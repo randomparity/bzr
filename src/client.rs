@@ -1,3 +1,4 @@
+use base64::Engine;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 
@@ -142,6 +143,48 @@ struct CommentCreateResponse {
     id: u64,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Attachment {
+    pub id: u64,
+    #[serde(default)]
+    pub bug_id: u64,
+    #[serde(default)]
+    pub file_name: String,
+    #[serde(default)]
+    pub summary: String,
+    #[serde(default)]
+    pub content_type: String,
+    #[serde(default)]
+    pub creator: Option<String>,
+    #[serde(default)]
+    pub creation_time: Option<String>,
+    #[serde(default)]
+    pub last_change_time: Option<String>,
+    #[serde(default)]
+    pub size: u64,
+    #[serde(default)]
+    pub is_obsolete: bool,
+    #[serde(default)]
+    pub is_private: bool,
+    #[serde(default)]
+    pub data: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct AttachmentBugResponse {
+    bugs: std::collections::HashMap<String, Vec<Attachment>>,
+}
+
+#[derive(Deserialize)]
+struct AttachmentByIdResponse {
+    attachments: std::collections::HashMap<String, Attachment>,
+}
+
+#[derive(Deserialize)]
+struct AttachmentCreateResponse {
+    ids: Vec<u64>,
+}
+
 #[derive(Deserialize)]
 struct ErrorResponse {
     #[serde(default)]
@@ -240,6 +283,77 @@ impl BugzillaClient {
             .map(|e| e.comments)
             .unwrap_or_default();
         Ok(comments)
+    }
+
+    pub async fn get_attachments(&self, bug_id: u64) -> Result<Vec<Attachment>> {
+        let resp = self
+            .http
+            .get(self.url(&format!("bug/{}/attachment", bug_id)))
+            .send()
+            .await?;
+        let resp = self.check_error(resp).await?;
+        let data: AttachmentBugResponse = resp.json().await?;
+        let attachments = data
+            .bugs
+            .into_values()
+            .next()
+            .unwrap_or_default();
+        Ok(attachments)
+    }
+
+    pub async fn get_attachment(&self, attachment_id: u64) -> Result<Attachment> {
+        let resp = self
+            .http
+            .get(self.url(&format!("bug/attachment/{}", attachment_id)))
+            .send()
+            .await?;
+        let resp = self.check_error(resp).await?;
+        let data: AttachmentByIdResponse = resp.json().await?;
+        data.attachments
+            .into_values()
+            .next()
+            .ok_or_else(|| BzrError::Other(format!("attachment {} not found", attachment_id)))
+    }
+
+    pub async fn download_attachment(&self, attachment_id: u64) -> Result<(String, Vec<u8>)> {
+        let attachment = self.get_attachment(attachment_id).await?;
+        let data = attachment
+            .data
+            .ok_or_else(|| BzrError::Other("attachment has no data".into()))?;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&data)
+            .map_err(|e| BzrError::Other(format!("failed to decode attachment: {}", e)))?;
+        Ok((attachment.file_name, bytes))
+    }
+
+    pub async fn upload_attachment(
+        &self,
+        bug_id: u64,
+        file_name: &str,
+        summary: &str,
+        content_type: &str,
+        data: &[u8],
+    ) -> Result<u64> {
+        let encoded = base64::engine::general_purpose::STANDARD.encode(data);
+        let body = serde_json::json!({
+            "ids": [bug_id],
+            "file_name": file_name,
+            "summary": summary,
+            "content_type": content_type,
+            "data": encoded,
+        });
+        let resp = self
+            .http
+            .post(self.url(&format!("bug/{}/attachment", bug_id)))
+            .json(&body)
+            .send()
+            .await?;
+        let resp = self.check_error(resp).await?;
+        let data: AttachmentCreateResponse = resp.json().await?;
+        data.ids
+            .into_iter()
+            .next()
+            .ok_or_else(|| BzrError::Other("no attachment ID returned".into()))
     }
 
     pub async fn add_comment(&self, bug_id: u64, text: &str) -> Result<u64> {

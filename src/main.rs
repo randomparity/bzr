@@ -32,6 +32,9 @@ async fn run(cli: Cli) -> error::Result<()> {
         Commands::Comment { action } => {
             commands::comment::execute(action, cli.server.as_deref(), &format).await
         }
+        Commands::Attachment { action } => {
+            commands::attachment::execute(action, cli.server.as_deref(), &format).await
+        }
         Commands::Config { action } => commands::config_cmd::execute(action),
     }
 }
