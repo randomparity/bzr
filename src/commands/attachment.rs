@@ -24,7 +24,12 @@ pub async fn execute(
             let (filename, data) = client.download_attachment(*id).await?;
             let dest = out.as_deref().unwrap_or(&filename);
             std::fs::write(dest, &data)?;
-            println!("Downloaded attachment #{} to {} ({} bytes)", id, dest, data.len());
+            println!(
+                "Downloaded attachment #{} to {} ({} bytes)",
+                id,
+                dest,
+                data.len()
+            );
         }
         AttachmentAction::Upload {
             bug_id,
@@ -33,26 +38,33 @@ pub async fn execute(
             content_type,
         } => {
             let path = Path::new(file);
-            let file_name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or(file);
+            let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or(file);
             let data = std::fs::read(path)?;
-            let summary = summary
-                .as_deref()
-                .unwrap_or(file_name);
+            let summary = summary.as_deref().unwrap_or(file_name);
             let ct = content_type
                 .as_deref()
                 .unwrap_or_else(|| guess_content_type(file_name));
-            let att_id = client.upload_attachment(*bug_id, file_name, summary, ct, &data).await?;
-            println!("Uploaded attachment #{} to bug #{} ({} bytes)", att_id, bug_id, data.len());
+            let att_id = client
+                .upload_attachment(*bug_id, file_name, summary, ct, &data)
+                .await?;
+            println!(
+                "Uploaded attachment #{} to bug #{} ({} bytes)",
+                att_id,
+                bug_id,
+                data.len()
+            );
         }
     }
     Ok(())
 }
 
 fn guess_content_type(filename: &str) -> &'static str {
-    match filename.rsplit('.').next().map(|e| e.to_lowercase()).as_deref() {
+    match filename
+        .rsplit('.')
+        .next()
+        .map(|e| e.to_lowercase())
+        .as_deref()
+    {
         Some("txt" | "log") => "text/plain",
         Some("html" | "htm") => "text/html",
         Some("json") => "application/json",
