@@ -27,6 +27,11 @@ pub enum Commands {
         #[command(subcommand)]
         action: CommentAction,
     },
+    /// Attachment operations
+    Attachment {
+        #[command(subcommand)]
+        action: AttachmentAction,
+    },
     /// Configuration management
     Config {
         #[command(subcommand)]
@@ -136,6 +141,36 @@ pub enum CommentAction {
         /// Comment text (opens $EDITOR if not provided)
         #[arg(long)]
         body: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AttachmentAction {
+    /// List attachments on a bug
+    List {
+        /// Bug ID
+        bug_id: u64,
+    },
+    /// Download an attachment
+    Download {
+        /// Attachment ID
+        id: u64,
+        /// Output file path (defaults to original filename)
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+    /// Upload an attachment to a bug
+    Upload {
+        /// Bug ID
+        bug_id: u64,
+        /// File to upload
+        file: String,
+        /// Attachment summary/description
+        #[arg(long)]
+        summary: Option<String>,
+        /// MIME type (auto-detected if not provided)
+        #[arg(long)]
+        content_type: Option<String>,
     },
 }
 

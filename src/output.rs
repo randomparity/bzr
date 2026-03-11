@@ -1,7 +1,7 @@
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
-use crate::client::{Bug, Comment};
+use crate::client::{Attachment, Bug, Comment};
 use crate::error::Result;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -148,6 +148,46 @@ pub fn print_bug_detail(bug: &Bug, format: &OutputFormat) -> Result<()> {
             if !bug.depends_on.is_empty() {
                 let ids: Vec<String> = bug.depends_on.iter().map(|i| i.to_string()).collect();
                 println!("  Depends on:  {}", ids.join(", "));
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn print_attachments(attachments: &[Attachment], format: &OutputFormat) -> Result<()> {
+    match format {
+        OutputFormat::Json => {
+            println!("{}", serde_json::to_string_pretty(attachments).unwrap());
+        }
+        OutputFormat::Table => {
+            if attachments.is_empty() {
+                println!("No attachments.");
+                return Ok(());
+            }
+            for a in attachments {
+                let obsolete = if a.is_obsolete { " [OBSOLETE]" } else { "" };
+                let private = if a.is_private { " [PRIVATE]" } else { "" };
+                println!(
+                    "{} #{} - {}{}{}",
+                    "Attachment".bold(),
+                    a.id,
+                    a.summary.bold(),
+                    obsolete.red(),
+                    private.red(),
+                );
+                println!(
+                    "  File:     {} ({}, {} bytes)",
+                    a.file_name, a.content_type, a.size
+                );
+                println!(
+                    "  Creator:  {}",
+                    a.creator.as_deref().unwrap_or("-")
+                );
+                println!(
+                    "  Created:  {}",
+                    a.creation_time.as_deref().unwrap_or("-")
+                );
+                println!();
             }
         }
     }
