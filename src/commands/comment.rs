@@ -42,9 +42,7 @@ fn edit_comment() -> Result<String> {
     writeln!(tmpfile.file, "<!-- Enter your comment above this line -->")?;
     drop(tmpfile.file);
 
-    let status = std::process::Command::new(&editor)
-        .arg(&path)
-        .status()?;
+    let status = std::process::Command::new(&editor).arg(&path).status()?;
 
     if !status.success() {
         return Err(BzrError::Other(format!("{} exited with error", editor)));

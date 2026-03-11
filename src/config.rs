@@ -21,7 +21,8 @@ pub struct ServerConfig {
 
 impl Config {
     pub fn path() -> Result<PathBuf> {
-        let config_dir = dirs::config_dir().ok_or_else(|| BzrError::config("cannot determine config directory"))?;
+        let config_dir = dirs::config_dir()
+            .ok_or_else(|| BzrError::config("cannot determine config directory"))?;
         Ok(config_dir.join("bzr").join("config.toml"))
     }
 
@@ -53,8 +54,8 @@ impl Config {
                     "no server configured. Run `bzr config set-server <name> --url <url> --api-key <key>` first",
                 )
             })?;
-        self.servers.get(name).ok_or_else(|| {
-            BzrError::config(format!("server '{}' not found in config", name))
-        })
+        self.servers
+            .get(name)
+            .ok_or_else(|| BzrError::config(format!("server '{}' not found in config", name)))
     }
 }

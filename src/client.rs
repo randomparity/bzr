@@ -241,7 +241,11 @@ impl BugzillaClient {
     }
 
     pub async fn get_bug(&self, id: u64) -> Result<Bug> {
-        let resp = self.http.get(self.url(&format!("bug/{}", id))).send().await?;
+        let resp = self
+            .http
+            .get(self.url(&format!("bug/{}", id)))
+            .send()
+            .await?;
         let resp = self.check_error(resp).await?;
         let data: BugListResponse = resp.json().await?;
         data.bugs
@@ -293,11 +297,7 @@ impl BugzillaClient {
             .await?;
         let resp = self.check_error(resp).await?;
         let data: AttachmentBugResponse = resp.json().await?;
-        let attachments = data
-            .bugs
-            .into_values()
-            .next()
-            .unwrap_or_default();
+        let attachments = data.bugs.into_values().next().unwrap_or_default();
         Ok(attachments)
     }
 

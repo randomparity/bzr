@@ -106,30 +106,15 @@ pub fn print_bug_detail(bug: &Bug, format: &OutputFormat) -> Result<()> {
                     println!("  Resolution:  {}", r);
                 }
             }
-            println!(
-                "  Product:     {}",
-                bug.product.as_deref().unwrap_or("-")
-            );
-            println!(
-                "  Component:   {}",
-                bug.component.as_deref().unwrap_or("-")
-            );
+            println!("  Product:     {}", bug.product.as_deref().unwrap_or("-"));
+            println!("  Component:   {}", bug.component.as_deref().unwrap_or("-"));
             println!(
                 "  Assignee:    {}",
                 bug.assigned_to.as_deref().unwrap_or("-")
             );
-            println!(
-                "  Priority:    {}",
-                bug.priority.as_deref().unwrap_or("-")
-            );
-            println!(
-                "  Severity:    {}",
-                bug.severity.as_deref().unwrap_or("-")
-            );
-            println!(
-                "  Creator:     {}",
-                bug.creator.as_deref().unwrap_or("-")
-            );
+            println!("  Priority:    {}", bug.priority.as_deref().unwrap_or("-"));
+            println!("  Severity:    {}", bug.severity.as_deref().unwrap_or("-"));
+            println!("  Creator:     {}", bug.creator.as_deref().unwrap_or("-"));
             println!(
                 "  Created:     {}",
                 bug.creation_time.as_deref().unwrap_or("-")
@@ -179,14 +164,8 @@ pub fn print_attachments(attachments: &[Attachment], format: &OutputFormat) -> R
                     "  File:     {} ({}, {} bytes)",
                     a.file_name, a.content_type, a.size
                 );
-                println!(
-                    "  Creator:  {}",
-                    a.creator.as_deref().unwrap_or("-")
-                );
-                println!(
-                    "  Created:  {}",
-                    a.creation_time.as_deref().unwrap_or("-")
-                );
+                println!("  Creator:  {}", a.creator.as_deref().unwrap_or("-"));
+                println!("  Created:  {}", a.creation_time.as_deref().unwrap_or("-"));
                 println!();
             }
         }

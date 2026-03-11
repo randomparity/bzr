@@ -4,7 +4,11 @@ use crate::config::Config;
 use crate::error::Result;
 use crate::output::{self, OutputFormat};
 
-pub async fn execute(action: &BugAction, server: Option<&str>, format: &OutputFormat) -> Result<()> {
+pub async fn execute(
+    action: &BugAction,
+    server: Option<&str>,
+    format: &OutputFormat,
+) -> Result<()> {
     let config = Config::load()?;
     let srv = config.active_server(server)?;
     let client = BugzillaClient::new(&srv.url, &srv.api_key)?;
