@@ -76,5 +76,11 @@ async fn run(cli: Cli) -> error::Result<()> {
         Commands::Server { action } => {
             commands::server::execute(action, cli.server.as_deref(), format).await
         }
+        Commands::Classification { action } => {
+            commands::classification::execute(action, cli.server.as_deref(), format).await
+        }
+        Commands::Component { action } => {
+            commands::component::execute(action, cli.server.as_deref()).await
+        }
     }
 }

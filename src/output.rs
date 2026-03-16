@@ -2,8 +2,8 @@ use colored::Colorize;
 use tabled::{Table, Tabled};
 
 use crate::client::{
-    Attachment, Bug, BugzillaUser, Comment, FieldValue, HistoryEntry, Product, ServerExtensions,
-    ServerVersion, WhoamiResponse,
+    Attachment, Bug, BugzillaUser, Classification, Comment, FieldValue, HistoryEntry, Product,
+    ServerExtensions, ServerVersion, WhoamiResponse,
 };
 
 fn truncate(s: &str, max_chars: usize) -> String {
@@ -501,6 +501,31 @@ pub fn print_comment_tags(tags: &[String]) {
     } else {
         for tag in tags {
             println!("  {tag}");
+        }
+    }
+}
+
+pub fn print_classification(classification: &Classification, format: OutputFormat) {
+    match format {
+        OutputFormat::Json => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(classification).expect("serializable to JSON")
+            );
+        }
+        OutputFormat::Table => {
+            println!(
+                "{} {}\n{}\n",
+                "Classification".bold(),
+                classification.name.bold(),
+                classification.description,
+            );
+            if !classification.products.is_empty() {
+                println!("{}:", "Products".bold());
+                for p in &classification.products {
+                    println!("  {} - {}", p.name, truncate(&p.description, 60));
+                }
+            }
         }
     }
 }
