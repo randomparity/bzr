@@ -236,6 +236,24 @@ pub struct WhoamiResponse {
     pub login: Option<String>,
 }
 
+// Server info types
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ServerVersion {
+    pub version: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ServerExtensions {
+    pub extensions: std::collections::HashMap<String, ExtensionInfo>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExtensionInfo {
+    #[serde(default)]
+    pub version: Option<String>,
+}
+
 // Bug history types
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -687,6 +705,18 @@ impl BugzillaClient {
 
     pub async fn whoami(&self) -> Result<WhoamiResponse> {
         let req = self.auth(self.http.get(self.url("whoami")));
+        let resp = self.send(req).await?;
+        self.parse_json(resp).await
+    }
+
+    pub async fn server_version(&self) -> Result<ServerVersion> {
+        let req = self.auth(self.http.get(self.url("version")));
+        let resp = self.send(req).await?;
+        self.parse_json(resp).await
+    }
+
+    pub async fn server_extensions(&self) -> Result<ServerExtensions> {
+        let req = self.auth(self.http.get(self.url("extensions")));
         let resp = self.send(req).await?;
         self.parse_json(resp).await
     }
@@ -1217,5 +1247,41 @@ mod tests {
         assert_eq!(who.id, 42);
         assert_eq!(who.name, "alice@example.com");
         assert_eq!(who.real_name.as_deref(), Some("Alice"));
+    }
+
+    #[tokio::test]
+    async fn server_version_returns_version() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/version"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.0.4"})),
+            )
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let ver = client.server_version().await.unwrap();
+        assert_eq!(ver.version, "5.0.4");
+    }
+
+    #[tokio::test]
+    async fn server_extensions_returns_map() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/extensions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "extensions": {
+                    "BmpConvert": {"version": "1.0"},
+                    "InlineHistory": {"version": "2.1"}
+                }
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let ext = client.server_extensions().await.unwrap();
+        assert_eq!(ext.extensions.len(), 2);
+        assert!(ext.extensions.contains_key("BmpConvert"));
     }
 }

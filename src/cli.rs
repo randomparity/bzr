@@ -63,6 +63,17 @@ pub enum Commands {
     },
     /// Show the currently authenticated user
     Whoami,
+    /// Server diagnostics
+    Server {
+        #[command(subcommand)]
+        action: ServerAction,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ServerAction {
+    /// Show server version and extensions
+    Info,
 }
 
 #[derive(Subcommand)]

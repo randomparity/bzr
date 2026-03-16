@@ -73,5 +73,8 @@ async fn run(cli: Cli) -> error::Result<()> {
             commands::group::execute(action, cli.server.as_deref(), format).await
         }
         Commands::Whoami => commands::whoami::execute(cli.server.as_deref(), format).await,
+        Commands::Server { action } => {
+            commands::server::execute(action, cli.server.as_deref(), format).await
+        }
     }
 }

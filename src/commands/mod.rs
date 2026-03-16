@@ -5,6 +5,7 @@ pub mod config_cmd;
 pub mod field;
 pub mod group;
 pub mod product;
+pub mod server;
 mod shared;
 pub mod user;
 pub mod whoami;
