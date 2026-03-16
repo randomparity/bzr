@@ -19,8 +19,9 @@ async fn main() {
     let filter = if std::env::var("RUST_LOG").is_ok() {
         EnvFilter::from_default_env()
     } else {
+        // Level strings are compile-time constants; parse_lossy is safe.
         let level = match cli.verbose {
-            0 => "warn",
+            0 => "bzr=warn",
             1 => "bzr=info",
             2 => "bzr=debug",
             _ => "bzr=trace",
