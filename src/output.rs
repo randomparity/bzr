@@ -155,7 +155,7 @@ pub fn print_bug_detail(bug: &Bug, format: OutputFormat) {
     }
 }
 
-pub fn print_history(bug_id: u64, history: &[HistoryEntry], format: OutputFormat) {
+pub fn print_history(history: &[HistoryEntry], format: OutputFormat) {
     match format {
         OutputFormat::Json => {
             println!(
@@ -164,10 +164,6 @@ pub fn print_history(bug_id: u64, history: &[HistoryEntry], format: OutputFormat
             );
         }
         OutputFormat::Table => {
-            if history.is_empty() {
-                println!("No history for bug #{bug_id}.");
-                return;
-            }
             for entry in history {
                 println!(
                     "{} by {} ({})",
@@ -180,10 +176,7 @@ pub fn print_history(bug_id: u64, history: &[HistoryEntry], format: OutputFormat
                         .attachment_id
                         .map(|id| format!(" [attachment #{id}]"))
                         .unwrap_or_default();
-                    println!(
-                        "  {}{attachment_suffix}:",
-                        change.field_name.bold(),
-                    );
+                    println!("  {}{attachment_suffix}:", change.field_name.bold(),);
                     if !change.removed.is_empty() {
                         println!("    - {}", change.removed.red());
                     }

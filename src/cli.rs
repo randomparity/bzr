@@ -280,6 +280,7 @@ pub enum GroupAction {
     /// List users in a group
     ListUsers {
         /// Group name
+        #[arg(long)]
         group: String,
     },
 }

@@ -215,6 +215,7 @@ pub struct BugzillaUser {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserGroup {
+    #[serde(default)]
     pub id: u64,
     #[serde(default)]
     pub name: String,
@@ -640,11 +641,10 @@ impl BugzillaClient {
     }
 
     pub async fn get_group_members(&self, group_name: &str) -> Result<Vec<BugzillaUser>> {
-        let req = self.auth(
-            self.http
-                .get(self.url("user"))
-                .query(&[("groups", group_name), ("include_fields", "id,name,real_name,email,groups")]),
-        );
+        let req = self.auth(self.http.get(self.url("user")).query(&[
+            ("group", group_name),
+            ("include_fields", "id,name,real_name,email,groups"),
+        ]));
         let resp = self.send(req).await?;
         let data: UserSearchResponse = self.parse_json(resp).await?;
         Ok(data.users)
@@ -679,7 +679,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use tracing_subscriber::layer::SubscriberExt;
-    use wiremock::matchers::{method, path, query_param};
+    use wiremock::matchers::{body_json, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -1085,7 +1085,7 @@ mod tests {
         let mock = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/rest/user"))
-            .and(query_param("groups", "admin"))
+            .and(query_param("group", "admin"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [
                     {
@@ -1120,7 +1120,7 @@ mod tests {
         let mock = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/rest/user"))
-            .and(query_param("groups", "nobody"))
+            .and(query_param("group", "nobody"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({"users": []})),
             )
@@ -1137,6 +1137,9 @@ mod tests {
         let mock = MockServer::start().await;
         Mock::given(method("PUT"))
             .and(path("/rest/user/alice@example.com"))
+            .and(body_json(
+                serde_json::json!({"groups": {"add": ["testers"]}}),
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [{"id": 1, "changes": {}}]
             })))
@@ -1156,6 +1159,9 @@ mod tests {
         let mock = MockServer::start().await;
         Mock::given(method("PUT"))
             .and(path("/rest/user/bob@example.com"))
+            .and(body_json(
+                serde_json::json!({"groups": {"remove": ["testers"]}}),
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [{"id": 2, "changes": {}}]
             })))
