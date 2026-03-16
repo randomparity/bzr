@@ -253,6 +253,23 @@ impl BugzillaClient {
         self.check_error(resp).await
     }
 
+    async fn parse_json<T: serde::de::DeserializeOwned>(
+        &self,
+        resp: reqwest::Response,
+    ) -> Result<T> {
+        let url = resp.url().to_string();
+        let body = resp.text().await?;
+        serde_json::from_str(&body).map_err(|e| {
+            tracing::debug!(
+                %url,
+                error = %e,
+                body_preview = &body[..body.len().min(512)],
+                "JSON deserialization failed"
+            );
+            BzrError::Other(format!("failed to parse response from {url}: {e}"))
+        })
+    }
+
     async fn check_error(&self, response: reqwest::Response) -> Result<reqwest::Response> {
         if response.status().is_client_error() || response.status().is_server_error() {
             let status = response.status();
@@ -279,14 +296,14 @@ impl BugzillaClient {
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
         let req = self.auth(self.http.get(self.url("bug")).query(params));
         let resp = self.send(req).await?;
-        let data: BugListResponse = resp.json().await?;
+        let data: BugListResponse = self.parse_json(resp).await?;
         Ok(data.bugs)
     }
 
     pub async fn get_bug(&self, id: u64) -> Result<Bug> {
         let req = self.auth(self.http.get(self.url(&format!("bug/{id}"))));
         let resp = self.send(req).await?;
-        let data: BugListResponse = resp.json().await?;
+        let data: BugListResponse = self.parse_json(resp).await?;
         data.bugs
             .into_iter()
             .next()
@@ -296,7 +313,7 @@ impl BugzillaClient {
     pub async fn create_bug(&self, params: &CreateBugParams) -> Result<u64> {
         let req = self.auth(self.http.post(self.url("bug")).json(params));
         let resp = self.send(req).await?;
-        let data: BugCreateResponse = resp.json().await?;
+        let data: BugCreateResponse = self.parse_json(resp).await?;
         Ok(data.id)
     }
 
@@ -309,7 +326,7 @@ impl BugzillaClient {
     pub async fn get_comments(&self, bug_id: u64) -> Result<Vec<Comment>> {
         let req = self.auth(self.http.get(self.url(&format!("bug/{bug_id}/comment"))));
         let resp = self.send(req).await?;
-        let data: CommentResponse = resp.json().await?;
+        let data: CommentResponse = self.parse_json(resp).await?;
         let comments = data
             .bugs
             .into_values()
@@ -322,7 +339,7 @@ impl BugzillaClient {
     pub async fn get_attachments(&self, bug_id: u64) -> Result<Vec<Attachment>> {
         let req = self.auth(self.http.get(self.url(&format!("bug/{bug_id}/attachment"))));
         let resp = self.send(req).await?;
-        let data: AttachmentBugResponse = resp.json().await?;
+        let data: AttachmentBugResponse = self.parse_json(resp).await?;
         let attachments = data.bugs.into_values().next().unwrap_or_default();
         Ok(attachments)
     }
@@ -333,7 +350,7 @@ impl BugzillaClient {
                 .get(self.url(&format!("bug/attachment/{attachment_id}"))),
         );
         let resp = self.send(req).await?;
-        let data: AttachmentByIdResponse = resp.json().await?;
+        let data: AttachmentByIdResponse = self.parse_json(resp).await?;
         data.attachments
             .into_values()
             .next()
@@ -373,7 +390,7 @@ impl BugzillaClient {
                 .json(&body),
         );
         let resp = self.send(req).await?;
-        let data: AttachmentCreateResponse = resp.json().await?;
+        let data: AttachmentCreateResponse = self.parse_json(resp).await?;
         data.ids
             .into_iter()
             .next()
@@ -388,7 +405,7 @@ impl BugzillaClient {
                 .json(&body),
         );
         let resp = self.send(req).await?;
-        let data: CommentCreateResponse = resp.json().await?;
+        let data: CommentCreateResponse = self.parse_json(resp).await?;
         Ok(data.id)
     }
 }
