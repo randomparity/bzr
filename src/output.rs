@@ -1,7 +1,7 @@
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
-use crate::client::{Attachment, Bug, BugzillaUser, Comment, FieldValue, Product};
+use crate::client::{Attachment, Bug, BugzillaUser, Comment, FieldValue, HistoryEntry, Product};
 
 fn truncate(s: &str, max_chars: usize) -> String {
     if s.chars().count() > max_chars {
@@ -150,6 +150,41 @@ pub fn print_bug_detail(bug: &Bug, format: OutputFormat) {
                     .map(std::string::ToString::to_string)
                     .collect();
                 println!("  Depends on:  {}", ids.join(", "));
+            }
+        }
+    }
+}
+
+pub fn print_history(history: &[HistoryEntry], format: OutputFormat) {
+    match format {
+        OutputFormat::Json => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(history).expect("serializable to JSON")
+            );
+        }
+        OutputFormat::Table => {
+            for entry in history {
+                println!(
+                    "{} by {} ({})",
+                    "Change".bold(),
+                    entry.who.cyan(),
+                    entry.when,
+                );
+                for change in &entry.changes {
+                    let attachment_suffix = change
+                        .attachment_id
+                        .map(|id| format!(" [attachment #{id}]"))
+                        .unwrap_or_default();
+                    println!("  {}{attachment_suffix}:", change.field_name.bold(),);
+                    if !change.removed.is_empty() {
+                        println!("    - {}", change.removed.red());
+                    }
+                    if !change.added.is_empty() {
+                        println!("    + {}", change.added.green());
+                    }
+                }
+                println!("{}", "─".repeat(60));
             }
         }
     }

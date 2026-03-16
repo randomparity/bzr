@@ -209,6 +209,38 @@ pub struct BugzillaUser {
     pub real_name: Option<String>,
     #[serde(default)]
     pub email: Option<String>,
+    #[serde(default)]
+    pub groups: Vec<UserGroup>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserGroup {
+    #[serde(default)]
+    pub id: u64,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+}
+
+// Bug history types
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct HistoryEntry {
+    pub who: String,
+    pub when: String,
+    pub changes: Vec<FieldChange>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FieldChange {
+    pub field_name: String,
+    #[serde(default)]
+    pub removed: String,
+    #[serde(default)]
+    pub added: String,
+    #[serde(default)]
+    pub attachment_id: Option<u64>,
 }
 
 // API response wrappers
@@ -302,6 +334,16 @@ struct FieldEntry {
 #[derive(Deserialize)]
 struct UserSearchResponse {
     users: Vec<BugzillaUser>,
+}
+
+#[derive(Deserialize)]
+struct HistoryResponse {
+    bugs: Vec<HistoryBugEntry>,
+}
+
+#[derive(Deserialize)]
+struct HistoryBugEntry {
+    history: Vec<HistoryEntry>,
 }
 
 #[derive(Deserialize)]
@@ -414,6 +456,18 @@ impl BugzillaClient {
             return Err(BzrError::Other(format!("HTTP {status}: {body}")));
         }
         Ok(response)
+    }
+
+    pub async fn get_bug_history(&self, id: u64) -> Result<Vec<HistoryEntry>> {
+        let req = self.auth(self.http.get(self.url(&format!("bug/{id}/history"))));
+        let resp = self.send(req).await?;
+        let data: HistoryResponse = self.parse_json(resp).await?;
+        Ok(data
+            .bugs
+            .into_iter()
+            .next()
+            .map(|b| b.history)
+            .unwrap_or_default())
     }
 
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
@@ -585,6 +639,38 @@ impl BugzillaClient {
         let data: UserSearchResponse = self.parse_json(resp).await?;
         Ok(data.users)
     }
+
+    pub async fn get_group_members(&self, group_name: &str) -> Result<Vec<BugzillaUser>> {
+        let req = self.auth(self.http.get(self.url("user")).query(&[
+            ("group", group_name),
+            ("include_fields", "id,name,real_name,email,groups"),
+        ]));
+        let resp = self.send(req).await?;
+        let data: UserSearchResponse = self.parse_json(resp).await?;
+        Ok(data.users)
+    }
+
+    pub async fn add_user_to_group(&self, user: &str, group: &str) -> Result<()> {
+        let body = serde_json::json!({
+            "groups": {
+                "add": [group]
+            }
+        });
+        let req = self.auth(self.http.put(self.url(&format!("user/{user}"))).json(&body));
+        self.send(req).await?;
+        Ok(())
+    }
+
+    pub async fn remove_user_from_group(&self, user: &str, group: &str) -> Result<()> {
+        let body = serde_json::json!({
+            "groups": {
+                "remove": [group]
+            }
+        });
+        let req = self.auth(self.http.put(self.url(&format!("user/{user}"))).json(&body));
+        self.send(req).await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -593,7 +679,8 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use tracing_subscriber::layer::SubscriberExt;
-    use wiremock::matchers::{method, path, query_param};
+    use tracing_subscriber::EnvFilter;
+    use wiremock::matchers::{body_json, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -639,7 +726,8 @@ mod tests {
         let fmt_layer = tracing_subscriber::fmt::layer()
             .with_writer(CapturingWriter(Arc::clone(&log_buf)))
             .with_ansi(false);
-        let subscriber = tracing_subscriber::registry().with(fmt_layer);
+        let filter = EnvFilter::new("bzr=debug");
+        let subscriber = tracing_subscriber::registry().with(fmt_layer).with(filter);
 
         let _guard = tracing::subscriber::set_default(subscriber);
 
@@ -669,7 +757,8 @@ mod tests {
         let fmt_layer = tracing_subscriber::fmt::layer()
             .with_writer(CapturingWriter(Arc::clone(&log_buf)))
             .with_ansi(false);
-        let subscriber = tracing_subscriber::registry().with(fmt_layer);
+        let filter = EnvFilter::new("bzr=debug");
+        let subscriber = tracing_subscriber::registry().with(fmt_layer).with(filter);
 
         let _guard = tracing::subscriber::set_default(subscriber);
 
@@ -892,5 +981,201 @@ mod tests {
             msg.contains("500") || msg.contains("Internal Server Error"),
             "expected 500 error: {msg}"
         );
+    }
+
+    #[tokio::test]
+    async fn get_bug_history_returns_entries() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42/history"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{
+                    "id": 42,
+                    "alias": [],
+                    "history": [
+                        {
+                            "who": "alice@example.com",
+                            "when": "2025-01-15T10:30:00Z",
+                            "changes": [
+                                {
+                                    "field_name": "status",
+                                    "removed": "NEW",
+                                    "added": "ASSIGNED"
+                                },
+                                {
+                                    "field_name": "assigned_to",
+                                    "removed": "",
+                                    "added": "alice@example.com"
+                                }
+                            ]
+                        },
+                        {
+                            "who": "bob@example.com",
+                            "when": "2025-01-16T14:00:00Z",
+                            "changes": [
+                                {
+                                    "field_name": "status",
+                                    "removed": "ASSIGNED",
+                                    "added": "RESOLVED"
+                                }
+                            ]
+                        }
+                    ]
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let history = client.get_bug_history(42).await.unwrap();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].who, "alice@example.com");
+        assert_eq!(history[0].changes.len(), 2);
+        assert_eq!(history[0].changes[0].field_name, "status");
+        assert_eq!(history[0].changes[0].removed, "NEW");
+        assert_eq!(history[0].changes[0].added, "ASSIGNED");
+        assert_eq!(history[1].changes.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn get_bug_history_empty() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/99/history"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{"id": 99, "alias": [], "history": []}]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let history = client.get_bug_history(99).await.unwrap();
+        assert!(history.is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_bug_history_with_attachment_id() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/10/history"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{
+                    "id": 10,
+                    "alias": [],
+                    "history": [{
+                        "who": "carol@example.com",
+                        "when": "2025-02-01T09:00:00Z",
+                        "changes": [{
+                            "field_name": "attachments.isobsolete",
+                            "removed": "0",
+                            "added": "1",
+                            "attachment_id": 555
+                        }]
+                    }]
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let history = client.get_bug_history(10).await.unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].changes[0].attachment_id, Some(555));
+    }
+
+    #[tokio::test]
+    async fn get_group_members_returns_users() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .and(query_param("group", "admin"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "users": [
+                    {
+                        "id": 1,
+                        "name": "alice@example.com",
+                        "real_name": "Alice",
+                        "email": "alice@example.com",
+                        "groups": [{"id": 10, "name": "admin", "description": "Admins"}]
+                    },
+                    {
+                        "id": 2,
+                        "name": "bob@example.com",
+                        "real_name": "Bob",
+                        "email": "bob@example.com",
+                        "groups": [{"id": 10, "name": "admin", "description": "Admins"}]
+                    }
+                ]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let users = client.get_group_members("admin").await.unwrap();
+        assert_eq!(users.len(), 2);
+        assert_eq!(users[0].name, "alice@example.com");
+        assert_eq!(users[0].groups.len(), 1);
+        assert_eq!(users[0].groups[0].name, "admin");
+    }
+
+    #[tokio::test]
+    async fn get_group_members_empty() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .and(query_param("group", "nobody"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"users": []})),
+            )
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let users = client.get_group_members("nobody").await.unwrap();
+        assert!(users.is_empty());
+    }
+
+    #[tokio::test]
+    async fn add_user_to_group_sends_put() {
+        let mock = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/rest/user/alice@example.com"))
+            .and(body_json(
+                serde_json::json!({"groups": {"add": ["testers"]}}),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "users": [{"id": 1, "changes": {}}]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        client
+            .add_user_to_group("alice@example.com", "testers")
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn remove_user_from_group_sends_put() {
+        let mock = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/rest/user/bob@example.com"))
+            .and(body_json(
+                serde_json::json!({"groups": {"remove": ["testers"]}}),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "users": [{"id": 2, "changes": {}}]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        client
+            .remove_user_from_group("bob@example.com", "testers")
+            .await
+            .unwrap();
     }
 }
