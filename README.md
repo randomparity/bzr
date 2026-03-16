@@ -22,7 +22,7 @@ Requires Rust 1.70+.
 ## Quick Start
 
 ```bash
-# Configure a Bugzilla server
+# Configure a Bugzilla server (add --email for Bugzilla 5.0 or earlier)
 bzr config set-server myserver --url https://bugzilla.example.com --api-key YOUR_API_KEY
 
 # List open bugs in a product
@@ -66,7 +66,7 @@ bzr [--server <NAME>] [--output table|json]
 │   ├── download <ATTACHMENT_ID> [-o <FILE>]
 │   └── upload <BUG_ID> <FILE> [--summary <S>] [--content-type <MIME>]
 └── config
-    ├── set-server <NAME> --url <URL> --api-key <KEY>
+    ├── set-server <NAME> --url <URL> --api-key <KEY> [--email <EMAIL>]
     ├── set-default <NAME>
     └── show
 ```
@@ -232,9 +232,11 @@ Configuration is stored in `~/.config/bzr/config.toml`. Multiple servers can be 
 Add or update a named server configuration.
 
 ```bash
-bzr config set-server redhat --url https://bugzilla.redhat.com --api-key abc123
+bzr config set-server redhat --url https://bugzilla.redhat.com --api-key abc123 --email you@redhat.com
 bzr config set-server mozilla --url https://bugzilla.mozilla.org --api-key xyz789
 ```
+
+The `--email` flag is required for older Bugzilla servers (5.0 and earlier) that don't support the `/rest/whoami` endpoint. It is used during auth detection via `/rest/valid_login`.
 
 The first server added is automatically set as the default.
 
@@ -279,6 +281,7 @@ default_server = "redhat"
 [servers.redhat]
 url = "https://bugzilla.redhat.com"
 api_key = "your-api-key-here"
+email = "you@redhat.com"
 
 [servers.mozilla]
 url = "https://bugzilla.mozilla.org"
@@ -287,7 +290,11 @@ api_key = "another-api-key"
 
 ## Authentication
 
-`bzr` authenticates using Bugzilla API keys sent via the `X-BUGZILLA-API-KEY` HTTP header. To generate an API key:
+`bzr` authenticates using Bugzilla API keys. On first use, it auto-detects whether your server supports header-based auth (`X-BUGZILLA-API-KEY`) or query parameter auth (`Bugzilla_api_key`), and caches the result.
+
+For servers running Bugzilla 5.0 or earlier, provide your `--email` when configuring, as auth detection uses the `/rest/valid_login` endpoint which requires it.
+
+To generate an API key:
 
 1. Log in to your Bugzilla instance
 2. Go to **Preferences > API Keys**

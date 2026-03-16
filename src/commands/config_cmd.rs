@@ -5,13 +5,19 @@ use crate::error::Result;
 #[expect(clippy::print_stdout)]
 pub fn execute(action: &ConfigAction) -> Result<()> {
     match action {
-        ConfigAction::SetServer { name, url, api_key } => {
+        ConfigAction::SetServer {
+            name,
+            url,
+            api_key,
+            email,
+        } => {
             let mut config = Config::load()?;
             config.servers.insert(
                 name.clone(),
                 ServerConfig {
                     url: url.clone(),
                     api_key: api_key.clone(),
+                    email: email.clone(),
                     auth_method: None,
                 },
             );
@@ -57,6 +63,9 @@ pub fn execute(action: &ConfigAction) -> Result<()> {
                     };
                     println!("\n[{name}]");
                     println!("  URL:     {}", srv.url);
+                    if let Some(ref email) = srv.email {
+                        println!("  Email:   {email}");
+                    }
                     println!("  API Key: {masked_key}");
                     println!("  Auth:    {auth_display}");
                 }
