@@ -41,6 +41,21 @@ pub enum Commands {
         #[command(subcommand)]
         action: ConfigAction,
     },
+    /// Product operations
+    Product {
+        #[command(subcommand)]
+        action: ProductAction,
+    },
+    /// Field/value lookup
+    Field {
+        #[command(subcommand)]
+        action: FieldAction,
+    },
+    /// User operations
+    User {
+        #[command(subcommand)]
+        action: UserAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -201,4 +216,33 @@ pub enum ConfigAction {
     },
     /// Show current configuration
     Show,
+}
+
+#[derive(Subcommand)]
+pub enum ProductAction {
+    /// List accessible products
+    List,
+    /// View product details (components, versions, milestones)
+    View {
+        /// Product name
+        name: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum FieldAction {
+    /// List valid values for a bug field
+    List {
+        /// Field name (e.g. status, priority, severity, resolution)
+        name: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum UserAction {
+    /// Search users by name or email
+    Search {
+        /// Search query
+        query: String,
+    },
 }

@@ -60,5 +60,14 @@ async fn run(cli: Cli) -> error::Result<()> {
             commands::attachment::execute(action, cli.server.as_deref(), format).await
         }
         Commands::Config { action } => commands::config_cmd::execute(action),
+        Commands::Product { action } => {
+            commands::product::execute(action, cli.server.as_deref(), format).await
+        }
+        Commands::Field { action } => {
+            commands::field::execute(action, cli.server.as_deref(), format).await
+        }
+        Commands::User { action } => {
+            commands::user::execute(action, cli.server.as_deref(), format).await
+        }
     }
 }
