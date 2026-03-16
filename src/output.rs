@@ -77,7 +77,10 @@ fn colorize_status(status: &str) -> String {
 pub fn print_bugs(bugs: &[Bug], format: OutputFormat) {
     match format {
         OutputFormat::Json => {
-            println!("{}", serde_json::to_string_pretty(bugs).unwrap());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(bugs).expect("serializable to JSON")
+            );
         }
         OutputFormat::Table => {
             if bugs.is_empty() {
@@ -94,7 +97,10 @@ pub fn print_bugs(bugs: &[Bug], format: OutputFormat) {
 pub fn print_bug_detail(bug: &Bug, format: OutputFormat) {
     match format {
         OutputFormat::Json => {
-            println!("{}", serde_json::to_string_pretty(bug).unwrap());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(bug).expect("serializable to JSON")
+            );
         }
         OutputFormat::Table => {
             println!(
@@ -152,7 +158,10 @@ pub fn print_bug_detail(bug: &Bug, format: OutputFormat) {
 pub fn print_attachments(attachments: &[Attachment], format: OutputFormat) {
     match format {
         OutputFormat::Json => {
-            println!("{}", serde_json::to_string_pretty(attachments).unwrap());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(attachments).expect("serializable to JSON")
+            );
         }
         OutputFormat::Table => {
             if attachments.is_empty() {
@@ -185,7 +194,10 @@ pub fn print_attachments(attachments: &[Attachment], format: OutputFormat) {
 pub fn print_comments(comments: &[Comment], format: OutputFormat) {
     match format {
         OutputFormat::Json => {
-            println!("{}", serde_json::to_string_pretty(comments).unwrap());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(comments).expect("serializable to JSON")
+            );
         }
         OutputFormat::Table => {
             if comments.is_empty() {
@@ -229,7 +241,10 @@ struct ProductRow {
 pub fn print_products(products: &[Product], format: OutputFormat) {
     match format {
         OutputFormat::Json => {
-            println!("{}", serde_json::to_string_pretty(products).unwrap());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(products).expect("serializable to JSON")
+            );
         }
         OutputFormat::Table => {
             if products.is_empty() {
@@ -256,7 +271,10 @@ pub fn print_products(products: &[Product], format: OutputFormat) {
 pub fn print_product_detail(product: &Product, format: OutputFormat) {
     match format {
         OutputFormat::Json => {
-            println!("{}", serde_json::to_string_pretty(product).unwrap());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(product).expect("serializable to JSON")
+            );
         }
         OutputFormat::Table => {
             println!(
@@ -309,62 +327,41 @@ struct FieldValueRow {
 pub fn print_field_values(field_name: &str, values: &[FieldValue], format: OutputFormat) {
     match format {
         OutputFormat::Json => {
-            println!("{}", serde_json::to_string_pretty(values).unwrap());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(values).expect("serializable to JSON")
+            );
         }
         OutputFormat::Table => {
             if values.is_empty() {
                 println!("No values for field '{field_name}'.");
                 return;
             }
-            let has_transitions = values.iter().any(|v| v.can_change_to.is_some());
-
-            if has_transitions {
-                let rows: Vec<FieldValueRow> = values
-                    .iter()
-                    .map(|v| {
-                        let transitions = v
-                            .can_change_to
-                            .as_ref()
-                            .map(|t| {
-                                t.iter()
-                                    .map(|s| s.name.as_str())
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
-                            })
-                            .unwrap_or_default();
-                        FieldValueRow {
-                            name: v.name.clone(),
-                            active: if v.is_active {
-                                "yes".into()
-                            } else {
-                                "no".into()
-                            },
-                            can_change_to: transitions,
-                        }
-                    })
-                    .collect();
-                println!("{}", Table::new(rows));
-            } else {
-                #[derive(Tabled)]
-                struct SimpleFieldRow {
-                    #[tabled(rename = "NAME")]
-                    name: String,
-                    #[tabled(rename = "ACTIVE")]
-                    active: String,
-                }
-                let rows: Vec<SimpleFieldRow> = values
-                    .iter()
-                    .map(|v| SimpleFieldRow {
+            let rows: Vec<FieldValueRow> = values
+                .iter()
+                .map(|v| {
+                    let transitions = v
+                        .can_change_to
+                        .as_ref()
+                        .map(|t| {
+                            t.iter()
+                                .map(|s| s.name.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        })
+                        .unwrap_or_default();
+                    FieldValueRow {
                         name: v.name.clone(),
                         active: if v.is_active {
                             "yes".into()
                         } else {
                             "no".into()
                         },
-                    })
-                    .collect();
-                println!("{}", Table::new(rows));
-            }
+                        can_change_to: transitions,
+                    }
+                })
+                .collect();
+            println!("{}", Table::new(rows));
         }
     }
 }
@@ -384,7 +381,10 @@ struct UserRow {
 pub fn print_users(users: &[BugzillaUser], format: OutputFormat) {
     match format {
         OutputFormat::Json => {
-            println!("{}", serde_json::to_string_pretty(users).unwrap());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(users).expect("serializable to JSON")
+            );
         }
         OutputFormat::Table => {
             if users.is_empty() {

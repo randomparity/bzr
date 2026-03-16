@@ -4,7 +4,7 @@ mod client;
 mod commands;
 mod config;
 mod error;
-#[expect(clippy::print_stdout, clippy::unwrap_used)]
+#[expect(clippy::print_stdout, clippy::expect_used)]
 mod output;
 
 use clap::Parser;
