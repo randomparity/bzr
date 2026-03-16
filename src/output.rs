@@ -1,7 +1,7 @@
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
-use crate::client::{Attachment, Bug, Comment};
+use crate::client::{Attachment, Bug, BugzillaUser, Comment, FieldValue, Product};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum OutputFormat {
@@ -205,6 +205,201 @@ pub fn print_comments(comments: &[Comment], format: OutputFormat) {
                 println!();
                 println!("{}", "─".repeat(60));
             }
+        }
+    }
+}
+
+#[derive(Tabled)]
+struct ProductRow {
+    #[tabled(rename = "ID")]
+    id: u64,
+    #[tabled(rename = "NAME")]
+    name: String,
+    #[tabled(rename = "DESCRIPTION")]
+    description: String,
+    #[tabled(rename = "COMPONENTS")]
+    components: usize,
+}
+
+pub fn print_products(products: &[Product], format: OutputFormat) {
+    match format {
+        OutputFormat::Json => {
+            println!("{}", serde_json::to_string_pretty(products).unwrap());
+        }
+        OutputFormat::Table => {
+            if products.is_empty() {
+                println!("No products found.");
+                return;
+            }
+            let rows: Vec<ProductRow> = products
+                .iter()
+                .map(|p| {
+                    let description = if p.description.len() > 60 {
+                        format!("{}...", &p.description[..57])
+                    } else {
+                        p.description.clone()
+                    };
+                    ProductRow {
+                        id: p.id,
+                        name: p.name.clone(),
+                        description,
+                        components: p.components.len(),
+                    }
+                })
+                .collect();
+            println!("{}", Table::new(rows));
+        }
+    }
+}
+
+pub fn print_product_detail(product: &Product, format: OutputFormat) {
+    match format {
+        OutputFormat::Json => {
+            println!("{}", serde_json::to_string_pretty(product).unwrap());
+        }
+        OutputFormat::Table => {
+            println!(
+                "{} {}\n{}\n",
+                "Product".bold(),
+                product.name.bold(),
+                product.description
+            );
+
+            if !product.components.is_empty() {
+                println!("{}:", "Components".bold());
+                for c in &product.components {
+                    let assignee = c.default_assignee.as_deref().unwrap_or("-");
+                    let active = if c.is_active { "" } else { " [inactive]" };
+                    println!("  {}{active}  (assignee: {assignee})", c.name);
+                }
+                println!();
+            }
+
+            if !product.versions.is_empty() {
+                println!("{}:", "Versions".bold());
+                for v in &product.versions {
+                    let active = if v.is_active { "" } else { " [inactive]" };
+                    println!("  {}{active}", v.name);
+                }
+                println!();
+            }
+
+            if !product.milestones.is_empty() {
+                println!("{}:", "Milestones".bold());
+                for m in &product.milestones {
+                    let active = if m.is_active { "" } else { " [inactive]" };
+                    println!("  {}{active}", m.name);
+                }
+            }
+        }
+    }
+}
+
+#[derive(Tabled)]
+struct FieldValueRow {
+    #[tabled(rename = "NAME")]
+    name: String,
+    #[tabled(rename = "ACTIVE")]
+    active: String,
+    #[tabled(rename = "CAN CHANGE TO")]
+    can_change_to: String,
+}
+
+pub fn print_field_values(field_name: &str, values: &[FieldValue], format: OutputFormat) {
+    match format {
+        OutputFormat::Json => {
+            println!("{}", serde_json::to_string_pretty(values).unwrap());
+        }
+        OutputFormat::Table => {
+            if values.is_empty() {
+                println!("No values for field '{field_name}'.");
+                return;
+            }
+            let has_transitions = values.iter().any(|v| v.can_change_to.is_some());
+
+            if has_transitions {
+                let rows: Vec<FieldValueRow> = values
+                    .iter()
+                    .map(|v| {
+                        let transitions = v
+                            .can_change_to
+                            .as_ref()
+                            .map(|t| {
+                                t.iter()
+                                    .map(|s| s.name.as_str())
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            })
+                            .unwrap_or_default();
+                        FieldValueRow {
+                            name: v.name.clone(),
+                            active: if v.is_active {
+                                "yes".into()
+                            } else {
+                                "no".into()
+                            },
+                            can_change_to: transitions,
+                        }
+                    })
+                    .collect();
+                println!("{}", Table::new(rows));
+            } else {
+                #[derive(Tabled)]
+                struct SimpleFieldRow {
+                    #[tabled(rename = "NAME")]
+                    name: String,
+                    #[tabled(rename = "ACTIVE")]
+                    active: String,
+                }
+                let rows: Vec<SimpleFieldRow> = values
+                    .iter()
+                    .map(|v| SimpleFieldRow {
+                        name: v.name.clone(),
+                        active: if v.is_active {
+                            "yes".into()
+                        } else {
+                            "no".into()
+                        },
+                    })
+                    .collect();
+                println!("{}", Table::new(rows));
+            }
+        }
+    }
+}
+
+#[derive(Tabled)]
+struct UserRow {
+    #[tabled(rename = "ID")]
+    id: u64,
+    #[tabled(rename = "NAME")]
+    name: String,
+    #[tabled(rename = "REAL NAME")]
+    real_name: String,
+    #[tabled(rename = "EMAIL")]
+    email: String,
+}
+
+pub fn print_users(users: &[BugzillaUser], format: OutputFormat) {
+    match format {
+        OutputFormat::Json => {
+            println!("{}", serde_json::to_string_pretty(users).unwrap());
+        }
+        OutputFormat::Table => {
+            if users.is_empty() {
+                println!("No users found.");
+                return;
+            }
+            let rows: Vec<UserRow> = users
+                .iter()
+                .map(|u| UserRow {
+                    id: u.id,
+                    name: u.name.clone(),
+                    real_name: u.real_name.clone().unwrap_or_default(),
+                    email: u.email.clone().unwrap_or_default(),
+                })
+                .collect();
+            println!("{}", Table::new(rows));
         }
     }
 }
