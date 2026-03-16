@@ -40,8 +40,13 @@ pub struct ServerConfig {
 
 impl Config {
     pub fn path() -> Result<PathBuf> {
-        let config_dir = dirs::config_dir()
-            .ok_or_else(|| BzrError::config("cannot determine config directory"))?;
+        let config_dir = if let Ok(val) = std::env::var("XDG_CONFIG_HOME") {
+            PathBuf::from(val)
+        } else {
+            let home = dirs::home_dir()
+                .ok_or_else(|| BzrError::config("cannot determine home directory"))?;
+            home.join(".config")
+        };
         Ok(config_dir.join("bzr").join("config.toml"))
     }
 
