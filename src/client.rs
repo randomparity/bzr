@@ -553,6 +553,8 @@ impl BugzillaClient {
         Ok(all_products)
     }
 
+    /// Fetch a product by name. Note: components, versions, and milestones
+    /// may require `include_fields` on some Bugzilla versions to be populated.
     pub async fn get_product(&self, name: &str) -> Result<Product> {
         let req = self.auth(self.http.get(self.url("product")).query(&[("names", name)]));
         let resp = self.send(req).await?;
@@ -563,6 +565,8 @@ impl BugzillaClient {
             .ok_or_else(|| BzrError::Other(format!("product '{name}' not found")))
     }
 
+    /// Fetch legal values for a bug field. An unrecognized field name returns
+    /// an empty list, indistinguishable from a field with no values.
     pub async fn get_field_values(&self, field_name: &str) -> Result<Vec<FieldValue>> {
         let req = self.auth(self.http.get(self.url(&format!("field/bug/{field_name}"))));
         let resp = self.send(req).await?;
@@ -847,5 +851,46 @@ mod tests {
         let client = test_client(&mock.uri());
         let users = client.search_users("nobody").await.unwrap();
         assert!(users.is_empty());
+    }
+
+    #[tokio::test]
+    async fn api_error_with_200_status() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/product"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 301,
+                "message": "You are not authorized to access that product."
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client.get_product("Secret").await.unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("301"), "expected error code 301: {msg}");
+        assert!(
+            msg.contains("not authorized"),
+            "expected auth error message: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn http_500_returns_error() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client.search_users("anyone").await.unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("500") || msg.contains("Internal Server Error"),
+            "expected 500 error: {msg}"
+        );
     }
 }
