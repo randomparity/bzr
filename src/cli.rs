@@ -340,12 +340,45 @@ pub enum ConfigAction {
 
 #[derive(Subcommand)]
 pub enum ProductAction {
-    /// List accessible products
-    List,
+    /// List products
+    List {
+        /// Product type: accessible (default), selectable, or enterable
+        #[arg(long, default_value = "accessible")]
+        r#type: String,
+    },
     /// View product details (components, versions, milestones)
     View {
         /// Product name
         name: String,
+    },
+    /// Create a new product
+    Create {
+        /// Product name
+        #[arg(long)]
+        name: String,
+        /// Product description
+        #[arg(long)]
+        description: String,
+        /// Initial version
+        #[arg(long, default_value = "unspecified")]
+        version: String,
+        /// Whether the product is open for bugs
+        #[arg(long, default_value = "true")]
+        is_open: bool,
+    },
+    /// Update an existing product
+    Update {
+        /// Product name
+        name: String,
+        /// New description
+        #[arg(long)]
+        description: Option<String>,
+        /// Default milestone
+        #[arg(long)]
+        default_milestone: Option<String>,
+        /// Whether the product is open for bugs
+        #[arg(long)]
+        is_open: Option<bool>,
     },
 }
 
@@ -364,6 +397,32 @@ pub enum UserAction {
     Search {
         /// Search query
         query: String,
+    },
+    /// Create a new user
+    Create {
+        /// User email
+        #[arg(long)]
+        email: String,
+        /// Full name
+        #[arg(long)]
+        full_name: Option<String>,
+        /// Password (prompted if not provided)
+        #[arg(long)]
+        password: Option<String>,
+    },
+    /// Update a user
+    Update {
+        /// User ID or login name
+        user: String,
+        /// New real name
+        #[arg(long)]
+        real_name: Option<String>,
+        /// New email
+        #[arg(long)]
+        email: Option<String>,
+        /// Disable login
+        #[arg(long)]
+        disable_login: Option<bool>,
     },
 }
 
@@ -392,6 +451,34 @@ pub enum GroupAction {
         /// Group name
         #[arg(long)]
         group: String,
+    },
+    /// View group details
+    View {
+        /// Group name or ID
+        group: String,
+    },
+    /// Create a new group
+    Create {
+        /// Group name
+        #[arg(long)]
+        name: String,
+        /// Group description
+        #[arg(long)]
+        description: String,
+        /// Whether the group is active
+        #[arg(long, default_value = "true")]
+        is_active: bool,
+    },
+    /// Update a group
+    Update {
+        /// Group name or ID
+        group: String,
+        /// New description
+        #[arg(long)]
+        description: Option<String>,
+        /// Whether the group is active
+        #[arg(long)]
+        is_active: Option<bool>,
     },
 }
 

@@ -2,8 +2,8 @@ use colored::Colorize;
 use tabled::{Table, Tabled};
 
 use crate::client::{
-    Attachment, Bug, BugzillaUser, Classification, Comment, FieldValue, HistoryEntry, Product,
-    ServerExtensions, ServerVersion, WhoamiResponse,
+    Attachment, Bug, BugzillaUser, Classification, Comment, FieldValue, GroupInfo, HistoryEntry,
+    Product, ServerExtensions, ServerVersion, WhoamiResponse,
 };
 
 fn truncate(s: &str, max_chars: usize) -> String {
@@ -524,6 +524,33 @@ pub fn print_classification(classification: &Classification, format: OutputForma
                 println!("{}:", "Products".bold());
                 for p in &classification.products {
                     println!("  {} - {}", p.name, truncate(&p.description, 60));
+                }
+            }
+        }
+    }
+}
+
+pub fn print_group_info(group: &GroupInfo, format: OutputFormat) {
+    match format {
+        OutputFormat::Json => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(group).expect("serializable to JSON")
+            );
+        }
+        OutputFormat::Table => {
+            println!("{} {}", "Group".bold(), group.name.bold());
+            println!("  Description:  {}", group.description);
+            println!(
+                "  Active:       {}",
+                if group.is_active { "yes" } else { "no" }
+            );
+            println!("  ID:           {}", group.id);
+            if !group.membership.is_empty() {
+                println!("\n{}:", "Members".bold());
+                for m in &group.membership {
+                    let real = m.real_name.as_deref().unwrap_or("");
+                    println!("  {} ({real})", m.name);
                 }
             }
         }
