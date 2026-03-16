@@ -2,7 +2,8 @@ use colored::Colorize;
 use tabled::{Table, Tabled};
 
 use crate::client::{
-    Attachment, Bug, BugzillaUser, Comment, FieldValue, HistoryEntry, Product, WhoamiResponse,
+    Attachment, Bug, BugzillaUser, Comment, FieldValue, HistoryEntry, Product, ServerExtensions,
+    ServerVersion, WhoamiResponse,
 };
 
 fn truncate(s: &str, max_chars: usize) -> String {
@@ -459,6 +460,37 @@ pub fn print_whoami(whoami: &WhoamiResponse, format: OutputFormat) {
                 println!("  Login:  {login}");
             }
             println!("  ID:     {}", whoami.id);
+        }
+    }
+}
+
+pub fn print_server_info(
+    version: &ServerVersion,
+    extensions: &ServerExtensions,
+    format: OutputFormat,
+) {
+    match format {
+        OutputFormat::Json => {
+            let combined = serde_json::json!({
+                "version": version.version,
+                "extensions": extensions.extensions,
+            });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&combined).expect("serializable to JSON")
+            );
+        }
+        OutputFormat::Table => {
+            println!("{} {}", "Bugzilla version:".bold(), version.version);
+            if extensions.extensions.is_empty() {
+                println!("\nNo extensions installed.");
+            } else {
+                println!("\n{}:", "Extensions".bold());
+                for (name, info) in &extensions.extensions {
+                    let ver = info.version.as_deref().unwrap_or("unknown");
+                    println!("  {name} ({ver})");
+                }
+            }
         }
     }
 }
