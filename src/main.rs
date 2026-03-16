@@ -69,5 +69,8 @@ async fn run(cli: Cli) -> error::Result<()> {
         Commands::User { action } => {
             commands::user::execute(action, cli.server.as_deref(), format).await
         }
+        Commands::Group { action } => {
+            commands::group::execute(action, cli.server.as_deref(), format).await
+        }
     }
 }

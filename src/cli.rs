@@ -56,6 +56,11 @@ pub enum Commands {
         #[command(subcommand)]
         action: UserAction,
     },
+    /// Group membership management
+    Group {
+        #[command(subcommand)]
+        action: GroupAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -249,5 +254,32 @@ pub enum UserAction {
     Search {
         /// Search query
         query: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum GroupAction {
+    /// Add a user to a group
+    AddUser {
+        /// Group name
+        #[arg(long)]
+        group: String,
+        /// User email/login
+        #[arg(long)]
+        user: String,
+    },
+    /// Remove a user from a group
+    RemoveUser {
+        /// Group name
+        #[arg(long)]
+        group: String,
+        /// User email/login
+        #[arg(long)]
+        user: String,
+    },
+    /// List users in a group
+    ListUsers {
+        /// Group name
+        group: String,
     },
 }
