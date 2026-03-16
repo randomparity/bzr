@@ -247,11 +247,9 @@ impl BugzillaClient {
 
     async fn send(&self, builder: RequestBuilder) -> Result<reqwest::Response> {
         let resp = builder.send().await?;
-        tracing::debug!(
-            url = %resp.url(),
-            status = %resp.status(),
-            "API response"
-        );
+        let url = resp.url();
+        let safe_url = format!("{}{}", url.origin().ascii_serialization(), url.path());
+        tracing::debug!(url = safe_url, status = %resp.status(), "API response");
         self.check_error(resp).await
     }
 
@@ -259,7 +257,12 @@ impl BugzillaClient {
         if response.status().is_client_error() || response.status().is_server_error() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            tracing::debug!(%status, %body, "API error response");
+            let preview = if body.len() > 512 {
+                &body[..512]
+            } else {
+                &body
+            };
+            tracing::debug!(%status, body = preview, "API error response");
             if let Ok(err) = serde_json::from_str::<ErrorResponse>(&body) {
                 if err.error {
                     return Err(BzrError::Api {
@@ -387,5 +390,101 @@ impl BugzillaClient {
         let resp = self.send(req).await?;
         let data: CommentCreateResponse = resp.json().await?;
         Ok(data.id)
+    }
+}
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use tracing_subscriber::layer::SubscriberExt;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::*;
+    use crate::config::AuthMethod;
+
+    /// Tracing layer that captures formatted log output into a shared buffer.
+    struct CapturingWriter(Arc<Mutex<Vec<u8>>>);
+
+    impl std::io::Write for CapturingWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for CapturingWriter {
+        type Writer = CapturingWriter;
+
+        fn make_writer(&'a self) -> Self::Writer {
+            CapturingWriter(Arc::clone(&self.0))
+        }
+    }
+
+    #[tokio::test]
+    async fn send_does_not_log_query_param_api_key() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({"bugs": [{"id": 1, "summary": "test", "status": "NEW"}]}),
+            ))
+            .mount(&mock)
+            .await;
+
+        let secret = "super-secret-api-key-12345";
+        let client = BugzillaClient::new(&mock.uri(), secret, AuthMethod::QueryParam).unwrap();
+
+        let log_buf = Arc::new(Mutex::new(Vec::new()));
+        let fmt_layer = tracing_subscriber::fmt::layer()
+            .with_writer(CapturingWriter(Arc::clone(&log_buf)))
+            .with_ansi(false);
+        let subscriber = tracing_subscriber::registry().with(fmt_layer);
+
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let _bug = client.get_bug(1).await.unwrap();
+
+        let output = String::from_utf8(log_buf.lock().unwrap().clone()).unwrap();
+        assert!(
+            !output.contains(secret),
+            "API key leaked in log output: {output}"
+        );
+    }
+
+    #[tokio::test]
+    async fn logged_url_contains_path() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({"bugs": [{"id": 42, "summary": "test", "status": "NEW"}]}),
+            ))
+            .mount(&mock)
+            .await;
+
+        let client = BugzillaClient::new(&mock.uri(), "key", AuthMethod::Header).unwrap();
+
+        let log_buf = Arc::new(Mutex::new(Vec::new()));
+        let fmt_layer = tracing_subscriber::fmt::layer()
+            .with_writer(CapturingWriter(Arc::clone(&log_buf)))
+            .with_ansi(false);
+        let subscriber = tracing_subscriber::registry().with(fmt_layer);
+
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let _bug = client.get_bug(42).await.unwrap();
+
+        let output = String::from_utf8(log_buf.lock().unwrap().clone()).unwrap();
+        assert!(
+            output.contains("/rest/bug/42"),
+            "logged URL should contain path: {output}"
+        );
     }
 }
