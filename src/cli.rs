@@ -91,6 +91,11 @@ pub enum BugAction {
         #[arg(long, default_value = "50")]
         limit: u32,
     },
+    /// Show change history of a bug
+    History {
+        /// Bug ID
+        id: u64,
+    },
     /// Create a new bug
     Create {
         /// Product name
