@@ -10,15 +10,29 @@ mod output;
 use clap::Parser;
 use cli::{Cli, Commands};
 use output::OutputFormat;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() {
+    let cli = Cli::parse();
+
+    let filter = if std::env::var("RUST_LOG").is_ok() {
+        EnvFilter::from_default_env()
+    } else {
+        // Level strings are compile-time constants; parse_lossy is safe.
+        let level = match cli.verbose {
+            0 => "bzr=warn",
+            1 => "bzr=info",
+            2 => "bzr=debug",
+            _ => "bzr=trace",
+        };
+        EnvFilter::new(level)
+    };
+
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(filter)
         .with_writer(std::io::stderr)
         .init();
-
-    let cli = Cli::parse();
 
     if let Err(e) = run(cli).await {
         #[expect(clippy::print_stderr)]
