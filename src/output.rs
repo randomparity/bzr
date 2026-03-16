@@ -3,6 +3,15 @@ use tabled::{Table, Tabled};
 
 use crate::client::{Attachment, Bug, BugzillaUser, Comment, FieldValue, Product};
 
+fn truncate(s: &str, max_chars: usize) -> String {
+    if s.chars().count() > max_chars {
+        let truncated: String = s.chars().take(max_chars - 3).collect();
+        format!("{truncated}...")
+    } else {
+        s.to_string()
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 pub enum OutputFormat {
     #[default]
@@ -37,11 +46,7 @@ struct BugRow {
 
 impl From<&Bug> for BugRow {
     fn from(b: &Bug) -> Self {
-        let summary = if b.summary.len() > 72 {
-            format!("{}...", &b.summary[..69])
-        } else {
-            b.summary.clone()
-        };
+        let summary = truncate(&b.summary, 72);
         BugRow {
             id: b.id,
             status: b.status.clone(),
@@ -234,11 +239,7 @@ pub fn print_products(products: &[Product], format: OutputFormat) {
             let rows: Vec<ProductRow> = products
                 .iter()
                 .map(|p| {
-                    let description = if p.description.len() > 60 {
-                        format!("{}...", &p.description[..57])
-                    } else {
-                        p.description.clone()
-                    };
+                    let description = truncate(&p.description, 60);
                     ProductRow {
                         id: p.id,
                         name: p.name.clone(),
