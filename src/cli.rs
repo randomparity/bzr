@@ -11,6 +11,10 @@ pub struct Cli {
     #[arg(long, global = true, default_value = "table")]
     pub output: String,
 
+    /// Increase log verbosity (-v=info, -vv=debug, -vvv=trace)
+    #[arg(short, long, action = clap::ArgAction::Count, global = true)]
+    pub verbose: u8,
+
     #[command(subcommand)]
     pub command: Commands,
 }

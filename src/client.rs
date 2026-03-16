@@ -225,6 +225,8 @@ impl BugzillaClient {
             .build()
             .map_err(|e| BzrError::Other(format!("failed to build HTTP client: {e}")))?;
 
+        tracing::debug!(base_url, %auth_method, "created Bugzilla client");
+
         Ok(BugzillaClient {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
@@ -243,10 +245,21 @@ impl BugzillaClient {
         }
     }
 
+    async fn send(&self, builder: RequestBuilder) -> Result<reqwest::Response> {
+        let resp = builder.send().await?;
+        tracing::debug!(
+            url = %resp.url(),
+            status = %resp.status(),
+            "API response"
+        );
+        self.check_error(resp).await
+    }
+
     async fn check_error(&self, response: reqwest::Response) -> Result<reqwest::Response> {
         if response.status().is_client_error() || response.status().is_server_error() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
+            tracing::debug!(%status, %body, "API error response");
             if let Ok(err) = serde_json::from_str::<ErrorResponse>(&body) {
                 if err.error {
                     return Err(BzrError::Api {
@@ -261,21 +274,15 @@ impl BugzillaClient {
     }
 
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
-        let resp = self
-            .auth(self.http.get(self.url("bug")).query(params))
-            .send()
-            .await?;
-        let resp = self.check_error(resp).await?;
+        let req = self.auth(self.http.get(self.url("bug")).query(params));
+        let resp = self.send(req).await?;
         let data: BugListResponse = resp.json().await?;
         Ok(data.bugs)
     }
 
     pub async fn get_bug(&self, id: u64) -> Result<Bug> {
-        let resp = self
-            .auth(self.http.get(self.url(&format!("bug/{id}"))))
-            .send()
-            .await?;
-        let resp = self.check_error(resp).await?;
+        let req = self.auth(self.http.get(self.url(&format!("bug/{id}"))));
+        let resp = self.send(req).await?;
         let data: BugListResponse = resp.json().await?;
         data.bugs
             .into_iter()
@@ -284,30 +291,21 @@ impl BugzillaClient {
     }
 
     pub async fn create_bug(&self, params: &CreateBugParams) -> Result<u64> {
-        let resp = self
-            .auth(self.http.post(self.url("bug")).json(params))
-            .send()
-            .await?;
-        let resp = self.check_error(resp).await?;
+        let req = self.auth(self.http.post(self.url("bug")).json(params));
+        let resp = self.send(req).await?;
         let data: BugCreateResponse = resp.json().await?;
         Ok(data.id)
     }
 
     pub async fn update_bug(&self, id: u64, params: &UpdateBugParams) -> Result<()> {
-        let resp = self
-            .auth(self.http.put(self.url(&format!("bug/{id}"))).json(params))
-            .send()
-            .await?;
-        self.check_error(resp).await?;
+        let req = self.auth(self.http.put(self.url(&format!("bug/{id}"))).json(params));
+        self.send(req).await?;
         Ok(())
     }
 
     pub async fn get_comments(&self, bug_id: u64) -> Result<Vec<Comment>> {
-        let resp = self
-            .auth(self.http.get(self.url(&format!("bug/{bug_id}/comment"))))
-            .send()
-            .await?;
-        let resp = self.check_error(resp).await?;
+        let req = self.auth(self.http.get(self.url(&format!("bug/{bug_id}/comment"))));
+        let resp = self.send(req).await?;
         let data: CommentResponse = resp.json().await?;
         let comments = data
             .bugs
@@ -319,25 +317,19 @@ impl BugzillaClient {
     }
 
     pub async fn get_attachments(&self, bug_id: u64) -> Result<Vec<Attachment>> {
-        let resp = self
-            .auth(self.http.get(self.url(&format!("bug/{bug_id}/attachment"))))
-            .send()
-            .await?;
-        let resp = self.check_error(resp).await?;
+        let req = self.auth(self.http.get(self.url(&format!("bug/{bug_id}/attachment"))));
+        let resp = self.send(req).await?;
         let data: AttachmentBugResponse = resp.json().await?;
         let attachments = data.bugs.into_values().next().unwrap_or_default();
         Ok(attachments)
     }
 
     pub async fn get_attachment(&self, attachment_id: u64) -> Result<Attachment> {
-        let resp = self
-            .auth(
-                self.http
-                    .get(self.url(&format!("bug/attachment/{attachment_id}"))),
-            )
-            .send()
-            .await?;
-        let resp = self.check_error(resp).await?;
+        let req = self.auth(
+            self.http
+                .get(self.url(&format!("bug/attachment/{attachment_id}"))),
+        );
+        let resp = self.send(req).await?;
         let data: AttachmentByIdResponse = resp.json().await?;
         data.attachments
             .into_values()
@@ -372,15 +364,12 @@ impl BugzillaClient {
             "content_type": content_type,
             "data": encoded,
         });
-        let resp = self
-            .auth(
-                self.http
-                    .post(self.url(&format!("bug/{bug_id}/attachment")))
-                    .json(&body),
-            )
-            .send()
-            .await?;
-        let resp = self.check_error(resp).await?;
+        let req = self.auth(
+            self.http
+                .post(self.url(&format!("bug/{bug_id}/attachment")))
+                .json(&body),
+        );
+        let resp = self.send(req).await?;
         let data: AttachmentCreateResponse = resp.json().await?;
         data.ids
             .into_iter()
@@ -390,15 +379,12 @@ impl BugzillaClient {
 
     pub async fn add_comment(&self, bug_id: u64, text: &str) -> Result<u64> {
         let body = serde_json::json!({ "comment": text });
-        let resp = self
-            .auth(
-                self.http
-                    .post(self.url(&format!("bug/{bug_id}/comment")))
-                    .json(&body),
-            )
-            .send()
-            .await?;
-        let resp = self.check_error(resp).await?;
+        let req = self.auth(
+            self.http
+                .post(self.url(&format!("bug/{bug_id}/comment")))
+                .json(&body),
+        );
+        let resp = self.send(req).await?;
         let data: CommentCreateResponse = resp.json().await?;
         Ok(data.id)
     }
