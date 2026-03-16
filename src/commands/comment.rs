@@ -12,8 +12,8 @@ pub async fn execute(
     let client = super::shared::build_client(server).await?;
 
     match action {
-        CommentAction::List { bug_id } => {
-            let comments = client.get_comments(*bug_id).await?;
+        CommentAction::List { bug_id, since } => {
+            let comments = client.get_comments_since(*bug_id, since.as_deref()).await?;
             output::print_comments(&comments, format);
         }
         CommentAction::Add { bug_id, body } => {
@@ -29,6 +29,22 @@ pub async fn execute(
             {
                 println!("Added comment #{id} to bug #{bug_id}");
             }
+        }
+        CommentAction::Tag {
+            comment_id,
+            add,
+            remove,
+        } => {
+            let tags = client.update_comment_tags(*comment_id, add, remove).await?;
+            #[expect(clippy::print_stdout)]
+            {
+                println!("Tags on comment #{comment_id}:");
+            }
+            output::print_comment_tags(&tags);
+        }
+        CommentAction::SearchTags { query } => {
+            let tags = client.search_comment_tags(query).await?;
+            output::print_comment_tags(&tags);
         }
     }
     Ok(())

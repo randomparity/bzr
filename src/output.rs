@@ -494,3 +494,13 @@ pub fn print_server_info(
         }
     }
 }
+
+pub fn print_comment_tags(tags: &[String]) {
+    if tags.is_empty() {
+        println!("No tags.");
+    } else {
+        for tag in tags {
+            println!("  {tag}");
+        }
+    }
+}
