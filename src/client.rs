@@ -679,6 +679,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::EnvFilter;
     use wiremock::matchers::{body_json, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -725,7 +726,8 @@ mod tests {
         let fmt_layer = tracing_subscriber::fmt::layer()
             .with_writer(CapturingWriter(Arc::clone(&log_buf)))
             .with_ansi(false);
-        let subscriber = tracing_subscriber::registry().with(fmt_layer);
+        let filter = EnvFilter::new("bzr=debug");
+        let subscriber = tracing_subscriber::registry().with(fmt_layer).with(filter);
 
         let _guard = tracing::subscriber::set_default(subscriber);
 
@@ -755,7 +757,8 @@ mod tests {
         let fmt_layer = tracing_subscriber::fmt::layer()
             .with_writer(CapturingWriter(Arc::clone(&log_buf)))
             .with_ansi(false);
-        let subscriber = tracing_subscriber::registry().with(fmt_layer);
+        let filter = EnvFilter::new("bzr=debug");
+        let subscriber = tracing_subscriber::registry().with(fmt_layer).with(filter);
 
         let _guard = tracing::subscriber::set_default(subscriber);
 
