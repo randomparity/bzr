@@ -31,7 +31,14 @@ pub async fn execute(action: &BugAction, server: Option<&str>, format: OutputFor
         }
         BugAction::History { id } => {
             let history = client.get_bug_history(*id).await?;
-            output::print_history(*id, &history, format);
+            if history.is_empty() {
+                #[expect(clippy::print_stdout)]
+                {
+                    println!("No history for bug #{id}.");
+                }
+            } else {
+                output::print_history(&history, format);
+            }
         }
         BugAction::Search { query, limit } => {
             let params = SearchParams {
