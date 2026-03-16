@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::fs;
 use std::path::PathBuf;
 
@@ -13,10 +14,28 @@ pub struct Config {
     pub servers: HashMap<String, ServerConfig>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthMethod {
+    Header,
+    QueryParam,
+}
+
+impl fmt::Display for AuthMethod {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AuthMethod::Header => write!(f, "header"),
+            AuthMethod::QueryParam => write!(f, "query_param"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     pub url: String,
     pub api_key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_method: Option<AuthMethod>,
 }
 
 impl Config {
@@ -46,16 +65,25 @@ impl Config {
         Ok(())
     }
 
-    pub fn active_server(&self, server_name: Option<&str>) -> Result<&ServerConfig> {
-        let name = server_name
+    pub fn active_server_named<'a>(
+        &'a self,
+        server_name: Option<&'a str>,
+    ) -> Result<(&'a str, &'a ServerConfig)> {
+        let name = self.resolve_server_name(server_name)?;
+        let srv = self
+            .servers
+            .get(name)
+            .ok_or_else(|| BzrError::config(format!("server '{name}' not found in config")))?;
+        Ok((name, srv))
+    }
+
+    pub fn resolve_server_name<'a>(&'a self, server_name: Option<&'a str>) -> Result<&'a str> {
+        server_name
             .or(self.default_server.as_deref())
             .ok_or_else(|| {
                 BzrError::config(
                     "no server configured. Run `bzr config set-server <name> --url <url> --api-key <key>` first",
                 )
-            })?;
-        self.servers
-            .get(name)
-            .ok_or_else(|| BzrError::config(format!("server '{}' not found in config", name)))
+            })
     }
 }

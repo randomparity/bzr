@@ -9,16 +9,22 @@ use crate::output::{self, OutputFormat};
 pub async fn execute(
     action: &CommentAction,
     server: Option<&str>,
-    format: &OutputFormat,
+    format: OutputFormat,
 ) -> Result<()> {
-    let config = Config::load()?;
-    let srv = config.active_server(server)?;
-    let client = BugzillaClient::new(&srv.url, &srv.api_key)?;
+    let mut config = Config::load()?;
+    let (server_name, srv) = config.active_server_named(server)?;
+    let (server_name, url, api_key) = (
+        server_name.to_string(),
+        srv.url.clone(),
+        srv.api_key.clone(),
+    );
+    let auth = crate::auth::resolve_auth_method(&mut config, &server_name).await?;
+    let client = BugzillaClient::new(&url, &api_key, auth)?;
 
     match action {
         CommentAction::List { bug_id } => {
             let comments = client.get_comments(*bug_id).await?;
-            output::print_comments(&comments, format)?;
+            output::print_comments(&comments, format);
         }
         CommentAction::Add { bug_id, body } => {
             let text = match body {
@@ -29,7 +35,10 @@ pub async fn execute(
                 return Err(BzrError::Other("empty comment, aborting".into()));
             }
             let id = client.add_comment(*bug_id, &text).await?;
-            println!("Added comment #{} to bug #{}", id, bug_id);
+            #[expect(clippy::print_stdout)]
+            {
+                println!("Added comment #{id} to bug #{bug_id}");
+            }
         }
     }
     Ok(())
@@ -45,7 +54,7 @@ fn edit_comment() -> Result<String> {
     let status = std::process::Command::new(&editor).arg(&path).status()?;
 
     if !status.success() {
-        return Err(BzrError::Other(format!("{} exited with error", editor)));
+        return Err(BzrError::Other(format!("{editor} exited with error")));
     }
 
     let content = std::fs::read_to_string(&path)?;

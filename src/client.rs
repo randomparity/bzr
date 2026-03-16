@@ -1,12 +1,25 @@
+use std::time::Duration;
+
 use base64::Engine;
-use reqwest::header::{HeaderMap, HeaderValue};
+use reqwest::header::HeaderValue;
+use reqwest::RequestBuilder;
 use serde::{Deserialize, Serialize};
 
+use crate::config::AuthMethod;
 use crate::error::{BzrError, Result};
+
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+enum AuthConfig {
+    Header(HeaderValue),
+    QueryParam(String),
+}
 
 pub struct BugzillaClient {
     http: reqwest::Client,
     base_url: String,
+    auth: AuthConfig,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -196,24 +209,38 @@ struct ErrorResponse {
 }
 
 impl BugzillaClient {
-    pub fn new(base_url: &str, api_key: &str) -> Result<Self> {
-        let mut headers = HeaderMap::new();
-        let key_val = HeaderValue::from_str(api_key)
-            .map_err(|_| BzrError::config("invalid API key characters"))?;
-        headers.insert("X-BUGZILLA-API-KEY", key_val);
+    pub fn new(base_url: &str, api_key: &str, auth_method: AuthMethod) -> Result<Self> {
+        let auth = match auth_method {
+            AuthMethod::Header => {
+                let value = HeaderValue::from_str(api_key)
+                    .map_err(|_| BzrError::config("invalid API key characters"))?;
+                AuthConfig::Header(value)
+            }
+            AuthMethod::QueryParam => AuthConfig::QueryParam(api_key.to_string()),
+        };
 
         let http = reqwest::Client::builder()
-            .default_headers(headers)
-            .build()?;
+            .connect_timeout(CONNECT_TIMEOUT)
+            .timeout(REQUEST_TIMEOUT)
+            .build()
+            .map_err(|e| BzrError::Other(format!("failed to build HTTP client: {e}")))?;
 
         Ok(BugzillaClient {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
+            auth,
         })
     }
 
     fn url(&self, path: &str) -> String {
         format!("{}/rest/{}", self.base_url, path.trim_start_matches('/'))
+    }
+
+    fn auth(&self, builder: RequestBuilder) -> RequestBuilder {
+        match &self.auth {
+            AuthConfig::Header(value) => builder.header("X-BUGZILLA-API-KEY", value.clone()),
+            AuthConfig::QueryParam(key) => builder.query(&[("Bugzilla_api_key", key)]),
+        }
     }
 
     async fn check_error(&self, response: reqwest::Response) -> Result<reqwest::Response> {
@@ -228,13 +255,16 @@ impl BugzillaClient {
                     });
                 }
             }
-            return Err(BzrError::Other(format!("HTTP {}: {}", status, body)));
+            return Err(BzrError::Other(format!("HTTP {status}: {body}")));
         }
         Ok(response)
     }
 
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
-        let resp = self.http.get(self.url("bug")).query(params).send().await?;
+        let resp = self
+            .auth(self.http.get(self.url("bug")).query(params))
+            .send()
+            .await?;
         let resp = self.check_error(resp).await?;
         let data: BugListResponse = resp.json().await?;
         Ok(data.bugs)
@@ -242,8 +272,7 @@ impl BugzillaClient {
 
     pub async fn get_bug(&self, id: u64) -> Result<Bug> {
         let resp = self
-            .http
-            .get(self.url(&format!("bug/{}", id)))
+            .auth(self.http.get(self.url(&format!("bug/{id}"))))
             .send()
             .await?;
         let resp = self.check_error(resp).await?;
@@ -251,11 +280,14 @@ impl BugzillaClient {
         data.bugs
             .into_iter()
             .next()
-            .ok_or_else(|| BzrError::Other(format!("bug {} not found", id)))
+            .ok_or_else(|| BzrError::Other(format!("bug {id} not found")))
     }
 
     pub async fn create_bug(&self, params: &CreateBugParams) -> Result<u64> {
-        let resp = self.http.post(self.url("bug")).json(params).send().await?;
+        let resp = self
+            .auth(self.http.post(self.url("bug")).json(params))
+            .send()
+            .await?;
         let resp = self.check_error(resp).await?;
         let data: BugCreateResponse = resp.json().await?;
         Ok(data.id)
@@ -263,9 +295,7 @@ impl BugzillaClient {
 
     pub async fn update_bug(&self, id: u64, params: &UpdateBugParams) -> Result<()> {
         let resp = self
-            .http
-            .put(self.url(&format!("bug/{}", id)))
-            .json(params)
+            .auth(self.http.put(self.url(&format!("bug/{id}"))).json(params))
             .send()
             .await?;
         self.check_error(resp).await?;
@@ -274,8 +304,7 @@ impl BugzillaClient {
 
     pub async fn get_comments(&self, bug_id: u64) -> Result<Vec<Comment>> {
         let resp = self
-            .http
-            .get(self.url(&format!("bug/{}/comment", bug_id)))
+            .auth(self.http.get(self.url(&format!("bug/{bug_id}/comment"))))
             .send()
             .await?;
         let resp = self.check_error(resp).await?;
@@ -291,8 +320,7 @@ impl BugzillaClient {
 
     pub async fn get_attachments(&self, bug_id: u64) -> Result<Vec<Attachment>> {
         let resp = self
-            .http
-            .get(self.url(&format!("bug/{}/attachment", bug_id)))
+            .auth(self.http.get(self.url(&format!("bug/{bug_id}/attachment"))))
             .send()
             .await?;
         let resp = self.check_error(resp).await?;
@@ -303,8 +331,10 @@ impl BugzillaClient {
 
     pub async fn get_attachment(&self, attachment_id: u64) -> Result<Attachment> {
         let resp = self
-            .http
-            .get(self.url(&format!("bug/attachment/{}", attachment_id)))
+            .auth(
+                self.http
+                    .get(self.url(&format!("bug/attachment/{attachment_id}"))),
+            )
             .send()
             .await?;
         let resp = self.check_error(resp).await?;
@@ -312,7 +342,7 @@ impl BugzillaClient {
         data.attachments
             .into_values()
             .next()
-            .ok_or_else(|| BzrError::Other(format!("attachment {} not found", attachment_id)))
+            .ok_or_else(|| BzrError::Other(format!("attachment {attachment_id} not found")))
     }
 
     pub async fn download_attachment(&self, attachment_id: u64) -> Result<(String, Vec<u8>)> {
@@ -322,7 +352,7 @@ impl BugzillaClient {
             .ok_or_else(|| BzrError::Other("attachment has no data".into()))?;
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(&data)
-            .map_err(|e| BzrError::Other(format!("failed to decode attachment: {}", e)))?;
+            .map_err(|e| BzrError::Other(format!("failed to decode attachment: {e}")))?;
         Ok((attachment.file_name, bytes))
     }
 
@@ -343,9 +373,11 @@ impl BugzillaClient {
             "data": encoded,
         });
         let resp = self
-            .http
-            .post(self.url(&format!("bug/{}/attachment", bug_id)))
-            .json(&body)
+            .auth(
+                self.http
+                    .post(self.url(&format!("bug/{bug_id}/attachment")))
+                    .json(&body),
+            )
             .send()
             .await?;
         let resp = self.check_error(resp).await?;
@@ -359,9 +391,11 @@ impl BugzillaClient {
     pub async fn add_comment(&self, bug_id: u64, text: &str) -> Result<u64> {
         let body = serde_json::json!({ "comment": text });
         let resp = self
-            .http
-            .post(self.url(&format!("bug/{}/comment", bug_id)))
-            .json(&body)
+            .auth(
+                self.http
+                    .post(self.url(&format!("bug/{bug_id}/comment")))
+                    .json(&body),
+            )
             .send()
             .await?;
         let resp = self.check_error(resp).await?;
