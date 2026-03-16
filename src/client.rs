@@ -89,11 +89,25 @@ pub struct SearchParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assigned_to: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub creator: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub severity: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alias: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub id: Vec<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quicksearch: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_fields: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exclude_fields: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -521,8 +535,16 @@ impl BugzillaClient {
         Ok(response)
     }
 
-    pub async fn get_bug_history(&self, id: u64) -> Result<Vec<HistoryEntry>> {
-        let req = self.auth(self.http.get(self.url(&format!("bug/{id}/history"))));
+    pub async fn get_bug_history_since(
+        &self,
+        id: u64,
+        since: Option<&str>,
+    ) -> Result<Vec<HistoryEntry>> {
+        let mut req_builder = self.http.get(self.url(&format!("bug/{id}/history")));
+        if let Some(since) = since {
+            req_builder = req_builder.query(&[("new_since", since)]);
+        }
+        let req = self.auth(req_builder);
         let resp = self.send(req).await?;
         let data: HistoryResponse = self.parse_json(resp).await?;
         Ok(data
@@ -540,8 +562,20 @@ impl BugzillaClient {
         Ok(data.bugs)
     }
 
-    pub async fn get_bug(&self, id: u64) -> Result<Bug> {
-        let req = self.auth(self.http.get(self.url(&format!("bug/{id}"))));
+    pub async fn get_bug_with_fields(
+        &self,
+        id: &str,
+        include_fields: Option<&str>,
+        exclude_fields: Option<&str>,
+    ) -> Result<Bug> {
+        let mut req_builder = self.http.get(self.url(&format!("bug/{id}")));
+        if let Some(fields) = include_fields {
+            req_builder = req_builder.query(&[("include_fields", fields)]);
+        }
+        if let Some(fields) = exclude_fields {
+            req_builder = req_builder.query(&[("exclude_fields", fields)]);
+        }
+        let req = self.auth(req_builder);
         let resp = self.send(req).await?;
         let data: BugListResponse = self.parse_json(resp).await?;
         data.bugs
@@ -890,7 +924,7 @@ mod tests {
 
         let _guard = tracing::subscriber::set_default(subscriber);
 
-        let _bug = client.get_bug(1).await.unwrap();
+        let _bug = client.get_bug_with_fields("1", None, None).await.unwrap();
 
         let output = String::from_utf8(log_buf.lock().unwrap().clone()).unwrap();
         assert!(
@@ -921,7 +955,7 @@ mod tests {
 
         let _guard = tracing::subscriber::set_default(subscriber);
 
-        let _bug = client.get_bug(42).await.unwrap();
+        let _bug = client.get_bug_with_fields("42", None, None).await.unwrap();
 
         let output = String::from_utf8(log_buf.lock().unwrap().clone()).unwrap();
         assert!(
@@ -1186,7 +1220,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let history = client.get_bug_history(42).await.unwrap();
+        let history = client.get_bug_history_since(42, None).await.unwrap();
         assert_eq!(history.len(), 2);
         assert_eq!(history[0].who, "alice@example.com");
         assert_eq!(history[0].changes.len(), 2);
@@ -1208,7 +1242,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let history = client.get_bug_history(99).await.unwrap();
+        let history = client.get_bug_history_since(99, None).await.unwrap();
         assert!(history.is_empty());
     }
 
@@ -1237,7 +1271,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let history = client.get_bug_history(10).await.unwrap();
+        let history = client.get_bug_history_since(10, None).await.unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].changes[0].attachment_id, Some(555));
     }
@@ -1504,5 +1538,53 @@ mod tests {
             .unwrap();
         assert_eq!(comments.len(), 1);
         assert_eq!(comments[0].text, "new comment");
+    }
+
+    #[tokio::test]
+    async fn get_bug_history_since_filters_by_date() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42/history"))
+            .and(query_param("new_since", "2025-06-01T00:00:00Z"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{
+                    "id": 42,
+                    "alias": [],
+                    "history": [{
+                        "who": "alice@example.com",
+                        "when": "2025-06-15T10:00:00Z",
+                        "changes": [{"field_name": "status", "removed": "NEW", "added": "ASSIGNED"}]
+                    }]
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let history = client
+            .get_bug_history_since(42, Some("2025-06-01T00:00:00Z"))
+            .await
+            .unwrap();
+        assert_eq!(history.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn get_bug_with_fields_passes_params() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/1"))
+            .and(query_param("include_fields", "id,summary"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({"bugs": [{"id": 1, "summary": "test", "status": "NEW"}]}),
+            ))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let bug = client
+            .get_bug_with_fields("1", Some("id,summary"), None)
+            .await
+            .unwrap();
+        assert_eq!(bug.id, 1);
     }
 }

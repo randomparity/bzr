@@ -16,25 +16,45 @@ pub async fn execute(action: &BugAction, server: Option<&str>, format: OutputFor
             component,
             status,
             assignee,
+            creator,
+            priority,
+            severity,
+            id,
+            alias,
             limit,
+            fields,
+            exclude_fields,
         } => {
             let params = SearchParams {
                 product: product.clone(),
                 component: component.clone(),
                 status: status.clone(),
                 assigned_to: assignee.clone(),
+                creator: creator.clone(),
+                priority: priority.clone(),
+                severity: severity.clone(),
+                id: id.clone(),
+                alias: alias.clone(),
                 limit: Some(*limit),
+                include_fields: fields.clone(),
+                exclude_fields: exclude_fields.clone(),
                 ..Default::default()
             };
             let bugs = client.search_bugs(&params).await?;
             output::print_bugs(&bugs, format);
         }
-        BugAction::View { id } => {
-            let bug = client.get_bug(*id).await?;
+        BugAction::View {
+            id,
+            fields,
+            exclude_fields,
+        } => {
+            let bug = client
+                .get_bug_with_fields(id, fields.as_deref(), exclude_fields.as_deref())
+                .await?;
             output::print_bug_detail(&bug, format);
         }
-        BugAction::History { id } => {
-            let history = client.get_bug_history(*id).await?;
+        BugAction::History { id, since } => {
+            let history = client.get_bug_history_since(*id, since.as_deref()).await?;
             if history.is_empty() {
                 #[expect(clippy::print_stdout)]
                 {
@@ -44,10 +64,17 @@ pub async fn execute(action: &BugAction, server: Option<&str>, format: OutputFor
                 output::print_history(&history, format);
             }
         }
-        BugAction::Search { query, limit } => {
+        BugAction::Search {
+            query,
+            limit,
+            fields,
+            exclude_fields,
+        } => {
             let params = SearchParams {
                 quicksearch: Some(query.clone()),
                 limit: Some(*limit),
+                include_fields: fields.clone(),
+                exclude_fields: exclude_fields.clone(),
                 ..Default::default()
             };
             let bugs = client.search_bugs(&params).await?;
