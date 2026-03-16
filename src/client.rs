@@ -211,6 +211,26 @@ pub struct BugzillaUser {
     pub email: Option<String>,
 }
 
+// Bug history types
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct HistoryEntry {
+    pub who: String,
+    pub when: String,
+    pub changes: Vec<FieldChange>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FieldChange {
+    pub field_name: String,
+    #[serde(default)]
+    pub removed: String,
+    #[serde(default)]
+    pub added: String,
+    #[serde(default)]
+    pub attachment_id: Option<u64>,
+}
+
 // API response wrappers
 #[derive(Deserialize)]
 struct BugListResponse {
@@ -302,6 +322,16 @@ struct FieldEntry {
 #[derive(Deserialize)]
 struct UserSearchResponse {
     users: Vec<BugzillaUser>,
+}
+
+#[derive(Deserialize)]
+struct HistoryResponse {
+    bugs: Vec<HistoryBugEntry>,
+}
+
+#[derive(Deserialize)]
+struct HistoryBugEntry {
+    history: Vec<HistoryEntry>,
 }
 
 #[derive(Deserialize)]
@@ -414,6 +444,18 @@ impl BugzillaClient {
             return Err(BzrError::Other(format!("HTTP {status}: {body}")));
         }
         Ok(response)
+    }
+
+    pub async fn get_bug_history(&self, id: u64) -> Result<Vec<HistoryEntry>> {
+        let req = self.auth(self.http.get(self.url(&format!("bug/{id}/history"))));
+        let resp = self.send(req).await?;
+        let data: HistoryResponse = self.parse_json(resp).await?;
+        Ok(data
+            .bugs
+            .into_iter()
+            .next()
+            .map(|b| b.history)
+            .unwrap_or_default())
     }
 
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
@@ -892,5 +934,105 @@ mod tests {
             msg.contains("500") || msg.contains("Internal Server Error"),
             "expected 500 error: {msg}"
         );
+    }
+
+    #[tokio::test]
+    async fn get_bug_history_returns_entries() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42/history"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{
+                    "id": 42,
+                    "alias": [],
+                    "history": [
+                        {
+                            "who": "alice@example.com",
+                            "when": "2025-01-15T10:30:00Z",
+                            "changes": [
+                                {
+                                    "field_name": "status",
+                                    "removed": "NEW",
+                                    "added": "ASSIGNED"
+                                },
+                                {
+                                    "field_name": "assigned_to",
+                                    "removed": "",
+                                    "added": "alice@example.com"
+                                }
+                            ]
+                        },
+                        {
+                            "who": "bob@example.com",
+                            "when": "2025-01-16T14:00:00Z",
+                            "changes": [
+                                {
+                                    "field_name": "status",
+                                    "removed": "ASSIGNED",
+                                    "added": "RESOLVED"
+                                }
+                            ]
+                        }
+                    ]
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let history = client.get_bug_history(42).await.unwrap();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].who, "alice@example.com");
+        assert_eq!(history[0].changes.len(), 2);
+        assert_eq!(history[0].changes[0].field_name, "status");
+        assert_eq!(history[0].changes[0].removed, "NEW");
+        assert_eq!(history[0].changes[0].added, "ASSIGNED");
+        assert_eq!(history[1].changes.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn get_bug_history_empty() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/99/history"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{"id": 99, "alias": [], "history": []}]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let history = client.get_bug_history(99).await.unwrap();
+        assert!(history.is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_bug_history_with_attachment_id() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/10/history"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{
+                    "id": 10,
+                    "alias": [],
+                    "history": [{
+                        "who": "carol@example.com",
+                        "when": "2025-02-01T09:00:00Z",
+                        "changes": [{
+                            "field_name": "attachments.isobsolete",
+                            "removed": "0",
+                            "added": "1",
+                            "attachment_id": 555
+                        }]
+                    }]
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let history = client.get_bug_history(10).await.unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].changes[0].attachment_id, Some(555));
     }
 }
