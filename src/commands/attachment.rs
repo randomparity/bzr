@@ -9,27 +9,36 @@ use crate::output::{self, OutputFormat};
 pub async fn execute(
     action: &AttachmentAction,
     server: Option<&str>,
-    format: &OutputFormat,
+    format: OutputFormat,
 ) -> Result<()> {
-    let config = Config::load()?;
-    let srv = config.active_server(server)?;
-    let client = BugzillaClient::new(&srv.url, &srv.api_key)?;
+    let mut config = Config::load()?;
+    let (server_name, srv) = config.active_server_named(server)?;
+    let (server_name, url, api_key) = (
+        server_name.to_string(),
+        srv.url.clone(),
+        srv.api_key.clone(),
+    );
+    let auth = crate::auth::resolve_auth_method(&mut config, &server_name).await?;
+    let client = BugzillaClient::new(&url, &api_key, auth)?;
 
     match action {
         AttachmentAction::List { bug_id } => {
             let attachments = client.get_attachments(*bug_id).await?;
-            output::print_attachments(&attachments, format)?;
+            output::print_attachments(&attachments, format);
         }
         AttachmentAction::Download { id, output: out } => {
             let (filename, data) = client.download_attachment(*id).await?;
             let dest = out.as_deref().unwrap_or(&filename);
             std::fs::write(dest, &data)?;
-            println!(
-                "Downloaded attachment #{} to {} ({} bytes)",
-                id,
-                dest,
-                data.len()
-            );
+            #[expect(clippy::print_stdout)]
+            {
+                println!(
+                    "Downloaded attachment #{} to {} ({} bytes)",
+                    id,
+                    dest,
+                    data.len()
+                );
+            }
         }
         AttachmentAction::Upload {
             bug_id,
@@ -47,12 +56,15 @@ pub async fn execute(
             let att_id = client
                 .upload_attachment(*bug_id, file_name, summary, ct, &data)
                 .await?;
-            println!(
-                "Uploaded attachment #{} to bug #{} ({} bytes)",
-                att_id,
-                bug_id,
-                data.len()
-            );
+            #[expect(clippy::print_stdout)]
+            {
+                println!(
+                    "Uploaded attachment #{} to bug #{} ({} bytes)",
+                    att_id,
+                    bug_id,
+                    data.len()
+                );
+            }
         }
     }
     Ok(())
@@ -62,10 +74,12 @@ fn guess_content_type(filename: &str) -> &'static str {
     match filename
         .rsplit('.')
         .next()
-        .map(|e| e.to_lowercase())
+        .map(str::to_lowercase)
         .as_deref()
     {
-        Some("txt" | "log") => "text/plain",
+        Some(
+            "txt" | "log" | "c" | "h" | "cpp" | "rs" | "py" | "sh" | "pl" | "rb" | "js" | "ts",
+        ) => "text/plain",
         Some("html" | "htm") => "text/html",
         Some("json") => "application/json",
         Some("xml") => "application/xml",
@@ -78,7 +92,6 @@ fn guess_content_type(filename: &str) -> &'static str {
         Some("zip") => "application/zip",
         Some("tar") => "application/x-tar",
         Some("patch" | "diff") => "text/x-diff",
-        Some("c" | "h" | "cpp" | "rs" | "py" | "sh" | "pl" | "rb" | "js" | "ts") => "text/plain",
         _ => "application/octet-stream",
     }
 }

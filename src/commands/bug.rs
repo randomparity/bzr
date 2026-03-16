@@ -4,14 +4,16 @@ use crate::config::Config;
 use crate::error::Result;
 use crate::output::{self, OutputFormat};
 
-pub async fn execute(
-    action: &BugAction,
-    server: Option<&str>,
-    format: &OutputFormat,
-) -> Result<()> {
-    let config = Config::load()?;
-    let srv = config.active_server(server)?;
-    let client = BugzillaClient::new(&srv.url, &srv.api_key)?;
+pub async fn execute(action: &BugAction, server: Option<&str>, format: OutputFormat) -> Result<()> {
+    let mut config = Config::load()?;
+    let (server_name, srv) = config.active_server_named(server)?;
+    let (server_name, url, api_key) = (
+        server_name.to_string(),
+        srv.url.clone(),
+        srv.api_key.clone(),
+    );
+    let auth = crate::auth::resolve_auth_method(&mut config, &server_name).await?;
+    let client = BugzillaClient::new(&url, &api_key, auth)?;
 
     match action {
         BugAction::List {
@@ -30,11 +32,11 @@ pub async fn execute(
                 ..Default::default()
             };
             let bugs = client.search_bugs(&params).await?;
-            output::print_bugs(&bugs, format)?;
+            output::print_bugs(&bugs, format);
         }
         BugAction::View { id } => {
             let bug = client.get_bug(*id).await?;
-            output::print_bug_detail(&bug, format)?;
+            output::print_bug_detail(&bug, format);
         }
         BugAction::Search { query, limit } => {
             let params = SearchParams {
@@ -43,7 +45,7 @@ pub async fn execute(
                 ..Default::default()
             };
             let bugs = client.search_bugs(&params).await?;
-            output::print_bugs(&bugs, format)?;
+            output::print_bugs(&bugs, format);
         }
         BugAction::Create {
             product,
@@ -66,7 +68,10 @@ pub async fn execute(
                 assigned_to: assignee.clone(),
             };
             let id = client.create_bug(&params).await?;
-            println!("Created bug #{}", id);
+            #[expect(clippy::print_stdout)]
+            {
+                println!("Created bug #{id}");
+            }
         }
         BugAction::Update {
             id,
@@ -88,7 +93,10 @@ pub async fn execute(
                 whiteboard: whiteboard.clone(),
             };
             client.update_bug(*id, &params).await?;
-            println!("Updated bug #{}", id);
+            #[expect(clippy::print_stdout)]
+            {
+                println!("Updated bug #{id}");
+            }
         }
     }
     Ok(())

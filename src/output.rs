@@ -2,7 +2,6 @@ use colored::Colorize;
 use tabled::{Table, Tabled};
 
 use crate::client::{Attachment, Bug, Comment};
-use crate::error::Result;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum OutputFormat {
@@ -17,7 +16,7 @@ impl std::str::FromStr for OutputFormat {
         match s.to_lowercase().as_str() {
             "table" => Ok(OutputFormat::Table),
             "json" => Ok(OutputFormat::Json),
-            other => Err(format!("unknown output format: {}", other)),
+            other => Err(format!("unknown output format: {other}")),
         }
     }
 }
@@ -70,7 +69,7 @@ fn colorize_status(status: &str) -> String {
     }
 }
 
-pub fn print_bugs(bugs: &[Bug], format: &OutputFormat) -> Result<()> {
+pub fn print_bugs(bugs: &[Bug], format: OutputFormat) {
     match format {
         OutputFormat::Json => {
             println!("{}", serde_json::to_string_pretty(bugs).unwrap());
@@ -78,17 +77,16 @@ pub fn print_bugs(bugs: &[Bug], format: &OutputFormat) -> Result<()> {
         OutputFormat::Table => {
             if bugs.is_empty() {
                 println!("No bugs found.");
-                return Ok(());
+                return;
             }
             let rows: Vec<BugRow> = bugs.iter().map(BugRow::from).collect();
             let table = Table::new(rows).to_string();
-            println!("{}", table);
+            println!("{table}");
         }
     }
-    Ok(())
 }
 
-pub fn print_bug_detail(bug: &Bug, format: &OutputFormat) -> Result<()> {
+pub fn print_bug_detail(bug: &Bug, format: OutputFormat) {
     match format {
         OutputFormat::Json => {
             println!("{}", serde_json::to_string_pretty(bug).unwrap());
@@ -103,7 +101,7 @@ pub fn print_bug_detail(bug: &Bug, format: &OutputFormat) -> Result<()> {
             println!("  Status:      {}", colorize_status(&bug.status));
             if let Some(ref r) = bug.resolution {
                 if !r.is_empty() {
-                    println!("  Resolution:  {}", r);
+                    println!("  Resolution:  {r}");
                 }
             }
             println!("  Product:     {}", bug.product.as_deref().unwrap_or("-"));
@@ -127,19 +125,26 @@ pub fn print_bug_detail(bug: &Bug, format: &OutputFormat) -> Result<()> {
                 println!("  Keywords:    {}", bug.keywords.join(", "));
             }
             if !bug.blocks.is_empty() {
-                let ids: Vec<String> = bug.blocks.iter().map(|i| i.to_string()).collect();
+                let ids: Vec<String> = bug
+                    .blocks
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .collect();
                 println!("  Blocks:      {}", ids.join(", "));
             }
             if !bug.depends_on.is_empty() {
-                let ids: Vec<String> = bug.depends_on.iter().map(|i| i.to_string()).collect();
+                let ids: Vec<String> = bug
+                    .depends_on
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .collect();
                 println!("  Depends on:  {}", ids.join(", "));
             }
         }
     }
-    Ok(())
 }
 
-pub fn print_attachments(attachments: &[Attachment], format: &OutputFormat) -> Result<()> {
+pub fn print_attachments(attachments: &[Attachment], format: OutputFormat) {
     match format {
         OutputFormat::Json => {
             println!("{}", serde_json::to_string_pretty(attachments).unwrap());
@@ -147,7 +152,7 @@ pub fn print_attachments(attachments: &[Attachment], format: &OutputFormat) -> R
         OutputFormat::Table => {
             if attachments.is_empty() {
                 println!("No attachments.");
-                return Ok(());
+                return;
             }
             for a in attachments {
                 let obsolete = if a.is_obsolete { " [OBSOLETE]" } else { "" };
@@ -170,10 +175,9 @@ pub fn print_attachments(attachments: &[Attachment], format: &OutputFormat) -> R
             }
         }
     }
-    Ok(())
 }
 
-pub fn print_comments(comments: &[Comment], format: &OutputFormat) -> Result<()> {
+pub fn print_comments(comments: &[Comment], format: OutputFormat) {
     match format {
         OutputFormat::Json => {
             println!("{}", serde_json::to_string_pretty(comments).unwrap());
@@ -181,7 +185,7 @@ pub fn print_comments(comments: &[Comment], format: &OutputFormat) -> Result<()>
         OutputFormat::Table => {
             if comments.is_empty() {
                 println!("No comments.");
-                return Ok(());
+                return;
             }
             for c in comments {
                 println!(
@@ -196,12 +200,11 @@ pub fn print_comments(comments: &[Comment], format: &OutputFormat) -> Result<()>
                 }
                 println!();
                 for line in c.text.lines() {
-                    println!("  {}", line);
+                    println!("  {line}");
                 }
                 println!();
                 println!("{}", "─".repeat(60));
             }
         }
     }
-    Ok(())
 }
