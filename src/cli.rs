@@ -186,6 +186,9 @@ pub enum ConfigAction {
         /// API key
         #[arg(long)]
         api_key: String,
+        /// Login email (required for older Bugzilla servers)
+        #[arg(long)]
+        email: Option<String>,
     },
     /// Set the default server
     SetDefault {
