@@ -209,6 +209,17 @@ pub struct BugzillaUser {
     pub real_name: Option<String>,
     #[serde(default)]
     pub email: Option<String>,
+    #[serde(default)]
+    pub groups: Vec<UserGroup>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserGroup {
+    pub id: u64,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
 }
 
 // Bug history types
@@ -627,6 +638,39 @@ impl BugzillaClient {
         let data: UserSearchResponse = self.parse_json(resp).await?;
         Ok(data.users)
     }
+
+    pub async fn get_group_members(&self, group_name: &str) -> Result<Vec<BugzillaUser>> {
+        let req = self.auth(
+            self.http
+                .get(self.url("user"))
+                .query(&[("groups", group_name), ("include_fields", "id,name,real_name,email,groups")]),
+        );
+        let resp = self.send(req).await?;
+        let data: UserSearchResponse = self.parse_json(resp).await?;
+        Ok(data.users)
+    }
+
+    pub async fn add_user_to_group(&self, user: &str, group: &str) -> Result<()> {
+        let body = serde_json::json!({
+            "groups": {
+                "add": [group]
+            }
+        });
+        let req = self.auth(self.http.put(self.url(&format!("user/{user}"))).json(&body));
+        self.send(req).await?;
+        Ok(())
+    }
+
+    pub async fn remove_user_from_group(&self, user: &str, group: &str) -> Result<()> {
+        let body = serde_json::json!({
+            "groups": {
+                "remove": [group]
+            }
+        });
+        let req = self.auth(self.http.put(self.url(&format!("user/{user}"))).json(&body));
+        self.send(req).await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1034,5 +1078,95 @@ mod tests {
         let history = client.get_bug_history(10).await.unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].changes[0].attachment_id, Some(555));
+    }
+
+    #[tokio::test]
+    async fn get_group_members_returns_users() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .and(query_param("groups", "admin"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "users": [
+                    {
+                        "id": 1,
+                        "name": "alice@example.com",
+                        "real_name": "Alice",
+                        "email": "alice@example.com",
+                        "groups": [{"id": 10, "name": "admin", "description": "Admins"}]
+                    },
+                    {
+                        "id": 2,
+                        "name": "bob@example.com",
+                        "real_name": "Bob",
+                        "email": "bob@example.com",
+                        "groups": [{"id": 10, "name": "admin", "description": "Admins"}]
+                    }
+                ]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let users = client.get_group_members("admin").await.unwrap();
+        assert_eq!(users.len(), 2);
+        assert_eq!(users[0].name, "alice@example.com");
+        assert_eq!(users[0].groups.len(), 1);
+        assert_eq!(users[0].groups[0].name, "admin");
+    }
+
+    #[tokio::test]
+    async fn get_group_members_empty() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .and(query_param("groups", "nobody"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"users": []})),
+            )
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let users = client.get_group_members("nobody").await.unwrap();
+        assert!(users.is_empty());
+    }
+
+    #[tokio::test]
+    async fn add_user_to_group_sends_put() {
+        let mock = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/rest/user/alice@example.com"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "users": [{"id": 1, "changes": {}}]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        client
+            .add_user_to_group("alice@example.com", "testers")
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn remove_user_from_group_sends_put() {
+        let mock = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/rest/user/bob@example.com"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "users": [{"id": 2, "changes": {}}]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        client
+            .remove_user_from_group("bob@example.com", "testers")
+            .await
+            .unwrap();
     }
 }
