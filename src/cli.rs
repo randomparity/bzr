@@ -166,6 +166,9 @@ pub enum BugAction {
         /// Whiteboard
         #[arg(long)]
         whiteboard: Option<String>,
+        /// Set flags (e.g. "review?(user@example.com)")
+        #[arg(long)]
+        flag: Vec<String>,
     },
 }
 
@@ -213,6 +216,35 @@ pub enum AttachmentAction {
         /// MIME type (auto-detected if not provided)
         #[arg(long)]
         content_type: Option<String>,
+        /// Set flags (e.g. "review?(user@example.com)")
+        #[arg(long)]
+        flag: Vec<String>,
+    },
+    /// Update an attachment
+    Update {
+        /// Attachment ID
+        id: u64,
+        /// New summary
+        #[arg(long)]
+        summary: Option<String>,
+        /// New file name
+        #[arg(long)]
+        file_name: Option<String>,
+        /// New content type
+        #[arg(long)]
+        content_type: Option<String>,
+        /// Mark as obsolete
+        #[arg(long)]
+        obsolete: Option<bool>,
+        /// Mark as patch
+        #[arg(long)]
+        is_patch: Option<bool>,
+        /// Mark as private
+        #[arg(long)]
+        is_private: Option<bool>,
+        /// Set flags (e.g. "review?(user@example.com)")
+        #[arg(long)]
+        flag: Vec<String>,
     },
 }
 

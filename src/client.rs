@@ -128,6 +128,8 @@ pub struct UpdateBugParams {
     pub summary: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub whiteboard: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub flags: Vec<FlagUpdate>,
 }
 
 // Product / field / user types
@@ -252,6 +254,36 @@ pub struct ServerExtensions {
 pub struct ExtensionInfo {
     #[serde(default)]
     pub version: Option<String>,
+}
+
+// Flag types
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FlagUpdate {
+    pub name: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub requestee: Option<String>,
+}
+
+// Attachment update params
+
+#[derive(Debug, Default, Serialize)]
+pub struct UpdateAttachmentParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_obsolete: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_patch: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_private: Option<bool>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub flags: Vec<FlagUpdate>,
 }
 
 // Bug history types
@@ -719,6 +751,47 @@ impl BugzillaClient {
         let req = self.auth(self.http.get(self.url("extensions")));
         let resp = self.send(req).await?;
         self.parse_json(resp).await
+    }
+
+    pub async fn update_attachment(&self, id: u64, params: &UpdateAttachmentParams) -> Result<()> {
+        let req = self.auth(
+            self.http
+                .put(self.url(&format!("bug/attachment/{id}")))
+                .json(params),
+        );
+        self.send(req).await?;
+        Ok(())
+    }
+
+    pub async fn upload_attachment_with_flags(
+        &self,
+        bug_id: u64,
+        file_name: &str,
+        summary: &str,
+        content_type: &str,
+        data: &[u8],
+        flags: &[FlagUpdate],
+    ) -> Result<u64> {
+        let encoded = base64::engine::general_purpose::STANDARD.encode(data);
+        let body = serde_json::json!({
+            "ids": [bug_id],
+            "file_name": file_name,
+            "summary": summary,
+            "content_type": content_type,
+            "data": encoded,
+            "flags": flags,
+        });
+        let req = self.auth(
+            self.http
+                .post(self.url(&format!("bug/{bug_id}/attachment")))
+                .json(&body),
+        );
+        let resp = self.send(req).await?;
+        let data: AttachmentCreateResponse = self.parse_json(resp).await?;
+        data.ids
+            .into_iter()
+            .next()
+            .ok_or_else(|| BzrError::Other("no attachment ID returned".into()))
     }
 }
 
@@ -1283,5 +1356,51 @@ mod tests {
         let ext = client.server_extensions().await.unwrap();
         assert_eq!(ext.extensions.len(), 2);
         assert!(ext.extensions.contains_key("BmpConvert"));
+    }
+
+    #[tokio::test]
+    async fn update_attachment_sends_put() {
+        let mock = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/rest/bug/attachment/100"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "attachments": [{"id": 100, "changes": {}}]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = UpdateAttachmentParams {
+            is_obsolete: Some(true),
+            summary: Some("Updated patch".into()),
+            ..Default::default()
+        };
+        client.update_attachment(100, &params).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn upload_attachment_with_flags_sends_flags() {
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/rest/bug/1/attachment"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [200]})),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let flags = vec![FlagUpdate {
+            name: "review".into(),
+            status: "?".into(),
+            requestee: Some("alice@example.com".into()),
+        }];
+        let id = client
+            .upload_attachment_with_flags(1, "test.txt", "test", "text/plain", b"hello", &flags)
+            .await
+            .unwrap();
+        assert_eq!(id, 200);
     }
 }
