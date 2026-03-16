@@ -1,7 +1,9 @@
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
-use crate::client::{Attachment, Bug, BugzillaUser, Comment, FieldValue, HistoryEntry, Product};
+use crate::client::{
+    Attachment, Bug, BugzillaUser, Comment, FieldValue, HistoryEntry, Product, WhoamiResponse,
+};
 
 fn truncate(s: &str, max_chars: usize) -> String {
     if s.chars().count() > max_chars {
@@ -436,6 +438,27 @@ pub fn print_users(users: &[BugzillaUser], format: OutputFormat) {
                 })
                 .collect();
             println!("{}", Table::new(rows));
+        }
+    }
+}
+
+pub fn print_whoami(whoami: &WhoamiResponse, format: OutputFormat) {
+    match format {
+        OutputFormat::Json => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(whoami).expect("serializable to JSON")
+            );
+        }
+        OutputFormat::Table => {
+            println!("{} {}", "User".bold(), whoami.name.bold());
+            if let Some(ref real_name) = whoami.real_name {
+                println!("  Name:   {real_name}");
+            }
+            if let Some(ref login) = whoami.login {
+                println!("  Login:  {login}");
+            }
+            println!("  ID:     {}", whoami.id);
         }
     }
 }

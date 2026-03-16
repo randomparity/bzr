@@ -61,6 +61,8 @@ pub enum Commands {
         #[command(subcommand)]
         action: GroupAction,
     },
+    /// Show the currently authenticated user
+    Whoami,
 }
 
 #[derive(Subcommand)]
