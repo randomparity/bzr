@@ -300,6 +300,30 @@ pub struct UpdateAttachmentParams {
     pub flags: Vec<FlagUpdate>,
 }
 
+// Classification types
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Classification {
+    pub id: u64,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub sort_key: u64,
+    #[serde(default)]
+    pub products: Vec<ClassificationProduct>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ClassificationProduct {
+    pub id: u64,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+}
+
 // Bug history types
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -421,6 +445,11 @@ struct HistoryResponse {
 #[derive(Deserialize)]
 struct HistoryBugEntry {
     history: Vec<HistoryEntry>,
+}
+
+#[derive(Deserialize)]
+struct ClassificationResponse {
+    classifications: Vec<Classification>,
 }
 
 #[derive(Deserialize)]
@@ -863,6 +892,47 @@ impl BugzillaClient {
             .into_iter()
             .next()
             .ok_or_else(|| BzrError::Other("no attachment ID returned".into()))
+    }
+
+    pub async fn get_classification(&self, name: &str) -> Result<Classification> {
+        let req = self.auth(self.http.get(self.url(&format!("classification/{name}"))));
+        let resp = self.send(req).await?;
+        let data: ClassificationResponse = self.parse_json(resp).await?;
+        data.classifications
+            .into_iter()
+            .next()
+            .ok_or_else(|| BzrError::Other(format!("classification '{name}' not found")))
+    }
+
+    pub async fn create_component(
+        &self,
+        product: &str,
+        name: &str,
+        description: &str,
+        default_assignee: &str,
+    ) -> Result<u64> {
+        let body = serde_json::json!({
+            "product": product,
+            "name": name,
+            "description": description,
+            "default_assignee": default_assignee,
+        });
+        let req = self.auth(self.http.post(self.url("component")).json(&body));
+        let resp = self.send(req).await?;
+        let data: serde_json::Value = self.parse_json(resp).await?;
+        data["id"]
+            .as_u64()
+            .ok_or_else(|| BzrError::Other("no component ID returned".into()))
+    }
+
+    pub async fn update_component(&self, id: u64, updates: &serde_json::Value) -> Result<()> {
+        let req = self.auth(
+            self.http
+                .put(self.url(&format!("component/{id}")))
+                .json(updates),
+        );
+        self.send(req).await?;
+        Ok(())
     }
 }
 
@@ -1586,5 +1656,31 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(bug.id, 1);
+    }
+
+    #[tokio::test]
+    async fn get_classification_returns_data() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/classification/Unclassified"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "classifications": [{
+                    "id": 1,
+                    "name": "Unclassified",
+                    "description": "Default",
+                    "sort_key": 0,
+                    "products": [
+                        {"id": 10, "name": "Widget", "description": "A widget"}
+                    ]
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let cls = client.get_classification("Unclassified").await.unwrap();
+        assert_eq!(cls.name, "Unclassified");
+        assert_eq!(cls.products.len(), 1);
+        assert_eq!(cls.products[0].name, "Widget");
     }
 }

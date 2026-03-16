@@ -1,6 +1,8 @@
 pub mod attachment;
 pub mod bug;
+pub mod classification;
 pub mod comment;
+pub mod component;
 pub mod config_cmd;
 pub mod field;
 pub mod group;
