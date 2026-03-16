@@ -1,19 +1,10 @@
 use crate::cli::BugAction;
-use crate::client::{BugzillaClient, CreateBugParams, SearchParams, UpdateBugParams};
-use crate::config::Config;
+use crate::client::{CreateBugParams, SearchParams, UpdateBugParams};
 use crate::error::Result;
 use crate::output::{self, OutputFormat};
 
 pub async fn execute(action: &BugAction, server: Option<&str>, format: OutputFormat) -> Result<()> {
-    let mut config = Config::load()?;
-    let (server_name, srv) = config.active_server_named(server)?;
-    let (server_name, url, api_key) = (
-        server_name.to_string(),
-        srv.url.clone(),
-        srv.api_key.clone(),
-    );
-    let auth = crate::auth::resolve_auth_method(&mut config, &server_name).await?;
-    let client = BugzillaClient::new(&url, &api_key, auth)?;
+    let client = super::shared::build_client(server).await?;
 
     match action {
         BugAction::List {

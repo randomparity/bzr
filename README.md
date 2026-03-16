@@ -7,6 +7,9 @@ A command-line interface for Bugzilla servers, written in Rust. Inspired by the 
 - **Bug management** — list, search, view, create, and update bugs
 - **Comments** — list and add comments, with `$EDITOR` integration for composing
 - **Attachments** — list, download, and upload file attachments with auto-detected MIME types
+- **Products** — list accessible products and view details (components, versions, milestones)
+- **Fields** — look up valid values for bug fields (status, priority, severity, etc.)
+- **Users** — search users by name or email
 - **Multi-server** — configure and switch between multiple Bugzilla instances
 - **Output formats** — human-readable tables (with colored status) or JSON for scripting
 - **Secure auth** — API key sent via `X-BUGZILLA-API-KEY` header, never in query strings
@@ -42,6 +45,18 @@ bzr attachment download 67890 -o patch.diff
 
 # Upload a file to a bug
 bzr attachment upload 12345 screenshot.png --summary "UI glitch screenshot"
+
+# List accessible products
+bzr product list
+
+# View product details (components, versions, milestones)
+bzr product view MyProduct
+
+# Check valid values for a field
+bzr field list status
+
+# Search for users
+bzr user search "alice"
 ```
 
 ## Command Reference
@@ -65,6 +80,13 @@ bzr [--server <NAME>] [--output table|json]
 │   ├── list <BUG_ID>
 │   ├── download <ATTACHMENT_ID> [-o <FILE>]
 │   └── upload <BUG_ID> <FILE> [--summary <S>] [--content-type <MIME>]
+├── product
+│   ├── list
+│   └── view <NAME>
+├── field
+│   └── list <FIELD_NAME>
+├── user
+│   └── search <QUERY>
 └── config
     ├── set-server <NAME> --url <URL> --api-key <KEY> [--email <EMAIL>]
     ├── set-default <NAME>
@@ -223,6 +245,48 @@ bzr attachment upload 12345 data.csv --summary "Performance data" --content-type
 | `--summary <S>` | Description of the attachment (default: filename) |
 | `--content-type <MIME>` | MIME type (auto-detected if omitted) |
 
+### `bzr product` — Product Operations
+
+#### `bzr product list`
+
+List all products accessible to the authenticated user.
+
+```bash
+bzr product list
+bzr product list --output json
+```
+
+#### `bzr product view`
+
+View product details including components, versions, and milestones.
+
+```bash
+bzr product view Fedora
+```
+
+### `bzr field` — Field Value Lookup
+
+#### `bzr field list`
+
+List valid values for a bug field (e.g. status, priority, severity, resolution). For status fields, shows allowed state transitions.
+
+```bash
+bzr field list status
+bzr field list priority
+bzr field list severity --output json
+```
+
+### `bzr user` — User Operations
+
+#### `bzr user search`
+
+Search for users by name or email.
+
+```bash
+bzr user search "alice"
+bzr user search "example.com" --output json
+```
+
 ### `bzr config` — Configuration Management
 
 Configuration is stored in `~/.config/bzr/config.toml`. Multiple servers can be configured and switched between using aliases.
@@ -269,6 +333,12 @@ bzr --output json bug view 12345 | jq -r '.assigned_to'
 
 # List attachment filenames
 bzr --output json attachment list 12345 | jq -r '.[].file_name'
+
+# Get product component names
+bzr --output json product view Fedora | jq -r '.components[].name'
+
+# List allowed status transitions from NEW
+bzr --output json field list status | jq '.[] | select(.name == "NEW") | .can_change_to'
 ```
 
 ## Configuration File Format

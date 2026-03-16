@@ -1,6 +1,6 @@
-# AGENTS.md
+# CLAUDE.md
 
-This file provides guidance to AI coding agents when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## What is bzr?
 
@@ -12,6 +12,7 @@ A Rust CLI for interacting with Bugzilla REST API servers. Supports bugs, commen
 cargo build                        # Debug build
 cargo build --release              # Release build
 cargo test                         # Run all tests
+cargo test <test_name>             # Run a single test
 cargo fmt                          # Format code
 cargo clippy -- -D warnings        # Lint (warnings are errors)
 make lint                          # Format + clippy in one step
@@ -23,43 +24,22 @@ Pre-commit hooks run `cargo fmt` and `cargo clippy` on commit, `cargo test` on p
 
 ## Architecture
 
-The codebase follows a layered CLI pattern with clear separation:
+Layered CLI pattern: `main.rs` parses args → matches `Commands` enum → delegates to `commands/*.rs::execute()` → which loads `Config`, resolves auth, builds `BugzillaClient`, calls API, and formats output.
 
-```
-src/
-├── main.rs          # Entry point: parses CLI, dispatches to commands
-├── cli.rs           # CLI structure via clap derive (Cli, Commands, *Action enums)
-├── client.rs        # BugzillaClient: HTTP client wrapping the Bugzilla REST API
-├── config.rs        # Config: TOML file at ~/.config/bzr/config.toml
-├── error.rs         # BzrError enum (thiserror) + Result type alias
-├── output.rs        # OutputFormat (Table/Json) + print_* display functions
-└── commands/
-    ├── bug.rs       # Bug subcommands (list, view, search, create, update)
-    ├── comment.rs   # Comment subcommands (list, add)
-    ├── attachment.rs # Attachment subcommands (list, download, upload)
-    └── config_cmd.rs # Config subcommands (set-server, set-default, show)
-```
+### Key modules
 
-**Request flow:** `main.rs` parses args into `Cli` struct → matches on `Commands` enum → calls `commands/*.rs::execute()` → which loads `Config`, builds `BugzillaClient`, calls API methods, and formats output via `output.rs`.
+- **`cli.rs`** — clap derive structs (`Cli`, `Commands`, `BugAction`, `CommentAction`, `AttachmentAction`, `ConfigAction`). All CLI arguments defined here.
+- **`client.rs`** — `BugzillaClient` wraps reqwest for Bugzilla REST API. Contains all API data types (`Bug`, `Comment`, `Attachment`, `SearchParams`, etc.) and response wrappers. Handles base64 encoding/decoding for attachments.
+- **`auth.rs`** — Auto-detects whether a server supports header auth (`X-BUGZILLA-API-KEY`) or query param auth (`Bugzilla_api_key`). Probes `rest/whoami` first (Bugzilla 5.1+), falls back to `rest/valid_login` (requires `--email`). Caches detected method in config.
+- **`config.rs`** — `Config` and `ServerConfig` structs. TOML file at `~/.config/bzr/config.toml`. Multiple named servers with a default. `AuthMethod` enum (`Header`/`QueryParam`) persisted per-server.
+- **`error.rs`** — `BzrError` enum (thiserror) with `Http`, `Config`, `Api`, `Io`, `TomlParse`, `TomlSerialize`, `Other` variants. `Result<T>` type alias.
+- **`output.rs`** — `OutputFormat` (Table/Json). `print_*` functions for bugs, comments, attachments. Uses `tabled` for tables, `colored` for status colors.
+- **`commands/`** — Each submodule has an `execute()` function that takes the action enum, optional server name, and output format. All follow the same pattern: load config → resolve auth → build client → call API → print output.
 
-**Key design decisions:**
-- `BugzillaClient` authenticates via `X-BUGZILLA-API-KEY` header (set once at client construction)
-- All API methods are async (tokio runtime)
-- Attachments are base64-encoded/decoded in `client.rs`
-- `output.rs` handles both table (using `tabled` + `colored`) and JSON output formats
-- Config supports multiple named servers with a default; first server added auto-becomes default
+### Conventions
 
-## Dependencies
-
-| Crate | Purpose |
-|-------|---------|
-| `clap` (derive) | CLI argument parsing |
-| `reqwest` (rustls-tls) | HTTP client |
-| `serde` / `serde_json` | Serialization |
-| `tokio` | Async runtime |
-| `toml` | Config file format |
-| `tabled` | Table output formatting |
-| `colored` | Terminal color output |
-| `thiserror` | Error type derivation |
-| `base64` | Attachment encoding |
-| `dirs` | Platform config directory |
+- `#[expect(clippy::print_stdout)]` is used to allow `println!` in output.rs and command success messages, since `print_stdout` is denied project-wide.
+- Logging uses `tracing` (not println). Verbosity: `-v`=info, `-vv`=debug, `-vvv`=trace. `RUST_LOG` env var overrides.
+- URLs are sanitized via `safe_url()` in debug logs to avoid leaking API keys in query params.
+- Tests use `wiremock` for HTTP mocking. Tests are in `#[cfg(test)] mod tests` within each source file (no separate `tests/` directory).
+- Clippy pedantic is enabled with strict deny rules (see `[lints.clippy]` in Cargo.toml). `unwrap_used` is denied, `expect_used` is warned.
