@@ -7,3 +7,4 @@ pub mod group;
 pub mod product;
 mod shared;
 pub mod user;
+pub mod whoami;

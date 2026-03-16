@@ -223,6 +223,19 @@ pub struct UserGroup {
     pub description: String,
 }
 
+// Whoami type
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WhoamiResponse {
+    pub id: u64,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub real_name: Option<String>,
+    #[serde(default)]
+    pub login: Option<String>,
+}
+
 // Bug history types
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -670,6 +683,12 @@ impl BugzillaClient {
         let req = self.auth(self.http.put(self.url(&format!("user/{user}"))).json(&body));
         self.send(req).await?;
         Ok(())
+    }
+
+    pub async fn whoami(&self) -> Result<WhoamiResponse> {
+        let req = self.auth(self.http.get(self.url("whoami")));
+        let resp = self.send(req).await?;
+        self.parse_json(resp).await
     }
 }
 
@@ -1177,5 +1196,26 @@ mod tests {
             .remove_user_from_group("bob@example.com", "testers")
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn whoami_returns_user_info() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/whoami"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 42,
+                "name": "alice@example.com",
+                "real_name": "Alice",
+                "login": "alice@example.com"
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let who = client.whoami().await.unwrap();
+        assert_eq!(who.id, 42);
+        assert_eq!(who.name, "alice@example.com");
+        assert_eq!(who.real_name.as_deref(), Some("Alice"));
     }
 }
