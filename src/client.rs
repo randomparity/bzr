@@ -247,26 +247,43 @@ impl BugzillaClient {
 
     async fn send(&self, builder: RequestBuilder) -> Result<reqwest::Response> {
         let resp = builder.send().await?;
-        let url = resp.url();
-        let safe_url = format!("{}{}", url.origin().ascii_serialization(), url.path());
-        tracing::debug!(url = safe_url, status = %resp.status(), "API response");
+        tracing::debug!(
+            url = Self::safe_url(resp.url()),
+            status = %resp.status(),
+            "API response"
+        );
         self.check_error(resp).await
+    }
+
+    fn safe_url(url: &reqwest::Url) -> String {
+        format!("{}{}", url.origin().ascii_serialization(), url.path())
     }
 
     async fn parse_json<T: serde::de::DeserializeOwned>(
         &self,
         resp: reqwest::Response,
     ) -> Result<T> {
-        let url = resp.url().to_string();
+        let safe_url = Self::safe_url(resp.url());
         let body = resp.text().await?;
+
+        // Check for Bugzilla error responses that arrive with 200 status
+        if let Ok(err) = serde_json::from_str::<ErrorResponse>(&body) {
+            if err.error {
+                return Err(BzrError::Api {
+                    code: err.code,
+                    message: err.message.unwrap_or_else(|| "unknown API error".into()),
+                });
+            }
+        }
+
         serde_json::from_str(&body).map_err(|e| {
             tracing::debug!(
-                %url,
+                url = safe_url,
                 error = %e,
                 body_preview = &body[..body.len().min(512)],
                 "JSON deserialization failed"
             );
-            BzrError::Other(format!("failed to parse response from {url}: {e}"))
+            BzrError::Other(format!("failed to parse response from {safe_url}: {e}"))
         })
     }
 
