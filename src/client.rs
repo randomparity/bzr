@@ -543,12 +543,9 @@ impl BugzillaClient {
 
         let mut all_products = Vec::new();
         for chunk in accessible.ids.chunks(50) {
-            let ids: Vec<String> = chunk.iter().map(std::string::ToString::to_string).collect();
-            let req = self.auth(
-                self.http
-                    .get(self.url("product"))
-                    .query(&[("ids", ids.join(","))]),
-            );
+            let id_params: Vec<(&str, String)> =
+                chunk.iter().map(|id| ("ids", id.to_string())).collect();
+            let req = self.auth(self.http.get(self.url("product")).query(&id_params));
             let resp = self.send(req).await?;
             let data: ProductResponse = self.parse_json(resp).await?;
             all_products.extend(data.products);
@@ -592,7 +589,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use tracing_subscriber::layer::SubscriberExt;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -697,12 +694,15 @@ mod tests {
             .await;
         Mock::given(method("GET"))
             .and(path("/rest/product"))
+            .and(query_param("ids", "1"))
+            .and(query_param("ids", "2"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "products": [
                     {"id": 1, "name": "Widget", "description": "A widget", "is_active": true, "components": [], "versions": [], "milestones": []},
                     {"id": 2, "name": "Gadget", "description": "A gadget", "is_active": true, "components": [], "versions": [], "milestones": []}
                 ]
             })))
+            .expect(1)
             .mount(&mock)
             .await;
 
