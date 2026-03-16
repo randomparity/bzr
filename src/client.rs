@@ -130,6 +130,87 @@ pub struct UpdateBugParams {
     pub whiteboard: Option<String>,
 }
 
+// Product / field / user types
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Product {
+    pub id: u64,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub is_active: bool,
+    #[serde(default)]
+    pub components: Vec<Component>,
+    #[serde(default)]
+    pub versions: Vec<Version>,
+    #[serde(default)]
+    pub milestones: Vec<Milestone>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Component {
+    pub id: u64,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub is_active: bool,
+    #[serde(default)]
+    pub default_assignee: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Version {
+    pub id: u64,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub sort_key: u64,
+    #[serde(default)]
+    pub is_active: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Milestone {
+    pub id: u64,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub sort_key: u64,
+    #[serde(default)]
+    pub is_active: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FieldValue {
+    pub name: String,
+    #[serde(default)]
+    pub sort_key: u64,
+    #[serde(default)]
+    pub is_active: bool,
+    #[serde(default)]
+    pub can_change_to: Option<Vec<StatusTransition>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StatusTransition {
+    pub name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BugzillaUser {
+    pub id: u64,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub real_name: Option<String>,
+    #[serde(default)]
+    pub email: Option<String>,
+}
+
 // API response wrappers
 #[derive(Deserialize)]
 struct BugListResponse {
@@ -196,6 +277,31 @@ struct AttachmentByIdResponse {
 #[derive(Deserialize)]
 struct AttachmentCreateResponse {
     ids: Vec<u64>,
+}
+
+#[derive(Deserialize)]
+struct ProductAccessibleResponse {
+    ids: Vec<u64>,
+}
+
+#[derive(Deserialize)]
+struct ProductResponse {
+    products: Vec<Product>,
+}
+
+#[derive(Deserialize)]
+struct FieldBugResponse {
+    fields: Vec<FieldEntry>,
+}
+
+#[derive(Deserialize)]
+struct FieldEntry {
+    values: Vec<FieldValue>,
+}
+
+#[derive(Deserialize)]
+struct UserSearchResponse {
+    users: Vec<BugzillaUser>,
 }
 
 #[derive(Deserialize)]
@@ -425,6 +531,60 @@ impl BugzillaClient {
         let data: CommentCreateResponse = self.parse_json(resp).await?;
         Ok(data.id)
     }
+
+    pub async fn list_products(&self) -> Result<Vec<Product>> {
+        let req = self.auth(self.http.get(self.url("product_accessible")));
+        let resp = self.send(req).await?;
+        let accessible: ProductAccessibleResponse = self.parse_json(resp).await?;
+
+        if accessible.ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut all_products = Vec::new();
+        for chunk in accessible.ids.chunks(50) {
+            let id_params: Vec<(&str, String)> =
+                chunk.iter().map(|id| ("ids", id.to_string())).collect();
+            let req = self.auth(self.http.get(self.url("product")).query(&id_params));
+            let resp = self.send(req).await?;
+            let data: ProductResponse = self.parse_json(resp).await?;
+            all_products.extend(data.products);
+        }
+        Ok(all_products)
+    }
+
+    /// Fetch a product by name. Note: components, versions, and milestones
+    /// may require `include_fields` on some Bugzilla versions to be populated.
+    pub async fn get_product(&self, name: &str) -> Result<Product> {
+        let req = self.auth(self.http.get(self.url("product")).query(&[("names", name)]));
+        let resp = self.send(req).await?;
+        let data: ProductResponse = self.parse_json(resp).await?;
+        data.products
+            .into_iter()
+            .next()
+            .ok_or_else(|| BzrError::Other(format!("product '{name}' not found")))
+    }
+
+    /// Fetch legal values for a bug field. An unrecognized field name returns
+    /// an empty list, indistinguishable from a field with no values.
+    pub async fn get_field_values(&self, field_name: &str) -> Result<Vec<FieldValue>> {
+        let req = self.auth(self.http.get(self.url(&format!("field/bug/{field_name}"))));
+        let resp = self.send(req).await?;
+        let data: FieldBugResponse = self.parse_json(resp).await?;
+        Ok(data
+            .fields
+            .into_iter()
+            .next()
+            .map(|f| f.values)
+            .unwrap_or_default())
+    }
+
+    pub async fn search_users(&self, query: &str) -> Result<Vec<BugzillaUser>> {
+        let req = self.auth(self.http.get(self.url("user")).query(&[("match", query)]));
+        let resp = self.send(req).await?;
+        let data: UserSearchResponse = self.parse_json(resp).await?;
+        Ok(data.users)
+    }
 }
 
 #[cfg(test)]
@@ -433,7 +593,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use tracing_subscriber::layer::SubscriberExt;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -519,6 +679,218 @@ mod tests {
         assert!(
             output.contains("/rest/bug/42"),
             "logged URL should contain path: {output}"
+        );
+    }
+
+    fn test_client(base_url: &str) -> BugzillaClient {
+        BugzillaClient::new(base_url, "test-key", AuthMethod::Header).unwrap()
+    }
+
+    #[tokio::test]
+    async fn list_products_returns_products() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/product_accessible"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [1, 2]})),
+            )
+            .mount(&mock)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/rest/product"))
+            .and(query_param("ids", "1"))
+            .and(query_param("ids", "2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "products": [
+                    {"id": 1, "name": "Widget", "description": "A widget", "is_active": true, "components": [], "versions": [], "milestones": []},
+                    {"id": 2, "name": "Gadget", "description": "A gadget", "is_active": true, "components": [], "versions": [], "milestones": []}
+                ]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let products = client.list_products().await.unwrap();
+        assert_eq!(products.len(), 2);
+        assert_eq!(products[0].name, "Widget");
+        assert_eq!(products[1].name, "Gadget");
+    }
+
+    #[tokio::test]
+    async fn list_products_empty() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/product_accessible"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": []})))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let products = client.list_products().await.unwrap();
+        assert!(products.is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_product_by_name() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/product"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "products": [{
+                    "id": 1,
+                    "name": "Widget",
+                    "description": "A widget",
+                    "is_active": true,
+                    "components": [{"id": 10, "name": "Backend", "description": "", "is_active": true}],
+                    "versions": [{"id": 20, "name": "1.0", "sort_key": 0, "is_active": true}],
+                    "milestones": [{"id": 30, "name": "M1", "sort_key": 0, "is_active": true}]
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let product = client.get_product("Widget").await.unwrap();
+        assert_eq!(product.name, "Widget");
+        assert_eq!(product.components.len(), 1);
+        assert_eq!(product.components[0].name, "Backend");
+        assert_eq!(product.versions.len(), 1);
+        assert_eq!(product.milestones.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn get_product_not_found() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/product"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"products": []})),
+            )
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client.get_product("NoSuch").await.unwrap_err();
+        assert!(err.to_string().contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn get_field_values_returns_values() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/field/bug/status"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "fields": [{
+                    "values": [
+                        {"name": "NEW", "sort_key": 100, "is_active": true, "can_change_to": [{"name": "ASSIGNED"}, {"name": "RESOLVED"}]},
+                        {"name": "RESOLVED", "sort_key": 500, "is_active": true}
+                    ]
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let values = client.get_field_values("status").await.unwrap();
+        assert_eq!(values.len(), 2);
+        assert_eq!(values[0].name, "NEW");
+        let transitions = values[0].can_change_to.as_ref().unwrap();
+        assert_eq!(transitions.len(), 2);
+        assert_eq!(transitions[0].name, "ASSIGNED");
+    }
+
+    #[tokio::test]
+    async fn get_field_values_empty_fields() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/field/bug/priority"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"fields": []})),
+            )
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let values = client.get_field_values("priority").await.unwrap();
+        assert!(values.is_empty());
+    }
+
+    #[tokio::test]
+    async fn search_users_returns_matches() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "users": [
+                    {"id": 1, "name": "alice@example.com", "real_name": "Alice", "email": "alice@example.com"},
+                    {"id": 2, "name": "bob@example.com", "real_name": "Bob", "email": "bob@example.com"}
+                ]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let users = client.search_users("example").await.unwrap();
+        assert_eq!(users.len(), 2);
+        assert_eq!(users[0].name, "alice@example.com");
+        assert_eq!(users[1].real_name.as_deref(), Some("Bob"));
+    }
+
+    #[tokio::test]
+    async fn search_users_empty() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"users": []})),
+            )
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let users = client.search_users("nobody").await.unwrap();
+        assert!(users.is_empty());
+    }
+
+    #[tokio::test]
+    async fn api_error_with_200_status() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/product"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 301,
+                "message": "You are not authorized to access that product."
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client.get_product("Secret").await.unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("301"), "expected error code 301: {msg}");
+        assert!(
+            msg.contains("not authorized"),
+            "expected auth error message: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn http_500_returns_error() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client.search_users("anyone").await.unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("500") || msg.contains("Internal Server Error"),
+            "expected 500 error: {msg}"
         );
     }
 }

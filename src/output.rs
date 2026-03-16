@@ -1,7 +1,16 @@
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
-use crate::client::{Attachment, Bug, Comment};
+use crate::client::{Attachment, Bug, BugzillaUser, Comment, FieldValue, Product};
+
+fn truncate(s: &str, max_chars: usize) -> String {
+    if s.chars().count() > max_chars {
+        let truncated: String = s.chars().take(max_chars - 3).collect();
+        format!("{truncated}...")
+    } else {
+        s.to_string()
+    }
+}
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum OutputFormat {
@@ -37,11 +46,7 @@ struct BugRow {
 
 impl From<&Bug> for BugRow {
     fn from(b: &Bug) -> Self {
-        let summary = if b.summary.len() > 72 {
-            format!("{}...", &b.summary[..69])
-        } else {
-            b.summary.clone()
-        };
+        let summary = truncate(&b.summary, 72);
         BugRow {
             id: b.id,
             status: b.status.clone(),
@@ -72,7 +77,10 @@ fn colorize_status(status: &str) -> String {
 pub fn print_bugs(bugs: &[Bug], format: OutputFormat) {
     match format {
         OutputFormat::Json => {
-            println!("{}", serde_json::to_string_pretty(bugs).unwrap());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(bugs).expect("serializable to JSON")
+            );
         }
         OutputFormat::Table => {
             if bugs.is_empty() {
@@ -89,7 +97,10 @@ pub fn print_bugs(bugs: &[Bug], format: OutputFormat) {
 pub fn print_bug_detail(bug: &Bug, format: OutputFormat) {
     match format {
         OutputFormat::Json => {
-            println!("{}", serde_json::to_string_pretty(bug).unwrap());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(bug).expect("serializable to JSON")
+            );
         }
         OutputFormat::Table => {
             println!(
@@ -147,7 +158,10 @@ pub fn print_bug_detail(bug: &Bug, format: OutputFormat) {
 pub fn print_attachments(attachments: &[Attachment], format: OutputFormat) {
     match format {
         OutputFormat::Json => {
-            println!("{}", serde_json::to_string_pretty(attachments).unwrap());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(attachments).expect("serializable to JSON")
+            );
         }
         OutputFormat::Table => {
             if attachments.is_empty() {
@@ -180,7 +194,10 @@ pub fn print_attachments(attachments: &[Attachment], format: OutputFormat) {
 pub fn print_comments(comments: &[Comment], format: OutputFormat) {
     match format {
         OutputFormat::Json => {
-            println!("{}", serde_json::to_string_pretty(comments).unwrap());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(comments).expect("serializable to JSON")
+            );
         }
         OutputFormat::Table => {
             if comments.is_empty() {
@@ -205,6 +222,185 @@ pub fn print_comments(comments: &[Comment], format: OutputFormat) {
                 println!();
                 println!("{}", "─".repeat(60));
             }
+        }
+    }
+}
+
+#[derive(Tabled)]
+struct ProductRow {
+    #[tabled(rename = "ID")]
+    id: u64,
+    #[tabled(rename = "NAME")]
+    name: String,
+    #[tabled(rename = "DESCRIPTION")]
+    description: String,
+    #[tabled(rename = "COMPONENTS")]
+    components: usize,
+}
+
+pub fn print_products(products: &[Product], format: OutputFormat) {
+    match format {
+        OutputFormat::Json => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(products).expect("serializable to JSON")
+            );
+        }
+        OutputFormat::Table => {
+            if products.is_empty() {
+                println!("No products found.");
+                return;
+            }
+            let rows: Vec<ProductRow> = products
+                .iter()
+                .map(|p| {
+                    let description = truncate(&p.description, 60);
+                    ProductRow {
+                        id: p.id,
+                        name: p.name.clone(),
+                        description,
+                        components: p.components.len(),
+                    }
+                })
+                .collect();
+            println!("{}", Table::new(rows));
+        }
+    }
+}
+
+pub fn print_product_detail(product: &Product, format: OutputFormat) {
+    match format {
+        OutputFormat::Json => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(product).expect("serializable to JSON")
+            );
+        }
+        OutputFormat::Table => {
+            println!(
+                "{} {}\n{}\n",
+                "Product".bold(),
+                product.name.bold(),
+                product.description
+            );
+
+            if !product.components.is_empty() {
+                println!("{}:", "Components".bold());
+                for c in &product.components {
+                    let assignee = c.default_assignee.as_deref().unwrap_or("-");
+                    let active = if c.is_active { "" } else { " [inactive]" };
+                    println!("  {}{active}  (assignee: {assignee})", c.name);
+                }
+                println!();
+            }
+
+            if !product.versions.is_empty() {
+                println!("{}:", "Versions".bold());
+                for v in &product.versions {
+                    let active = if v.is_active { "" } else { " [inactive]" };
+                    println!("  {}{active}", v.name);
+                }
+                println!();
+            }
+
+            if !product.milestones.is_empty() {
+                println!("{}:", "Milestones".bold());
+                for m in &product.milestones {
+                    let active = if m.is_active { "" } else { " [inactive]" };
+                    println!("  {}{active}", m.name);
+                }
+            }
+        }
+    }
+}
+
+#[derive(Tabled)]
+struct FieldValueRow {
+    #[tabled(rename = "NAME")]
+    name: String,
+    #[tabled(rename = "ACTIVE")]
+    active: String,
+    #[tabled(rename = "CAN CHANGE TO")]
+    can_change_to: String,
+}
+
+pub fn print_field_values(field_name: &str, values: &[FieldValue], format: OutputFormat) {
+    match format {
+        OutputFormat::Json => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(values).expect("serializable to JSON")
+            );
+        }
+        OutputFormat::Table => {
+            if values.is_empty() {
+                println!("No values for field '{field_name}'.");
+                return;
+            }
+            let rows: Vec<FieldValueRow> = values
+                .iter()
+                .map(|v| {
+                    let transitions = v
+                        .can_change_to
+                        .as_ref()
+                        .map(|t| {
+                            t.iter()
+                                .map(|s| s.name.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        })
+                        .unwrap_or_default();
+                    FieldValueRow {
+                        name: v.name.clone(),
+                        active: if v.is_active {
+                            "yes".into()
+                        } else {
+                            "no".into()
+                        },
+                        can_change_to: transitions,
+                    }
+                })
+                .collect();
+            println!("{}", Table::new(rows));
+        }
+    }
+}
+
+#[derive(Tabled)]
+struct UserRow {
+    #[tabled(rename = "ID")]
+    id: u64,
+    #[tabled(rename = "NAME")]
+    name: String,
+    #[tabled(rename = "REAL NAME")]
+    real_name: String,
+    #[tabled(rename = "EMAIL")]
+    email: String,
+}
+
+pub fn print_users(users: &[BugzillaUser], format: OutputFormat) {
+    match format {
+        OutputFormat::Json => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(users).expect("serializable to JSON")
+            );
+        }
+        OutputFormat::Table => {
+            if users.is_empty() {
+                println!("No users found.");
+                return;
+            }
+            let rows: Vec<UserRow> = users
+                .iter()
+                .map(|u| UserRow {
+                    id: u.id,
+                    name: u.name.clone(),
+                    real_name: u.real_name.clone().unwrap_or_default(),
+                    email: u.email.clone().unwrap_or_default(),
+                })
+                .collect();
+            println!("{}", Table::new(rows));
         }
     }
 }

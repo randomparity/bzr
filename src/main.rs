@@ -4,7 +4,7 @@ mod client;
 mod commands;
 mod config;
 mod error;
-#[expect(clippy::print_stdout, clippy::unwrap_used)]
+#[expect(clippy::print_stdout, clippy::expect_used)]
 mod output;
 
 use clap::Parser;
@@ -60,5 +60,14 @@ async fn run(cli: Cli) -> error::Result<()> {
             commands::attachment::execute(action, cli.server.as_deref(), format).await
         }
         Commands::Config { action } => commands::config_cmd::execute(action),
+        Commands::Product { action } => {
+            commands::product::execute(action, cli.server.as_deref(), format).await
+        }
+        Commands::Field { action } => {
+            commands::field::execute(action, cli.server.as_deref(), format).await
+        }
+        Commands::User { action } => {
+            commands::user::execute(action, cli.server.as_deref(), format).await
+        }
     }
 }
