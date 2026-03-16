@@ -3,6 +3,10 @@ use crate::client::{CreateBugParams, SearchParams, UpdateBugParams};
 use crate::error::Result;
 use crate::output::{self, OutputFormat};
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "single match dispatch over many action variants"
+)]
 pub async fn execute(action: &BugAction, server: Option<&str>, format: OutputFormat) -> Result<()> {
     let client = super::shared::build_client(server).await?;
 
@@ -84,7 +88,9 @@ pub async fn execute(action: &BugAction, server: Option<&str>, format: OutputFor
             severity,
             summary,
             whiteboard,
+            flag,
         } => {
+            let flags = super::shared::parse_flags(flag)?;
             let params = UpdateBugParams {
                 status: status.clone(),
                 resolution: resolution.clone(),
@@ -93,6 +99,7 @@ pub async fn execute(action: &BugAction, server: Option<&str>, format: OutputFor
                 severity: severity.clone(),
                 summary: summary.clone(),
                 whiteboard: whiteboard.clone(),
+                flags,
             };
             client.update_bug(*id, &params).await?;
             #[expect(clippy::print_stdout)]
