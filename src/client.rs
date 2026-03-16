@@ -300,6 +300,32 @@ pub struct UpdateAttachmentParams {
     pub flags: Vec<FlagUpdate>,
 }
 
+// Group info type (for group view)
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GroupInfo {
+    pub id: u64,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub is_active: bool,
+    #[serde(default)]
+    pub membership: Vec<GroupMember>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GroupMember {
+    pub id: u64,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub real_name: Option<String>,
+    #[serde(default)]
+    pub email: Option<String>,
+}
+
 // Classification types
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -450,6 +476,11 @@ struct HistoryBugEntry {
 #[derive(Deserialize)]
 struct ClassificationResponse {
     classifications: Vec<Classification>,
+}
+
+#[derive(Deserialize)]
+struct GroupResponse {
+    groups: Vec<GroupInfo>,
 }
 
 #[derive(Deserialize)]
@@ -749,8 +780,13 @@ impl BugzillaClient {
         Ok(data.id)
     }
 
-    pub async fn list_products(&self) -> Result<Vec<Product>> {
-        let req = self.auth(self.http.get(self.url("product_accessible")));
+    pub async fn list_products_by_type(&self, product_type: &str) -> Result<Vec<Product>> {
+        let endpoint = match product_type {
+            "selectable" => "product_selectable",
+            "enterable" => "product_enterable",
+            _ => "product_accessible",
+        };
+        let req = self.auth(self.http.get(self.url(endpoint)));
         let resp = self.send(req).await?;
         let accessible: ProductAccessibleResponse = self.parse_json(resp).await?;
 
@@ -768,6 +804,25 @@ impl BugzillaClient {
             all_products.extend(data.products);
         }
         Ok(all_products)
+    }
+
+    pub async fn create_product(&self, params: &serde_json::Value) -> Result<u64> {
+        let req = self.auth(self.http.post(self.url("product")).json(params));
+        let resp = self.send(req).await?;
+        let data: serde_json::Value = self.parse_json(resp).await?;
+        data["id"]
+            .as_u64()
+            .ok_or_else(|| BzrError::Other("no product ID returned".into()))
+    }
+
+    pub async fn update_product(&self, name: &str, updates: &serde_json::Value) -> Result<()> {
+        let req = self.auth(
+            self.http
+                .put(self.url(&format!("product/{name}")))
+                .json(updates),
+        );
+        self.send(req).await?;
+        Ok(())
     }
 
     /// Fetch a product by name. Note: components, versions, and milestones
@@ -934,6 +989,80 @@ impl BugzillaClient {
         self.send(req).await?;
         Ok(())
     }
+
+    pub async fn create_user(
+        &self,
+        email: &str,
+        full_name: Option<&str>,
+        password: Option<&str>,
+    ) -> Result<u64> {
+        let mut body = serde_json::json!({ "email": email });
+        if let Some(name) = full_name {
+            body["full_name"] = serde_json::Value::String(name.to_string());
+        }
+        if let Some(pw) = password {
+            body["password"] = serde_json::Value::String(pw.to_string());
+        }
+        let req = self.auth(self.http.post(self.url("user")).json(&body));
+        let resp = self.send(req).await?;
+        let data: serde_json::Value = self.parse_json(resp).await?;
+        data["id"]
+            .as_u64()
+            .ok_or_else(|| BzrError::Other("no user ID returned".into()))
+    }
+
+    pub async fn update_user(&self, user: &str, updates: &serde_json::Value) -> Result<()> {
+        let req = self.auth(
+            self.http
+                .put(self.url(&format!("user/{user}")))
+                .json(updates),
+        );
+        self.send(req).await?;
+        Ok(())
+    }
+
+    pub async fn get_group(&self, group: &str) -> Result<GroupInfo> {
+        let req = self.auth(
+            self.http
+                .get(self.url("group"))
+                .query(&[("names", group), ("membership", "1")]),
+        );
+        let resp = self.send(req).await?;
+        let data: GroupResponse = self.parse_json(resp).await?;
+        data.groups
+            .into_iter()
+            .next()
+            .ok_or_else(|| BzrError::Other(format!("group '{group}' not found")))
+    }
+
+    pub async fn create_group(
+        &self,
+        name: &str,
+        description: &str,
+        is_active: bool,
+    ) -> Result<u64> {
+        let body = serde_json::json!({
+            "name": name,
+            "description": description,
+            "is_active": is_active,
+        });
+        let req = self.auth(self.http.post(self.url("group")).json(&body));
+        let resp = self.send(req).await?;
+        let data: serde_json::Value = self.parse_json(resp).await?;
+        data["id"]
+            .as_u64()
+            .ok_or_else(|| BzrError::Other("no group ID returned".into()))
+    }
+
+    pub async fn update_group(&self, group: &str, updates: &serde_json::Value) -> Result<()> {
+        let req = self.auth(
+            self.http
+                .put(self.url(&format!("group/{group}")))
+                .json(updates),
+        );
+        self.send(req).await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1063,7 +1192,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let products = client.list_products().await.unwrap();
+        let products = client.list_products_by_type("accessible").await.unwrap();
         assert_eq!(products.len(), 2);
         assert_eq!(products[0].name, "Widget");
         assert_eq!(products[1].name, "Gadget");
@@ -1079,7 +1208,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let products = client.list_products().await.unwrap();
+        let products = client.list_products_by_type("accessible").await.unwrap();
         assert!(products.is_empty());
     }
 
