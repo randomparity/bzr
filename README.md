@@ -4,7 +4,8 @@ A command-line interface for Bugzilla servers, written in Rust. Inspired by the 
 
 ## Features
 
-- **Bug management** — list, search, view, create, and update bugs
+- **Bug management** — list, search, view, create, update, and view change history
+- **Groups** — list group members, add and remove users from groups
 - **Comments** — list and add comments, with `$EDITOR` integration for composing
 - **Attachments** — list, download, and upload file attachments with auto-detected MIME types
 - **Products** — list accessible products and view details (components, versions, milestones)
@@ -34,6 +35,9 @@ bzr bug list --product MyProduct --status NEW
 # View a specific bug
 bzr bug view 12345
 
+# View change history for a bug
+bzr bug history 12345
+
 # Search for bugs
 bzr bug search "crash on startup"
 
@@ -57,6 +61,15 @@ bzr field list status
 
 # Search for users
 bzr user search "alice"
+
+# List members of a group
+bzr group list-users --group admin
+
+# Add a user to a group
+bzr group add-user --group testers --user alice@example.com
+
+# Remove a user from a group
+bzr group remove-user --group testers --user alice@example.com
 ```
 
 ## Command Reference
@@ -69,6 +82,7 @@ bzr [--server <NAME>] [--output table|json]
 │   ├── list [--product <P>] [--component <C>] [--status <S>] [--assignee <A>] [--limit <N>]
 │   ├── view <ID>
 │   ├── search <QUERY> [--limit <N>]
+│   ├── history <ID>
 │   ├── create --product <P> --component <C> --summary <S> [--version <V>]
 │   │          [--description <D>] [--priority <P>] [--severity <S>] [--assignee <A>]
 │   └── update <ID> [--status <S>] [--resolution <R>] [--assignee <A>]
@@ -87,6 +101,10 @@ bzr [--server <NAME>] [--output table|json]
 │   └── list <FIELD_NAME>
 ├── user
 │   └── search <QUERY>
+├── group
+│   ├── add-user --group <G> --user <U>
+│   ├── remove-user --group <G> --user <U>
+│   └── list-users --group <G>
 └── config
     ├── set-server <NAME> --url <URL> --api-key <KEY> [--email <EMAIL>]
     ├── set-default <NAME>
@@ -128,6 +146,15 @@ Display detailed information about a single bug.
 ```bash
 bzr bug view 12345
 bzr bug view 12345 --output json
+```
+
+#### `bzr bug history`
+
+View the change history of a bug, showing who changed which fields and when.
+
+```bash
+bzr bug history 12345
+bzr bug history 12345 --output json
 ```
 
 #### `bzr bug search`
@@ -286,6 +313,47 @@ Search for users by name or email.
 bzr user search "alice"
 bzr user search "example.com" --output json
 ```
+
+### `bzr group` — Group Membership Management
+
+#### `bzr group list-users`
+
+List all users in a group.
+
+```bash
+bzr group list-users --group admin
+bzr group list-users --group admin --output json
+```
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `--group <G>` | Yes | Group name |
+
+#### `bzr group add-user`
+
+Add a user to a group.
+
+```bash
+bzr group add-user --group testers --user alice@example.com
+```
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `--group <G>` | Yes | Group name |
+| `--user <U>` | Yes | User email or login |
+
+#### `bzr group remove-user`
+
+Remove a user from a group.
+
+```bash
+bzr group remove-user --group testers --user alice@example.com
+```
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `--group <G>` | Yes | Group name |
+| `--user <U>` | Yes | User email or login |
 
 ### `bzr config` — Configuration Management
 
