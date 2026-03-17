@@ -83,6 +83,10 @@ bzr group add-user --group testers --user alice@example.com
 
 See [docs/bzr-cli.md](docs/bzr-cli.md) for the full command reference covering all commands and options.
 
+## Claude Code Skills
+
+See [docs/skills.md](docs/skills.md) for writing Claude Code skills that automate Bugzilla workflows with bzr.
+
 ## JSON Output
 
 All list and view commands support `--output json` for scripting and piping to tools like `jq`:
