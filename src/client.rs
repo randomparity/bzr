@@ -1,12 +1,18 @@
+use std::collections::HashMap;
 use std::time::Duration;
 
 use base64::Engine;
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use reqwest::header::HeaderValue;
 use reqwest::RequestBuilder;
 use serde::{Deserialize, Serialize};
 
 use crate::config::AuthMethod;
 use crate::error::{BzrError, Result};
+
+fn encode_path(segment: &str) -> String {
+    utf8_percent_encode(segment, NON_ALPHANUMERIC).to_string()
+}
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
@@ -261,7 +267,7 @@ pub struct ServerVersion {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ServerExtensions {
-    pub extensions: std::collections::HashMap<String, ExtensionInfo>,
+    pub extensions: HashMap<String, ExtensionInfo>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -298,6 +304,63 @@ pub struct UpdateAttachmentParams {
     pub is_private: Option<bool>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub flags: Vec<FlagUpdate>,
+}
+
+// Admin param types
+
+#[derive(Debug, Serialize)]
+pub struct CreateProductParams {
+    pub name: String,
+    pub description: String,
+    pub version: String,
+    pub is_open: bool,
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct UpdateProductParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_milestone: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_open: Option<bool>,
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct UpdateComponentParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_assignee: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreateUserParams {
+    pub email: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub full_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct UpdateUserParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub real_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub login_denied_text: Option<String>,
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct UpdateGroupParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_active: Option<bool>,
 }
 
 // Group info type (for group view)
@@ -701,7 +764,7 @@ impl BugzillaClient {
     pub async fn search_comment_tags(&self, query: &str) -> Result<Vec<String>> {
         let req = self.auth(
             self.http
-                .get(self.url(&format!("bug/comment/tags/{query}"))),
+                .get(self.url(&format!("bug/comment/tags/{}", encode_path(query)))),
         );
         let resp = self.send(req).await?;
         self.parse_json(resp).await
@@ -746,6 +809,7 @@ impl BugzillaClient {
         summary: &str,
         content_type: &str,
         data: &[u8],
+        flags: &[FlagUpdate],
     ) -> Result<u64> {
         let encoded = base64::engine::general_purpose::STANDARD.encode(data);
         let body = serde_json::json!({
@@ -754,6 +818,7 @@ impl BugzillaClient {
             "summary": summary,
             "content_type": content_type,
             "data": encoded,
+            "flags": flags,
         });
         let req = self.auth(
             self.http
@@ -806,7 +871,7 @@ impl BugzillaClient {
         Ok(all_products)
     }
 
-    pub async fn create_product(&self, params: &serde_json::Value) -> Result<u64> {
+    pub async fn create_product(&self, params: &CreateProductParams) -> Result<u64> {
         let req = self.auth(self.http.post(self.url("product")).json(params));
         let resp = self.send(req).await?;
         let data: serde_json::Value = self.parse_json(resp).await?;
@@ -815,10 +880,10 @@ impl BugzillaClient {
             .ok_or_else(|| BzrError::Other("no product ID returned".into()))
     }
 
-    pub async fn update_product(&self, name: &str, updates: &serde_json::Value) -> Result<()> {
+    pub async fn update_product(&self, name: &str, updates: &UpdateProductParams) -> Result<()> {
         let req = self.auth(
             self.http
-                .put(self.url(&format!("product/{name}")))
+                .put(self.url(&format!("product/{}", encode_path(name))))
                 .json(updates),
         );
         self.send(req).await?;
@@ -874,7 +939,11 @@ impl BugzillaClient {
                 "add": [group]
             }
         });
-        let req = self.auth(self.http.put(self.url(&format!("user/{user}"))).json(&body));
+        let req = self.auth(
+            self.http
+                .put(self.url(&format!("user/{}", encode_path(user))))
+                .json(&body),
+        );
         self.send(req).await?;
         Ok(())
     }
@@ -885,7 +954,11 @@ impl BugzillaClient {
                 "remove": [group]
             }
         });
-        let req = self.auth(self.http.put(self.url(&format!("user/{user}"))).json(&body));
+        let req = self.auth(
+            self.http
+                .put(self.url(&format!("user/{}", encode_path(user))))
+                .json(&body),
+        );
         self.send(req).await?;
         Ok(())
     }
@@ -918,39 +991,11 @@ impl BugzillaClient {
         Ok(())
     }
 
-    pub async fn upload_attachment_with_flags(
-        &self,
-        bug_id: u64,
-        file_name: &str,
-        summary: &str,
-        content_type: &str,
-        data: &[u8],
-        flags: &[FlagUpdate],
-    ) -> Result<u64> {
-        let encoded = base64::engine::general_purpose::STANDARD.encode(data);
-        let body = serde_json::json!({
-            "ids": [bug_id],
-            "file_name": file_name,
-            "summary": summary,
-            "content_type": content_type,
-            "data": encoded,
-            "flags": flags,
-        });
+    pub async fn get_classification(&self, name: &str) -> Result<Classification> {
         let req = self.auth(
             self.http
-                .post(self.url(&format!("bug/{bug_id}/attachment")))
-                .json(&body),
+                .get(self.url(&format!("classification/{}", encode_path(name)))),
         );
-        let resp = self.send(req).await?;
-        let data: AttachmentCreateResponse = self.parse_json(resp).await?;
-        data.ids
-            .into_iter()
-            .next()
-            .ok_or_else(|| BzrError::Other("no attachment ID returned".into()))
-    }
-
-    pub async fn get_classification(&self, name: &str) -> Result<Classification> {
-        let req = self.auth(self.http.get(self.url(&format!("classification/{name}"))));
         let resp = self.send(req).await?;
         let data: ClassificationResponse = self.parse_json(resp).await?;
         data.classifications
@@ -980,7 +1025,7 @@ impl BugzillaClient {
             .ok_or_else(|| BzrError::Other("no component ID returned".into()))
     }
 
-    pub async fn update_component(&self, id: u64, updates: &serde_json::Value) -> Result<()> {
+    pub async fn update_component(&self, id: u64, updates: &UpdateComponentParams) -> Result<()> {
         let req = self.auth(
             self.http
                 .put(self.url(&format!("component/{id}")))
@@ -990,20 +1035,8 @@ impl BugzillaClient {
         Ok(())
     }
 
-    pub async fn create_user(
-        &self,
-        email: &str,
-        full_name: Option<&str>,
-        password: Option<&str>,
-    ) -> Result<u64> {
-        let mut body = serde_json::json!({ "email": email });
-        if let Some(name) = full_name {
-            body["full_name"] = serde_json::Value::String(name.to_string());
-        }
-        if let Some(pw) = password {
-            body["password"] = serde_json::Value::String(pw.to_string());
-        }
-        let req = self.auth(self.http.post(self.url("user")).json(&body));
+    pub async fn create_user(&self, params: &CreateUserParams) -> Result<u64> {
+        let req = self.auth(self.http.post(self.url("user")).json(params));
         let resp = self.send(req).await?;
         let data: serde_json::Value = self.parse_json(resp).await?;
         data["id"]
@@ -1011,10 +1044,10 @@ impl BugzillaClient {
             .ok_or_else(|| BzrError::Other("no user ID returned".into()))
     }
 
-    pub async fn update_user(&self, user: &str, updates: &serde_json::Value) -> Result<()> {
+    pub async fn update_user(&self, user: &str, updates: &UpdateUserParams) -> Result<()> {
         let req = self.auth(
             self.http
-                .put(self.url(&format!("user/{user}")))
+                .put(self.url(&format!("user/{}", encode_path(user))))
                 .json(updates),
         );
         self.send(req).await?;
@@ -1054,10 +1087,10 @@ impl BugzillaClient {
             .ok_or_else(|| BzrError::Other("no group ID returned".into()))
     }
 
-    pub async fn update_group(&self, group: &str, updates: &serde_json::Value) -> Result<()> {
+    pub async fn update_group(&self, group: &str, updates: &UpdateGroupParams) -> Result<()> {
         let req = self.auth(
             self.http
-                .put(self.url(&format!("group/{group}")))
+                .put(self.url(&format!("group/{}", encode_path(group))))
                 .json(updates),
         );
         self.send(req).await?;
@@ -1531,7 +1564,10 @@ mod tests {
     async fn add_user_to_group_sends_put() {
         let mock = MockServer::start().await;
         Mock::given(method("PUT"))
-            .and(path("/rest/user/alice@example.com"))
+            .and(path(format!(
+                "/rest/user/{}",
+                encode_path("alice@example.com")
+            )))
             .and(body_json(
                 serde_json::json!({"groups": {"add": ["testers"]}}),
             ))
@@ -1553,7 +1589,10 @@ mod tests {
     async fn remove_user_from_group_sends_put() {
         let mock = MockServer::start().await;
         Mock::given(method("PUT"))
-            .and(path("/rest/user/bob@example.com"))
+            .and(path(format!(
+                "/rest/user/{}",
+                encode_path("bob@example.com")
+            )))
             .and(body_json(
                 serde_json::json!({"groups": {"remove": ["testers"]}}),
             ))
@@ -1668,7 +1707,7 @@ mod tests {
             requestee: Some("alice@example.com".into()),
         }];
         let id = client
-            .upload_attachment_with_flags(1, "test.txt", "test", "text/plain", b"hello", &flags)
+            .upload_attachment(1, "test.txt", "test", "text/plain", b"hello", &flags)
             .await
             .unwrap();
         assert_eq!(id, 200);
@@ -1811,5 +1850,413 @@ mod tests {
         assert_eq!(cls.name, "Unclassified");
         assert_eq!(cls.products.len(), 1);
         assert_eq!(cls.products[0].name, "Widget");
+    }
+
+    // Admin API tests: create/update product, component, user, group
+
+    #[tokio::test]
+    async fn create_product_returns_id() {
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/rest/product"))
+            .and(body_json(serde_json::json!({
+                "name": "NewProduct",
+                "description": "A new product",
+                "version": "1.0",
+                "is_open": true,
+            })))
+            .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 42})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = CreateProductParams {
+            name: "NewProduct".into(),
+            description: "A new product".into(),
+            version: "1.0".into(),
+            is_open: true,
+        };
+        let id = client.create_product(&params).await.unwrap();
+        assert_eq!(id, 42);
+    }
+
+    #[tokio::test]
+    async fn create_product_forbidden() {
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/rest/product"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 51,
+                "message": "You are not authorized to create products."
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = CreateProductParams {
+            name: "X".into(),
+            description: "X".into(),
+            version: "1.0".into(),
+            is_open: true,
+        };
+        let err = client.create_product(&params).await.unwrap_err();
+        assert!(err.to_string().contains("not authorized"));
+    }
+
+    #[tokio::test]
+    async fn update_product_sends_put() {
+        let mock = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/rest/product/Widget"))
+            .and(body_json(serde_json::json!({
+                "description": "Updated desc",
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "products": [{"id": 1, "changes": {}}]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = UpdateProductParams {
+            description: Some("Updated desc".into()),
+            ..Default::default()
+        };
+        client.update_product("Widget", &params).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn update_product_forbidden() {
+        let mock = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/rest/product/Widget"))
+            .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 51,
+                "message": "You are not authorized."
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = UpdateProductParams::default();
+        let err = client.update_product("Widget", &params).await.unwrap_err();
+        assert!(err.to_string().contains("not authorized"));
+    }
+
+    #[tokio::test]
+    async fn create_component_returns_id() {
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/rest/component"))
+            .and(body_json(serde_json::json!({
+                "product": "Widget",
+                "name": "Backend",
+                "description": "Backend component",
+                "default_assignee": "dev@example.com",
+            })))
+            .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 10})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let id = client
+            .create_component("Widget", "Backend", "Backend component", "dev@example.com")
+            .await
+            .unwrap();
+        assert_eq!(id, 10);
+    }
+
+    #[tokio::test]
+    async fn create_component_forbidden() {
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/rest/component"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 51,
+                "message": "You are not authorized."
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client
+            .create_component("X", "Y", "Z", "a@b.com")
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("not authorized"));
+    }
+
+    #[tokio::test]
+    async fn update_component_sends_put() {
+        let mock = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/rest/component/10"))
+            .and(body_json(serde_json::json!({
+                "description": "New desc",
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "components": [{"id": 10, "changes": {}}]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = UpdateComponentParams {
+            description: Some("New desc".into()),
+            ..Default::default()
+        };
+        client.update_component(10, &params).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn update_component_forbidden() {
+        let mock = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/rest/component/10"))
+            .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 51,
+                "message": "You are not authorized."
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = UpdateComponentParams::default();
+        let err = client.update_component(10, &params).await.unwrap_err();
+        assert!(err.to_string().contains("not authorized"));
+    }
+
+    #[tokio::test]
+    async fn create_user_returns_id() {
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/rest/user"))
+            .and(body_json(serde_json::json!({
+                "email": "new@example.com",
+                "full_name": "New User",
+            })))
+            .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 99})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = CreateUserParams {
+            email: "new@example.com".into(),
+            full_name: Some("New User".into()),
+            password: None,
+        };
+        let id = client.create_user(&params).await.unwrap();
+        assert_eq!(id, 99);
+    }
+
+    #[tokio::test]
+    async fn create_user_forbidden() {
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/rest/user"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 51,
+                "message": "You are not authorized."
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = CreateUserParams {
+            email: "x@x.com".into(),
+            full_name: None,
+            password: None,
+        };
+        let err = client.create_user(&params).await.unwrap_err();
+        assert!(err.to_string().contains("not authorized"));
+    }
+
+    #[tokio::test]
+    async fn update_user_sends_put() {
+        let mock = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path(format!(
+                "/rest/user/{}",
+                encode_path("alice@example.com")
+            )))
+            .and(body_json(serde_json::json!({
+                "real_name": "Alice Smith",
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "users": [{"id": 1, "changes": {}}]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = UpdateUserParams {
+            real_name: Some("Alice Smith".into()),
+            ..Default::default()
+        };
+        client
+            .update_user("alice@example.com", &params)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn update_user_forbidden() {
+        let mock = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path(format!(
+                "/rest/user/{}",
+                encode_path("alice@example.com")
+            )))
+            .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 51,
+                "message": "You are not authorized."
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = UpdateUserParams::default();
+        let err = client
+            .update_user("alice@example.com", &params)
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("not authorized"));
+    }
+
+    #[tokio::test]
+    async fn get_group_returns_info() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/group"))
+            .and(query_param("names", "admin"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "groups": [{
+                    "id": 1,
+                    "name": "admin",
+                    "description": "Administrators",
+                    "is_active": true,
+                    "membership": []
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let info = client.get_group("admin").await.unwrap();
+        assert_eq!(info.name, "admin");
+        assert!(info.is_active);
+    }
+
+    #[tokio::test]
+    async fn get_group_forbidden() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/group"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 51,
+                "message": "You are not authorized."
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client.get_group("secret").await.unwrap_err();
+        assert!(err.to_string().contains("not authorized"));
+    }
+
+    #[tokio::test]
+    async fn create_group_returns_id() {
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/rest/group"))
+            .and(body_json(serde_json::json!({
+                "name": "testers",
+                "description": "Test team",
+                "is_active": true,
+            })))
+            .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 5})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let id = client
+            .create_group("testers", "Test team", true)
+            .await
+            .unwrap();
+        assert_eq!(id, 5);
+    }
+
+    #[tokio::test]
+    async fn create_group_forbidden() {
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/rest/group"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 51,
+                "message": "You are not authorized."
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client.create_group("x", "x", true).await.unwrap_err();
+        assert!(err.to_string().contains("not authorized"));
+    }
+
+    #[tokio::test]
+    async fn update_group_sends_put() {
+        let mock = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/rest/group/testers"))
+            .and(body_json(serde_json::json!({
+                "description": "Updated testers",
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "groups": [{"id": 5, "changes": {}}]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = UpdateGroupParams {
+            description: Some("Updated testers".into()),
+            ..Default::default()
+        };
+        client.update_group("testers", &params).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn update_group_forbidden() {
+        let mock = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/rest/group/testers"))
+            .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 51,
+                "message": "You are not authorized."
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = UpdateGroupParams::default();
+        let err = client.update_group("testers", &params).await.unwrap_err();
+        assert!(err.to_string().contains("not authorized"));
     }
 }

@@ -46,15 +46,9 @@ pub async fn execute(
                 .as_deref()
                 .unwrap_or_else(|| guess_content_type(file_name));
             let flags = super::shared::parse_flags(flag)?;
-            let att_id = if flags.is_empty() {
-                client
-                    .upload_attachment(*bug_id, file_name, summary, ct, &data)
-                    .await?
-            } else {
-                client
-                    .upload_attachment_with_flags(*bug_id, file_name, summary, ct, &data, &flags)
-                    .await?
-            };
+            let att_id = client
+                .upload_attachment(*bug_id, file_name, summary, ct, &data, &flags)
+                .await?;
             #[expect(clippy::print_stdout)]
             {
                 println!(

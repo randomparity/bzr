@@ -1,4 +1,5 @@
 use crate::cli::ProductAction;
+use crate::client::{CreateProductParams, UpdateProductParams};
 use crate::error::Result;
 use crate::output::{self, OutputFormat};
 
@@ -24,13 +25,13 @@ pub async fn execute(
             version,
             is_open,
         } => {
-            let body = serde_json::json!({
-                "name": name,
-                "description": description,
-                "version": version,
-                "is_open": is_open,
-            });
-            let id = client.create_product(&body).await?;
+            let params = CreateProductParams {
+                name: name.clone(),
+                description: description.clone(),
+                version: version.clone(),
+                is_open: *is_open,
+            };
+            let id = client.create_product(&params).await?;
             #[expect(clippy::print_stdout)]
             {
                 println!("Created product #{id} '{name}'");
@@ -42,21 +43,12 @@ pub async fn execute(
             default_milestone,
             is_open,
         } => {
-            let mut updates = serde_json::Map::new();
-            if let Some(d) = description {
-                updates.insert("description".into(), serde_json::Value::String(d.clone()));
-            }
-            if let Some(m) = default_milestone {
-                updates.insert(
-                    "default_milestone".into(),
-                    serde_json::Value::String(m.clone()),
-                );
-            }
-            if let Some(o) = is_open {
-                updates.insert("is_open".into(), serde_json::Value::Bool(*o));
-            }
-            let body = serde_json::Value::Object(updates);
-            client.update_product(name, &body).await?;
+            let params = UpdateProductParams {
+                description: description.clone(),
+                default_milestone: default_milestone.clone(),
+                is_open: *is_open,
+            };
+            client.update_product(name, &params).await?;
             #[expect(clippy::print_stdout)]
             {
                 println!("Updated product '{name}'");
