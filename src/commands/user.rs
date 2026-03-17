@@ -1,4 +1,5 @@
 use crate::cli::UserAction;
+use crate::client::{CreateUserParams, UpdateUserParams};
 use crate::error::Result;
 use crate::output::{self, OutputFormat};
 
@@ -13,6 +14,46 @@ pub async fn execute(
         UserAction::Search { query } => {
             let users = client.search_users(query).await?;
             output::print_users(&users, format);
+        }
+        UserAction::Create {
+            email,
+            full_name,
+            password,
+        } => {
+            let params = CreateUserParams {
+                email: email.clone(),
+                full_name: full_name.clone(),
+                password: password.clone(),
+            };
+            let id = client.create_user(&params).await?;
+            #[expect(clippy::print_stdout)]
+            {
+                println!("Created user #{id} ({email})");
+            }
+        }
+        UserAction::Update {
+            user,
+            real_name,
+            email,
+            disable_login,
+            login_denied_text,
+        } => {
+            let denied_text = match (disable_login, login_denied_text) {
+                (Some(true), Some(text)) => Some(text.clone()),
+                (Some(true), None) => Some("Account disabled".into()),
+                (Some(false), _) => Some(String::new()),
+                (None, _) => None,
+            };
+            let params = UpdateUserParams {
+                real_name: real_name.clone(),
+                email: email.clone(),
+                login_denied_text: denied_text,
+            };
+            client.update_user(user, &params).await?;
+            #[expect(clippy::print_stdout)]
+            {
+                println!("Updated user '{user}'");
+            }
         }
     }
     Ok(())

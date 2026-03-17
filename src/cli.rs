@@ -61,6 +61,29 @@ pub enum Commands {
         #[command(subcommand)]
         action: GroupAction,
     },
+    /// Show the currently authenticated user
+    Whoami,
+    /// Server diagnostics
+    Server {
+        #[command(subcommand)]
+        action: ServerAction,
+    },
+    /// Classification operations
+    Classification {
+        #[command(subcommand)]
+        action: ClassificationAction,
+    },
+    /// Component operations
+    Component {
+        #[command(subcommand)]
+        action: ComponentAction,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ServerAction {
+    /// Show server version and extensions
+    Info,
 }
 
 #[derive(Subcommand)]
@@ -79,14 +102,41 @@ pub enum BugAction {
         /// Filter by assignee
         #[arg(long)]
         assignee: Option<String>,
+        /// Filter by creator
+        #[arg(long)]
+        creator: Option<String>,
+        /// Filter by priority
+        #[arg(long)]
+        priority: Option<String>,
+        /// Filter by severity
+        #[arg(long)]
+        severity: Option<String>,
+        /// Filter by bug IDs
+        #[arg(long)]
+        id: Vec<u64>,
+        /// Filter by alias
+        #[arg(long)]
+        alias: Option<String>,
         /// Max number of results
         #[arg(long, default_value = "50")]
         limit: u32,
+        /// Only return these fields (comma-separated)
+        #[arg(long)]
+        fields: Option<String>,
+        /// Exclude these fields (comma-separated)
+        #[arg(long)]
+        exclude_fields: Option<String>,
     },
     /// View a bug by ID
     View {
-        /// Bug ID
-        id: u64,
+        /// Bug ID or alias
+        id: String,
+        /// Only return these fields (comma-separated)
+        #[arg(long)]
+        fields: Option<String>,
+        /// Exclude these fields (comma-separated)
+        #[arg(long)]
+        exclude_fields: Option<String>,
     },
     /// Search bugs by text query
     Search {
@@ -95,11 +145,20 @@ pub enum BugAction {
         /// Max number of results
         #[arg(long, default_value = "50")]
         limit: u32,
+        /// Only return these fields (comma-separated)
+        #[arg(long)]
+        fields: Option<String>,
+        /// Exclude these fields (comma-separated)
+        #[arg(long)]
+        exclude_fields: Option<String>,
     },
     /// Show change history of a bug
     History {
         /// Bug ID
         id: u64,
+        /// Only show changes after this date (ISO 8601)
+        #[arg(long)]
+        since: Option<String>,
     },
     /// Create a new bug
     Create {
@@ -153,6 +212,9 @@ pub enum BugAction {
         /// Whiteboard
         #[arg(long)]
         whiteboard: Option<String>,
+        /// Set flags (e.g. "review?(user@example.com)")
+        #[arg(long)]
+        flag: Vec<String>,
     },
 }
 
@@ -162,6 +224,9 @@ pub enum CommentAction {
     List {
         /// Bug ID
         bug_id: u64,
+        /// Only show comments created after this date (ISO 8601)
+        #[arg(long)]
+        since: Option<String>,
     },
     /// Add a comment to a bug
     Add {
@@ -170,6 +235,22 @@ pub enum CommentAction {
         /// Comment text (opens $EDITOR if not provided)
         #[arg(long)]
         body: Option<String>,
+    },
+    /// Add or remove tags on a comment
+    Tag {
+        /// Comment ID
+        comment_id: u64,
+        /// Tags to add
+        #[arg(long)]
+        add: Vec<String>,
+        /// Tags to remove
+        #[arg(long)]
+        remove: Vec<String>,
+    },
+    /// Search comments by tag
+    SearchTags {
+        /// Tag query
+        query: String,
     },
 }
 
@@ -200,6 +281,35 @@ pub enum AttachmentAction {
         /// MIME type (auto-detected if not provided)
         #[arg(long)]
         content_type: Option<String>,
+        /// Set flags (e.g. "review?(user@example.com)")
+        #[arg(long)]
+        flag: Vec<String>,
+    },
+    /// Update an attachment
+    Update {
+        /// Attachment ID
+        id: u64,
+        /// New summary
+        #[arg(long)]
+        summary: Option<String>,
+        /// New file name
+        #[arg(long)]
+        file_name: Option<String>,
+        /// New content type
+        #[arg(long)]
+        content_type: Option<String>,
+        /// Mark as obsolete
+        #[arg(long)]
+        obsolete: Option<bool>,
+        /// Mark as patch
+        #[arg(long)]
+        is_patch: Option<bool>,
+        /// Mark as private
+        #[arg(long)]
+        is_private: Option<bool>,
+        /// Set flags (e.g. "review?(user@example.com)")
+        #[arg(long)]
+        flag: Vec<String>,
     },
 }
 
@@ -230,12 +340,45 @@ pub enum ConfigAction {
 
 #[derive(Subcommand)]
 pub enum ProductAction {
-    /// List accessible products
-    List,
+    /// List products
+    List {
+        /// Product type: accessible (default), selectable, or enterable
+        #[arg(long, default_value = "accessible")]
+        r#type: String,
+    },
     /// View product details (components, versions, milestones)
     View {
         /// Product name
         name: String,
+    },
+    /// Create a new product
+    Create {
+        /// Product name
+        #[arg(long)]
+        name: String,
+        /// Product description
+        #[arg(long)]
+        description: String,
+        /// Initial version
+        #[arg(long, default_value = "unspecified")]
+        version: String,
+        /// Whether the product is open for bugs
+        #[arg(long, default_value = "true")]
+        is_open: bool,
+    },
+    /// Update an existing product
+    Update {
+        /// Product name
+        name: String,
+        /// New description
+        #[arg(long)]
+        description: Option<String>,
+        /// Default milestone
+        #[arg(long)]
+        default_milestone: Option<String>,
+        /// Whether the product is open for bugs
+        #[arg(long)]
+        is_open: Option<bool>,
     },
 }
 
@@ -254,6 +397,35 @@ pub enum UserAction {
     Search {
         /// Search query
         query: String,
+    },
+    /// Create a new user
+    Create {
+        /// User email
+        #[arg(long)]
+        email: String,
+        /// Full name
+        #[arg(long)]
+        full_name: Option<String>,
+        /// Password (optional, generated by server if omitted)
+        #[arg(long)]
+        password: Option<String>,
+    },
+    /// Update a user
+    Update {
+        /// User ID or login name
+        user: String,
+        /// New real name
+        #[arg(long)]
+        real_name: Option<String>,
+        /// New email
+        #[arg(long)]
+        email: Option<String>,
+        /// Disable login
+        #[arg(long)]
+        disable_login: Option<bool>,
+        /// Custom login denied message (used with --disable-login)
+        #[arg(long)]
+        login_denied_text: Option<String>,
     },
 }
 
@@ -282,5 +454,75 @@ pub enum GroupAction {
         /// Group name
         #[arg(long)]
         group: String,
+    },
+    /// View group details
+    View {
+        /// Group name or ID
+        group: String,
+    },
+    /// Create a new group
+    Create {
+        /// Group name
+        #[arg(long)]
+        name: String,
+        /// Group description
+        #[arg(long)]
+        description: String,
+        /// Whether the group is active
+        #[arg(long, default_value = "true")]
+        is_active: bool,
+    },
+    /// Update a group
+    Update {
+        /// Group name or ID
+        group: String,
+        /// New description
+        #[arg(long)]
+        description: Option<String>,
+        /// Whether the group is active
+        #[arg(long)]
+        is_active: Option<bool>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ClassificationAction {
+    /// View a classification by name or ID
+    View {
+        /// Classification name or ID
+        name: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ComponentAction {
+    /// Create a new component
+    Create {
+        /// Product name
+        #[arg(long)]
+        product: String,
+        /// Component name
+        #[arg(long)]
+        name: String,
+        /// Component description
+        #[arg(long)]
+        description: String,
+        /// Default assignee email
+        #[arg(long)]
+        default_assignee: String,
+    },
+    /// Update a component
+    Update {
+        /// Component ID
+        id: u64,
+        /// New name
+        #[arg(long)]
+        name: Option<String>,
+        /// New description
+        #[arg(long)]
+        description: Option<String>,
+        /// New default assignee
+        #[arg(long)]
+        default_assignee: Option<String>,
     },
 }

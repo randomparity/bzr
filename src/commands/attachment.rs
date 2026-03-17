@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use crate::cli::AttachmentAction;
+use crate::client::UpdateAttachmentParams;
 use crate::error::Result;
 use crate::output::{self, OutputFormat};
 
@@ -35,6 +36,7 @@ pub async fn execute(
             file,
             summary,
             content_type,
+            flag,
         } => {
             let path = Path::new(file);
             let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or(file);
@@ -43,8 +45,9 @@ pub async fn execute(
             let ct = content_type
                 .as_deref()
                 .unwrap_or_else(|| guess_content_type(file_name));
+            let flags = super::shared::parse_flags(flag)?;
             let att_id = client
-                .upload_attachment(*bug_id, file_name, summary, ct, &data)
+                .upload_attachment(*bug_id, file_name, summary, ct, &data, &flags)
                 .await?;
             #[expect(clippy::print_stdout)]
             {
@@ -54,6 +57,32 @@ pub async fn execute(
                     bug_id,
                     data.len()
                 );
+            }
+        }
+        AttachmentAction::Update {
+            id,
+            summary,
+            file_name,
+            content_type,
+            obsolete,
+            is_patch,
+            is_private,
+            flag,
+        } => {
+            let flags = super::shared::parse_flags(flag)?;
+            let params = UpdateAttachmentParams {
+                summary: summary.clone(),
+                file_name: file_name.clone(),
+                content_type: content_type.clone(),
+                is_obsolete: *obsolete,
+                is_patch: *is_patch,
+                is_private: *is_private,
+                flags,
+            };
+            client.update_attachment(*id, &params).await?;
+            #[expect(clippy::print_stdout)]
+            {
+                println!("Updated attachment #{id}");
             }
         }
     }
