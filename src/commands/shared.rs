@@ -17,9 +17,9 @@ pub async fn build_client(server: Option<&str>) -> Result<BugzillaClient> {
 /// Parse flag strings like "review?(user@example.com)" or "review+" or "review-"
 /// into `FlagUpdate` structs.
 ///
-/// Syntax: `name[+-?](requestee)`
+/// Syntax: `name[+-?X](requestee)`
 ///   - `name` is the flag type name
-///   - `[+-?]` is the status character
+///   - `[+-?X]` is the status character (`X` clears the flag)
 ///   - `(requestee)` is optional, only valid with `?`
 pub fn parse_flags(raw: &[String]) -> Result<Vec<FlagUpdate>> {
     let mut flags = Vec::new();
@@ -36,9 +36,9 @@ pub fn parse_flags(raw: &[String]) -> Result<Vec<FlagUpdate>> {
 
 fn parse_single_flag(s: &str) -> Result<(String, String, Option<String>)> {
     // Find the status character (+, -, ?)
-    let status_pos = s.find(['+', '-', '?']).ok_or_else(|| {
+    let status_pos = s.find(['+', '-', '?', 'X']).ok_or_else(|| {
         BzrError::Other(format!(
-            "invalid flag '{s}': must contain +, -, or ? (e.g. 'review?')"
+            "invalid flag '{s}': must contain +, -, ?, or X (e.g. 'review?')"
         ))
     })?;
 
@@ -112,9 +112,21 @@ mod tests {
     }
 
     #[test]
+    fn parse_flag_clear() {
+        let flags = parse_flags(&["reviewX".into()]).unwrap();
+        assert_eq!(flags[0].name, "review");
+        assert_eq!(flags[0].status, "X");
+        assert!(flags[0].requestee.is_none());
+    }
+
+    #[test]
     fn parse_multiple_flags() {
         let flags = parse_flags(&["review+".into(), "approval?".into()]).unwrap();
         assert_eq!(flags.len(), 2);
+        assert_eq!(flags[0].name, "review");
+        assert_eq!(flags[0].status, "+");
+        assert_eq!(flags[1].name, "approval");
+        assert_eq!(flags[1].status, "?");
     }
 
     #[test]

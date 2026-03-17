@@ -1,4 +1,5 @@
 use crate::cli::UserAction;
+use crate::client::{CreateUserParams, UpdateUserParams};
 use crate::error::Result;
 use crate::output::{self, OutputFormat};
 
@@ -19,9 +20,12 @@ pub async fn execute(
             full_name,
             password,
         } => {
-            let id = client
-                .create_user(email, full_name.as_deref(), password.as_deref())
-                .await?;
+            let params = CreateUserParams {
+                email: email.clone(),
+                full_name: full_name.clone(),
+                password: password.clone(),
+            };
+            let id = client.create_user(&params).await?;
             #[expect(clippy::print_stdout)]
             {
                 println!("Created user #{id} ({email})");
@@ -32,26 +36,20 @@ pub async fn execute(
             real_name,
             email,
             disable_login,
+            login_denied_text,
         } => {
-            let mut updates = serde_json::Map::new();
-            if let Some(n) = real_name {
-                updates.insert("real_name".into(), serde_json::Value::String(n.clone()));
-            }
-            if let Some(e) = email {
-                updates.insert("email".into(), serde_json::Value::String(e.clone()));
-            }
-            if let Some(d) = disable_login {
-                updates.insert(
-                    "login_denied_text".into(),
-                    if *d {
-                        serde_json::Value::String("Account disabled".into())
-                    } else {
-                        serde_json::Value::String(String::new())
-                    },
-                );
-            }
-            let body = serde_json::Value::Object(updates);
-            client.update_user(user, &body).await?;
+            let denied_text = match (disable_login, login_denied_text) {
+                (Some(true), Some(text)) => Some(text.clone()),
+                (Some(true), None) => Some("Account disabled".into()),
+                (Some(false), _) => Some(String::new()),
+                (None, _) => None,
+            };
+            let params = UpdateUserParams {
+                real_name: real_name.clone(),
+                email: email.clone(),
+                login_denied_text: denied_text,
+            };
+            client.update_user(user, &params).await?;
             #[expect(clippy::print_stdout)]
             {
                 println!("Updated user '{user}'");

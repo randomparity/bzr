@@ -1,7 +1,13 @@
 use crate::cli::ComponentAction;
+use crate::client::UpdateComponentParams;
 use crate::error::Result;
+use crate::output::OutputFormat;
 
-pub async fn execute(action: &ComponentAction, server: Option<&str>) -> Result<()> {
+pub async fn execute(
+    action: &ComponentAction,
+    server: Option<&str>,
+    _format: OutputFormat,
+) -> Result<()> {
     let client = super::shared::build_client(server).await?;
 
     match action {
@@ -25,21 +31,12 @@ pub async fn execute(action: &ComponentAction, server: Option<&str>) -> Result<(
             description,
             default_assignee,
         } => {
-            let mut updates = serde_json::Map::new();
-            if let Some(n) = name {
-                updates.insert("name".into(), serde_json::Value::String(n.clone()));
-            }
-            if let Some(d) = description {
-                updates.insert("description".into(), serde_json::Value::String(d.clone()));
-            }
-            if let Some(a) = default_assignee {
-                updates.insert(
-                    "default_assignee".into(),
-                    serde_json::Value::String(a.clone()),
-                );
-            }
-            let body = serde_json::Value::Object(updates);
-            client.update_component(*id, &body).await?;
+            let params = UpdateComponentParams {
+                name: name.clone(),
+                description: description.clone(),
+                default_assignee: default_assignee.clone(),
+            };
+            client.update_component(*id, &params).await?;
             #[expect(clippy::print_stdout)]
             {
                 println!("Updated component #{id}");

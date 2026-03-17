@@ -1,4 +1,5 @@
 use crate::cli::GroupAction;
+use crate::client::UpdateGroupParams;
 use crate::error::Result;
 use crate::output::{self, OutputFormat};
 
@@ -48,15 +49,11 @@ pub async fn execute(
             description,
             is_active,
         } => {
-            let mut updates = serde_json::Map::new();
-            if let Some(d) = description {
-                updates.insert("description".into(), serde_json::Value::String(d.clone()));
-            }
-            if let Some(a) = is_active {
-                updates.insert("is_active".into(), serde_json::Value::Bool(*a));
-            }
-            let body = serde_json::Value::Object(updates);
-            client.update_group(group, &body).await?;
+            let params = UpdateGroupParams {
+                description: description.clone(),
+                is_active: *is_active,
+            };
+            client.update_group(group, &params).await?;
             #[expect(clippy::print_stdout)]
             {
                 println!("Updated group '{group}'");
