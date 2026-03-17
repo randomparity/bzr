@@ -19,11 +19,11 @@ A command-line interface for Bugzilla servers, written in Rust. Inspired by the 
 - **Admin operations** — create and update products, components, users, and groups
 - **Multi-server** — configure and switch between multiple Bugzilla instances
 - **Output formats** — human-readable tables (with colored status) or JSON for scripting
-- **Secure auth** — API key sent via `X-BUGZILLA-API-KEY` header, never in query strings
+- **Secure auth** — API key sent via `X-BUGZILLA-API-KEY` header by default; falls back to query parameter auth for older servers
 
 ## Installation
 
-```
+```bash
 cargo install --path .
 ```
 
@@ -104,35 +104,13 @@ bzr --output json product view Fedora | jq -r '.components[].name'
 bzr --output json field list status | jq '.[] | select(.name == "NEW") | .can_change_to'
 ```
 
-## Configuration File Format
+## Configuration & Authentication
 
-`~/.config/bzr/config.toml`:
-
-```toml
-default_server = "redhat"
-
-[servers.redhat]
-url = "https://bugzilla.redhat.com"
-api_key = "your-api-key-here"
-email = "you@redhat.com"
-
-[servers.mozilla]
-url = "https://bugzilla.mozilla.org"
-api_key = "another-api-key"
-```
+Configuration is stored in `~/.config/bzr/config.toml` with support for multiple named servers. See [docs/bzr-cli.md](docs/bzr-cli.md#configuration-file-format) for the full file format.
 
 ## Authentication
 
-`bzr` authenticates using Bugzilla API keys. On first use, it auto-detects whether your server supports header-based auth (`X-BUGZILLA-API-KEY`) or query parameter auth (`Bugzilla_api_key`), and caches the result.
-
-For servers running Bugzilla 5.0 or earlier, provide your `--email` when configuring, as auth detection uses the `/rest/valid_login` endpoint which requires it.
-
-To generate an API key:
-
-1. Log in to your Bugzilla instance
-2. Go to **Preferences > API Keys**
-3. Generate a new key
-4. Add it with `bzr config set-server`
+`bzr` authenticates using Bugzilla API keys. When you run `bzr config set-server`, it auto-detects whether your server supports header-based auth (`X-BUGZILLA-API-KEY`) or query parameter auth (`Bugzilla_api_key`), and caches the result. See [docs/bzr-cli.md](docs/bzr-cli.md#authentication) for details on generating and configuring API keys.
 
 ## License
 
