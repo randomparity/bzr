@@ -1,6 +1,27 @@
 # bzr CLI Reference
 
 Complete command reference for bzr, a CLI for Bugzilla REST API servers.
+For installation and quick start, see [README.md](../README.md).
+
+## Contents
+
+- [Global Options](#global-options)
+- [bug](#bzr-bug----bug-operations)
+- [comment](#bzr-comment----comment-operations)
+- [attachment](#bzr-attachment----attachment-operations)
+- [product](#bzr-product----product-operations)
+- [field](#bzr-field----field-value-lookup)
+- [user](#bzr-user----user-operations)
+- [group](#bzr-group----group-management)
+- [whoami](#bzr-whoami)
+- [server](#bzr-server----server-diagnostics)
+- [classification](#bzr-classification----classification-operations)
+- [component](#bzr-component----component-operations)
+- [config](#bzr-config----configuration-management)
+- [Flag Syntax](#flag-syntax)
+- [JSON Output](#json-output)
+- [Configuration File Format](#configuration-file-format)
+- [Authentication](#authentication)
 
 ## Global Options
 
@@ -612,7 +633,7 @@ bzr config set-server redhat --url https://bugzilla.redhat.com --api-key abc123 
 bzr config set-server mozilla --url https://bugzilla.mozilla.org --api-key xyz789
 ```
 
-The `--email` flag is required for older Bugzilla servers (5.0 and earlier) that don't support the `/rest/whoami` endpoint.
+The `--email` flag is required for older Bugzilla servers (5.0 or earlier) that don't support the `/rest/whoami` endpoint.
 
 The first server added is automatically set as the default.
 
@@ -621,7 +642,7 @@ The first server added is automatically set as the default.
 | `<NAME>` | Yes | Server alias name |
 | `--url <URL>` | Yes | Server URL |
 | `--api-key <KEY>` | Yes | API key |
-| `--email <EMAIL>` | No | Login email (required for Bugzilla 5.0 and earlier) |
+| `--email <EMAIL>` | No | Login email (required for Bugzilla 5.0 or earlier) |
 
 ### `bzr config set-default`
 
