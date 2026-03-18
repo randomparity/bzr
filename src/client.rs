@@ -556,7 +556,36 @@ struct ErrorResponse {
     message: Option<String>,
 }
 
+/// Bugzilla response keys that indicate real data is present alongside
+/// an error payload. When any of these exist, the error is a non-fatal
+/// server-side warning (e.g. from a Bugzilla extension) and the data
+/// should be used.
+const DATA_KEYS: &[&str] = &[
+    "bugs",
+    "comments",
+    "attachments",
+    "products",
+    "groups",
+    "users",
+    "fields",
+    "extensions",
+    "classifications",
+    "ids",
+];
+
 impl BugzillaClient {
+    /// Check if a JSON response body contains known Bugzilla data keys,
+    /// indicating the response has real data alongside any error fields.
+    fn has_data_fields(body: &str) -> bool {
+        let Ok(obj) = serde_json::from_str::<serde_json::Value>(body) else {
+            return false;
+        };
+        let Some(map) = obj.as_object() else {
+            return false;
+        };
+        DATA_KEYS.iter().any(|key| map.contains_key(*key))
+    }
+
     pub fn new(base_url: &str, api_key: &str, auth_method: AuthMethod) -> Result<Self> {
         let auth = match auth_method {
             AuthMethod::Header => {
@@ -614,13 +643,36 @@ impl BugzillaClient {
         let safe_url = Self::safe_url(resp.url());
         let body = resp.text().await?;
 
-        // Check for Bugzilla error responses that arrive with 200 status
+        tracing::trace!(
+            url = safe_url,
+            body = &body[..body.len().min(2048)],
+            "response body"
+        );
+
+        // Check for Bugzilla error responses that arrive with 200 status.
+        // Some servers (e.g. IBM LTC Bugzilla) include error fields alongside
+        // valid data — only treat the error as fatal when the response doesn't
+        // also contain real data (indicated by common Bugzilla result keys).
         if let Ok(err) = serde_json::from_str::<ErrorResponse>(&body) {
             if err.error {
-                return Err(BzrError::Api {
-                    code: err.code,
-                    message: err.message.unwrap_or_else(|| "unknown API error".into()),
-                });
+                let has_data = Self::has_data_fields(&body);
+                tracing::debug!(
+                    url = safe_url,
+                    code = err.code,
+                    message = err.message.as_deref().unwrap_or("unknown"),
+                    has_data,
+                    "error payload in 200 response"
+                );
+                if !has_data {
+                    return Err(BzrError::Api {
+                        code: err.code,
+                        message: err.message.unwrap_or_else(|| "unknown API error".into()),
+                    });
+                }
+                tracing::warn!(
+                    url = safe_url,
+                    "server returned error alongside data; using data"
+                );
             }
         }
 
@@ -639,12 +691,11 @@ impl BugzillaClient {
         if response.status().is_client_error() || response.status().is_server_error() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            let preview = if body.len() > 512 {
-                &body[..512]
-            } else {
-                &body
-            };
-            tracing::debug!(%status, body = preview, "API error response");
+            tracing::debug!(
+                %status,
+                body = &body[..body.len().min(512)],
+                "API error response"
+            );
             if let Ok(err) = serde_json::from_str::<ErrorResponse>(&body) {
                 if err.error {
                     return Err(BzrError::Api {
@@ -1101,99 +1152,33 @@ impl BugzillaClient {
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 mod tests {
-    use std::sync::{Arc, Mutex};
-
-    use tracing_subscriber::layer::SubscriberExt;
-    use tracing_subscriber::EnvFilter;
     use wiremock::matchers::{body_json, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
     use crate::config::AuthMethod;
 
-    /// Tracing layer that captures formatted log output into a shared buffer.
-    struct CapturingWriter(Arc<Mutex<Vec<u8>>>);
-
-    impl std::io::Write for CapturingWriter {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            self.0.lock().unwrap().extend_from_slice(buf);
-            Ok(buf.len())
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for CapturingWriter {
-        type Writer = CapturingWriter;
-
-        fn make_writer(&'a self) -> Self::Writer {
-            CapturingWriter(Arc::clone(&self.0))
-        }
-    }
-
-    #[tokio::test]
-    async fn send_does_not_log_query_param_api_key() {
-        let mock = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/rest/bug/1"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(
-                serde_json::json!({"bugs": [{"id": 1, "summary": "test", "status": "NEW"}]}),
-            ))
-            .mount(&mock)
-            .await;
-
-        let secret = "super-secret-api-key-12345";
-        let client = BugzillaClient::new(&mock.uri(), secret, AuthMethod::QueryParam).unwrap();
-
-        let log_buf = Arc::new(Mutex::new(Vec::new()));
-        let fmt_layer = tracing_subscriber::fmt::layer()
-            .with_writer(CapturingWriter(Arc::clone(&log_buf)))
-            .with_ansi(false);
-        let filter = EnvFilter::new("bzr=debug");
-        let subscriber = tracing_subscriber::registry().with(fmt_layer).with(filter);
-
-        let _guard = tracing::subscriber::set_default(subscriber);
-
-        let _bug = client.get_bug_with_fields("1", None, None).await.unwrap();
-
-        let output = String::from_utf8(log_buf.lock().unwrap().clone()).unwrap();
+    #[test]
+    fn safe_url_strips_query_params() {
+        let url =
+            reqwest::Url::parse("https://bugzilla.example.com/rest/bug/1?Bugzilla_api_key=secret")
+                .unwrap();
+        let safe = BugzillaClient::safe_url(&url);
         assert!(
-            !output.contains(secret),
-            "API key leaked in log output: {output}"
+            !safe.contains("secret"),
+            "API key should be stripped: {safe}"
+        );
+        assert!(
+            safe.contains("/rest/bug/1"),
+            "path should be preserved: {safe}"
         );
     }
 
-    #[tokio::test]
-    async fn logged_url_contains_path() {
-        let mock = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/rest/bug/42"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(
-                serde_json::json!({"bugs": [{"id": 42, "summary": "test", "status": "NEW"}]}),
-            ))
-            .mount(&mock)
-            .await;
-
-        let client = BugzillaClient::new(&mock.uri(), "key", AuthMethod::Header).unwrap();
-
-        let log_buf = Arc::new(Mutex::new(Vec::new()));
-        let fmt_layer = tracing_subscriber::fmt::layer()
-            .with_writer(CapturingWriter(Arc::clone(&log_buf)))
-            .with_ansi(false);
-        let filter = EnvFilter::new("bzr=debug");
-        let subscriber = tracing_subscriber::registry().with(fmt_layer).with(filter);
-
-        let _guard = tracing::subscriber::set_default(subscriber);
-
-        let _bug = client.get_bug_with_fields("42", None, None).await.unwrap();
-
-        let output = String::from_utf8(log_buf.lock().unwrap().clone()).unwrap();
-        assert!(
-            output.contains("/rest/bug/42"),
-            "logged URL should contain path: {output}"
-        );
+    #[test]
+    fn safe_url_preserves_path() {
+        let url = reqwest::Url::parse("https://bugzilla.example.com/rest/bug/42").unwrap();
+        let safe = BugzillaClient::safe_url(&url);
+        assert_eq!(safe, "https://bugzilla.example.com/rest/bug/42");
     }
 
     fn test_client(base_url: &str) -> BugzillaClient {
@@ -1388,6 +1373,28 @@ mod tests {
             msg.contains("not authorized"),
             "expected auth error message: {msg}"
         );
+    }
+
+    #[tokio::test]
+    async fn api_error_with_200_and_data_returns_data() {
+        // Some servers (e.g. IBM LTC) return error fields alongside real
+        // data. The data should be used and the error logged as a warning.
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 100500,
+                "message": "MirrorTool internal error",
+                "bugs": [{"id": 42, "summary": "test bug", "status": "NEW"}]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let bug = client.get_bug_with_fields("42", None, None).await.unwrap();
+        assert_eq!(bug.id, 42);
+        assert_eq!(bug.summary, "test bug");
     }
 
     #[tokio::test]

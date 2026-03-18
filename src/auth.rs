@@ -152,17 +152,20 @@ async fn try_whoami(
         }
     };
 
-    if resp.status().is_success() {
-        if let Ok(body) = resp.json::<WhoAmIResponse>().await {
-            if body.id > 0 {
+    let status = resp.status();
+    let body = resp.text().await.unwrap_or_default();
+    tracing::trace!(probe = "whoami/header", %status, body, "auth probe response");
+    if status.is_success() {
+        if let Ok(parsed) = serde_json::from_str::<WhoAmIResponse>(&body) {
+            if parsed.id > 0 {
                 return WhoamiOutcome::Authenticated(AuthMethod::Header);
             }
         }
-    } else if resp.status() == reqwest::StatusCode::NOT_FOUND {
+    } else if status == reqwest::StatusCode::NOT_FOUND {
         tracing::debug!("rest/whoami not available on this server");
         return WhoamiOutcome::NotFound;
     } else {
-        tracing::debug!(status = %resp.status(), "header auth probe failed");
+        tracing::debug!(%status, "header auth probe failed");
     }
 
     // Probe: query-param auth
@@ -179,17 +182,20 @@ async fn try_whoami(
         }
     };
 
-    if resp.status().is_success() {
-        if let Ok(body) = resp.json::<WhoAmIResponse>().await {
-            if body.id > 0 {
+    let status = resp.status();
+    let body = resp.text().await.unwrap_or_default();
+    tracing::trace!(probe = "whoami/query_param", %status, body, "auth probe response");
+    if status.is_success() {
+        if let Ok(parsed) = serde_json::from_str::<WhoAmIResponse>(&body) {
+            if parsed.id > 0 {
                 return WhoamiOutcome::Authenticated(AuthMethod::QueryParam);
             }
         }
-    } else if resp.status() == reqwest::StatusCode::NOT_FOUND {
+    } else if status == reqwest::StatusCode::NOT_FOUND {
         tracing::debug!("rest/whoami not available on this server");
         return WhoamiOutcome::NotFound;
     } else {
-        tracing::debug!(status = %resp.status(), "query param auth probe failed");
+        tracing::debug!(%status, "query param auth probe failed");
     }
 
     WhoamiOutcome::AuthRejected
@@ -268,14 +274,18 @@ async fn probe_valid_login(
         req = req.header("X-BUGZILLA-API-KEY", hdr.clone());
     }
     let resp = req.send().await.ok()?;
-    if !resp.status().is_success() {
-        tracing::debug!(status = %resp.status(), %method, "valid_login probe failed");
+    let status = resp.status();
+    if !status.is_success() {
+        tracing::debug!(%status, %method, "valid_login probe failed");
         return None;
     }
-    let body: ValidLoginResponse = resp.json().await.ok()?;
-    if body.result.0 {
+    let body_text = resp.text().await.ok()?;
+    tracing::trace!(probe = "valid_login", %method, body = body_text, "auth probe response");
+    let parsed: ValidLoginResponse = serde_json::from_str(&body_text).ok()?;
+    if parsed.result.0 {
         Some(method)
     } else {
+        tracing::debug!(%method, "valid_login returned false");
         None
     }
 }
