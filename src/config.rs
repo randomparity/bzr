@@ -21,6 +21,24 @@ pub enum AuthMethod {
     QueryParam,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ApiMode {
+    Rest,
+    XmlRpc,
+    Hybrid,
+}
+
+impl fmt::Display for ApiMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ApiMode::Rest => write!(f, "rest"),
+            ApiMode::XmlRpc => write!(f, "xmlrpc"),
+            ApiMode::Hybrid => write!(f, "hybrid"),
+        }
+    }
+}
+
 impl fmt::Display for AuthMethod {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -38,6 +56,10 @@ pub struct ServerConfig {
     pub email: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth_method: Option<AuthMethod>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_mode: Option<ApiMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_version: Option<String>,
 }
 
 impl Config {

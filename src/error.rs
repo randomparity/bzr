@@ -20,6 +20,9 @@ pub enum BzrError {
     #[error("TOML serialize error: {0}")]
     TomlSerialize(#[from] toml::ser::Error),
 
+    #[error("XML-RPC error: {0}")]
+    XmlRpc(String),
+
     #[error("{0}")]
     Other(String),
 }
@@ -34,7 +37,7 @@ impl BzrError {
     pub fn exit_code(&self) -> i32 {
         match self {
             BzrError::Config(_) | BzrError::TomlParse(_) | BzrError::TomlSerialize(_) => 3,
-            BzrError::Api { .. } => 4,
+            BzrError::Api { .. } | BzrError::XmlRpc(_) => 4,
             BzrError::Http(_) => 5,
             BzrError::Io(_) => 6,
             BzrError::Other(_) => 1,
@@ -44,7 +47,7 @@ impl BzrError {
     pub fn error_type(&self) -> &'static str {
         match self {
             BzrError::Config(_) | BzrError::TomlParse(_) | BzrError::TomlSerialize(_) => "config",
-            BzrError::Api { .. } => "api",
+            BzrError::Api { .. } | BzrError::XmlRpc(_) => "api",
             BzrError::Http(_) => "http",
             BzrError::Io(_) => "io",
             BzrError::Other(_) => "other",

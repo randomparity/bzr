@@ -6,6 +6,8 @@ mod config;
 mod error;
 #[expect(clippy::print_stdout, clippy::expect_used)]
 mod output;
+mod xmlrpc;
+mod xmlrpc_client;
 
 use std::io::IsTerminal;
 
@@ -108,38 +110,39 @@ async fn run(cli: Cli, format: OutputFormat) -> error::Result<()> {
         suppress_stdout();
     }
 
+    let api = cli.api;
     match &cli.command {
         Commands::Bug { action } => {
-            commands::bug::execute(action, cli.server.as_deref(), format).await
+            commands::bug::execute(action, cli.server.as_deref(), format, api).await
         }
         Commands::Comment { action } => {
-            commands::comment::execute(action, cli.server.as_deref(), format).await
+            commands::comment::execute(action, cli.server.as_deref(), format, api).await
         }
         Commands::Attachment { action } => {
-            commands::attachment::execute(action, cli.server.as_deref(), format).await
+            commands::attachment::execute(action, cli.server.as_deref(), format, api).await
         }
         Commands::Config { action } => commands::config_cmd::execute(action, format),
         Commands::Product { action } => {
-            commands::product::execute(action, cli.server.as_deref(), format).await
+            commands::product::execute(action, cli.server.as_deref(), format, api).await
         }
         Commands::Field { action } => {
-            commands::field::execute(action, cli.server.as_deref(), format).await
+            commands::field::execute(action, cli.server.as_deref(), format, api).await
         }
         Commands::User { action } => {
-            commands::user::execute(action, cli.server.as_deref(), format).await
+            commands::user::execute(action, cli.server.as_deref(), format, api).await
         }
         Commands::Group { action } => {
-            commands::group::execute(action, cli.server.as_deref(), format).await
+            commands::group::execute(action, cli.server.as_deref(), format, api).await
         }
-        Commands::Whoami => commands::whoami::execute(cli.server.as_deref(), format).await,
+        Commands::Whoami => commands::whoami::execute(cli.server.as_deref(), format, api).await,
         Commands::Server { action } => {
-            commands::server::execute(action, cli.server.as_deref(), format).await
+            commands::server::execute(action, cli.server.as_deref(), format, api).await
         }
         Commands::Classification { action } => {
-            commands::classification::execute(action, cli.server.as_deref(), format).await
+            commands::classification::execute(action, cli.server.as_deref(), format, api).await
         }
         Commands::Component { action } => {
-            commands::component::execute(action, cli.server.as_deref(), format).await
+            commands::component::execute(action, cli.server.as_deref(), format, api).await
         }
     }
 }
@@ -173,6 +176,7 @@ mod tests {
             json: false,
             no_color: false,
             quiet: false,
+            api: None,
             verbose: 0,
             command,
         }

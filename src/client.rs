@@ -7,8 +7,9 @@ use reqwest::header::HeaderValue;
 use reqwest::RequestBuilder;
 use serde::{Deserialize, Serialize};
 
-use crate::config::AuthMethod;
+use crate::config::{ApiMode, AuthMethod};
 use crate::error::{BzrError, Result};
+use crate::xmlrpc_client::XmlRpcClient;
 
 fn encode_path(segment: &str) -> String {
     utf8_percent_encode(segment, NON_ALPHANUMERIC).to_string()
@@ -34,6 +35,8 @@ pub struct BugzillaClient {
     base_url: String,
     auth: AuthConfig,
     api_key: String,
+    api_mode: ApiMode,
+    xmlrpc: Option<XmlRpcClient>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -596,7 +599,12 @@ impl BugzillaClient {
         DATA_KEYS.iter().any(|key| map.contains_key(*key))
     }
 
-    pub fn new(base_url: &str, api_key: &str, auth_method: AuthMethod) -> Result<Self> {
+    pub fn new(
+        base_url: &str,
+        api_key: &str,
+        auth_method: AuthMethod,
+        api_mode: ApiMode,
+    ) -> Result<Self> {
         let auth = match auth_method {
             AuthMethod::Header => {
                 let value = HeaderValue::from_str(api_key)
@@ -612,13 +620,22 @@ impl BugzillaClient {
             .build()
             .map_err(|e| BzrError::Other(format!("failed to build HTTP client: {e}")))?;
 
-        tracing::debug!(base_url, %auth_method, "created Bugzilla client");
+        let xmlrpc = match api_mode {
+            ApiMode::Rest => None,
+            ApiMode::XmlRpc | ApiMode::Hybrid => {
+                Some(XmlRpcClient::new(http.clone(), base_url, api_key))
+            }
+        };
+
+        tracing::debug!(base_url, %auth_method, %api_mode, "created Bugzilla client");
 
         Ok(BugzillaClient {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
             auth,
             api_key: api_key.to_string(),
+            api_mode,
+            xmlrpc,
         })
     }
 
@@ -768,6 +785,23 @@ impl BugzillaClient {
     }
 
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
+        tracing::debug!(?params, %self.api_mode, "search parameters");
+        match self.api_mode {
+            ApiMode::Rest => self.search_bugs_rest(params).await,
+            ApiMode::XmlRpc => self.search_bugs_xmlrpc(params).await,
+            ApiMode::Hybrid => {
+                let result = self.search_bugs_rest(params).await?;
+                if result.is_empty() {
+                    tracing::debug!("REST search returned empty, retrying via XML-RPC");
+                    self.search_bugs_xmlrpc(params).await
+                } else {
+                    Ok(result)
+                }
+            }
+        }
+    }
+
+    async fn search_bugs_rest(&self, params: &SearchParams) -> Result<Vec<Bug>> {
         let mut req_builder = self.http.get(self.url("bug")).query(params);
         if params.include_fields.is_none() {
             req_builder = req_builder.query(&[("include_fields", BUG_DEFAULT_FIELDS)]);
@@ -778,7 +812,36 @@ impl BugzillaClient {
         Ok(data.bugs)
     }
 
+    async fn search_bugs_xmlrpc(&self, params: &SearchParams) -> Result<Vec<Bug>> {
+        let xmlrpc = self
+            .xmlrpc
+            .as_ref()
+            .ok_or_else(|| BzrError::Other("XML-RPC client not initialized".into()))?;
+        xmlrpc.search_bugs(params).await
+    }
+
     pub async fn get_bug_with_fields(
+        &self,
+        id: &str,
+        include_fields: Option<&str>,
+        exclude_fields: Option<&str>,
+    ) -> Result<Bug> {
+        match self.api_mode {
+            ApiMode::XmlRpc => return self.get_bug_xmlrpc(id).await,
+            ApiMode::Hybrid => {
+                let rest_result = self.get_bug_rest(id, include_fields, exclude_fields).await;
+                if rest_result.is_err() {
+                    tracing::debug!("REST bug lookup failed, retrying via XML-RPC");
+                    return self.get_bug_xmlrpc(id).await;
+                }
+                return rest_result;
+            }
+            ApiMode::Rest => {}
+        }
+        self.get_bug_rest(id, include_fields, exclude_fields).await
+    }
+
+    async fn get_bug_rest(
         &self,
         id: &str,
         include_fields: Option<&str>,
@@ -809,6 +872,14 @@ impl BugzillaClient {
             .into_iter()
             .next()
             .ok_or_else(|| BzrError::Other(format!("bug {id} not found")))
+    }
+
+    async fn get_bug_xmlrpc(&self, id: &str) -> Result<Bug> {
+        let xmlrpc = self
+            .xmlrpc
+            .as_ref()
+            .ok_or_else(|| BzrError::Other("XML-RPC client not initialized".into()))?;
+        xmlrpc.get_bug(id).await
     }
 
     async fn get_bug_via_search(
@@ -1280,7 +1351,7 @@ mod tests {
     }
 
     fn test_client(base_url: &str) -> BugzillaClient {
-        BugzillaClient::new(base_url, "test-key", AuthMethod::Header).unwrap()
+        BugzillaClient::new(base_url, "test-key", AuthMethod::Header, ApiMode::Rest).unwrap()
     }
 
     #[tokio::test]
@@ -2028,7 +2099,7 @@ mod tests {
             .and(path("/rest/bug/99"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "error": true,
-                "code": 100500,
+                "code": 100_500,
                 "message": "Extension crash"
             })))
             .mount(&mock)
@@ -2485,7 +2556,7 @@ mod tests {
     }
 
     fn test_client_query_param(base_url: &str) -> BugzillaClient {
-        BugzillaClient::new(base_url, "test-key", AuthMethod::QueryParam).unwrap()
+        BugzillaClient::new(base_url, "test-key", AuthMethod::QueryParam, ApiMode::Rest).unwrap()
     }
 
     #[tokio::test]
@@ -2591,5 +2662,53 @@ mod tests {
         let client = test_client(&mock.uri());
         let err = client.search_users("anyone", false).await.unwrap_err();
         assert!(err.to_string().contains("not authorized"));
+    }
+
+    #[test]
+    fn search_params_serialization_product_only() {
+        let params = SearchParams {
+            product: Some("Product".into()),
+            limit: Some(50),
+            ..Default::default()
+        };
+        let qs = serde_urlencoded::to_string(&params).unwrap();
+        assert!(qs.contains("product=Product"));
+        assert!(qs.contains("limit=50"));
+    }
+
+    #[tokio::test]
+    async fn search_bugs_sends_product_filter() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("product", "Product"))
+            .and(query_param("limit", "50"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{
+                    "id": 217_630,
+                    "summary": "Test bug",
+                    "status": "WORKING",
+                    "product": "Product",
+                    "component": "Triage",
+                    "assigned_to": "test@example.com",
+                    "priority": "P1",
+                    "severity": "high",
+                    "creation_time": "2026-03-09T09:33:08Z",
+                    "last_change_time": "2026-03-18T05:49:05Z"
+                }]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = SearchParams {
+            product: Some("Product".into()),
+            limit: Some(50),
+            ..Default::default()
+        };
+        let bugs = client.search_bugs(&params).await.unwrap();
+        assert_eq!(bugs.len(), 1);
+        assert_eq!(bugs[0].id, 217_630);
     }
 }

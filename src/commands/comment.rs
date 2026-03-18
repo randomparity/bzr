@@ -1,6 +1,7 @@
 use std::io::{IsTerminal, Read, Write};
 
 use crate::cli::CommentAction;
+use crate::config::ApiMode;
 use crate::error::{BzrError, Result};
 use crate::output::{self, OutputFormat};
 
@@ -8,8 +9,9 @@ pub async fn execute(
     action: &CommentAction,
     server: Option<&str>,
     format: OutputFormat,
+    api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::build_client(server).await?;
+    let client = super::shared::build_client(server, api).await?;
 
     match action {
         CommentAction::List { bug_id, since } => {

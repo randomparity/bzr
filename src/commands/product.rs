@@ -1,5 +1,6 @@
 use crate::cli::ProductAction;
 use crate::client::{CreateProductParams, UpdateProductParams};
+use crate::config::ApiMode;
 use crate::error::Result;
 use crate::output::{self, OutputFormat};
 
@@ -7,8 +8,9 @@ pub async fn execute(
     action: &ProductAction,
     server: Option<&str>,
     format: OutputFormat,
+    api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::build_client(server).await?;
+    let client = super::shared::build_client(server, api).await?;
 
     match action {
         ProductAction::List { r#type } => {

@@ -34,6 +34,7 @@ For installation and quick start, see [README.md](../README.md).
 | `--json` | Shorthand for `--output json` |
 | `--no-color` | Disable colored output. Color is also suppressed automatically when stdout is not a TTY. |
 | `--quiet` | Suppress all stdout output (exit code confirms success) |
+| `--api <MODE>` | Override API transport: `rest`, `xmlrpc`, or `hybrid`. Auto-detected from server version if not set. |
 | `-v, --verbose` | Increase log verbosity (`-v`=info, `-vv`=debug, `-vvv`=trace; `RUST_LOG` overrides) |
 | `-h, --help` | Print help |
 | `-V, --version` | Print version |
@@ -795,6 +796,13 @@ email = "you@redhat.com"
 [servers.mozilla]
 url = "https://bugzilla.mozilla.org"
 api_key = "another-api-key"
+
+[servers.older]
+url = "https://bugzilla.example.com"
+api_key = "old-server-key"
+email = "you@example.com"
+api_mode = "hybrid"        # auto-detected: rest, xmlrpc, or hybrid
+server_version = "5.0.4"   # auto-detected from /rest/version
 ```
 
 ---
@@ -823,3 +831,25 @@ To generate an API key:
 2. Go to **Preferences > API Keys**
 3. Generate a new key
 4. Add it with `bzr config set-server`
+
+## API Transport
+
+`bzr` supports two API transports: REST and XML-RPC. On first use, it auto-detects the server version and selects the best transport:
+
+| Server Version | Transport | Notes |
+|---------------|-----------|-------|
+| < 5.0 | `xmlrpc` | REST API not available |
+| 5.0.x | `hybrid` | REST exists but may return empty results for some queries; falls back to XML-RPC |
+| >= 5.1 | `rest` | REST API is mature |
+
+The detected transport is cached in the config file alongside the server version.
+
+Override per-invocation with `--api`:
+
+```bash
+bzr --api xmlrpc bug list --product MyProduct
+bzr --api hybrid bug search "crash"
+bzr --api rest bug view 12345
+```
+
+In `hybrid` mode, `bzr` tries REST first. If the REST search returns empty results, it retries via XML-RPC. For direct bug lookups, it falls back to XML-RPC if the REST call fails.
