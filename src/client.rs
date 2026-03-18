@@ -1014,11 +1014,21 @@ impl BugzillaClient {
         Ok(data.users)
     }
 
-    pub async fn get_group_members(&self, group_name: &str) -> Result<Vec<BugzillaUser>> {
-        let req = self.auth(self.http.get(self.url("user")).query(&[
-            ("group", group_name),
-            ("include_fields", "id,name,real_name,email,groups"),
-        ]));
+    pub async fn get_group_members(
+        &self,
+        group_name: &str,
+        include_details: bool,
+    ) -> Result<Vec<BugzillaUser>> {
+        let fields = if include_details {
+            "id,name,real_name,email,can_login,groups"
+        } else {
+            "id,name,real_name,email"
+        };
+        let req = self.auth(
+            self.http
+                .get(self.url("user"))
+                .query(&[("group", group_name), ("include_fields", fields)]),
+        );
         let resp = self.send(req).await?;
         let data: UserSearchResponse = self.parse_json(resp).await?;
         Ok(data.users)
@@ -1592,6 +1602,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/user"))
             .and(query_param("group", "admin"))
+            .and(query_param("include_fields", "id,name,real_name,email"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [
                     {
@@ -1614,11 +1625,43 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client.get_group_members("admin").await.unwrap();
+        let users = client.get_group_members("admin", false).await.unwrap();
         assert_eq!(users.len(), 2);
+        assert_eq!(users[0].name, "alice@example.com");
+    }
+
+    #[tokio::test]
+    async fn get_group_members_details_sends_include_fields() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .and(query_param("group", "admin"))
+            .and(query_param(
+                "include_fields",
+                "id,name,real_name,email,can_login,groups",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "users": [
+                    {
+                        "id": 1,
+                        "name": "alice@example.com",
+                        "real_name": "Alice",
+                        "email": "alice@example.com",
+                        "can_login": true,
+                        "groups": [{"id": 10, "name": "admin", "description": "Admins"}]
+                    }
+                ]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let users = client.get_group_members("admin", true).await.unwrap();
+        assert_eq!(users.len(), 1);
         assert_eq!(users[0].name, "alice@example.com");
         assert_eq!(users[0].groups.len(), 1);
         assert_eq!(users[0].groups[0].name, "admin");
+        assert_eq!(users[0].can_login, Some(true));
     }
 
     #[tokio::test]
@@ -1634,7 +1677,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client.get_group_members("nobody").await.unwrap();
+        let users = client.get_group_members("nobody", false).await.unwrap();
         assert!(users.is_empty());
     }
 

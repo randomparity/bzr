@@ -484,6 +484,9 @@ pub enum GroupAction {
         /// Group name
         #[arg(long)]
         group: String,
+        /// Show extended details (groups, login status)
+        #[arg(long)]
+        details: bool,
     },
     /// View group details
     View {

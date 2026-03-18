@@ -105,7 +105,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [-v.
 ├── group
 │   ├── add-user --group <G> --user <U>
 │   ├── remove-user --group <G> --user <U>
-│   ├── list-users --group <G>
+│   ├── list-users --group <G> [--details]
 │   ├── view <GROUP>
 │   ├── create --name <N> --description <D> [--is-active <BOOL>]
 │   └── update <GROUP> [--description <D>] [--is-active <BOOL>]
@@ -534,12 +534,14 @@ List all users in a group.
 
 ```bash
 bzr group list-users --group admin
+bzr group list-users --group admin --details   # includes groups and login status
 bzr --json group list-users --group admin
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
 | `--group <G>` | Yes | Group name |
+| `--details` | No | Show extended details (groups, login status). Only affects table output; JSON always includes all fields. Requires authentication; group visibility depends on caller privileges. |
 
 ### `bzr group view`
 
