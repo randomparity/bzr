@@ -37,9 +37,9 @@ pub async fn execute(
                 format,
             );
         }
-        GroupAction::ListUsers { group } => {
-            let users = client.get_group_members(group).await?;
-            output::print_users(&users, format, false);
+        GroupAction::ListUsers { group, details } => {
+            let users = client.get_group_members(group, *details).await?;
+            output::print_users(&users, format, *details);
         }
         GroupAction::View { group } => {
             let info = client.get_group(group).await?;

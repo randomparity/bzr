@@ -1014,11 +1014,25 @@ impl BugzillaClient {
         Ok(data.users)
     }
 
-    pub async fn get_group_members(&self, group_name: &str) -> Result<Vec<BugzillaUser>> {
-        let req = self.auth(self.http.get(self.url("user")).query(&[
-            ("group", group_name),
-            ("include_fields", "id,name,real_name,email,groups"),
-        ]));
+    pub async fn get_group_members(
+        &self,
+        group_name: &str,
+        include_details: bool,
+    ) -> Result<Vec<BugzillaUser>> {
+        // Always send include_fields to cap the response payload — group
+        // queries can return many members. Unlike search_users (which omits
+        // include_fields to get Bugzilla's default set), we explicitly
+        // constrain both paths.
+        let fields = if include_details {
+            "id,name,real_name,email,can_login,groups"
+        } else {
+            "id,name,real_name,email"
+        };
+        let req = self.auth(
+            self.http
+                .get(self.url("user"))
+                .query(&[("group", group_name), ("include_fields", fields)]),
+        );
         let resp = self.send(req).await?;
         let data: UserSearchResponse = self.parse_json(resp).await?;
         Ok(data.users)
@@ -1592,6 +1606,42 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/user"))
             .and(query_param("group", "admin"))
+            .and(query_param("include_fields", "id,name,real_name,email"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "users": [
+                    {
+                        "id": 1,
+                        "name": "alice@example.com",
+                        "real_name": "Alice",
+                        "email": "alice@example.com"
+                    },
+                    {
+                        "id": 2,
+                        "name": "bob@example.com",
+                        "real_name": "Bob",
+                        "email": "bob@example.com"
+                    }
+                ]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let users = client.get_group_members("admin", false).await.unwrap();
+        assert_eq!(users.len(), 2);
+        assert_eq!(users[0].name, "alice@example.com");
+    }
+
+    #[tokio::test]
+    async fn get_group_members_details_sends_include_fields() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .and(query_param("group", "admin"))
+            .and(query_param(
+                "include_fields",
+                "id,name,real_name,email,can_login,groups",
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [
                     {
@@ -1599,13 +1649,7 @@ mod tests {
                         "name": "alice@example.com",
                         "real_name": "Alice",
                         "email": "alice@example.com",
-                        "groups": [{"id": 10, "name": "admin", "description": "Admins"}]
-                    },
-                    {
-                        "id": 2,
-                        "name": "bob@example.com",
-                        "real_name": "Bob",
-                        "email": "bob@example.com",
+                        "can_login": true,
                         "groups": [{"id": 10, "name": "admin", "description": "Admins"}]
                     }
                 ]
@@ -1614,11 +1658,12 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client.get_group_members("admin").await.unwrap();
-        assert_eq!(users.len(), 2);
+        let users = client.get_group_members("admin", true).await.unwrap();
+        assert_eq!(users.len(), 1);
         assert_eq!(users[0].name, "alice@example.com");
         assert_eq!(users[0].groups.len(), 1);
         assert_eq!(users[0].groups[0].name, "admin");
+        assert_eq!(users[0].can_login, Some(true));
     }
 
     #[tokio::test]
@@ -1634,8 +1679,34 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client.get_group_members("nobody").await.unwrap();
+        let users = client.get_group_members("nobody", false).await.unwrap();
         assert!(users.is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_group_members_api_error() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .and(query_param("group", "nonexistent"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 51,
+                "message": "There is no group named 'nonexistent'."
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client
+            .get_group_members("nonexistent", false)
+            .await
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("nonexistent"),
+            "Expected error to mention group name, got: {msg}"
+        );
     }
 
     #[tokio::test]
