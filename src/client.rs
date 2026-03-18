@@ -2045,10 +2045,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let bug = client
-            .get_bug_with_fields("99", None, None)
-            .await
-            .unwrap();
+        let bug = client.get_bug_with_fields("99", None, None).await.unwrap();
         assert_eq!(bug.id, 99);
         assert_eq!(bug.summary, "fallback bug");
     }
