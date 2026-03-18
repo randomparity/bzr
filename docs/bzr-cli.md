@@ -118,7 +118,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [-v.
 │   ├── create --product <P> --name <N> --description <D> --default-assignee <E>
 │   └── update <ID> [--name <N>] [--description <D>] [--default-assignee <E>]
 └── config
-    ├── set-server <NAME> --url <URL> --api-key <KEY> [--email <EMAIL>]
+    ├── set-server <NAME> --url <URL> --api-key <KEY> [--email <EMAIL>] [--auth-method <METHOD>]
     ├── set-default <NAME>
     └── show
 ```
@@ -673,6 +673,7 @@ The first server added is automatically set as the default.
 | `--url <URL>` | Yes | Server URL |
 | `--api-key <KEY>` | Yes | API key |
 | `--email <EMAIL>` | No | Login email (required for Bugzilla 5.0 or earlier) |
+| `--auth-method <METHOD>` | No | Override auto-detected auth method (`header` or `query_param`) |
 
 ### `bzr config set-default`
 
@@ -795,7 +796,19 @@ api_key = "another-api-key"
 
 `bzr` authenticates using Bugzilla API keys. On first use, it auto-detects whether your server supports header-based auth (`X-BUGZILLA-API-KEY`) or query parameter auth (`Bugzilla_api_key`), and caches the result.
 
+Detection probes endpoints in order:
+
+1. `rest/whoami` (Bugzilla 5.1+) — tries header auth, then query param
+2. `rest/valid_login` (Bugzilla 5.0+, requires `--email`) — tries header auth, then query param
+3. If step 2 detects query param, verifies by probing `rest/bug?limit=1` with header auth — if the probe succeeds, prefers header auth (avoids leaking API keys in URLs)
+
 For servers running Bugzilla 5.0 or earlier, provide your `--email` when configuring, as auth detection uses the `/rest/valid_login` endpoint which requires it.
+
+If auto-detection picks the wrong method (e.g. on servers with custom extensions), override it with `--auth-method`:
+
+```bash
+bzr config set-server myserver --url https://bugzilla.example.com --api-key KEY --auth-method header
+```
 
 To generate an API key:
 

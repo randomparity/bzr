@@ -81,6 +81,17 @@ async fn detect_auth_method(
     // Fall back to valid_login endpoint (Bugzilla 5.0+, requires email)
     if let Some(login) = email {
         if let Some(method) = try_valid_login(http, base, api_key, &key_val, login).await {
+            // valid_login can give false negatives for header auth on servers
+            // with custom extensions (e.g. IBM LTC). When query_param is
+            // detected, verify by probing a real endpoint with header auth.
+            // Prefer header when both work — it avoids leaking keys in URLs.
+            if method == AuthMethod::QueryParam && probe_header_on_api(http, base, &key_val).await {
+                tracing::info!(
+                    "header auth works on API endpoints despite valid_login \
+                     rejecting it; preferring header"
+                );
+                return Ok(AuthMethod::Header);
+            }
             return Ok(method);
         }
     }
@@ -259,6 +270,38 @@ async fn probe_valid_login(
     }
 }
 
+/// Try header auth on a real API endpoint to verify it works.
+///
+/// Some servers (e.g. IBM LTC Bugzilla) report header auth as unsupported
+/// via `valid_login` but accept it on actual API endpoints. A minimal
+/// `rest/bug?limit=1` request is used — any 2xx confirms header auth works.
+async fn probe_header_on_api(http: &reqwest::Client, base: &str, key_header: &HeaderValue) -> bool {
+    let url = format!("{base}/rest/bug");
+    let resp = http
+        .get(&url)
+        .query(&[("limit", "1")])
+        .header("X-BUGZILLA-API-KEY", key_header.clone())
+        .send()
+        .await;
+    match resp {
+        Ok(r) if r.status().is_success() => {
+            tracing::debug!("header auth probe on rest/bug succeeded");
+            true
+        }
+        Ok(r) => {
+            tracing::debug!(
+                status = %r.status(),
+                "header auth probe on rest/bug failed"
+            );
+            false
+        }
+        Err(e) => {
+            tracing::debug!("header auth probe request failed: {e}");
+            false
+        }
+    }
+}
+
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 mod tests {
@@ -347,7 +390,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn whoami_404_falls_back_to_valid_login_query_param() {
+    async fn valid_login_query_param_but_header_works_on_api() {
+        // Simulates IBM LTC-style servers: valid_login rejects header auth
+        // but actual API endpoints accept it. Should prefer header.
         let server = MockServer::start().await;
 
         Mock::given(method("GET"))
@@ -372,6 +417,64 @@ mod tests {
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": true})),
             )
+            .mount(&server)
+            .await;
+
+        // Header auth works on real API endpoints
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+            .mount(&server)
+            .await;
+
+        let result = detect_auth_method(
+            &test_client(),
+            &server.uri(),
+            "test-key",
+            Some("user@example.com"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result, AuthMethod::Header);
+    }
+
+    #[tokio::test]
+    async fn valid_login_query_param_and_header_fails_on_api() {
+        // Server truly only supports query_param: valid_login and API
+        // endpoints both reject header auth.
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/whoami"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/valid_login"))
+            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": false})),
+            )
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/valid_login"))
+            .and(query_param("login", "user@example.com"))
+            .and(query_param("Bugzilla_api_key", "test-key"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": true})),
+            )
+            .mount(&server)
+            .await;
+
+        // Header auth rejected on real API endpoints
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .respond_with(ResponseTemplate::new(401))
             .mount(&server)
             .await;
 
