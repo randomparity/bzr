@@ -556,7 +556,36 @@ struct ErrorResponse {
     message: Option<String>,
 }
 
+/// Bugzilla response keys that indicate real data is present alongside
+/// an error payload. When any of these exist, the error is a non-fatal
+/// server-side warning (e.g. from a Bugzilla extension) and the data
+/// should be used.
+const DATA_KEYS: &[&str] = &[
+    "bugs",
+    "comments",
+    "attachments",
+    "products",
+    "groups",
+    "users",
+    "fields",
+    "extensions",
+    "classifications",
+    "ids",
+];
+
 impl BugzillaClient {
+    /// Check if a JSON response body contains known Bugzilla data keys,
+    /// indicating the response has real data alongside any error fields.
+    fn has_data_fields(body: &str) -> bool {
+        let Ok(obj) = serde_json::from_str::<serde_json::Value>(body) else {
+            return false;
+        };
+        let Some(map) = obj.as_object() else {
+            return false;
+        };
+        DATA_KEYS.iter().any(|key| map.contains_key(*key))
+    }
+
     pub fn new(base_url: &str, api_key: &str, auth_method: AuthMethod) -> Result<Self> {
         let auth = match auth_method {
             AuthMethod::Header => {
@@ -614,13 +643,24 @@ impl BugzillaClient {
         let safe_url = Self::safe_url(resp.url());
         let body = resp.text().await?;
 
-        // Check for Bugzilla error responses that arrive with 200 status
+        // Check for Bugzilla error responses that arrive with 200 status.
+        // Some servers (e.g. IBM LTC Bugzilla) include error fields alongside
+        // valid data — only treat the error as fatal when the response doesn't
+        // also contain real data (indicated by common Bugzilla result keys).
         if let Ok(err) = serde_json::from_str::<ErrorResponse>(&body) {
-            if err.error {
+            if err.error && !Self::has_data_fields(&body) {
                 return Err(BzrError::Api {
                     code: err.code,
                     message: err.message.unwrap_or_else(|| "unknown API error".into()),
                 });
+            }
+            if err.error {
+                tracing::warn!(
+                    url = safe_url,
+                    code = err.code,
+                    message = err.message.as_deref().unwrap_or("unknown"),
+                    "server returned error alongside data; using data"
+                );
             }
         }
 
@@ -1388,6 +1428,28 @@ mod tests {
             msg.contains("not authorized"),
             "expected auth error message: {msg}"
         );
+    }
+
+    #[tokio::test]
+    async fn api_error_with_200_and_data_returns_data() {
+        // Some servers (e.g. IBM LTC) return error fields alongside real
+        // data. The data should be used and the error logged as a warning.
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 100500,
+                "message": "MirrorTool internal error",
+                "bugs": [{"id": 42, "summary": "test bug", "status": "NEW"}]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let bug = client.get_bug_with_fields("42", None, None).await.unwrap();
+        assert_eq!(bug.id, 42);
+        assert_eq!(bug.summary, "test bug");
     }
 
     #[tokio::test]
