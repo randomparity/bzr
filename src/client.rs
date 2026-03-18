@@ -643,22 +643,34 @@ impl BugzillaClient {
         let safe_url = Self::safe_url(resp.url());
         let body = resp.text().await?;
 
+        tracing::trace!(
+            url = safe_url,
+            body = &body[..body.len().min(2048)],
+            "response body"
+        );
+
         // Check for Bugzilla error responses that arrive with 200 status.
         // Some servers (e.g. IBM LTC Bugzilla) include error fields alongside
         // valid data — only treat the error as fatal when the response doesn't
         // also contain real data (indicated by common Bugzilla result keys).
         if let Ok(err) = serde_json::from_str::<ErrorResponse>(&body) {
-            if err.error && !Self::has_data_fields(&body) {
-                return Err(BzrError::Api {
-                    code: err.code,
-                    message: err.message.unwrap_or_else(|| "unknown API error".into()),
-                });
-            }
             if err.error {
-                tracing::warn!(
+                let has_data = Self::has_data_fields(&body);
+                tracing::debug!(
                     url = safe_url,
                     code = err.code,
                     message = err.message.as_deref().unwrap_or("unknown"),
+                    has_data,
+                    "error payload in 200 response"
+                );
+                if !has_data {
+                    return Err(BzrError::Api {
+                        code: err.code,
+                        message: err.message.unwrap_or_else(|| "unknown API error".into()),
+                    });
+                }
+                tracing::warn!(
+                    url = safe_url,
                     "server returned error alongside data; using data"
                 );
             }
@@ -679,12 +691,11 @@ impl BugzillaClient {
         if response.status().is_client_error() || response.status().is_server_error() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            let preview = if body.len() > 512 {
-                &body[..512]
-            } else {
-                &body
-            };
-            tracing::debug!(%status, body = preview, "API error response");
+            tracing::debug!(
+                %status,
+                body = &body[..body.len().min(512)],
+                "API error response"
+            );
             if let Ok(err) = serde_json::from_str::<ErrorResponse>(&body) {
                 if err.error {
                     return Err(BzrError::Api {
