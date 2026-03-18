@@ -17,6 +17,13 @@ fn encode_path(segment: &str) -> String {
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Default fields requested for Bug queries. Matches the fields in [`Bug`] and
+/// avoids requesting server-side fields we don't use — some Bugzilla extensions
+/// crash when serializing certain fields (e.g. group visibility) via the REST API.
+const BUG_DEFAULT_FIELDS: &str = "id,summary,status,resolution,product,component,\
+    assigned_to,priority,severity,creation_time,last_change_time,creator,\
+    url,whiteboard,keywords,blocks,depends_on,cc";
+
 enum AuthConfig {
     Header(HeaderValue),
     QueryParam(String),
@@ -761,7 +768,11 @@ impl BugzillaClient {
     }
 
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
-        let req = self.auth(self.http.get(self.url("bug")).query(params));
+        let mut req_builder = self.http.get(self.url("bug")).query(params);
+        if params.include_fields.is_none() {
+            req_builder = req_builder.query(&[("include_fields", BUG_DEFAULT_FIELDS)]);
+        }
+        let req = self.auth(req_builder);
         let resp = self.send(req).await?;
         let data: BugListResponse = self.parse_json(resp).await?;
         Ok(data.bugs)
@@ -773,10 +784,11 @@ impl BugzillaClient {
         include_fields: Option<&str>,
         exclude_fields: Option<&str>,
     ) -> Result<Bug> {
-        let mut req_builder = self.http.get(self.url(&format!("bug/{id}")));
-        if let Some(fields) = include_fields {
-            req_builder = req_builder.query(&[("include_fields", fields)]);
-        }
+        let fields = include_fields.unwrap_or(BUG_DEFAULT_FIELDS);
+        let mut req_builder = self
+            .http
+            .get(self.url(&format!("bug/{id}")))
+            .query(&[("include_fields", fields)]);
         if let Some(fields) = exclude_fields {
             req_builder = req_builder.query(&[("exclude_fields", fields)]);
         }
