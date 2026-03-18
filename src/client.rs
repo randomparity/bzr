@@ -794,6 +794,38 @@ impl BugzillaClient {
         }
         let req = self.auth(req_builder);
         let resp = self.send(req).await?;
+        let result: Result<BugListResponse> = self.parse_json(resp).await;
+
+        // If the direct endpoint fails with a server internal error (100500),
+        // retry via the search endpoint (/rest/bug?id=X). Some Bugzilla
+        // extensions only hook into the direct lookup path and crash there.
+        if let Err(BzrError::Api { code: 100_500, .. }) = &result {
+            tracing::debug!("direct bug lookup returned 100500, retrying via search endpoint");
+            return self.get_bug_via_search(id, fields, exclude_fields).await;
+        }
+
+        result?
+            .bugs
+            .into_iter()
+            .next()
+            .ok_or_else(|| BzrError::Other(format!("bug {id} not found")))
+    }
+
+    async fn get_bug_via_search(
+        &self,
+        id: &str,
+        include_fields: &str,
+        exclude_fields: Option<&str>,
+    ) -> Result<Bug> {
+        let mut req_builder = self
+            .http
+            .get(self.url("bug"))
+            .query(&[("id", id), ("include_fields", include_fields)]);
+        if let Some(fields) = exclude_fields {
+            req_builder = req_builder.query(&[("exclude_fields", fields)]);
+        }
+        let req = self.auth(req_builder);
+        let resp = self.send(req).await?;
         let data: BugListResponse = self.parse_json(resp).await?;
         data.bugs
             .into_iter()
@@ -1985,6 +2017,37 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(bug.id, 1);
+    }
+
+    #[tokio::test]
+    async fn get_bug_with_fields_falls_back_on_100500() {
+        let mock = MockServer::start().await;
+
+        // Direct endpoint returns 100500 (server extension crash)
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/99"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 100500,
+                "message": "Extension crash"
+            })))
+            .mount(&mock)
+            .await;
+
+        // Search endpoint returns the bug successfully
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("id", "99"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({"bugs": [{"id": 99, "summary": "fallback bug", "status": "NEW"}]}),
+            ))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let bug = client.get_bug_with_fields("99", None, None).await.unwrap();
+        assert_eq!(bug.id, 99);
+        assert_eq!(bug.summary, "fallback bug");
     }
 
     #[tokio::test]
