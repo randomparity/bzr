@@ -7,8 +7,11 @@ mod error;
 #[expect(clippy::print_stdout, clippy::expect_used)]
 mod output;
 
+use std::io::IsTerminal;
+
 use clap::Parser;
 use cli::{Cli, Commands};
+use error::BzrError;
 use output::OutputFormat;
 use tracing_subscriber::EnvFilter;
 
@@ -34,20 +37,72 @@ async fn main() {
         .with_writer(std::io::stderr)
         .init();
 
-    if let Err(e) = run(cli).await {
+    // Disable colors when --no-color is set or stdout is not a TTY.
+    if cli.no_color || !std::io::stdout().is_terminal() {
+        colored::control::set_override(false);
+    }
+
+    let format = match resolve_format(&cli) {
+        Ok(f) => f,
+        Err(e) => {
+            #[expect(clippy::print_stderr)]
+            {
+                eprintln!("error: {e}");
+            }
+            std::process::exit(e.exit_code());
+        }
+    };
+
+    if let Err(e) = run(cli, format).await {
         #[expect(clippy::print_stderr)]
         {
-            eprintln!("error: {e}");
+            if format == OutputFormat::Json {
+                let json_err = serde_json::json!({
+                    "error": {
+                        "type": e.error_type(),
+                        "message": e.to_string(),
+                        "exit_code": e.exit_code(),
+                    }
+                });
+                eprintln!(
+                    "{}",
+                    serde_json::to_string(&json_err)
+                        .unwrap_or_else(|_| format!("{{\"error\":{{\"message\":\"{e}\"}}}}")),
+                );
+            } else {
+                eprintln!("error: {e}");
+            }
         }
-        std::process::exit(1);
+        std::process::exit(e.exit_code());
     }
 }
 
-async fn run(cli: Cli) -> error::Result<()> {
-    let format: OutputFormat = cli
-        .output
-        .parse()
-        .map_err(|e: String| error::BzrError::Other(e))?;
+/// Resolve output format from flags, env var, and TTY detection.
+///
+/// Precedence: `--json` > `--output` > `BZR_OUTPUT` env > auto-detect
+/// (JSON when stdout is not a TTY, table otherwise).
+fn resolve_format(cli: &Cli) -> error::Result<OutputFormat> {
+    if cli.json {
+        return Ok(OutputFormat::Json);
+    }
+    if let Some(ref out) = cli.output {
+        return out.parse().map_err(BzrError::Other);
+    }
+    if let Ok(val) = std::env::var("BZR_OUTPUT") {
+        return val.parse().map_err(BzrError::Other);
+    }
+    if std::io::stdout().is_terminal() {
+        Ok(OutputFormat::Table)
+    } else {
+        Ok(OutputFormat::Json)
+    }
+}
+
+async fn run(cli: Cli, format: OutputFormat) -> error::Result<()> {
+    // When --quiet, suppress all stdout by discarding writes.
+    if cli.quiet {
+        suppress_stdout();
+    }
 
     match &cli.command {
         Commands::Bug { action } => {
@@ -59,7 +114,7 @@ async fn run(cli: Cli) -> error::Result<()> {
         Commands::Attachment { action } => {
             commands::attachment::execute(action, cli.server.as_deref(), format).await
         }
-        Commands::Config { action } => commands::config_cmd::execute(action),
+        Commands::Config { action } => commands::config_cmd::execute(action, format),
         Commands::Product { action } => {
             commands::product::execute(action, cli.server.as_deref(), format).await
         }
@@ -81,6 +136,18 @@ async fn run(cli: Cli) -> error::Result<()> {
         }
         Commands::Component { action } => {
             commands::component::execute(action, cli.server.as_deref(), format).await
+        }
+    }
+}
+
+/// Redirect stdout to /dev/null for --quiet mode.
+fn suppress_stdout() {
+    use std::os::unix::io::AsRawFd;
+    // Safety: dup2 replaces stdout fd with /dev/null fd.
+    // This is safe because we own the process and only do this once.
+    if let Ok(devnull) = std::fs::File::open("/dev/null") {
+        unsafe {
+            libc::dup2(devnull.as_raw_fd(), libc::STDOUT_FILENO);
         }
     }
 }

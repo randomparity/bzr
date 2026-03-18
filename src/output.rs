@@ -6,6 +6,22 @@ use crate::client::{
     Product, ServerExtensions, ServerVersion, WhoamiResponse,
 };
 
+/// Print a mutation result in the appropriate format.
+///
+/// In JSON mode, prints compact JSON to stdout.
+/// In table mode, prints the human-readable message.
+pub fn print_result(value: &serde_json::Value, human_message: &str, format: OutputFormat) {
+    match format {
+        OutputFormat::Json => {
+            println!(
+                "{}",
+                serde_json::to_string(&value).expect("mutation result serializable to JSON")
+            );
+        }
+        OutputFormat::Table => println!("{human_message}"),
+    }
+}
+
 fn truncate(s: &str, max_chars: usize) -> String {
     if s.chars().count() > max_chars {
         let truncated: String = s.chars().take(max_chars - 3).collect();
@@ -15,7 +31,7 @@ fn truncate(s: &str, max_chars: usize) -> String {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum OutputFormat {
     #[default]
     Table,

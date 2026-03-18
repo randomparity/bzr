@@ -115,6 +115,7 @@ dependencies = [
  "clap",
  "colored",
  "dirs",
+ "libc",
  "percent-encoding",
  "reqwest",
  "serde",

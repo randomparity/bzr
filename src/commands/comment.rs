@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::io::{IsTerminal, Read, Write};
 
 use crate::cli::CommentAction;
 use crate::error::{BzrError, Result};
@@ -19,16 +19,22 @@ pub async fn execute(
         CommentAction::Add { bug_id, body } => {
             let text = match body {
                 Some(t) => t.clone(),
-                None => edit_comment()?,
+                None => read_comment_body()?,
             };
             if text.trim().is_empty() {
                 return Err(BzrError::Other("empty comment, aborting".into()));
             }
             let id = client.add_comment(*bug_id, &text).await?;
-            #[expect(clippy::print_stdout)]
-            {
-                println!("Added comment #{id} to bug #{bug_id}");
-            }
+            output::print_result(
+                &serde_json::json!({
+                    "id": id,
+                    "bug_id": bug_id,
+                    "resource": "comment",
+                    "action": "created",
+                }),
+                &format!("Added comment #{id} to bug #{bug_id}"),
+                format,
+            );
         }
         CommentAction::Tag {
             comment_id,
@@ -36,11 +42,23 @@ pub async fn execute(
             remove,
         } => {
             let tags = client.update_comment_tags(*comment_id, add, remove).await?;
-            #[expect(clippy::print_stdout)]
-            {
-                println!("Tags on comment #{comment_id}:");
-            }
-            output::print_comment_tags(&tags);
+            output::print_result(
+                &serde_json::json!({
+                    "comment_id": comment_id,
+                    "tags": tags,
+                    "resource": "comment_tag",
+                    "action": "updated",
+                }),
+                &format!(
+                    "Tags on comment #{comment_id}: {}",
+                    if tags.is_empty() {
+                        "(none)".to_string()
+                    } else {
+                        tags.join(", ")
+                    }
+                ),
+                format,
+            );
         }
         CommentAction::SearchTags { query } => {
             let tags = client.search_comment_tags(query).await?;
@@ -48,6 +66,17 @@ pub async fn execute(
         }
     }
     Ok(())
+}
+
+/// Read comment body from stdin (pipe) or $EDITOR (TTY).
+fn read_comment_body() -> Result<String> {
+    let stdin = std::io::stdin();
+    if !stdin.is_terminal() {
+        let mut buf = String::new();
+        stdin.lock().read_to_string(&mut buf)?;
+        return Ok(buf);
+    }
+    edit_comment()
 }
 
 fn edit_comment() -> Result<String> {

@@ -8,8 +8,20 @@ pub struct Cli {
     pub server: Option<String>,
 
     /// Output format: table or json
-    #[arg(long, global = true, default_value = "table")]
-    pub output: String,
+    #[arg(long, global = true)]
+    pub output: Option<String>,
+
+    /// Shorthand for --output json
+    #[arg(long, global = true)]
+    pub json: bool,
+
+    /// Disable colored output
+    #[arg(long, global = true)]
+    pub no_color: bool,
+
+    /// Suppress all stdout output
+    #[arg(long, global = true)]
+    pub quiet: bool,
 
     /// Set log verbosity (default: warnings only, -v=info, -vv=debug, -vvv=trace; `RUST_LOG` overrides)
     #[arg(short, long, action = clap::ArgAction::Count, global = true)]

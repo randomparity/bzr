@@ -1,9 +1,11 @@
+use std::fmt::Write;
+
 use crate::cli::ConfigAction;
 use crate::config::{Config, ServerConfig};
 use crate::error::Result;
+use crate::output::{self, OutputFormat};
 
-#[expect(clippy::print_stdout)]
-pub fn execute(action: &ConfigAction) -> Result<()> {
+pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
     match action {
         ConfigAction::SetServer {
             name,
@@ -24,12 +26,28 @@ pub fn execute(action: &ConfigAction) -> Result<()> {
             if config.default_server.is_none() {
                 config.default_server = Some(name.clone());
             }
+            let is_default = config.default_server.as_deref() == Some(name.as_str());
+            let path = Config::path()?;
             config.save()?;
-            println!("Server '{name}' configured at {url}");
-            if config.default_server.as_deref() == Some(name.as_str()) {
-                println!("Set as default server.");
+
+            let mut human = format!("Server '{name}' configured at {url}");
+            if is_default {
+                human.push_str("\nSet as default server.");
             }
-            println!("Config file: {}", Config::path()?.display());
+            let _ = write!(human, "\nConfig file: {}", path.display());
+
+            output::print_result(
+                &serde_json::json!({
+                    "name": name,
+                    "url": url,
+                    "is_default": is_default,
+                    "config_file": path.to_string_lossy(),
+                    "resource": "server_config",
+                    "action": "configured",
+                }),
+                &human,
+                format,
+            );
         }
         ConfigAction::SetDefault { name } => {
             let mut config = Config::load()?;
@@ -39,13 +57,63 @@ pub fn execute(action: &ConfigAction) -> Result<()> {
                 )));
             }
             config.default_server = Some(name.clone());
+            let path = Config::path()?;
             config.save()?;
-            println!("Default server set to '{name}'");
-            println!("Config file: {}", Config::path()?.display());
+
+            output::print_result(
+                &serde_json::json!({
+                    "name": name,
+                    "config_file": path.to_string_lossy(),
+                    "resource": "default_server",
+                    "action": "updated",
+                }),
+                &format!(
+                    "Default server set to '{name}'\nConfig file: {}",
+                    path.display()
+                ),
+                format,
+            );
         }
         ConfigAction::Show => {
-            let config = Config::load()?;
-            let path = Config::path()?;
+            show_config(format)?;
+        }
+    }
+    Ok(())
+}
+
+#[expect(clippy::print_stdout)]
+fn show_config(format: OutputFormat) -> Result<()> {
+    let config = Config::load()?;
+    let path = Config::path()?;
+
+    match format {
+        OutputFormat::Json => {
+            let mut servers = serde_json::Map::new();
+            for (name, srv) in &config.servers {
+                let masked_key = mask_api_key(&srv.api_key);
+                servers.insert(
+                    name.clone(),
+                    serde_json::json!({
+                        "url": srv.url,
+                        "email": srv.email,
+                        "api_key": masked_key,
+                        "auth_method": srv.auth_method
+                            .as_ref()
+                            .map(ToString::to_string),
+                    }),
+                );
+            }
+            let out = serde_json::json!({
+                "config_file": path.to_string_lossy(),
+                "default_server": config.default_server,
+                "servers": servers,
+            });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&out).unwrap_or_else(|_| "{}".into())
+            );
+        }
+        OutputFormat::Table => {
             println!("Config file: {}\n", path.display());
             if let Some(ref def) = config.default_server {
                 println!("Default server: {def}");
@@ -54,11 +122,7 @@ pub fn execute(action: &ConfigAction) -> Result<()> {
                 println!("No servers configured.");
             } else {
                 for (name, srv) in &config.servers {
-                    let masked_key = if srv.api_key.len() > 8 {
-                        format!("{}...", &srv.api_key[..8])
-                    } else {
-                        "***".into()
-                    };
+                    let masked_key = mask_api_key(&srv.api_key);
                     let auth_display = match &srv.auth_method {
                         Some(m) => m.to_string(),
                         None => "auto (not yet detected)".into(),
@@ -75,4 +139,12 @@ pub fn execute(action: &ConfigAction) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn mask_api_key(key: &str) -> String {
+    if key.len() > 8 {
+        format!("{}...", &key[..8])
+    } else {
+        "***".into()
+    }
 }
