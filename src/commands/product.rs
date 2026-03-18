@@ -32,10 +32,11 @@ pub async fn execute(
                 is_open: *is_open,
             };
             let id = client.create_product(&params).await?;
-            #[expect(clippy::print_stdout)]
-            {
-                println!("Created product #{id} '{name}'");
-            }
+            output::print_result(
+                &serde_json::json!({"id": id, "name": name, "resource": "product", "action": "created"}),
+                &format!("Created product #{id} '{name}'"),
+                format,
+            );
         }
         ProductAction::Update {
             name,
@@ -49,10 +50,11 @@ pub async fn execute(
                 is_open: *is_open,
             };
             client.update_product(name, &params).await?;
-            #[expect(clippy::print_stdout)]
-            {
-                println!("Updated product '{name}'");
-            }
+            output::print_result(
+                &serde_json::json!({"name": name, "resource": "product", "action": "updated"}),
+                &format!("Updated product '{name}'"),
+                format,
+            );
         }
     }
     Ok(())

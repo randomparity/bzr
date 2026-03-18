@@ -30,4 +30,101 @@ impl BzrError {
     pub fn config(msg: impl fmt::Display) -> Self {
         BzrError::Config(msg.to_string())
     }
+
+    pub fn exit_code(&self) -> i32 {
+        match self {
+            BzrError::Config(_) | BzrError::TomlParse(_) | BzrError::TomlSerialize(_) => 3,
+            BzrError::Api { .. } => 4,
+            BzrError::Http(_) => 5,
+            BzrError::Io(_) => 6,
+            BzrError::Other(_) => 1,
+        }
+    }
+
+    pub fn error_type(&self) -> &'static str {
+        match self {
+            BzrError::Config(_) | BzrError::TomlParse(_) | BzrError::TomlSerialize(_) => "config",
+            BzrError::Api { .. } => "api",
+            BzrError::Http(_) => "http",
+            BzrError::Io(_) => "io",
+            BzrError::Other(_) => "other",
+        }
+    }
+}
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exit_code_config() {
+        let err = BzrError::Config("bad config".into());
+        assert_eq!(err.exit_code(), 3);
+    }
+
+    #[test]
+    fn exit_code_api() {
+        let err = BzrError::Api {
+            code: 101,
+            message: "Invalid Bug ID".into(),
+        };
+        assert_eq!(err.exit_code(), 4);
+    }
+
+    #[test]
+    fn exit_code_io() {
+        let err = BzrError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "file not found",
+        ));
+        assert_eq!(err.exit_code(), 6);
+    }
+
+    #[test]
+    fn exit_code_other() {
+        let err = BzrError::Other("something went wrong".into());
+        assert_eq!(err.exit_code(), 1);
+    }
+
+    #[test]
+    fn exit_code_toml_parse() {
+        let toml_err: std::result::Result<toml::Value, _> = toml::from_str("{{bad");
+        let err = BzrError::TomlParse(toml_err.unwrap_err());
+        assert_eq!(err.exit_code(), 3);
+    }
+
+    #[test]
+    fn error_type_config() {
+        let err = BzrError::Config("x".into());
+        assert_eq!(err.error_type(), "config");
+    }
+
+    #[test]
+    fn error_type_api() {
+        let err = BzrError::Api {
+            code: 1,
+            message: "x".into(),
+        };
+        assert_eq!(err.error_type(), "api");
+    }
+
+    #[test]
+    fn error_type_io() {
+        let err = BzrError::Io(std::io::Error::other("x"));
+        assert_eq!(err.error_type(), "io");
+    }
+
+    #[test]
+    fn error_type_other() {
+        let err = BzrError::Other("x".into());
+        assert_eq!(err.error_type(), "other");
+    }
+
+    #[test]
+    fn error_type_toml_parse() {
+        let toml_err: std::result::Result<toml::Value, _> = toml::from_str("{{bad");
+        let err = BzrError::TomlParse(toml_err.unwrap_err());
+        assert_eq!(err.error_type(), "config");
+    }
 }

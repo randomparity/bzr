@@ -19,6 +19,7 @@ colored = "3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 percent-encoding = "2"
+libc = "0.2"
 
 [dev-dependencies]
 wiremock = "0.6"

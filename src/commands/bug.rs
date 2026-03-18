@@ -101,10 +101,11 @@ pub async fn execute(action: &BugAction, server: Option<&str>, format: OutputFor
                 assigned_to: assignee.clone(),
             };
             let id = client.create_bug(&params).await?;
-            #[expect(clippy::print_stdout)]
-            {
-                println!("Created bug #{id}");
-            }
+            output::print_result(
+                &serde_json::json!({"id": id, "resource": "bug", "action": "created"}),
+                &format!("Created bug #{id}"),
+                format,
+            );
         }
         BugAction::Update {
             id,
@@ -129,10 +130,11 @@ pub async fn execute(action: &BugAction, server: Option<&str>, format: OutputFor
                 flags,
             };
             client.update_bug(*id, &params).await?;
-            #[expect(clippy::print_stdout)]
-            {
-                println!("Updated bug #{id}");
-            }
+            output::print_result(
+                &serde_json::json!({"id": id, "resource": "bug", "action": "updated"}),
+                &format!("Updated bug #{id}"),
+                format,
+            );
         }
     }
     Ok(())

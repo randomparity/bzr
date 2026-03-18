@@ -13,17 +13,29 @@ pub async fn execute(
     match action {
         GroupAction::AddUser { group, user } => {
             client.add_user_to_group(user, group).await?;
-            #[expect(clippy::print_stdout)]
-            {
-                println!("Added {user} to group '{group}'");
-            }
+            output::print_result(
+                &serde_json::json!({
+                    "user": user,
+                    "group": group,
+                    "resource": "group_membership",
+                    "action": "added",
+                }),
+                &format!("Added {user} to group '{group}'"),
+                format,
+            );
         }
         GroupAction::RemoveUser { group, user } => {
             client.remove_user_from_group(user, group).await?;
-            #[expect(clippy::print_stdout)]
-            {
-                println!("Removed {user} from group '{group}'");
-            }
+            output::print_result(
+                &serde_json::json!({
+                    "user": user,
+                    "group": group,
+                    "resource": "group_membership",
+                    "action": "removed",
+                }),
+                &format!("Removed {user} from group '{group}'"),
+                format,
+            );
         }
         GroupAction::ListUsers { group } => {
             let users = client.get_group_members(group).await?;
@@ -39,10 +51,16 @@ pub async fn execute(
             is_active,
         } => {
             let id = client.create_group(name, description, *is_active).await?;
-            #[expect(clippy::print_stdout)]
-            {
-                println!("Created group #{id} '{name}'");
-            }
+            output::print_result(
+                &serde_json::json!({
+                    "id": id,
+                    "name": name,
+                    "resource": "group",
+                    "action": "created",
+                }),
+                &format!("Created group #{id} '{name}'"),
+                format,
+            );
         }
         GroupAction::Update {
             group,
@@ -54,10 +72,15 @@ pub async fn execute(
                 is_active: *is_active,
             };
             client.update_group(group, &params).await?;
-            #[expect(clippy::print_stdout)]
-            {
-                println!("Updated group '{group}'");
-            }
+            output::print_result(
+                &serde_json::json!({
+                    "name": group,
+                    "resource": "group",
+                    "action": "updated",
+                }),
+                &format!("Updated group '{group}'"),
+                format,
+            );
         }
     }
     Ok(())

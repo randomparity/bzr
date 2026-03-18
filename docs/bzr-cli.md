@@ -6,6 +6,8 @@ For installation and quick start, see [README.md](../README.md).
 ## Contents
 
 - [Global Options](#global-options)
+- [Environment Variables](#environment-variables)
+- [Exit Codes](#exit-codes)
 - [bug](#bzr-bug----bug-operations)
 - [comment](#bzr-comment----comment-operations)
 - [attachment](#bzr-attachment----attachment-operations)
@@ -28,15 +30,42 @@ For installation and quick start, see [README.md](../README.md).
 | Option | Description |
 |--------|-------------|
 | `--server <NAME>` | Use a specific server from config instead of the default |
-| `--output <FORMAT>` | Output format: `table` (default) or `json` |
+| `--output <FORMAT>` | Output format: `table` or `json`. Defaults to table at a TTY; auto-selects json when stdout is not a TTY. |
+| `--json` | Shorthand for `--output json` |
+| `--no-color` | Disable colored output. Color is also suppressed automatically when stdout is not a TTY. |
+| `--quiet` | Suppress all stdout output (exit code confirms success) |
 | `-v, --verbose` | Increase log verbosity (`-v`=info, `-vv`=debug, `-vvv`=trace; `RUST_LOG` overrides) |
 | `-h, --help` | Print help |
 | `-V, --version` | Print version |
 
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `BZR_OUTPUT` | Default output format (`table` or `json`). Overridden by `--output` or `--json`. |
+| `NO_COLOR` | Disable colored output (any value). Supported natively by the `colored` crate. |
+| `CLICOLOR` | Set to `0` to disable colored output (standard convention respected by the `colored` crate). |
+| `CLICOLOR_FORCE` | Set to `1` to force colored output even when stdout is not a TTY. |
+| `RUST_LOG` | Override log verbosity (e.g. `bzr=debug`). |
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | General/unknown error |
+| 2 | CLI usage error (invalid arguments)* |
+| 3 | Config or TOML parse error |
+| 4 | Bugzilla API error |
+| 5 | HTTP/network error |
+| 6 | IO error |
+
+*Exit code 2 is produced by clap for invalid or missing arguments before bzr's error handling runs.
+
 ## Command Tree
 
 ```
-bzr [--server <NAME>] [--output table|json] [-v...]
+bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [-v...]
 ├── bug
 │   ├── list [--product <P>] [--component <C>] [--status <S>] [--assignee <A>]
 │   │        [--creator <C>] [--priority <P>] [--severity <S>] [--id <ID>...]
@@ -130,7 +159,7 @@ Display detailed information about a single bug.
 
 ```bash
 bzr bug view 12345
-bzr bug view 12345 --output json
+bzr --json bug view 12345
 bzr bug view my-alias --fields id,summary,assigned_to
 ```
 
@@ -164,7 +193,7 @@ View the change history of a bug, showing who changed which fields and when.
 ```bash
 bzr bug history 12345
 bzr bug history 12345 --since 2025-01-01
-bzr bug history 12345 --output json
+bzr --json bug history 12345
 ```
 
 | Option | Required | Description |
@@ -227,7 +256,7 @@ List all comments on a bug.
 ```bash
 bzr comment list 12345
 bzr comment list 12345 --since 2025-06-01
-bzr comment list 12345 --output json
+bzr --json comment list 12345
 ```
 
 | Option | Required | Description |
@@ -237,17 +266,18 @@ bzr comment list 12345 --output json
 
 ### `bzr comment add`
 
-Add a comment to a bug. If `--body` is omitted, opens `$EDITOR` (falls back to `vi`).
+Add a comment to a bug. If `--body` is omitted: reads from stdin when piped (`echo "text" | bzr comment add 12345`), or opens `$EDITOR` (falls back to `vi`) at a TTY.
 
 ```bash
 bzr comment add 12345 --body "Confirmed on Fedora 42"
-bzr comment add 12345   # opens editor
+bzr comment add 12345                          # opens editor
+echo "Automated comment" | bzr comment add 12345  # reads stdin
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
 | `<BUG_ID>` | Yes | Bug ID |
-| `--body <TEXT>` | No | Comment text (opens `$EDITOR` if omitted) |
+| `--body <TEXT>` | No | Comment text (reads stdin or opens `$EDITOR` if omitted) |
 
 ### `bzr comment tag`
 
@@ -271,7 +301,7 @@ Search for comments by tag.
 
 ```bash
 bzr comment search-tags spam
-bzr comment search-tags needs-info --output json
+bzr --json comment search-tags needs-info
 ```
 
 | Option | Required | Description |
@@ -288,7 +318,7 @@ List all attachments on a bug.
 
 ```bash
 bzr attachment list 12345
-bzr attachment list 12345 --output json
+bzr --json attachment list 12345
 ```
 
 ### `bzr attachment download`
@@ -355,7 +385,7 @@ List products accessible to the authenticated user.
 ```bash
 bzr product list
 bzr product list --type selectable
-bzr product list --output json
+bzr --json product list
 ```
 
 | Option | Required | Default | Description |
@@ -368,7 +398,7 @@ View product details including components, versions, and milestones.
 
 ```bash
 bzr product view Fedora
-bzr product view Fedora --output json
+bzr --json product view Fedora
 ```
 
 ### `bzr product create`
@@ -415,7 +445,7 @@ List valid values for a bug field (e.g. status, priority, severity, resolution).
 ```bash
 bzr field list status
 bzr field list priority
-bzr field list severity --output json
+bzr --json field list severity
 ```
 
 ---
@@ -428,7 +458,7 @@ Search for users by name or email.
 
 ```bash
 bzr user search "alice"
-bzr user search "example.com" --output json
+bzr --json user search "example.com"
 ```
 
 ### `bzr user create`
@@ -499,7 +529,7 @@ List all users in a group.
 
 ```bash
 bzr group list-users --group admin
-bzr group list-users --group admin --output json
+bzr --json group list-users --group admin
 ```
 
 | Option | Required | Description |
@@ -512,7 +542,7 @@ View group details.
 
 ```bash
 bzr group view admin
-bzr group view admin --output json
+bzr --json group view admin
 ```
 
 ### `bzr group create`
@@ -553,7 +583,7 @@ Show the currently authenticated user.
 
 ```bash
 bzr whoami
-bzr whoami --output json
+bzr --json whoami
 ```
 
 ---
@@ -566,7 +596,7 @@ Show server version and installed extensions.
 
 ```bash
 bzr server info
-bzr server info --output json
+bzr --json server info
 ```
 
 ---
@@ -579,7 +609,7 @@ View a classification by name or ID.
 
 ```bash
 bzr classification view "Unclassified"
-bzr classification view "Unclassified" --output json
+bzr --json classification view "Unclassified"
 ```
 
 ---
@@ -654,10 +684,11 @@ bzr config set-default mozilla
 
 ### `bzr config show`
 
-Display the current configuration (API keys are masked).
+Display the current configuration (API keys are masked). Supports `--json` for structured output.
 
 ```bash
 bzr config show
+bzr --json config show
 ```
 
 ---
@@ -680,32 +711,63 @@ The `--flag` option is available on `bzr bug update`, `bzr attachment upload`, a
 
 ## JSON Output
 
-All list and view commands support `--output json` for scripting and piping to tools like `jq`:
+### Auto-detection
+
+When stdout is not a TTY (i.e. piped to another program or redirected to a file), bzr automatically outputs JSON. At a TTY, it defaults to table format. Override with `--json`, `--output`, or the `BZR_OUTPUT` env var.
+
+### List and view commands
+
+All list and view commands support JSON output for scripting and piping to tools like `jq`:
 
 ```bash
 # Get bug IDs matching a search
-bzr --output json bug search "memory leak" | jq '.[].id'
+bzr --json bug search "memory leak" | jq '.[].id'
 
 # Extract assignee from a bug
-bzr --output json bug view 12345 | jq -r '.assigned_to'
+bzr --json bug view 12345 | jq -r '.assigned_to'
 
 # List attachment filenames
-bzr --output json attachment list 12345 | jq -r '.[].file_name'
+bzr --json attachment list 12345 | jq -r '.[].file_name'
 
 # Get product component names
-bzr --output json product view Fedora | jq -r '.components[].name'
+bzr --json product view Fedora | jq -r '.components[].name'
 
 # List allowed status transitions from NEW
-bzr --output json field list status | jq '.[] | select(.name == "NEW") | .can_change_to'
+bzr --json field list status | jq '.[] | select(.name == "NEW") | .can_change_to'
 
 # Get only specific fields from a bug
-bzr --output json bug view 12345 --fields id,summary,status | jq .
+bzr --json bug view 12345 --fields id,summary,status | jq .
 
 # Check authenticated user
-bzr --output json whoami | jq -r '.name'
+bzr --json whoami | jq -r '.name'
 
 # List server extensions
-bzr --output json server info | jq -r '.extensions | keys[]'
+bzr --json server info | jq -r '.extensions | keys[]'
+
+# View config as JSON
+bzr --json config show | jq .
+```
+
+### Mutation responses
+
+Create, update, and delete commands return structured JSON with `--json`:
+
+```json
+{"id":123,"resource":"bug","action":"created"}
+{"id":456,"bug_id":123,"resource":"comment","action":"created"}
+{"id":789,"resource":"attachment","action":"updated"}
+{"user":"alice","group":"qa","resource":"group_membership","action":"added"}
+{"id":67890,"file":"/tmp/patch.diff","size":4096,"resource":"attachment","action":"downloaded"}
+```
+
+All mutation responses include `resource` and `action` fields. Most include `id` for the created/updated resource. Note: `comment tag` responses use `comment_id`, not `id`. Membership responses (`group_membership`) have no `id` field.
+
+### Error output
+
+When `--json` is active, errors are emitted as JSON on stderr:
+
+```json
+{"error":{"type":"api","message":"Bugzilla API error: Invalid Bug ID (code 101)","exit_code":4}}
 ```
 
 ---

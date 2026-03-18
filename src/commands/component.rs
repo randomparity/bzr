@@ -1,12 +1,12 @@
 use crate::cli::ComponentAction;
 use crate::client::UpdateComponentParams;
 use crate::error::Result;
-use crate::output::OutputFormat;
+use crate::output::{self, OutputFormat};
 
 pub async fn execute(
     action: &ComponentAction,
     server: Option<&str>,
-    _format: OutputFormat,
+    format: OutputFormat,
 ) -> Result<()> {
     let client = super::shared::build_client(server).await?;
 
@@ -20,10 +20,16 @@ pub async fn execute(
             let id = client
                 .create_component(product, name, description, default_assignee)
                 .await?;
-            #[expect(clippy::print_stdout)]
-            {
-                println!("Created component #{id} in product '{product}'");
-            }
+            output::print_result(
+                &serde_json::json!({
+                    "id": id,
+                    "product": product,
+                    "resource": "component",
+                    "action": "created",
+                }),
+                &format!("Created component #{id} in product '{product}'"),
+                format,
+            );
         }
         ComponentAction::Update {
             id,
@@ -37,10 +43,15 @@ pub async fn execute(
                 default_assignee: default_assignee.clone(),
             };
             client.update_component(*id, &params).await?;
-            #[expect(clippy::print_stdout)]
-            {
-                println!("Updated component #{id}");
-            }
+            output::print_result(
+                &serde_json::json!({
+                    "id": id,
+                    "resource": "component",
+                    "action": "updated",
+                }),
+                &format!("Updated component #{id}"),
+                format,
+            );
         }
     }
     Ok(())

@@ -21,15 +21,20 @@ pub async fn execute(
             let (filename, data) = client.download_attachment(*id).await?;
             let dest = out.as_deref().unwrap_or(&filename);
             std::fs::write(dest, &data)?;
-            #[expect(clippy::print_stdout)]
-            {
-                println!(
-                    "Downloaded attachment #{} to {} ({} bytes)",
-                    id,
-                    dest,
+            output::print_result(
+                &serde_json::json!({
+                    "id": id,
+                    "file": dest,
+                    "size": data.len(),
+                    "resource": "attachment",
+                    "action": "downloaded",
+                }),
+                &format!(
+                    "Downloaded attachment #{id} to {dest} ({} bytes)",
                     data.len()
-                );
-            }
+                ),
+                format,
+            );
         }
         AttachmentAction::Upload {
             bug_id,
@@ -49,15 +54,20 @@ pub async fn execute(
             let att_id = client
                 .upload_attachment(*bug_id, file_name, summary, ct, &data, &flags)
                 .await?;
-            #[expect(clippy::print_stdout)]
-            {
-                println!(
-                    "Uploaded attachment #{} to bug #{} ({} bytes)",
-                    att_id,
-                    bug_id,
+            output::print_result(
+                &serde_json::json!({
+                    "id": att_id,
+                    "bug_id": bug_id,
+                    "size": data.len(),
+                    "resource": "attachment",
+                    "action": "created",
+                }),
+                &format!(
+                    "Uploaded attachment #{att_id} to bug #{bug_id} ({} bytes)",
                     data.len()
-                );
-            }
+                ),
+                format,
+            );
         }
         AttachmentAction::Update {
             id,
@@ -80,10 +90,11 @@ pub async fn execute(
                 flags,
             };
             client.update_attachment(*id, &params).await?;
-            #[expect(clippy::print_stdout)]
-            {
-                println!("Updated attachment #{id}");
-            }
+            output::print_result(
+                &serde_json::json!({"id": id, "resource": "attachment", "action": "updated"}),
+                &format!("Updated attachment #{id}"),
+                format,
+            );
         }
     }
     Ok(())

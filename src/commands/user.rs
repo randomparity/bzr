@@ -26,10 +26,11 @@ pub async fn execute(
                 password: password.clone(),
             };
             let id = client.create_user(&params).await?;
-            #[expect(clippy::print_stdout)]
-            {
-                println!("Created user #{id} ({email})");
-            }
+            output::print_result(
+                &serde_json::json!({"id": id, "email": email, "resource": "user", "action": "created"}),
+                &format!("Created user #{id} ({email})"),
+                format,
+            );
         }
         UserAction::Update {
             user,
@@ -50,10 +51,11 @@ pub async fn execute(
                 login_denied_text: denied_text,
             };
             client.update_user(user, &params).await?;
-            #[expect(clippy::print_stdout)]
-            {
-                println!("Updated user '{user}'");
-            }
+            output::print_result(
+                &serde_json::json!({"user": user, "resource": "user", "action": "updated"}),
+                &format!("Updated user '{user}'"),
+                format,
+            );
         }
     }
     Ok(())
