@@ -641,9 +641,7 @@ impl BugzillaClient {
                     status = %retried.status(),
                     "auth fallback response"
                 );
-                if !retried.status().is_client_error()
-                    && !retried.status().is_server_error()
-                {
+                if !retried.status().is_client_error() && !retried.status().is_server_error() {
                     return Ok(retried);
                 }
                 tracing::debug!("auth fallback also failed, returning original 401");
@@ -654,9 +652,7 @@ impl BugzillaClient {
 
     fn apply_alternate_auth(&self, builder: RequestBuilder) -> RequestBuilder {
         match &self.auth {
-            AuthConfig::Header(_) => {
-                builder.query(&[("Bugzilla_api_key", &self.api_key)])
-            }
+            AuthConfig::Header(_) => builder.query(&[("Bugzilla_api_key", &self.api_key)]),
             AuthConfig::QueryParam(_) => {
                 let value = HeaderValue::from_str(&self.api_key)
                     .unwrap_or_else(|_| HeaderValue::from_static(""));
