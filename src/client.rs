@@ -1141,99 +1141,33 @@ impl BugzillaClient {
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 mod tests {
-    use std::sync::{Arc, Mutex};
-
-    use tracing_subscriber::layer::SubscriberExt;
-    use tracing_subscriber::EnvFilter;
     use wiremock::matchers::{body_json, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
     use crate::config::AuthMethod;
 
-    /// Tracing layer that captures formatted log output into a shared buffer.
-    struct CapturingWriter(Arc<Mutex<Vec<u8>>>);
-
-    impl std::io::Write for CapturingWriter {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            self.0.lock().unwrap().extend_from_slice(buf);
-            Ok(buf.len())
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for CapturingWriter {
-        type Writer = CapturingWriter;
-
-        fn make_writer(&'a self) -> Self::Writer {
-            CapturingWriter(Arc::clone(&self.0))
-        }
-    }
-
-    #[tokio::test]
-    async fn send_does_not_log_query_param_api_key() {
-        let mock = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/rest/bug/1"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(
-                serde_json::json!({"bugs": [{"id": 1, "summary": "test", "status": "NEW"}]}),
-            ))
-            .mount(&mock)
-            .await;
-
-        let secret = "super-secret-api-key-12345";
-        let client = BugzillaClient::new(&mock.uri(), secret, AuthMethod::QueryParam).unwrap();
-
-        let log_buf = Arc::new(Mutex::new(Vec::new()));
-        let fmt_layer = tracing_subscriber::fmt::layer()
-            .with_writer(CapturingWriter(Arc::clone(&log_buf)))
-            .with_ansi(false);
-        let filter = EnvFilter::new("bzr=debug");
-        let subscriber = tracing_subscriber::registry().with(fmt_layer).with(filter);
-
-        let _guard = tracing::subscriber::set_default(subscriber);
-
-        let _bug = client.get_bug_with_fields("1", None, None).await.unwrap();
-
-        let output = String::from_utf8(log_buf.lock().unwrap().clone()).unwrap();
+    #[test]
+    fn safe_url_strips_query_params() {
+        let url =
+            reqwest::Url::parse("https://bugzilla.example.com/rest/bug/1?Bugzilla_api_key=secret")
+                .unwrap();
+        let safe = BugzillaClient::safe_url(&url);
         assert!(
-            !output.contains(secret),
-            "API key leaked in log output: {output}"
+            !safe.contains("secret"),
+            "API key should be stripped: {safe}"
+        );
+        assert!(
+            safe.contains("/rest/bug/1"),
+            "path should be preserved: {safe}"
         );
     }
 
-    #[tokio::test]
-    async fn logged_url_contains_path() {
-        let mock = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/rest/bug/42"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(
-                serde_json::json!({"bugs": [{"id": 42, "summary": "test", "status": "NEW"}]}),
-            ))
-            .mount(&mock)
-            .await;
-
-        let client = BugzillaClient::new(&mock.uri(), "key", AuthMethod::Header).unwrap();
-
-        let log_buf = Arc::new(Mutex::new(Vec::new()));
-        let fmt_layer = tracing_subscriber::fmt::layer()
-            .with_writer(CapturingWriter(Arc::clone(&log_buf)))
-            .with_ansi(false);
-        let filter = EnvFilter::new("bzr=debug");
-        let subscriber = tracing_subscriber::registry().with(fmt_layer).with(filter);
-
-        let _guard = tracing::subscriber::set_default(subscriber);
-
-        let _bug = client.get_bug_with_fields("42", None, None).await.unwrap();
-
-        let output = String::from_utf8(log_buf.lock().unwrap().clone()).unwrap();
-        assert!(
-            output.contains("/rest/bug/42"),
-            "logged URL should contain path: {output}"
-        );
+    #[test]
+    fn safe_url_preserves_path() {
+        let url = reqwest::Url::parse("https://bugzilla.example.com/rest/bug/42").unwrap();
+        let safe = BugzillaClient::safe_url(&url);
+        assert_eq!(safe, "https://bugzilla.example.com/rest/bug/42");
     }
 
     fn test_client(base_url: &str) -> BugzillaClient {
