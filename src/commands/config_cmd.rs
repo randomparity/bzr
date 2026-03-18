@@ -29,6 +29,7 @@ pub fn execute(action: &ConfigAction) -> Result<()> {
             if config.default_server.as_deref() == Some(name.as_str()) {
                 println!("Set as default server.");
             }
+            println!("Config file: {}", Config::path()?.display());
         }
         ConfigAction::SetDefault { name } => {
             let mut config = Config::load()?;
@@ -40,6 +41,7 @@ pub fn execute(action: &ConfigAction) -> Result<()> {
             config.default_server = Some(name.clone());
             config.save()?;
             println!("Default server set to '{name}'");
+            println!("Config file: {}", Config::path()?.display());
         }
         ConfigAction::Show => {
             let config = Config::load()?;
