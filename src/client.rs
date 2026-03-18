@@ -1019,6 +1019,10 @@ impl BugzillaClient {
         group_name: &str,
         include_details: bool,
     ) -> Result<Vec<BugzillaUser>> {
+        // Always send include_fields to cap the response payload — group
+        // queries can return many members. Unlike search_users (which omits
+        // include_fields to get Bugzilla's default set), we explicitly
+        // constrain both paths.
         let fields = if include_details {
             "id,name,real_name,email,can_login,groups"
         } else {
@@ -1609,15 +1613,13 @@ mod tests {
                         "id": 1,
                         "name": "alice@example.com",
                         "real_name": "Alice",
-                        "email": "alice@example.com",
-                        "groups": [{"id": 10, "name": "admin", "description": "Admins"}]
+                        "email": "alice@example.com"
                     },
                     {
                         "id": 2,
                         "name": "bob@example.com",
                         "real_name": "Bob",
-                        "email": "bob@example.com",
-                        "groups": [{"id": 10, "name": "admin", "description": "Admins"}]
+                        "email": "bob@example.com"
                     }
                 ]
             })))
@@ -1679,6 +1681,32 @@ mod tests {
         let client = test_client(&mock.uri());
         let users = client.get_group_members("nobody", false).await.unwrap();
         assert!(users.is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_group_members_api_error() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .and(query_param("group", "nonexistent"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 51,
+                "message": "There is no group named 'nonexistent'."
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client
+            .get_group_members("nonexistent", false)
+            .await
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("nonexistent"),
+            "Expected error to mention group name, got: {msg}"
+        );
     }
 
     #[tokio::test]

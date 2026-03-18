@@ -464,7 +464,7 @@ bzr --json user search "example.com"
 
 | Option | Description |
 |--------|-------------|
-| `--details` | Show extended details (groups, login status). Only affects table output; JSON always includes all fields. Requires authentication; group visibility depends on caller privileges. |
+| `--details` | Show extended details (groups, login status). Only affects table output; JSON always includes all fields. Group visibility depends on caller privileges. |
 
 ### `bzr user create`
 
@@ -538,10 +538,10 @@ bzr group list-users --group admin --details   # includes groups and login statu
 bzr --json group list-users --group admin
 ```
 
-| Option | Required | Description |
-|--------|----------|-------------|
-| `--group <G>` | Yes | Group name |
-| `--details` | No | Show extended details (groups, login status). Only affects table output; JSON always includes all fields. Requires authentication; group visibility depends on caller privileges. |
+| Option | Description |
+|--------|-------------|
+| `--group <G>` | **Required.** Group name |
+| `--details` | Show extended details (groups, login status). Only affects table output; JSON always includes all fields. Group visibility depends on caller privileges. |
 
 ### `bzr group view`
 
