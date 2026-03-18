@@ -75,7 +75,14 @@ async fn detect_auth_method(
         WhoamiOutcome::NotFound => {
             tracing::info!("falling back to rest/valid_login for older Bugzilla");
         }
-        WhoamiOutcome::Failed => {}
+        WhoamiOutcome::NetworkError => {
+            tracing::warn!(
+                "could not reach server during auth detection; \
+                 defaulting to header auth"
+            );
+            return Ok(AuthMethod::Header);
+        }
+        WhoamiOutcome::AuthRejected => {}
     }
 
     // Fall back to valid_login endpoint (Bugzilla 5.0+, requires email)
@@ -117,7 +124,10 @@ async fn detect_auth_method(
 enum WhoamiOutcome {
     Authenticated(AuthMethod),
     NotFound,
-    Failed,
+    /// Server responded but auth was rejected (e.g. 401).
+    AuthRejected,
+    /// Could not reach the server at all (network/TLS/timeout).
+    NetworkError,
 }
 
 async fn try_whoami(
@@ -137,8 +147,8 @@ async fn try_whoami(
     {
         Ok(r) => r,
         Err(e) => {
-            tracing::debug!("whoami request failed: {e}");
-            return WhoamiOutcome::Failed;
+            tracing::debug!("whoami request failed: {e:#}");
+            return WhoamiOutcome::NetworkError;
         }
     };
 
@@ -164,8 +174,8 @@ async fn try_whoami(
     {
         Ok(r) => r,
         Err(e) => {
-            tracing::debug!("whoami query-param request failed: {e}");
-            return WhoamiOutcome::Failed;
+            tracing::debug!("whoami query-param request failed: {e:#}");
+            return WhoamiOutcome::NetworkError;
         }
     };
 
@@ -182,7 +192,7 @@ async fn try_whoami(
         tracing::debug!(status = %resp.status(), "query param auth probe failed");
     }
 
-    WhoamiOutcome::Failed
+    WhoamiOutcome::AuthRejected
 }
 
 #[derive(Deserialize)]
@@ -506,6 +516,16 @@ mod tests {
             err.contains("Check your API key"),
             "should mention API key, got: {err}"
         );
+    }
+
+    #[tokio::test]
+    async fn network_error_defaults_to_header() {
+        // When the server is unreachable, default to header auth
+        // rather than failing — header is the safest default.
+        let result =
+            detect_auth_method(&test_client(), "https://127.0.0.1:1", "test-key", None).await;
+        assert!(result.is_ok(), "should default to header, got: {result:?}");
+        assert_eq!(result.unwrap(), AuthMethod::Header);
     }
 
     #[tokio::test]
