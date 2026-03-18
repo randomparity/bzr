@@ -11,9 +11,9 @@ pub async fn execute(
     let client = super::shared::build_client(server).await?;
 
     match action {
-        UserAction::Search { query } => {
-            let users = client.search_users(query).await?;
-            output::print_users(&users, format);
+        UserAction::Search { query, details } => {
+            let users = client.search_users(query, *details).await?;
+            output::print_users(&users, format, *details);
         }
         UserAction::Create {
             email,

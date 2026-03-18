@@ -424,6 +424,9 @@ pub enum UserAction {
     Search {
         /// Search query
         query: String,
+        /// Show extended details (groups, login status)
+        #[arg(long)]
+        details: bool,
     },
     /// Create a new user
     Create {
