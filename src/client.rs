@@ -998,8 +998,17 @@ impl BugzillaClient {
             .unwrap_or_default())
     }
 
-    pub async fn search_users(&self, query: &str) -> Result<Vec<BugzillaUser>> {
-        let req = self.auth(self.http.get(self.url("user")).query(&[("match", query)]));
+    pub async fn search_users(
+        &self,
+        query: &str,
+        include_details: bool,
+    ) -> Result<Vec<BugzillaUser>> {
+        let mut req_builder = self.http.get(self.url("user")).query(&[("match", query)]);
+        if include_details {
+            req_builder = req_builder
+                .query(&[("include_fields", "id,name,real_name,email,can_login,groups")]);
+        }
+        let req = self.auth(req_builder);
         let resp = self.send(req).await?;
         let data: UserSearchResponse = self.parse_json(resp).await?;
         Ok(data.users)
@@ -1361,7 +1370,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client.search_users("example").await.unwrap();
+        let users = client.search_users("example", false).await.unwrap();
         assert_eq!(users.len(), 2);
         assert_eq!(users[0].name, "alice@example.com");
         assert_eq!(users[1].real_name.as_deref(), Some("Bob"));
@@ -1379,8 +1388,39 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client.search_users("nobody").await.unwrap();
+        let users = client.search_users("nobody", false).await.unwrap();
         assert!(users.is_empty());
+    }
+
+    #[tokio::test]
+    async fn search_users_details_sends_include_fields() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .and(query_param("match", "alice"))
+            .and(query_param(
+                "include_fields",
+                "id,name,real_name,email,can_login,groups",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "users": [{
+                    "id": 1,
+                    "name": "alice@example.com",
+                    "real_name": "Alice",
+                    "email": "alice@example.com",
+                    "can_login": true,
+                    "groups": [{"id": 10, "name": "admin", "description": "Admins"}]
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let users = client.search_users("alice", true).await.unwrap();
+        assert_eq!(users.len(), 1);
+        assert_eq!(users[0].can_login, Some(true));
+        assert_eq!(users[0].groups.len(), 1);
+        assert_eq!(users[0].groups[0].name, "admin");
     }
 
     #[tokio::test]
@@ -1438,7 +1478,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let err = client.search_users("anyone").await.unwrap_err();
+        let err = client.search_users("anyone", false).await.unwrap_err();
         let msg = err.to_string();
         assert!(
             msg.contains("500") || msg.contains("Internal Server Error"),
@@ -2329,7 +2369,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client.search_users("alice").await.unwrap();
+        let users = client.search_users("alice", false).await.unwrap();
         assert_eq!(users.len(), 1);
         assert_eq!(users[0].name, "alice@example.com");
     }
@@ -2361,7 +2401,7 @@ mod tests {
             .await;
 
         let client = test_client_query_param(&mock.uri());
-        let users = client.search_users("bob").await.unwrap();
+        let users = client.search_users("bob", false).await.unwrap();
         assert_eq!(users.len(), 1);
         assert_eq!(users[0].name, "bob@example.com");
     }
@@ -2380,7 +2420,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let err = client.search_users("anyone").await.unwrap_err();
+        let err = client.search_users("anyone", false).await.unwrap_err();
         let msg = err.to_string();
         assert!(
             msg.contains("410") || msg.contains("log in"),
@@ -2403,7 +2443,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let err = client.search_users("anyone").await.unwrap_err();
+        let err = client.search_users("anyone", false).await.unwrap_err();
         assert!(err.to_string().contains("not authorized"));
     }
 }

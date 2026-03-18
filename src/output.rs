@@ -448,6 +448,29 @@ struct DetailedUserRow {
     groups: String,
 }
 
+fn detailed_row(user: &BugzillaUser) -> DetailedUserRow {
+    DetailedUserRow {
+        id: user.id,
+        name: user.name.clone(),
+        real_name: user.real_name.clone().unwrap_or_default(),
+        email: user.email.clone().unwrap_or_default(),
+        can_login: match user.can_login {
+            Some(true) => "Yes".into(),
+            Some(false) => "No".into(),
+            None => "-".into(),
+        },
+        groups: if user.groups.is_empty() {
+            "-".into()
+        } else {
+            user.groups
+                .iter()
+                .map(|g| g.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        },
+    }
+}
+
 pub fn print_users(users: &[BugzillaUser], format: OutputFormat, details: bool) {
     match format {
         OutputFormat::Json => {
@@ -462,29 +485,7 @@ pub fn print_users(users: &[BugzillaUser], format: OutputFormat, details: bool) 
                 return;
             }
             if details {
-                let rows: Vec<DetailedUserRow> = users
-                    .iter()
-                    .map(|u| DetailedUserRow {
-                        id: u.id,
-                        name: u.name.clone(),
-                        real_name: u.real_name.clone().unwrap_or_default(),
-                        email: u.email.clone().unwrap_or_default(),
-                        can_login: match u.can_login {
-                            Some(true) => "Yes".into(),
-                            Some(false) => "No".into(),
-                            None => "-".into(),
-                        },
-                        groups: if u.groups.is_empty() {
-                            "-".into()
-                        } else {
-                            u.groups
-                                .iter()
-                                .map(|g| g.name.as_str())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        },
-                    })
-                    .collect();
+                let rows: Vec<DetailedUserRow> = users.iter().map(detailed_row).collect();
                 println!("{}", Table::new(rows));
             } else {
                 let rows: Vec<UserRow> = users
@@ -654,29 +655,7 @@ mod tests {
             make_user(2, "bob", Some(false), vec![]),
             make_user(3, "carol", None, vec!["testers"]),
         ];
-        let rows: Vec<DetailedUserRow> = users
-            .iter()
-            .map(|u| DetailedUserRow {
-                id: u.id,
-                name: u.name.clone(),
-                real_name: u.real_name.clone().unwrap_or_default(),
-                email: u.email.clone().unwrap_or_default(),
-                can_login: match u.can_login {
-                    Some(true) => "Yes".into(),
-                    Some(false) => "No".into(),
-                    None => "-".into(),
-                },
-                groups: if u.groups.is_empty() {
-                    "-".into()
-                } else {
-                    u.groups
-                        .iter()
-                        .map(|g| g.name.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                },
-            })
-            .collect();
+        let rows: Vec<DetailedUserRow> = users.iter().map(detailed_row).collect();
         let table = Table::new(rows).to_string();
         assert!(table.contains("CAN LOGIN"));
         assert!(table.contains("GROUPS"));

@@ -98,7 +98,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [-v.
 ├── field
 │   └── list <FIELD_NAME>
 ├── user
-│   ├── search <QUERY>
+│   ├── search <QUERY> [--details]
 │   ├── create --email <E> [--full-name <N>] [--password <P>]
 │   └── update <USER> [--real-name <N>] [--email <E>] [--disable-login <BOOL>]
 │                      [--login-denied-text <T>]
@@ -462,9 +462,9 @@ bzr user search "alice" --details   # includes groups and login status
 bzr --json user search "example.com"
 ```
 
-| Flag | Description |
-|------|-------------|
-| `--details` | Show extended details (groups, login status) |
+| Option | Description |
+|--------|-------------|
+| `--details` | Show extended details (groups, login status). Only affects table output; JSON always includes all fields. Requires authentication; group visibility depends on caller privileges. |
 
 ### `bzr user create`
 

@@ -12,7 +12,7 @@ pub async fn execute(
 
     match action {
         UserAction::Search { query, details } => {
-            let users = client.search_users(query).await?;
+            let users = client.search_users(query, *details).await?;
             output::print_users(&users, format, *details);
         }
         UserAction::Create {
