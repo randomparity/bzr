@@ -30,9 +30,9 @@ For installation and quick start, see [README.md](../README.md).
 | Option | Description |
 |--------|-------------|
 | `--server <NAME>` | Use a specific server from config instead of the default |
-| `--output <FORMAT>` | Output format: `table` or `json` |
+| `--output <FORMAT>` | Output format: `table` or `json`. Defaults to table at a TTY; auto-selects json when stdout is not a TTY. |
 | `--json` | Shorthand for `--output json` |
-| `--no-color` | Disable colored output (also auto-disabled when stdout is not a TTY) |
+| `--no-color` | Disable colored output. Color is also suppressed automatically when stdout is not a TTY. |
 | `--quiet` | Suppress all stdout output (exit code confirms success) |
 | `-v, --verbose` | Increase log verbosity (`-v`=info, `-vv`=debug, `-vvv`=trace; `RUST_LOG` overrides) |
 | `-h, --help` | Print help |
@@ -44,6 +44,8 @@ For installation and quick start, see [README.md](../README.md).
 |----------|-------------|
 | `BZR_OUTPUT` | Default output format (`table` or `json`). Overridden by `--output` or `--json`. |
 | `NO_COLOR` | Disable colored output (any value). Supported natively by the `colored` crate. |
+| `CLICOLOR` | Set to `0` to disable colored output (standard convention respected by the `colored` crate). |
+| `CLICOLOR_FORCE` | Set to `1` to force colored output even when stdout is not a TTY. |
 | `RUST_LOG` | Override log verbosity (e.g. `bzr=debug`). |
 
 ## Exit Codes
@@ -52,11 +54,13 @@ For installation and quick start, see [README.md](../README.md).
 |------|---------|
 | 0 | Success |
 | 1 | General/unknown error |
-| 2 | CLI usage error (invalid arguments) |
+| 2 | CLI usage error (invalid arguments)* |
 | 3 | Config or TOML parse error |
 | 4 | Bugzilla API error |
 | 5 | HTTP/network error |
 | 6 | IO error |
+
+*Exit code 2 is produced by clap for invalid or missing arguments before bzr's error handling runs.
 
 ## Command Tree
 
@@ -753,9 +757,10 @@ Create, update, and delete commands return structured JSON with `--json`:
 {"id":456,"bug_id":123,"resource":"comment","action":"created"}
 {"id":789,"resource":"attachment","action":"updated"}
 {"user":"alice","group":"qa","resource":"group_membership","action":"added"}
+{"id":67890,"file":"/tmp/patch.diff","size":4096,"resource":"attachment","action":"downloaded"}
 ```
 
-All mutation responses include `resource` and `action` fields. Most include `id` for the created/updated resource.
+All mutation responses include `resource` and `action` fields. Most include `id` for the created/updated resource. Note: `comment tag` responses use `comment_id`, not `id`. Membership responses (`group_membership`) have no `id` field.
 
 ### Error output
 

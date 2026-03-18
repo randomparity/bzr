@@ -62,7 +62,18 @@ pub async fn execute(
         }
         CommentAction::SearchTags { query } => {
             let tags = client.search_comment_tags(query).await?;
-            output::print_comment_tags(&tags);
+            output::print_result(
+                &serde_json::json!(tags),
+                &if tags.is_empty() {
+                    "No tags.".to_string()
+                } else {
+                    tags.iter()
+                        .map(|t| format!("  {t}"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                },
+                format,
+            );
         }
     }
     Ok(())

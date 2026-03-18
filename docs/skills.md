@@ -209,7 +209,7 @@ Walk the user through connecting to a Bugzilla server.
    Otherwise ask if the user wants to set it as default:
    `bzr config set-default <NAME>`
 6. Show final config:
-   `bzr config show`
+   `bzr --json config show`
 ```
 
 ### bzr-admin — Admin: products, users, groups
@@ -336,13 +336,12 @@ Generate a report of resolved bugs in **$ARGUMENTS**.
 ## Tips and Gotchas
 
 - **Use `--json` shorthand**: `--json` is equivalent to `--output json` but shorter. Skills can also set `BZR_OUTPUT=json` in the environment to avoid repeating the flag.
-- **Auto-detection**: When stdout is not a TTY (piped or redirected), bzr outputs JSON automatically. No flags needed in pipe contexts.
+- **Auto-detection**: When bzr's stdout is not a TTY (piped, redirected, or captured with `$(...)`), bzr outputs JSON automatically. At an interactive TTY, use `--json` or set `BZR_OUTPUT=json`.
 - **Flag positioning**: `--json` and `--server` go *before* the subcommand. `bzr --json bug list`, not `bzr bug list --json`.
 - **Exit codes**: bzr uses distinct exit codes (0=success, 2=usage, 3=config, 4=API, 5=network, 6=IO). Skills can check `$?` to handle errors without parsing stderr.
 - **JSON errors**: When `--json` is active, errors are emitted as JSON on stderr: `{"error":{"type":"api","message":"...","exit_code":4}}`.
 - **Mutation responses**: Create/update commands return structured JSON with `--json`: `{"id":123,"resource":"bug","action":"created"}`. No need for regex to extract IDs.
-- **Pipe comments**: `echo "text" | bzr comment add 12345` works when stdin is not a TTY. No need for `--body` in pipe contexts.
-- **Always pass `--body`**: When adding comments in a skill, always use `--body "<text>"`. Omitting it at a TTY opens `$EDITOR`, which hangs in non-interactive contexts.
+- **Adding comments**: Use `--body "<text>"` in skills — it is explicit and works in all contexts. Alternatively, `echo "text" | bzr comment add 12345` works when stdin is not a TTY. Omitting both at a TTY opens `$EDITOR`, which hangs in non-interactive skill runs.
 - **Attachment downloads**: Use `-o /tmp/<name>` to save attachments to a known path the agent can read back.
 - **Validate before updating**: Use `bzr field list <field>` to check valid values for status, priority, severity, and resolution before calling `bug update`.
 - **Flag syntax**: `review?(user@example.com)` requests review, `review+` grants, `review-` denies. See [Flag Syntax](bzr-cli.md#flag-syntax).

@@ -66,8 +66,9 @@ async fn main() {
                 });
                 eprintln!(
                     "{}",
-                    serde_json::to_string(&json_err)
-                        .unwrap_or_else(|_| format!("{{\"error\":{{\"message\":\"{e}\"}}}}")),
+                    serde_json::to_string(&json_err).unwrap_or_else(|_| {
+                        r#"{"error":{"message":"serialization failed"}}"#.into()
+                    }),
                 );
             } else {
                 eprintln!("error: {e}");
@@ -83,6 +84,9 @@ async fn main() {
 /// (JSON when stdout is not a TTY, table otherwise).
 fn resolve_format(cli: &Cli) -> error::Result<OutputFormat> {
     if cli.json {
+        if cli.output.is_some() {
+            tracing::warn!("--output ignored because --json takes precedence");
+        }
         return Ok(OutputFormat::Json);
     }
     if let Some(ref out) = cli.output {
@@ -141,6 +145,7 @@ async fn run(cli: Cli, format: OutputFormat) -> error::Result<()> {
 }
 
 /// Redirect stdout to /dev/null for --quiet mode.
+#[cfg(unix)]
 fn suppress_stdout() {
     use std::os::unix::io::AsRawFd;
     // Safety: dup2 replaces stdout fd with /dev/null fd.
@@ -149,5 +154,72 @@ fn suppress_stdout() {
         unsafe {
             libc::dup2(devnull.as_raw_fd(), libc::STDOUT_FILENO);
         }
+    }
+}
+
+/// No-op on non-Unix platforms.
+#[cfg(not(unix))]
+fn suppress_stdout() {}
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    fn base_cli(command: Commands) -> Cli {
+        Cli {
+            server: None,
+            output: None,
+            json: false,
+            no_color: false,
+            quiet: false,
+            verbose: 0,
+            command,
+        }
+    }
+
+    fn dummy_command() -> Commands {
+        Commands::Whoami
+    }
+
+    #[test]
+    fn resolve_format_json_flag() {
+        let mut cli = base_cli(dummy_command());
+        cli.json = true;
+        let fmt = resolve_format(&cli).expect("should resolve");
+        assert_eq!(fmt, OutputFormat::Json);
+    }
+
+    #[test]
+    fn resolve_format_output_json() {
+        let mut cli = base_cli(dummy_command());
+        cli.output = Some("json".into());
+        let fmt = resolve_format(&cli).expect("should resolve");
+        assert_eq!(fmt, OutputFormat::Json);
+    }
+
+    #[test]
+    fn resolve_format_output_table() {
+        let mut cli = base_cli(dummy_command());
+        cli.output = Some("table".into());
+        let fmt = resolve_format(&cli).expect("should resolve");
+        assert_eq!(fmt, OutputFormat::Table);
+    }
+
+    #[test]
+    fn resolve_format_invalid_output() {
+        let mut cli = base_cli(dummy_command());
+        cli.output = Some("xml".into());
+        let err = resolve_format(&cli).unwrap_err();
+        assert_eq!(err.exit_code(), 1);
+    }
+
+    #[test]
+    fn resolve_format_json_overrides_output() {
+        let mut cli = base_cli(dummy_command());
+        cli.json = true;
+        cli.output = Some("table".into());
+        let fmt = resolve_format(&cli).expect("should resolve");
+        assert_eq!(fmt, OutputFormat::Json);
     }
 }
