@@ -1,5 +1,17 @@
 use clap::{Parser, Subcommand};
 
+use crate::config::AuthMethod;
+
+fn parse_auth_method(s: &str) -> std::result::Result<AuthMethod, String> {
+    match s {
+        "header" => Ok(AuthMethod::Header),
+        "query_param" => Ok(AuthMethod::QueryParam),
+        _ => Err(format!(
+            "invalid auth method '{s}': expected 'header' or 'query_param'"
+        )),
+    }
+}
+
 #[derive(Parser)]
 #[command(name = "bzr", version, about = "A CLI for Bugzilla")]
 pub struct Cli {
@@ -340,6 +352,9 @@ pub enum ConfigAction {
         /// Login email (required for older Bugzilla servers)
         #[arg(long)]
         email: Option<String>,
+        /// Override auto-detected auth method (`header` or `query_param`)
+        #[arg(long, value_parser = parse_auth_method)]
+        auth_method: Option<AuthMethod>,
     },
     /// Set the default server
     SetDefault {

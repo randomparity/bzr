@@ -12,6 +12,7 @@ pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
             url,
             api_key,
             email,
+            auth_method,
         } => {
             let mut config = Config::load()?;
             config.servers.insert(
@@ -20,7 +21,7 @@ pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
                     url: url.clone(),
                     api_key: api_key.clone(),
                     email: email.clone(),
-                    auth_method: None,
+                    auth_method: *auth_method,
                 },
             );
             if config.default_server.is_none() {

@@ -118,7 +118,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [-v.
 │   ├── create --product <P> --name <N> --description <D> --default-assignee <E>
 │   └── update <ID> [--name <N>] [--description <D>] [--default-assignee <E>]
 └── config
-    ├── set-server <NAME> --url <URL> --api-key <KEY> [--email <EMAIL>]
+    ├── set-server <NAME> --url <URL> --api-key <KEY> [--email <EMAIL>] [--auth-method <METHOD>]
     ├── set-default <NAME>
     └── show
 ```
@@ -673,6 +673,7 @@ The first server added is automatically set as the default.
 | `--url <URL>` | Yes | Server URL |
 | `--api-key <KEY>` | Yes | API key |
 | `--email <EMAIL>` | No | Login email (required for Bugzilla 5.0 or earlier) |
+| `--auth-method <METHOD>` | No | Override auto-detected auth method (`header` or `query_param`) |
 
 ### `bzr config set-default`
 
