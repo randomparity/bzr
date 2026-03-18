@@ -234,6 +234,8 @@ pub struct BugzillaUser {
     pub email: Option<String>,
     #[serde(default)]
     pub groups: Vec<UserGroup>,
+    #[serde(default)]
+    pub can_login: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1413,7 +1415,7 @@ mod tests {
             .and(path("/rest/bug/42"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "error": true,
-                "code": 100500,
+                "code": 100_500,
                 "message": "MirrorTool internal error",
                 "bugs": [{"id": 42, "summary": "test bug", "status": "NEW"}]
             })))

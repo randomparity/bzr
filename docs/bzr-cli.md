@@ -458,8 +458,13 @@ Search for users by name or email.
 
 ```bash
 bzr user search "alice"
+bzr user search "alice" --details   # includes groups and login status
 bzr --json user search "example.com"
 ```
+
+| Flag | Description |
+|------|-------------|
+| `--details` | Show extended details (groups, login status) |
 
 ### `bzr user create`
 
