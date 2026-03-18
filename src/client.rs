@@ -26,6 +26,7 @@ pub struct BugzillaClient {
     http: reqwest::Client,
     base_url: String,
     auth: AuthConfig,
+    api_key: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -608,6 +609,7 @@ impl BugzillaClient {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
             auth,
+            api_key: api_key.to_string(),
         })
     }
 
@@ -623,13 +625,44 @@ impl BugzillaClient {
     }
 
     async fn send(&self, builder: RequestBuilder) -> Result<reqwest::Response> {
+        let retry_builder = builder.try_clone();
         let resp = builder.send().await?;
         tracing::debug!(
             url = Self::safe_url(resp.url()),
             status = %resp.status(),
             "API response"
         );
+        if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+            if let Some(clone) = retry_builder {
+                tracing::debug!("401 received, retrying with alternate auth method");
+                let retried = self.apply_alternate_auth(clone).send().await?;
+                tracing::debug!(
+                    url = Self::safe_url(retried.url()),
+                    status = %retried.status(),
+                    "auth fallback response"
+                );
+                if !retried.status().is_client_error()
+                    && !retried.status().is_server_error()
+                {
+                    return Ok(retried);
+                }
+                tracing::debug!("auth fallback also failed, returning original 401");
+            }
+        }
         self.check_error(resp).await
+    }
+
+    fn apply_alternate_auth(&self, builder: RequestBuilder) -> RequestBuilder {
+        match &self.auth {
+            AuthConfig::Header(_) => {
+                builder.query(&[("Bugzilla_api_key", &self.api_key)])
+            }
+            AuthConfig::QueryParam(_) => {
+                let value = HeaderValue::from_str(&self.api_key)
+                    .unwrap_or_else(|_| HeaderValue::from_static(""));
+                builder.header("X-BUGZILLA-API-KEY", value)
+            }
+        }
     }
 
     fn safe_url(url: &reqwest::Url) -> String {
@@ -2264,6 +2297,115 @@ mod tests {
         let client = test_client(&mock.uri());
         let params = UpdateGroupParams::default();
         let err = client.update_group("testers", &params).await.unwrap_err();
+        assert!(err.to_string().contains("not authorized"));
+    }
+
+    fn test_client_query_param(base_url: &str) -> BugzillaClient {
+        BugzillaClient::new(base_url, "test-key", AuthMethod::QueryParam).unwrap()
+    }
+
+    #[tokio::test]
+    async fn auth_fallback_header_to_query_param_on_401() {
+        let mock = MockServer::start().await;
+        // Success response requires query param auth (registered first)
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .and(query_param("Bugzilla_api_key", "test-key"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "users": [{"id": 1, "name": "alice@example.com"}]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+        // First request returns 401 (registered second, checked first by LIFO)
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 410,
+                "message": "You must log in."
+            })))
+            .up_to_n_times(1)
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let users = client.search_users("alice").await.unwrap();
+        assert_eq!(users.len(), 1);
+        assert_eq!(users[0].name, "alice@example.com");
+    }
+
+    #[tokio::test]
+    async fn auth_fallback_query_param_to_header_on_401() {
+        let mock = MockServer::start().await;
+        // Success response requires header auth (registered first)
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .and(wiremock::matchers::header("X-BUGZILLA-API-KEY", "test-key"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "users": [{"id": 2, "name": "bob@example.com"}]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+        // First request returns 401 (registered second, checked first by LIFO)
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 410,
+                "message": "You must log in."
+            })))
+            .up_to_n_times(1)
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client_query_param(&mock.uri());
+        let users = client.search_users("bob").await.unwrap();
+        assert_eq!(users.len(), 1);
+        assert_eq!(users[0].name, "bob@example.com");
+    }
+
+    #[tokio::test]
+    async fn auth_fallback_both_fail_returns_original_error() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 410,
+                "message": "You must log in."
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client.search_users("anyone").await.unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("410") || msg.contains("log in"),
+            "expected auth error: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn non_401_errors_do_not_trigger_fallback() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 51,
+                "message": "You are not authorized."
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client.search_users("anyone").await.unwrap_err();
         assert!(err.to_string().contains("not authorized"));
     }
 }
