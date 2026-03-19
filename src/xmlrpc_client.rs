@@ -86,11 +86,7 @@ impl XmlRpcClient {
         }
         if !params.id.is_empty() {
             #[expect(clippy::cast_possible_wrap, reason = "bug IDs fit in i64")]
-            let ids: Vec<Value> = params
-                .id
-                .iter()
-                .map(|id| Value::Int(*id as i64))
-                .collect();
+            let ids: Vec<Value> = params.id.iter().map(|id| Value::Int(*id as i64)).collect();
             rpc_params.insert("ids".into(), Value::Array(ids));
         }
         if let Some(limit) = params.limit {
