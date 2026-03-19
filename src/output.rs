@@ -7,7 +7,6 @@ use crate::types::{
     OutputFormat, Product, ServerExtensions, ServerVersion, WhoamiResponse,
 };
 
-/// Print any serializable value as pretty JSON.
 fn print_json(value: &(impl Serialize + ?Sized)) {
     println!(
         "{}",
@@ -15,7 +14,6 @@ fn print_json(value: &(impl Serialize + ?Sized)) {
     );
 }
 
-/// Dispatch on output format: print JSON or run a closure for table output.
 fn format_or_json<T: Serialize + ?Sized>(
     value: &T,
     format: OutputFormat,
@@ -27,7 +25,6 @@ fn format_or_json<T: Serialize + ?Sized>(
     }
 }
 
-/// Print a mutation result in the appropriate format.
 pub fn print_result(value: &serde_json::Value, human_message: &str, format: OutputFormat) {
     match format {
         OutputFormat::Json => {
@@ -512,10 +509,10 @@ impl ServerDisplayInfo {
             url: srv.url.clone(),
             email: srv.email.clone(),
             api_key: mask_api_key(&srv.api_key),
-            auth_method: srv.auth_method.as_ref().map_or_else(
-                || "auto (not yet detected)".into(),
-                ToString::to_string,
-            ),
+            auth_method: srv
+                .auth_method
+                .as_ref()
+                .map_or_else(|| "auto (not yet detected)".into(), ToString::to_string),
         }
     }
 }

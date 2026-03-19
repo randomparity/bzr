@@ -65,11 +65,11 @@ mod tests {
     // FlagStatus tests
 
     #[test]
-    fn flag_status_as_char() {
-        assert_eq!(FlagStatus::Grant.as_char(), '+');
-        assert_eq!(FlagStatus::Deny.as_char(), '-');
-        assert_eq!(FlagStatus::Request.as_char(), '?');
-        assert_eq!(FlagStatus::Clear.as_char(), 'X');
+    fn flag_status_to_char() {
+        assert_eq!(FlagStatus::Grant.to_char(), '+');
+        assert_eq!(FlagStatus::Deny.to_char(), '-');
+        assert_eq!(FlagStatus::Request.to_char(), '?');
+        assert_eq!(FlagStatus::Clear.to_char(), 'X');
     }
 
     #[test]

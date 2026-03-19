@@ -13,7 +13,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::build_client(server, api).await?;
+    let client = super::shared::connect_client(server, api).await?;
 
     match action {
         AttachmentAction::List { bug_id } => {
@@ -72,9 +72,7 @@ pub async fn execute(
                     "resource": "attachment",
                     "action": "created",
                 }),
-                &format!(
-                    "Uploaded attachment #{att_id} to bug #{bug_id} ({size} bytes)",
-                ),
+                &format!("Uploaded attachment #{att_id} to bug #{bug_id} ({size} bytes)",),
                 format,
             );
         }

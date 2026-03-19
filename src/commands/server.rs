@@ -10,7 +10,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::build_client(server, api).await?;
+    let client = super::shared::connect_client(server, api).await?;
 
     match action {
         ServerAction::Info => {
@@ -42,8 +42,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/version"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"version": "5.0.4"})),
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.0.4"})),
             )
             .mount(&mock)
             .await;
@@ -51,8 +50,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/extensions"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"extensions": {}})),
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"extensions": {}})),
             )
             .mount(&mock)
             .await;

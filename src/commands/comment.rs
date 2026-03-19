@@ -12,7 +12,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::build_client(server, api).await?;
+    let client = super::shared::connect_client(server, api).await?;
 
     match action {
         CommentAction::List { bug_id, since } => {
@@ -186,10 +186,7 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/rest/bug/42/comment"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"id": 100})),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 100})))
             .mount(&mock)
             .await;
 
@@ -201,10 +198,24 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn comment_add_empty_body_is_rejected() {
-        // The execute() function checks text.trim().is_empty() before calling the API.
-        let text = "   ";
-        assert!(text.trim().is_empty());
+    #[tokio::test]
+    async fn comment_add_empty_body_is_rejected() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+
+        // No mock needed — execute() should reject before making any API call
+        let action = CommentAction::Add {
+            bug_id: 42,
+            body: Some("   ".to_string()),
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err(), "empty body should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("empty comment"),
+            "expected 'empty comment' error, got: {err}"
+        );
     }
 }

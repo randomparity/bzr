@@ -11,7 +11,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::build_client(server, api).await?;
+    let client = super::shared::connect_client(server, api).await?;
 
     match action {
         ProductAction::List { r#type } => {
@@ -83,8 +83,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/product_accessible"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"ids": [1, 2]})),
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [1, 2]})),
             )
             .mount(&mock)
             .await;

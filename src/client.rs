@@ -409,7 +409,6 @@ impl BugzillaClient {
                         BzrError::Http(_)
                         | BzrError::HttpStatus { .. }
                         | BzrError::Deserialize(_)
-                        | BzrError::Other(_)
                         | BzrError::XmlRpc(_),
                     ) => {
                         tracing::info!("REST bug lookup failed, retrying via XML-RPC");

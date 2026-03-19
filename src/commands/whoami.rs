@@ -8,7 +8,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::build_client(server, api).await?;
+    let client = super::shared::connect_client(server, api).await?;
     let whoami = client.whoami().await?;
     output::print_whoami(&whoami, format);
     Ok(())

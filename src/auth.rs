@@ -11,10 +11,11 @@ struct WhoamiProbe {
     id: u64,
 }
 
-/// Returns the cached auth method and detected API mode for a server.
+/// Returns the auth method and API mode for a server.
 ///
-/// If the auth method is already cached, returns it with the detected API mode.
-/// Otherwise, detects auth method and server version, persists both, and returns them.
+/// If the auth method is already cached, returns it with the cached API mode
+/// (or `Rest` as default). Otherwise, detects auth method and server version
+/// via network probes, persists both to the config file, and returns them.
 pub async fn detect_and_cache_server_settings(
     config: &mut Config,
     server_name: &str,
@@ -47,6 +48,8 @@ pub async fn detect_and_cache_server_settings(
         "detected server settings"
     );
 
+    // Second lookup required: the first `get()` borrows `config` immutably for
+    // `url`/`api_key` extraction, but `get_mut()` needs a mutable borrow.
     let srv_mut = config
         .servers
         .get_mut(server_name)

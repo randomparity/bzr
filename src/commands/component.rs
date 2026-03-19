@@ -11,7 +11,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::build_client(server, api).await?;
+    let client = super::shared::connect_client(server, api).await?;
 
     match action {
         ComponentAction::Create {
@@ -83,10 +83,7 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/rest/component"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"id": 42})),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 42})))
             .mount(&mock)
             .await;
 

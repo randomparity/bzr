@@ -3,7 +3,7 @@
 //! Unlike other command modules, `execute()` is **synchronous** because config
 //! operations are pure local file I/O — no network client or auth detection needed.
 
-use std::fmt::Write;
+use std::fmt::Write as _;
 
 use crate::cli::ConfigAction;
 use crate::config::{Config, ServerConfig};

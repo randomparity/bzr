@@ -56,13 +56,17 @@ For installation and quick start, see [README.md](../README.md).
 |------|---------|
 | 0 | Success |
 | 1 | General/unknown error |
-| 2 | CLI usage error (invalid arguments)* |
+| 2 | Resource not found, or CLI usage error (invalid arguments)* |
 | 3 | Config or TOML parse error |
-| 4 | Bugzilla API error |
+| 4 | Bugzilla API or XML-RPC error |
 | 5 | HTTP/network error |
 | 6 | IO error |
+| 7 | Input validation error (e.g. invalid flag syntax, empty comment) |
+| 8 | Response deserialization error |
+| 9 | Authentication error |
+| 10 | Data integrity error (e.g. missing attachment data) |
 
-*Exit code 2 is produced by clap for invalid or missing arguments before bzr's error handling runs.
+*Exit code 2 is also produced by clap for invalid or missing arguments before bzr's error handling runs.
 
 ## Command Tree
 

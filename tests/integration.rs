@@ -238,6 +238,7 @@ async fn product_list_integration() {
     Mock::given(method("GET"))
         .and(path("/rest/product_accessible"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [1]})))
+        .expect(1)
         .mount(&mock)
         .await;
     Mock::given(method("GET"))
@@ -248,6 +249,7 @@ async fn product_list_integration() {
                 "is_active": true, "components": [], "versions": [], "milestones": []
             }]
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -278,6 +280,7 @@ async fn server_info_integration() {
         .respond_with(
             ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.1.2"})),
         )
+        .expect(1)
         .mount(&mock)
         .await;
     Mock::given(method("GET"))
@@ -285,6 +288,7 @@ async fn server_info_integration() {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "extensions": {}
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -314,6 +318,7 @@ async fn field_list_integration() {
                 ]
             }]
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -346,6 +351,7 @@ async fn classification_view_integration() {
                 "products": []
             }]
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -385,6 +391,7 @@ async fn user_search_integration() {
                 "groups": []
             }]
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -418,6 +425,7 @@ async fn group_view_integration() {
                 "membership": []
             }]
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -442,6 +450,7 @@ async fn component_create_integration() {
     Mock::given(method("POST"))
         .and(path("/rest/component"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 10})))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -487,6 +496,7 @@ async fn attachment_list_integration() {
                 }]
             }
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -576,6 +586,7 @@ async fn api_error_propagates() {
             "code": 101,
             "message": "Bug #99999 does not exist."
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -615,6 +626,7 @@ async fn bug_history_integration() {
                 }]
             }]
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -642,6 +654,7 @@ async fn bug_update_integration() {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "bugs": [{"id": 42, "changes": {}}]
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -674,6 +687,7 @@ async fn comment_add_integration() {
     Mock::given(method("POST"))
         .and(path("/rest/bug/42/comment"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 999})))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -703,6 +717,7 @@ async fn comment_tag_integration() {
     Mock::given(method("PUT"))
         .and(path("/rest/bug/comment/100/tags"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!(["spam"])))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -733,6 +748,7 @@ async fn comment_search_tags_integration() {
     Mock::given(method("GET"))
         .and(path("/rest/bug/comment/tags/spam"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!(["spam"])))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -776,6 +792,7 @@ async fn attachment_download_integration() {
                 }
             }
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -814,6 +831,7 @@ async fn attachment_upload_integration() {
     Mock::given(method("POST"))
         .and(path("/rest/bug/42/attachment"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [101]})))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -851,6 +869,7 @@ async fn attachment_update_integration() {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "attachments": [{"id": 99, "changes": {}}]
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -889,6 +908,7 @@ async fn component_update_integration() {
     Mock::given(method("PUT"))
         .and(path("/rest/component/10"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 10})))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -928,6 +948,7 @@ async fn product_view_integration() {
                 "is_active": true, "components": [], "versions": [], "milestones": []
             }]
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -956,6 +977,7 @@ async fn product_create_integration() {
     Mock::given(method("POST"))
         .and(path("/rest/product"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 5})))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -989,6 +1011,7 @@ async fn product_update_integration() {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "products": [{"id": 1, "changes": {}}]
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -1020,6 +1043,7 @@ async fn user_create_integration() {
     Mock::given(method("POST"))
         .and(path("/rest/user"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 42})))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -1048,6 +1072,7 @@ async fn user_update_integration() {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "users": [{"id": 1, "changes": {}}]
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -1076,6 +1101,7 @@ async fn group_create_integration() {
     Mock::given(method("POST"))
         .and(path("/rest/group"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 10})))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -1104,6 +1130,7 @@ async fn group_update_integration() {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "id": 10, "changes": {}
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -1132,6 +1159,7 @@ async fn group_add_user_integration() {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "users": [{"id": 1, "changes": {}}]
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -1159,6 +1187,7 @@ async fn group_remove_user_integration() {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "users": [{"id": 1, "changes": {}}]
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -1195,6 +1224,7 @@ async fn group_list_users_integration() {
                 "groups": [{"name": "admin"}]
             }]
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -1331,6 +1361,7 @@ async fn e2e_bug_list_via_cli_args() {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "bugs": [{"id": 1, "summary": "CLI test", "status": "NEW"}]
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -1363,6 +1394,7 @@ async fn e2e_bug_view_via_cli_args() {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "bugs": [{"id": 42, "summary": "CLI view test", "status": "NEW"}]
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -1388,6 +1420,7 @@ async fn e2e_whoami_via_cli_args() {
             "name": "admin@example.com",
             "real_name": "Admin"
         })))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -1421,6 +1454,7 @@ async fn e2e_server_info_via_cli_args() {
         .respond_with(
             ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.2"})),
         )
+        .expect(1)
         .mount(&mock)
         .await;
     Mock::given(method("GET"))
@@ -1428,6 +1462,7 @@ async fn e2e_server_info_via_cli_args() {
         .respond_with(
             ResponseTemplate::new(200).set_body_json(serde_json::json!({"extensions": {}})),
         )
+        .expect(1)
         .mount(&mock)
         .await;
 

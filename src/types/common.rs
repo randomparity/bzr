@@ -68,7 +68,7 @@ pub enum FlagStatus {
 }
 
 impl FlagStatus {
-    pub fn as_char(self) -> char {
+    pub fn to_char(self) -> char {
         match self {
             FlagStatus::Grant => '+',
             FlagStatus::Deny => '-',
@@ -80,7 +80,7 @@ impl FlagStatus {
 
 impl std::fmt::Display for FlagStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_char())
+        write!(f, "{}", self.to_char())
     }
 }
 
@@ -89,7 +89,7 @@ impl Serialize for FlagStatus {
         &self,
         serializer: S,
     ) -> std::result::Result<S::Ok, S::Error> {
-        serializer.serialize_char(self.as_char())
+        serializer.serialize_char(self.to_char())
     }
 }
 

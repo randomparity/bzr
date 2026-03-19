@@ -3,7 +3,7 @@ use crate::config::{ApiMode, Config};
 use crate::error::{BzrError, Result};
 use crate::types::{FlagStatus, FlagUpdate};
 
-pub async fn build_client(
+pub async fn connect_client(
     server: Option<&str>,
     api_override: Option<ApiMode>,
 ) -> Result<BugzillaClient> {

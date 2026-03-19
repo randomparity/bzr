@@ -11,7 +11,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::build_client(server, api).await?;
+    let client = super::shared::connect_client(server, api).await?;
 
     match action {
         UserAction::Search { query, details } => {
@@ -74,6 +74,8 @@ mod tests {
     use crate::cli::UserAction;
     use crate::types::OutputFormat;
 
+    // Note: user tests that modify env need ENV_LOCK + setup_config
+
     #[tokio::test]
     async fn user_search_returns_results() {
         let _lock = ENV_LOCK.lock().unwrap();
@@ -101,45 +103,59 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn denied_text_logic() {
-        // Test the denied_text derivation logic from execute()
-        // (Some(true), Some(text)) => Some(text.clone())
-        let disable_login = Some(true);
-        let login_denied_text = Some("Go away".to_string());
-        let denied_text = match (&disable_login, &login_denied_text) {
-            (Some(true), Some(text)) => Some(text.clone()),
-            (Some(true), None) => Some("Account disabled".into()),
-            (Some(false), _) => Some(String::new()),
-            (None, _) => None,
-        };
-        assert_eq!(denied_text.as_deref(), Some("Go away"));
+    #[tokio::test]
+    async fn update_user_disable_login_sends_denied_text() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
 
-        // (Some(true), None) => Some("Account disabled")
-        let denied_text2 = match (Some(true), None::<String>) {
-            (Some(true), Some(text)) => Some(text),
-            (Some(true), None) => Some("Account disabled".into()),
-            (Some(false), _) => Some(String::new()),
-            (None, _) => None,
-        };
-        assert_eq!(denied_text2.as_deref(), Some("Account disabled"));
+        Mock::given(method("PUT"))
+            .and(path("/rest/user/alice%40test%2Ecom"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&mock)
+            .await;
 
-        // (Some(false), _) => Some("")
-        let denied_text3 = match (Some(false), Some("ignored".to_string())) {
-            (Some(true), Some(text)) => Some(text),
-            (Some(true), None) => Some("Account disabled".into()),
-            (Some(false), _) => Some(String::new()),
-            (None, _) => None,
+        let action = UserAction::Update {
+            user: "alice@test.com".to_string(),
+            real_name: None,
+            email: None,
+            disable_login: Some(true),
+            login_denied_text: Some("Go away".to_string()),
         };
-        assert_eq!(denied_text3.as_deref(), Some(""));
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(
+            result.is_ok(),
+            "update with disable_login failed: {result:?}"
+        );
+    }
 
-        // (None, _) => None
-        let denied_text4 = match (None::<bool>, Some("ignored".to_string())) {
-            (Some(true), Some(text)) => Some(text),
-            (Some(true), None) => Some("Account disabled".into()),
-            (Some(false), _) => Some(String::new()),
-            (None, _) => None,
+    #[tokio::test]
+    async fn update_user_enable_login_sends_empty_denied_text() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+
+        Mock::given(method("PUT"))
+            .and(path("/rest/user/bob%40test%2Ecom"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let action = UserAction::Update {
+            user: "bob@test.com".to_string(),
+            real_name: None,
+            email: None,
+            disable_login: Some(false),
+            login_denied_text: None,
         };
-        assert!(denied_text4.is_none());
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(
+            result.is_ok(),
+            "update with enable_login failed: {result:?}"
+        );
     }
 }
