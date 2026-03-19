@@ -105,7 +105,7 @@ mod tests {
     fn config_operations_with_file_io() {
         let _lock = crate::ENV_LOCK.lock().unwrap();
         let tmp = tempfile::TempDir::new().unwrap();
-        std::env::set_var("XDG_CONFIG_HOME", tmp.path());
+        unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
         // 1. set-default on empty config returns error
         let config = Config::default();

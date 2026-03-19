@@ -1166,7 +1166,7 @@ mod tests {
     }
 
     #[test]
-    fn field_value_row_conversion() {
+    fn print_field_values_json_active_and_inactive() {
         let values = vec![
             FieldValue {
                 name: "NEW".into(),
@@ -1183,36 +1183,13 @@ mod tests {
                 can_change_to: None,
             },
         ];
-        let rows: Vec<FieldValueRow> = values
-            .iter()
-            .map(|v| {
-                let transitions = v
-                    .can_change_to
-                    .as_ref()
-                    .map(|t| {
-                        t.iter()
-                            .map(|s| s.name.as_str())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    })
-                    .unwrap_or_default();
-                FieldValueRow {
-                    name: v.name.clone(),
-                    active: if v.is_active {
-                        "yes".into()
-                    } else {
-                        "no".into()
-                    },
-                    can_change_to: transitions,
-                }
-            })
-            .collect();
-        let table = Table::new(rows).to_string();
-        assert!(table.contains("NEW"));
-        assert!(table.contains("yes"));
-        assert!(table.contains("ASSIGNED"));
-        assert!(table.contains("CLOSED"));
-        assert!(table.contains("no"));
+        let json = serde_json::to_string_pretty(&values).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed[0]["name"], "NEW");
+        assert_eq!(parsed[0]["is_active"], true);
+        assert_eq!(parsed[1]["name"], "CLOSED");
+        assert_eq!(parsed[1]["is_active"], false);
+        assert!(parsed[1]["can_change_to"].is_null());
     }
 
     // ── print_whoami ─────────────────────────────────────────────────
@@ -1387,21 +1364,16 @@ mod tests {
     }
 
     #[test]
-    fn print_users_table_no_detail_mode() {
-        let users = vec![make_user(1, "alice", Some(true), vec![])];
-        let rows: Vec<UserRow> = users
-            .iter()
-            .map(|u| UserRow {
-                id: u.id,
-                name: u.name.clone(),
-                real_name: u.real_name.clone().unwrap_or_default(),
-                email: u.email.clone().unwrap_or_default(),
-            })
-            .collect();
-        let table = Table::new(rows).to_string();
-        assert!(table.contains("alice"));
-        assert!(table.contains("alice@example.com"));
-        assert!(!table.contains("CAN LOGIN"));
+    fn print_users_json_includes_all_fields() {
+        let users = vec![make_user(1, "alice", Some(true), vec!["admin"])];
+        let json = serde_json::to_string_pretty(&users).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed[0]["id"], 1);
+        assert_eq!(parsed[0]["name"], "alice");
+        assert_eq!(parsed[0]["real_name"], "alice Real");
+        assert_eq!(parsed[0]["email"], "alice@example.com");
+        assert_eq!(parsed[0]["can_login"], true);
+        assert_eq!(parsed[0]["groups"][0]["name"], "admin");
     }
 
     // ── mask_api_key tests ──────────────────────────────────────────

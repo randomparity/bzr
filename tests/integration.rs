@@ -33,7 +33,7 @@ api_mode = "rest"
 "#,
     );
     std::fs::write(config_dir.join("config.toml"), config_content).unwrap();
-    std::env::set_var("XDG_CONFIG_HOME", tmp.path());
+    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 }
 
 // ── Bug commands ──────────────────────────────────────────────────────
@@ -531,7 +531,7 @@ api_key = "key-1234567890"
 "#,
     )
     .unwrap();
-    std::env::set_var("XDG_CONFIG_HOME", tmp.path());
+    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let action = bzr::cli::ConfigAction::Show;
     let result = bzr::commands::config_cmd::execute(&action, bzr::types::OutputFormat::Json);
@@ -1255,7 +1255,7 @@ fn config_set_server_integration() {
         "default_server = \"local\"\n\n[servers.local]\nurl = \"https://bugzilla.local\"\napi_key = \"key-1234567890\"\n",
     )
     .unwrap();
-    std::env::set_var("XDG_CONFIG_HOME", tmp.path());
+    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let action = bzr::cli::ConfigAction::SetServer {
         name: "staging".to_string(),
@@ -1283,7 +1283,7 @@ fn config_set_default_integration() {
         "default_server = \"local\"\n\n[servers.local]\nurl = \"https://bugzilla.local\"\napi_key = \"key-1234567890\"\n\n[servers.staging]\nurl = \"https://staging.example\"\napi_key = \"staging-key\"\n",
     )
     .unwrap();
-    std::env::set_var("XDG_CONFIG_HOME", tmp.path());
+    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let action = bzr::cli::ConfigAction::SetDefault {
         name: "staging".to_string(),
@@ -1300,7 +1300,7 @@ fn config_set_default_integration() {
 
 /// Parse CLI args and dispatch to the correct command `execute()` function,
 /// exercising the same path as `main.rs::run()`.
-async fn dispatch_cli(args: &[&str], _server_url: &str) -> bzr::error::Result<()> {
+async fn dispatch_cli(args: &[&str]) -> bzr::error::Result<()> {
     let cli = bzr::cli::Cli::try_parse_from(args)
         .map_err(|e| bzr::error::BzrError::InputValidation(e.to_string()))?;
 
@@ -1365,19 +1365,16 @@ async fn e2e_bug_list_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(
-        &[
-            "bzr",
-            "--server",
-            "test",
-            "--json",
-            "bug",
-            "list",
-            "--product",
-            "Firefox",
-        ],
-        &mock.uri(),
-    )
+    let result = dispatch_cli(&[
+        "bzr",
+        "--server",
+        "test",
+        "--json",
+        "bug",
+        "list",
+        "--product",
+        "Firefox",
+    ])
     .await;
     assert!(result.is_ok(), "e2e bug list: {result:?}");
 }
@@ -1398,11 +1395,7 @@ async fn e2e_bug_view_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(
-        &["bzr", "--server", "test", "--json", "bug", "view", "42"],
-        &mock.uri(),
-    )
-    .await;
+    let result = dispatch_cli(&["bzr", "--server", "test", "--json", "bug", "view", "42"]).await;
     assert!(result.is_ok(), "e2e bug view: {result:?}");
 }
 
@@ -1424,11 +1417,7 @@ async fn e2e_whoami_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(
-        &["bzr", "--server", "test", "--json", "whoami"],
-        &mock.uri(),
-    )
-    .await;
+    let result = dispatch_cli(&["bzr", "--server", "test", "--json", "whoami"]).await;
     assert!(result.is_ok(), "e2e whoami: {result:?}");
 }
 
@@ -1438,7 +1427,7 @@ async fn e2e_config_show_via_cli_args() {
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, "http://localhost:1");
 
-    let result = dispatch_cli(&["bzr", "--json", "config", "show"], "unused").await;
+    let result = dispatch_cli(&["bzr", "--json", "config", "show"]).await;
     assert!(result.is_ok(), "e2e config show: {result:?}");
 }
 
@@ -1466,10 +1455,6 @@ async fn e2e_server_info_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(
-        &["bzr", "--server", "test", "--json", "server", "info"],
-        &mock.uri(),
-    )
-    .await;
+    let result = dispatch_cli(&["bzr", "--server", "test", "--json", "server", "info"]).await;
     assert!(result.is_ok(), "e2e server info: {result:?}");
 }

@@ -32,6 +32,11 @@ enum AuthConfig {
     QueryParam(String),
 }
 
+enum GroupOp {
+    Add,
+    Remove,
+}
+
 pub struct BugzillaClient {
     http: reqwest::Client,
     base_url: String,
@@ -744,22 +749,28 @@ impl BugzillaClient {
     }
 
     pub async fn add_user_to_group(&self, user: &str, group: &str) -> Result<()> {
-        self.modify_group_membership(user, group, "add").await
+        self.modify_group_membership(user, group, GroupOp::Add)
+            .await
     }
 
     pub async fn remove_user_from_group(&self, user: &str, group: &str) -> Result<()> {
-        self.modify_group_membership(user, group, "remove").await
+        self.modify_group_membership(user, group, GroupOp::Remove)
+            .await
     }
 
     async fn modify_group_membership(
         &self,
         user: &str,
         group: &str,
-        operation: &str,
+        operation: GroupOp,
     ) -> Result<()> {
+        let key = match operation {
+            GroupOp::Add => "add",
+            GroupOp::Remove => "remove",
+        };
         let body = serde_json::json!({
             "groups": {
-                operation: [group]
+                key: [group]
             }
         });
         let req = self.apply_auth(

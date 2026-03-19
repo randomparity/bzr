@@ -15,7 +15,9 @@ struct WhoamiProbe {
 ///
 /// If the auth method is already cached, returns it with the cached API mode
 /// (or `Rest` as default). Otherwise, detects auth method and server version
-/// via network probes, persists both to the config file, and returns them.
+/// via network probes. Always persists the auth method; only persists API mode
+/// and version when version detection succeeds (avoids caching wrong defaults
+/// on transient failures).
 pub async fn detect_and_cache_server_settings(
     config: &mut Config,
     server_name: &str,
@@ -90,6 +92,10 @@ async fn detect_version_and_mode(
         AuthMethod::Header => {
             if let Ok(val) = reqwest::header::HeaderValue::from_str(api_key) {
                 req = req.header(AUTH_HEADER_NAME, val);
+            } else {
+                tracing::debug!(
+                    "API key has invalid header characters, sending version request without auth"
+                );
             }
         }
         AuthMethod::QueryParam => {
@@ -263,6 +269,9 @@ async fn probe_whoami(request: reqwest::RequestBuilder, method: AuthMethod) -> W
     let body = resp.text().await.unwrap_or_default();
     tracing::trace!(probe = "whoami", %method, %status, body, "auth probe response");
     if status.is_success() {
+        // A valid whoami response contains a positive user ID. Treat id==0
+        // (unauthenticated/anonymous) and unparseable bodies as auth failures
+        // — the server responded but didn't confirm our credentials.
         if let Ok(parsed) = serde_json::from_str::<WhoamiProbe>(&body) {
             if parsed.id > 0 {
                 return WhoamiOutcome::Authenticated(method);

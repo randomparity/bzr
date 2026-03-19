@@ -184,7 +184,7 @@ mod tests {
     fn config_file_io_operations() {
         let _lock = crate::ENV_LOCK.lock().unwrap();
         let tmp = tempfile::tempdir().unwrap();
-        env::set_var("XDG_CONFIG_HOME", tmp.path());
+        unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
         // 1. Load returns default when no file exists
         let config = Config::load().unwrap();

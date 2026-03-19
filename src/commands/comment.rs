@@ -96,20 +96,24 @@ fn read_comment_body() -> Result<String> {
 fn edit_comment() -> Result<String> {
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".into());
     let mut tmpfile = tempfile()?;
-    let path = tmpfile.path.clone();
-    writeln!(tmpfile.file, "<!-- Enter your comment above this line -->")?;
-    drop(tmpfile.file);
+    if let Some(ref mut f) = tmpfile.file {
+        writeln!(f, "<!-- Enter your comment above this line -->")?;
+    }
+    tmpfile.close_file();
 
-    let status = std::process::Command::new(&editor).arg(&path).status()?;
+    let status = std::process::Command::new(&editor)
+        .arg(&tmpfile.path)
+        .status()?;
 
     if !status.success() {
+        // TempFile::drop cleans up the file
         return Err(BzrError::InputValidation(format!(
             "{editor} exited with error"
         )));
     }
 
-    let content = std::fs::read_to_string(&path)?;
-    let _ = std::fs::remove_file(&path);
+    let content = std::fs::read_to_string(&tmpfile.path)?;
+    // TempFile::drop cleans up the file
 
     let text: String = content
         .lines()
@@ -122,14 +126,30 @@ fn edit_comment() -> Result<String> {
 
 struct TempFile {
     path: std::path::PathBuf,
-    file: std::fs::File,
+    file: Option<std::fs::File>,
+}
+
+impl TempFile {
+    /// Close the file handle (flushes writes) while keeping the path for reading.
+    fn close_file(&mut self) {
+        self.file.take();
+    }
+}
+
+impl Drop for TempFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
 }
 
 fn tempfile() -> Result<TempFile> {
     let dir = std::env::temp_dir();
     let path = dir.join(format!("bzr-comment-{}.txt", std::process::id()));
     let file = std::fs::File::create(&path)?;
-    Ok(TempFile { path, file })
+    Ok(TempFile {
+        path,
+        file: Some(file),
+    })
 }
 
 #[cfg(test)]
