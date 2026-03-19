@@ -1,8 +1,8 @@
 use crate::cli::ComponentAction;
-use crate::client::UpdateComponentParams;
 use crate::config::ApiMode;
 use crate::error::Result;
 use crate::output::{self, OutputFormat};
+use crate::types::{CreateComponentParams, UpdateComponentParams};
 
 pub async fn execute(
     action: &ComponentAction,
@@ -19,9 +19,13 @@ pub async fn execute(
             description,
             default_assignee,
         } => {
-            let id = client
-                .create_component(product, name, description, default_assignee)
-                .await?;
+            let params = CreateComponentParams {
+                product: product.clone(),
+                name: name.clone(),
+                description: description.clone(),
+                default_assignee: default_assignee.clone(),
+            };
+            let id = client.create_component(&params).await?;
             output::print_result(
                 &serde_json::json!({
                     "id": id,

@@ -1,10 +1,10 @@
 use std::path::Path;
 
 use crate::cli::AttachmentAction;
-use crate::client::UpdateAttachmentParams;
 use crate::config::ApiMode;
 use crate::error::Result;
 use crate::output::{self, OutputFormat};
+use crate::types::{UpdateAttachmentParams, UploadAttachmentParams};
 
 pub async fn execute(
     action: &AttachmentAction,
@@ -53,9 +53,15 @@ pub async fn execute(
                 .as_deref()
                 .unwrap_or_else(|| guess_content_type(file_name));
             let flags = super::shared::parse_flags(flag)?;
-            let att_id = client
-                .upload_attachment(*bug_id, file_name, summary, ct, &data, &flags)
-                .await?;
+            let upload_params = UploadAttachmentParams {
+                bug_id: *bug_id,
+                file_name: file_name.to_string(),
+                summary: summary.to_string(),
+                content_type: ct.to_string(),
+                data: data.clone(),
+                flags,
+            };
+            let att_id = client.upload_attachment(&upload_params).await?;
             output::print_result(
                 &serde_json::json!({
                     "id": att_id,

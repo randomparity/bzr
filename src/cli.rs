@@ -1,16 +1,8 @@
 use clap::{Parser, Subcommand};
 
 use crate::config::{ApiMode, AuthMethod};
-
-fn parse_auth_method(s: &str) -> std::result::Result<AuthMethod, String> {
-    match s {
-        "header" => Ok(AuthMethod::Header),
-        "query_param" => Ok(AuthMethod::QueryParam),
-        _ => Err(format!(
-            "invalid auth method '{s}': expected 'header' or 'query_param'"
-        )),
-    }
-}
+use crate::output::OutputFormat;
+use crate::types::ProductListType;
 
 #[derive(Parser)]
 #[command(name = "bzr", version, about = "A CLI for Bugzilla")]
@@ -21,7 +13,7 @@ pub struct Cli {
 
     /// Output format: table or json
     #[arg(long, global = true)]
-    pub output: Option<String>,
+    pub output: Option<OutputFormat>,
 
     /// Shorthand for --output json
     #[arg(long, global = true)]
@@ -357,7 +349,7 @@ pub enum ConfigAction {
         #[arg(long)]
         email: Option<String>,
         /// Override auto-detected auth method (`header` or `query_param`)
-        #[arg(long, value_parser = parse_auth_method)]
+        #[arg(long)]
         auth_method: Option<AuthMethod>,
     },
     /// Set the default server
@@ -375,7 +367,7 @@ pub enum ProductAction {
     List {
         /// Product type: accessible (default), selectable, or enterable
         #[arg(long, default_value = "accessible")]
-        r#type: String,
+        r#type: ProductListType,
     },
     /// View product details (components, versions, milestones)
     View {

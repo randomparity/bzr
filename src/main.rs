@@ -6,6 +6,7 @@ mod config;
 mod error;
 #[expect(clippy::print_stdout, clippy::expect_used)]
 mod output;
+mod types;
 mod xmlrpc;
 mod xmlrpc_client;
 
@@ -91,8 +92,8 @@ fn resolve_format(cli: &Cli) -> error::Result<OutputFormat> {
         }
         return Ok(OutputFormat::Json);
     }
-    if let Some(ref out) = cli.output {
-        return out.parse().map_err(BzrError::Other);
+    if let Some(out) = cli.output {
+        return Ok(out);
     }
     if let Ok(val) = std::env::var("BZR_OUTPUT") {
         return val.parse().map_err(BzrError::Other);
@@ -197,7 +198,7 @@ mod tests {
     #[test]
     fn resolve_format_output_json() {
         let mut cli = base_cli(dummy_command());
-        cli.output = Some("json".into());
+        cli.output = Some(OutputFormat::Json);
         let fmt = resolve_format(&cli).expect("should resolve");
         assert_eq!(fmt, OutputFormat::Json);
     }
@@ -205,24 +206,16 @@ mod tests {
     #[test]
     fn resolve_format_output_table() {
         let mut cli = base_cli(dummy_command());
-        cli.output = Some("table".into());
+        cli.output = Some(OutputFormat::Table);
         let fmt = resolve_format(&cli).expect("should resolve");
         assert_eq!(fmt, OutputFormat::Table);
-    }
-
-    #[test]
-    fn resolve_format_invalid_output() {
-        let mut cli = base_cli(dummy_command());
-        cli.output = Some("xml".into());
-        let err = resolve_format(&cli).unwrap_err();
-        assert_eq!(err.exit_code(), 1);
     }
 
     #[test]
     fn resolve_format_json_overrides_output() {
         let mut cli = base_cli(dummy_command());
         cli.json = true;
-        cli.output = Some("table".into());
+        cli.output = Some(OutputFormat::Table);
         let fmt = resolve_format(&cli).expect("should resolve");
         assert_eq!(fmt, OutputFormat::Json);
     }

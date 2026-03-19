@@ -23,6 +23,9 @@ pub enum BzrError {
     #[error("XML-RPC error: {0}")]
     XmlRpc(String),
 
+    #[error("{resource} not found: {id}")]
+    NotFound { resource: &'static str, id: String },
+
     #[error("{0}")]
     Other(String),
 }
@@ -40,6 +43,7 @@ impl BzrError {
             BzrError::Api { .. } | BzrError::XmlRpc(_) => 4,
             BzrError::Http(_) => 5,
             BzrError::Io(_) => 6,
+            BzrError::NotFound { .. } => 2,
             BzrError::Other(_) => 1,
         }
     }
@@ -50,6 +54,7 @@ impl BzrError {
             BzrError::Api { .. } | BzrError::XmlRpc(_) => "api",
             BzrError::Http(_) => "http",
             BzrError::Io(_) => "io",
+            BzrError::NotFound { .. } => "not_found",
             BzrError::Other(_) => "other",
         }
     }
@@ -122,6 +127,17 @@ mod tests {
     fn error_type_other() {
         let err = BzrError::Other("x".into());
         assert_eq!(err.error_type(), "other");
+    }
+
+    #[test]
+    fn exit_code_not_found() {
+        let err = BzrError::NotFound {
+            resource: "bug",
+            id: "42".into(),
+        };
+        assert_eq!(err.exit_code(), 2);
+        assert_eq!(err.error_type(), "not_found");
+        assert_eq!(err.to_string(), "bug not found: 42");
     }
 
     #[test]

@@ -4,3 +4,6 @@ target/
 # Claude Flow
 .claude-flow/
 .hive-mind/
+
+# Desloppify
+.desloppify/

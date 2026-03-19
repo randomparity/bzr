@@ -1,6 +1,7 @@
-use crate::client::{BugzillaClient, FlagUpdate};
+use crate::client::BugzillaClient;
 use crate::config::{ApiMode, Config};
 use crate::error::{BzrError, Result};
+use crate::types::FlagUpdate;
 
 pub async fn build_client(
     server: Option<&str>,

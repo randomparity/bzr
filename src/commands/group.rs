@@ -1,8 +1,8 @@
 use crate::cli::GroupAction;
-use crate::client::UpdateGroupParams;
 use crate::config::ApiMode;
 use crate::error::Result;
 use crate::output::{self, OutputFormat};
+use crate::types::{CreateGroupParams, UpdateGroupParams};
 
 pub async fn execute(
     action: &GroupAction,
@@ -52,7 +52,12 @@ pub async fn execute(
             description,
             is_active,
         } => {
-            let id = client.create_group(name, description, *is_active).await?;
+            let params = CreateGroupParams {
+                name: name.clone(),
+                description: description.clone(),
+                is_active: *is_active,
+            };
+            let id = client.create_group(&params).await?;
             output::print_result(
                 &serde_json::json!({
                     "id": id,

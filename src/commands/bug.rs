@@ -1,8 +1,8 @@
 use crate::cli::BugAction;
-use crate::client::{CreateBugParams, SearchParams, UpdateBugParams};
 use crate::config::ApiMode;
 use crate::error::Result;
 use crate::output::{self, OutputFormat};
+use crate::types::{CreateBugParams, SearchParams, UpdateBugParams};
 
 #[expect(
     clippy::too_many_lines,
@@ -55,7 +55,7 @@ pub async fn execute(
             exclude_fields,
         } => {
             let bug = client
-                .get_bug_with_fields(id, fields.as_deref(), exclude_fields.as_deref())
+                .get_bug(id, fields.as_deref(), exclude_fields.as_deref())
                 .await?;
             output::print_bug_detail(&bug, format);
         }

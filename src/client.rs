@@ -1,22 +1,25 @@
-use std::collections::HashMap;
-use std::time::Duration;
-
 use base64::Engine;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use reqwest::header::HeaderValue;
 use reqwest::RequestBuilder;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::config::{ApiMode, AuthMethod};
 use crate::error::{BzrError, Result};
+use crate::types::{
+    Attachment, Bug, BugzillaUser, Classification, Comment, CreateBugParams, CreateComponentParams,
+    CreateGroupParams, CreateProductParams, CreateUserParams, FieldValue, GroupInfo, HistoryEntry,
+    Product, ProductListType, SearchParams, ServerExtensions, ServerVersion,
+    UpdateAttachmentParams, UpdateBugParams, UpdateComponentParams, UpdateGroupParams,
+    UpdateProductParams, UpdateUserParams, UploadAttachmentParams, WhoamiResponse,
+};
 use crate::xmlrpc_client::XmlRpcClient;
 
 fn encode_path(segment: &str) -> String {
     utf8_percent_encode(segment, NON_ALPHANUMERIC).to_string()
 }
 
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+use crate::config::{CONNECT_TIMEOUT, REQUEST_TIMEOUT};
 
 /// Default fields requested for Bug queries. Matches the fields in [`Bug`] and
 /// avoids requesting server-side fields we don't use — some Bugzilla extensions
@@ -37,434 +40,6 @@ pub struct BugzillaClient {
     api_key: String,
     api_mode: ApiMode,
     xmlrpc: Option<XmlRpcClient>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Bug {
-    pub id: u64,
-    #[serde(default)]
-    pub summary: String,
-    #[serde(default)]
-    pub status: String,
-    #[serde(default)]
-    pub resolution: Option<String>,
-    #[serde(default)]
-    pub product: Option<String>,
-    #[serde(default)]
-    pub component: Option<String>,
-    #[serde(default)]
-    pub assigned_to: Option<String>,
-    #[serde(default)]
-    pub priority: Option<String>,
-    #[serde(default)]
-    pub severity: Option<String>,
-    #[serde(default)]
-    pub creation_time: Option<String>,
-    #[serde(default)]
-    pub last_change_time: Option<String>,
-    #[serde(default)]
-    pub creator: Option<String>,
-    #[serde(default)]
-    pub url: Option<String>,
-    #[serde(default)]
-    pub whiteboard: Option<String>,
-    #[serde(default)]
-    pub keywords: Vec<String>,
-    #[serde(default)]
-    pub blocks: Vec<u64>,
-    #[serde(default)]
-    pub depends_on: Vec<u64>,
-    #[serde(default)]
-    pub cc: Vec<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Comment {
-    pub id: u64,
-    #[serde(default)]
-    pub bug_id: u64,
-    #[serde(default)]
-    pub text: String,
-    #[serde(default)]
-    pub creator: Option<String>,
-    #[serde(default)]
-    pub creation_time: Option<String>,
-    #[serde(default)]
-    pub count: u64,
-    #[serde(default)]
-    pub is_private: bool,
-}
-
-#[derive(Debug, Default, Serialize)]
-pub struct SearchParams {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub product: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub component: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub assigned_to: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub creator: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub priority: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub severity: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub alias: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub id: Vec<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub limit: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub summary: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub quicksearch: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub include_fields: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub exclude_fields: Option<String>,
-}
-
-impl SearchParams {
-    /// Returns true if any filter fields are set (product, component, etc.).
-    ///
-    /// Used by hybrid mode to decide whether an empty REST result warrants
-    /// an XML-RPC retry — only retries when filters are present, since a
-    /// filterless empty result is legitimately empty.
-    pub fn has_filters(&self) -> bool {
-        self.product.is_some()
-            || self.component.is_some()
-            || self.status.is_some()
-            || self.assigned_to.is_some()
-            || self.creator.is_some()
-            || self.priority.is_some()
-            || self.severity.is_some()
-            || self.alias.is_some()
-            || !self.id.is_empty()
-            || self.summary.is_some()
-            || self.quicksearch.is_some()
-    }
-}
-
-#[derive(Debug, Serialize)]
-pub struct CreateBugParams {
-    pub product: String,
-    pub component: String,
-    pub summary: String,
-    pub version: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub priority: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub severity: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub assigned_to: Option<String>,
-}
-
-#[derive(Debug, Default, Serialize)]
-pub struct UpdateBugParams {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub resolution: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub assigned_to: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub priority: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub severity: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub summary: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub whiteboard: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub flags: Vec<FlagUpdate>,
-}
-
-// Product / field / user types
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Product {
-    pub id: u64,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub description: String,
-    #[serde(default)]
-    pub is_active: bool,
-    #[serde(default)]
-    pub components: Vec<Component>,
-    #[serde(default)]
-    pub versions: Vec<Version>,
-    #[serde(default)]
-    pub milestones: Vec<Milestone>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Component {
-    pub id: u64,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub description: String,
-    #[serde(default)]
-    pub is_active: bool,
-    #[serde(default)]
-    pub default_assignee: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Version {
-    pub id: u64,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub sort_key: u64,
-    #[serde(default)]
-    pub is_active: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Milestone {
-    pub id: u64,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub sort_key: u64,
-    #[serde(default)]
-    pub is_active: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct FieldValue {
-    pub name: String,
-    #[serde(default)]
-    pub sort_key: u64,
-    #[serde(default)]
-    pub is_active: bool,
-    #[serde(default)]
-    pub can_change_to: Option<Vec<StatusTransition>>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct StatusTransition {
-    pub name: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct BugzillaUser {
-    pub id: u64,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub real_name: Option<String>,
-    #[serde(default)]
-    pub email: Option<String>,
-    #[serde(default)]
-    pub groups: Vec<UserGroup>,
-    #[serde(default)]
-    pub can_login: Option<bool>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct UserGroup {
-    #[serde(default)]
-    pub id: u64,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub description: String,
-}
-
-// Whoami type
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct WhoamiResponse {
-    pub id: u64,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub real_name: Option<String>,
-    #[serde(default)]
-    pub login: Option<String>,
-}
-
-// Server info types
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ServerVersion {
-    pub version: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ServerExtensions {
-    pub extensions: HashMap<String, ExtensionInfo>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ExtensionInfo {
-    #[serde(default)]
-    pub version: Option<String>,
-}
-
-// Flag types
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FlagUpdate {
-    pub name: String,
-    pub status: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub requestee: Option<String>,
-}
-
-// Attachment update params
-
-#[derive(Debug, Default, Serialize)]
-pub struct UpdateAttachmentParams {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub summary: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub file_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub content_type: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub is_obsolete: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub is_patch: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub is_private: Option<bool>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub flags: Vec<FlagUpdate>,
-}
-
-// Admin param types
-
-#[derive(Debug, Serialize)]
-pub struct CreateProductParams {
-    pub name: String,
-    pub description: String,
-    pub version: String,
-    pub is_open: bool,
-}
-
-#[derive(Debug, Default, Serialize)]
-pub struct UpdateProductParams {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub default_milestone: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub is_open: Option<bool>,
-}
-
-#[derive(Debug, Default, Serialize)]
-pub struct UpdateComponentParams {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub default_assignee: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct CreateUserParams {
-    pub email: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub full_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub password: Option<String>,
-}
-
-#[derive(Debug, Default, Serialize)]
-pub struct UpdateUserParams {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub real_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub login_denied_text: Option<String>,
-}
-
-#[derive(Debug, Default, Serialize)]
-pub struct UpdateGroupParams {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub is_active: Option<bool>,
-}
-
-// Group info type (for group view)
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GroupInfo {
-    pub id: u64,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub description: String,
-    #[serde(default)]
-    pub is_active: bool,
-    #[serde(default)]
-    pub membership: Vec<GroupMember>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GroupMember {
-    pub id: u64,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub real_name: Option<String>,
-    #[serde(default)]
-    pub email: Option<String>,
-}
-
-// Classification types
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Classification {
-    pub id: u64,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub description: String,
-    #[serde(default)]
-    pub sort_key: u64,
-    #[serde(default)]
-    pub products: Vec<ClassificationProduct>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ClassificationProduct {
-    pub id: u64,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub description: String,
-}
-
-// Bug history types
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct HistoryEntry {
-    pub who: String,
-    pub when: String,
-    pub changes: Vec<FieldChange>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct FieldChange {
-    pub field_name: String,
-    #[serde(default)]
-    pub removed: String,
-    #[serde(default)]
-    pub added: String,
-    #[serde(default)]
-    pub attachment_id: Option<u64>,
 }
 
 // API response wrappers
@@ -491,33 +66,6 @@ struct CommentBugEntry {
 #[derive(Deserialize)]
 struct CommentCreateResponse {
     id: u64,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Attachment {
-    pub id: u64,
-    #[serde(default)]
-    pub bug_id: u64,
-    #[serde(default)]
-    pub file_name: String,
-    #[serde(default)]
-    pub summary: String,
-    #[serde(default)]
-    pub content_type: String,
-    #[serde(default)]
-    pub creator: Option<String>,
-    #[serde(default)]
-    pub creation_time: Option<String>,
-    #[serde(default)]
-    pub last_change_time: Option<String>,
-    #[serde(default)]
-    pub size: u64,
-    #[serde(default)]
-    pub is_obsolete: bool,
-    #[serde(default)]
-    pub is_private: bool,
-    #[serde(default)]
-    pub data: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -846,7 +394,7 @@ impl BugzillaClient {
         xmlrpc.search_bugs(params).await
     }
 
-    pub async fn get_bug_with_fields(
+    pub async fn get_bug(
         &self,
         id: &str,
         include_fields: Option<&str>,
@@ -906,7 +454,10 @@ impl BugzillaClient {
             .bugs
             .into_iter()
             .next()
-            .ok_or_else(|| BzrError::Other(format!("bug {id} not found")))
+            .ok_or_else(|| BzrError::NotFound {
+                resource: "bug",
+                id: id.to_string(),
+            })
     }
 
     async fn get_bug_xmlrpc(&self, id: &str) -> Result<Bug> {
@@ -936,7 +487,10 @@ impl BugzillaClient {
         data.bugs
             .into_iter()
             .next()
-            .ok_or_else(|| BzrError::Other(format!("bug {id} not found")))
+            .ok_or_else(|| BzrError::NotFound {
+                resource: "bug",
+                id: id.to_string(),
+            })
     }
 
     pub async fn create_bug(&self, params: &CreateBugParams) -> Result<u64> {
@@ -1020,7 +574,10 @@ impl BugzillaClient {
         data.attachments
             .into_values()
             .next()
-            .ok_or_else(|| BzrError::Other(format!("attachment {attachment_id} not found")))
+            .ok_or_else(|| BzrError::NotFound {
+                resource: "attachment",
+                id: attachment_id.to_string(),
+            })
     }
 
     pub async fn download_attachment(&self, attachment_id: u64) -> Result<(String, Vec<u8>)> {
@@ -1034,27 +591,19 @@ impl BugzillaClient {
         Ok((attachment.file_name, bytes))
     }
 
-    pub async fn upload_attachment(
-        &self,
-        bug_id: u64,
-        file_name: &str,
-        summary: &str,
-        content_type: &str,
-        data: &[u8],
-        flags: &[FlagUpdate],
-    ) -> Result<u64> {
-        let encoded = base64::engine::general_purpose::STANDARD.encode(data);
+    pub async fn upload_attachment(&self, params: &UploadAttachmentParams) -> Result<u64> {
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&params.data);
         let body = serde_json::json!({
-            "ids": [bug_id],
-            "file_name": file_name,
-            "summary": summary,
-            "content_type": content_type,
+            "ids": [params.bug_id],
+            "file_name": params.file_name,
+            "summary": params.summary,
+            "content_type": params.content_type,
             "data": encoded,
-            "flags": flags,
+            "flags": params.flags,
         });
         let req = self.auth(
             self.http
-                .post(self.url(&format!("bug/{bug_id}/attachment")))
+                .post(self.url(&format!("bug/{}/attachment", params.bug_id)))
                 .json(&body),
         );
         let resp = self.send(req).await?;
@@ -1077,12 +626,11 @@ impl BugzillaClient {
         Ok(data.id)
     }
 
-    pub async fn list_products_by_type(&self, product_type: &str) -> Result<Vec<Product>> {
-        let endpoint = match product_type {
-            "selectable" => "product_selectable",
-            "enterable" => "product_enterable",
-            _ => "product_accessible",
-        };
+    pub async fn list_products_by_type(
+        &self,
+        product_type: ProductListType,
+    ) -> Result<Vec<Product>> {
+        let endpoint = product_type.as_endpoint();
         let req = self.auth(self.http.get(self.url(endpoint)));
         let resp = self.send(req).await?;
         let accessible: ProductAccessibleResponse = self.parse_json(resp).await?;
@@ -1131,7 +679,10 @@ impl BugzillaClient {
         data.products
             .into_iter()
             .next()
-            .ok_or_else(|| BzrError::Other(format!("product '{name}' not found")))
+            .ok_or_else(|| BzrError::NotFound {
+                resource: "product",
+                id: name.to_string(),
+            })
     }
 
     /// Fetch legal values for a bug field. An unrecognized field name returns
@@ -1256,23 +807,14 @@ impl BugzillaClient {
         data.classifications
             .into_iter()
             .next()
-            .ok_or_else(|| BzrError::Other(format!("classification '{name}' not found")))
+            .ok_or_else(|| BzrError::NotFound {
+                resource: "classification",
+                id: name.to_string(),
+            })
     }
 
-    pub async fn create_component(
-        &self,
-        product: &str,
-        name: &str,
-        description: &str,
-        default_assignee: &str,
-    ) -> Result<u64> {
-        let body = serde_json::json!({
-            "product": product,
-            "name": name,
-            "description": description,
-            "default_assignee": default_assignee,
-        });
-        let req = self.auth(self.http.post(self.url("component")).json(&body));
+    pub async fn create_component(&self, params: &CreateComponentParams) -> Result<u64> {
+        let req = self.auth(self.http.post(self.url("component")).json(params));
         let resp = self.send(req).await?;
         let data: serde_json::Value = self.parse_json(resp).await?;
         data["id"]
@@ -1320,21 +862,14 @@ impl BugzillaClient {
         data.groups
             .into_iter()
             .next()
-            .ok_or_else(|| BzrError::Other(format!("group '{group}' not found")))
+            .ok_or_else(|| BzrError::NotFound {
+                resource: "group",
+                id: group.to_string(),
+            })
     }
 
-    pub async fn create_group(
-        &self,
-        name: &str,
-        description: &str,
-        is_active: bool,
-    ) -> Result<u64> {
-        let body = serde_json::json!({
-            "name": name,
-            "description": description,
-            "is_active": is_active,
-        });
-        let req = self.auth(self.http.post(self.url("group")).json(&body));
+    pub async fn create_group(&self, params: &CreateGroupParams) -> Result<u64> {
+        let req = self.auth(self.http.post(self.url("group")).json(params));
         let resp = self.send(req).await?;
         let data: serde_json::Value = self.parse_json(resp).await?;
         data["id"]
@@ -1361,6 +896,7 @@ mod tests {
 
     use super::*;
     use crate::config::AuthMethod;
+    use crate::types::FlagUpdate;
 
     #[test]
     fn safe_url_strips_query_params() {
@@ -1418,7 +954,10 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let products = client.list_products_by_type("accessible").await.unwrap();
+        let products = client
+            .list_products_by_type(ProductListType::Accessible)
+            .await
+            .unwrap();
         assert_eq!(products.len(), 2);
         assert_eq!(products[0].name, "Widget");
         assert_eq!(products[1].name, "Gadget");
@@ -1434,7 +973,10 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let products = client.list_products_by_type("accessible").await.unwrap();
+        let products = client
+            .list_products_by_type(ProductListType::Accessible)
+            .await
+            .unwrap();
         assert!(products.is_empty());
     }
 
@@ -1631,7 +1173,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let bug = client.get_bug_with_fields("42", None, None).await.unwrap();
+        let bug = client.get_bug("42", None, None).await.unwrap();
         assert_eq!(bug.id, 42);
         assert_eq!(bug.summary, "test bug");
     }
@@ -2010,7 +1552,14 @@ mod tests {
             requestee: Some("alice@example.com".into()),
         }];
         let id = client
-            .upload_attachment(1, "test.txt", "test", "text/plain", b"hello", &flags)
+            .upload_attachment(&UploadAttachmentParams {
+                bug_id: 1,
+                file_name: "test.txt".into(),
+                summary: "test".into(),
+                content_type: "text/plain".into(),
+                data: b"hello".to_vec(),
+                flags,
+            })
             .await
             .unwrap();
         assert_eq!(id, 200);
@@ -2110,7 +1659,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_bug_with_fields_passes_params() {
+    async fn get_bug_passes_params() {
         let mock = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/rest/bug/1"))
@@ -2122,15 +1671,12 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let bug = client
-            .get_bug_with_fields("1", Some("id,summary"), None)
-            .await
-            .unwrap();
+        let bug = client.get_bug("1", Some("id,summary"), None).await.unwrap();
         assert_eq!(bug.id, 1);
     }
 
     #[tokio::test]
-    async fn get_bug_with_fields_falls_back_on_100500() {
+    async fn get_bug_falls_back_on_100500() {
         let mock = MockServer::start().await;
 
         // Direct endpoint returns 100500 (server extension crash)
@@ -2155,7 +1701,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let bug = client.get_bug_with_fields("99", None, None).await.unwrap();
+        let bug = client.get_bug("99", None, None).await.unwrap();
         assert_eq!(bug.id, 99);
         assert_eq!(bug.summary, "fallback bug");
     }
@@ -2299,7 +1845,12 @@ mod tests {
 
         let client = test_client(&mock.uri());
         let id = client
-            .create_component("Widget", "Backend", "Backend component", "dev@example.com")
+            .create_component(&CreateComponentParams {
+                product: "Widget".into(),
+                name: "Backend".into(),
+                description: "Backend component".into(),
+                default_assignee: "dev@example.com".into(),
+            })
             .await
             .unwrap();
         assert_eq!(id, 10);
@@ -2320,7 +1871,12 @@ mod tests {
 
         let client = test_client(&mock.uri());
         let err = client
-            .create_component("X", "Y", "Z", "a@b.com")
+            .create_component(&CreateComponentParams {
+                product: "X".into(),
+                name: "Y".into(),
+                description: "Z".into(),
+                default_assignee: "a@b.com".into(),
+            })
             .await
             .unwrap_err();
         assert!(err.to_string().contains("not authorized"));
@@ -2528,7 +2084,11 @@ mod tests {
 
         let client = test_client(&mock.uri());
         let id = client
-            .create_group("testers", "Test team", true)
+            .create_group(&CreateGroupParams {
+                name: "testers".into(),
+                description: "Test team".into(),
+                is_active: true,
+            })
             .await
             .unwrap();
         assert_eq!(id, 5);
@@ -2548,7 +2108,14 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let err = client.create_group("x", "x", true).await.unwrap_err();
+        let err = client
+            .create_group(&CreateGroupParams {
+                name: "x".into(),
+                description: "x".into(),
+                is_active: true,
+            })
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("not authorized"));
     }
 
@@ -2876,7 +2443,7 @@ mod tests {
             .await;
 
         let client = test_client_hybrid(&mock.uri());
-        let bug = client.get_bug_with_fields("42", None, None).await.unwrap();
+        let bug = client.get_bug("42", None, None).await.unwrap();
         assert_eq!(bug.id, 42);
         assert_eq!(bug.summary, "XML-RPC result");
     }
@@ -2903,10 +2470,7 @@ mod tests {
             .await;
 
         let client = test_client_hybrid(&mock.uri());
-        let err = client
-            .get_bug_with_fields("42", None, None)
-            .await
-            .unwrap_err();
+        let err = client.get_bug("42", None, None).await.unwrap_err();
         assert!(
             err.to_string().contains("Invalid API key"),
             "should propagate auth error, got: {err}"

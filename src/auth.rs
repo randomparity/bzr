@@ -1,13 +1,8 @@
-use std::time::Duration;
-
 use reqwest::header::HeaderValue;
 use serde::Deserialize;
 
-use crate::config::{ApiMode, AuthMethod, Config};
+use crate::config::{ApiMode, AuthMethod, Config, CONNECT_TIMEOUT, REQUEST_TIMEOUT};
 use crate::error::{BzrError, Result};
-
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Deserialize)]
 struct WhoAmIResponse {

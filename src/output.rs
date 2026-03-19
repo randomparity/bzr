@@ -1,25 +1,38 @@
 use colored::Colorize;
+use serde::Serialize;
 use tabled::{Table, Tabled};
 
-use crate::client::{
+use crate::types::{
     Attachment, Bug, BugzillaUser, Classification, Comment, FieldValue, GroupInfo, HistoryEntry,
     Product, ServerExtensions, ServerVersion, WhoamiResponse,
 };
 
+/// Print any serializable value as pretty JSON.
+fn print_json(value: &impl Serialize) {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(value).expect("serializable to JSON")
+    );
+}
+
 /// Print a mutation result in the appropriate format.
-///
-/// In JSON mode, prints compact JSON to stdout.
-/// In table mode, prints the human-readable message.
 pub fn print_result(value: &serde_json::Value, human_message: &str, format: OutputFormat) {
     match format {
         OutputFormat::Json => {
             println!(
                 "{}",
-                serde_json::to_string(&value).expect("mutation result serializable to JSON")
+                serde_json::to_string(value).expect("mutation result serializable to JSON")
             );
         }
         OutputFormat::Table => println!("{human_message}"),
     }
+}
+
+fn format_id_list(ids: &[u64]) -> String {
+    ids.iter()
+        .map(std::string::ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn truncate(s: &str, max_chars: usize) -> String {
@@ -95,12 +108,7 @@ fn colorize_status(status: &str) -> String {
 
 pub fn print_bugs(bugs: &[Bug], format: OutputFormat) {
     match format {
-        OutputFormat::Json => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(bugs).expect("serializable to JSON")
-            );
-        }
+        OutputFormat::Json => print_json(&bugs),
         OutputFormat::Table => {
             if bugs.is_empty() {
                 println!("No bugs found.");
@@ -115,12 +123,7 @@ pub fn print_bugs(bugs: &[Bug], format: OutputFormat) {
 
 pub fn print_bug_detail(bug: &Bug, format: OutputFormat) {
     match format {
-        OutputFormat::Json => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(bug).expect("serializable to JSON")
-            );
-        }
+        OutputFormat::Json => print_json(bug),
         OutputFormat::Table => {
             println!(
                 "{} #{}\n{}\n",
@@ -155,20 +158,10 @@ pub fn print_bug_detail(bug: &Bug, format: OutputFormat) {
                 println!("  Keywords:    {}", bug.keywords.join(", "));
             }
             if !bug.blocks.is_empty() {
-                let ids: Vec<String> = bug
-                    .blocks
-                    .iter()
-                    .map(std::string::ToString::to_string)
-                    .collect();
-                println!("  Blocks:      {}", ids.join(", "));
+                println!("  Blocks:      {}", format_id_list(&bug.blocks));
             }
             if !bug.depends_on.is_empty() {
-                let ids: Vec<String> = bug
-                    .depends_on
-                    .iter()
-                    .map(std::string::ToString::to_string)
-                    .collect();
-                println!("  Depends on:  {}", ids.join(", "));
+                println!("  Depends on:  {}", format_id_list(&bug.depends_on));
             }
         }
     }
@@ -176,12 +169,7 @@ pub fn print_bug_detail(bug: &Bug, format: OutputFormat) {
 
 pub fn print_history(history: &[HistoryEntry], format: OutputFormat) {
     match format {
-        OutputFormat::Json => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(history).expect("serializable to JSON")
-            );
-        }
+        OutputFormat::Json => print_json(&history),
         OutputFormat::Table => {
             for entry in history {
                 println!(
@@ -211,12 +199,7 @@ pub fn print_history(history: &[HistoryEntry], format: OutputFormat) {
 
 pub fn print_attachments(attachments: &[Attachment], format: OutputFormat) {
     match format {
-        OutputFormat::Json => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(attachments).expect("serializable to JSON")
-            );
-        }
+        OutputFormat::Json => print_json(&attachments),
         OutputFormat::Table => {
             if attachments.is_empty() {
                 println!("No attachments.");
@@ -247,12 +230,7 @@ pub fn print_attachments(attachments: &[Attachment], format: OutputFormat) {
 
 pub fn print_comments(comments: &[Comment], format: OutputFormat) {
     match format {
-        OutputFormat::Json => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(comments).expect("serializable to JSON")
-            );
-        }
+        OutputFormat::Json => print_json(&comments),
         OutputFormat::Table => {
             if comments.is_empty() {
                 println!("No comments.");
@@ -294,12 +272,7 @@ struct ProductRow {
 
 pub fn print_products(products: &[Product], format: OutputFormat) {
     match format {
-        OutputFormat::Json => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(products).expect("serializable to JSON")
-            );
-        }
+        OutputFormat::Json => print_json(&products),
         OutputFormat::Table => {
             if products.is_empty() {
                 println!("No products found.");
@@ -324,12 +297,7 @@ pub fn print_products(products: &[Product], format: OutputFormat) {
 
 pub fn print_product_detail(product: &Product, format: OutputFormat) {
     match format {
-        OutputFormat::Json => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(product).expect("serializable to JSON")
-            );
-        }
+        OutputFormat::Json => print_json(product),
         OutputFormat::Table => {
             println!(
                 "{} {}\n{}\n",
@@ -380,12 +348,7 @@ struct FieldValueRow {
 
 pub fn print_field_values(field_name: &str, values: &[FieldValue], format: OutputFormat) {
     match format {
-        OutputFormat::Json => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(values).expect("serializable to JSON")
-            );
-        }
+        OutputFormat::Json => print_json(&values),
         OutputFormat::Table => {
             if values.is_empty() {
                 println!("No values for field '{field_name}'.");
@@ -473,12 +436,7 @@ fn detailed_row(user: &BugzillaUser) -> DetailedUserRow {
 
 pub fn print_users(users: &[BugzillaUser], format: OutputFormat, details: bool) {
     match format {
-        OutputFormat::Json => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(users).expect("serializable to JSON")
-            );
-        }
+        OutputFormat::Json => print_json(&users),
         OutputFormat::Table => {
             if users.is_empty() {
                 println!("No users found.");
@@ -505,12 +463,7 @@ pub fn print_users(users: &[BugzillaUser], format: OutputFormat, details: bool) 
 
 pub fn print_whoami(whoami: &WhoamiResponse, format: OutputFormat) {
     match format {
-        OutputFormat::Json => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(whoami).expect("serializable to JSON")
-            );
-        }
+        OutputFormat::Json => print_json(whoami),
         OutputFormat::Table => {
             println!("{} {}", "User".bold(), whoami.name.bold());
             if let Some(ref real_name) = whoami.real_name {
@@ -535,10 +488,7 @@ pub fn print_server_info(
                 "version": version.version,
                 "extensions": extensions.extensions,
             });
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&combined).expect("serializable to JSON")
-            );
+            print_json(&combined);
         }
         OutputFormat::Table => {
             println!("{} {}", "Bugzilla version:".bold(), version.version);
@@ -557,12 +507,7 @@ pub fn print_server_info(
 
 pub fn print_classification(classification: &Classification, format: OutputFormat) {
     match format {
-        OutputFormat::Json => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(classification).expect("serializable to JSON")
-            );
-        }
+        OutputFormat::Json => print_json(classification),
         OutputFormat::Table => {
             println!(
                 "{} {}\n{}\n",
@@ -582,12 +527,7 @@ pub fn print_classification(classification: &Classification, format: OutputForma
 
 pub fn print_group_info(group: &GroupInfo, format: OutputFormat) {
     match format {
-        OutputFormat::Json => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(group).expect("serializable to JSON")
-            );
-        }
+        OutputFormat::Json => print_json(group),
         OutputFormat::Table => {
             println!("{} {}", "Group".bold(), group.name.bold());
             println!("  Description:  {}", group.description);
@@ -611,7 +551,13 @@ pub fn print_group_info(group: &GroupInfo, format: OutputFormat) {
 #[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::client::{BugzillaUser, UserGroup};
+    use crate::types::{
+        Attachment, Bug, BugzillaUser, Classification, ClassificationProduct, Comment, FieldChange,
+        FieldValue, GroupInfo, GroupMember, HistoryEntry, Product, StatusTransition, UserGroup,
+        WhoamiResponse,
+    };
+
+    // ── Test data helpers ────────────────────────────────────────────
 
     fn make_user(id: u64, name: &str, can_login: Option<bool>, groups: Vec<&str>) -> BugzillaUser {
         BugzillaUser {
@@ -630,6 +576,147 @@ mod tests {
             can_login,
         }
     }
+
+    fn make_bug(id: u64, summary: &str, status: &str) -> Bug {
+        Bug {
+            id,
+            summary: summary.into(),
+            status: status.into(),
+            resolution: None,
+            product: Some("TestProduct".into()),
+            component: Some("TestComponent".into()),
+            assigned_to: Some("dev@example.com".into()),
+            priority: Some("P1".into()),
+            severity: Some("major".into()),
+            creation_time: Some("2025-01-15T10:00:00Z".into()),
+            last_change_time: Some("2025-01-16T12:00:00Z".into()),
+            creator: Some("reporter@example.com".into()),
+            url: None,
+            whiteboard: None,
+            keywords: vec!["regression".into()],
+            blocks: vec![200, 201],
+            depends_on: vec![100],
+            cc: vec!["watcher@example.com".into()],
+        }
+    }
+
+    fn make_comment(count: u64, text: &str) -> Comment {
+        Comment {
+            id: count + 100,
+            bug_id: 42,
+            text: text.into(),
+            creator: Some("commenter@example.com".into()),
+            creation_time: Some("2025-02-01T08:00:00Z".into()),
+            count,
+            is_private: false,
+        }
+    }
+
+    fn make_attachment(id: u64, summary: &str) -> Attachment {
+        Attachment {
+            id,
+            bug_id: 42,
+            file_name: format!("file_{id}.patch"),
+            summary: summary.into(),
+            content_type: "text/plain".into(),
+            creator: Some("author@example.com".into()),
+            creation_time: Some("2025-03-01T09:00:00Z".into()),
+            last_change_time: Some("2025-03-02T10:00:00Z".into()),
+            size: 1234,
+            is_obsolete: false,
+            is_private: false,
+            data: None,
+        }
+    }
+
+    fn make_product(id: u64, name: &str) -> Product {
+        Product {
+            id,
+            name: name.into(),
+            description: "A test product description".into(),
+            is_active: true,
+            components: vec![crate::types::Component {
+                id: 1,
+                name: "General".into(),
+                description: "General component".into(),
+                is_active: true,
+                default_assignee: Some("dev@example.com".into()),
+            }],
+            versions: vec![crate::types::Version {
+                id: 1,
+                name: "1.0".into(),
+                sort_key: 0,
+                is_active: true,
+            }],
+            milestones: vec![crate::types::Milestone {
+                id: 1,
+                name: "M1".into(),
+                sort_key: 0,
+                is_active: true,
+            }],
+        }
+    }
+
+    fn make_whoami() -> WhoamiResponse {
+        WhoamiResponse {
+            id: 42,
+            name: "testuser".into(),
+            real_name: Some("Test User".into()),
+            login: Some("testuser@example.com".into()),
+        }
+    }
+
+    fn make_classification() -> Classification {
+        Classification {
+            id: 1,
+            name: "Software".into(),
+            description: "Software products".into(),
+            sort_key: 0,
+            products: vec![ClassificationProduct {
+                id: 10,
+                name: "Widget".into(),
+                description: "Widget product".into(),
+            }],
+        }
+    }
+
+    fn make_group_info() -> GroupInfo {
+        GroupInfo {
+            id: 5,
+            name: "core-team".into(),
+            description: "Core development team".into(),
+            is_active: true,
+            membership: vec![GroupMember {
+                id: 1,
+                name: "alice".into(),
+                real_name: Some("Alice Smith".into()),
+                email: Some("alice@example.com".into()),
+            }],
+        }
+    }
+
+    fn make_history_entry() -> HistoryEntry {
+        HistoryEntry {
+            who: "editor@example.com".into(),
+            when: "2025-04-01T12:00:00Z".into(),
+            changes: vec![
+                FieldChange {
+                    field_name: "status".into(),
+                    removed: "NEW".into(),
+                    added: "ASSIGNED".into(),
+                    attachment_id: None,
+                },
+                FieldChange {
+                    field_name: "flagtypes.name".into(),
+                    removed: String::new(),
+                    added: "review?".into(),
+                    attachment_id: Some(99),
+                },
+            ],
+        }
+    }
+
+    // ── Existing user row tests ──────────────────────────────────────
 
     #[test]
     fn user_row_excludes_detail_columns() {
@@ -675,5 +762,623 @@ mod tests {
         let json = serde_json::to_string_pretty(&users).unwrap();
         assert!(json.contains("\"can_login\": true"));
         assert!(json.contains("\"groups\""));
+    }
+
+    // ── truncate ─────────────────────────────────────────────────────
+
+    #[test]
+    fn truncate_short_string_unchanged() {
+        assert_eq!(truncate("hello", 10), "hello");
+    }
+
+    #[test]
+    fn truncate_exact_length_unchanged() {
+        assert_eq!(truncate("abcde", 5), "abcde");
+    }
+
+    #[test]
+    fn truncate_long_string_adds_ellipsis() {
+        let result = truncate("abcdefghij", 7);
+        assert_eq!(result, "abcd...");
+        assert_eq!(result.len(), 7);
+    }
+
+    #[test]
+    fn truncate_unicode_counts_chars_not_bytes() {
+        // 4 chars, each multi-byte
+        let input = "\u{1f600}\u{1f601}\u{1f602}\u{1f603}";
+        let result = truncate(input, 4);
+        assert_eq!(result, input); // exactly 4 chars, not truncated
+        let result = truncate(input, 3);
+        assert!(result.ends_with("..."));
+    }
+
+    // ── colorize_status ──────────────────────────────────────────────
+
+    #[test]
+    fn colorize_status_new_is_green() {
+        // colored output includes ANSI codes; just verify it does not panic
+        // and produces a non-empty string containing the original status text
+        let result = colorize_status("NEW");
+        assert!(result.contains("NEW"));
+    }
+
+    #[test]
+    fn colorize_status_assigned_is_yellow() {
+        let result = colorize_status("ASSIGNED");
+        assert!(result.contains("ASSIGNED"));
+    }
+
+    #[test]
+    fn colorize_status_resolved_is_red() {
+        let result = colorize_status("RESOLVED");
+        assert!(result.contains("RESOLVED"));
+    }
+
+    #[test]
+    fn colorize_status_unknown_passes_through() {
+        let result = colorize_status("CUSTOM");
+        assert!(result.contains("CUSTOM"));
+    }
+
+    #[test]
+    fn colorize_status_case_insensitive() {
+        let result = colorize_status("new");
+        assert!(result.contains("new"));
+    }
+
+    // ── shorten_email ────────────────────────────────────────────────
+
+    #[test]
+    fn shorten_email_strips_domain() {
+        assert_eq!(shorten_email("alice@example.com"), "alice");
+    }
+
+    #[test]
+    fn shorten_email_no_at_unchanged() {
+        assert_eq!(shorten_email("alice"), "alice");
+    }
+
+    #[test]
+    fn shorten_email_empty_string() {
+        assert_eq!(shorten_email(""), "");
+    }
+
+    // ── format_id_list ───────────────────────────────────────────────
+
+    #[test]
+    fn format_id_list_empty() {
+        assert_eq!(format_id_list(&[]), "");
+    }
+
+    #[test]
+    fn format_id_list_single() {
+        assert_eq!(format_id_list(&[42]), "42");
+    }
+
+    #[test]
+    fn format_id_list_multiple() {
+        assert_eq!(format_id_list(&[1, 2, 3]), "1, 2, 3");
+    }
+
+    // ── print_json helper ────────────────────────────────────────────
+
+    #[test]
+    fn print_json_produces_valid_json_for_bug() {
+        let bug = make_bug(1, "Test bug", "NEW");
+        let json = serde_json::to_string_pretty(&bug).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["id"], 1);
+        assert_eq!(parsed["summary"], "Test bug");
+        assert_eq!(parsed["status"], "NEW");
+    }
+
+    #[test]
+    fn print_json_produces_valid_json_for_vec() {
+        let bugs = vec![make_bug(1, "A", "NEW"), make_bug(2, "B", "RESOLVED")];
+        let json = serde_json::to_string_pretty(&bugs).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(parsed.is_array());
+        assert_eq!(parsed.as_array().unwrap().len(), 2);
+    }
+
+    // ── BugRow conversion ────────────────────────────────────────────
+
+    #[test]
+    fn bug_row_from_bug_truncates_summary() {
+        let mut bug = make_bug(1, &"x".repeat(100), "NEW");
+        let row = BugRow::from(&bug);
+        assert_eq!(row.summary.chars().count(), 72);
+        assert!(row.summary.ends_with("..."));
+
+        bug.summary = "short".into();
+        let row = BugRow::from(&bug);
+        assert_eq!(row.summary, "short");
+    }
+
+    #[test]
+    fn bug_row_from_bug_shortens_assignee() {
+        let bug = make_bug(1, "test", "NEW");
+        let row = BugRow::from(&bug);
+        assert_eq!(row.assignee, "dev");
+    }
+
+    #[test]
+    fn bug_row_from_bug_missing_fields() {
+        let bug = Bug {
+            id: 1,
+            summary: "minimal".into(),
+            status: "NEW".into(),
+            resolution: None,
+            product: None,
+            component: None,
+            assigned_to: None,
+            priority: None,
+            severity: None,
+            creation_time: None,
+            last_change_time: None,
+            creator: None,
+            url: None,
+            whiteboard: None,
+            keywords: vec![],
+            blocks: vec![],
+            depends_on: vec![],
+            cc: vec![],
+        };
+        let row = BugRow::from(&bug);
+        assert_eq!(row.priority, "");
+        assert_eq!(row.assignee, "");
+    }
+
+    // ── print_bugs ───────────────────────────────────────────────────
+
+    #[test]
+    fn print_bugs_json_empty_list() {
+        let bugs: Vec<Bug> = vec![];
+        let json = serde_json::to_string_pretty(&bugs).unwrap();
+        assert_eq!(json, "[]");
+    }
+
+    #[test]
+    fn print_bugs_json_one_bug() {
+        let bugs = vec![make_bug(42, "Login broken", "NEW")];
+        let json = serde_json::to_string_pretty(&bugs).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed[0]["id"], 42);
+        assert_eq!(parsed[0]["summary"], "Login broken");
+    }
+
+    #[test]
+    fn print_bugs_table_renders_rows() {
+        let bugs = vec![make_bug(42, "Login broken", "NEW")];
+        let rows: Vec<BugRow> = bugs.iter().map(BugRow::from).collect();
+        let table = Table::new(rows).to_string();
+        assert!(table.contains("42"));
+        assert!(table.contains("NEW"));
+        assert!(table.contains("Login broken"));
+        assert!(table.contains("ID"));
+        assert!(table.contains("STATUS"));
+        assert!(table.contains("SUMMARY"));
+    }
+
+    // ── print_bug_detail ─────────────────────────────────────────────
+
+    #[test]
+    fn print_bug_detail_json_contains_all_fields() {
+        let bug = make_bug(42, "Detail test", "ASSIGNED");
+        let json = serde_json::to_string_pretty(&bug).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["id"], 42);
+        assert_eq!(parsed["summary"], "Detail test");
+        assert_eq!(parsed["status"], "ASSIGNED");
+        assert_eq!(parsed["product"], "TestProduct");
+        assert_eq!(parsed["component"], "TestComponent");
+        assert_eq!(parsed["assigned_to"], "dev@example.com");
+        assert_eq!(parsed["priority"], "P1");
+        assert_eq!(parsed["severity"], "major");
+        assert_eq!(parsed["creator"], "reporter@example.com");
+        assert_eq!(parsed["keywords"][0], "regression");
+        assert_eq!(parsed["blocks"][0], 200);
+        assert_eq!(parsed["depends_on"][0], 100);
+    }
+
+    #[test]
+    fn print_bug_detail_json_with_resolution() {
+        let mut bug = make_bug(42, "Fixed bug", "RESOLVED");
+        bug.resolution = Some("FIXED".into());
+        let json = serde_json::to_string_pretty(&bug).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["resolution"], "FIXED");
+    }
+
+    // ── print_comments ───────────────────────────────────────────────
+
+    #[test]
+    fn print_comments_json_empty() {
+        let comments: Vec<Comment> = vec![];
+        let json = serde_json::to_string_pretty(&comments).unwrap();
+        assert_eq!(json, "[]");
+    }
+
+    #[test]
+    fn print_comments_json_one_comment() {
+        let comments = vec![make_comment(0, "First comment text")];
+        let json = serde_json::to_string_pretty(&comments).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed[0]["text"], "First comment text");
+        assert_eq!(parsed[0]["count"], 0);
+        assert_eq!(parsed[0]["creator"], "commenter@example.com");
+    }
+
+    #[test]
+    fn print_comments_json_private_flag() {
+        let mut comment = make_comment(1, "secret");
+        comment.is_private = true;
+        let json = serde_json::to_string(&comment).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["is_private"], true);
+    }
+
+    // ── print_attachments ────────────────────────────────────────────
+
+    #[test]
+    fn print_attachments_json_empty() {
+        let attachments: Vec<Attachment> = vec![];
+        let json = serde_json::to_string_pretty(&attachments).unwrap();
+        assert_eq!(json, "[]");
+    }
+
+    #[test]
+    fn print_attachments_json_one_attachment() {
+        let attachments = vec![make_attachment(10, "Fix patch")];
+        let json = serde_json::to_string_pretty(&attachments).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed[0]["id"], 10);
+        assert_eq!(parsed[0]["summary"], "Fix patch");
+        assert_eq!(parsed[0]["file_name"], "file_10.patch");
+        assert_eq!(parsed[0]["content_type"], "text/plain");
+        assert_eq!(parsed[0]["size"], 1234);
+    }
+
+    #[test]
+    fn print_attachments_json_obsolete_and_private() {
+        let mut att = make_attachment(11, "Old patch");
+        att.is_obsolete = true;
+        att.is_private = true;
+        let json = serde_json::to_string(&att).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["is_obsolete"], true);
+        assert_eq!(parsed["is_private"], true);
+    }
+
+    // ── print_history ────────────────────────────────────────────────
+
+    #[test]
+    fn print_history_json_one_entry() {
+        let history = vec![make_history_entry()];
+        let json = serde_json::to_string_pretty(&history).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed[0]["who"], "editor@example.com");
+        assert_eq!(parsed[0]["when"], "2025-04-01T12:00:00Z");
+        let changes = parsed[0]["changes"].as_array().unwrap();
+        assert_eq!(changes.len(), 2);
+        assert_eq!(changes[0]["field_name"], "status");
+        assert_eq!(changes[0]["removed"], "NEW");
+        assert_eq!(changes[0]["added"], "ASSIGNED");
+        assert_eq!(changes[1]["attachment_id"], 99);
+    }
+
+    #[test]
+    fn print_history_json_empty() {
+        let history: Vec<HistoryEntry> = vec![];
+        let json = serde_json::to_string_pretty(&history).unwrap();
+        assert_eq!(json, "[]");
+    }
+
+    // ── print_products ───────────────────────────────────────────────
+
+    #[test]
+    fn print_products_json_empty() {
+        let products: Vec<Product> = vec![];
+        let json = serde_json::to_string_pretty(&products).unwrap();
+        assert_eq!(json, "[]");
+    }
+
+    #[test]
+    fn print_products_json_one_product() {
+        let products = vec![make_product(1, "Widget")];
+        let json = serde_json::to_string_pretty(&products).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed[0]["id"], 1);
+        assert_eq!(parsed[0]["name"], "Widget");
+        assert!(parsed[0]["components"].is_array());
+    }
+
+    #[test]
+    fn product_row_conversion() {
+        let product = make_product(5, "Gadget");
+        let row = ProductRow {
+            id: product.id,
+            name: product.name.clone(),
+            description: truncate(&product.description, 60),
+            components: product.components.len(),
+        };
+        let table = Table::new(vec![row]).to_string();
+        assert!(table.contains("5"));
+        assert!(table.contains("Gadget"));
+        assert!(table.contains("1")); // 1 component
+    }
+
+    // ── print_field_values ───────────────────────────────────────────
+
+    #[test]
+    fn print_field_values_json_empty() {
+        let values: Vec<FieldValue> = vec![];
+        let json = serde_json::to_string_pretty(&values).unwrap();
+        assert_eq!(json, "[]");
+    }
+
+    #[test]
+    fn print_field_values_json_with_transitions() {
+        let values = vec![FieldValue {
+            name: "NEW".into(),
+            sort_key: 0,
+            is_active: true,
+            can_change_to: Some(vec![
+                StatusTransition {
+                    name: "ASSIGNED".into(),
+                },
+                StatusTransition {
+                    name: "RESOLVED".into(),
+                },
+            ]),
+        }];
+        let json = serde_json::to_string_pretty(&values).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed[0]["name"], "NEW");
+        assert_eq!(parsed[0]["is_active"], true);
+        let transitions = parsed[0]["can_change_to"].as_array().unwrap();
+        assert_eq!(transitions.len(), 2);
+        assert_eq!(transitions[0]["name"], "ASSIGNED");
+    }
+
+    #[test]
+    fn field_value_row_conversion() {
+        let values = vec![
+            FieldValue {
+                name: "NEW".into(),
+                sort_key: 0,
+                is_active: true,
+                can_change_to: Some(vec![StatusTransition {
+                    name: "ASSIGNED".into(),
+                }]),
+            },
+            FieldValue {
+                name: "CLOSED".into(),
+                sort_key: 1,
+                is_active: false,
+                can_change_to: None,
+            },
+        ];
+        let rows: Vec<FieldValueRow> = values
+            .iter()
+            .map(|v| {
+                let transitions = v
+                    .can_change_to
+                    .as_ref()
+                    .map(|t| {
+                        t.iter()
+                            .map(|s| s.name.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    })
+                    .unwrap_or_default();
+                FieldValueRow {
+                    name: v.name.clone(),
+                    active: if v.is_active {
+                        "yes".into()
+                    } else {
+                        "no".into()
+                    },
+                    can_change_to: transitions,
+                }
+            })
+            .collect();
+        let table = Table::new(rows).to_string();
+        assert!(table.contains("NEW"));
+        assert!(table.contains("yes"));
+        assert!(table.contains("ASSIGNED"));
+        assert!(table.contains("CLOSED"));
+        assert!(table.contains("no"));
+    }
+
+    // ── print_whoami ─────────────────────────────────────────────────
+
+    #[test]
+    fn print_whoami_json() {
+        let whoami = make_whoami();
+        let json = serde_json::to_string_pretty(&whoami).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["id"], 42);
+        assert_eq!(parsed["name"], "testuser");
+        assert_eq!(parsed["real_name"], "Test User");
+        assert_eq!(parsed["login"], "testuser@example.com");
+    }
+
+    #[test]
+    fn print_whoami_json_minimal() {
+        let whoami = WhoamiResponse {
+            id: 1,
+            name: "bot".into(),
+            real_name: None,
+            login: None,
+        };
+        let json = serde_json::to_string_pretty(&whoami).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["id"], 1);
+        assert!(parsed["real_name"].is_null());
+        assert!(parsed["login"].is_null());
+    }
+
+    // ── print_classification ─────────────────────────────────────────
+
+    #[test]
+    fn print_classification_json() {
+        let classification = make_classification();
+        let json = serde_json::to_string_pretty(&classification).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["id"], 1);
+        assert_eq!(parsed["name"], "Software");
+        assert_eq!(parsed["description"], "Software products");
+        let products = parsed["products"].as_array().unwrap();
+        assert_eq!(products.len(), 1);
+        assert_eq!(products[0]["name"], "Widget");
+    }
+
+    #[test]
+    fn print_classification_json_empty_products() {
+        let classification = Classification {
+            id: 2,
+            name: "Empty".into(),
+            description: "No products".into(),
+            sort_key: 0,
+            products: vec![],
+        };
+        let json = serde_json::to_string_pretty(&classification).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(parsed["products"].as_array().unwrap().is_empty());
+    }
+
+    // ── print_group_info ─────────────────────────────────────────────
+
+    #[test]
+    fn print_group_info_json() {
+        let group = make_group_info();
+        let json = serde_json::to_string_pretty(&group).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["id"], 5);
+        assert_eq!(parsed["name"], "core-team");
+        assert_eq!(parsed["description"], "Core development team");
+        assert_eq!(parsed["is_active"], true);
+        let members = parsed["membership"].as_array().unwrap();
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0]["name"], "alice");
+        assert_eq!(members[0]["real_name"], "Alice Smith");
+    }
+
+    #[test]
+    fn print_group_info_json_no_members() {
+        let group = GroupInfo {
+            id: 6,
+            name: "empty-group".into(),
+            description: "No members".into(),
+            is_active: false,
+            membership: vec![],
+        };
+        let json = serde_json::to_string_pretty(&group).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["is_active"], false);
+        assert!(parsed["membership"].as_array().unwrap().is_empty());
+    }
+
+    // ── OutputFormat parsing ─────────────────────────────────────────
+
+    #[test]
+    fn output_format_from_str() {
+        assert_eq!(
+            "table".parse::<OutputFormat>().unwrap(),
+            OutputFormat::Table
+        );
+        assert_eq!("json".parse::<OutputFormat>().unwrap(), OutputFormat::Json);
+        assert_eq!("JSON".parse::<OutputFormat>().unwrap(), OutputFormat::Json);
+        assert_eq!(
+            "Table".parse::<OutputFormat>().unwrap(),
+            OutputFormat::Table
+        );
+        assert!("xml".parse::<OutputFormat>().is_err());
+    }
+
+    #[test]
+    fn output_format_default_is_table() {
+        assert_eq!(OutputFormat::default(), OutputFormat::Table);
+    }
+
+    // ── print_result ─────────────────────────────────────────────────
+
+    #[test]
+    fn print_result_json_serializes_value() {
+        let value = serde_json::json!({"id": 42});
+        let json = serde_json::to_string(&value).unwrap();
+        assert_eq!(json, r#"{"id":42}"#);
+    }
+
+    // ── print_server_info ────────────────────────────────────────────
+
+    #[test]
+    fn print_server_info_json_combined() {
+        let version = ServerVersion {
+            version: "5.0.4".into(),
+        };
+        let extensions = ServerExtensions {
+            extensions: {
+                let mut m = std::collections::HashMap::new();
+                m.insert(
+                    "BmpConvert".into(),
+                    crate::types::ExtensionInfo {
+                        version: Some("1.0".into()),
+                    },
+                );
+                m
+            },
+        };
+        let combined = serde_json::json!({
+            "version": version.version,
+            "extensions": extensions.extensions,
+        });
+        let json = serde_json::to_string_pretty(&combined).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["version"], "5.0.4");
+        assert!(parsed["extensions"]["BmpConvert"].is_object());
+    }
+
+    // ── print_product_detail ─────────────────────────────────────────
+
+    #[test]
+    fn print_product_detail_json() {
+        let product = make_product(3, "Acme");
+        let json = serde_json::to_string_pretty(&product).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["id"], 3);
+        assert_eq!(parsed["name"], "Acme");
+        assert!(!parsed["components"].as_array().unwrap().is_empty());
+        assert!(!parsed["versions"].as_array().unwrap().is_empty());
+        assert!(!parsed["milestones"].as_array().unwrap().is_empty());
+    }
+
+    // ── print_users (extended) ───────────────────────────────────────
+
+    #[test]
+    fn print_users_json_empty() {
+        let users: Vec<BugzillaUser> = vec![];
+        let json = serde_json::to_string_pretty(&users).unwrap();
+        assert_eq!(json, "[]");
+    }
+
+    #[test]
+    fn print_users_table_no_detail_mode() {
+        let users = vec![make_user(1, "alice", Some(true), vec![])];
+        let rows: Vec<UserRow> = users
+            .iter()
+            .map(|u| UserRow {
+                id: u.id,
+                name: u.name.clone(),
+                real_name: u.real_name.clone().unwrap_or_default(),
+                email: u.email.clone().unwrap_or_default(),
+            })
+            .collect();
+        let table = Table::new(rows).to_string();
+        assert!(table.contains("alice"));
+        assert!(table.contains("alice@example.com"));
+        assert!(!table.contains("CAN LOGIN"));
     }
 }

@@ -1,8 +1,8 @@
 use crate::cli::ProductAction;
-use crate::client::{CreateProductParams, UpdateProductParams};
 use crate::config::ApiMode;
 use crate::error::Result;
 use crate::output::{self, OutputFormat};
+use crate::types::{CreateProductParams, UpdateProductParams};
 
 pub async fn execute(
     action: &ProductAction,
@@ -14,7 +14,7 @@ pub async fn execute(
 
     match action {
         ProductAction::List { r#type } => {
-            let products = client.list_products_by_type(r#type).await?;
+            let products = client.list_products_by_type(*r#type).await?;
             output::print_products(&products, format);
         }
         ProductAction::View { name } => {
