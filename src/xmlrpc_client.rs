@@ -85,11 +85,8 @@ impl XmlRpcClient {
             rpc_params.insert("alias".into(), Value::from(alias.as_str()));
         }
         if !params.id.is_empty() {
-            let ids: Vec<Value> = params
-                .id
-                .iter()
-                .map(|id| Value::Int((*id).cast_signed()))
-                .collect();
+            #[expect(clippy::cast_possible_wrap, reason = "bug IDs fit in i64")]
+            let ids: Vec<Value> = params.id.iter().map(|id| Value::Int(*id as i64)).collect();
             rpc_params.insert("ids".into(), Value::Array(ids));
         }
         if let Some(limit) = params.limit {
@@ -166,7 +163,8 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         .ok_or_else(|| BzrError::XmlRpc("bug missing id field".into()))?;
 
     Ok(Bug {
-        id: id.cast_unsigned(),
+        #[expect(clippy::cast_sign_loss, reason = "bug IDs are non-negative")]
+        id: id as u64,
         summary: get_str(m, "summary").unwrap_or_default(),
         status: get_str(m, "status").unwrap_or_default(),
         resolution: get_str_opt(m, "resolution"),
@@ -227,7 +225,11 @@ fn get_int_array(m: &BTreeMap<String, Value>, key: &str) -> Vec<u64> {
         .map(|arr| {
             arr.iter()
                 .filter_map(Value::as_i64)
-                .map(i64::cast_unsigned)
+                .map(|v| {
+                    #[expect(clippy::cast_sign_loss, reason = "bug IDs are non-negative")]
+                    let id = v as u64;
+                    id
+                })
                 .collect()
         })
         .unwrap_or_default()
