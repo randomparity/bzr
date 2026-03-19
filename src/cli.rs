@@ -555,3 +555,71 @@ pub enum ComponentAction {
         default_assignee: Option<String>,
     },
 }
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn parse_bug_list_minimal() {
+        let cli = Cli::try_parse_from(["bzr", "bug", "list"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Commands::Bug {
+                action: BugAction::List { .. }
+            }
+        ));
+    }
+
+    #[test]
+    fn parse_bug_view_by_id() {
+        let cli = Cli::try_parse_from(["bzr", "bug", "view", "12345"]).unwrap();
+        match cli.command {
+            Commands::Bug {
+                action: BugAction::View { id, .. },
+            } => assert_eq!(id, "12345"),
+            _ => panic!("expected Bug View"),
+        }
+    }
+
+    #[test]
+    fn parse_global_json_flag() {
+        let cli = Cli::try_parse_from(["bzr", "--json", "bug", "list"]).unwrap();
+        assert!(cli.json);
+    }
+
+    #[test]
+    fn parse_global_server_flag() {
+        let cli = Cli::try_parse_from(["bzr", "--server", "myserver", "bug", "list"]).unwrap();
+        assert_eq!(cli.server.as_deref(), Some("myserver"));
+    }
+
+    #[test]
+    fn parse_config_set_server() {
+        let cli = Cli::try_parse_from([
+            "bzr",
+            "config",
+            "set-server",
+            "prod",
+            "--url",
+            "https://bz.example.com",
+            "--api-key",
+            "secret123",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Commands::Config {
+                action: ConfigAction::SetServer { .. }
+            }
+        ));
+    }
+
+    #[test]
+    fn parse_unknown_command_fails() {
+        let result = Cli::try_parse_from(["bzr", "nonexistent"]);
+        assert!(result.is_err());
+    }
+}

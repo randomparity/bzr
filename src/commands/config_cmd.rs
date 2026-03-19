@@ -151,3 +151,90 @@ fn mask_api_key(key: &str) -> String {
         "***".into()
     }
 }
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::error::BzrError;
+
+    #[test]
+    fn mask_api_key_long_key_shows_prefix() {
+        assert_eq!(mask_api_key("abcdefghijklmnop"), "abcdefgh...");
+    }
+
+    #[test]
+    fn mask_api_key_short_key_fully_masked() {
+        assert_eq!(mask_api_key("short"), "***");
+    }
+
+    #[test]
+    fn mask_api_key_exactly_8_chars_fully_masked() {
+        assert_eq!(mask_api_key("12345678"), "***");
+    }
+
+    #[test]
+    fn mask_api_key_empty_string_fully_masked() {
+        assert_eq!(mask_api_key(""), "***");
+    }
+
+    /// Combined test for config operations that require env::set_var.
+    /// Grouped in a single test to avoid env var race conditions with
+    /// parallel test execution.
+    #[test]
+    fn config_operations_with_file_io() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        std::env::set_var("XDG_CONFIG_HOME", tmp.path());
+
+        // 1. set-default on empty config returns error
+        let config = Config::default();
+        config.save().unwrap();
+        let result = execute(
+            &ConfigAction::SetDefault {
+                name: "nonexistent".into(),
+            },
+            OutputFormat::Table,
+        );
+        assert!(result.is_err());
+        assert!(
+            matches!(result.unwrap_err(), BzrError::Config(_)),
+            "expected Config error for unknown server"
+        );
+
+        // 2. First set-server auto-sets default
+        execute(
+            &ConfigAction::SetServer {
+                name: "first".into(),
+                url: "https://first.example.com".into(),
+                api_key: "first-key-1234567890".into(),
+                email: None,
+                auth_method: None,
+            },
+            OutputFormat::Table,
+        )
+        .unwrap();
+        let config = Config::load().unwrap();
+        assert_eq!(config.default_server.as_deref(), Some("first"));
+        assert!(config.servers.contains_key("first"));
+
+        // 3. Second set-server does not override default
+        execute(
+            &ConfigAction::SetServer {
+                name: "second".into(),
+                url: "https://second.example.com".into(),
+                api_key: "second-key-1234567890".into(),
+                email: None,
+                auth_method: None,
+            },
+            OutputFormat::Table,
+        )
+        .unwrap();
+        let config = Config::load().unwrap();
+        assert_eq!(
+            config.default_server.as_deref(),
+            Some("first"),
+            "second server should not override existing default"
+        );
+        assert_eq!(config.servers.len(), 2);
+    }
+}
