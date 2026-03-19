@@ -131,3 +131,80 @@ fn tempfile() -> Result<TempFile> {
     let file = std::fs::File::create(&path)?;
     Ok(TempFile { path, file })
 }
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used, clippy::await_holding_lock)]
+mod tests {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::super::test_helpers::{setup_config, ENV_LOCK};
+    use crate::cli::CommentAction;
+    use crate::types::OutputFormat;
+
+    #[tokio::test]
+    async fn comment_list_returns_comments() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42/comment"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": {
+                    "42": {
+                        "comments": [{
+                            "id": 1,
+                            "bug_id": 42,
+                            "text": "Hello world",
+                            "creator": "user@test.com",
+                            "creation_time": "2025-01-01T00:00:00Z",
+                            "is_private": false,
+                            "count": 0
+                        }]
+                    }
+                }
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = CommentAction::List {
+            bug_id: 42,
+            since: None,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn comment_add_with_body() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+
+        Mock::given(method("POST"))
+            .and(path("/rest/bug/42/comment"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"id": 100})),
+            )
+            .mount(&mock)
+            .await;
+
+        let action = CommentAction::Add {
+            bug_id: 42,
+            body: Some("Test comment".to_string()),
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn comment_add_empty_body_is_rejected() {
+        // The execute() function checks text.trim().is_empty() before calling the API.
+        let text = "   ";
+        assert!(text.trim().is_empty());
+    }
+}

@@ -62,3 +62,49 @@ pub async fn execute(
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used, clippy::await_holding_lock)]
+mod tests {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::super::test_helpers::{setup_config, ENV_LOCK};
+    use crate::cli::ProductAction;
+    use crate::types::{OutputFormat, ProductListType};
+
+    #[tokio::test]
+    async fn product_list_returns_products() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+
+        Mock::given(method("GET"))
+            .and(path("/rest/product_accessible"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"ids": [1, 2]})),
+            )
+            .mount(&mock)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/product"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "products": [{
+                    "id": 1,
+                    "name": "TestProduct",
+                    "description": "A test product"
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = ProductAction::List {
+            r#type: ProductListType::Accessible,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_ok());
+    }
+}

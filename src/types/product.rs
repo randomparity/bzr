@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Product {
     pub id: u64,
     #[serde(default)]
@@ -18,6 +19,7 @@ pub struct Product {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Component {
     pub id: u64,
     #[serde(default)]
@@ -31,6 +33,7 @@ pub struct Component {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Version {
     pub id: u64,
     #[serde(default)]
@@ -42,6 +45,7 @@ pub struct Version {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Milestone {
     pub id: u64,
     #[serde(default)]
@@ -53,6 +57,7 @@ pub struct Milestone {
 }
 
 #[derive(Debug, Serialize)]
+#[non_exhaustive]
 pub struct CreateProductParams {
     pub name: String,
     pub description: String,
@@ -61,6 +66,7 @@ pub struct CreateProductParams {
 }
 
 #[derive(Debug, Default, Serialize)]
+#[non_exhaustive]
 pub struct UpdateProductParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -71,6 +77,7 @@ pub struct UpdateProductParams {
 }
 
 #[derive(Debug, Serialize)]
+#[non_exhaustive]
 pub struct CreateComponentParams {
     pub product: String,
     pub name: String,
@@ -79,6 +86,7 @@ pub struct CreateComponentParams {
 }
 
 #[derive(Debug, Default, Serialize)]
+#[non_exhaustive]
 pub struct UpdateComponentParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -89,6 +97,7 @@ pub struct UpdateComponentParams {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Classification {
     pub id: u64,
     #[serde(default)]
@@ -102,6 +111,7 @@ pub struct Classification {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ClassificationProduct {
     pub id: u64,
     #[serde(default)]

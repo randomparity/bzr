@@ -177,7 +177,7 @@ mod tests {
         }
     }
 
-    /// Combined test for operations that require env::set_var.
+    /// Combined test for operations that require `env::set_var`.
     /// Grouped in a single test to avoid env var race conditions with
     /// parallel test execution.
     #[test]

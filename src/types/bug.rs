@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::common::FlagUpdate;
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Bug {
     pub id: u64,
     #[serde(default)]
@@ -42,6 +43,7 @@ pub struct Bug {
 }
 
 #[derive(Debug, Default, Serialize)]
+#[non_exhaustive]
 pub struct SearchParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub product: Option<String>,
@@ -95,6 +97,7 @@ impl SearchParams {
 }
 
 #[derive(Debug, Serialize)]
+#[non_exhaustive]
 pub struct CreateBugParams {
     pub product: String,
     pub component: String,
@@ -111,6 +114,7 @@ pub struct CreateBugParams {
 }
 
 #[derive(Debug, Default, Serialize)]
+#[non_exhaustive]
 pub struct UpdateBugParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
@@ -131,6 +135,7 @@ pub struct UpdateBugParams {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct HistoryEntry {
     pub who: String,
     pub when: String,
@@ -138,6 +143,7 @@ pub struct HistoryEntry {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FieldChange {
     pub field_name: String,
     #[serde(default)]
@@ -149,6 +155,7 @@ pub struct FieldChange {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FieldValue {
     pub name: String,
     #[serde(default)]
@@ -160,6 +167,7 @@ pub struct FieldValue {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct StatusTransition {
     pub name: String,
 }

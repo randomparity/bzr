@@ -54,12 +54,13 @@ pub async fn execute(
                 .as_deref()
                 .unwrap_or_else(|| guess_content_type(file_name));
             let flags = super::shared::parse_flags(flag)?;
+            let size = data.len();
             let upload_params = UploadAttachmentParams {
                 bug_id: *bug_id,
                 file_name: file_name.to_string(),
                 summary: summary.to_string(),
                 content_type: ct.to_string(),
-                data: data.clone(),
+                data,
                 flags,
             };
             let att_id = client.upload_attachment(&upload_params).await?;
@@ -67,13 +68,12 @@ pub async fn execute(
                 &serde_json::json!({
                     "id": att_id,
                     "bug_id": bug_id,
-                    "size": data.len(),
+                    "size": size,
                     "resource": "attachment",
                     "action": "created",
                 }),
                 &format!(
-                    "Uploaded attachment #{att_id} to bug #{bug_id} ({} bytes)",
-                    data.len()
+                    "Uploaded attachment #{att_id} to bug #{bug_id} ({size} bytes)",
                 ),
                 format,
             );

@@ -93,3 +93,42 @@ pub async fn execute(
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used, clippy::await_holding_lock)]
+mod tests {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::super::test_helpers::{setup_config, ENV_LOCK};
+    use crate::cli::GroupAction;
+    use crate::types::OutputFormat;
+
+    #[tokio::test]
+    async fn group_view_returns_info() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+
+        Mock::given(method("GET"))
+            .and(path("/rest/group"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "groups": [{
+                    "id": 1,
+                    "name": "admin",
+                    "description": "Admin group",
+                    "is_active": true,
+                    "membership": []
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = GroupAction::View {
+            group: "admin".to_string(),
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_ok(), "group_view failed: {result:?}");
+    }
+}

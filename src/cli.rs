@@ -557,7 +557,7 @@ pub enum ComponentAction {
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used)]
+#[expect(clippy::unwrap_used, clippy::panic)]
 mod tests {
     use super::*;
     use clap::Parser;

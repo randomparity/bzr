@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct BugzillaUser {
     pub id: u64,
     #[serde(default)]
@@ -16,6 +17,7 @@ pub struct BugzillaUser {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UserGroup {
     #[serde(default)]
     pub id: u64,
@@ -26,6 +28,7 @@ pub struct UserGroup {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct WhoamiResponse {
     pub id: u64,
     #[serde(default)]
@@ -37,6 +40,7 @@ pub struct WhoamiResponse {
 }
 
 #[derive(Debug, Serialize)]
+#[non_exhaustive]
 pub struct CreateUserParams {
     pub email: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -46,6 +50,7 @@ pub struct CreateUserParams {
 }
 
 #[derive(Debug, Default, Serialize)]
+#[non_exhaustive]
 pub struct UpdateUserParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub real_name: Option<String>,
@@ -56,6 +61,7 @@ pub struct UpdateUserParams {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GroupInfo {
     pub id: u64,
     #[serde(default)]
@@ -69,6 +75,7 @@ pub struct GroupInfo {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GroupMember {
     pub id: u64,
     #[serde(default)]
@@ -80,6 +87,7 @@ pub struct GroupMember {
 }
 
 #[derive(Debug, Serialize)]
+#[non_exhaustive]
 pub struct CreateGroupParams {
     pub name: String,
     pub description: String,
@@ -87,6 +95,7 @@ pub struct CreateGroupParams {
 }
 
 #[derive(Debug, Default, Serialize)]
+#[non_exhaustive]
 pub struct UpdateGroupParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,

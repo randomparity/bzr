@@ -63,3 +63,40 @@ pub async fn execute(
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used, clippy::await_holding_lock)]
+mod tests {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::super::test_helpers::{setup_config, ENV_LOCK};
+    use crate::cli::ComponentAction;
+    use crate::types::OutputFormat;
+
+    #[tokio::test]
+    async fn component_create_succeeds() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+
+        Mock::given(method("POST"))
+            .and(path("/rest/component"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"id": 42})),
+            )
+            .mount(&mock)
+            .await;
+
+        let action = ComponentAction::Create {
+            product: "TestProduct".to_string(),
+            name: "Backend".to_string(),
+            description: "Backend component".to_string(),
+            default_assignee: "dev@test.com".to_string(),
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_ok());
+    }
+}

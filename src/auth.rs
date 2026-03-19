@@ -115,6 +115,8 @@ async fn detect_version_and_mode(
     };
 
     let Ok(parsed) = serde_json::from_str::<VersionResp>(&body) else {
+        // Endpoint exists (200 OK) but returns non-standard body — assume a
+        // modern server with a custom extension; default to Hybrid.
         return (None, ApiMode::Hybrid);
     };
 

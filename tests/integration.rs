@@ -4,7 +4,7 @@
 //! These tests are serialized via a mutex because they set the
 //! process-global `XDG_CONFIG_HOME` environment variable.
 
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used, clippy::await_holding_lock)]
 
 use std::sync::Mutex;
 
@@ -1268,9 +1268,9 @@ fn config_set_default_integration() {
 // ── CLI-to-execute end-to-end tests ──────────────────────────────────
 // These test the full path: CLI arg parsing → command dispatch → API call
 
-/// Parse CLI args and dispatch to the correct command execute() function,
-/// exercising the same path as main.rs::run().
-async fn dispatch_cli(args: &[&str], server_url: &str) -> bzr::error::Result<()> {
+/// Parse CLI args and dispatch to the correct command `execute()` function,
+/// exercising the same path as `main.rs::run()`.
+async fn dispatch_cli(args: &[&str], _server_url: &str) -> bzr::error::Result<()> {
     let cli = bzr::cli::Cli::try_parse_from(args)
         .map_err(|e| bzr::error::BzrError::InputValidation(e.to_string()))?;
 

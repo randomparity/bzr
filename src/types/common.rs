@@ -111,6 +111,7 @@ impl<'de> Deserialize<'de> for FlagStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct FlagUpdate {
     pub name: String,
     pub status: FlagStatus,
@@ -119,16 +120,19 @@ pub struct FlagUpdate {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ServerVersion {
     pub version: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ServerExtensions {
     pub extensions: HashMap<String, ExtensionInfo>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ExtensionInfo {
     #[serde(default)]
     pub version: Option<String>,

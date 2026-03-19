@@ -574,7 +574,7 @@ fn mask_api_key(key: &str) -> String {
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used)]
+#[expect(clippy::unwrap_used, clippy::useless_vec, clippy::single_char_pattern)]
 mod tests {
     use super::*;
     use crate::types::{

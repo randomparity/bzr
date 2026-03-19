@@ -1,3 +1,8 @@
+//! Configuration management commands.
+//!
+//! Unlike other command modules, `execute()` is **synchronous** because config
+//! operations are pure local file I/O — no network client or auth detection needed.
+
 use std::fmt::Write;
 
 use crate::cli::ConfigAction;
@@ -79,16 +84,11 @@ pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
             );
         }
         ConfigAction::Show => {
-            show_config(format)?;
+            let config = Config::load()?;
+            let path = Config::path()?;
+            output::print_config(&config, &path, format);
         }
     }
-    Ok(())
-}
-
-fn show_config(format: OutputFormat) -> Result<()> {
-    let config = Config::load()?;
-    let path = Config::path()?;
-    output::print_config(&config, &path, format);
     Ok(())
 }
 
@@ -98,7 +98,7 @@ mod tests {
     use super::*;
     use crate::error::BzrError;
 
-    /// Combined test for config operations that require env::set_var.
+    /// Combined test for config operations that require `env::set_var`.
     /// Grouped in a single test to avoid env var race conditions with
     /// parallel test execution.
     #[test]

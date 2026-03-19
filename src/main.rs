@@ -143,13 +143,13 @@ async fn run(cli: Cli, format: OutputFormat) -> error::Result<()> {
 fn suppress_stdout() {
     use std::os::unix::io::AsRawFd;
     if let Ok(devnull) = std::fs::File::open("/dev/null") {
+        extern "C" {
+            fn dup2(oldfd: std::ffi::c_int, newfd: std::ffi::c_int) -> std::ffi::c_int;
+        }
         // SAFETY: dup2 replaces stdout fd with /dev/null fd.
         // We own the process and only call this once at startup, before any
         // other threads are writing to stdout. We declare the libc dup2
         // symbol directly to avoid pulling in the full libc crate.
-        extern "C" {
-            fn dup2(oldfd: std::ffi::c_int, newfd: std::ffi::c_int) -> std::ffi::c_int;
-        }
         unsafe {
             dup2(devnull.as_raw_fd(), 1); // STDOUT_FILENO = 1
         }

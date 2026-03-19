@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::common::FlagUpdate;
 
 #[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Attachment {
     pub id: u64,
     #[serde(default)]
@@ -29,6 +30,7 @@ pub struct Attachment {
     pub data: Option<String>,
 }
 
+#[non_exhaustive]
 pub struct UploadAttachmentParams {
     pub bug_id: u64,
     pub file_name: String,
@@ -39,6 +41,7 @@ pub struct UploadAttachmentParams {
 }
 
 #[derive(Debug, Default, Serialize)]
+#[non_exhaustive]
 pub struct UpdateAttachmentParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
