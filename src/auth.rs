@@ -1,11 +1,13 @@
 use reqwest::header::HeaderValue;
 use serde::Deserialize;
 
-use crate::config::{ApiMode, AuthMethod, Config, CONNECT_TIMEOUT, REQUEST_TIMEOUT};
+use crate::config::{
+    build_http_client, ApiMode, AuthMethod, Config, AUTH_HEADER_NAME, AUTH_QUERY_PARAM,
+};
 use crate::error::{BzrError, Result};
 
 #[derive(Deserialize)]
-struct WhoAmIResponse {
+struct WhoamiProbe {
     #[serde(default)]
     id: u64,
 }
@@ -33,10 +35,7 @@ pub async fn resolve_server_settings(
     let api_key = srv.api_key.clone();
     let email = srv.email.clone();
 
-    let http = reqwest::Client::builder()
-        .connect_timeout(CONNECT_TIMEOUT)
-        .timeout(REQUEST_TIMEOUT)
-        .build()
+    let http = build_http_client()
         .map_err(|e| BzrError::Other(format!("failed to build HTTP client: {e}")))?;
 
     let method = detect_auth_method(&http, &url, &api_key, email.as_deref()).await?;
@@ -89,11 +88,11 @@ async fn detect_version_and_mode(
     match auth_method {
         AuthMethod::Header => {
             if let Ok(val) = reqwest::header::HeaderValue::from_str(api_key) {
-                req = req.header("X-BUGZILLA-API-KEY", val);
+                req = req.header(AUTH_HEADER_NAME, val);
             }
         }
         AuthMethod::QueryParam => {
-            req = req.query(&[("Bugzilla_api_key", api_key)]);
+            req = req.query(&[(AUTH_QUERY_PARAM, api_key)]);
         }
     }
 
@@ -236,63 +235,41 @@ async fn try_whoami(
     let url = format!("{base}/rest/whoami");
 
     // Probe: header-based auth
-    let resp = match http
-        .get(&url)
-        .header("X-BUGZILLA-API-KEY", key_header.clone())
-        .send()
-        .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::debug!("whoami request failed: {e:#}");
-            return WhoamiOutcome::NetworkError;
-        }
-    };
-
-    let status = resp.status();
-    let body = resp.text().await.unwrap_or_default();
-    tracing::trace!(probe = "whoami/header", %status, body, "auth probe response");
-    if status.is_success() {
-        if let Ok(parsed) = serde_json::from_str::<WhoAmIResponse>(&body) {
-            if parsed.id > 0 {
-                return WhoamiOutcome::Authenticated(AuthMethod::Header);
-            }
-        }
-    } else if status == reqwest::StatusCode::NOT_FOUND {
-        tracing::debug!("rest/whoami not available on this server");
-        return WhoamiOutcome::NotFound;
-    } else {
-        tracing::debug!(%status, "header auth probe failed");
+    let header_req = http.get(&url).header(AUTH_HEADER_NAME, key_header.clone());
+    let outcome = probe_whoami(header_req, AuthMethod::Header).await;
+    match outcome {
+        WhoamiOutcome::AuthRejected => {} // try query-param next
+        other => return other,
     }
 
     // Probe: query-param auth
-    let resp = match http
-        .get(&url)
-        .query(&[("Bugzilla_api_key", api_key)])
-        .send()
-        .await
-    {
+    let query_req = http.get(&url).query(&[(AUTH_QUERY_PARAM, api_key)]);
+    probe_whoami(query_req, AuthMethod::QueryParam).await
+}
+
+async fn probe_whoami(request: reqwest::RequestBuilder, method: AuthMethod) -> WhoamiOutcome {
+    let resp = match request.send().await {
         Ok(r) => r,
         Err(e) => {
-            tracing::debug!("whoami query-param request failed: {e:#}");
+            tracing::debug!("whoami {method} request failed: {e:#}");
             return WhoamiOutcome::NetworkError;
         }
     };
 
     let status = resp.status();
     let body = resp.text().await.unwrap_or_default();
-    tracing::trace!(probe = "whoami/query_param", %status, body, "auth probe response");
+    tracing::trace!(probe = "whoami", %method, %status, body, "auth probe response");
     if status.is_success() {
-        if let Ok(parsed) = serde_json::from_str::<WhoAmIResponse>(&body) {
+        if let Ok(parsed) = serde_json::from_str::<WhoamiProbe>(&body) {
             if parsed.id > 0 {
-                return WhoamiOutcome::Authenticated(AuthMethod::QueryParam);
+                return WhoamiOutcome::Authenticated(method);
             }
         }
     } else if status == reqwest::StatusCode::NOT_FOUND {
         tracing::debug!("rest/whoami not available on this server");
         return WhoamiOutcome::NotFound;
     } else {
-        tracing::debug!(%status, "query param auth probe failed");
+        tracing::debug!(%status, %method, "whoami auth probe failed");
     }
 
     WhoamiOutcome::AuthRejected
@@ -346,7 +323,7 @@ async fn try_valid_login(
     if let Some(method) = probe_valid_login(
         http,
         &url,
-        &[("login", login), ("Bugzilla_api_key", api_key)],
+        &[("login", login), (AUTH_QUERY_PARAM, api_key)],
         None,
         AuthMethod::QueryParam,
     )
@@ -368,7 +345,7 @@ async fn probe_valid_login(
 ) -> Option<AuthMethod> {
     let mut req = http.get(url).query(query);
     if let Some(hdr) = key_header {
-        req = req.header("X-BUGZILLA-API-KEY", hdr.clone());
+        req = req.header(AUTH_HEADER_NAME, hdr.clone());
     }
     let resp = req.send().await.ok()?;
     let status = resp.status();
@@ -397,7 +374,7 @@ async fn probe_header_on_api(http: &reqwest::Client, base: &str, key_header: &He
     let resp = http
         .get(&url)
         .query(&[("limit", "1")])
-        .header("X-BUGZILLA-API-KEY", key_header.clone())
+        .header(AUTH_HEADER_NAME, key_header.clone())
         .send()
         .await;
     match resp {
@@ -426,6 +403,7 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
+    use crate::config::{CONNECT_TIMEOUT, REQUEST_TIMEOUT};
 
     fn test_client() -> reqwest::Client {
         reqwest::Client::builder()

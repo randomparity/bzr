@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::config::AUTH_QUERY_PARAM;
 use crate::error::{BzrError, Result};
 use crate::types::{Bug, SearchParams};
 use crate::xmlrpc::{self, Value};
@@ -23,10 +24,7 @@ impl XmlRpcClient {
     // Never log the request body. Response bodies are safe to log at trace
     // level since Bugzilla does not echo auth credentials back.
     async fn call(&self, method: &str, mut params: BTreeMap<String, Value>) -> Result<Value> {
-        params.insert(
-            "Bugzilla_api_key".into(),
-            Value::from(self.api_key.as_str()),
-        );
+        params.insert(AUTH_QUERY_PARAM.into(), Value::from(self.api_key.as_str()));
 
         let body = xmlrpc::build_request(method, params);
         let url = format!("{}/xmlrpc.cgi", self.base_url);
@@ -161,17 +159,17 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         id: id as u64,
         summary: get_str(m, "summary").unwrap_or_default(),
         status: get_str(m, "status").unwrap_or_default(),
-        resolution: get_str_opt(m, "resolution"),
-        product: get_str_opt(m, "product"),
-        component: get_str_opt(m, "component"),
-        assigned_to: get_str_opt(m, "assigned_to"),
-        priority: get_str_opt(m, "priority"),
-        severity: get_str_opt(m, "severity"),
+        resolution: get_nonempty_str(m, "resolution"),
+        product: get_nonempty_str(m, "product"),
+        component: get_nonempty_str(m, "component"),
+        assigned_to: get_nonempty_str(m, "assigned_to"),
+        priority: get_nonempty_str(m, "priority"),
+        severity: get_nonempty_str(m, "severity"),
         creation_time: get_datetime_str(m, "creation_time"),
         last_change_time: get_datetime_str(m, "last_change_time"),
-        creator: get_str_opt(m, "creator"),
-        url: get_str_opt(m, "url"),
-        whiteboard: get_str_opt(m, "whiteboard"),
+        creator: get_nonempty_str(m, "creator"),
+        url: get_nonempty_str(m, "url"),
+        whiteboard: get_nonempty_str(m, "whiteboard"),
         keywords: get_str_array(m, "keywords"),
         blocks: get_int_array(m, "blocks"),
         depends_on: get_int_array(m, "depends_on"),
@@ -183,7 +181,7 @@ fn get_str(m: &BTreeMap<String, Value>, key: &str) -> Option<String> {
     m.get(key).and_then(Value::as_str).map(String::from)
 }
 
-fn get_str_opt(m: &BTreeMap<String, Value>, key: &str) -> Option<String> {
+fn get_nonempty_str(m: &BTreeMap<String, Value>, key: &str) -> Option<String> {
     let val = m.get(key)?;
     match val {
         Value::String(s) if s.is_empty() => None,

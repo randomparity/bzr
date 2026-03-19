@@ -1,7 +1,7 @@
 use crate::client::BugzillaClient;
 use crate::config::{ApiMode, Config};
 use crate::error::{BzrError, Result};
-use crate::types::FlagUpdate;
+use crate::types::{FlagStatus, FlagUpdate};
 
 pub async fn build_client(
     server: Option<&str>,
@@ -40,22 +40,28 @@ pub fn parse_flags(raw: &[String]) -> Result<Vec<FlagUpdate>> {
     Ok(flags)
 }
 
-fn parse_single_flag(s: &str) -> Result<(String, String, Option<String>)> {
-    // Find the status character (+, -, ?)
+fn parse_single_flag(s: &str) -> Result<(String, FlagStatus, Option<String>)> {
+    // Find the status character (+, -, ?, X)
     let status_pos = s.find(['+', '-', '?', 'X']).ok_or_else(|| {
-        BzrError::Other(format!(
+        BzrError::InputValidation(format!(
             "invalid flag '{s}': must contain +, -, ?, or X (e.g. 'review?')"
         ))
     })?;
 
     let name = s[..status_pos].to_string();
     if name.is_empty() {
-        return Err(BzrError::Other(format!(
+        return Err(BzrError::InputValidation(format!(
             "invalid flag '{s}': flag name cannot be empty"
         )));
     }
 
-    let status_char = &s[status_pos..=status_pos];
+    let status = match s.as_bytes()[status_pos] {
+        b'+' => FlagStatus::Grant,
+        b'-' => FlagStatus::Deny,
+        b'?' => FlagStatus::Request,
+        b'X' => FlagStatus::Clear,
+        _ => unreachable!("find() only matches +, -, ?, X"),
+    };
     let remainder = &s[status_pos + 1..];
 
     let requestee = if remainder.starts_with('(') && remainder.ends_with(')') {
@@ -63,12 +69,12 @@ fn parse_single_flag(s: &str) -> Result<(String, String, Option<String>)> {
     } else if remainder.is_empty() {
         None
     } else {
-        return Err(BzrError::Other(format!(
+        return Err(BzrError::InputValidation(format!(
             "invalid flag '{s}': requestee must be in parentheses"
         )));
     };
 
-    Ok((name, status_char.to_string(), requestee))
+    Ok((name, status, requestee))
 }
 
 #[cfg(test)]
@@ -81,7 +87,7 @@ mod tests {
         let flags = parse_flags(&["review?(alice@example.com)".into()]).unwrap();
         assert_eq!(flags.len(), 1);
         assert_eq!(flags[0].name, "review");
-        assert_eq!(flags[0].status, "?");
+        assert_eq!(flags[0].status, FlagStatus::Request);
         assert_eq!(flags[0].requestee.as_deref(), Some("alice@example.com"));
     }
 
@@ -89,14 +95,14 @@ mod tests {
     fn parse_flag_grant() {
         let flags = parse_flags(&["review+".into()]).unwrap();
         assert_eq!(flags[0].name, "review");
-        assert_eq!(flags[0].status, "+");
+        assert_eq!(flags[0].status, FlagStatus::Grant);
         assert!(flags[0].requestee.is_none());
     }
 
     #[test]
     fn parse_flag_deny() {
         let flags = parse_flags(&["review-".into()]).unwrap();
-        assert_eq!(flags[0].status, "-");
+        assert_eq!(flags[0].status, FlagStatus::Deny);
     }
 
     #[test]
@@ -121,7 +127,7 @@ mod tests {
     fn parse_flag_clear() {
         let flags = parse_flags(&["reviewX".into()]).unwrap();
         assert_eq!(flags[0].name, "review");
-        assert_eq!(flags[0].status, "X");
+        assert_eq!(flags[0].status, FlagStatus::Clear);
         assert!(flags[0].requestee.is_none());
     }
 
@@ -130,9 +136,9 @@ mod tests {
         let flags = parse_flags(&["review+".into(), "approval?".into()]).unwrap();
         assert_eq!(flags.len(), 2);
         assert_eq!(flags[0].name, "review");
-        assert_eq!(flags[0].status, "+");
+        assert_eq!(flags[0].status, FlagStatus::Grant);
         assert_eq!(flags[1].name, "approval");
-        assert_eq!(flags[1].status, "?");
+        assert_eq!(flags[1].status, FlagStatus::Request);
     }
 
     #[test]

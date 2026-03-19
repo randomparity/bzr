@@ -26,6 +26,12 @@ pub enum BzrError {
     #[error("{resource} not found: {id}")]
     NotFound { resource: &'static str, id: String },
 
+    #[error("HTTP {status}: {body}")]
+    HttpStatus { status: u16, body: String },
+
+    #[error("{0}")]
+    InputValidation(String),
+
     #[error("{0}")]
     Other(String),
 }
@@ -41,9 +47,10 @@ impl BzrError {
         match self {
             BzrError::Config(_) | BzrError::TomlParse(_) | BzrError::TomlSerialize(_) => 3,
             BzrError::Api { .. } | BzrError::XmlRpc(_) => 4,
-            BzrError::Http(_) => 5,
+            BzrError::Http(_) | BzrError::HttpStatus { .. } => 5,
             BzrError::Io(_) => 6,
             BzrError::NotFound { .. } => 2,
+            BzrError::InputValidation(_) => 7,
             BzrError::Other(_) => 1,
         }
     }
@@ -52,9 +59,10 @@ impl BzrError {
         match self {
             BzrError::Config(_) | BzrError::TomlParse(_) | BzrError::TomlSerialize(_) => "config",
             BzrError::Api { .. } | BzrError::XmlRpc(_) => "api",
-            BzrError::Http(_) => "http",
+            BzrError::Http(_) | BzrError::HttpStatus { .. } => "http",
             BzrError::Io(_) => "io",
             BzrError::NotFound { .. } => "not_found",
+            BzrError::InputValidation(_) => "input",
             BzrError::Other(_) => "other",
         }
     }
@@ -145,5 +153,24 @@ mod tests {
         let toml_err: std::result::Result<toml::Value, _> = toml::from_str("{{bad");
         let err = BzrError::TomlParse(toml_err.unwrap_err());
         assert_eq!(err.error_type(), "config");
+    }
+
+    #[test]
+    fn exit_code_http_status() {
+        let err = BzrError::HttpStatus {
+            status: 500,
+            body: "internal error".into(),
+        };
+        assert_eq!(err.exit_code(), 5);
+        assert_eq!(err.error_type(), "http");
+        assert_eq!(err.to_string(), "HTTP 500: internal error");
+    }
+
+    #[test]
+    fn exit_code_input_validation() {
+        let err = BzrError::InputValidation("bad flag".into());
+        assert_eq!(err.exit_code(), 7);
+        assert_eq!(err.error_type(), "input");
+        assert_eq!(err.to_string(), "bad flag");
     }
 }

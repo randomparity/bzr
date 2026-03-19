@@ -4,7 +4,7 @@ use reqwest::header::HeaderValue;
 use reqwest::RequestBuilder;
 use serde::Deserialize;
 
-use crate::config::{ApiMode, AuthMethod};
+use crate::config::{build_http_client, ApiMode, AuthMethod, AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::error::{BzrError, Result};
 use crate::types::{
     Attachment, Bug, BugzillaUser, Classification, Comment, CreateBugParams, CreateComponentParams,
@@ -18,8 +18,6 @@ use crate::xmlrpc_client::XmlRpcClient;
 fn encode_path(segment: &str) -> String {
     utf8_percent_encode(segment, NON_ALPHANUMERIC).to_string()
 }
-
-use crate::config::{CONNECT_TIMEOUT, REQUEST_TIMEOUT};
 
 /// Default fields requested for Bug queries. Matches the fields in [`Bug`] and
 /// avoids requesting server-side fields we don't use — some Bugzilla extensions
@@ -48,8 +46,10 @@ struct BugListResponse {
     bugs: Vec<Bug>,
 }
 
+/// Generic response for endpoints that return a single `id` field.
+/// Used by bug creation, comment creation, product/component/user/group creation.
 #[derive(Deserialize)]
-struct BugCreateResponse {
+struct IdResponse {
     id: u64,
 }
 
@@ -61,11 +61,6 @@ struct CommentResponse {
 #[derive(Deserialize)]
 struct CommentBugEntry {
     comments: Vec<Comment>,
-}
-
-#[derive(Deserialize)]
-struct CommentCreateResponse {
-    id: u64,
 }
 
 #[derive(Deserialize)]
@@ -183,10 +178,7 @@ impl BugzillaClient {
             AuthMethod::QueryParam => AuthConfig::QueryParam(api_key.to_string()),
         };
 
-        let http = reqwest::Client::builder()
-            .connect_timeout(CONNECT_TIMEOUT)
-            .timeout(REQUEST_TIMEOUT)
-            .build()
+        let http = build_http_client()
             .map_err(|e| BzrError::Other(format!("failed to build HTTP client: {e}")))?;
 
         let xmlrpc = match api_mode {
@@ -214,8 +206,8 @@ impl BugzillaClient {
 
     fn auth(&self, builder: RequestBuilder) -> RequestBuilder {
         match &self.auth {
-            AuthConfig::Header(value) => builder.header("X-BUGZILLA-API-KEY", value.clone()),
-            AuthConfig::QueryParam(key) => builder.query(&[("Bugzilla_api_key", key)]),
+            AuthConfig::Header(value) => builder.header(AUTH_HEADER_NAME, value.clone()),
+            AuthConfig::QueryParam(key) => builder.query(&[(AUTH_QUERY_PARAM, key)]),
         }
     }
 
@@ -247,11 +239,11 @@ impl BugzillaClient {
 
     fn apply_alternate_auth(&self, builder: RequestBuilder) -> RequestBuilder {
         match &self.auth {
-            AuthConfig::Header(_) => builder.query(&[("Bugzilla_api_key", &self.api_key)]),
+            AuthConfig::Header(_) => builder.query(&[(AUTH_QUERY_PARAM, &self.api_key)]),
             AuthConfig::QueryParam(_) => {
                 let value = HeaderValue::from_str(&self.api_key)
                     .unwrap_or_else(|_| HeaderValue::from_static(""));
-                builder.header("X-BUGZILLA-API-KEY", value)
+                builder.header(AUTH_HEADER_NAME, value)
             }
         }
     }
@@ -328,7 +320,10 @@ impl BugzillaClient {
                     });
                 }
             }
-            return Err(BzrError::Other(format!("HTTP {status}: {body}")));
+            return Err(BzrError::HttpStatus {
+                status: status.as_u16(),
+                body,
+            });
         }
         Ok(response)
     }
@@ -405,7 +400,12 @@ impl BugzillaClient {
             ApiMode::Hybrid => {
                 let rest_result = self.get_bug_rest(id, include_fields, exclude_fields).await;
                 match &rest_result {
-                    Err(BzrError::Http(_) | BzrError::Other(_) | BzrError::XmlRpc(_)) => {
+                    Err(
+                        BzrError::Http(_)
+                        | BzrError::HttpStatus { .. }
+                        | BzrError::Other(_)
+                        | BzrError::XmlRpc(_),
+                    ) => {
                         tracing::info!("REST bug lookup failed, retrying via XML-RPC");
                         return self.get_bug_xmlrpc(id).await;
                     }
@@ -496,7 +496,7 @@ impl BugzillaClient {
     pub async fn create_bug(&self, params: &CreateBugParams) -> Result<u64> {
         let req = self.auth(self.http.post(self.url("bug")).json(params));
         let resp = self.send(req).await?;
-        let data: BugCreateResponse = self.parse_json(resp).await?;
+        let data: IdResponse = self.parse_json(resp).await?;
         Ok(data.id)
     }
 
@@ -622,7 +622,7 @@ impl BugzillaClient {
                 .json(&body),
         );
         let resp = self.send(req).await?;
-        let data: CommentCreateResponse = self.parse_json(resp).await?;
+        let data: IdResponse = self.parse_json(resp).await?;
         Ok(data.id)
     }
 
@@ -654,10 +654,8 @@ impl BugzillaClient {
     pub async fn create_product(&self, params: &CreateProductParams) -> Result<u64> {
         let req = self.auth(self.http.post(self.url("product")).json(params));
         let resp = self.send(req).await?;
-        let data: serde_json::Value = self.parse_json(resp).await?;
-        data["id"]
-            .as_u64()
-            .ok_or_else(|| BzrError::Other("no product ID returned".into()))
+        let data: IdResponse = self.parse_json(resp).await?;
+        Ok(data.id)
     }
 
     pub async fn update_product(&self, name: &str, updates: &UpdateProductParams) -> Result<()> {
@@ -685,18 +683,24 @@ impl BugzillaClient {
             })
     }
 
-    /// Fetch legal values for a bug field. An unrecognized field name returns
-    /// an empty list, indistinguishable from a field with no values.
+    /// Fetch legal values for a bug field.
+    ///
+    /// Returns `NotFound` when the server does not recognize the field name
+    /// (empty `fields` array). An empty `Vec` means the field exists but has
+    /// no legal values.
     pub async fn get_field_values(&self, field_name: &str) -> Result<Vec<FieldValue>> {
         let req = self.auth(self.http.get(self.url(&format!("field/bug/{field_name}"))));
         let resp = self.send(req).await?;
         let data: FieldBugResponse = self.parse_json(resp).await?;
-        Ok(data
+        let field = data
             .fields
             .into_iter()
             .next()
-            .map(|f| f.values)
-            .unwrap_or_default())
+            .ok_or_else(|| BzrError::NotFound {
+                resource: "field",
+                id: field_name.to_string(),
+            })?;
+        Ok(field.values)
     }
 
     pub async fn search_users(
@@ -816,10 +820,8 @@ impl BugzillaClient {
     pub async fn create_component(&self, params: &CreateComponentParams) -> Result<u64> {
         let req = self.auth(self.http.post(self.url("component")).json(params));
         let resp = self.send(req).await?;
-        let data: serde_json::Value = self.parse_json(resp).await?;
-        data["id"]
-            .as_u64()
-            .ok_or_else(|| BzrError::Other("no component ID returned".into()))
+        let data: IdResponse = self.parse_json(resp).await?;
+        Ok(data.id)
     }
 
     pub async fn update_component(&self, id: u64, updates: &UpdateComponentParams) -> Result<()> {
@@ -835,10 +837,8 @@ impl BugzillaClient {
     pub async fn create_user(&self, params: &CreateUserParams) -> Result<u64> {
         let req = self.auth(self.http.post(self.url("user")).json(params));
         let resp = self.send(req).await?;
-        let data: serde_json::Value = self.parse_json(resp).await?;
-        data["id"]
-            .as_u64()
-            .ok_or_else(|| BzrError::Other("no user ID returned".into()))
+        let data: IdResponse = self.parse_json(resp).await?;
+        Ok(data.id)
     }
 
     pub async fn update_user(&self, user: &str, updates: &UpdateUserParams) -> Result<()> {
@@ -871,10 +871,8 @@ impl BugzillaClient {
     pub async fn create_group(&self, params: &CreateGroupParams) -> Result<u64> {
         let req = self.auth(self.http.post(self.url("group")).json(params));
         let resp = self.send(req).await?;
-        let data: serde_json::Value = self.parse_json(resp).await?;
-        data["id"]
-            .as_u64()
-            .ok_or_else(|| BzrError::Other("no group ID returned".into()))
+        let data: IdResponse = self.parse_json(resp).await?;
+        Ok(data.id)
     }
 
     pub async fn update_group(&self, group: &str, updates: &UpdateGroupParams) -> Result<()> {
@@ -896,7 +894,7 @@ mod tests {
 
     use super::*;
     use crate::config::AuthMethod;
-    use crate::types::FlagUpdate;
+    use crate::types::{FlagStatus, FlagUpdate};
 
     #[test]
     fn safe_url_strips_query_params() {
@@ -1050,10 +1048,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_field_values_empty_fields() {
+    async fn get_field_values_unrecognized_field_returns_not_found() {
         let mock = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/rest/field/bug/priority"))
+            .and(path("/rest/field/bug/nonexistent"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({"fields": []})),
             )
@@ -1061,8 +1059,17 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let values = client.get_field_values("priority").await.unwrap();
-        assert!(values.is_empty());
+        let err = client.get_field_values("nonexistent").await.unwrap_err();
+        assert!(
+            matches!(
+                err,
+                BzrError::NotFound {
+                    resource: "field",
+                    ..
+                }
+            ),
+            "expected NotFound, got: {err}"
+        );
     }
 
     #[tokio::test]
@@ -1548,7 +1555,7 @@ mod tests {
         let client = test_client(&mock.uri());
         let flags = vec![FlagUpdate {
             name: "review".into(),
-            status: "?".into(),
+            status: FlagStatus::Request,
             requestee: Some("alice@example.com".into()),
         }];
         let id = client

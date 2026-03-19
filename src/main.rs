@@ -96,7 +96,7 @@ fn resolve_format(cli: &Cli) -> error::Result<OutputFormat> {
         return Ok(out);
     }
     if let Ok(val) = std::env::var("BZR_OUTPUT") {
-        return val.parse().map_err(BzrError::Other);
+        return val.parse().map_err(BzrError::InputValidation);
     }
     if std::io::stdout().is_terminal() {
         Ok(OutputFormat::Table)

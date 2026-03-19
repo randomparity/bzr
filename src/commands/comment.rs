@@ -24,7 +24,7 @@ pub async fn execute(
                 None => read_comment_body()?,
             };
             if text.trim().is_empty() {
-                return Err(BzrError::Other("empty comment, aborting".into()));
+                return Err(BzrError::InputValidation("empty comment, aborting".into()));
             }
             let id = client.add_comment(*bug_id, &text).await?;
             output::print_result(
@@ -102,7 +102,9 @@ fn edit_comment() -> Result<String> {
     let status = std::process::Command::new(&editor).arg(&path).status()?;
 
     if !status.success() {
-        return Err(BzrError::Other(format!("{editor} exited with error")));
+        return Err(BzrError::InputValidation(format!(
+            "{editor} exited with error"
+        )));
     }
 
     let content = std::fs::read_to_string(&path)?;
