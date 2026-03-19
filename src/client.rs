@@ -366,8 +366,12 @@ impl BugzillaClient {
         tracing::debug!(?params, %self.api_mode, "search parameters");
         match self.api_mode {
             ApiMode::Rest => self.search_bugs_rest(params).await,
-            ApiMode::XmlRpc => self.search_bugs_xmlrpc(params).await,
+            ApiMode::XmlRpc => self.xmlrpc_client()?.search_bugs(params).await,
             ApiMode::Hybrid => {
+                // Hybrid search only retries on empty results with active filters,
+                // not on REST errors. Unlike get_bug (which retries on HTTP/parse
+                // errors), search results are less critical and REST errors likely
+                // indicate a server issue that XML-RPC won't solve either.
                 let rest_result = self.search_bugs_rest(params).await;
                 match rest_result {
                     Ok(ref bugs) if !bugs.is_empty() => rest_result,
@@ -376,7 +380,7 @@ impl BugzillaClient {
                             "REST search returned empty with active filters, \
                              retrying via XML-RPC"
                         );
-                        self.search_bugs_xmlrpc(params).await
+                        self.xmlrpc_client()?.search_bugs(params).await
                     }
                     other => other,
                 }
@@ -395,10 +399,6 @@ impl BugzillaClient {
         Ok(data.bugs)
     }
 
-    async fn search_bugs_xmlrpc(&self, params: &SearchParams) -> Result<Vec<Bug>> {
-        self.xmlrpc_client()?.search_bugs(params).await
-    }
-
     pub async fn get_bug(
         &self,
         id: &str,
@@ -406,7 +406,7 @@ impl BugzillaClient {
         exclude_fields: Option<&str>,
     ) -> Result<Bug> {
         match self.api_mode {
-            ApiMode::XmlRpc => self.get_bug_xmlrpc(id).await,
+            ApiMode::XmlRpc => self.xmlrpc_client()?.get_bug(id).await,
             ApiMode::Hybrid => {
                 let rest_result = self.get_bug_rest(id, include_fields, exclude_fields).await;
                 match &rest_result {
@@ -417,14 +417,14 @@ impl BugzillaClient {
                         | BzrError::XmlRpc(_),
                     ) => {
                         tracing::info!("REST bug lookup failed, retrying via XML-RPC");
-                        self.get_bug_xmlrpc(id).await
+                        self.xmlrpc_client()?.get_bug(id).await
                     }
                     Err(BzrError::Api { code: 100_500, .. }) => {
                         tracing::info!(
                             "REST bug lookup returned 100500, \
                              retrying via XML-RPC"
                         );
-                        self.get_bug_xmlrpc(id).await
+                        self.xmlrpc_client()?.get_bug(id).await
                     }
                     _ => rest_result,
                 }
@@ -467,10 +467,6 @@ impl BugzillaClient {
                 resource: "bug",
                 id: id.to_string(),
             })
-    }
-
-    async fn get_bug_xmlrpc(&self, id: &str) -> Result<Bug> {
-        self.xmlrpc_client()?.get_bug(id).await
     }
 
     async fn get_bug_via_search(

@@ -58,7 +58,8 @@ impl XmlRpcClient {
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
         let mut rpc_params = BTreeMap::new();
 
-        // Map string filter fields to XML-RPC params.
+        // Bugzilla XML-RPC uses the same parameter names as REST but expects
+        // typed values (Value::String) rather than query-string encoding.
         let string_fields: &[(&str, &Option<String>)] = &[
             ("product", &params.product),
             ("component", &params.component),
@@ -85,7 +86,7 @@ impl XmlRpcClient {
         if let Some(limit) = params.limit {
             rpc_params.insert("limit".into(), Value::Int(i64::from(limit)));
         }
-        // Comma-separated field lists become XML-RPC arrays.
+        // REST accepts comma-separated field lists; XML-RPC requires arrays.
         for (key, value) in [
             ("include_fields", &params.include_fields),
             ("exclude_fields", &params.exclude_fields),
