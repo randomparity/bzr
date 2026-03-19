@@ -457,27 +457,29 @@ pub fn print_server_info(
     extensions: &ServerExtensions,
     format: OutputFormat,
 ) {
-    match format {
-        OutputFormat::Json => {
-            let combined = serde_json::json!({
-                "version": version.version,
-                "extensions": extensions.extensions,
-            });
-            print_json(&combined);
-        }
-        OutputFormat::Table => {
-            println!("{} {}", "Bugzilla version:".bold(), version.version);
-            if extensions.extensions.is_empty() {
-                println!("\nNo extensions installed.");
-            } else {
-                println!("\n{}:", "Extensions".bold());
-                for (name, info) in &extensions.extensions {
-                    let ver = info.version.as_deref().unwrap_or("unknown");
-                    println!("  {name} ({ver})");
-                }
+    #[derive(Serialize)]
+    struct ServerInfoView<'a> {
+        version: &'a str,
+        extensions: &'a std::collections::HashMap<String, crate::types::ExtensionInfo>,
+    }
+
+    let view = ServerInfoView {
+        version: &version.version,
+        extensions: &extensions.extensions,
+    };
+
+    format_or_json(&view, format, |view| {
+        println!("{} {}", "Bugzilla version:".bold(), view.version);
+        if view.extensions.is_empty() {
+            println!("\nNo extensions installed.");
+        } else {
+            println!("\n{}:", "Extensions".bold());
+            for (name, info) in view.extensions {
+                let ver = info.version.as_deref().unwrap_or("unknown");
+                println!("  {name} ({ver})");
             }
         }
-    }
+    });
 }
 
 pub fn print_classification(classification: &Classification, format: OutputFormat) {
@@ -514,6 +516,73 @@ pub fn print_group_info(group: &GroupInfo, format: OutputFormat) {
             }
         }
     });
+}
+
+pub fn print_config(
+    config: &crate::config::Config,
+    config_path: &std::path::Path,
+    format: OutputFormat,
+) {
+    match format {
+        OutputFormat::Json => {
+            let mut servers = serde_json::Map::new();
+            for (name, srv) in &config.servers {
+                let masked_key = mask_api_key(&srv.api_key);
+                servers.insert(
+                    name.clone(),
+                    serde_json::json!({
+                        "url": srv.url,
+                        "email": srv.email,
+                        "api_key": masked_key,
+                        "auth_method": srv.auth_method
+                            .as_ref()
+                            .map(ToString::to_string),
+                    }),
+                );
+            }
+            let out = serde_json::json!({
+                "config_file": config_path.to_string_lossy(),
+                "default_server": config.default_server,
+                "servers": servers,
+            });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&out).unwrap_or_else(|_| "{}".into())
+            );
+        }
+        OutputFormat::Table => {
+            println!("Config file: {}\n", config_path.display());
+            if let Some(ref def) = config.default_server {
+                println!("Default server: {def}");
+            }
+            if config.servers.is_empty() {
+                println!("No servers configured.");
+            } else {
+                for (name, srv) in &config.servers {
+                    let masked_key = mask_api_key(&srv.api_key);
+                    let auth_display = match &srv.auth_method {
+                        Some(m) => m.to_string(),
+                        None => "auto (not yet detected)".into(),
+                    };
+                    println!("\n[{name}]");
+                    println!("  URL:     {}", srv.url);
+                    if let Some(ref email) = srv.email {
+                        println!("  Email:   {email}");
+                    }
+                    println!("  API Key: {masked_key}");
+                    println!("  Auth:    {auth_display}");
+                }
+            }
+        }
+    }
+}
+
+fn mask_api_key(key: &str) -> String {
+    if key.len() > 8 {
+        format!("{}...", &key[..8])
+    } else {
+        "***".into()
+    }
 }
 
 #[cfg(test)]
@@ -1348,5 +1417,27 @@ mod tests {
         assert!(table.contains("alice"));
         assert!(table.contains("alice@example.com"));
         assert!(!table.contains("CAN LOGIN"));
+    }
+
+    // ── mask_api_key tests ──────────────────────────────────────────
+
+    #[test]
+    fn mask_api_key_long_key_shows_prefix() {
+        assert_eq!(mask_api_key("abcdefghijklmnop"), "abcdefgh...");
+    }
+
+    #[test]
+    fn mask_api_key_short_key_fully_masked() {
+        assert_eq!(mask_api_key("short"), "***");
+    }
+
+    #[test]
+    fn mask_api_key_exactly_8_chars_fully_masked() {
+        assert_eq!(mask_api_key("12345678"), "***");
+    }
+
+    #[test]
+    fn mask_api_key_empty_string_fully_masked() {
+        assert_eq!(mask_api_key(""), "***");
     }
 }

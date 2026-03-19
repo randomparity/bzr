@@ -32,6 +32,15 @@ pub enum BzrError {
     #[error("{0}")]
     InputValidation(String),
 
+    #[error("Failed to parse response: {0}")]
+    Deserialize(String),
+
+    #[error("Authentication error: {0}")]
+    Auth(String),
+
+    #[error("Data integrity error: {0}")]
+    DataIntegrity(String),
+
     #[error("{0}")]
     Other(String),
 }
@@ -51,6 +60,9 @@ impl BzrError {
             BzrError::Io(_) => 6,
             BzrError::NotFound { .. } => 2,
             BzrError::InputValidation(_) => 7,
+            BzrError::Deserialize(_) => 8,
+            BzrError::Auth(_) => 9,
+            BzrError::DataIntegrity(_) => 10,
             BzrError::Other(_) => 1,
         }
     }
@@ -63,6 +75,9 @@ impl BzrError {
             BzrError::Io(_) => "io",
             BzrError::NotFound { .. } => "not_found",
             BzrError::InputValidation(_) => "input",
+            BzrError::Deserialize(_) => "deserialize",
+            BzrError::Auth(_) => "auth",
+            BzrError::DataIntegrity(_) => "data_integrity",
             BzrError::Other(_) => "other",
         }
     }
@@ -172,5 +187,31 @@ mod tests {
         assert_eq!(err.exit_code(), 7);
         assert_eq!(err.error_type(), "input");
         assert_eq!(err.to_string(), "bad flag");
+    }
+
+    #[test]
+    fn exit_code_deserialize() {
+        let err = BzrError::Deserialize("invalid JSON".into());
+        assert_eq!(err.exit_code(), 8);
+        assert_eq!(err.error_type(), "deserialize");
+        assert_eq!(err.to_string(), "Failed to parse response: invalid JSON");
+    }
+
+    #[test]
+    fn exit_code_auth() {
+        let err = BzrError::Auth("invalid API key".into());
+        assert_eq!(err.exit_code(), 9);
+        assert_eq!(err.error_type(), "auth");
+        assert_eq!(
+            err.to_string(),
+            "Authentication error: invalid API key"
+        );
+    }
+
+    #[test]
+    fn exit_code_data_integrity() {
+        let err = BzrError::DataIntegrity("attachment has no data".into());
+        assert_eq!(err.exit_code(), 10);
+        assert_eq!(err.error_type(), "data_integrity");
     }
 }

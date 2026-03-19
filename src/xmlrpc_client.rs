@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::config::AUTH_QUERY_PARAM;
+use crate::http::AUTH_QUERY_PARAM;
 use crate::error::{BzrError, Result};
 use crate::types::{Bug, SearchParams};
 use crate::xmlrpc::{self, Value};

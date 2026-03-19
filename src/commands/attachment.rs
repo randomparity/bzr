@@ -133,3 +133,64 @@ fn guess_content_type(filename: &str) -> &'static str {
         _ => "application/octet-stream",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn guess_content_type_text_plain() {
+        assert_eq!(guess_content_type("file.txt"), "text/plain");
+        assert_eq!(guess_content_type("script.py"), "text/plain");
+        assert_eq!(guess_content_type("main.rs"), "text/plain");
+        assert_eq!(guess_content_type("code.c"), "text/plain");
+        assert_eq!(guess_content_type("app.js"), "text/plain");
+    }
+
+    #[test]
+    fn guess_content_type_html() {
+        assert_eq!(guess_content_type("page.html"), "text/html");
+        assert_eq!(guess_content_type("page.htm"), "text/html");
+    }
+
+    #[test]
+    fn guess_content_type_json() {
+        assert_eq!(guess_content_type("data.json"), "application/json");
+    }
+
+    #[test]
+    fn guess_content_type_images() {
+        assert_eq!(guess_content_type("photo.png"), "image/png");
+        assert_eq!(guess_content_type("photo.jpg"), "image/jpeg");
+        assert_eq!(guess_content_type("photo.jpeg"), "image/jpeg");
+        assert_eq!(guess_content_type("anim.gif"), "image/gif");
+        assert_eq!(guess_content_type("logo.svg"), "image/svg+xml");
+    }
+
+    #[test]
+    fn guess_content_type_archives() {
+        assert_eq!(guess_content_type("file.gz"), "application/gzip");
+        assert_eq!(guess_content_type("file.tgz"), "application/gzip");
+        assert_eq!(guess_content_type("file.zip"), "application/zip");
+        assert_eq!(guess_content_type("file.tar"), "application/x-tar");
+    }
+
+    #[test]
+    fn guess_content_type_diff() {
+        assert_eq!(guess_content_type("fix.patch"), "text/x-diff");
+        assert_eq!(guess_content_type("changes.diff"), "text/x-diff");
+    }
+
+    #[test]
+    fn guess_content_type_unknown() {
+        assert_eq!(guess_content_type("file.xyz"), "application/octet-stream");
+        assert_eq!(guess_content_type("noext"), "application/octet-stream");
+    }
+
+    #[test]
+    fn guess_content_type_case_insensitive() {
+        assert_eq!(guess_content_type("FILE.TXT"), "text/plain");
+        assert_eq!(guess_content_type("image.PNG"), "image/png");
+        assert_eq!(guess_content_type("data.JSON"), "application/json");
+    }
+}

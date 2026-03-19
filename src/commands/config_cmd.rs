@@ -84,72 +84,11 @@ pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
     Ok(())
 }
 
-#[expect(clippy::print_stdout)]
 fn show_config(format: OutputFormat) -> Result<()> {
     let config = Config::load()?;
     let path = Config::path()?;
-
-    match format {
-        OutputFormat::Json => {
-            let mut servers = serde_json::Map::new();
-            for (name, srv) in &config.servers {
-                let masked_key = mask_api_key(&srv.api_key);
-                servers.insert(
-                    name.clone(),
-                    serde_json::json!({
-                        "url": srv.url,
-                        "email": srv.email,
-                        "api_key": masked_key,
-                        "auth_method": srv.auth_method
-                            .as_ref()
-                            .map(ToString::to_string),
-                    }),
-                );
-            }
-            let out = serde_json::json!({
-                "config_file": path.to_string_lossy(),
-                "default_server": config.default_server,
-                "servers": servers,
-            });
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&out).unwrap_or_else(|_| "{}".into())
-            );
-        }
-        OutputFormat::Table => {
-            println!("Config file: {}\n", path.display());
-            if let Some(ref def) = config.default_server {
-                println!("Default server: {def}");
-            }
-            if config.servers.is_empty() {
-                println!("No servers configured.");
-            } else {
-                for (name, srv) in &config.servers {
-                    let masked_key = mask_api_key(&srv.api_key);
-                    let auth_display = match &srv.auth_method {
-                        Some(m) => m.to_string(),
-                        None => "auto (not yet detected)".into(),
-                    };
-                    println!("\n[{name}]");
-                    println!("  URL:     {}", srv.url);
-                    if let Some(ref email) = srv.email {
-                        println!("  Email:   {email}");
-                    }
-                    println!("  API Key: {masked_key}");
-                    println!("  Auth:    {auth_display}");
-                }
-            }
-        }
-    }
+    output::print_config(&config, &path, format);
     Ok(())
-}
-
-fn mask_api_key(key: &str) -> String {
-    if key.len() > 8 {
-        format!("{}...", &key[..8])
-    } else {
-        "***".into()
-    }
 }
 
 #[cfg(test)]
@@ -157,26 +96,6 @@ fn mask_api_key(key: &str) -> String {
 mod tests {
     use super::*;
     use crate::error::BzrError;
-
-    #[test]
-    fn mask_api_key_long_key_shows_prefix() {
-        assert_eq!(mask_api_key("abcdefghijklmnop"), "abcdefgh...");
-    }
-
-    #[test]
-    fn mask_api_key_short_key_fully_masked() {
-        assert_eq!(mask_api_key("short"), "***");
-    }
-
-    #[test]
-    fn mask_api_key_exactly_8_chars_fully_masked() {
-        assert_eq!(mask_api_key("12345678"), "***");
-    }
-
-    #[test]
-    fn mask_api_key_empty_string_fully_masked() {
-        assert_eq!(mask_api_key(""), "***");
-    }
 
     /// Combined test for config operations that require env::set_var.
     /// Grouped in a single test to avoid env var race conditions with

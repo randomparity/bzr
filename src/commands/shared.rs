@@ -15,7 +15,7 @@ pub async fn build_client(
         srv.api_key.clone(),
     );
     let (auth, detected_mode) =
-        crate::auth::resolve_server_settings(&mut config, &server_name).await?;
+        crate::auth::detect_and_cache_server_settings(&mut config, &server_name).await?;
     let api_mode = api_override.unwrap_or(detected_mode);
     BugzillaClient::new(&url, &api_key, auth, api_mode)
 }

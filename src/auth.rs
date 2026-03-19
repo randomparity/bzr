@@ -1,9 +1,8 @@
 use reqwest::header::HeaderValue;
 use serde::Deserialize;
 
-use crate::config::{
-    build_http_client, ApiMode, AuthMethod, Config, AUTH_HEADER_NAME, AUTH_QUERY_PARAM,
-};
+use crate::config::{ApiMode, AuthMethod, Config};
+use crate::http::{build_http_client, AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::error::{BzrError, Result};
 
 #[derive(Deserialize)]
@@ -16,7 +15,7 @@ struct WhoamiProbe {
 ///
 /// If the auth method is already cached, returns it with the detected API mode.
 /// Otherwise, detects auth method and server version, persists both, and returns them.
-pub async fn resolve_server_settings(
+pub async fn detect_and_cache_server_settings(
     config: &mut Config,
     server_name: &str,
 ) -> Result<(AuthMethod, ApiMode)> {
@@ -36,7 +35,7 @@ pub async fn resolve_server_settings(
     let email = srv.email.clone();
 
     let http = build_http_client()
-        .map_err(|e| BzrError::Other(format!("failed to build HTTP client: {e}")))?;
+        .map_err(BzrError::Http)?;
 
     let method = detect_auth_method(&http, &url, &api_key, email.as_deref()).await?;
     let (version, api_mode) = detect_version_and_mode(&http, &url, &api_key, method).await;
@@ -214,7 +213,7 @@ async fn detect_auth_method(
              server. Check your API key and server URL."
         }
     };
-    Err(BzrError::Other(hint.into()))
+    Err(BzrError::Auth(hint.into()))
 }
 
 enum WhoamiOutcome {
@@ -403,14 +402,9 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
-    use crate::config::{CONNECT_TIMEOUT, REQUEST_TIMEOUT};
 
     fn test_client() -> reqwest::Client {
-        reqwest::Client::builder()
-            .connect_timeout(CONNECT_TIMEOUT)
-            .timeout(REQUEST_TIMEOUT)
-            .build()
-            .unwrap()
+        crate::http::build_http_client().unwrap()
     }
 
     #[tokio::test]
@@ -418,7 +412,7 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/rest/whoami"))
-            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .and(header(AUTH_HEADER_NAME, "test-key"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 42})))
             .mount(&server)
             .await;
@@ -435,14 +429,14 @@ mod tests {
 
         Mock::given(method("GET"))
             .and(path("/rest/whoami"))
-            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .and(header(AUTH_HEADER_NAME, "test-key"))
             .respond_with(ResponseTemplate::new(401))
             .mount(&server)
             .await;
 
         Mock::given(method("GET"))
             .and(path("/rest/whoami"))
-            .and(query_param("Bugzilla_api_key", "test-key"))
+            .and(query_param(AUTH_QUERY_PARAM, "test-key"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 7})))
             .mount(&server)
             .await;
@@ -466,7 +460,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/valid_login"))
             .and(query_param("login", "user@example.com"))
-            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .and(header(AUTH_HEADER_NAME, "test-key"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": true})),
             )
@@ -498,7 +492,7 @@ mod tests {
 
         Mock::given(method("GET"))
             .and(path("/rest/valid_login"))
-            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .and(header(AUTH_HEADER_NAME, "test-key"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": false})),
             )
@@ -508,7 +502,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/valid_login"))
             .and(query_param("login", "user@example.com"))
-            .and(query_param("Bugzilla_api_key", "test-key"))
+            .and(query_param(AUTH_QUERY_PARAM, "test-key"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": true})),
             )
@@ -518,7 +512,7 @@ mod tests {
         // Header auth works on real API endpoints
         Mock::given(method("GET"))
             .and(path("/rest/bug"))
-            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .and(header(AUTH_HEADER_NAME, "test-key"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
             .mount(&server)
             .await;
@@ -548,7 +542,7 @@ mod tests {
 
         Mock::given(method("GET"))
             .and(path("/rest/valid_login"))
-            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .and(header(AUTH_HEADER_NAME, "test-key"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": false})),
             )
@@ -558,7 +552,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/valid_login"))
             .and(query_param("login", "user@example.com"))
-            .and(query_param("Bugzilla_api_key", "test-key"))
+            .and(query_param(AUTH_QUERY_PARAM, "test-key"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": true})),
             )
@@ -568,7 +562,7 @@ mod tests {
         // Header auth rejected on real API endpoints
         Mock::given(method("GET"))
             .and(path("/rest/bug"))
-            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .and(header(AUTH_HEADER_NAME, "test-key"))
             .respond_with(ResponseTemplate::new(401))
             .mount(&server)
             .await;
@@ -645,7 +639,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/valid_login"))
             .and(query_param("login", "user@example.com"))
-            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .and(header(AUTH_HEADER_NAME, "test-key"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": 1})),
             )
@@ -711,7 +705,7 @@ mod tests {
             },
         );
 
-        let (method, mode) = resolve_server_settings(&mut config, "cached")
+        let (method, mode) = detect_and_cache_server_settings(&mut config, "cached")
             .await
             .unwrap();
         assert_eq!(method, AuthMethod::Header);
@@ -733,7 +727,7 @@ mod tests {
             },
         );
 
-        let (method, mode) = resolve_server_settings(&mut config, "cached")
+        let (method, mode) = detect_and_cache_server_settings(&mut config, "cached")
             .await
             .unwrap();
         assert_eq!(method, AuthMethod::Header);
@@ -743,7 +737,7 @@ mod tests {
     #[tokio::test]
     async fn missing_server_returns_error() {
         let mut config = Config::default();
-        let result = resolve_server_settings(&mut config, "nonexistent").await;
+        let result = detect_and_cache_server_settings(&mut config, "nonexistent").await;
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("not found"), "unexpected error: {err}");

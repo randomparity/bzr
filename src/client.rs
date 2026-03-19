@@ -4,7 +4,8 @@ use reqwest::header::HeaderValue;
 use reqwest::RequestBuilder;
 use serde::Deserialize;
 
-use crate::config::{build_http_client, ApiMode, AuthMethod, AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
+use crate::config::{ApiMode, AuthMethod};
+use crate::http::{build_http_client, AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::error::{BzrError, Result};
 use crate::types::{
     Attachment, Bug, BugzillaUser, Classification, Comment, CreateBugParams, CreateComponentParams,
@@ -179,7 +180,7 @@ impl BugzillaClient {
         };
 
         let http = build_http_client()
-            .map_err(|e| BzrError::Other(format!("failed to build HTTP client: {e}")))?;
+            .map_err(BzrError::Http)?;
 
         let xmlrpc = match api_mode {
             ApiMode::Rest => None,
@@ -204,7 +205,15 @@ impl BugzillaClient {
         format!("{}/rest/{}", self.base_url, path.trim_start_matches('/'))
     }
 
-    fn auth(&self, builder: RequestBuilder) -> RequestBuilder {
+    fn xmlrpc_client(&self) -> Result<&XmlRpcClient> {
+        self.xmlrpc.as_ref().ok_or_else(|| {
+            BzrError::Config(
+                "XML-RPC client not initialized — set api_mode to 'xmlrpc' or 'hybrid'".into(),
+            )
+        })
+    }
+
+    fn apply_auth(&self, builder: RequestBuilder) -> RequestBuilder {
         match &self.auth {
             AuthConfig::Header(value) => builder.header(AUTH_HEADER_NAME, value.clone()),
             AuthConfig::QueryParam(key) => builder.query(&[(AUTH_QUERY_PARAM, key)]),
@@ -299,7 +308,7 @@ impl BugzillaClient {
                 body_preview = &body[..body.len().min(512)],
                 "JSON deserialization failed"
             );
-            BzrError::Other(format!("failed to parse response from {safe_url}: {e}"))
+            BzrError::Deserialize(format!("failed to parse response from {safe_url}: {e}"))
         })
     }
 
@@ -337,7 +346,7 @@ impl BugzillaClient {
         if let Some(since) = since {
             req_builder = req_builder.query(&[("new_since", since)]);
         }
-        let req = self.auth(req_builder);
+        let req = self.apply_auth(req_builder);
         let resp = self.send(req).await?;
         let data: HistoryResponse = self.parse_json(resp).await?;
         Ok(data
@@ -375,18 +384,14 @@ impl BugzillaClient {
         if params.include_fields.is_none() {
             req_builder = req_builder.query(&[("include_fields", BUG_DEFAULT_FIELDS)]);
         }
-        let req = self.auth(req_builder);
+        let req = self.apply_auth(req_builder);
         let resp = self.send(req).await?;
         let data: BugListResponse = self.parse_json(resp).await?;
         Ok(data.bugs)
     }
 
     async fn search_bugs_xmlrpc(&self, params: &SearchParams) -> Result<Vec<Bug>> {
-        let xmlrpc = self
-            .xmlrpc
-            .as_ref()
-            .ok_or_else(|| BzrError::Other("XML-RPC client not initialized".into()))?;
-        xmlrpc.search_bugs(params).await
+        self.xmlrpc_client()?.search_bugs(params).await
     }
 
     pub async fn get_bug(
@@ -396,32 +401,32 @@ impl BugzillaClient {
         exclude_fields: Option<&str>,
     ) -> Result<Bug> {
         match self.api_mode {
-            ApiMode::XmlRpc => return self.get_bug_xmlrpc(id).await,
+            ApiMode::XmlRpc => self.get_bug_xmlrpc(id).await,
             ApiMode::Hybrid => {
                 let rest_result = self.get_bug_rest(id, include_fields, exclude_fields).await;
                 match &rest_result {
                     Err(
                         BzrError::Http(_)
                         | BzrError::HttpStatus { .. }
+                        | BzrError::Deserialize(_)
                         | BzrError::Other(_)
                         | BzrError::XmlRpc(_),
                     ) => {
                         tracing::info!("REST bug lookup failed, retrying via XML-RPC");
-                        return self.get_bug_xmlrpc(id).await;
+                        self.get_bug_xmlrpc(id).await
                     }
                     Err(BzrError::Api { code: 100_500, .. }) => {
                         tracing::info!(
                             "REST bug lookup returned 100500, \
                              retrying via XML-RPC"
                         );
-                        return self.get_bug_xmlrpc(id).await;
+                        self.get_bug_xmlrpc(id).await
                     }
-                    _ => return rest_result,
+                    _ => rest_result,
                 }
             }
-            ApiMode::Rest => {}
+            ApiMode::Rest => self.get_bug_rest(id, include_fields, exclude_fields).await,
         }
-        self.get_bug_rest(id, include_fields, exclude_fields).await
     }
 
     async fn get_bug_rest(
@@ -438,7 +443,7 @@ impl BugzillaClient {
         if let Some(fields) = exclude_fields {
             req_builder = req_builder.query(&[("exclude_fields", fields)]);
         }
-        let req = self.auth(req_builder);
+        let req = self.apply_auth(req_builder);
         let resp = self.send(req).await?;
         let result: Result<BugListResponse> = self.parse_json(resp).await;
 
@@ -461,11 +466,7 @@ impl BugzillaClient {
     }
 
     async fn get_bug_xmlrpc(&self, id: &str) -> Result<Bug> {
-        let xmlrpc = self
-            .xmlrpc
-            .as_ref()
-            .ok_or_else(|| BzrError::Other("XML-RPC client not initialized".into()))?;
-        xmlrpc.get_bug(id).await
+        self.xmlrpc_client()?.get_bug(id).await
     }
 
     async fn get_bug_via_search(
@@ -481,7 +482,7 @@ impl BugzillaClient {
         if let Some(fields) = exclude_fields {
             req_builder = req_builder.query(&[("exclude_fields", fields)]);
         }
-        let req = self.auth(req_builder);
+        let req = self.apply_auth(req_builder);
         let resp = self.send(req).await?;
         let data: BugListResponse = self.parse_json(resp).await?;
         data.bugs
@@ -494,14 +495,14 @@ impl BugzillaClient {
     }
 
     pub async fn create_bug(&self, params: &CreateBugParams) -> Result<u64> {
-        let req = self.auth(self.http.post(self.url("bug")).json(params));
+        let req = self.apply_auth(self.http.post(self.url("bug")).json(params));
         let resp = self.send(req).await?;
         let data: IdResponse = self.parse_json(resp).await?;
         Ok(data.id)
     }
 
     pub async fn update_bug(&self, id: u64, params: &UpdateBugParams) -> Result<()> {
-        let req = self.auth(self.http.put(self.url(&format!("bug/{id}"))).json(params));
+        let req = self.apply_auth(self.http.put(self.url(&format!("bug/{id}"))).json(params));
         self.send(req).await?;
         Ok(())
     }
@@ -515,7 +516,7 @@ impl BugzillaClient {
         if let Some(since) = since {
             req_builder = req_builder.query(&[("new_since", since)]);
         }
-        let req = self.auth(req_builder);
+        let req = self.apply_auth(req_builder);
         let resp = self.send(req).await?;
         let data: CommentResponse = self.parse_json(resp).await?;
         let comments = data
@@ -538,7 +539,7 @@ impl BugzillaClient {
             "add": add,
             "remove": remove,
         });
-        let req = self.auth(
+        let req = self.apply_auth(
             self.http
                 .put(self.url(&format!("bug/comment/{comment_id}/tags")))
                 .json(&body),
@@ -548,7 +549,7 @@ impl BugzillaClient {
     }
 
     pub async fn search_comment_tags(&self, query: &str) -> Result<Vec<String>> {
-        let req = self.auth(
+        let req = self.apply_auth(
             self.http
                 .get(self.url(&format!("bug/comment/tags/{}", encode_path(query)))),
         );
@@ -557,7 +558,7 @@ impl BugzillaClient {
     }
 
     pub async fn get_attachments(&self, bug_id: u64) -> Result<Vec<Attachment>> {
-        let req = self.auth(self.http.get(self.url(&format!("bug/{bug_id}/attachment"))));
+        let req = self.apply_auth(self.http.get(self.url(&format!("bug/{bug_id}/attachment"))));
         let resp = self.send(req).await?;
         let data: AttachmentBugResponse = self.parse_json(resp).await?;
         let attachments = data.bugs.into_values().next().unwrap_or_default();
@@ -565,7 +566,7 @@ impl BugzillaClient {
     }
 
     pub async fn get_attachment(&self, attachment_id: u64) -> Result<Attachment> {
-        let req = self.auth(
+        let req = self.apply_auth(
             self.http
                 .get(self.url(&format!("bug/attachment/{attachment_id}"))),
         );
@@ -584,10 +585,10 @@ impl BugzillaClient {
         let attachment = self.get_attachment(attachment_id).await?;
         let data = attachment
             .data
-            .ok_or_else(|| BzrError::Other("attachment has no data".into()))?;
+            .ok_or_else(|| BzrError::DataIntegrity("attachment has no data".into()))?;
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(&data)
-            .map_err(|e| BzrError::Other(format!("failed to decode attachment: {e}")))?;
+            .map_err(|e| BzrError::DataIntegrity(format!("failed to decode attachment: {e}")))?;
         Ok((attachment.file_name, bytes))
     }
 
@@ -601,7 +602,7 @@ impl BugzillaClient {
             "data": encoded,
             "flags": params.flags,
         });
-        let req = self.auth(
+        let req = self.apply_auth(
             self.http
                 .post(self.url(&format!("bug/{}/attachment", params.bug_id)))
                 .json(&body),
@@ -611,12 +612,12 @@ impl BugzillaClient {
         data.ids
             .into_iter()
             .next()
-            .ok_or_else(|| BzrError::Other("no attachment ID returned".into()))
+            .ok_or_else(|| BzrError::DataIntegrity("no attachment ID returned".into()))
     }
 
     pub async fn add_comment(&self, bug_id: u64, text: &str) -> Result<u64> {
         let body = serde_json::json!({ "comment": text });
-        let req = self.auth(
+        let req = self.apply_auth(
             self.http
                 .post(self.url(&format!("bug/{bug_id}/comment")))
                 .json(&body),
@@ -631,7 +632,7 @@ impl BugzillaClient {
         product_type: ProductListType,
     ) -> Result<Vec<Product>> {
         let endpoint = product_type.as_endpoint();
-        let req = self.auth(self.http.get(self.url(endpoint)));
+        let req = self.apply_auth(self.http.get(self.url(endpoint)));
         let resp = self.send(req).await?;
         let accessible: ProductAccessibleResponse = self.parse_json(resp).await?;
 
@@ -643,7 +644,7 @@ impl BugzillaClient {
         for chunk in accessible.ids.chunks(50) {
             let id_params: Vec<(&str, String)> =
                 chunk.iter().map(|id| ("ids", id.to_string())).collect();
-            let req = self.auth(self.http.get(self.url("product")).query(&id_params));
+            let req = self.apply_auth(self.http.get(self.url("product")).query(&id_params));
             let resp = self.send(req).await?;
             let data: ProductResponse = self.parse_json(resp).await?;
             all_products.extend(data.products);
@@ -652,14 +653,14 @@ impl BugzillaClient {
     }
 
     pub async fn create_product(&self, params: &CreateProductParams) -> Result<u64> {
-        let req = self.auth(self.http.post(self.url("product")).json(params));
+        let req = self.apply_auth(self.http.post(self.url("product")).json(params));
         let resp = self.send(req).await?;
         let data: IdResponse = self.parse_json(resp).await?;
         Ok(data.id)
     }
 
     pub async fn update_product(&self, name: &str, updates: &UpdateProductParams) -> Result<()> {
-        let req = self.auth(
+        let req = self.apply_auth(
             self.http
                 .put(self.url(&format!("product/{}", encode_path(name))))
                 .json(updates),
@@ -671,7 +672,7 @@ impl BugzillaClient {
     /// Fetch a product by name. Note: components, versions, and milestones
     /// may require `include_fields` on some Bugzilla versions to be populated.
     pub async fn get_product(&self, name: &str) -> Result<Product> {
-        let req = self.auth(self.http.get(self.url("product")).query(&[("names", name)]));
+        let req = self.apply_auth(self.http.get(self.url("product")).query(&[("names", name)]));
         let resp = self.send(req).await?;
         let data: ProductResponse = self.parse_json(resp).await?;
         data.products
@@ -689,7 +690,7 @@ impl BugzillaClient {
     /// (empty `fields` array). An empty `Vec` means the field exists but has
     /// no legal values.
     pub async fn get_field_values(&self, field_name: &str) -> Result<Vec<FieldValue>> {
-        let req = self.auth(self.http.get(self.url(&format!("field/bug/{field_name}"))));
+        let req = self.apply_auth(self.http.get(self.url(&format!("field/bug/{field_name}"))));
         let resp = self.send(req).await?;
         let data: FieldBugResponse = self.parse_json(resp).await?;
         let field = data
@@ -713,7 +714,7 @@ impl BugzillaClient {
             req_builder = req_builder
                 .query(&[("include_fields", "id,name,real_name,email,can_login,groups")]);
         }
-        let req = self.auth(req_builder);
+        let req = self.apply_auth(req_builder);
         let resp = self.send(req).await?;
         let data: UserSearchResponse = self.parse_json(resp).await?;
         Ok(data.users)
@@ -733,7 +734,7 @@ impl BugzillaClient {
         } else {
             "id,name,real_name,email"
         };
-        let req = self.auth(
+        let req = self.apply_auth(
             self.http
                 .get(self.url("user"))
                 .query(&[("group", group_name), ("include_fields", fields)]),
@@ -744,27 +745,25 @@ impl BugzillaClient {
     }
 
     pub async fn add_user_to_group(&self, user: &str, group: &str) -> Result<()> {
-        let body = serde_json::json!({
-            "groups": {
-                "add": [group]
-            }
-        });
-        let req = self.auth(
-            self.http
-                .put(self.url(&format!("user/{}", encode_path(user))))
-                .json(&body),
-        );
-        self.send(req).await?;
-        Ok(())
+        self.modify_group_membership(user, group, "add").await
     }
 
     pub async fn remove_user_from_group(&self, user: &str, group: &str) -> Result<()> {
+        self.modify_group_membership(user, group, "remove").await
+    }
+
+    async fn modify_group_membership(
+        &self,
+        user: &str,
+        group: &str,
+        operation: &str,
+    ) -> Result<()> {
         let body = serde_json::json!({
             "groups": {
-                "remove": [group]
+                operation: [group]
             }
         });
-        let req = self.auth(
+        let req = self.apply_auth(
             self.http
                 .put(self.url(&format!("user/{}", encode_path(user))))
                 .json(&body),
@@ -774,25 +773,25 @@ impl BugzillaClient {
     }
 
     pub async fn whoami(&self) -> Result<WhoamiResponse> {
-        let req = self.auth(self.http.get(self.url("whoami")));
+        let req = self.apply_auth(self.http.get(self.url("whoami")));
         let resp = self.send(req).await?;
         self.parse_json(resp).await
     }
 
     pub async fn server_version(&self) -> Result<ServerVersion> {
-        let req = self.auth(self.http.get(self.url("version")));
+        let req = self.apply_auth(self.http.get(self.url("version")));
         let resp = self.send(req).await?;
         self.parse_json(resp).await
     }
 
     pub async fn server_extensions(&self) -> Result<ServerExtensions> {
-        let req = self.auth(self.http.get(self.url("extensions")));
+        let req = self.apply_auth(self.http.get(self.url("extensions")));
         let resp = self.send(req).await?;
         self.parse_json(resp).await
     }
 
     pub async fn update_attachment(&self, id: u64, params: &UpdateAttachmentParams) -> Result<()> {
-        let req = self.auth(
+        let req = self.apply_auth(
             self.http
                 .put(self.url(&format!("bug/attachment/{id}")))
                 .json(params),
@@ -802,7 +801,7 @@ impl BugzillaClient {
     }
 
     pub async fn get_classification(&self, name: &str) -> Result<Classification> {
-        let req = self.auth(
+        let req = self.apply_auth(
             self.http
                 .get(self.url(&format!("classification/{}", encode_path(name)))),
         );
@@ -818,14 +817,14 @@ impl BugzillaClient {
     }
 
     pub async fn create_component(&self, params: &CreateComponentParams) -> Result<u64> {
-        let req = self.auth(self.http.post(self.url("component")).json(params));
+        let req = self.apply_auth(self.http.post(self.url("component")).json(params));
         let resp = self.send(req).await?;
         let data: IdResponse = self.parse_json(resp).await?;
         Ok(data.id)
     }
 
     pub async fn update_component(&self, id: u64, updates: &UpdateComponentParams) -> Result<()> {
-        let req = self.auth(
+        let req = self.apply_auth(
             self.http
                 .put(self.url(&format!("component/{id}")))
                 .json(updates),
@@ -835,14 +834,14 @@ impl BugzillaClient {
     }
 
     pub async fn create_user(&self, params: &CreateUserParams) -> Result<u64> {
-        let req = self.auth(self.http.post(self.url("user")).json(params));
+        let req = self.apply_auth(self.http.post(self.url("user")).json(params));
         let resp = self.send(req).await?;
         let data: IdResponse = self.parse_json(resp).await?;
         Ok(data.id)
     }
 
     pub async fn update_user(&self, user: &str, updates: &UpdateUserParams) -> Result<()> {
-        let req = self.auth(
+        let req = self.apply_auth(
             self.http
                 .put(self.url(&format!("user/{}", encode_path(user))))
                 .json(updates),
@@ -852,7 +851,7 @@ impl BugzillaClient {
     }
 
     pub async fn get_group(&self, group: &str) -> Result<GroupInfo> {
-        let req = self.auth(
+        let req = self.apply_auth(
             self.http
                 .get(self.url("group"))
                 .query(&[("names", group), ("membership", "1")]),
@@ -869,14 +868,14 @@ impl BugzillaClient {
     }
 
     pub async fn create_group(&self, params: &CreateGroupParams) -> Result<u64> {
-        let req = self.auth(self.http.post(self.url("group")).json(params));
+        let req = self.apply_auth(self.http.post(self.url("group")).json(params));
         let resp = self.send(req).await?;
         let data: IdResponse = self.parse_json(resp).await?;
         Ok(data.id)
     }
 
     pub async fn update_group(&self, group: &str, updates: &UpdateGroupParams) -> Result<()> {
-        let req = self.auth(
+        let req = self.apply_auth(
             self.http
                 .put(self.url(&format!("group/{}", encode_path(group))))
                 .json(updates),
@@ -898,9 +897,11 @@ mod tests {
 
     #[test]
     fn safe_url_strips_query_params() {
-        let url =
-            reqwest::Url::parse("https://bugzilla.example.com/rest/bug/1?Bugzilla_api_key=secret")
-                .unwrap();
+        let url = reqwest::Url::parse(&format!(
+            "https://bugzilla.example.com/rest/bug/1?{}=secret",
+            crate::http::AUTH_QUERY_PARAM
+        ))
+        .unwrap();
         let safe = BugzillaClient::safe_url(&url);
         assert!(
             !safe.contains("secret"),
@@ -2178,7 +2179,7 @@ mod tests {
         // Success response requires query param auth (registered first)
         Mock::given(method("GET"))
             .and(path("/rest/user"))
-            .and(query_param("Bugzilla_api_key", "test-key"))
+            .and(query_param(crate::http::AUTH_QUERY_PARAM, "test-key"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [{"id": 1, "name": "alice@example.com"}]
             })))
@@ -2210,7 +2211,7 @@ mod tests {
         // Success response requires header auth (registered first)
         Mock::given(method("GET"))
             .and(path("/rest/user"))
-            .and(wiremock::matchers::header("X-BUGZILLA-API-KEY", "test-key"))
+            .and(wiremock::matchers::header(crate::http::AUTH_HEADER_NAME, "test-key"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [{"id": 2, "name": "bob@example.com"}]
             })))

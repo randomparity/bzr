@@ -1,22 +1,12 @@
-mod auth;
-mod cli;
-mod client;
-mod commands;
-mod config;
-mod error;
-#[expect(clippy::print_stdout, clippy::expect_used)]
-mod output;
-mod types;
-mod xmlrpc;
-mod xmlrpc_client;
-
 use std::io::IsTerminal;
 
 use clap::Parser;
-use cli::{Cli, Commands};
-use error::BzrError;
-use output::OutputFormat;
 use tracing_subscriber::EnvFilter;
+
+use bzr::cli::{Cli, Commands};
+use bzr::commands;
+use bzr::error::{self, BzrError};
+use bzr::output::OutputFormat;
 
 #[tokio::main]
 async fn main() {
@@ -152,8 +142,9 @@ async fn run(cli: Cli, format: OutputFormat) -> error::Result<()> {
 #[cfg(unix)]
 fn suppress_stdout() {
     use std::os::unix::io::AsRawFd;
-    // Safety: dup2 replaces stdout fd with /dev/null fd.
-    // This is safe because we own the process and only do this once.
+    // SAFETY: dup2 replaces stdout fd with /dev/null fd.
+    // We own the process and only call this once at startup, before any
+    // other threads are writing to stdout.
     if let Ok(devnull) = std::fs::File::open("/dev/null") {
         unsafe {
             libc::dup2(devnull.as_raw_fd(), libc::STDOUT_FILENO);

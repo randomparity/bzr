@@ -3,27 +3,10 @@ use std::fmt;
 use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::{BzrError, Result};
-
-pub(crate) const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-pub(crate) const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
-
-/// HTTP header name for Bugzilla API key authentication.
-pub(crate) const AUTH_HEADER_NAME: &str = "X-BUGZILLA-API-KEY";
-/// Query parameter name for Bugzilla API key authentication.
-pub(crate) const AUTH_QUERY_PARAM: &str = "Bugzilla_api_key";
-
-/// Build a shared HTTP client with standard timeout configuration.
-pub(crate) fn build_http_client() -> std::result::Result<reqwest::Client, reqwest::Error> {
-    reqwest::Client::builder()
-        .connect_timeout(CONNECT_TIMEOUT)
-        .timeout(REQUEST_TIMEOUT)
-        .build()
-}
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Config {
@@ -194,21 +177,20 @@ mod tests {
         }
     }
 
+    /// Combined test for operations that require env::set_var.
+    /// Grouped in a single test to avoid env var race conditions with
+    /// parallel test execution.
     #[test]
-    fn load_returns_default_when_no_file_exists() {
+    fn config_file_io_operations() {
         let tmp = tempfile::tempdir().unwrap();
-        // Point XDG_CONFIG_HOME at a temp dir with no config file
         env::set_var("XDG_CONFIG_HOME", tmp.path());
+
+        // 1. Load returns default when no file exists
         let config = Config::load().unwrap();
         assert!(config.default_server.is_none());
         assert!(config.servers.is_empty());
-    }
 
-    #[test]
-    fn save_and_load_roundtrip() {
-        let tmp = tempfile::tempdir().unwrap();
-        env::set_var("XDG_CONFIG_HOME", tmp.path());
-
+        // 2. Save and load roundtrip
         let original = make_config_with_server();
         original.save().unwrap();
 
