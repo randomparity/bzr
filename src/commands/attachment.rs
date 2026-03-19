@@ -3,7 +3,8 @@ use std::path::Path;
 use crate::cli::AttachmentAction;
 use crate::config::ApiMode;
 use crate::error::Result;
-use crate::output::{self, OutputFormat};
+use crate::output;
+use crate::types::OutputFormat;
 use crate::types::{UpdateAttachmentParams, UploadAttachmentParams};
 
 pub async fn execute(

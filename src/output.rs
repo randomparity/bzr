@@ -4,7 +4,7 @@ use tabled::{Table, Tabled};
 
 use crate::types::{
     Attachment, Bug, BugzillaUser, Classification, Comment, FieldValue, GroupInfo, HistoryEntry,
-    Product, ServerExtensions, ServerVersion, WhoamiResponse,
+    OutputFormat, Product, ServerExtensions, ServerVersion, WhoamiResponse,
 };
 
 /// Print any serializable value as pretty JSON.
@@ -53,26 +53,6 @@ fn truncate(s: &str, max_chars: usize) -> String {
         format!("{truncated}...")
     } else {
         s.to_string()
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum OutputFormat {
-    #[default]
-    Table,
-    Json,
-}
-
-impl std::str::FromStr for OutputFormat {
-    type Err = String;
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "table" => Ok(OutputFormat::Table),
-            "json" => Ok(OutputFormat::Json),
-            _ => Err(format!(
-                "invalid output format '{s}': expected 'table' or 'json'"
-            )),
-        }
     }
 }
 
@@ -518,63 +498,71 @@ pub fn print_group_info(group: &GroupInfo, format: OutputFormat) {
     });
 }
 
+#[derive(Serialize)]
+struct ServerDisplayInfo {
+    url: String,
+    email: Option<String>,
+    api_key: String,
+    auth_method: String,
+}
+
+impl ServerDisplayInfo {
+    fn from_config(srv: &crate::config::ServerConfig) -> Self {
+        Self {
+            url: srv.url.clone(),
+            email: srv.email.clone(),
+            api_key: mask_api_key(&srv.api_key),
+            auth_method: srv.auth_method.as_ref().map_or_else(
+                || "auto (not yet detected)".into(),
+                ToString::to_string,
+            ),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct ConfigView {
+    config_file: String,
+    default_server: Option<String>,
+    servers: std::collections::BTreeMap<String, ServerDisplayInfo>,
+}
+
 pub fn print_config(
     config: &crate::config::Config,
     config_path: &std::path::Path,
     format: OutputFormat,
 ) {
-    match format {
-        OutputFormat::Json => {
-            let mut servers = serde_json::Map::new();
-            for (name, srv) in &config.servers {
-                let masked_key = mask_api_key(&srv.api_key);
-                servers.insert(
-                    name.clone(),
-                    serde_json::json!({
-                        "url": srv.url,
-                        "email": srv.email,
-                        "api_key": masked_key,
-                        "auth_method": srv.auth_method
-                            .as_ref()
-                            .map(ToString::to_string),
-                    }),
-                );
-            }
-            let out = serde_json::json!({
-                "config_file": config_path.to_string_lossy(),
-                "default_server": config.default_server,
-                "servers": servers,
-            });
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&out).unwrap_or_else(|_| "{}".into())
-            );
+    let servers: std::collections::BTreeMap<String, ServerDisplayInfo> = config
+        .servers
+        .iter()
+        .map(|(name, srv)| (name.clone(), ServerDisplayInfo::from_config(srv)))
+        .collect();
+
+    let view = ConfigView {
+        config_file: config_path.to_string_lossy().into_owned(),
+        default_server: config.default_server.clone(),
+        servers,
+    };
+
+    format_or_json(&view, format, |v| {
+        println!("Config file: {}\n", v.config_file);
+        if let Some(ref def) = v.default_server {
+            println!("Default server: {def}");
         }
-        OutputFormat::Table => {
-            println!("Config file: {}\n", config_path.display());
-            if let Some(ref def) = config.default_server {
-                println!("Default server: {def}");
-            }
-            if config.servers.is_empty() {
-                println!("No servers configured.");
-            } else {
-                for (name, srv) in &config.servers {
-                    let masked_key = mask_api_key(&srv.api_key);
-                    let auth_display = match &srv.auth_method {
-                        Some(m) => m.to_string(),
-                        None => "auto (not yet detected)".into(),
-                    };
-                    println!("\n[{name}]");
-                    println!("  URL:     {}", srv.url);
-                    if let Some(ref email) = srv.email {
-                        println!("  Email:   {email}");
-                    }
-                    println!("  API Key: {masked_key}");
-                    println!("  Auth:    {auth_display}");
+        if v.servers.is_empty() {
+            println!("No servers configured.");
+        } else {
+            for (name, s) in &v.servers {
+                println!("\n[{name}]");
+                println!("  URL:     {}", s.url);
+                if let Some(ref email) = s.email {
+                    println!("  Email:   {email}");
                 }
+                println!("  API Key: {}", s.api_key);
+                println!("  Auth:    {}", s.auth_method);
             }
         }
-    }
+    });
 }
 
 fn mask_api_key(key: &str) -> String {

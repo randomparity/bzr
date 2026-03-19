@@ -6,7 +6,7 @@ use tracing_subscriber::EnvFilter;
 use bzr::cli::{Cli, Commands};
 use bzr::commands;
 use bzr::error::{self, BzrError};
-use bzr::output::OutputFormat;
+use bzr::types::OutputFormat;
 
 #[tokio::main]
 async fn main() {
@@ -142,12 +142,16 @@ async fn run(cli: Cli, format: OutputFormat) -> error::Result<()> {
 #[cfg(unix)]
 fn suppress_stdout() {
     use std::os::unix::io::AsRawFd;
-    // SAFETY: dup2 replaces stdout fd with /dev/null fd.
-    // We own the process and only call this once at startup, before any
-    // other threads are writing to stdout.
     if let Ok(devnull) = std::fs::File::open("/dev/null") {
+        // SAFETY: dup2 replaces stdout fd with /dev/null fd.
+        // We own the process and only call this once at startup, before any
+        // other threads are writing to stdout. We declare the libc dup2
+        // symbol directly to avoid pulling in the full libc crate.
+        extern "C" {
+            fn dup2(oldfd: std::ffi::c_int, newfd: std::ffi::c_int) -> std::ffi::c_int;
+        }
         unsafe {
-            libc::dup2(devnull.as_raw_fd(), libc::STDOUT_FILENO);
+            dup2(devnull.as_raw_fd(), 1); // STDOUT_FILENO = 1
         }
     }
 }
@@ -157,7 +161,7 @@ fn suppress_stdout() {
 fn suppress_stdout() {}
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used, clippy::expect_used)]
+#[expect(clippy::expect_used)]
 mod tests {
     use super::*;
 

@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 
 use crate::config::{ApiMode, AuthMethod};
-use crate::output::OutputFormat;
+use crate::types::OutputFormat;
 use crate::types::ProductListType;
 
 #[derive(Parser)]
@@ -645,8 +645,7 @@ mod tests {
 
     #[test]
     fn parse_bug_search_with_limit() {
-        let cli =
-            Cli::try_parse_from(["bzr", "bug", "search", "crash", "--limit", "10"]).unwrap();
+        let cli = Cli::try_parse_from(["bzr", "bug", "search", "crash", "--limit", "10"]).unwrap();
         match cli.command {
             Commands::Bug {
                 action: BugAction::Search { limit, .. },
@@ -706,14 +705,7 @@ mod tests {
     #[test]
     fn parse_bug_update_with_flags() {
         let cli = Cli::try_parse_from([
-            "bzr",
-            "bug",
-            "update",
-            "42",
-            "--status",
-            "RESOLVED",
-            "--flag",
-            "review+",
+            "bzr", "bug", "update", "42", "--status", "RESOLVED", "--flag", "review+",
         ])
         .unwrap();
         match cli.command {
@@ -744,15 +736,9 @@ mod tests {
 
     #[test]
     fn parse_comment_add_with_body() {
-        let cli = Cli::try_parse_from([
-            "bzr",
-            "comment",
-            "add",
-            "42",
-            "--body",
-            "This is a comment",
-        ])
-        .unwrap();
+        let cli =
+            Cli::try_parse_from(["bzr", "comment", "add", "42", "--body", "This is a comment"])
+                .unwrap();
         match cli.command {
             Commands::Comment {
                 action: CommentAction::Add { bug_id, body },
@@ -872,8 +858,7 @@ mod tests {
 
     #[test]
     fn parse_classification_view() {
-        let cli =
-            Cli::try_parse_from(["bzr", "classification", "view", "Unclassified"]).unwrap();
+        let cli = Cli::try_parse_from(["bzr", "classification", "view", "Unclassified"]).unwrap();
         match cli.command {
             Commands::Classification {
                 action: ClassificationAction::View { name },
@@ -998,14 +983,7 @@ mod tests {
     #[test]
     fn parse_comment_tag() {
         let cli = Cli::try_parse_from([
-            "bzr",
-            "comment",
-            "tag",
-            "200",
-            "--add",
-            "spam",
-            "--remove",
-            "good",
+            "bzr", "comment", "tag", "200", "--add", "spam", "--remove", "good",
         ])
         .unwrap();
         match cli.command {

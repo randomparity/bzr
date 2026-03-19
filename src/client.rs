@@ -5,8 +5,8 @@ use reqwest::RequestBuilder;
 use serde::Deserialize;
 
 use crate::config::{ApiMode, AuthMethod};
-use crate::http::{build_http_client, AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::error::{BzrError, Result};
+use crate::http::{build_http_client, AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::types::{
     Attachment, Bug, BugzillaUser, Classification, Comment, CreateBugParams, CreateComponentParams,
     CreateGroupParams, CreateProductParams, CreateUserParams, FieldValue, GroupInfo, HistoryEntry,
@@ -14,7 +14,7 @@ use crate::types::{
     UpdateAttachmentParams, UpdateBugParams, UpdateComponentParams, UpdateGroupParams,
     UpdateProductParams, UpdateUserParams, UploadAttachmentParams, WhoamiResponse,
 };
-use crate::xmlrpc_client::XmlRpcClient;
+use crate::xmlrpc::client::XmlRpcClient;
 
 fn encode_path(segment: &str) -> String {
     utf8_percent_encode(segment, NON_ALPHANUMERIC).to_string()
@@ -179,8 +179,7 @@ impl BugzillaClient {
             AuthMethod::QueryParam => AuthConfig::QueryParam(api_key.to_string()),
         };
 
-        let http = build_http_client()
-            .map_err(BzrError::Http)?;
+        let http = build_http_client().map_err(BzrError::Http)?;
 
         let xmlrpc = match api_mode {
             ApiMode::Rest => None,
@@ -231,7 +230,7 @@ impl BugzillaClient {
         if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
             if let Some(clone) = retry_builder {
                 tracing::debug!("401 received, retrying with alternate auth method");
-                let retried = self.apply_alternate_auth(clone).send().await?;
+                let retried = self.apply_alternate_auth(clone)?.send().await?;
                 tracing::debug!(
                     url = Self::safe_url(retried.url()),
                     status = %retried.status(),
@@ -246,13 +245,14 @@ impl BugzillaClient {
         self.check_error(resp).await
     }
 
-    fn apply_alternate_auth(&self, builder: RequestBuilder) -> RequestBuilder {
+    fn apply_alternate_auth(&self, builder: RequestBuilder) -> Result<RequestBuilder> {
         match &self.auth {
-            AuthConfig::Header(_) => builder.query(&[(AUTH_QUERY_PARAM, &self.api_key)]),
+            AuthConfig::Header(_) => Ok(builder.query(&[(AUTH_QUERY_PARAM, &self.api_key)])),
             AuthConfig::QueryParam(_) => {
-                let value = HeaderValue::from_str(&self.api_key)
-                    .unwrap_or_else(|_| HeaderValue::from_static(""));
-                builder.header(AUTH_HEADER_NAME, value)
+                let value = HeaderValue::from_str(&self.api_key).map_err(|e| {
+                    BzrError::Config(format!("API key contains invalid header characters: {e}"))
+                })?;
+                Ok(builder.header(AUTH_HEADER_NAME, value))
             }
         }
     }
@@ -2211,7 +2211,10 @@ mod tests {
         // Success response requires header auth (registered first)
         Mock::given(method("GET"))
             .and(path("/rest/user"))
-            .and(wiremock::matchers::header(crate::http::AUTH_HEADER_NAME, "test-key"))
+            .and(wiremock::matchers::header(
+                crate::http::AUTH_HEADER_NAME,
+                "test-key",
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [{"id": 2, "name": "bob@example.com"}]
             })))

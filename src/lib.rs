@@ -21,4 +21,8 @@ pub(crate) mod http;
 pub mod output;
 pub mod types;
 pub(crate) mod xmlrpc;
-pub(crate) mod xmlrpc_client;
+
+/// Shared mutex for tests that modify the process-global `XDG_CONFIG_HOME` env var.
+/// All such tests must acquire this lock to avoid racing with each other.
+#[cfg(test)]
+pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());

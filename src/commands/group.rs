@@ -1,7 +1,8 @@
 use crate::cli::GroupAction;
 use crate::config::ApiMode;
 use crate::error::Result;
-use crate::output::{self, OutputFormat};
+use crate::output;
+use crate::types::OutputFormat;
 use crate::types::{CreateGroupParams, UpdateGroupParams};
 
 pub async fn execute(

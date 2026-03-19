@@ -1,7 +1,8 @@
 use crate::cli::ComponentAction;
 use crate::config::ApiMode;
 use crate::error::Result;
-use crate::output::{self, OutputFormat};
+use crate::output;
+use crate::types::OutputFormat;
 use crate::types::{CreateComponentParams, UpdateComponentParams};
 
 pub async fn execute(

@@ -202,10 +202,7 @@ mod tests {
         let err = BzrError::Auth("invalid API key".into());
         assert_eq!(err.exit_code(), 9);
         assert_eq!(err.error_type(), "auth");
-        assert_eq!(
-            err.to_string(),
-            "Authentication error: invalid API key"
-        );
+        assert_eq!(err.to_string(), "Authentication error: invalid API key");
     }
 
     #[test]

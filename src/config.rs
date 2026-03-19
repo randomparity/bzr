@@ -182,6 +182,7 @@ mod tests {
     /// parallel test execution.
     #[test]
     fn config_file_io_operations() {
+        let _lock = crate::ENV_LOCK.lock().unwrap();
         let tmp = tempfile::tempdir().unwrap();
         env::set_var("XDG_CONFIG_HOME", tmp.path());
 

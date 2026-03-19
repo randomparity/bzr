@@ -3,7 +3,8 @@ use std::io::{IsTerminal, Read, Write};
 use crate::cli::CommentAction;
 use crate::config::ApiMode;
 use crate::error::{BzrError, Result};
-use crate::output::{self, OutputFormat};
+use crate::output;
+use crate::types::OutputFormat;
 
 pub async fn execute(
     action: &CommentAction,

@@ -2,8 +2,8 @@ use reqwest::header::HeaderValue;
 use serde::Deserialize;
 
 use crate::config::{ApiMode, AuthMethod, Config};
-use crate::http::{build_http_client, AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::error::{BzrError, Result};
+use crate::http::{build_http_client, AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 
 #[derive(Deserialize)]
 struct WhoamiProbe {
@@ -34,8 +34,7 @@ pub async fn detect_and_cache_server_settings(
     let api_key = srv.api_key.clone();
     let email = srv.email.clone();
 
-    let http = build_http_client()
-        .map_err(BzrError::Http)?;
+    let http = build_http_client().map_err(BzrError::Http)?;
 
     let method = detect_auth_method(&http, &url, &api_key, email.as_deref()).await?;
     let (version, api_mode) = detect_version_and_mode(&http, &url, &api_key, method).await;

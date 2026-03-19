@@ -1,7 +1,8 @@
 use crate::cli::UserAction;
 use crate::config::ApiMode;
 use crate::error::Result;
-use crate::output::{self, OutputFormat};
+use crate::output;
+use crate::types::OutputFormat;
 use crate::types::{CreateUserParams, UpdateUserParams};
 
 pub async fn execute(

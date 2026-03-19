@@ -1,6 +1,7 @@
 use crate::config::ApiMode;
 use crate::error::Result;
-use crate::output::{self, OutputFormat};
+use crate::output;
+use crate::types::OutputFormat;
 
 pub async fn execute(
     server: Option<&str>,
