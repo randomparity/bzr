@@ -1,5 +1,6 @@
 use crate::cli::BugAction;
 use crate::client::{CreateBugParams, SearchParams, UpdateBugParams};
+use crate::config::ApiMode;
 use crate::error::Result;
 use crate::output::{self, OutputFormat};
 
@@ -7,8 +8,13 @@ use crate::output::{self, OutputFormat};
     clippy::too_many_lines,
     reason = "single match dispatch over many action variants"
 )]
-pub async fn execute(action: &BugAction, server: Option<&str>, format: OutputFormat) -> Result<()> {
-    let client = super::shared::build_client(server).await?;
+pub async fn execute(
+    action: &BugAction,
+    server: Option<&str>,
+    format: OutputFormat,
+    api: Option<ApiMode>,
+) -> Result<()> {
+    let client = super::shared::build_client(server, api).await?;
 
     match action {
         BugAction::List {

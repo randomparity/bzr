@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::config::AuthMethod;
+use crate::config::{ApiMode, AuthMethod};
 
 fn parse_auth_method(s: &str) -> std::result::Result<AuthMethod, String> {
     match s {
@@ -34,6 +34,10 @@ pub struct Cli {
     /// Suppress all stdout output
     #[arg(long, global = true)]
     pub quiet: bool,
+
+    /// Override API transport: rest, xmlrpc, or hybrid
+    #[arg(long, global = true)]
+    pub api: Option<ApiMode>,
 
     /// Set log verbosity (default: warnings only, -v=info, -vv=debug, -vvv=trace; `RUST_LOG` overrides)
     #[arg(short, long, action = clap::ArgAction::Count, global = true)]

@@ -22,6 +22,8 @@ pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
                     api_key: api_key.clone(),
                     email: email.clone(),
                     auth_method: *auth_method,
+                    api_mode: None,
+                    server_version: None,
                 },
             );
             if config.default_server.is_none() {

@@ -1,8 +1,11 @@
 use crate::client::{BugzillaClient, FlagUpdate};
-use crate::config::Config;
+use crate::config::{ApiMode, Config};
 use crate::error::{BzrError, Result};
 
-pub async fn build_client(server: Option<&str>) -> Result<BugzillaClient> {
+pub async fn build_client(
+    server: Option<&str>,
+    api_override: Option<ApiMode>,
+) -> Result<BugzillaClient> {
     let mut config = Config::load()?;
     let (server_name, srv) = config.active_server_named(server)?;
     let (server_name, url, api_key) = (
@@ -10,8 +13,10 @@ pub async fn build_client(server: Option<&str>) -> Result<BugzillaClient> {
         srv.url.clone(),
         srv.api_key.clone(),
     );
-    let auth = crate::auth::resolve_auth_method(&mut config, &server_name).await?;
-    BugzillaClient::new(&url, &api_key, auth)
+    let (auth, detected_mode) =
+        crate::auth::resolve_server_settings(&mut config, &server_name).await?;
+    let api_mode = api_override.unwrap_or(detected_mode);
+    BugzillaClient::new(&url, &api_key, auth, api_mode)
 }
 
 /// Parse flag strings like "review?(user@example.com)" or "review+" or "review-"

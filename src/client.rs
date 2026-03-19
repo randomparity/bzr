@@ -7,8 +7,9 @@ use reqwest::header::HeaderValue;
 use reqwest::RequestBuilder;
 use serde::{Deserialize, Serialize};
 
-use crate::config::AuthMethod;
+use crate::config::{ApiMode, AuthMethod};
 use crate::error::{BzrError, Result};
+use crate::xmlrpc_client::XmlRpcClient;
 
 fn encode_path(segment: &str) -> String {
     utf8_percent_encode(segment, NON_ALPHANUMERIC).to_string()
@@ -34,6 +35,8 @@ pub struct BugzillaClient {
     base_url: String,
     auth: AuthConfig,
     api_key: String,
+    api_mode: ApiMode,
+    xmlrpc: Option<XmlRpcClient>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -122,6 +125,27 @@ pub struct SearchParams {
     pub include_fields: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exclude_fields: Option<String>,
+}
+
+impl SearchParams {
+    /// Returns true if any filter fields are set (product, component, etc.).
+    ///
+    /// Used by hybrid mode to decide whether an empty REST result warrants
+    /// an XML-RPC retry — only retries when filters are present, since a
+    /// filterless empty result is legitimately empty.
+    pub fn has_filters(&self) -> bool {
+        self.product.is_some()
+            || self.component.is_some()
+            || self.status.is_some()
+            || self.assigned_to.is_some()
+            || self.creator.is_some()
+            || self.priority.is_some()
+            || self.severity.is_some()
+            || self.alias.is_some()
+            || !self.id.is_empty()
+            || self.summary.is_some()
+            || self.quicksearch.is_some()
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -596,7 +620,12 @@ impl BugzillaClient {
         DATA_KEYS.iter().any(|key| map.contains_key(*key))
     }
 
-    pub fn new(base_url: &str, api_key: &str, auth_method: AuthMethod) -> Result<Self> {
+    pub fn new(
+        base_url: &str,
+        api_key: &str,
+        auth_method: AuthMethod,
+        api_mode: ApiMode,
+    ) -> Result<Self> {
         let auth = match auth_method {
             AuthMethod::Header => {
                 let value = HeaderValue::from_str(api_key)
@@ -612,13 +641,22 @@ impl BugzillaClient {
             .build()
             .map_err(|e| BzrError::Other(format!("failed to build HTTP client: {e}")))?;
 
-        tracing::debug!(base_url, %auth_method, "created Bugzilla client");
+        let xmlrpc = match api_mode {
+            ApiMode::Rest => None,
+            ApiMode::XmlRpc | ApiMode::Hybrid => {
+                Some(XmlRpcClient::new(http.clone(), base_url, api_key))
+            }
+        };
+
+        tracing::debug!(base_url, %auth_method, %api_mode, "created Bugzilla client");
 
         Ok(BugzillaClient {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
             auth,
             api_key: api_key.to_string(),
+            api_mode,
+            xmlrpc,
         })
     }
 
@@ -768,6 +806,28 @@ impl BugzillaClient {
     }
 
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
+        tracing::debug!(?params, %self.api_mode, "search parameters");
+        match self.api_mode {
+            ApiMode::Rest => self.search_bugs_rest(params).await,
+            ApiMode::XmlRpc => self.search_bugs_xmlrpc(params).await,
+            ApiMode::Hybrid => {
+                let rest_result = self.search_bugs_rest(params).await;
+                match rest_result {
+                    Ok(ref bugs) if !bugs.is_empty() => rest_result,
+                    Ok(_) if params.has_filters() => {
+                        tracing::info!(
+                            "REST search returned empty with active filters, \
+                             retrying via XML-RPC"
+                        );
+                        self.search_bugs_xmlrpc(params).await
+                    }
+                    other => other,
+                }
+            }
+        }
+    }
+
+    async fn search_bugs_rest(&self, params: &SearchParams) -> Result<Vec<Bug>> {
         let mut req_builder = self.http.get(self.url("bug")).query(params);
         if params.include_fields.is_none() {
             req_builder = req_builder.query(&[("include_fields", BUG_DEFAULT_FIELDS)]);
@@ -778,7 +838,45 @@ impl BugzillaClient {
         Ok(data.bugs)
     }
 
+    async fn search_bugs_xmlrpc(&self, params: &SearchParams) -> Result<Vec<Bug>> {
+        let xmlrpc = self
+            .xmlrpc
+            .as_ref()
+            .ok_or_else(|| BzrError::Other("XML-RPC client not initialized".into()))?;
+        xmlrpc.search_bugs(params).await
+    }
+
     pub async fn get_bug_with_fields(
+        &self,
+        id: &str,
+        include_fields: Option<&str>,
+        exclude_fields: Option<&str>,
+    ) -> Result<Bug> {
+        match self.api_mode {
+            ApiMode::XmlRpc => return self.get_bug_xmlrpc(id).await,
+            ApiMode::Hybrid => {
+                let rest_result = self.get_bug_rest(id, include_fields, exclude_fields).await;
+                match &rest_result {
+                    Err(BzrError::Http(_) | BzrError::Other(_) | BzrError::XmlRpc(_)) => {
+                        tracing::info!("REST bug lookup failed, retrying via XML-RPC");
+                        return self.get_bug_xmlrpc(id).await;
+                    }
+                    Err(BzrError::Api { code: 100_500, .. }) => {
+                        tracing::info!(
+                            "REST bug lookup returned 100500, \
+                             retrying via XML-RPC"
+                        );
+                        return self.get_bug_xmlrpc(id).await;
+                    }
+                    _ => return rest_result,
+                }
+            }
+            ApiMode::Rest => {}
+        }
+        self.get_bug_rest(id, include_fields, exclude_fields).await
+    }
+
+    async fn get_bug_rest(
         &self,
         id: &str,
         include_fields: Option<&str>,
@@ -809,6 +907,14 @@ impl BugzillaClient {
             .into_iter()
             .next()
             .ok_or_else(|| BzrError::Other(format!("bug {id} not found")))
+    }
+
+    async fn get_bug_xmlrpc(&self, id: &str) -> Result<Bug> {
+        let xmlrpc = self
+            .xmlrpc
+            .as_ref()
+            .ok_or_else(|| BzrError::Other("XML-RPC client not initialized".into()))?;
+        xmlrpc.get_bug(id).await
     }
 
     async fn get_bug_via_search(
@@ -1280,7 +1386,11 @@ mod tests {
     }
 
     fn test_client(base_url: &str) -> BugzillaClient {
-        BugzillaClient::new(base_url, "test-key", AuthMethod::Header).unwrap()
+        BugzillaClient::new(base_url, "test-key", AuthMethod::Header, ApiMode::Rest).unwrap()
+    }
+
+    fn test_client_hybrid(base_url: &str) -> BugzillaClient {
+        BugzillaClient::new(base_url, "test-key", AuthMethod::Header, ApiMode::Hybrid).unwrap()
     }
 
     #[tokio::test]
@@ -2028,7 +2138,7 @@ mod tests {
             .and(path("/rest/bug/99"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "error": true,
-                "code": 100500,
+                "code": 100_500,
                 "message": "Extension crash"
             })))
             .mount(&mock)
@@ -2485,7 +2595,7 @@ mod tests {
     }
 
     fn test_client_query_param(base_url: &str) -> BugzillaClient {
-        BugzillaClient::new(base_url, "test-key", AuthMethod::QueryParam).unwrap()
+        BugzillaClient::new(base_url, "test-key", AuthMethod::QueryParam, ApiMode::Rest).unwrap()
     }
 
     #[tokio::test]
@@ -2591,5 +2701,233 @@ mod tests {
         let client = test_client(&mock.uri());
         let err = client.search_users("anyone", false).await.unwrap_err();
         assert!(err.to_string().contains("not authorized"));
+    }
+
+    #[test]
+    fn search_params_serialization_product_only() {
+        let params = SearchParams {
+            product: Some("Product".into()),
+            limit: Some(50),
+            ..Default::default()
+        };
+        let qs = serde_urlencoded::to_string(&params).unwrap();
+        assert!(qs.contains("product=Product"));
+        assert!(qs.contains("limit=50"));
+    }
+
+    #[tokio::test]
+    async fn search_bugs_sends_product_filter() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("product", "Product"))
+            .and(query_param("limit", "50"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{
+                    "id": 217_630,
+                    "summary": "Test bug",
+                    "status": "WORKING",
+                    "product": "Product",
+                    "component": "Triage",
+                    "assigned_to": "test@example.com",
+                    "priority": "P1",
+                    "severity": "high",
+                    "creation_time": "2026-03-09T09:33:08Z",
+                    "last_change_time": "2026-03-18T05:49:05Z"
+                }]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = SearchParams {
+            product: Some("Product".into()),
+            limit: Some(50),
+            ..Default::default()
+        };
+        let bugs = client.search_bugs(&params).await.unwrap();
+        assert_eq!(bugs.len(), 1);
+        assert_eq!(bugs[0].id, 217_630);
+    }
+
+    fn xmlrpc_bug_response(id: i64, summary: &str) -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+            <methodResponse><params><param><value><struct>
+              <member><name>bugs</name><value><array><data>
+                <value><struct>
+                  <member><name>id</name><value><int>{id}</int></value></member>
+                  <member><name>summary</name><value><string>{summary}</string></value></member>
+                  <member><name>status</name><value><string>NEW</string></value></member>
+                  <member><name>keywords</name><value><array><data></data></array></value></member>
+                  <member><name>blocks</name><value><array><data></data></array></value></member>
+                  <member><name>depends_on</name><value><array><data></data></array></value></member>
+                  <member><name>cc</name><value><array><data></data></array></value></member>
+                </struct></value>
+              </data></array></value></member>
+            </struct></value></param></params></methodResponse>"#
+        )
+    }
+
+    #[tokio::test]
+    async fn hybrid_search_rest_has_results_no_xmlrpc_call() {
+        let mock = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{"id": 1, "summary": "REST bug", "status": "NEW"}]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
+            .mount(&mock)
+            .await;
+
+        let client = test_client_hybrid(&mock.uri());
+        let params = SearchParams {
+            product: Some("P".into()),
+            ..Default::default()
+        };
+        let bugs = client.search_bugs(&params).await.unwrap();
+        assert_eq!(bugs.len(), 1);
+        assert_eq!(bugs[0].summary, "REST bug");
+    }
+
+    #[tokio::test]
+    async fn hybrid_search_rest_empty_with_filters_falls_back_to_xmlrpc() {
+        let mock = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(99, "XML-RPC bug")),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client_hybrid(&mock.uri());
+        let params = SearchParams {
+            product: Some("P".into()),
+            ..Default::default()
+        };
+        let bugs = client.search_bugs(&params).await.unwrap();
+        assert_eq!(bugs.len(), 1);
+        assert_eq!(bugs[0].id, 99);
+        assert_eq!(bugs[0].summary, "XML-RPC bug");
+    }
+
+    #[tokio::test]
+    async fn hybrid_search_rest_empty_without_filters_no_fallback() {
+        let mock = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
+            .mount(&mock)
+            .await;
+
+        let client = test_client_hybrid(&mock.uri());
+        let params = SearchParams::default();
+        let bugs = client.search_bugs(&params).await.unwrap();
+        assert!(bugs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn hybrid_get_bug_rest_500_falls_back_to_xmlrpc() {
+        let mock = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("error"))
+            .mount(&mock)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(xmlrpc_bug_response(42, "XML-RPC result")),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client_hybrid(&mock.uri());
+        let bug = client.get_bug_with_fields("42", None, None).await.unwrap();
+        assert_eq!(bug.id, 42);
+        assert_eq!(bug.summary, "XML-RPC result");
+    }
+
+    #[tokio::test]
+    async fn hybrid_get_bug_rest_401_does_not_fall_back() {
+        let mock = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42"))
+            .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 102,
+                "message": "Invalid API key"
+            })))
+            .mount(&mock)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
+            .mount(&mock)
+            .await;
+
+        let client = test_client_hybrid(&mock.uri());
+        let err = client
+            .get_bug_with_fields("42", None, None)
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("Invalid API key"),
+            "should propagate auth error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn search_params_has_filters() {
+        let empty = SearchParams::default();
+        assert!(!empty.has_filters());
+
+        let with_product = SearchParams {
+            product: Some("P".into()),
+            ..Default::default()
+        };
+        assert!(with_product.has_filters());
+
+        let with_quicksearch = SearchParams {
+            quicksearch: Some("crash".into()),
+            ..Default::default()
+        };
+        assert!(with_quicksearch.has_filters());
     }
 }
