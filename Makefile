@@ -3,7 +3,8 @@ PRE_COMMIT ?= pre-commit
 RUST_MIN_VERSION := 1.70.0
 
 .PHONY: setup check-rust check-components check-pre-commit install-hooks \
-        build release test fmt clippy lint clean help
+        build release test fmt clippy lint clean help \
+        functional-build functional-start functional-test functional-stop
 
 ## Setup & Environment
 
@@ -64,6 +65,20 @@ lint: fmt clippy ## Run all linters (fmt + clippy)
 
 clean: ## Remove build artifacts
 	$(CARGO) clean
+
+## Functional Tests
+
+functional-build: ## Build the Bugzilla container image
+	tests/functional/setup-bugzilla.sh build
+
+functional-start: ## Start the Bugzilla container
+	tests/functional/setup-bugzilla.sh start
+
+functional-test: functional-start ## Run functional tests against real Bugzilla
+	tests/functional/run-tests.sh
+
+functional-stop: ## Stop and remove the Bugzilla container
+	tests/functional/setup-bugzilla.sh stop
 
 ## Help
 
