@@ -339,7 +339,7 @@ bzr attachment download 67890 -o /tmp/patch.diff
 | Option | Required | Description |
 |--------|----------|-------------|
 | `<ATTACHMENT_ID>` | Yes | Attachment ID |
-| `-o, --output <FILE>` | No | Output file path (default: original filename) |
+| `-o, --out <FILE>` | No | Output file path (default: original filename) |
 
 ### `bzr attachment upload`
 

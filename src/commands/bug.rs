@@ -96,6 +96,8 @@ pub async fn execute(
             priority,
             severity,
             assignee,
+            op_sys,
+            rep_platform,
         } => {
             let params = CreateBugParams {
                 product: product.clone(),
@@ -106,6 +108,8 @@ pub async fn execute(
                 priority: priority.clone(),
                 severity: severity.clone(),
                 assigned_to: assignee.clone(),
+                op_sys: op_sys.clone(),
+                rep_platform: rep_platform.clone(),
             };
             let id = client.create_bug(&params).await?;
             output::print_result(

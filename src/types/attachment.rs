@@ -1,6 +1,16 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use super::common::FlagUpdate;
+
+/// Deserialize a boolean that may arrive as an integer (0/1) from Bugzilla 5.0.
+fn bool_from_int_or_bool<'de, D: Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    let v = serde_json::Value::deserialize(d)?;
+    match v {
+        serde_json::Value::Bool(b) => Ok(b),
+        serde_json::Value::Number(n) => Ok(n.as_u64() != Some(0)),
+        _ => Ok(false),
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -22,9 +32,9 @@ pub struct Attachment {
     pub last_change_time: Option<String>,
     #[serde(default)]
     pub size: u64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "bool_from_int_or_bool")]
     pub is_obsolete: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "bool_from_int_or_bool")]
     pub is_private: bool,
     #[serde(default)]
     pub data: Option<String>,

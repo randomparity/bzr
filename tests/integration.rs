@@ -156,6 +156,8 @@ async fn bug_create_integration() {
         priority: None,
         severity: None,
         assignee: None,
+        op_sys: None,
+        rep_platform: None,
     };
     let result =
         bzr::commands::bug::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None)
@@ -799,7 +801,7 @@ async fn attachment_download_integration() {
     let out_path = tmp.path().join("downloaded.txt");
     let action = bzr::cli::AttachmentAction::Download {
         id: 99,
-        output: Some(out_path.to_string_lossy().into_owned()),
+        out: Some(out_path.to_string_lossy().into_owned()),
     };
     let result = bzr::commands::attachment::execute(
         &action,

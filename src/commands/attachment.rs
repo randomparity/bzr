@@ -20,7 +20,7 @@ pub async fn execute(
             let attachments = client.get_attachments(*bug_id).await?;
             output::print_attachments(&attachments, format);
         }
-        AttachmentAction::Download { id, output: out } => {
+        AttachmentAction::Download { id, out } => {
             let (filename, data) = client.download_attachment(*id).await?;
             let dest = out.as_deref().unwrap_or(&filename);
             std::fs::write(dest, &data)?;

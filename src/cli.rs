@@ -206,6 +206,12 @@ pub enum BugAction {
         /// Assignee
         #[arg(long)]
         assignee: Option<String>,
+        /// Operating system (required by some Bugzilla installations)
+        #[arg(long)]
+        op_sys: Option<String>,
+        /// Hardware platform (required by some Bugzilla installations)
+        #[arg(long)]
+        rep_platform: Option<String>,
     },
     /// Update an existing bug
     Update {
@@ -286,8 +292,8 @@ pub enum AttachmentAction {
         /// Attachment ID
         id: u64,
         /// Output file path (defaults to original filename)
-        #[arg(short, long)]
-        output: Option<String>,
+        #[arg(short = 'o', long = "out", id = "out_file")]
+        out: Option<String>,
     },
     /// Upload an attachment to a bug
     Upload {
@@ -766,10 +772,10 @@ mod tests {
         let cli = Cli::try_parse_from(["bzr", "attachment", "download", "100"]).unwrap();
         match cli.command {
             Commands::Attachment {
-                action: AttachmentAction::Download { id, output },
+                action: AttachmentAction::Download { id, out },
             } => {
                 assert_eq!(id, 100);
-                assert!(output.is_none());
+                assert!(out.is_none());
             }
             _ => panic!("expected Attachment Download"),
         }

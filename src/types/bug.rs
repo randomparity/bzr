@@ -1,6 +1,11 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use super::common::FlagUpdate;
+
+/// Deserialize a string that may be null into an empty string.
+fn deserialize_null_string<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    Option::<String>::deserialize(d).map(Option::unwrap_or_default)
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -61,7 +66,7 @@ pub struct SearchParams {
     pub severity: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub alias: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip)]
     pub id: Vec<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
@@ -111,6 +116,10 @@ pub struct CreateBugParams {
     pub severity: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assigned_to: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub op_sys: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rep_platform: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -157,6 +166,9 @@ pub struct FieldChange {
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct FieldValue {
+    /// Field value name. Null for the "default/unset" entry in some Bugzilla
+    /// field types (e.g. `bug_status` on Bugzilla 5.0 has a null-named entry).
+    #[serde(default, deserialize_with = "deserialize_null_string")]
     pub name: String,
     #[serde(default)]
     pub sort_key: u64,

@@ -390,6 +390,11 @@ impl BugzillaClient {
 
     async fn search_bugs_rest(&self, params: &SearchParams) -> Result<Vec<Bug>> {
         let mut req_builder = self.http.get(self.url("bug")).query(params);
+        // Vec<u64> can't be serialized by reqwest's query serializer, so
+        // we add each id as a separate query parameter manually.
+        for id in &params.id {
+            req_builder = req_builder.query(&[("id", id)]);
+        }
         if params.include_fields.is_none() {
             req_builder = req_builder.query(&[("include_fields", BUG_DEFAULT_FIELDS)]);
         }
@@ -729,16 +734,20 @@ impl BugzillaClient {
         // queries can return many members. Unlike search_users (which omits
         // include_fields to get Bugzilla's default set), we explicitly
         // constrain both paths.
+        // Always include "groups" in the field list — Bugzilla 5.0 only
+        // evaluates the group filter when the groups field is requested.
         let fields = if include_details {
             "id,name,real_name,email,can_login,groups"
         } else {
-            "id,name,real_name,email"
+            "id,name,real_name,email,groups"
         };
-        let req = self.apply_auth(
-            self.http
-                .get(self.url("user"))
-                .query(&[("group", group_name), ("include_fields", fields)]),
-        );
+        // Bugzilla 5.0 requires at least one of ids/names/match alongside
+        // the group filter. Use a broad match pattern to list all members.
+        let req = self.apply_auth(self.http.get(self.url("user")).query(&[
+            ("group", group_name),
+            ("include_fields", fields),
+            ("match", "*"),
+        ]));
         let resp = self.send(req).await?;
         let data: UserSearchResponse = self.parse_json(resp).await?;
         Ok(data.users)
@@ -778,10 +787,46 @@ impl BugzillaClient {
         Ok(())
     }
 
-    pub async fn whoami(&self) -> Result<WhoamiResponse> {
+    pub async fn whoami(&self, email_hint: Option<&str>) -> Result<WhoamiResponse> {
         let req = self.apply_auth(self.http.get(self.url("whoami")));
+        let resp = self.send(req).await;
+        match resp {
+            Ok(r) => self.parse_json(r).await,
+            Err(BzrError::Api { code: 32614, .. }) => {
+                // /rest/whoami not available (Bugzilla < 5.1). Fall back to
+                // looking up the user by email if available.
+                tracing::debug!("whoami endpoint not found, falling back to user lookup");
+                if let Some(email) = email_hint {
+                    self.whoami_via_user_lookup(email).await
+                } else {
+                    Err(BzrError::Api {
+                        code: 32614,
+                        message: "whoami not available on this server; add --email to your server config for Bugzilla 5.0 compatibility".into(),
+                    })
+                }
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Fallback for Bugzilla < 5.1 which lacks `/rest/whoami`.
+    async fn whoami_via_user_lookup(&self, email: &str) -> Result<WhoamiResponse> {
+        let req = self.apply_auth(self.http.get(self.url("user")).query(&[("names", email)]));
         let resp = self.send(req).await?;
-        self.parse_json(resp).await
+        let data: UserSearchResponse = self.parse_json(resp).await?;
+        data.users
+            .into_iter()
+            .next()
+            .map(|u| WhoamiResponse {
+                id: u.id,
+                name: u.name,
+                real_name: u.real_name,
+                login: u.email,
+            })
+            .ok_or_else(|| BzrError::NotFound {
+                resource: "user",
+                id: email.to_string(),
+            })
     }
 
     pub async fn server_version(&self) -> Result<ServerVersion> {
@@ -847,10 +892,18 @@ impl BugzillaClient {
     }
 
     pub async fn update_user(&self, user: &str, updates: &UpdateUserParams) -> Result<()> {
+        // Build a combined body with the user identifier and update fields.
+        // Bugzilla 5.0 requires `names` in the body; newer versions accept
+        // the user in the URL path. Including `names` works across both.
+        let mut body = serde_json::to_value(updates)
+            .map_err(|e| BzrError::Other(format!("failed to serialize user update: {e}")))?;
+        if let Some(obj) = body.as_object_mut() {
+            obj.insert("names".into(), serde_json::json!([user]));
+        }
         let req = self.apply_auth(
             self.http
                 .put(self.url(&format!("user/{}", encode_path(user))))
-                .json(updates),
+                .json(&body),
         );
         self.send(req).await?;
         Ok(())
@@ -1316,7 +1369,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/user"))
             .and(query_param("group", "admin"))
-            .and(query_param("include_fields", "id,name,real_name,email"))
+            .and(query_param("include_fields", "id,name,real_name,email,groups"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [
                     {
@@ -1484,7 +1537,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let who = client.whoami().await.unwrap();
+        let who = client.whoami(None).await.unwrap();
         assert_eq!(who.id, 42);
         assert_eq!(who.name, "alice@example.com");
         assert_eq!(who.real_name.as_deref(), Some("Alice"));
@@ -1995,6 +2048,7 @@ mod tests {
             )))
             .and(body_json(serde_json::json!({
                 "real_name": "Alice Smith",
+                "names": ["alice@example.com"],
             })))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [{"id": 1, "changes": {}}]
