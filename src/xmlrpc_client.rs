@@ -19,6 +19,9 @@ impl XmlRpcClient {
         }
     }
 
+    // SECURITY: The request body contains Bugzilla_api_key in plain text.
+    // Never log the request body. Response bodies are safe to log at trace
+    // level since Bugzilla does not echo auth credentials back.
     async fn call(&self, method: &str, mut params: BTreeMap<String, Value>) -> Result<Value> {
         params.insert(
             "Bugzilla_api_key".into(),
@@ -44,16 +47,12 @@ impl XmlRpcClient {
 
         let status = resp.status();
         if status.is_client_error() || status.is_server_error() {
-            let body_text = resp.text().await.unwrap_or_default();
-            tracing::debug!(%status, body = &body_text[..body_text.len().min(512)], "XML-RPC HTTP error");
+            tracing::debug!(%status, "XML-RPC HTTP error");
             return Err(BzrError::XmlRpc(format!("HTTP {status}")));
         }
 
         let body_text = resp.text().await?;
-        tracing::trace!(
-            body = &body_text[..body_text.len().min(2048)],
-            "XML-RPC response"
-        );
+        tracing::trace!(body_len = body_text.len(), "XML-RPC response received");
 
         xmlrpc::parse_response(&body_text)
     }
@@ -102,6 +101,14 @@ impl XmlRpcClient {
         if let Some(ref quicksearch) = params.quicksearch {
             rpc_params.insert("quicksearch".into(), Value::from(quicksearch.as_str()));
         }
+        if let Some(ref fields) = params.include_fields {
+            let arr: Vec<Value> = fields.split(',').map(|f| Value::from(f.trim())).collect();
+            rpc_params.insert("include_fields".into(), Value::Array(arr));
+        }
+        if let Some(ref fields) = params.exclude_fields {
+            let arr: Vec<Value> = fields.split(',').map(|f| Value::from(f.trim())).collect();
+            rpc_params.insert("exclude_fields".into(), Value::Array(arr));
+        }
 
         let result = self.call("Bug.search", rpc_params).await?;
         extract_bugs(&result)
@@ -110,11 +117,13 @@ impl XmlRpcClient {
     pub async fn get_bug(&self, id: &str) -> Result<Bug> {
         let mut rpc_params = BTreeMap::new();
 
-        // Try parsing as integer ID first, fall back to alias
+        // Try parsing as integer ID first, fall back to alias.
+        // Both must be wrapped in an array — Bugzilla XML-RPC requires
+        // ids to always be an array, even for aliases.
         if let Ok(numeric_id) = id.parse::<i64>() {
             rpc_params.insert("ids".into(), Value::Array(vec![Value::Int(numeric_id)]));
         } else {
-            rpc_params.insert("ids".into(), Value::from(id));
+            rpc_params.insert("ids".into(), Value::Array(vec![Value::from(id)]));
         }
 
         let result = self.call("Bug.get", rpc_params).await?;
@@ -434,6 +443,23 @@ mod tests {
             msg.contains("Access Denied"),
             "should contain message: {msg}"
         );
+    }
+
+    #[tokio::test]
+    async fn get_bug_by_alias() {
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(55, "Alias bug")),
+            )
+            .mount(&mock)
+            .await;
+
+        let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+        let bug = client.get_bug("my-alias").await.unwrap();
+        assert_eq!(bug.id, 55);
+        assert_eq!(bug.summary, "Alias bug");
     }
 
     #[tokio::test]

@@ -24,6 +24,7 @@ For installation and quick start, see [README.md](../README.md).
 - [JSON Output](#json-output)
 - [Configuration File Format](#configuration-file-format)
 - [Authentication](#authentication)
+- [API Transport](#api-transport)
 
 ## Global Options
 
@@ -66,7 +67,7 @@ For installation and quick start, see [README.md](../README.md).
 ## Command Tree
 
 ```
-bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [-v...]
+bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--api rest|xmlrpc|hybrid] [-v...]
 ├── bug
 │   ├── list [--product <P>] [--component <C>] [--status <S>] [--assignee <A>]
 │   │        [--creator <C>] [--priority <P>] [--severity <S>] [--id <ID>...]
@@ -802,7 +803,7 @@ url = "https://bugzilla.example.com"
 api_key = "old-server-key"
 email = "you@example.com"
 api_mode = "hybrid"        # auto-detected: rest, xmlrpc, or hybrid
-server_version = "5.0.4"   # auto-detected from /rest/version
+server_version = "5.0.4"   # auto-detected (absent if version endpoint unavailable)
 ```
 
 ---
@@ -832,19 +833,21 @@ To generate an API key:
 3. Generate a new key
 4. Add it with `bzr config set-server`
 
+---
+
 ## API Transport
 
-`bzr` supports two API transports: REST and XML-RPC. On first use, it auto-detects the server version and selects the best transport:
+`bzr` supports three API transport modes: `rest`, `hybrid`, and `xmlrpc`. On first use, it auto-detects the server version and selects the best mode:
 
-| Server Version | Transport | Notes |
-|---------------|-----------|-------|
+| Server Version | Mode | Notes |
+|----------------|------|-------|
 | < 5.0 | `xmlrpc` | REST API not available |
 | 5.0.x | `hybrid` | REST exists but may return empty results for some queries; falls back to XML-RPC |
 | >= 5.1 | `rest` | REST API is mature |
 
-The detected transport is cached in the config file alongside the server version.
+The detected mode is cached in the config file alongside the server version. If version detection fails due to a transient error, the mode is not cached and will be re-detected on the next invocation.
 
-Override per-invocation with `--api`:
+Override per-invocation with `--api` (does not modify the cached config value):
 
 ```bash
 bzr --api xmlrpc bug list --product MyProduct
@@ -852,4 +855,4 @@ bzr --api hybrid bug search "crash"
 bzr --api rest bug view 12345
 ```
 
-In `hybrid` mode, `bzr` tries REST first. If the REST search returns empty results, it retries via XML-RPC. For direct bug lookups, it falls back to XML-RPC if the REST call fails.
+In `hybrid` mode, `bzr` tries REST first for search/list operations. If REST returns empty results and the query has active filters (product, status, etc.), it retries via XML-RPC. For direct bug lookups (`bug view`), it falls back to XML-RPC on server errors but not on authentication failures.

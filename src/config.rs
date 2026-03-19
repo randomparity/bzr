@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::fs;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
@@ -25,6 +26,7 @@ pub enum AuthMethod {
 #[serde(rename_all = "snake_case")]
 pub enum ApiMode {
     Rest,
+    #[serde(rename = "xmlrpc")]
     XmlRpc,
     Hybrid,
 }
@@ -35,6 +37,21 @@ impl fmt::Display for ApiMode {
             ApiMode::Rest => write!(f, "rest"),
             ApiMode::XmlRpc => write!(f, "xmlrpc"),
             ApiMode::Hybrid => write!(f, "hybrid"),
+        }
+    }
+}
+
+impl FromStr for ApiMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "rest" => Ok(ApiMode::Rest),
+            "xmlrpc" => Ok(ApiMode::XmlRpc),
+            "hybrid" => Ok(ApiMode::Hybrid),
+            _ => Err(format!(
+                "invalid API mode '{s}': expected 'rest', 'xmlrpc', or 'hybrid'"
+            )),
         }
     }
 }

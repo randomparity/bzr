@@ -2,17 +2,6 @@ use clap::{Parser, Subcommand};
 
 use crate::config::{ApiMode, AuthMethod};
 
-fn parse_api_mode(s: &str) -> std::result::Result<ApiMode, String> {
-    match s {
-        "rest" => Ok(ApiMode::Rest),
-        "xmlrpc" => Ok(ApiMode::XmlRpc),
-        "hybrid" => Ok(ApiMode::Hybrid),
-        _ => Err(format!(
-            "invalid API mode '{s}': expected 'rest', 'xmlrpc', or 'hybrid'"
-        )),
-    }
-}
-
 fn parse_auth_method(s: &str) -> std::result::Result<AuthMethod, String> {
     match s {
         "header" => Ok(AuthMethod::Header),
@@ -47,7 +36,7 @@ pub struct Cli {
     pub quiet: bool,
 
     /// Override API transport: rest, xmlrpc, or hybrid
-    #[arg(long, global = true, value_parser = parse_api_mode)]
+    #[arg(long, global = true)]
     pub api: Option<ApiMode>,
 
     /// Set log verbosity (default: warnings only, -v=info, -vv=debug, -vvv=trace; `RUST_LOG` overrides)
