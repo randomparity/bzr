@@ -1,8 +1,8 @@
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
-use super::{
-    colorize_status, print_formatted, print_colored_field, print_id_list_field, print_list_field,
+use super::common::{
+    colorize_status, print_colored_field, print_formatted, print_id_list_field, print_list_field,
     print_optional_field, shorten_email, truncate,
 };
 use crate::types::{Bug, HistoryEntry, OutputFormat};

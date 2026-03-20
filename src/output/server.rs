@@ -1,7 +1,7 @@
 use colored::Colorize;
 use serde::Serialize;
 
-use super::{print_formatted, mask_api_key};
+use super::common::{mask_api_key, print_formatted};
 use crate::types::OutputFormat;
 
 /// Combined server information for display.
