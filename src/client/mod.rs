@@ -127,6 +127,14 @@ impl BugzillaClient {
         })
     }
 
+    /// Send a PUT request with a JSON body to a REST resource path.
+    /// Used by update methods across resource modules.
+    pub(super) async fn put_json(&self, path: &str, body: &impl serde::Serialize) -> Result<()> {
+        let req = self.apply_auth(self.http.put(self.url(path)).json(body));
+        self.send(req).await?;
+        Ok(())
+    }
+
     pub(super) fn apply_auth(&self, builder: RequestBuilder) -> RequestBuilder {
         match &self.auth {
             AuthConfig::Header(value) => builder.header(AUTH_HEADER_NAME, value.clone()),

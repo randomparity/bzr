@@ -106,13 +106,8 @@ impl BugzillaClient {
     }
 
     pub async fn update_group(&self, group: &str, updates: &UpdateGroupParams) -> Result<()> {
-        let req = self.apply_auth(
-            self.http
-                .put(self.url(&format!("group/{}", encode_path(group))))
-                .json(updates),
-        );
-        self.send(req).await?;
-        Ok(())
+        self.put_json(&format!("group/{}", encode_path(group)), updates)
+            .await
     }
 }
 

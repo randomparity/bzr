@@ -1,3 +1,8 @@
+//! Whoami command — shows the authenticated user's identity.
+//!
+//! Unlike other command modules, `execute()` has no action enum parameter
+//! because `whoami` has no subcommands.
+
 use crate::error::Result;
 use crate::output;
 use crate::types::ApiMode;

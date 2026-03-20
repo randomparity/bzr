@@ -36,13 +36,8 @@ impl BugzillaClient {
 
     /// Update a user's profile fields.
     pub async fn update_user(&self, user: &str, updates: &UpdateUserParams) -> Result<()> {
-        let req = self.apply_auth(
-            self.http
-                .put(self.url(&format!("user/{}", encode_path(user))))
-                .json(updates),
-        );
-        self.send(req).await?;
-        Ok(())
+        self.put_json(&format!("user/{}", encode_path(user)), updates)
+            .await
     }
 }
 

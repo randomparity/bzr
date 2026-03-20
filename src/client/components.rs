@@ -11,13 +11,7 @@ impl BugzillaClient {
     }
 
     pub async fn update_component(&self, id: u64, updates: &UpdateComponentParams) -> Result<()> {
-        let req = self.apply_auth(
-            self.http
-                .put(self.url(&format!("component/{id}")))
-                .json(updates),
-        );
-        self.send(req).await?;
-        Ok(())
+        self.put_json(&format!("component/{id}"), updates).await
     }
 }
 

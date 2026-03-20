@@ -49,13 +49,8 @@ impl BugzillaClient {
     }
 
     pub async fn update_product(&self, name: &str, updates: &UpdateProductParams) -> Result<()> {
-        let req = self.apply_auth(
-            self.http
-                .put(self.url(&format!("product/{}", encode_path(name))))
-                .json(updates),
-        );
-        self.send(req).await?;
-        Ok(())
+        self.put_json(&format!("product/{}", encode_path(name)), updates)
+            .await
     }
 
     /// Fetch a product by name. Note: components, versions, and milestones
