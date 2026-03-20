@@ -8,7 +8,7 @@ use std::fmt::Write as _;
 use crate::cli::ConfigAction;
 use crate::config::{Config, ServerConfig};
 use crate::error::Result;
-use crate::output;
+use crate::output::{self, ConfigResult};
 use crate::types::OutputFormat;
 
 pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
@@ -46,14 +46,12 @@ pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
             let _ = write!(human, "\nConfig file: {}", path.display());
 
             output::print_result(
-                &serde_json::json!({
-                    "name": name,
-                    "url": url,
-                    "is_default": is_default,
-                    "config_file": path.to_string_lossy(),
-                    "resource": "server_config",
-                    "action": "configured",
-                }),
+                &ConfigResult::configured(
+                    name.as_str(),
+                    url.as_str(),
+                    is_default,
+                    path.to_string_lossy(),
+                ),
                 &human,
                 format,
             );
@@ -70,12 +68,7 @@ pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
             config.save()?;
 
             output::print_result(
-                &serde_json::json!({
-                    "name": name,
-                    "config_file": path.to_string_lossy(),
-                    "resource": "default_server",
-                    "action": "updated",
-                }),
+                &ConfigResult::default_set(name.as_str(), path.to_string_lossy()),
                 &format!(
                     "Default server set to '{name}'\nConfig file: {}",
                     path.display()

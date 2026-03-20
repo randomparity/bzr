@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::cli::AttachmentAction;
 use crate::error::Result;
-use crate::output::{self, ActionResult, ResourceKind};
+use crate::output::{self, ActionResult, DownloadResult, ResourceKind, UploadResult};
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{UpdateAttachmentParams, UploadAttachmentParams};
@@ -25,13 +25,7 @@ pub async fn execute(
             let dest = out.as_deref().unwrap_or(&filename);
             std::fs::write(dest, &data)?;
             output::print_result(
-                &serde_json::json!({
-                    "id": id,
-                    "file": dest,
-                    "size": data.len(),
-                    "resource": "attachment",
-                    "action": "downloaded",
-                }),
+                &DownloadResult::new(*id, dest, data.len()),
                 &format!(
                     "Downloaded attachment #{id} to {dest} ({} bytes)",
                     data.len()
@@ -65,13 +59,7 @@ pub async fn execute(
             };
             let att_id = client.upload_attachment(&upload_params).await?;
             output::print_result(
-                &serde_json::json!({
-                    "id": att_id,
-                    "bug_id": bug_id,
-                    "size": size,
-                    "resource": "attachment",
-                    "action": "created",
-                }),
+                &UploadResult::new(att_id, *bug_id, size),
                 &format!("Uploaded attachment #{att_id} to bug #{bug_id} ({size} bytes)",),
                 format,
             );

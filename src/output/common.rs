@@ -54,6 +54,8 @@ pub enum ResourceKind {
     Product,
     #[serde(rename = "component")]
     Component,
+    #[serde(rename = "server")]
+    Server,
 }
 
 /// Action type for mutation result payloads.
@@ -67,6 +69,8 @@ pub enum ActionKind {
     Added,
     #[serde(rename = "removed")]
     Removed,
+    #[serde(rename = "downloaded")]
+    Downloaded,
 }
 
 /// Typed result payload for relationship mutations (e.g. group membership).
@@ -99,15 +103,122 @@ impl MembershipResult {
     }
 }
 
+/// Typed result payload for attachment download operations.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct DownloadResult {
+    pub id: u64,
+    pub file: String,
+    pub size: usize,
+    pub resource: ResourceKind,
+    pub action: ActionKind,
+}
+
+impl DownloadResult {
+    pub fn new(id: u64, file: impl Into<String>, size: usize) -> Self {
+        Self {
+            id,
+            file: file.into(),
+            size,
+            resource: ResourceKind::Attachment,
+            action: ActionKind::Downloaded,
+        }
+    }
+}
+
+/// Typed result payload for attachment upload operations.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct UploadResult {
+    pub id: u64,
+    pub bug_id: u64,
+    pub size: usize,
+    pub resource: ResourceKind,
+    pub action: ActionKind,
+}
+
+impl UploadResult {
+    pub fn new(id: u64, bug_id: u64, size: usize) -> Self {
+        Self {
+            id,
+            bug_id,
+            size,
+            resource: ResourceKind::Attachment,
+            action: ActionKind::Created,
+        }
+    }
+}
+
+/// Typed result payload for comment tag operations.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct TagResult {
+    pub comment_id: u64,
+    pub tags: Vec<String>,
+    pub resource: ResourceKind,
+    pub action: ActionKind,
+}
+
+impl TagResult {
+    pub fn updated(comment_id: u64, tags: Vec<String>) -> Self {
+        Self {
+            comment_id,
+            tags,
+            resource: ResourceKind::Comment,
+            action: ActionKind::Updated,
+        }
+    }
+}
+
+/// Typed result payload for config operations.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct ConfigResult {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_default: Option<bool>,
+    pub config_file: String,
+    pub resource: ResourceKind,
+    pub action: ActionKind,
+}
+
+impl ConfigResult {
+    pub fn configured(
+        name: impl Into<String>,
+        url: impl Into<String>,
+        is_default: bool,
+        config_file: impl Into<String>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            url: Some(url.into()),
+            is_default: Some(is_default),
+            config_file: config_file.into(),
+            resource: ResourceKind::Server,
+            action: ActionKind::Created,
+        }
+    }
+
+    pub fn default_set(name: impl Into<String>, config_file: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            url: None,
+            is_default: None,
+            config_file: config_file.into(),
+            resource: ResourceKind::Server,
+            action: ActionKind::Updated,
+        }
+    }
+}
+
 /// Typed result payload for JSON output of mutation operations.
 ///
 /// Covers standard CRUD results with an `id` and optional `name`.
-/// Relationship mutations use [`MembershipResult`] instead.
-/// The following cases intentionally use ad-hoc `serde_json::json!()`:
-/// - **Attachment download** — includes `file` path and `size` fields.
-/// - **Attachment upload** — includes `bug_id` and `size` fields.
-/// - **Comment tags** — returns the resulting tag list, not a simple resource mutation.
-/// - **Config operations** — include config-file path, URL, and default-server flag.
+/// Relationship mutations use [`MembershipResult`], attachment I/O uses
+/// [`DownloadResult`]/[`UploadResult`], tag operations use [`TagResult`],
+/// and config operations use [`ConfigResult`].
 #[derive(Debug, Serialize)]
 #[non_exhaustive]
 pub struct ActionResult {

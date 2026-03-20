@@ -2,7 +2,7 @@ use std::io::{IsTerminal, Read, Write};
 
 use crate::cli::CommentAction;
 use crate::error::{BzrError, Result};
-use crate::output::{self, ActionResult, ResourceKind};
+use crate::output::{self, ActionResult, ResourceKind, TagResult};
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 
@@ -40,21 +40,14 @@ pub async fn execute(
             remove,
         } => {
             let tags = client.update_comment_tags(*comment_id, add, remove).await?;
+            let display = if tags.is_empty() {
+                "(none)".to_string()
+            } else {
+                tags.join(", ")
+            };
             output::print_result(
-                &serde_json::json!({
-                    "comment_id": comment_id,
-                    "tags": tags,
-                    "resource": "comment_tag",
-                    "action": "updated",
-                }),
-                &format!(
-                    "Tags on comment #{comment_id}: {}",
-                    if tags.is_empty() {
-                        "(none)".to_string()
-                    } else {
-                        tags.join(", ")
-                    }
-                ),
+                &TagResult::updated(*comment_id, tags),
+                &format!("Tags on comment #{comment_id}: {display}"),
                 format,
             );
         }
