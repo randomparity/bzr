@@ -16,7 +16,13 @@ pub async fn execute(
         ServerAction::Info => {
             let version = client.server_version().await?;
             let extensions = client.server_extensions().await?;
-            output::print_server_info(&version, &extensions, format);
+            output::print_server_info(
+                &output::ServerInfo {
+                    version: &version,
+                    extensions: &extensions,
+                },
+                format,
+            );
         }
     }
     Ok(())

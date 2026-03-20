@@ -34,10 +34,13 @@ impl BugzillaClient {
         Ok(data.id)
     }
 
+    /// Update a user's profile fields.
+    ///
+    /// Note: this method injects a `names` field into the JSON body alongside
+    /// the `UpdateUserParams` fields. Bugzilla 5.0 requires `names` in the
+    /// request body; newer versions accept the user in the URL path alone.
+    /// Including `names` ensures compatibility across both versions.
     pub async fn update_user(&self, user: &str, updates: &UpdateUserParams) -> Result<()> {
-        // Build a combined body with the user identifier and update fields.
-        // Bugzilla 5.0 requires `names` in the body; newer versions accept
-        // the user in the URL path. Including `names` works across both.
         let mut body = serde_json::to_value(updates)
             .map_err(|e| BzrError::Other(format!("failed to serialize user update: {e}")))?;
         if let Some(obj) = body.as_object_mut() {

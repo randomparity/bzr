@@ -1,0 +1,221 @@
+use colored::Colorize;
+use tabled::{Table, Tabled};
+
+use super::{format_or_json, truncate};
+use crate::types::{Classification, OutputFormat, Product};
+
+#[derive(Tabled)]
+struct ProductRow {
+    #[tabled(rename = "ID")]
+    id: u64,
+    #[tabled(rename = "NAME")]
+    name: String,
+    #[tabled(rename = "DESCRIPTION")]
+    description: String,
+    #[tabled(rename = "COMPONENTS")]
+    components: usize,
+}
+
+#[expect(clippy::print_stdout)]
+pub fn print_products(products: &[Product], format: OutputFormat) {
+    format_or_json(products, format, |products| {
+        if products.is_empty() {
+            println!("No products found.");
+            return;
+        }
+        let rows: Vec<ProductRow> = products
+            .iter()
+            .map(|p| {
+                let description = truncate(&p.description, 60);
+                ProductRow {
+                    id: p.id,
+                    name: p.name.clone(),
+                    description,
+                    components: p.components.len(),
+                }
+            })
+            .collect();
+        println!("{}", Table::new(rows));
+    });
+}
+
+#[expect(clippy::print_stdout)]
+pub fn print_product_detail(product: &Product, format: OutputFormat) {
+    format_or_json(product, format, |product| {
+        println!(
+            "{} {}\n{}\n",
+            "Product".bold(),
+            product.name.bold(),
+            product.description
+        );
+        if !product.components.is_empty() {
+            println!("{}:", "Components".bold());
+            for c in &product.components {
+                let assignee = c.default_assignee.as_deref().unwrap_or("-");
+                let active = if c.is_active { "" } else { " [inactive]" };
+                println!("  {}{active}  (assignee: {assignee})", c.name);
+            }
+            println!();
+        }
+        if !product.versions.is_empty() {
+            println!("{}:", "Versions".bold());
+            for v in &product.versions {
+                let active = if v.is_active { "" } else { " [inactive]" };
+                println!("  {}{active}", v.name);
+            }
+            println!();
+        }
+        if !product.milestones.is_empty() {
+            println!("{}:", "Milestones".bold());
+            for m in &product.milestones {
+                let active = if m.is_active { "" } else { " [inactive]" };
+                println!("  {}{active}", m.name);
+            }
+        }
+    });
+}
+
+#[expect(clippy::print_stdout)]
+pub fn print_classification(classification: &Classification, format: OutputFormat) {
+    format_or_json(classification, format, |classification| {
+        println!(
+            "{} {}\n{}\n",
+            "Classification".bold(),
+            classification.name.bold(),
+            classification.description,
+        );
+        if !classification.products.is_empty() {
+            println!("{}:", "Products".bold());
+            for p in &classification.products {
+                println!("  {} - {}", p.name, truncate(&p.description, 60));
+            }
+        }
+    });
+}
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used, clippy::useless_vec, clippy::single_char_pattern)]
+mod tests {
+    use super::*;
+    use crate::types::{Classification, ClassificationProduct, Product};
+    use tabled::Table;
+
+    fn make_product(id: u64, name: &str) -> Product {
+        Product {
+            id,
+            name: name.into(),
+            description: "A test product description".into(),
+            is_active: true,
+            components: vec![crate::types::Component {
+                id: 1,
+                name: "General".into(),
+                description: "General component".into(),
+                is_active: true,
+                default_assignee: Some("dev@example.com".into()),
+            }],
+            versions: vec![crate::types::Version {
+                id: 1,
+                name: "1.0".into(),
+                sort_key: 0,
+                is_active: true,
+            }],
+            milestones: vec![crate::types::Milestone {
+                id: 1,
+                name: "M1".into(),
+                sort_key: 0,
+                is_active: true,
+            }],
+        }
+    }
+
+    fn make_classification() -> Classification {
+        Classification {
+            id: 1,
+            name: "Software".into(),
+            description: "Software products".into(),
+            sort_key: 0,
+            products: vec![ClassificationProduct {
+                id: 10,
+                name: "Widget".into(),
+                description: "Widget product".into(),
+            }],
+        }
+    }
+
+    // ── print_products ───────────────────────────────────────────────
+
+    #[test]
+    fn print_products_json_empty() {
+        let products: Vec<Product> = vec![];
+        let json = serde_json::to_string_pretty(&products).unwrap();
+        assert_eq!(json, "[]");
+    }
+
+    #[test]
+    fn print_products_json_one_product() {
+        let products = vec![make_product(1, "Widget")];
+        let json = serde_json::to_string_pretty(&products).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed[0]["id"], 1);
+        assert_eq!(parsed[0]["name"], "Widget");
+        assert!(parsed[0]["components"].is_array());
+    }
+
+    #[test]
+    fn product_row_conversion() {
+        let product = make_product(5, "Gadget");
+        let row = ProductRow {
+            id: product.id,
+            name: product.name.clone(),
+            description: truncate(&product.description, 60),
+            components: product.components.len(),
+        };
+        let table = Table::new(vec![row]).to_string();
+        assert!(table.contains("5"));
+        assert!(table.contains("Gadget"));
+        assert!(table.contains("1")); // 1 component
+    }
+
+    // ── print_product_detail ─────────────────────────────────────────
+
+    #[test]
+    fn print_product_detail_json() {
+        let product = make_product(3, "Acme");
+        let json = serde_json::to_string_pretty(&product).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["id"], 3);
+        assert_eq!(parsed["name"], "Acme");
+        assert!(!parsed["components"].as_array().unwrap().is_empty());
+        assert!(!parsed["versions"].as_array().unwrap().is_empty());
+        assert!(!parsed["milestones"].as_array().unwrap().is_empty());
+    }
+
+    // ── print_classification ─────────────────────────────────────────
+
+    #[test]
+    fn print_classification_json() {
+        let classification = make_classification();
+        let json = serde_json::to_string_pretty(&classification).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["id"], 1);
+        assert_eq!(parsed["name"], "Software");
+        assert_eq!(parsed["description"], "Software products");
+        let products = parsed["products"].as_array().unwrap();
+        assert_eq!(products.len(), 1);
+        assert_eq!(products[0]["name"], "Widget");
+    }
+
+    #[test]
+    fn print_classification_json_empty_products() {
+        let classification = Classification {
+            id: 2,
+            name: "Empty".into(),
+            description: "No products".into(),
+            sort_key: 0,
+            products: vec![],
+        };
+        let json = serde_json::to_string_pretty(&classification).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(parsed["products"].as_array().unwrap().is_empty());
+    }
+}

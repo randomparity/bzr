@@ -19,7 +19,7 @@ struct WhoamiProbe {
 /// via network probes. Always persists the auth method; only persists API mode
 /// and version when version detection succeeds (avoids caching wrong defaults
 /// on transient failures).
-pub async fn detect_and_cache_server_settings(
+pub async fn detect_and_persist_server_settings(
     config: &mut Config,
     server_name: &str,
 ) -> Result<(AuthMethod, ApiMode)> {
@@ -720,7 +720,7 @@ mod tests {
             },
         );
 
-        let (method, mode) = detect_and_cache_server_settings(&mut config, "cached")
+        let (method, mode) = detect_and_persist_server_settings(&mut config, "cached")
             .await
             .unwrap();
         assert_eq!(method, AuthMethod::Header);
@@ -742,7 +742,7 @@ mod tests {
             },
         );
 
-        let (method, mode) = detect_and_cache_server_settings(&mut config, "cached")
+        let (method, mode) = detect_and_persist_server_settings(&mut config, "cached")
             .await
             .unwrap();
         assert_eq!(method, AuthMethod::Header);
@@ -752,7 +752,7 @@ mod tests {
     #[tokio::test]
     async fn missing_server_returns_error() {
         let mut config = Config::default();
-        let result = detect_and_cache_server_settings(&mut config, "nonexistent").await;
+        let result = detect_and_persist_server_settings(&mut config, "nonexistent").await;
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("not found"), "unexpected error: {err}");
