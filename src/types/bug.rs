@@ -86,6 +86,9 @@ impl SearchParams {
     /// Used by hybrid mode to decide whether an empty REST result warrants
     /// an XML-RPC retry — only retries when filters are present, since a
     /// filterless empty result is legitimately empty.
+    ///
+    /// Note: `limit`, `include_fields`, and `exclude_fields` are intentionally
+    /// excluded — they control pagination and field selection, not bug filtering.
     pub fn has_filters(&self) -> bool {
         self.product.is_some()
             || self.component.is_some()
