@@ -63,15 +63,49 @@ pub enum ActionKind {
     Created,
     #[serde(rename = "updated")]
     Updated,
+    #[serde(rename = "added")]
+    Added,
+    #[serde(rename = "removed")]
+    Removed,
+}
+
+/// Typed result payload for relationship mutations (e.g. group membership).
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct MembershipResult {
+    pub user: String,
+    pub group: String,
+    pub resource: ResourceKind,
+    pub action: ActionKind,
+}
+
+impl MembershipResult {
+    pub fn added(user: impl Into<String>, group: impl Into<String>) -> Self {
+        Self {
+            user: user.into(),
+            group: group.into(),
+            resource: ResourceKind::Group,
+            action: ActionKind::Added,
+        }
+    }
+
+    pub fn removed(user: impl Into<String>, group: impl Into<String>) -> Self {
+        Self {
+            user: user.into(),
+            group: group.into(),
+            resource: ResourceKind::Group,
+            action: ActionKind::Removed,
+        }
+    }
 }
 
 /// Typed result payload for JSON output of mutation operations.
 ///
-/// Covers standard CRUD results with an `id` and optional `name`. The following
-/// cases intentionally use ad-hoc `serde_json::json!()` instead:
+/// Covers standard CRUD results with an `id` and optional `name`.
+/// Relationship mutations use [`MembershipResult`] instead.
+/// The following cases intentionally use ad-hoc `serde_json::json!()`:
 /// - **Attachment download** — includes `file` path and `size` fields.
 /// - **Attachment upload** — includes `bug_id` and `size` fields.
-/// - **Group membership add/remove** — relationship-shaped (user + group), not resource-shaped.
 /// - **Comment tags** — returns the resulting tag list, not a simple resource mutation.
 /// - **Config operations** — include config-file path, URL, and default-server flag.
 #[derive(Debug, Serialize)]

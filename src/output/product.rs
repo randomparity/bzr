@@ -180,9 +180,9 @@ mod tests {
             components: product.components.len(),
         };
         let table = Table::new(vec![row]).to_string();
-        assert!(table.contains("5"));
+        assert!(table.contains('5'));
         assert!(table.contains("Gadget"));
-        assert!(table.contains("1")); // 1 component
+        assert!(table.contains('1')); // 1 component
     }
 
     // ── print_product_detail ─────────────────────────────────────────

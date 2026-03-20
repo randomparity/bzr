@@ -2,7 +2,7 @@ use colored::Colorize;
 use serde::Serialize;
 
 use super::common::{mask_api_key, print_colored_field, print_formatted, print_optional_field};
-use crate::types::OutputFormat;
+use crate::types::{OutputFormat, ServerInfoResponse};
 
 /// Combined server information for display.
 #[derive(Serialize)]
@@ -10,6 +10,15 @@ use crate::types::OutputFormat;
 pub struct ServerInfo<'a> {
     pub version: &'a str,
     pub extensions: &'a std::collections::HashMap<String, crate::types::ExtensionInfo>,
+}
+
+impl<'a> From<&'a ServerInfoResponse> for ServerInfo<'a> {
+    fn from(info: &'a ServerInfoResponse) -> Self {
+        Self {
+            version: &info.version.version,
+            extensions: &info.extensions.extensions,
+        }
+    }
 }
 
 #[expect(clippy::print_stdout)]

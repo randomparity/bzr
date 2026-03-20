@@ -9,7 +9,7 @@ mod server;
 mod user;
 
 // Re-export shared types and helpers used by commands.
-pub use common::{print_result, ActionResult, ResourceKind};
+pub use common::{print_result, ActionResult, MembershipResult, ResourceKind};
 
 // Re-export all public items from submodules.
 pub use attachment::print_attachments;

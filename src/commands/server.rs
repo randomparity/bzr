@@ -15,13 +15,7 @@ pub async fn execute(
     match action {
         ServerAction::Info => {
             let info = client.server_info().await?;
-            output::print_server_info(
-                &output::ServerInfo {
-                    version: &info.version.version,
-                    extensions: &info.extensions.extensions,
-                },
-                format,
-            );
+            output::print_server_info(&output::ServerInfo::from(&info), format);
         }
     }
     Ok(())

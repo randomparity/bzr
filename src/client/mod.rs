@@ -24,7 +24,7 @@ pub(super) fn encode_path(segment: &str) -> String {
     utf8_percent_encode(segment, NON_ALPHANUMERIC).to_string()
 }
 
-enum AuthConfig {
+enum PreparedAuth {
     Header(HeaderValue),
     QueryParam(String),
 }
@@ -32,7 +32,7 @@ enum AuthConfig {
 pub struct BugzillaClient {
     pub(super) http: reqwest::Client,
     pub(super) base_url: String,
-    auth: AuthConfig,
+    auth: PreparedAuth,
     pub(super) api_key: String,
     pub(super) api_mode: ApiMode,
     pub(super) xmlrpc: Option<XmlRpcClient>,
@@ -89,9 +89,9 @@ impl BugzillaClient {
             AuthMethod::Header => {
                 let value = HeaderValue::from_str(api_key)
                     .map_err(|_| BzrError::config("invalid API key characters"))?;
-                AuthConfig::Header(value)
+                PreparedAuth::Header(value)
             }
-            AuthMethod::QueryParam => AuthConfig::QueryParam(api_key.to_string()),
+            AuthMethod::QueryParam => PreparedAuth::QueryParam(api_key.to_string()),
         };
 
         let http = build_http_client().map_err(BzrError::Http)?;
@@ -143,8 +143,8 @@ impl BugzillaClient {
 
     pub(super) fn apply_auth(&self, builder: RequestBuilder) -> RequestBuilder {
         match &self.auth {
-            AuthConfig::Header(value) => builder.header(AUTH_HEADER_NAME, value.clone()),
-            AuthConfig::QueryParam(key) => builder.query(&[(AUTH_QUERY_PARAM, key)]),
+            PreparedAuth::Header(value) => builder.header(AUTH_HEADER_NAME, value.clone()),
+            PreparedAuth::QueryParam(key) => builder.query(&[(AUTH_QUERY_PARAM, key)]),
         }
     }
 
@@ -189,8 +189,8 @@ impl BugzillaClient {
 
     fn apply_alternate_auth(&self, builder: RequestBuilder) -> Result<RequestBuilder> {
         match &self.auth {
-            AuthConfig::Header(_) => Ok(builder.query(&[(AUTH_QUERY_PARAM, &self.api_key)])),
-            AuthConfig::QueryParam(_) => {
+            PreparedAuth::Header(_) => Ok(builder.query(&[(AUTH_QUERY_PARAM, &self.api_key)])),
+            PreparedAuth::QueryParam(_) => {
                 let value = HeaderValue::from_str(&self.api_key).map_err(|e| {
                     BzrError::Config(format!("API key contains invalid header characters: {e}"))
                 })?;

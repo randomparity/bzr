@@ -45,6 +45,10 @@ async fn main() {
         }
     };
 
+    if cli.quiet {
+        suppress_stdout();
+    }
+
     if let Err(e) = bzr::dispatch(&cli, format).await {
         #[expect(clippy::print_stderr)]
         {
@@ -69,6 +73,25 @@ async fn main() {
         std::process::exit(e.exit_code());
     }
 }
+
+/// Redirect stdout to /dev/null for --quiet mode.
+#[cfg(unix)]
+fn suppress_stdout() {
+    use std::os::unix::io::AsRawFd;
+    if let Ok(devnull) = std::fs::File::open("/dev/null") {
+        extern "C" {
+            fn dup2(oldfd: std::ffi::c_int, newfd: std::ffi::c_int) -> std::ffi::c_int;
+        }
+        // SAFETY: dup2 replaces stdout fd with /dev/null. Called once at startup
+        // before any other threads write to stdout.
+        unsafe {
+            dup2(devnull.as_raw_fd(), 1);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn suppress_stdout() {}
 
 /// Resolve output format from flags, env var, and TTY detection.
 ///

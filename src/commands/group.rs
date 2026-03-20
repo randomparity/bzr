@@ -1,6 +1,6 @@
 use crate::cli::GroupAction;
 use crate::error::Result;
-use crate::output::{self, ActionResult, ResourceKind};
+use crate::output::{self, ActionResult, MembershipResult, ResourceKind};
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{CreateGroupParams, UpdateGroupParams};
@@ -17,12 +17,7 @@ pub async fn execute(
         GroupAction::AddUser { group, user } => {
             client.add_user_to_group(user, group).await?;
             output::print_result(
-                &serde_json::json!({
-                    "user": user,
-                    "group": group,
-                    "resource": "group_membership",
-                    "action": "added",
-                }),
+                &MembershipResult::added(user.as_str(), group.as_str()),
                 &format!("Added {user} to group '{group}'"),
                 format,
             );
@@ -30,12 +25,7 @@ pub async fn execute(
         GroupAction::RemoveUser { group, user } => {
             client.remove_user_from_group(user, group).await?;
             output::print_result(
-                &serde_json::json!({
-                    "user": user,
-                    "group": group,
-                    "resource": "group_membership",
-                    "action": "removed",
-                }),
+                &MembershipResult::removed(user.as_str(), group.as_str()),
                 &format!("Removed {user} from group '{group}'"),
                 format,
             );

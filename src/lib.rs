@@ -31,10 +31,6 @@ pub(crate) static ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_n
 /// This is the shared dispatch logic used by both the binary (`main.rs`)
 /// and integration tests, ensuring they exercise the same code paths.
 pub async fn dispatch(cli: &cli::Cli, format: types::OutputFormat) -> error::Result<()> {
-    if cli.quiet {
-        suppress_stdout();
-    }
-
     let api = cli.api;
     let server = cli.server.as_deref();
 
@@ -72,21 +68,3 @@ pub async fn dispatch(cli: &cli::Cli, format: types::OutputFormat) -> error::Res
     }
 }
 
-/// Redirect stdout to /dev/null for --quiet mode.
-#[cfg(unix)]
-fn suppress_stdout() {
-    use std::os::unix::io::AsRawFd;
-    if let Ok(devnull) = std::fs::File::open("/dev/null") {
-        extern "C" {
-            fn dup2(oldfd: std::ffi::c_int, newfd: std::ffi::c_int) -> std::ffi::c_int;
-        }
-        // SAFETY: dup2 replaces stdout fd with /dev/null. Called once at startup
-        // before any other threads write to stdout.
-        unsafe {
-            dup2(devnull.as_raw_fd(), 1);
-        }
-    }
-}
-
-#[cfg(not(unix))]
-fn suppress_stdout() {}

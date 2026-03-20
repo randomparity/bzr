@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn print_bugs_table_renders_rows() {
-        let bugs = vec![make_bug(42, "Login broken", "NEW")];
+        let bugs = [make_bug(42, "Login broken", "NEW")];
         let rows: Vec<BugRow> = bugs.iter().map(BugRow::from).collect();
         let table = Table::new(rows).to_string();
         assert!(table.contains("42"));

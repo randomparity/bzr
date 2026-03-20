@@ -1,7 +1,7 @@
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
-use super::common::print_formatted;
+use super::common::{print_colored_field, print_formatted, print_optional_field};
 use crate::types::{BugzillaUser, OutputFormat, WhoamiResponse};
 
 #[derive(Tabled)]
@@ -85,13 +85,9 @@ pub fn print_users(users: &[BugzillaUser], details: bool, format: OutputFormat) 
 pub fn print_whoami(whoami: &WhoamiResponse, format: OutputFormat) {
     print_formatted(whoami, format, |whoami| {
         println!("{} {}", "User".bold(), whoami.name.bold());
-        if let Some(ref real_name) = whoami.real_name {
-            println!("  Name:   {real_name}");
-        }
-        if let Some(ref login) = whoami.login {
-            println!("  Login:  {login}");
-        }
-        println!("  ID:     {}", whoami.id);
+        print_optional_field("Name", whoami.real_name.as_deref());
+        print_optional_field("Login", whoami.login.as_deref());
+        print_colored_field("ID", &whoami.id.to_string());
     });
 }
 
