@@ -2,7 +2,7 @@ use std::io::{IsTerminal, Read, Write};
 
 use crate::cli::CommentAction;
 use crate::error::{BzrError, Result};
-use crate::output::{self, ActionResult, ResourceKind, TagResult};
+use crate::output::{self, ActionResult, ResourceKind, SearchResult, TagResult};
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 
@@ -54,7 +54,7 @@ pub async fn execute(
         CommentAction::SearchTags { query } => {
             let tags = client.search_comment_tags(query).await?;
             output::print_result(
-                &serde_json::json!(tags),
+                &SearchResult::new(tags.clone()),
                 &if tags.is_empty() {
                     "No tags.".to_string()
                 } else {

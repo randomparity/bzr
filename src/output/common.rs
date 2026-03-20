@@ -213,12 +213,26 @@ impl ConfigResult {
     }
 }
 
+/// Typed result payload for list-shaped search results (e.g. tag search).
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct SearchResult {
+    pub items: Vec<String>,
+}
+
+impl SearchResult {
+    pub fn new(items: Vec<String>) -> Self {
+        Self { items }
+    }
+}
+
 /// Typed result payload for JSON output of mutation operations.
 ///
 /// Covers standard CRUD results with an `id` and optional `name`.
 /// Relationship mutations use [`MembershipResult`], attachment I/O uses
 /// [`DownloadResult`]/[`UploadResult`], tag operations use [`TagResult`],
-/// and config operations use [`ConfigResult`].
+/// config operations use [`ConfigResult`], and search results use
+/// [`SearchResult`].
 #[derive(Debug, Serialize)]
 #[non_exhaustive]
 pub struct ActionResult {
@@ -300,7 +314,16 @@ pub(super) fn format_id_list(ids: &[u64]) -> String {
 }
 
 pub(super) fn yes_no(value: bool) -> &'static str {
-    if value { "yes" } else { "no" }
+    if value { "Yes" } else { "No" }
+}
+
+/// Three-valued yes/no for `Option<bool>` — returns "Yes", "No", or "-".
+pub(super) fn opt_yes_no(value: Option<bool>) -> &'static str {
+    match value {
+        Some(true) => "Yes",
+        Some(false) => "No",
+        None => "-",
+    }
 }
 
 pub(super) fn print_bool_field(label: &str, value: bool) {

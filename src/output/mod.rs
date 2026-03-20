@@ -11,7 +11,7 @@ mod user;
 // Re-export shared types and helpers used by commands.
 pub use common::{
     print_result, ActionResult, ConfigResult, DownloadResult, MembershipResult, ResourceKind,
-    TagResult, UploadResult,
+    SearchResult, TagResult, UploadResult,
 };
 
 // Re-export all public items from submodules.

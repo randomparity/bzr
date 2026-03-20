@@ -1,7 +1,7 @@
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
-use super::common::{print_colored_field, print_formatted, print_optional_field};
+use super::common::{opt_yes_no, print_colored_field, print_formatted, print_optional_field};
 use crate::types::{BugzillaUser, OutputFormat, WhoamiResponse};
 
 #[derive(Tabled)]
@@ -47,11 +47,7 @@ fn detailed_row(user: &BugzillaUser) -> DetailedUserRow {
         name: user.name.clone(),
         real_name: user.real_name.clone().unwrap_or_default(),
         email: user.email.clone().unwrap_or_default(),
-        can_login: match user.can_login {
-            Some(true) => "Yes".into(),
-            Some(false) => "No".into(),
-            None => "-".into(),
-        },
+        can_login: opt_yes_no(user.can_login).into(),
         groups: if user.groups.is_empty() {
             "-".into()
         } else {
