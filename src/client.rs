@@ -1369,7 +1369,10 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/user"))
             .and(query_param("group", "admin"))
-            .and(query_param("include_fields", "id,name,real_name,email,groups"))
+            .and(query_param(
+                "include_fields",
+                "id,name,real_name,email,groups",
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [
                     {
