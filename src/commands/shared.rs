@@ -3,7 +3,8 @@ use crate::config::Config;
 use crate::error::Result;
 use crate::types::ApiMode;
 
-/// Connect to a Bugzilla server.
+/// Like [`connect_client_with_email`], but discards the server email.
+/// Used by all commands that do not need the Bugzilla 5.0 `valid_login` fallback.
 pub async fn connect_client(
     server: Option<&str>,
     api_override: Option<ApiMode>,

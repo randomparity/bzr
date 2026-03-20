@@ -77,7 +77,8 @@ pub enum ActionKind {
 #[derive(Debug, Serialize)]
 #[non_exhaustive]
 pub struct ActionResult {
-    pub id: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub resource: ResourceKind,
@@ -87,7 +88,7 @@ pub struct ActionResult {
 impl ActionResult {
     pub fn created(id: u64, resource: ResourceKind) -> Self {
         Self {
-            id,
+            id: Some(id),
             name: None,
             resource,
             action: ActionKind::Created,
@@ -96,7 +97,7 @@ impl ActionResult {
 
     pub fn created_named(id: u64, name: impl Into<String>, resource: ResourceKind) -> Self {
         Self {
-            id,
+            id: Some(id),
             name: Some(name.into()),
             resource,
             action: ActionKind::Created,
@@ -105,7 +106,7 @@ impl ActionResult {
 
     pub fn updated(id: u64, resource: ResourceKind) -> Self {
         Self {
-            id,
+            id: Some(id),
             name: None,
             resource,
             action: ActionKind::Updated,
@@ -114,7 +115,7 @@ impl ActionResult {
 
     pub fn updated_named(name: impl Into<String>, resource: ResourceKind) -> Self {
         Self {
-            id: 0,
+            id: None,
             name: Some(name.into()),
             resource,
             action: ActionKind::Updated,
@@ -123,25 +124,23 @@ impl ActionResult {
 }
 
 // ── Detail-field helpers ────────────────────────────────────────────
+// Shared formatting for bug/resource detail views. All use consistent
+// 12-char label alignment and render absent values as "-".
 
-/// Print a detail field with a pre-formatted (e.g. colored) value.
 pub(super) fn print_colored_field(label: &str, value: &str) {
     println!("  {label:<12}  {value}");
 }
 
-/// Print an optional detail field, showing "-" when absent.
 pub(super) fn print_optional_field(label: &str, value: Option<&str>) {
     println!("  {label:<12}  {}", value.unwrap_or("-"));
 }
 
-/// Print a string-list detail field, only when non-empty.
 pub(super) fn print_list_field(label: &str, items: &[String]) {
     if !items.is_empty() {
         println!("  {label:<12}  {}", items.join(", "));
     }
 }
 
-/// Print an ID-list detail field, only when non-empty.
 pub(super) fn print_id_list_field(label: &str, ids: &[u64]) {
     if !ids.is_empty() {
         println!("  {label:<12}  {}", format_id_list(ids));
