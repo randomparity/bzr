@@ -2,6 +2,28 @@
 # Test helper library for bzr functional tests.
 # Source this file; do not execute directly.
 
+# ── Version ──────────────────────────────────────────────────────────
+BZ_VERSION="${BZR_BZ_VERSION:-bz50}"
+
+bz_version_num() {
+    case "$BZ_VERSION" in
+        bz50) echo 500 ;;
+        bz52) echo 520 ;;
+        *)    echo 0 ;;
+    esac
+}
+
+# Skip test if version is below minimum. Usage: require_version 520 "reason"
+require_version() {
+    local min="$1"
+    local reason="${2:-requires newer Bugzilla}"
+    if [[ $(bz_version_num) -lt $min ]]; then
+        test_skip "$reason"
+        return 1
+    fi
+    return 0
+}
+
 # ── Counters ─────────────────────────────────────────────────────────
 PASS_COUNT=0
 FAIL_COUNT=0

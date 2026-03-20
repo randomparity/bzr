@@ -4,7 +4,8 @@ RUST_MIN_VERSION := 1.70.0
 
 .PHONY: setup check-rust check-components check-pre-commit install-hooks \
         build release test fmt clippy lint clean help \
-        functional-build functional-start functional-test functional-stop
+        functional-build functional-start functional-test functional-stop \
+        functional-test-bz52 functional-test-all functional-stop-all
 
 ## Setup & Environment
 
@@ -79,6 +80,17 @@ functional-test: functional-start ## Run functional tests against real Bugzilla
 
 functional-stop: ## Stop and remove the Bugzilla container
 	tests/functional/setup-bugzilla.sh stop
+
+functional-test-bz52: ## Run functional tests against Bugzilla 5.2
+	BZR_BZ_VERSION=bz52 tests/functional/setup-bugzilla.sh start
+	BZR_BZ_VERSION=bz52 tests/functional/run-tests.sh
+
+functional-test-all: ## Run functional tests against all Bugzilla versions
+	tests/functional/run-all-versions.sh
+
+functional-stop-all: ## Stop all Bugzilla test containers
+	BZR_BZ_VERSION=bz50 tests/functional/setup-bugzilla.sh stop
+	BZR_BZ_VERSION=bz52 tests/functional/setup-bugzilla.sh stop
 
 ## Help
 

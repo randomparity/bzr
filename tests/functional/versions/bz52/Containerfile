@@ -1,0 +1,100 @@
+# Bugzilla 5.2 + MariaDB single-container image for functional testing.
+# Build:  podman build -t localhost/bzr-func-bz52:latest -f Containerfile .
+# Run:    podman run -d --name bzr-func-test-bz52 -p 8090:80 localhost/bzr-func-bz52:latest
+
+FROM docker.io/library/fedora:39
+
+# ── System packages ──────────────────────────────────────────────────
+RUN dnf -y install \
+        mariadb-server mariadb \
+        httpd mod_perl \
+        perl-interpreter perl-CGI perl-DBI perl-DBD-MySQL \
+        perl-TimeDate perl-DateTime perl-DateTime-TimeZone \
+        perl-Digest-SHA perl-Email-MIME perl-Email-Sender \
+        perl-Email-Send perl-Encode perl-Encode-Detect \
+        perl-File-MimeInfo perl-File-Slurp \
+        perl-GD perl-GDGraph perl-HTML-Parser perl-HTML-Scrubber \
+        perl-IO-stringy perl-JSON-XS perl-List-MoreUtils \
+        perl-MIME-tools perl-Math-Random-ISAAC \
+        perl-Module-Build perl-Net-SMTP-SSL \
+        perl-Template-Toolkit perl-Text-Diff \
+        perl-TheSchwartz perl-TimeDate \
+        perl-URI perl-XML-Twig \
+        perl-libwww-perl perl-XMLRPC-Lite perl-SOAP-Lite \
+        perl-Cache-Memcached perl-Authen-SASL \
+        perl-LDAP perl-Authen-Radius \
+        perl-App-cpanminus \
+        git wget patch procps-ng \
+    && dnf clean all
+
+# ── Install Bugzilla 5.2 ────────────────────────────────────────────
+RUN cd /var/www/html \
+    && git clone --depth 1 --branch release-5.2-stable \
+       https://github.com/bugzilla/bugzilla.git
+
+# Install any missing Perl deps that Bugzilla's checksetup detects
+# Bugzilla 5.2 requires additional modules vs 5.0 (DBIx::Connector, etc.)
+RUN cd /var/www/html/bugzilla \
+    && cpanm --notest \
+        Chart::Lines \
+        Template::Plugin::GD::Image \
+        Math::Random::ISAAC \
+        JSON::RPC \
+        Test::Taint \
+        DBIx::Connector \
+        PatchReader \
+        Email::Reply \
+        HTML::FormatText::WithLinks \
+        Daemon::Generic \
+        File::Copy::Recursive \
+    || true
+
+# ── MariaDB setup ───────────────────────────────────────────────────
+RUN mysql_install_db --user=mysql --datadir=/var/lib/mysql
+
+# ── Bugzilla localconfig ────────────────────────────────────────────
+# Note: Bugzilla 5.2 requires 'mariadb' driver (not 'mysql')
+RUN printf '%s\n' \
+      '$db_driver = "mariadb";' \
+      '$db_host = "localhost";' \
+      '$db_name = "bugs";' \
+      '$db_user = "bugs";' \
+      '$db_pass = "bugzilla";' \
+      '$webservergroup = "apache";' \
+    > /var/www/html/bugzilla/localconfig
+
+# ── Apache config for Bugzilla ──────────────────────────────────────
+# Serve Bugzilla from document root so /rest/ works without /bugzilla/ prefix
+RUN sed -i 's|DocumentRoot "/var/www/html"|DocumentRoot "/var/www/html/bugzilla"|' \
+        /etc/httpd/conf/httpd.conf \
+    && cat > /etc/httpd/conf.d/bugzilla.conf <<'APACHECONF'
+<Directory "/var/www/html/bugzilla">
+    AddHandler cgi-script .cgi
+    Options +ExecCGI +FollowSymLinks
+    DirectoryIndex index.cgi
+    AllowOverride All
+    Require all granted
+</Directory>
+# Map /rest/* to rest.cgi (Bugzilla 5.2 still uses rest.cgi)
+RewriteEngine On
+RewriteRule ^/rest/(.*)$ /rest.cgi/$1 [L]
+RewriteRule ^/rest$ /rest.cgi [L]
+APACHECONF
+RUN echo "LoadModule rewrite_module modules/mod_rewrite.so" \
+    >> /etc/httpd/conf.modules.d/00-rewrite.conf 2>/dev/null || true
+
+# ── checksetup answers file ─────────────────────────────────────────
+RUN printf '%s\n' \
+      "\$answer{'ADMIN_EMAIL'} = 'admin@test.bzr';" \
+      "\$answer{'ADMIN_PASSWORD'} = 'FuncTest1!';" \
+      "\$answer{'ADMIN_REALNAME'} = 'Admin User';" \
+      "\$answer{'NO_PAUSE'} = 1;" \
+    > /var/www/html/bugzilla/answers.txt
+
+# ── Entrypoint ──────────────────────────────────────────────────────
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 80
+
+CMD ["/entrypoint.sh"]

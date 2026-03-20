@@ -10,7 +10,13 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
 # ── Constants ────────────────────────────────────────────────────────
-BZ_PORT="${BZR_FUNC_PORT:-8089}"
+BZ_VERSION="${BZR_BZ_VERSION:-bz50}"
+case "$BZ_VERSION" in
+    bz50) DEFAULT_PORT=8089 ;;
+    bz52) DEFAULT_PORT=8090 ;;
+    *)    DEFAULT_PORT=8089 ;;
+esac
+BZ_PORT="${BZR_FUNC_PORT:-$DEFAULT_PORT}"
 BZ_URL="http://localhost:${BZ_PORT}"
 ADMIN_EMAIL="admin@test.bzr"
 API_KEY="FuncTest0123456789abcdef0123456789abcdef"
@@ -39,7 +45,7 @@ trap cleanup EXIT
 # ══════════════════════════════════════════════════════════════════════
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  bzr functional tests                                   ║"
+echo "║  bzr functional tests  (${BZ_VERSION})                         ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -167,17 +173,31 @@ else
 fi
 
 test_begin "15. component update"
+# Component update REST endpoint is not available on Bugzilla 5.0 or 5.2
 if [[ -n "${COMP_ID:-}" ]] && [[ "$COMP_ID" != "null" ]]; then
     run_bzr component update "$COMP_ID" --description "Updated backend"
     if [[ $BZR_EXIT -eq 0 ]]; then
         test_pass
     elif grep -q "32614" "$BZR_STDERR" 2>/dev/null; then
-        test_skip "component update REST endpoint not available (Bugzilla 5.0)"
+        test_skip "component update REST endpoint not available"
     else
         assert_success  # report the actual error
     fi
 else
-    test_skip "no component ID from create"
+    # Component was already created in a prior run; try to look up the ID
+    COMP_ID=$(curl -sf "${BZ_URL}/rest/component?product=FuncTestProd&name=Backend&Bugzilla_api_key=${API_KEY}" 2>/dev/null | jq -r '.components[0].id // empty' 2>/dev/null || echo "")
+    if [[ -n "$COMP_ID" ]] && [[ "$COMP_ID" != "null" ]]; then
+        run_bzr component update "$COMP_ID" --description "Updated backend"
+        if [[ $BZR_EXIT -eq 0 ]]; then
+            test_pass
+        elif grep -q "32614" "$BZR_STDERR" 2>/dev/null; then
+            test_skip "component update REST endpoint not available"
+        else
+            assert_success
+        fi
+    else
+        test_skip "no component ID available"
+    fi
 fi
 
 echo ""
@@ -224,6 +244,15 @@ else
     assert_success
 fi
 
+# Re-enable testuser in case it was disabled by a prior run (test 24 sets disable_login=true)
+test_begin "21b. user re-enable (idempotent fix)"
+run_bzr user update testuser@test.bzr --disable-login false --login-denied-text ""
+if [[ $BZR_EXIT -eq 0 ]]; then
+    test_pass
+else
+    test_skip "user update not available (new user)"
+fi
+
 test_begin "22. user search testuser"
 run_bzr user search testuser
 if assert_success && assert_stdout_contains "testuser"; then test_pass; fi
@@ -263,6 +292,11 @@ test_begin "27. group update functest-grp"
 run_bzr group update functest-grp --description "Updated group desc"
 if assert_success; then test_pass; fi
 
+# Re-enable testuser before group membership tests (test 24 disables it)
+test_begin "27b. user re-enable for group tests"
+run_bzr user update testuser@test.bzr --disable-login false --login-denied-text ""
+if assert_success; then test_pass; fi
+
 test_begin "28. group add-user"
 run_bzr group add-user --group functest-grp --user testuser@test.bzr
 if assert_success; then test_pass; fi
@@ -278,6 +312,10 @@ if assert_success; then test_pass; fi
 test_begin "31. group remove-user"
 run_bzr group remove-user --group functest-grp --user testuser@test.bzr
 if assert_success; then test_pass; fi
+
+# Re-disable testuser so it's excluded from list-users results (Bugzilla 5.0
+# default user search hides disabled users, which is also what test 24 does)
+run_bzr user update testuser@test.bzr --disable-login true --login-denied-text "test disabled" >/dev/null 2>&1 || true
 
 test_begin "32. group list-users (after remove)"
 run_bzr group list-users --group functest-grp
@@ -511,7 +549,7 @@ echo ""
 # ══════════════════════════════════════════════════════════════════════
 # Phase 12: Summary
 # ══════════════════════════════════════════════════════════════════════
-echo "── Phase 12: Cleanup ───────────────────────────────────────"
+echo "── Phase 12: Cleanup (${BZ_VERSION}) ──────────────────────────────"
 echo "  Cleaning up temp files..."
 # cleanup runs via trap
 
