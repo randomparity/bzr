@@ -4,15 +4,15 @@ use reqwest::header::HeaderValue;
 use reqwest::RequestBuilder;
 use serde::Deserialize;
 
-use crate::config::{ApiMode, AuthMethod};
 use crate::error::{BzrError, Result};
 use crate::http::{build_http_client, AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::types::{
-    Attachment, Bug, BugzillaUser, Classification, Comment, CreateBugParams, CreateComponentParams,
-    CreateGroupParams, CreateProductParams, CreateUserParams, FieldValue, GroupInfo, HistoryEntry,
-    Product, ProductListType, SearchParams, ServerExtensions, ServerVersion,
-    UpdateAttachmentParams, UpdateBugParams, UpdateComponentParams, UpdateGroupParams,
-    UpdateProductParams, UpdateUserParams, UploadAttachmentParams, WhoamiResponse,
+    ApiMode, Attachment, AuthMethod, Bug, BugzillaUser, Classification, Comment, CreateBugParams,
+    CreateComponentParams, CreateGroupParams, CreateProductParams, CreateUserParams, FieldValue,
+    GroupInfo, HistoryEntry, Product, ProductListType, SearchParams, ServerExtensions,
+    ServerVersion, UpdateAttachmentParams, UpdateBugParams, UpdateComponentParams,
+    UpdateGroupParams, UpdateProductParams, UpdateUserParams, UploadAttachmentParams,
+    WhoamiResponse,
 };
 use crate::xmlrpc::client::XmlRpcClient;
 
@@ -233,21 +233,34 @@ impl BugzillaClient {
             "API response"
         );
         if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-            if let Some(clone) = retry_builder {
-                tracing::debug!("401 received, retrying with alternate auth method");
-                let retried = self.apply_alternate_auth(clone)?.send().await?;
-                tracing::debug!(
-                    url = Self::safe_url(retried.url()),
-                    status = %retried.status(),
-                    "auth fallback response"
-                );
-                if !retried.status().is_client_error() && !retried.status().is_server_error() {
-                    return Ok(retried);
-                }
-                tracing::debug!("auth fallback also failed, returning original 401");
+            if let Some(retried) = self.retry_with_alternate_auth(retry_builder).await? {
+                return Ok(retried);
             }
         }
         self.check_error(resp).await
+    }
+
+    /// On 401, retry the request with the alternate auth method (header ↔ query param).
+    /// Returns `Some(response)` if the retry succeeded, `None` if it failed or was not possible.
+    async fn retry_with_alternate_auth(
+        &self,
+        retry_builder: Option<RequestBuilder>,
+    ) -> Result<Option<reqwest::Response>> {
+        let Some(clone) = retry_builder else {
+            return Ok(None);
+        };
+        tracing::debug!("401 received, retrying with alternate auth method");
+        let retried = self.apply_alternate_auth(clone)?.send().await?;
+        tracing::debug!(
+            url = Self::safe_url(retried.url()),
+            status = %retried.status(),
+            "auth fallback response"
+        );
+        if !retried.status().is_client_error() && !retried.status().is_server_error() {
+            return Ok(Some(retried));
+        }
+        tracing::debug!("auth fallback also failed, returning original 401");
+        Ok(None)
     }
 
     fn apply_alternate_auth(&self, builder: RequestBuilder) -> Result<RequestBuilder> {
@@ -425,6 +438,9 @@ impl BugzillaClient {
                         self.xmlrpc_client()?.get_bug(id).await
                     }
                     Err(BzrError::Api { code: 100_500, .. }) => {
+                        // get_bug_rest() already retries 100500 via the search
+                        // endpoint; this arm catches the case where the search
+                        // endpoint also fails with 100500.
                         tracing::info!(
                             "REST bug lookup returned 100500, \
                              retrying via XML-RPC"
@@ -951,7 +967,6 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
-    use crate::config::AuthMethod;
     use crate::types::{FlagStatus, FlagUpdate};
 
     #[test]

@@ -1,9 +1,9 @@
 use std::io::{IsTerminal, Read, Write};
 
 use crate::cli::CommentAction;
-use crate::config::ApiMode;
 use crate::error::{BzrError, Result};
 use crate::output;
+use crate::types::ApiMode;
 use crate::types::OutputFormat;
 
 pub async fn execute(
@@ -12,7 +12,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::connect_client(server, api).await?;
+    let (client, _email) = super::shared::connect_client(server, api).await?;
 
     match action {
         CommentAction::List { bug_id, since } => {

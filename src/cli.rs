@@ -1,8 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::config::{ApiMode, AuthMethod};
-use crate::types::OutputFormat;
-use crate::types::ProductListType;
+use crate::types::{ApiMode, AuthMethod, OutputFormat, ProductListType};
 
 #[derive(Parser)]
 #[command(name = "bzr", version, about = "A CLI for Bugzilla")]

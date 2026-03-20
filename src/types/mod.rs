@@ -5,12 +5,24 @@ mod common;
 mod product;
 mod user;
 
-pub use attachment::*;
-pub use bug::*;
-pub use comment::*;
-pub use common::*;
-pub use product::*;
-pub use user::*;
+pub use attachment::{Attachment, UpdateAttachmentParams, UploadAttachmentParams};
+pub use bug::{
+    Bug, CreateBugParams, FieldChange, FieldValue, HistoryEntry, SearchParams, StatusTransition,
+    UpdateBugParams,
+};
+pub use comment::Comment;
+pub use common::{
+    ApiMode, AuthMethod, ExtensionInfo, FlagStatus, FlagUpdate, OutputFormat, ServerExtensions,
+    ServerVersion,
+};
+pub use product::{
+    Classification, ClassificationProduct, Component, CreateComponentParams, CreateProductParams,
+    Milestone, Product, ProductListType, UpdateComponentParams, UpdateProductParams, Version,
+};
+pub use user::{
+    BugzillaUser, CreateGroupParams, CreateUserParams, GroupInfo, GroupMember, UpdateGroupParams,
+    UpdateUserParams, UserGroup, WhoamiResponse,
+};
 
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]

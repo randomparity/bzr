@@ -1,6 +1,72 @@
 use std::collections::HashMap;
+use std::fmt;
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthMethod {
+    Header,
+    QueryParam,
+}
+
+impl FromStr for AuthMethod {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "header" => Ok(AuthMethod::Header),
+            "query_param" => Ok(AuthMethod::QueryParam),
+            _ => Err(format!(
+                "invalid auth method '{s}': expected 'header' or 'query_param'"
+            )),
+        }
+    }
+}
+
+impl fmt::Display for AuthMethod {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AuthMethod::Header => write!(f, "header"),
+            AuthMethod::QueryParam => write!(f, "query_param"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ApiMode {
+    Rest,
+    #[serde(rename = "xmlrpc")]
+    XmlRpc,
+    Hybrid,
+}
+
+impl fmt::Display for ApiMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ApiMode::Rest => write!(f, "rest"),
+            ApiMode::XmlRpc => write!(f, "xmlrpc"),
+            ApiMode::Hybrid => write!(f, "hybrid"),
+        }
+    }
+}
+
+impl FromStr for ApiMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "rest" => Ok(ApiMode::Rest),
+            "xmlrpc" => Ok(ApiMode::XmlRpc),
+            "hybrid" => Ok(ApiMode::Hybrid),
+            _ => Err(format!(
+                "invalid API mode '{s}': expected 'rest', 'xmlrpc', or 'hybrid'"
+            )),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum OutputFormat {
@@ -18,38 +84,6 @@ impl std::str::FromStr for OutputFormat {
             _ => Err(format!(
                 "invalid output format '{s}': expected 'table' or 'json'"
             )),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum ProductListType {
-    #[default]
-    Accessible,
-    Selectable,
-    Enterable,
-}
-
-impl std::str::FromStr for ProductListType {
-    type Err = String;
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "accessible" => Ok(Self::Accessible),
-            "selectable" => Ok(Self::Selectable),
-            "enterable" => Ok(Self::Enterable),
-            other => Err(format!(
-                "invalid product type '{other}': expected 'accessible', 'selectable', or 'enterable'"
-            )),
-        }
-    }
-}
-
-impl ProductListType {
-    pub fn as_endpoint(self) -> &'static str {
-        match self {
-            Self::Accessible => "product_accessible",
-            Self::Selectable => "product_selectable",
-            Self::Enterable => "product_enterable",
         }
     }
 }

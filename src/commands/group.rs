@@ -1,7 +1,7 @@
 use crate::cli::GroupAction;
-use crate::config::ApiMode;
 use crate::error::Result;
 use crate::output;
+use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{CreateGroupParams, UpdateGroupParams};
 
@@ -11,7 +11,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::connect_client(server, api).await?;
+    let (client, _email) = super::shared::connect_client(server, api).await?;
 
     match action {
         GroupAction::AddUser { group, user } => {
@@ -42,7 +42,7 @@ pub async fn execute(
         }
         GroupAction::ListUsers { group, details } => {
             let users = client.get_group_members(group, *details).await?;
-            output::print_users(&users, format, *details);
+            output::print_users(&users, *details, format);
         }
         GroupAction::View { group } => {
             let info = client.get_group(group).await?;

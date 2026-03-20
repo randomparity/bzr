@@ -1,6 +1,6 @@
-use crate::config::{ApiMode, Config};
 use crate::error::Result;
 use crate::output;
+use crate::types::ApiMode;
 use crate::types::OutputFormat;
 
 pub async fn execute(
@@ -8,14 +8,9 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::connect_client(server, api).await?;
-    // Load email from config for Bugzilla 5.0 fallback (whoami endpoint
+    let (client, email_hint) = super::shared::connect_client(server, api).await?;
+    // Email hint is used for Bugzilla 5.0 fallback (whoami endpoint
     // was added in 5.1; older servers need a user lookup by email).
-    let config = Config::load()?;
-    let email_hint = config
-        .active_server_named(server)
-        .ok()
-        .and_then(|(_, srv)| srv.email.clone());
     let whoami = client.whoami(email_hint.as_deref()).await?;
     output::print_whoami(&whoami, format);
     Ok(())

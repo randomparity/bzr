@@ -1,9 +1,9 @@
 use std::path::Path;
 
 use crate::cli::AttachmentAction;
-use crate::config::ApiMode;
 use crate::error::Result;
-use crate::output;
+use crate::output::{self, ActionResult};
+use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{UpdateAttachmentParams, UploadAttachmentParams};
 
@@ -13,7 +13,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::connect_client(server, api).await?;
+    let (client, _email) = super::shared::connect_client(server, api).await?;
 
     match action {
         AttachmentAction::List { bug_id } => {
@@ -98,7 +98,11 @@ pub async fn execute(
             };
             client.update_attachment(*id, &params).await?;
             output::print_result(
-                &serde_json::json!({"id": id, "resource": "attachment", "action": "updated"}),
+                &ActionResult {
+                    id: *id,
+                    resource: "attachment",
+                    action: "updated",
+                },
                 &format!("Updated attachment #{id}"),
                 format,
             );

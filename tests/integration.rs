@@ -1312,43 +1312,7 @@ async fn dispatch_cli(args: &[&str]) -> bzr::error::Result<()> {
         cli.output.unwrap_or(bzr::types::OutputFormat::Json)
     };
 
-    let api = cli.api;
-    let server = cli.server.as_deref();
-
-    match &cli.command {
-        bzr::cli::Commands::Bug { action } => {
-            bzr::commands::bug::execute(action, server, format, api).await
-        }
-        bzr::cli::Commands::Comment { action } => {
-            bzr::commands::comment::execute(action, server, format, api).await
-        }
-        bzr::cli::Commands::Attachment { action } => {
-            bzr::commands::attachment::execute(action, server, format, api).await
-        }
-        bzr::cli::Commands::Config { action } => bzr::commands::config_cmd::execute(action, format),
-        bzr::cli::Commands::Product { action } => {
-            bzr::commands::product::execute(action, server, format, api).await
-        }
-        bzr::cli::Commands::Field { action } => {
-            bzr::commands::field::execute(action, server, format, api).await
-        }
-        bzr::cli::Commands::User { action } => {
-            bzr::commands::user::execute(action, server, format, api).await
-        }
-        bzr::cli::Commands::Group { action } => {
-            bzr::commands::group::execute(action, server, format, api).await
-        }
-        bzr::cli::Commands::Whoami => bzr::commands::whoami::execute(server, format, api).await,
-        bzr::cli::Commands::Server { action } => {
-            bzr::commands::server::execute(action, server, format, api).await
-        }
-        bzr::cli::Commands::Classification { action } => {
-            bzr::commands::classification::execute(action, server, format, api).await
-        }
-        bzr::cli::Commands::Component { action } => {
-            bzr::commands::component::execute(action, server, format, api).await
-        }
-    }
+    bzr::dispatch(&cli, format).await
 }
 
 #[tokio::test]

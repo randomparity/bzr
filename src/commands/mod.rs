@@ -34,6 +34,7 @@ api_mode = "rest"
 "#,
         );
         std::fs::write(config_dir.join("config.toml"), config_content).unwrap();
+        // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
         unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
     }
 }

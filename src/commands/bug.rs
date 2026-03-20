@@ -1,7 +1,7 @@
 use crate::cli::BugAction;
-use crate::config::ApiMode;
 use crate::error::Result;
-use crate::output;
+use crate::output::{self, ActionResult};
+use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{CreateBugParams, SearchParams, UpdateBugParams};
 
@@ -15,7 +15,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::connect_client(server, api).await?;
+    let (client, _email) = super::shared::connect_client(server, api).await?;
 
     match action {
         BugAction::List {
@@ -113,7 +113,11 @@ pub async fn execute(
             };
             let id = client.create_bug(&params).await?;
             output::print_result(
-                &serde_json::json!({"id": id, "resource": "bug", "action": "created"}),
+                &ActionResult {
+                    id,
+                    resource: "bug",
+                    action: "created",
+                },
                 &format!("Created bug #{id}"),
                 format,
             );
@@ -142,7 +146,11 @@ pub async fn execute(
             };
             client.update_bug(*id, &params).await?;
             output::print_result(
-                &serde_json::json!({"id": id, "resource": "bug", "action": "updated"}),
+                &ActionResult {
+                    id: *id,
+                    resource: "bug",
+                    action: "updated",
+                },
                 &format!("Updated bug #{id}"),
                 format,
             );

@@ -1,7 +1,7 @@
 use crate::cli::UserAction;
-use crate::config::ApiMode;
 use crate::error::Result;
 use crate::output;
+use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{CreateUserParams, UpdateUserParams};
 
@@ -11,12 +11,12 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::connect_client(server, api).await?;
+    let (client, _email) = super::shared::connect_client(server, api).await?;
 
     match action {
         UserAction::Search { query, details } => {
             let users = client.search_users(query, *details).await?;
-            output::print_users(&users, format, *details);
+            output::print_users(&users, *details, format);
         }
         UserAction::Create {
             email,

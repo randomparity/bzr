@@ -105,6 +105,7 @@ mod tests {
     fn config_operations_with_file_io() {
         let _lock = crate::ENV_LOCK.lock().unwrap();
         let tmp = tempfile::TempDir::new().unwrap();
+        // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
         unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
         // 1. set-default on empty config returns error

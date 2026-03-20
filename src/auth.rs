@@ -1,9 +1,10 @@
 use reqwest::header::HeaderValue;
 use serde::Deserialize;
 
-use crate::config::{ApiMode, AuthMethod, Config};
+use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::http::{build_http_client, AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
+use crate::types::{ApiMode, AuthMethod};
 
 #[derive(Deserialize)]
 struct WhoamiProbe {
@@ -106,7 +107,7 @@ async fn detect_version_and_mode(
     let resp = match req.send().await {
         Ok(r) => r,
         Err(e) => {
-            tracing::debug!("version detection failed: {e}");
+            tracing::warn!("version detection failed (falling back to xmlrpc): {e}");
             return (None, ApiMode::XmlRpc);
         }
     };
@@ -120,6 +121,7 @@ async fn detect_version_and_mode(
     }
 
     let Ok(body) = resp.text().await else {
+        tracing::warn!("version response body unreadable, falling back to xmlrpc");
         return (None, ApiMode::XmlRpc);
     };
 

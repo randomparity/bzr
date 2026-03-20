@@ -1,23 +1,29 @@
 use crate::client::BugzillaClient;
-use crate::config::{ApiMode, Config};
+use crate::config::Config;
 use crate::error::{BzrError, Result};
+use crate::types::ApiMode;
 use crate::types::{FlagStatus, FlagUpdate};
 
+/// Connect to a Bugzilla server, returning the client and the server's
+/// configured email (if any). The email is needed by whoami for Bugzilla 5.0
+/// fallback; other commands can ignore it.
 pub async fn connect_client(
     server: Option<&str>,
     api_override: Option<ApiMode>,
-) -> Result<BugzillaClient> {
+) -> Result<(BugzillaClient, Option<String>)> {
     let mut config = Config::load()?;
     let (server_name, srv) = config.active_server_named(server)?;
-    let (server_name, url, api_key) = (
+    let (server_name, url, api_key, email) = (
         server_name.to_string(),
         srv.url.clone(),
         srv.api_key.clone(),
+        srv.email.clone(),
     );
     let (auth, detected_mode) =
         crate::auth::detect_and_cache_server_settings(&mut config, &server_name).await?;
     let api_mode = api_override.unwrap_or(detected_mode);
-    BugzillaClient::new(&url, &api_key, auth, api_mode)
+    let client = BugzillaClient::new(&url, &api_key, auth, api_mode)?;
+    Ok((client, email))
 }
 
 /// Parse flag strings like "review?(user@example.com)" or "review+" or "review-"

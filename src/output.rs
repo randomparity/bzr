@@ -25,7 +25,7 @@ fn format_or_json<T: Serialize + ?Sized>(
     }
 }
 
-pub fn print_result(value: &serde_json::Value, human_message: &str, format: OutputFormat) {
+pub fn print_result(value: &(impl Serialize + ?Sized), human_message: &str, format: OutputFormat) {
     match format {
         OutputFormat::Json => {
             println!(
@@ -35,6 +35,14 @@ pub fn print_result(value: &serde_json::Value, human_message: &str, format: Outp
         }
         OutputFormat::Table => println!("{human_message}"),
     }
+}
+
+/// Typed result payload for JSON output of mutation operations.
+#[derive(Debug, Serialize)]
+pub struct ActionResult {
+    pub id: u64,
+    pub resource: &'static str,
+    pub action: &'static str,
 }
 
 fn format_id_list(ids: &[u64]) -> String {
@@ -307,7 +315,7 @@ struct FieldValueRow {
     can_change_to: String,
 }
 
-pub fn print_field_values(field_name: &str, values: &[FieldValue], format: OutputFormat) {
+pub fn print_field_values(values: &[FieldValue], field_name: &str, format: OutputFormat) {
     format_or_json(values, format, |values| {
         if values.is_empty() {
             println!("No values for field '{field_name}'.");
@@ -392,7 +400,7 @@ fn detailed_row(user: &BugzillaUser) -> DetailedUserRow {
     }
 }
 
-pub fn print_users(users: &[BugzillaUser], format: OutputFormat, details: bool) {
+pub fn print_users(users: &[BugzillaUser], details: bool, format: OutputFormat) {
     format_or_json(users, format, |users| {
         if users.is_empty() {
             println!("No users found.");

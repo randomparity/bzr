@@ -119,3 +119,35 @@ pub struct ClassificationProduct {
     #[serde(default)]
     pub description: String,
 }
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ProductListType {
+    #[default]
+    Accessible,
+    Selectable,
+    Enterable,
+}
+
+impl std::str::FromStr for ProductListType {
+    type Err = String;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "accessible" => Ok(Self::Accessible),
+            "selectable" => Ok(Self::Selectable),
+            "enterable" => Ok(Self::Enterable),
+            other => Err(format!(
+                "invalid product type '{other}': expected 'accessible', 'selectable', or 'enterable'"
+            )),
+        }
+    }
+}
+
+impl ProductListType {
+    pub fn as_endpoint(self) -> &'static str {
+        match self {
+            Self::Accessible => "product_accessible",
+            Self::Selectable => "product_selectable",
+            Self::Enterable => "product_enterable",
+        }
+    }
+}
