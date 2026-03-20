@@ -860,6 +860,74 @@ mod tests {
         assert_eq!(mode, ApiMode::XmlRpc);
     }
 
+    /// Exercises the full orchestration: no cached auth → probes server → persists result.
+    #[tokio::test]
+    async fn uncached_auth_detects_and_persists() {
+        let server = MockServer::start().await;
+
+        // whoami succeeds with header auth → detects Header auth method
+        Mock::given(method("GET"))
+            .and(path("/rest/whoami"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})),
+            )
+            .mount(&server)
+            .await;
+
+        // version endpoint → detects REST mode
+        Mock::given(method("GET"))
+            .and(path("/rest/version"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"version": "5.1.2"})),
+            )
+            .mount(&server)
+            .await;
+
+        // Set up a real config file so config.save() works
+        let _lock = crate::ENV_LOCK.lock().unwrap();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let config_dir = tmp.path().join("bzr");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        let config_content = format!(
+            r#"
+default_server = "test"
+
+[servers.test]
+url = "{}"
+api_key = "test-key"
+"#,
+            server.uri()
+        );
+        std::fs::write(config_dir.join("config.toml"), &config_content).unwrap();
+        // SAFETY: Tests are serialized via ENV_LOCK.
+        unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+        let mut config = Config::load().unwrap();
+        assert!(
+            config.servers["test"].auth_method.is_none(),
+            "precondition: auth_method should not be cached"
+        );
+
+        let (method, mode) = detect_and_persist_server_settings(&mut config, "test")
+            .await
+            .unwrap();
+        assert_eq!(method, AuthMethod::Header);
+        assert_eq!(mode, ApiMode::Rest);
+
+        // Verify persistence: reload from disk
+        let reloaded = Config::load().unwrap();
+        assert_eq!(
+            reloaded.servers["test"].auth_method,
+            Some(AuthMethod::Header)
+        );
+        assert_eq!(reloaded.servers["test"].api_mode, Some(ApiMode::Rest));
+        assert_eq!(
+            reloaded.servers["test"].server_version.as_deref(),
+            Some("5.1.2")
+        );
+    }
+
     #[tokio::test]
     async fn detect_version_non_json_returns_hybrid() {
         let server = MockServer::start().await;

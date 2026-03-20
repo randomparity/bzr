@@ -46,6 +46,13 @@ impl BugzillaClient {
             })
     }
 
+    /// Fetch both version and extensions from the server in a single call.
+    pub async fn server_info(&self) -> Result<(ServerVersion, ServerExtensions)> {
+        let version = self.server_version().await?;
+        let extensions = self.server_extensions().await?;
+        Ok((version, extensions))
+    }
+
     pub async fn server_version(&self) -> Result<ServerVersion> {
         let req = self.apply_auth(self.http.get(self.url("version")));
         let resp = self.send(req).await?;

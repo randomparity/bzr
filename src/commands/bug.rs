@@ -241,4 +241,67 @@ mod tests {
         let result = super::execute(&action, None, OutputFormat::Json, None).await;
         assert!(result.is_ok());
     }
+
+    #[tokio::test]
+    async fn bug_update_sends_put() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+
+        Mock::given(method("PUT"))
+            .and(path("/rest/bug/42"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": [{"id": 42, "changes": {}}]})),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let action = BugAction::Update {
+            id: 42,
+            status: Some("RESOLVED".into()),
+            resolution: Some("FIXED".into()),
+            assignee: None,
+            priority: None,
+            severity: None,
+            summary: None,
+            whiteboard: None,
+            flag: vec![],
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn bug_create_sends_post() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+
+        Mock::given(method("POST"))
+            .and(path("/rest/bug"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 99})),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let action = BugAction::Create {
+            product: "TestProduct".into(),
+            component: "General".into(),
+            summary: "New bug".into(),
+            version: "unspecified".into(),
+            description: None,
+            priority: None,
+            severity: None,
+            assignee: None,
+            op_sys: None,
+            rep_platform: None,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_ok());
+    }
 }

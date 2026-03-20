@@ -5,6 +5,24 @@ use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{CreateUserParams, UpdateUserParams};
 
+/// Compute the Bugzilla `login_denied_text` field from CLI flags.
+///
+/// - `--disable-login` with custom text → use that text
+/// - `--disable-login` without text → default "Account disabled"
+/// - `--disable-login=false` → empty string (re-enables login)
+/// - neither flag → `None` (leave unchanged)
+fn resolve_login_denied_text(
+    disable: Option<bool>,
+    custom_text: Option<&str>,
+) -> Option<String> {
+    match (disable, custom_text) {
+        (Some(true), Some(text)) => Some(text.into()),
+        (Some(true), None) => Some("Account disabled".into()),
+        (Some(false), _) => Some(String::new()),
+        (None, _) => None,
+    }
+}
+
 pub async fn execute(
     action: &UserAction,
     server: Option<&str>,
@@ -42,12 +60,8 @@ pub async fn execute(
             disable_login,
             login_denied_text,
         } => {
-            let denied_text = match (disable_login, login_denied_text) {
-                (Some(true), Some(text)) => Some(text.clone()),
-                (Some(true), None) => Some("Account disabled".into()),
-                (Some(false), _) => Some(String::new()),
-                (None, _) => None,
-            };
+            let denied_text =
+                resolve_login_denied_text(*disable_login, login_denied_text.as_deref());
             let params = UpdateUserParams {
                 names: Some(vec![user.clone()]),
                 real_name: real_name.clone(),
@@ -158,5 +172,30 @@ mod tests {
             result.is_ok(),
             "update with enable_login failed: {result:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn user_create_sends_post() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+
+        Mock::given(method("POST"))
+            .and(path("/rest/user"))
+            .respond_with(
+                ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 99})),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let action = UserAction::Create {
+            email: "new@test.com".into(),
+            full_name: Some("New User".into()),
+            password: None,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_ok(), "user create failed: {result:?}");
     }
 }
