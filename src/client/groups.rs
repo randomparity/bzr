@@ -22,24 +22,13 @@ impl BugzillaClient {
     pub async fn get_group_members(
         &self,
         group_name: &str,
-        include_details: bool,
+        include_fields: &str,
     ) -> Result<Vec<BugzillaUser>> {
-        // Always send include_fields to cap the response payload — group
-        // queries can return many members. Unlike search_users (which omits
-        // include_fields to get Bugzilla's default set), we explicitly
-        // constrain both paths.
-        // Always include "groups" in the field list — Bugzilla 5.0 only
-        // evaluates the group filter when the groups field is requested.
-        let fields = if include_details {
-            "id,name,real_name,email,can_login,groups"
-        } else {
-            "id,name,real_name,email,groups"
-        };
         // Bugzilla 5.0 requires at least one of ids/names/match alongside
         // the group filter. Use a broad match pattern to list all members.
         let req = self.apply_auth(self.http.get(self.url("user")).query(&[
             ("group", group_name),
-            ("include_fields", fields),
+            ("include_fields", include_fields),
             ("match", "*"),
         ]));
         let resp = self.send(req).await?;
@@ -151,7 +140,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client.get_group_members("admin", false).await.unwrap();
+        let users = client.get_group_members("admin", "id,name,real_name,email,groups").await.unwrap();
         assert_eq!(users.len(), 2);
         assert_eq!(users[0].name, "alice@example.com");
     }
@@ -182,7 +171,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client.get_group_members("admin", true).await.unwrap();
+        let users = client.get_group_members("admin", "id,name,real_name,email,can_login,groups").await.unwrap();
         assert_eq!(users.len(), 1);
         assert_eq!(users[0].name, "alice@example.com");
         assert_eq!(users[0].groups.len(), 1);
@@ -203,7 +192,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client.get_group_members("nobody", false).await.unwrap();
+        let users = client.get_group_members("nobody", "id,name,real_name,email,groups").await.unwrap();
         assert!(users.is_empty());
     }
 
@@ -223,7 +212,7 @@ mod tests {
 
         let client = test_client(&mock.uri());
         let err = client
-            .get_group_members("nonexistent", false)
+            .get_group_members("nonexistent", "id,name,real_name,email,groups")
             .await
             .unwrap_err();
         let msg = err.to_string();

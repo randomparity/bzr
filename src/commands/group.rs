@@ -31,7 +31,12 @@ pub async fn execute(
             );
         }
         GroupAction::ListUsers { group, details } => {
-            let users = client.get_group_members(group, *details).await?;
+            let fields = if *details {
+                "id,name,real_name,email,can_login,groups"
+            } else {
+                "id,name,real_name,email,groups"
+            };
+            let users = client.get_group_members(group, fields).await?;
             output::print_users(&users, *details, format);
         }
         GroupAction::View { group } => {
