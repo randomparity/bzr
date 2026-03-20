@@ -39,6 +39,18 @@ pub fn print_products(products: &[Product], format: OutputFormat) {
     });
 }
 
+fn print_named_list(heading: &str, items: &[(impl AsRef<str>, bool)]) {
+    if items.is_empty() {
+        return;
+    }
+    println!("{}:", heading.bold());
+    for (name, is_active) in items {
+        let active = if *is_active { "" } else { " [inactive]" };
+        println!("  {}{active}", name.as_ref());
+    }
+    println!();
+}
+
 #[expect(clippy::print_stdout)]
 pub fn print_product_detail(product: &Product, format: OutputFormat) {
     print_formatted(product, format, |product| {
@@ -57,21 +69,18 @@ pub fn print_product_detail(product: &Product, format: OutputFormat) {
             }
             println!();
         }
-        if !product.versions.is_empty() {
-            println!("{}:", "Versions".bold());
-            for v in &product.versions {
-                let active = if v.is_active { "" } else { " [inactive]" };
-                println!("  {}{active}", v.name);
-            }
-            println!();
-        }
-        if !product.milestones.is_empty() {
-            println!("{}:", "Milestones".bold());
-            for m in &product.milestones {
-                let active = if m.is_active { "" } else { " [inactive]" };
-                println!("  {}{active}", m.name);
-            }
-        }
+        let versions: Vec<_> = product
+            .versions
+            .iter()
+            .map(|v| (v.name.as_str(), v.is_active))
+            .collect();
+        print_named_list("Versions", &versions);
+        let milestones: Vec<_> = product
+            .milestones
+            .iter()
+            .map(|m| (m.name.as_str(), m.is_active))
+            .collect();
+        print_named_list("Milestones", &milestones);
     });
 }
 
