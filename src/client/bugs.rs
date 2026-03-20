@@ -77,6 +77,11 @@ impl BugzillaClient {
 
     async fn search_bugs_rest(&self, params: &SearchParams) -> Result<Vec<Bug>> {
         let mut req_builder = self.http.get(self.url("bug")).query(params);
+        // Vec fields can't be serialized by reqwest's query serializer, so we
+        // append them manually as repeated query params (e.g. &id=1&id=2).
+        for id in &params.id {
+            req_builder = req_builder.query(&[("id", id)]);
+        }
         if params.include_fields.is_none() {
             req_builder = req_builder.query(&[("include_fields", BUG_DEFAULT_FIELDS)]);
         }
