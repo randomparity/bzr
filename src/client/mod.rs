@@ -411,7 +411,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let err = client.search_users("anyone", false).await.unwrap_err();
+        let err = client.search_users("anyone", None).await.unwrap_err();
         let msg = err.to_string();
         assert!(
             msg.contains("500") || msg.contains("Internal Server Error"),
@@ -446,7 +446,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client.search_users("alice", false).await.unwrap();
+        let users = client.search_users("alice", None).await.unwrap();
         assert_eq!(users.len(), 1);
         assert_eq!(users[0].name, "alice@example.com");
     }
@@ -481,7 +481,7 @@ mod tests {
             .await;
 
         let client = test_client_query_param(&mock.uri());
-        let users = client.search_users("bob", false).await.unwrap();
+        let users = client.search_users("bob", None).await.unwrap();
         assert_eq!(users.len(), 1);
         assert_eq!(users[0].name, "bob@example.com");
     }
@@ -500,7 +500,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let err = client.search_users("anyone", false).await.unwrap_err();
+        let err = client.search_users("anyone", None).await.unwrap_err();
         let msg = err.to_string();
         assert!(
             msg.contains("410") || msg.contains("log in"),
@@ -523,7 +523,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let err = client.search_users("anyone", false).await.unwrap_err();
+        let err = client.search_users("anyone", None).await.unwrap_err();
         assert!(err.to_string().contains("not authorized"));
     }
 }

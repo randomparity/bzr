@@ -21,5 +21,5 @@ pub use comment::print_comments;
 pub use field::print_field_values;
 pub use group::print_group_info;
 pub use product::{print_classification, print_product_detail, print_products};
-pub use server::{print_config, print_server_info, ServerInfo};
+pub use server::{print_config, print_server_info, ConfigView, ServerInfo};
 pub use user::{print_users, print_whoami};

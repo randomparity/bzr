@@ -79,7 +79,8 @@ pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
         ConfigAction::Show => {
             let config = Config::load()?;
             let path = Config::path()?;
-            output::print_config(&config, &path, format);
+            let view = output::ConfigView::from_config(&config, &path);
+            output::print_config(&view, format);
         }
     }
     Ok(())

@@ -38,7 +38,7 @@ pub fn print_server_info(info: &ServerInfo<'_>, format: OutputFormat) {
 }
 
 #[derive(Serialize)]
-struct ServerDisplayInfo {
+pub struct ServerDisplayInfo {
     url: String,
     email: Option<String>,
     api_key: String,
@@ -60,31 +60,30 @@ impl ServerDisplayInfo {
 }
 
 #[derive(Serialize)]
-struct ConfigView {
-    config_file: String,
-    default_server: Option<String>,
-    servers: std::collections::BTreeMap<String, ServerDisplayInfo>,
+pub struct ConfigView {
+    pub config_file: String,
+    pub default_server: Option<String>,
+    pub servers: std::collections::BTreeMap<String, ServerDisplayInfo>,
+}
+
+impl ConfigView {
+    pub fn from_config(config: &crate::config::Config, path: &std::path::Path) -> Self {
+        let servers = config
+            .servers
+            .iter()
+            .map(|(name, srv)| (name.clone(), ServerDisplayInfo::from_config(srv)))
+            .collect();
+        Self {
+            config_file: path.to_string_lossy().into_owned(),
+            default_server: config.default_server.clone(),
+            servers,
+        }
+    }
 }
 
 #[expect(clippy::print_stdout)]
-pub fn print_config(
-    config: &crate::config::Config,
-    config_path: &std::path::Path,
-    format: OutputFormat,
-) {
-    let servers: std::collections::BTreeMap<String, ServerDisplayInfo> = config
-        .servers
-        .iter()
-        .map(|(name, srv)| (name.clone(), ServerDisplayInfo::from_config(srv)))
-        .collect();
-
-    let view = ConfigView {
-        config_file: config_path.to_string_lossy().into_owned(),
-        default_server: config.default_server.clone(),
-        servers,
-    };
-
-    print_formatted(&view, format, |v| {
+pub fn print_config(view: &ConfigView, format: OutputFormat) {
+    print_formatted(view, format, |v| {
         println!("Config file: {}\n", v.config_file);
         if let Some(ref def) = v.default_server {
             println!("Default server: {def}");
