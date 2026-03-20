@@ -1,8 +1,9 @@
 use crate::cli::BugAction;
-use crate::client::{CreateBugParams, SearchParams, UpdateBugParams};
 use crate::config::ApiMode;
 use crate::error::Result;
-use crate::output::{self, OutputFormat};
+use crate::output;
+use crate::types::OutputFormat;
+use crate::types::{CreateBugParams, SearchParams, UpdateBugParams};
 
 #[expect(
     clippy::too_many_lines,
@@ -14,7 +15,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::build_client(server, api).await?;
+    let client = super::shared::connect_client(server, api).await?;
 
     match action {
         BugAction::List {
@@ -55,7 +56,7 @@ pub async fn execute(
             exclude_fields,
         } => {
             let bug = client
-                .get_bug_with_fields(id, fields.as_deref(), exclude_fields.as_deref())
+                .get_bug(id, fields.as_deref(), exclude_fields.as_deref())
                 .await?;
             output::print_bug_detail(&bug, format);
         }
@@ -95,6 +96,8 @@ pub async fn execute(
             priority,
             severity,
             assignee,
+            op_sys,
+            rep_platform,
         } => {
             let params = CreateBugParams {
                 product: product.clone(),
@@ -105,6 +108,8 @@ pub async fn execute(
                 priority: priority.clone(),
                 severity: severity.clone(),
                 assigned_to: assignee.clone(),
+                op_sys: op_sys.clone(),
+                rep_platform: rep_platform.clone(),
             };
             let id = client.create_bug(&params).await?;
             output::print_result(
@@ -144,4 +149,96 @@ pub async fn execute(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used, clippy::await_holding_lock)]
+mod tests {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::super::test_helpers::{setup_config, ENV_LOCK};
+    use crate::cli::BugAction;
+    use crate::types::OutputFormat;
+
+    #[tokio::test]
+    async fn bug_list_returns_bugs() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{
+                    "id": 1,
+                    "summary": "Test bug",
+                    "status": "NEW",
+                    "resolution": "",
+                    "assigned_to": "nobody@test.com",
+                    "priority": "P1",
+                    "severity": "normal",
+                    "product": "TestProduct",
+                    "component": "General",
+                    "creation_time": "2025-01-01T00:00:00Z",
+                    "last_change_time": "2025-01-01T00:00:00Z"
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = BugAction::List {
+            product: None,
+            component: None,
+            status: None,
+            assignee: None,
+            creator: None,
+            priority: None,
+            severity: None,
+            id: vec![],
+            alias: None,
+            limit: 50,
+            fields: None,
+            exclude_fields: None,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn bug_view_returns_detail() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{
+                    "id": 42,
+                    "summary": "Test bug",
+                    "status": "NEW",
+                    "resolution": "",
+                    "assigned_to": "nobody@test.com",
+                    "priority": "P1",
+                    "severity": "normal",
+                    "product": "TestProduct",
+                    "component": "General",
+                    "creation_time": "2025-01-01T00:00:00Z",
+                    "last_change_time": "2025-01-01T00:00:00Z"
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = BugAction::View {
+            id: "42".to_string(),
+            fields: None,
+            exclude_fields: None,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_ok());
+    }
 }

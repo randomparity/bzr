@@ -1,8 +1,9 @@
 use crate::cli::ProductAction;
-use crate::client::{CreateProductParams, UpdateProductParams};
 use crate::config::ApiMode;
 use crate::error::Result;
-use crate::output::{self, OutputFormat};
+use crate::output;
+use crate::types::OutputFormat;
+use crate::types::{CreateProductParams, UpdateProductParams};
 
 pub async fn execute(
     action: &ProductAction,
@@ -10,11 +11,11 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::build_client(server, api).await?;
+    let client = super::shared::connect_client(server, api).await?;
 
     match action {
         ProductAction::List { r#type } => {
-            let products = client.list_products_by_type(r#type).await?;
+            let products = client.list_products_by_type(*r#type).await?;
             output::print_products(&products, format);
         }
         ProductAction::View { name } => {
@@ -60,4 +61,49 @@ pub async fn execute(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used, clippy::await_holding_lock)]
+mod tests {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::super::test_helpers::{setup_config, ENV_LOCK};
+    use crate::cli::ProductAction;
+    use crate::types::{OutputFormat, ProductListType};
+
+    #[tokio::test]
+    async fn product_list_returns_products() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+
+        Mock::given(method("GET"))
+            .and(path("/rest/product_accessible"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [1, 2]})),
+            )
+            .mount(&mock)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/product"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "products": [{
+                    "id": 1,
+                    "name": "TestProduct",
+                    "description": "A test product"
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = ProductAction::List {
+            r#type: ProductListType::Accessible,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_ok());
+    }
 }

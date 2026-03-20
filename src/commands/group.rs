@@ -1,8 +1,9 @@
 use crate::cli::GroupAction;
-use crate::client::UpdateGroupParams;
 use crate::config::ApiMode;
 use crate::error::Result;
-use crate::output::{self, OutputFormat};
+use crate::output;
+use crate::types::OutputFormat;
+use crate::types::{CreateGroupParams, UpdateGroupParams};
 
 pub async fn execute(
     action: &GroupAction,
@@ -10,7 +11,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::build_client(server, api).await?;
+    let client = super::shared::connect_client(server, api).await?;
 
     match action {
         GroupAction::AddUser { group, user } => {
@@ -52,7 +53,12 @@ pub async fn execute(
             description,
             is_active,
         } => {
-            let id = client.create_group(name, description, *is_active).await?;
+            let params = CreateGroupParams {
+                name: name.clone(),
+                description: description.clone(),
+                is_active: *is_active,
+            };
+            let id = client.create_group(&params).await?;
             output::print_result(
                 &serde_json::json!({
                     "id": id,
@@ -86,4 +92,43 @@ pub async fn execute(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used, clippy::await_holding_lock)]
+mod tests {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::super::test_helpers::{setup_config, ENV_LOCK};
+    use crate::cli::GroupAction;
+    use crate::types::OutputFormat;
+
+    #[tokio::test]
+    async fn group_view_returns_info() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+
+        Mock::given(method("GET"))
+            .and(path("/rest/group"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "groups": [{
+                    "id": 1,
+                    "name": "admin",
+                    "description": "Admin group",
+                    "is_active": true,
+                    "membership": []
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = GroupAction::View {
+            group: "admin".to_string(),
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_ok(), "group_view failed: {result:?}");
+    }
 }

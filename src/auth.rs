@@ -1,25 +1,24 @@
-use std::time::Duration;
-
 use reqwest::header::HeaderValue;
 use serde::Deserialize;
 
 use crate::config::{ApiMode, AuthMethod, Config};
 use crate::error::{BzrError, Result};
-
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+use crate::http::{build_http_client, AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 
 #[derive(Deserialize)]
-struct WhoAmIResponse {
+struct WhoamiProbe {
     #[serde(default)]
     id: u64,
 }
 
-/// Returns the cached auth method and detected API mode for a server.
+/// Returns the auth method and API mode for a server.
 ///
-/// If the auth method is already cached, returns it with the detected API mode.
-/// Otherwise, detects auth method and server version, persists both, and returns them.
-pub async fn resolve_server_settings(
+/// If the auth method is already cached, returns it with the cached API mode
+/// (or `Rest` as default). Otherwise, detects auth method and server version
+/// via network probes. Always persists the auth method; only persists API mode
+/// and version when version detection succeeds (avoids caching wrong defaults
+/// on transient failures).
+pub async fn detect_and_cache_server_settings(
     config: &mut Config,
     server_name: &str,
 ) -> Result<(AuthMethod, ApiMode)> {
@@ -38,11 +37,7 @@ pub async fn resolve_server_settings(
     let api_key = srv.api_key.clone();
     let email = srv.email.clone();
 
-    let http = reqwest::Client::builder()
-        .connect_timeout(CONNECT_TIMEOUT)
-        .timeout(REQUEST_TIMEOUT)
-        .build()
-        .map_err(|e| BzrError::Other(format!("failed to build HTTP client: {e}")))?;
+    let http = build_http_client().map_err(BzrError::Http)?;
 
     let method = detect_auth_method(&http, &url, &api_key, email.as_deref()).await?;
     let (version, api_mode) = detect_version_and_mode(&http, &url, &api_key, method).await;
@@ -55,6 +50,8 @@ pub async fn resolve_server_settings(
         "detected server settings"
     );
 
+    // Second lookup required: the first `get()` borrows `config` immutably for
+    // `url`/`api_key` extraction, but `get_mut()` needs a mutable borrow.
     let srv_mut = config
         .servers
         .get_mut(server_name)
@@ -94,11 +91,15 @@ async fn detect_version_and_mode(
     match auth_method {
         AuthMethod::Header => {
             if let Ok(val) = reqwest::header::HeaderValue::from_str(api_key) {
-                req = req.header("X-BUGZILLA-API-KEY", val);
+                req = req.header(AUTH_HEADER_NAME, val);
+            } else {
+                tracing::debug!(
+                    "API key has invalid header characters, sending version request without auth"
+                );
             }
         }
         AuthMethod::QueryParam => {
-            req = req.query(&[("Bugzilla_api_key", api_key)]);
+            req = req.query(&[(AUTH_QUERY_PARAM, api_key)]);
         }
     }
 
@@ -123,6 +124,8 @@ async fn detect_version_and_mode(
     };
 
     let Ok(parsed) = serde_json::from_str::<VersionResp>(&body) else {
+        // Endpoint exists (200 OK) but returns non-standard body — assume a
+        // modern server with a custom extension; default to Hybrid.
         return (None, ApiMode::Hybrid);
     };
 
@@ -220,7 +223,7 @@ async fn detect_auth_method(
              server. Check your API key and server URL."
         }
     };
-    Err(BzrError::Other(hint.into()))
+    Err(BzrError::Auth(hint.into()))
 }
 
 enum WhoamiOutcome {
@@ -241,63 +244,44 @@ async fn try_whoami(
     let url = format!("{base}/rest/whoami");
 
     // Probe: header-based auth
-    let resp = match http
-        .get(&url)
-        .header("X-BUGZILLA-API-KEY", key_header.clone())
-        .send()
-        .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::debug!("whoami request failed: {e:#}");
-            return WhoamiOutcome::NetworkError;
-        }
-    };
-
-    let status = resp.status();
-    let body = resp.text().await.unwrap_or_default();
-    tracing::trace!(probe = "whoami/header", %status, body, "auth probe response");
-    if status.is_success() {
-        if let Ok(parsed) = serde_json::from_str::<WhoAmIResponse>(&body) {
-            if parsed.id > 0 {
-                return WhoamiOutcome::Authenticated(AuthMethod::Header);
-            }
-        }
-    } else if status == reqwest::StatusCode::NOT_FOUND {
-        tracing::debug!("rest/whoami not available on this server");
-        return WhoamiOutcome::NotFound;
-    } else {
-        tracing::debug!(%status, "header auth probe failed");
+    let header_req = http.get(&url).header(AUTH_HEADER_NAME, key_header.clone());
+    let outcome = probe_whoami(header_req, AuthMethod::Header).await;
+    match outcome {
+        WhoamiOutcome::AuthRejected => {} // try query-param next
+        other => return other,
     }
 
     // Probe: query-param auth
-    let resp = match http
-        .get(&url)
-        .query(&[("Bugzilla_api_key", api_key)])
-        .send()
-        .await
-    {
+    let query_req = http.get(&url).query(&[(AUTH_QUERY_PARAM, api_key)]);
+    probe_whoami(query_req, AuthMethod::QueryParam).await
+}
+
+async fn probe_whoami(request: reqwest::RequestBuilder, method: AuthMethod) -> WhoamiOutcome {
+    let resp = match request.send().await {
         Ok(r) => r,
         Err(e) => {
-            tracing::debug!("whoami query-param request failed: {e:#}");
+            tracing::debug!("whoami {method} request failed: {e:#}");
             return WhoamiOutcome::NetworkError;
         }
     };
 
     let status = resp.status();
     let body = resp.text().await.unwrap_or_default();
-    tracing::trace!(probe = "whoami/query_param", %status, body, "auth probe response");
+    tracing::trace!(probe = "whoami", %method, %status, body, "auth probe response");
     if status.is_success() {
-        if let Ok(parsed) = serde_json::from_str::<WhoAmIResponse>(&body) {
+        // A valid whoami response contains a positive user ID. Treat id==0
+        // (unauthenticated/anonymous) and unparseable bodies as auth failures
+        // — the server responded but didn't confirm our credentials.
+        if let Ok(parsed) = serde_json::from_str::<WhoamiProbe>(&body) {
             if parsed.id > 0 {
-                return WhoamiOutcome::Authenticated(AuthMethod::QueryParam);
+                return WhoamiOutcome::Authenticated(method);
             }
         }
     } else if status == reqwest::StatusCode::NOT_FOUND {
         tracing::debug!("rest/whoami not available on this server");
         return WhoamiOutcome::NotFound;
     } else {
-        tracing::debug!(%status, "query param auth probe failed");
+        tracing::debug!(%status, %method, "whoami auth probe failed");
     }
 
     WhoamiOutcome::AuthRejected
@@ -351,7 +335,7 @@ async fn try_valid_login(
     if let Some(method) = probe_valid_login(
         http,
         &url,
-        &[("login", login), ("Bugzilla_api_key", api_key)],
+        &[("login", login), (AUTH_QUERY_PARAM, api_key)],
         None,
         AuthMethod::QueryParam,
     )
@@ -373,7 +357,7 @@ async fn probe_valid_login(
 ) -> Option<AuthMethod> {
     let mut req = http.get(url).query(query);
     if let Some(hdr) = key_header {
-        req = req.header("X-BUGZILLA-API-KEY", hdr.clone());
+        req = req.header(AUTH_HEADER_NAME, hdr.clone());
     }
     let resp = req.send().await.ok()?;
     let status = resp.status();
@@ -402,7 +386,7 @@ async fn probe_header_on_api(http: &reqwest::Client, base: &str, key_header: &He
     let resp = http
         .get(&url)
         .query(&[("limit", "1")])
-        .header("X-BUGZILLA-API-KEY", key_header.clone())
+        .header(AUTH_HEADER_NAME, key_header.clone())
         .send()
         .await;
     match resp {
@@ -433,11 +417,7 @@ mod tests {
     use super::*;
 
     fn test_client() -> reqwest::Client {
-        reqwest::Client::builder()
-            .connect_timeout(CONNECT_TIMEOUT)
-            .timeout(REQUEST_TIMEOUT)
-            .build()
-            .unwrap()
+        crate::http::build_http_client().unwrap()
     }
 
     #[tokio::test]
@@ -445,7 +425,7 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/rest/whoami"))
-            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .and(header(AUTH_HEADER_NAME, "test-key"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 42})))
             .mount(&server)
             .await;
@@ -462,14 +442,14 @@ mod tests {
 
         Mock::given(method("GET"))
             .and(path("/rest/whoami"))
-            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .and(header(AUTH_HEADER_NAME, "test-key"))
             .respond_with(ResponseTemplate::new(401))
             .mount(&server)
             .await;
 
         Mock::given(method("GET"))
             .and(path("/rest/whoami"))
-            .and(query_param("Bugzilla_api_key", "test-key"))
+            .and(query_param(AUTH_QUERY_PARAM, "test-key"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 7})))
             .mount(&server)
             .await;
@@ -493,7 +473,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/valid_login"))
             .and(query_param("login", "user@example.com"))
-            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .and(header(AUTH_HEADER_NAME, "test-key"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": true})),
             )
@@ -525,7 +505,7 @@ mod tests {
 
         Mock::given(method("GET"))
             .and(path("/rest/valid_login"))
-            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .and(header(AUTH_HEADER_NAME, "test-key"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": false})),
             )
@@ -535,7 +515,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/valid_login"))
             .and(query_param("login", "user@example.com"))
-            .and(query_param("Bugzilla_api_key", "test-key"))
+            .and(query_param(AUTH_QUERY_PARAM, "test-key"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": true})),
             )
@@ -545,7 +525,7 @@ mod tests {
         // Header auth works on real API endpoints
         Mock::given(method("GET"))
             .and(path("/rest/bug"))
-            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .and(header(AUTH_HEADER_NAME, "test-key"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
             .mount(&server)
             .await;
@@ -575,7 +555,7 @@ mod tests {
 
         Mock::given(method("GET"))
             .and(path("/rest/valid_login"))
-            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .and(header(AUTH_HEADER_NAME, "test-key"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": false})),
             )
@@ -585,7 +565,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/valid_login"))
             .and(query_param("login", "user@example.com"))
-            .and(query_param("Bugzilla_api_key", "test-key"))
+            .and(query_param(AUTH_QUERY_PARAM, "test-key"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": true})),
             )
@@ -595,7 +575,7 @@ mod tests {
         // Header auth rejected on real API endpoints
         Mock::given(method("GET"))
             .and(path("/rest/bug"))
-            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .and(header(AUTH_HEADER_NAME, "test-key"))
             .respond_with(ResponseTemplate::new(401))
             .mount(&server)
             .await;
@@ -672,7 +652,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/valid_login"))
             .and(query_param("login", "user@example.com"))
-            .and(header("X-BUGZILLA-API-KEY", "test-key"))
+            .and(header(AUTH_HEADER_NAME, "test-key"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": 1})),
             )
@@ -738,7 +718,7 @@ mod tests {
             },
         );
 
-        let (method, mode) = resolve_server_settings(&mut config, "cached")
+        let (method, mode) = detect_and_cache_server_settings(&mut config, "cached")
             .await
             .unwrap();
         assert_eq!(method, AuthMethod::Header);
@@ -760,7 +740,7 @@ mod tests {
             },
         );
 
-        let (method, mode) = resolve_server_settings(&mut config, "cached")
+        let (method, mode) = detect_and_cache_server_settings(&mut config, "cached")
             .await
             .unwrap();
         assert_eq!(method, AuthMethod::Header);
@@ -770,7 +750,7 @@ mod tests {
     #[tokio::test]
     async fn missing_server_returns_error() {
         let mut config = Config::default();
-        let result = resolve_server_settings(&mut config, "nonexistent").await;
+        let result = detect_and_cache_server_settings(&mut config, "nonexistent").await;
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("not found"), "unexpected error: {err}");

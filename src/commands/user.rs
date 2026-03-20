@@ -1,8 +1,9 @@
 use crate::cli::UserAction;
-use crate::client::{CreateUserParams, UpdateUserParams};
 use crate::config::ApiMode;
 use crate::error::Result;
-use crate::output::{self, OutputFormat};
+use crate::output;
+use crate::types::OutputFormat;
+use crate::types::{CreateUserParams, UpdateUserParams};
 
 pub async fn execute(
     action: &UserAction,
@@ -10,7 +11,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::build_client(server, api).await?;
+    let client = super::shared::connect_client(server, api).await?;
 
     match action {
         UserAction::Search { query, details } => {
@@ -61,4 +62,100 @@ pub async fn execute(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used, clippy::await_holding_lock)]
+mod tests {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::super::test_helpers::{setup_config, ENV_LOCK};
+    use crate::cli::UserAction;
+    use crate::types::OutputFormat;
+
+    // Note: user tests that modify env need ENV_LOCK + setup_config
+
+    #[tokio::test]
+    async fn user_search_returns_results() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "users": [{
+                    "id": 1,
+                    "name": "alice@test.com",
+                    "real_name": "Alice"
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = UserAction::Search {
+            query: "alice".to_string(),
+            details: false,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn update_user_disable_login_sends_denied_text() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+
+        Mock::given(method("PUT"))
+            .and(path("/rest/user/alice%40test%2Ecom"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let action = UserAction::Update {
+            user: "alice@test.com".to_string(),
+            real_name: None,
+            email: None,
+            disable_login: Some(true),
+            login_denied_text: Some("Go away".to_string()),
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(
+            result.is_ok(),
+            "update with disable_login failed: {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn update_user_enable_login_sends_empty_denied_text() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+
+        Mock::given(method("PUT"))
+            .and(path("/rest/user/bob%40test%2Ecom"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let action = UserAction::Update {
+            user: "bob@test.com".to_string(),
+            real_name: None,
+            email: None,
+            disable_login: Some(false),
+            login_denied_text: None,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(
+            result.is_ok(),
+            "update with enable_login failed: {result:?}"
+        );
+    }
 }

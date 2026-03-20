@@ -1,3 +1,5 @@
+pub(crate) mod client;
+
 use std::collections::BTreeMap;
 
 use quick_xml::events::Event;

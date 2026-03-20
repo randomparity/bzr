@@ -1,10 +1,11 @@
 use std::path::Path;
 
 use crate::cli::AttachmentAction;
-use crate::client::UpdateAttachmentParams;
 use crate::config::ApiMode;
 use crate::error::Result;
-use crate::output::{self, OutputFormat};
+use crate::output;
+use crate::types::OutputFormat;
+use crate::types::{UpdateAttachmentParams, UploadAttachmentParams};
 
 pub async fn execute(
     action: &AttachmentAction,
@@ -12,14 +13,14 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::build_client(server, api).await?;
+    let client = super::shared::connect_client(server, api).await?;
 
     match action {
         AttachmentAction::List { bug_id } => {
             let attachments = client.get_attachments(*bug_id).await?;
             output::print_attachments(&attachments, format);
         }
-        AttachmentAction::Download { id, output: out } => {
+        AttachmentAction::Download { id, out } => {
             let (filename, data) = client.download_attachment(*id).await?;
             let dest = out.as_deref().unwrap_or(&filename);
             std::fs::write(dest, &data)?;
@@ -53,21 +54,25 @@ pub async fn execute(
                 .as_deref()
                 .unwrap_or_else(|| guess_content_type(file_name));
             let flags = super::shared::parse_flags(flag)?;
-            let att_id = client
-                .upload_attachment(*bug_id, file_name, summary, ct, &data, &flags)
-                .await?;
+            let size = data.len();
+            let upload_params = UploadAttachmentParams {
+                bug_id: *bug_id,
+                file_name: file_name.to_string(),
+                summary: summary.to_string(),
+                content_type: ct.to_string(),
+                data,
+                flags,
+            };
+            let att_id = client.upload_attachment(&upload_params).await?;
             output::print_result(
                 &serde_json::json!({
                     "id": att_id,
                     "bug_id": bug_id,
-                    "size": data.len(),
+                    "size": size,
                     "resource": "attachment",
                     "action": "created",
                 }),
-                &format!(
-                    "Uploaded attachment #{att_id} to bug #{bug_id} ({} bytes)",
-                    data.len()
-                ),
+                &format!("Uploaded attachment #{att_id} to bug #{bug_id} ({size} bytes)",),
                 format,
             );
         }
@@ -125,5 +130,66 @@ fn guess_content_type(filename: &str) -> &'static str {
         Some("tar") => "application/x-tar",
         Some("patch" | "diff") => "text/x-diff",
         _ => "application/octet-stream",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn guess_content_type_text_plain() {
+        assert_eq!(guess_content_type("file.txt"), "text/plain");
+        assert_eq!(guess_content_type("script.py"), "text/plain");
+        assert_eq!(guess_content_type("main.rs"), "text/plain");
+        assert_eq!(guess_content_type("code.c"), "text/plain");
+        assert_eq!(guess_content_type("app.js"), "text/plain");
+    }
+
+    #[test]
+    fn guess_content_type_html() {
+        assert_eq!(guess_content_type("page.html"), "text/html");
+        assert_eq!(guess_content_type("page.htm"), "text/html");
+    }
+
+    #[test]
+    fn guess_content_type_json() {
+        assert_eq!(guess_content_type("data.json"), "application/json");
+    }
+
+    #[test]
+    fn guess_content_type_images() {
+        assert_eq!(guess_content_type("photo.png"), "image/png");
+        assert_eq!(guess_content_type("photo.jpg"), "image/jpeg");
+        assert_eq!(guess_content_type("photo.jpeg"), "image/jpeg");
+        assert_eq!(guess_content_type("anim.gif"), "image/gif");
+        assert_eq!(guess_content_type("logo.svg"), "image/svg+xml");
+    }
+
+    #[test]
+    fn guess_content_type_archives() {
+        assert_eq!(guess_content_type("file.gz"), "application/gzip");
+        assert_eq!(guess_content_type("file.tgz"), "application/gzip");
+        assert_eq!(guess_content_type("file.zip"), "application/zip");
+        assert_eq!(guess_content_type("file.tar"), "application/x-tar");
+    }
+
+    #[test]
+    fn guess_content_type_diff() {
+        assert_eq!(guess_content_type("fix.patch"), "text/x-diff");
+        assert_eq!(guess_content_type("changes.diff"), "text/x-diff");
+    }
+
+    #[test]
+    fn guess_content_type_unknown() {
+        assert_eq!(guess_content_type("file.xyz"), "application/octet-stream");
+        assert_eq!(guess_content_type("noext"), "application/octet-stream");
+    }
+
+    #[test]
+    fn guess_content_type_case_insensitive() {
+        assert_eq!(guess_content_type("FILE.TXT"), "text/plain");
+        assert_eq!(guess_content_type("image.PNG"), "image/png");
+        assert_eq!(guess_content_type("data.JSON"), "application/json");
     }
 }

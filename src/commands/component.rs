@@ -1,8 +1,9 @@
 use crate::cli::ComponentAction;
-use crate::client::UpdateComponentParams;
 use crate::config::ApiMode;
 use crate::error::Result;
-use crate::output::{self, OutputFormat};
+use crate::output;
+use crate::types::OutputFormat;
+use crate::types::{CreateComponentParams, UpdateComponentParams};
 
 pub async fn execute(
     action: &ComponentAction,
@@ -10,7 +11,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::build_client(server, api).await?;
+    let client = super::shared::connect_client(server, api).await?;
 
     match action {
         ComponentAction::Create {
@@ -19,9 +20,13 @@ pub async fn execute(
             description,
             default_assignee,
         } => {
-            let id = client
-                .create_component(product, name, description, default_assignee)
-                .await?;
+            let params = CreateComponentParams {
+                product: product.clone(),
+                name: name.clone(),
+                description: description.clone(),
+                default_assignee: default_assignee.clone(),
+            };
+            let id = client.create_component(&params).await?;
             output::print_result(
                 &serde_json::json!({
                     "id": id,
@@ -57,4 +62,38 @@ pub async fn execute(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used, clippy::await_holding_lock)]
+mod tests {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::super::test_helpers::{setup_config, ENV_LOCK};
+    use crate::cli::ComponentAction;
+    use crate::types::OutputFormat;
+
+    #[tokio::test]
+    async fn component_create_succeeds() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+
+        Mock::given(method("POST"))
+            .and(path("/rest/component"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 42})))
+            .mount(&mock)
+            .await;
+
+        let action = ComponentAction::Create {
+            product: "TestProduct".to_string(),
+            name: "Backend".to_string(),
+            description: "Backend component".to_string(),
+            default_assignee: "dev@test.com".to_string(),
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_ok());
+    }
 }

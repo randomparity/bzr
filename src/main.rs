@@ -1,21 +1,12 @@
-mod auth;
-mod cli;
-mod client;
-mod commands;
-mod config;
-mod error;
-#[expect(clippy::print_stdout, clippy::expect_used)]
-mod output;
-mod xmlrpc;
-mod xmlrpc_client;
-
 use std::io::IsTerminal;
 
 use clap::Parser;
-use cli::{Cli, Commands};
-use error::BzrError;
-use output::OutputFormat;
 use tracing_subscriber::EnvFilter;
+
+use bzr::cli::{Cli, Commands};
+use bzr::commands;
+use bzr::error::{self, BzrError};
+use bzr::types::OutputFormat;
 
 #[tokio::main]
 async fn main() {
@@ -91,11 +82,11 @@ fn resolve_format(cli: &Cli) -> error::Result<OutputFormat> {
         }
         return Ok(OutputFormat::Json);
     }
-    if let Some(ref out) = cli.output {
-        return out.parse().map_err(BzrError::Other);
+    if let Some(out) = cli.output {
+        return Ok(out);
     }
     if let Ok(val) = std::env::var("BZR_OUTPUT") {
-        return val.parse().map_err(BzrError::Other);
+        return val.parse().map_err(BzrError::InputValidation);
     }
     if std::io::stdout().is_terminal() {
         Ok(OutputFormat::Table)
@@ -151,11 +142,16 @@ async fn run(cli: Cli, format: OutputFormat) -> error::Result<()> {
 #[cfg(unix)]
 fn suppress_stdout() {
     use std::os::unix::io::AsRawFd;
-    // Safety: dup2 replaces stdout fd with /dev/null fd.
-    // This is safe because we own the process and only do this once.
     if let Ok(devnull) = std::fs::File::open("/dev/null") {
+        extern "C" {
+            fn dup2(oldfd: std::ffi::c_int, newfd: std::ffi::c_int) -> std::ffi::c_int;
+        }
+        // SAFETY: dup2 replaces stdout fd with /dev/null fd.
+        // We own the process and only call this once at startup, before any
+        // other threads are writing to stdout. We declare the libc dup2
+        // symbol directly to avoid pulling in the full libc crate.
         unsafe {
-            libc::dup2(devnull.as_raw_fd(), libc::STDOUT_FILENO);
+            dup2(devnull.as_raw_fd(), 1); // STDOUT_FILENO = 1
         }
     }
 }
@@ -165,7 +161,7 @@ fn suppress_stdout() {
 fn suppress_stdout() {}
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used, clippy::expect_used)]
+#[expect(clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -197,7 +193,7 @@ mod tests {
     #[test]
     fn resolve_format_output_json() {
         let mut cli = base_cli(dummy_command());
-        cli.output = Some("json".into());
+        cli.output = Some(OutputFormat::Json);
         let fmt = resolve_format(&cli).expect("should resolve");
         assert_eq!(fmt, OutputFormat::Json);
     }
@@ -205,24 +201,16 @@ mod tests {
     #[test]
     fn resolve_format_output_table() {
         let mut cli = base_cli(dummy_command());
-        cli.output = Some("table".into());
+        cli.output = Some(OutputFormat::Table);
         let fmt = resolve_format(&cli).expect("should resolve");
         assert_eq!(fmt, OutputFormat::Table);
-    }
-
-    #[test]
-    fn resolve_format_invalid_output() {
-        let mut cli = base_cli(dummy_command());
-        cli.output = Some("xml".into());
-        let err = resolve_format(&cli).unwrap_err();
-        assert_eq!(err.exit_code(), 1);
     }
 
     #[test]
     fn resolve_format_json_overrides_output() {
         let mut cli = base_cli(dummy_command());
         cli.json = true;
-        cli.output = Some("table".into());
+        cli.output = Some(OutputFormat::Table);
         let fmt = resolve_format(&cli).expect("should resolve");
         assert_eq!(fmt, OutputFormat::Json);
     }

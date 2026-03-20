@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
-use crate::client::{Bug, SearchParams};
 use crate::error::{BzrError, Result};
+use crate::http::AUTH_QUERY_PARAM;
+use crate::types::{Bug, SearchParams};
 use crate::xmlrpc::{self, Value};
 
 pub struct XmlRpcClient {
@@ -23,10 +24,7 @@ impl XmlRpcClient {
     // Never log the request body. Response bodies are safe to log at trace
     // level since Bugzilla does not echo auth credentials back.
     async fn call(&self, method: &str, mut params: BTreeMap<String, Value>) -> Result<Value> {
-        params.insert(
-            "Bugzilla_api_key".into(),
-            Value::from(self.api_key.as_str()),
-        );
+        params.insert(AUTH_QUERY_PARAM.into(), Value::from(self.api_key.as_str()));
 
         let body = xmlrpc::build_request(method, params);
         let url = format!("{}/xmlrpc.cgi", self.base_url);
@@ -60,30 +58,26 @@ impl XmlRpcClient {
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
         let mut rpc_params = BTreeMap::new();
 
-        if let Some(ref product) = params.product {
-            rpc_params.insert("product".into(), Value::from(product.as_str()));
+        // Bugzilla XML-RPC uses the same parameter names as REST but expects
+        // typed values (Value::String) rather than query-string encoding.
+        let string_fields: &[(&str, &Option<String>)] = &[
+            ("product", &params.product),
+            ("component", &params.component),
+            ("status", &params.status),
+            ("assigned_to", &params.assigned_to),
+            ("creator", &params.creator),
+            ("priority", &params.priority),
+            ("severity", &params.severity),
+            ("alias", &params.alias),
+            ("summary", &params.summary),
+            ("quicksearch", &params.quicksearch),
+        ];
+        for &(key, value) in string_fields {
+            if let Some(ref v) = *value {
+                rpc_params.insert(key.into(), Value::from(v.as_str()));
+            }
         }
-        if let Some(ref component) = params.component {
-            rpc_params.insert("component".into(), Value::from(component.as_str()));
-        }
-        if let Some(ref status) = params.status {
-            rpc_params.insert("status".into(), Value::from(status.as_str()));
-        }
-        if let Some(ref assigned_to) = params.assigned_to {
-            rpc_params.insert("assigned_to".into(), Value::from(assigned_to.as_str()));
-        }
-        if let Some(ref creator) = params.creator {
-            rpc_params.insert("creator".into(), Value::from(creator.as_str()));
-        }
-        if let Some(ref priority) = params.priority {
-            rpc_params.insert("priority".into(), Value::from(priority.as_str()));
-        }
-        if let Some(ref severity) = params.severity {
-            rpc_params.insert("severity".into(), Value::from(severity.as_str()));
-        }
-        if let Some(ref alias) = params.alias {
-            rpc_params.insert("alias".into(), Value::from(alias.as_str()));
-        }
+
         if !params.id.is_empty() {
             #[expect(clippy::cast_possible_wrap, reason = "bug IDs fit in i64")]
             let ids: Vec<Value> = params.id.iter().map(|id| Value::Int(*id as i64)).collect();
@@ -92,19 +86,15 @@ impl XmlRpcClient {
         if let Some(limit) = params.limit {
             rpc_params.insert("limit".into(), Value::Int(i64::from(limit)));
         }
-        if let Some(ref summary) = params.summary {
-            rpc_params.insert("summary".into(), Value::from(summary.as_str()));
-        }
-        if let Some(ref quicksearch) = params.quicksearch {
-            rpc_params.insert("quicksearch".into(), Value::from(quicksearch.as_str()));
-        }
-        if let Some(ref fields) = params.include_fields {
-            let arr: Vec<Value> = fields.split(',').map(|f| Value::from(f.trim())).collect();
-            rpc_params.insert("include_fields".into(), Value::Array(arr));
-        }
-        if let Some(ref fields) = params.exclude_fields {
-            let arr: Vec<Value> = fields.split(',').map(|f| Value::from(f.trim())).collect();
-            rpc_params.insert("exclude_fields".into(), Value::Array(arr));
+        // REST accepts comma-separated field lists; XML-RPC requires arrays.
+        for (key, value) in [
+            ("include_fields", &params.include_fields),
+            ("exclude_fields", &params.exclude_fields),
+        ] {
+            if let Some(ref fields) = *value {
+                let arr: Vec<Value> = fields.split(',').map(|f| Value::from(f.trim())).collect();
+                rpc_params.insert(key.into(), Value::Array(arr));
+            }
         }
 
         let result = self.call("Bug.search", rpc_params).await?;
@@ -126,7 +116,10 @@ impl XmlRpcClient {
         let result = self.call("Bug.get", rpc_params).await?;
         let mut bugs = extract_bugs(&result)?;
         if bugs.is_empty() {
-            return Err(BzrError::Other(format!("bug {id} not found")));
+            return Err(BzrError::NotFound {
+                resource: "bug",
+                id: id.to_string(),
+            });
         }
         Ok(bugs.swap_remove(0))
     }
@@ -167,17 +160,17 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         id: id as u64,
         summary: get_str(m, "summary").unwrap_or_default(),
         status: get_str(m, "status").unwrap_or_default(),
-        resolution: get_str_opt(m, "resolution"),
-        product: get_str_opt(m, "product"),
-        component: get_str_opt(m, "component"),
-        assigned_to: get_str_opt(m, "assigned_to"),
-        priority: get_str_opt(m, "priority"),
-        severity: get_str_opt(m, "severity"),
+        resolution: get_nonempty_str(m, "resolution"),
+        product: get_nonempty_str(m, "product"),
+        component: get_nonempty_str(m, "component"),
+        assigned_to: get_nonempty_str(m, "assigned_to"),
+        priority: get_nonempty_str(m, "priority"),
+        severity: get_nonempty_str(m, "severity"),
         creation_time: get_datetime_str(m, "creation_time"),
         last_change_time: get_datetime_str(m, "last_change_time"),
-        creator: get_str_opt(m, "creator"),
-        url: get_str_opt(m, "url"),
-        whiteboard: get_str_opt(m, "whiteboard"),
+        creator: get_nonempty_str(m, "creator"),
+        url: get_nonempty_str(m, "url"),
+        whiteboard: get_nonempty_str(m, "whiteboard"),
         keywords: get_str_array(m, "keywords"),
         blocks: get_int_array(m, "blocks"),
         depends_on: get_int_array(m, "depends_on"),
@@ -189,7 +182,7 @@ fn get_str(m: &BTreeMap<String, Value>, key: &str) -> Option<String> {
     m.get(key).and_then(Value::as_str).map(String::from)
 }
 
-fn get_str_opt(m: &BTreeMap<String, Value>, key: &str) -> Option<String> {
+fn get_nonempty_str(m: &BTreeMap<String, Value>, key: &str) -> Option<String> {
     let val = m.get(key)?;
     match val {
         Value::String(s) if s.is_empty() => None,
