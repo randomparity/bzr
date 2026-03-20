@@ -216,8 +216,6 @@ impl BugzillaClient {
             "response body"
         );
 
-        // Parse once to serde_json::Value, then check for errors and
-        // deserialize the target type from the same parsed value.
         let value: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
             tracing::debug!(
                 url = safe_url,
@@ -228,42 +226,56 @@ impl BugzillaClient {
             BzrError::Deserialize(format!("failed to parse response from {safe_url}: {e}"))
         })?;
 
-        // Check for Bugzilla error responses that arrive with 200 status.
-        // Some servers (e.g. IBM LTC Bugzilla) include error fields alongside
-        // valid data — only treat the error as fatal when the response doesn't
-        // also contain real data (indicated by common Bugzilla result keys).
-        if let Some(map) = value.as_object() {
-            let is_error = map.get("error").and_then(serde_json::Value::as_bool).unwrap_or(false);
-            if is_error {
-                let code = map.get("code").and_then(serde_json::Value::as_i64).unwrap_or(0);
-                let message = map
-                    .get("message")
-                    .and_then(|v| v.as_str())
-                    .map(String::from);
-                let has_data = Self::has_data_fields(map);
-                tracing::debug!(
-                    url = safe_url,
-                    code,
-                    message = message.as_deref().unwrap_or("unknown"),
-                    has_data,
-                    "error payload in 200 response"
-                );
-                if !has_data {
-                    return Err(BzrError::Api {
-                        code,
-                        message: message.unwrap_or_else(|| "unknown API error".into()),
-                    });
-                }
-                tracing::warn!(
-                    url = safe_url,
-                    "server returned error alongside data; using data"
-                );
-            }
-        }
+        Self::check_bugzilla_200_error(&value, &safe_url)?;
 
         serde_json::from_value(value).map_err(|e| {
             BzrError::Deserialize(format!("failed to deserialize response from {safe_url}: {e}"))
         })
+    }
+
+    /// Detect Bugzilla error payloads that arrive with HTTP 200 status.
+    ///
+    /// Some servers (e.g. IBM LTC Bugzilla) include error fields alongside
+    /// valid data — only treat the error as fatal when the response doesn't
+    /// also contain real data (indicated by common Bugzilla result keys).
+    fn check_bugzilla_200_error(value: &serde_json::Value, url: &str) -> Result<()> {
+        let Some(map) = value.as_object() else {
+            return Ok(());
+        };
+        let is_error = map
+            .get("error")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        if !is_error {
+            return Ok(());
+        }
+
+        let code = map
+            .get("code")
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(0);
+        let message = map
+            .get("message")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        let has_data = Self::has_data_fields(map);
+
+        tracing::debug!(
+            url,
+            code,
+            message = message.as_deref().unwrap_or("unknown"),
+            has_data,
+            "error payload in 200 response"
+        );
+
+        if !has_data {
+            return Err(BzrError::Api {
+                code,
+                message: message.unwrap_or_else(|| "unknown API error".into()),
+            });
+        }
+        tracing::warn!(url, "server returned error alongside data; using data");
+        Ok(())
     }
 
     async fn check_error(&self, response: reqwest::Response) -> Result<reqwest::Response> {
