@@ -133,7 +133,7 @@ pub async fn execute(
             whiteboard,
             flag,
         } => {
-            let flags = super::shared::parse_flags(flag)?;
+            let flags = super::flags::parse_flags(flag)?;
             let params = UpdateBugParams {
                 status: status.clone(),
                 resolution: resolution.clone(),

@@ -53,7 +53,7 @@ pub async fn execute(
             let ct = content_type
                 .as_deref()
                 .unwrap_or_else(|| guess_content_type(file_name));
-            let flags = super::shared::parse_flags(flag)?;
+            let flags = super::flags::parse_flags(flag)?;
             let size = data.len();
             let upload_params = UploadAttachmentParams {
                 bug_id: *bug_id,
@@ -86,7 +86,7 @@ pub async fn execute(
             is_private,
             flag,
         } => {
-            let flags = super::shared::parse_flags(flag)?;
+            let flags = super::flags::parse_flags(flag)?;
             let params = UpdateAttachmentParams {
                 summary: summary.clone(),
                 file_name: file_name.clone(),

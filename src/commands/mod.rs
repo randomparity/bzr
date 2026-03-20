@@ -5,6 +5,7 @@ pub mod comment;
 pub mod component;
 pub mod config_cmd;
 pub mod field;
+mod flags;
 pub mod group;
 pub mod product;
 pub mod server;
