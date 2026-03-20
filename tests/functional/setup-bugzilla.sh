@@ -10,15 +10,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BZ_VERSION="${BZR_BZ_VERSION:-bz50}"
 
 case "$BZ_VERSION" in
-    bz50) DEFAULT_PORT=8089 ;;
-    bz52) DEFAULT_PORT=8090 ;;
+    bz50) DEFAULT_PORT=8089; DEFAULT_TIMEOUT=90 ;;
+    bz52) DEFAULT_PORT=8090; DEFAULT_TIMEOUT=240 ;;
     *)    echo "ERROR: Unknown BZR_BZ_VERSION=$BZ_VERSION (expected bz50 or bz52)" >&2; exit 1 ;;
 esac
 
 CONTAINER_NAME="${BZR_FUNC_CONTAINER:-bzr-func-test-${BZ_VERSION}}"
 IMAGE_NAME="${BZR_FUNC_IMAGE:-localhost/bzr-func-${BZ_VERSION}:latest}"
 BZ_PORT="${BZR_FUNC_PORT:-$DEFAULT_PORT}"
-HEALTH_TIMEOUT="${BZR_FUNC_TIMEOUT:-90}"
+HEALTH_TIMEOUT="${BZR_FUNC_TIMEOUT:-$DEFAULT_TIMEOUT}"
 
 # ── Helpers ──────────────────────────────────────────────────────────
 

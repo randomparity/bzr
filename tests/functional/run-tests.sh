@@ -247,11 +247,7 @@ fi
 # Re-enable testuser in case it was disabled by a prior run (test 24 sets disable_login=true)
 test_begin "21b. user re-enable (idempotent fix)"
 run_bzr user update testuser@test.bzr --disable-login false --login-denied-text ""
-if [[ $BZR_EXIT -eq 0 ]]; then
-    test_pass
-else
-    test_skip "user update not available (new user)"
-fi
+if assert_success; then test_pass; fi
 
 test_begin "22. user search testuser"
 run_bzr user search testuser

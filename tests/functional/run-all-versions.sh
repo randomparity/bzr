@@ -1,11 +1,18 @@
 #!/bin/bash
 # Run functional tests against all supported Bugzilla versions.
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VERSIONS=("bz50" "bz52")
 FAILED=0
 RESULTS=()
+
+cleanup_all() {
+    for ver in "${VERSIONS[@]}"; do
+        BZR_BZ_VERSION="$ver" "$SCRIPT_DIR/setup-bugzilla.sh" stop 2>/dev/null || true
+    done
+}
+trap cleanup_all EXIT
 
 for ver in "${VERSIONS[@]}"; do
     echo ""
@@ -15,7 +22,11 @@ for ver in "${VERSIONS[@]}"; do
     echo ""
 
     export BZR_BZ_VERSION="$ver"
-    "$SCRIPT_DIR/setup-bugzilla.sh" start
+    if ! "$SCRIPT_DIR/setup-bugzilla.sh" start; then
+        RESULTS+=("${ver}: FAILED (container start)")
+        FAILED=1
+        continue
+    fi
 
     if "$SCRIPT_DIR/run-tests.sh"; then
         RESULTS+=("${ver}: PASSED")

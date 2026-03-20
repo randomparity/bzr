@@ -1,6 +1,6 @@
 # Bugzilla 5.0 + MariaDB single-container image for functional testing.
-# Build:  podman build -t localhost/bzr-func-test-bz:latest -f Containerfile .
-# Run:    podman run -d --name bzr-func-test -p 8089:80 localhost/bzr-func-test-bz:latest
+# Build:  podman build -t localhost/bzr-func-bz50:latest -f Containerfile .
+# Run:    podman run -d --name bzr-func-test-bz50 -p 8089:80 localhost/bzr-func-bz50:latest
 
 FROM docker.io/library/fedora:39
 
