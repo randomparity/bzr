@@ -1,18 +1,29 @@
 #!/bin/bash
 # Container lifecycle management for bzr functional tests.
 # Usage: setup-bugzilla.sh {build|start|stop|status|reset|logs}
+# Set BZR_BZ_VERSION to select Bugzilla version (bz50, bz52). Default: bz50.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONTAINER_NAME="${BZR_FUNC_CONTAINER:-bzr-func-test}"
-IMAGE_NAME="${BZR_FUNC_IMAGE:-localhost/bzr-func-test-bz:latest}"
-BZ_PORT="${BZR_FUNC_PORT:-8089}"
-HEALTH_TIMEOUT="${BZR_FUNC_TIMEOUT:-90}"
+
+# ── Version-aware defaults ───────────────────────────────────────────
+BZ_VERSION="${BZR_BZ_VERSION:-bz50}"
+
+case "$BZ_VERSION" in
+    bz50) DEFAULT_PORT=8089; DEFAULT_TIMEOUT=90 ;;
+    bz52) DEFAULT_PORT=8090; DEFAULT_TIMEOUT=240 ;;
+    *)    echo "ERROR: Unknown BZR_BZ_VERSION=$BZ_VERSION (expected bz50 or bz52)" >&2; exit 1 ;;
+esac
+
+CONTAINER_NAME="${BZR_FUNC_CONTAINER:-bzr-func-test-${BZ_VERSION}}"
+IMAGE_NAME="${BZR_FUNC_IMAGE:-localhost/bzr-func-${BZ_VERSION}:latest}"
+BZ_PORT="${BZR_FUNC_PORT:-$DEFAULT_PORT}"
+HEALTH_TIMEOUT="${BZR_FUNC_TIMEOUT:-$DEFAULT_TIMEOUT}"
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
-log() { echo "==> $*"; }
-err() { echo "ERROR: $*" >&2; }
+log() { echo "==> [$BZ_VERSION] $*"; }
+err() { echo "ERROR: [$BZ_VERSION] $*" >&2; }
 
 wait_for_ready() {
     local url="http://localhost:${BZ_PORT}/rest/version"
@@ -40,11 +51,17 @@ container_exists() {
 # ── Subcommands ──────────────────────────────────────────────────────
 
 cmd_build() {
+    local containerfile="${SCRIPT_DIR}/versions/${BZ_VERSION}/Containerfile"
+    local context="${SCRIPT_DIR}/versions/${BZ_VERSION}"
+    if [[ ! -f "$containerfile" ]]; then
+        err "Containerfile not found: $containerfile"
+        exit 1
+    fi
     log "Building image ${IMAGE_NAME}..."
     podman build \
         -t "$IMAGE_NAME" \
-        -f "${SCRIPT_DIR}/Containerfile" \
-        "$SCRIPT_DIR"
+        -f "$containerfile" \
+        "$context"
     log "Image built successfully."
 }
 
@@ -122,6 +139,7 @@ case "${1:-}" in
     logs)   shift; cmd_logs "$@" ;;
     *)
         echo "Usage: $0 {build|start|stop|status|reset|logs}"
+        echo "  Set BZR_BZ_VERSION=bz50|bz52 (default: bz50)"
         exit 1
         ;;
 esac

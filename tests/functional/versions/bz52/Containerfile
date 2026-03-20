@@ -1,6 +1,6 @@
-# Bugzilla 5.0 + MariaDB single-container image for functional testing.
-# Build:  podman build -t localhost/bzr-func-test-bz:latest -f Containerfile .
-# Run:    podman run -d --name bzr-func-test -p 8089:80 localhost/bzr-func-test-bz:latest
+# Bugzilla 5.2 + MariaDB single-container image for functional testing.
+# Build:  podman build -t localhost/bzr-func-bz52:latest -f Containerfile .
+# Run:    podman run -d --name bzr-func-test-bz52 -p 8090:80 localhost/bzr-func-bz52:latest
 
 FROM docker.io/library/fedora:39
 
@@ -27,12 +27,13 @@ RUN dnf -y install \
         git wget patch procps-ng \
     && dnf clean all
 
-# ── Install Bugzilla 5.0 ────────────────────────────────────────────
+# ── Install Bugzilla 5.2 ────────────────────────────────────────────
 RUN cd /var/www/html \
-    && git clone --depth 1 --branch release-5.0-stable \
+    && git clone --depth 1 --branch release-5.2-stable \
        https://github.com/bugzilla/bugzilla.git
 
 # Install any missing Perl deps that Bugzilla's checksetup detects
+# Bugzilla 5.2 requires additional modules vs 5.0 (DBIx::Connector, etc.)
 RUN cd /var/www/html/bugzilla \
     && cpanm --notest \
         Chart::Lines \
@@ -40,14 +41,21 @@ RUN cd /var/www/html/bugzilla \
         Math::Random::ISAAC \
         JSON::RPC \
         Test::Taint \
+        DBIx::Connector \
+        PatchReader \
+        Email::Reply \
+        HTML::FormatText::WithLinks \
+        Daemon::Generic \
+        File::Copy::Recursive \
     || true
 
 # ── MariaDB setup ───────────────────────────────────────────────────
 RUN mysql_install_db --user=mysql --datadir=/var/lib/mysql
 
 # ── Bugzilla localconfig ────────────────────────────────────────────
+# Note: Bugzilla 5.2 requires 'mariadb' driver (not 'mysql')
 RUN printf '%s\n' \
-      '$db_driver = "mysql";' \
+      '$db_driver = "mariadb";' \
       '$db_host = "localhost";' \
       '$db_name = "bugs";' \
       '$db_user = "bugs";' \
@@ -67,7 +75,7 @@ RUN sed -i 's|DocumentRoot "/var/www/html"|DocumentRoot "/var/www/html/bugzilla"
     AllowOverride All
     Require all granted
 </Directory>
-# Map /rest/* to rest.cgi (Bugzilla 5.0 uses rest.cgi, not a /rest/ directory)
+# Map /rest/* to rest.cgi (Bugzilla 5.2 still uses rest.cgi)
 RewriteEngine On
 RewriteRule ^/rest/(.*)$ /rest.cgi/$1 [L]
 RewriteRule ^/rest$ /rest.cgi [L]
