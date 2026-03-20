@@ -1,18 +1,15 @@
 use colored::Colorize;
 
-use super::common::print_formatted;
+use super::common::{print_bool_field, print_colored_field, print_formatted};
 use crate::types::{GroupInfo, OutputFormat};
 
 #[expect(clippy::print_stdout)]
 pub fn print_group_info(group: &GroupInfo, format: OutputFormat) {
     print_formatted(group, format, |group| {
         println!("{} {}", "Group".bold(), group.name.bold());
-        println!("  Description:  {}", group.description);
-        println!(
-            "  Active:       {}",
-            if group.is_active { "yes" } else { "no" }
-        );
-        println!("  ID:           {}", group.id);
+        print_colored_field("Description", &group.description);
+        print_bool_field("Active", group.is_active);
+        print_colored_field("ID", &group.id.to_string());
         if !group.membership.is_empty() {
             println!("\n{}:", "Members".bold());
             for m in &group.membership {

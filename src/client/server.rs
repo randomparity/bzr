@@ -1,7 +1,7 @@
 use super::BugzillaClient;
 use super::users::UserSearchResponse;
 use crate::error::{BzrError, Result};
-use crate::types::{ServerExtensions, ServerVersion, WhoamiResponse};
+use crate::types::{ServerExtensions, ServerInfoResponse, ServerVersion, WhoamiResponse};
 
 impl BugzillaClient {
     pub async fn whoami(&self, email_hint: Option<&str>) -> Result<WhoamiResponse> {
@@ -9,9 +9,12 @@ impl BugzillaClient {
         let resp = self.send(req).await;
         match resp {
             Ok(r) => self.parse_json(r).await,
-            Err(BzrError::Api { code: 32614, .. }) => {
-                // /rest/whoami not available (Bugzilla < 5.1). Fall back to
-                // looking up the user by email if available.
+            Err(
+                BzrError::Api { code: 32614, .. } | BzrError::HttpStatus { status: 404, .. },
+            ) => {
+                // /rest/whoami not available (Bugzilla < 5.1). May surface as
+                // API error 32614 (JSON response) or raw HTTP 404 (non-JSON server).
+                // Fall back to looking up the user by email if available.
                 tracing::debug!("whoami endpoint not found, falling back to user lookup");
                 if let Some(email) = email_hint {
                     self.whoami_via_user_lookup(email).await
@@ -47,10 +50,13 @@ impl BugzillaClient {
     }
 
     /// Fetch both version and extensions from the server in a single call.
-    pub async fn server_info(&self) -> Result<(ServerVersion, ServerExtensions)> {
+    pub async fn server_info(&self) -> Result<ServerInfoResponse> {
         let version = self.server_version().await?;
         let extensions = self.server_extensions().await?;
-        Ok((version, extensions))
+        Ok(ServerInfoResponse {
+            version,
+            extensions,
+        })
     }
 
     pub async fn server_version(&self) -> Result<ServerVersion> {

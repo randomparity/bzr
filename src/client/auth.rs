@@ -885,7 +885,7 @@ mod tests {
             .await;
 
         // Set up a real config file so config.save() works
-        let _lock = crate::ENV_LOCK.lock().unwrap();
+        let _lock = crate::ENV_LOCK.lock().await;
         let tmp = tempfile::TempDir::new().unwrap();
         let config_dir = tmp.path().join("bzr");
         std::fs::create_dir_all(&config_dir).unwrap();

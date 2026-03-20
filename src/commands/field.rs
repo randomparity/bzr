@@ -29,7 +29,7 @@ pub async fn execute(
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used, clippy::await_holding_lock)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -40,7 +40,7 @@ mod tests {
 
     #[tokio::test]
     async fn field_list_returns_values() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = ENV_LOCK.lock().await;
         let mock = MockServer::start().await;
         let tmp = tempfile::TempDir::new().unwrap();
         setup_config(&tmp, &mock.uri());

@@ -14,7 +14,7 @@ pub use bug::{
 pub use comment::Comment;
 pub use common::{
     ApiMode, AuthMethod, ExtensionInfo, FlagStatus, FlagUpdate, OutputFormat, ServerExtensions,
-    ServerVersion,
+    ServerInfoResponse, ServerVersion,
 };
 pub use group::{CreateGroupParams, GroupInfo, GroupMember, UpdateGroupParams};
 pub use product::{

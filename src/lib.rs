@@ -24,7 +24,7 @@ pub(crate) mod xmlrpc;
 /// Shared mutex for tests that modify the process-global `XDG_CONFIG_HOME` env var.
 /// All such tests must acquire this lock to avoid racing with each other.
 #[cfg(test)]
-pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+pub(crate) static ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// Dispatch a parsed CLI to the appropriate command handler.
 ///

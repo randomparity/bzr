@@ -1,7 +1,7 @@
 use colored::Colorize;
 use serde::Serialize;
 
-use super::common::{mask_api_key, print_formatted};
+use super::common::{mask_api_key, print_colored_field, print_formatted, print_optional_field};
 use crate::types::OutputFormat;
 
 /// Combined server information for display.
@@ -85,12 +85,10 @@ pub fn print_config(
         } else {
             for (name, s) in &v.servers {
                 println!("\n[{name}]");
-                println!("  URL:     {}", s.url);
-                if let Some(ref email) = s.email {
-                    println!("  Email:   {email}");
-                }
-                println!("  API Key: {}", s.api_key);
-                println!("  Auth:    {}", s.auth_method);
+                print_colored_field("URL", &s.url);
+                print_optional_field("Email", s.email.as_deref());
+                print_colored_field("API Key", &s.api_key);
+                print_colored_field("Auth", &s.auth_method);
             }
         }
     });

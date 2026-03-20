@@ -80,7 +80,7 @@ pub async fn execute(
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used, clippy::await_holding_lock)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -93,7 +93,7 @@ mod tests {
 
     #[tokio::test]
     async fn user_search_returns_results() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = ENV_LOCK.lock().await;
         let mock = MockServer::start().await;
         let tmp = tempfile::TempDir::new().unwrap();
         setup_config(&tmp, &mock.uri());
@@ -120,7 +120,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_user_disable_login_sends_denied_text() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = ENV_LOCK.lock().await;
         let mock = MockServer::start().await;
         let tmp = tempfile::TempDir::new().unwrap();
         setup_config(&tmp, &mock.uri());
@@ -148,7 +148,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_user_enable_login_sends_empty_denied_text() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = ENV_LOCK.lock().await;
         let mock = MockServer::start().await;
         let tmp = tempfile::TempDir::new().unwrap();
         setup_config(&tmp, &mock.uri());
@@ -176,7 +176,7 @@ mod tests {
 
     #[tokio::test]
     async fn user_create_sends_post() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = ENV_LOCK.lock().await;
         let mock = MockServer::start().await;
         let tmp = tempfile::TempDir::new().unwrap();
         setup_config(&tmp, &mock.uri());

@@ -14,11 +14,11 @@ pub async fn execute(
 
     match action {
         ServerAction::Info => {
-            let (version, extensions) = client.server_info().await?;
+            let info = client.server_info().await?;
             output::print_server_info(
                 &output::ServerInfo {
-                    version: &version.version,
-                    extensions: &extensions.extensions,
+                    version: &info.version.version,
+                    extensions: &info.extensions.extensions,
                 },
                 format,
             );
@@ -28,7 +28,7 @@ pub async fn execute(
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used, clippy::await_holding_lock)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -39,7 +39,7 @@ mod tests {
 
     #[tokio::test]
     async fn server_info_returns_version_and_extensions() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = ENV_LOCK.lock().await;
         let mock = MockServer::start().await;
         let tmp = tempfile::TempDir::new().unwrap();
         setup_config(&tmp, &mock.uri());

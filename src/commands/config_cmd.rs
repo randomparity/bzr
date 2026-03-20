@@ -103,7 +103,7 @@ mod tests {
     /// parallel test execution.
     #[test]
     fn config_operations_with_file_io() {
-        let _lock = crate::ENV_LOCK.lock().unwrap();
+        let _lock = crate::ENV_LOCK.blocking_lock();
         let tmp = tempfile::TempDir::new().unwrap();
         // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
         unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };

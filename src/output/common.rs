@@ -154,6 +154,14 @@ pub(super) fn format_id_list(ids: &[u64]) -> String {
         .join(", ")
 }
 
+pub(super) fn yes_no(value: bool) -> &'static str {
+    if value { "yes" } else { "no" }
+}
+
+pub(super) fn print_bool_field(label: &str, value: bool) {
+    println!("  {label:<12}  {}", yes_no(value));
+}
+
 // ── Text helpers ────────────────────────────────────────────────────
 
 pub(super) fn truncate(s: &str, max_chars: usize) -> String {

@@ -152,7 +152,7 @@ pub async fn execute(
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used, clippy::await_holding_lock)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -163,7 +163,7 @@ mod tests {
 
     #[tokio::test]
     async fn bug_list_returns_bugs() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = ENV_LOCK.lock().await;
         let mock = MockServer::start().await;
         let tmp = tempfile::TempDir::new().unwrap();
         setup_config(&tmp, &mock.uri());
@@ -208,7 +208,7 @@ mod tests {
 
     #[tokio::test]
     async fn bug_view_returns_detail() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = ENV_LOCK.lock().await;
         let mock = MockServer::start().await;
         let tmp = tempfile::TempDir::new().unwrap();
         setup_config(&tmp, &mock.uri());
@@ -244,7 +244,7 @@ mod tests {
 
     #[tokio::test]
     async fn bug_update_sends_put() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = ENV_LOCK.lock().await;
         let mock = MockServer::start().await;
         let tmp = tempfile::TempDir::new().unwrap();
         setup_config(&tmp, &mock.uri());
@@ -275,7 +275,7 @@ mod tests {
 
     #[tokio::test]
     async fn bug_create_sends_post() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = ENV_LOCK.lock().await;
         let mock = MockServer::start().await;
         let tmp = tempfile::TempDir::new().unwrap();
         setup_config(&tmp, &mock.uri());

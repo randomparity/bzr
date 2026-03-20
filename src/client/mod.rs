@@ -99,6 +99,12 @@ impl BugzillaClient {
         let xmlrpc = match api_mode {
             ApiMode::Rest => None,
             ApiMode::XmlRpc | ApiMode::Hybrid => {
+                if auth_method == AuthMethod::Header {
+                    tracing::info!(
+                        "XML-RPC always sends API key in request body, \
+                         overriding configured header auth for XML-RPC calls"
+                    );
+                }
                 Some(XmlRpcClient::new(http.clone(), base_url, api_key))
             }
         };
@@ -174,7 +180,7 @@ impl BugzillaClient {
             status = %retried.status(),
             "auth fallback response"
         );
-        if !retried.status().is_client_error() && !retried.status().is_server_error() {
+        if retried.status().is_success() {
             return Ok(Some(retried));
         }
         tracing::debug!("auth fallback also failed, returning original 401");

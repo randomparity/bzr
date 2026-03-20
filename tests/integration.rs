@@ -4,9 +4,9 @@
 //! These tests are serialized via a mutex because they set the
 //! process-global `XDG_CONFIG_HOME` environment variable.
 
-#![expect(clippy::unwrap_used, clippy::await_holding_lock)]
+#![expect(clippy::unwrap_used)]
 
-use std::sync::Mutex;
+use tokio::sync::Mutex;
 
 use clap::Parser;
 
@@ -14,7 +14,7 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 /// Serializes tests that modify `XDG_CONFIG_HOME`.
-static ENV_LOCK: Mutex<()> = Mutex::new(());
+static ENV_LOCK: Mutex<()> = Mutex::const_new(());
 
 /// Writes a config file to a temp directory with the given server URL
 /// and pre-cached auth method (Header) so auth detection is skipped.
@@ -40,7 +40,7 @@ api_mode = "rest"
 
 #[tokio::test]
 async fn bug_list_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -79,7 +79,7 @@ async fn bug_list_integration() {
 
 #[tokio::test]
 async fn bug_view_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -106,7 +106,7 @@ async fn bug_view_integration() {
 
 #[tokio::test]
 async fn bug_search_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -135,7 +135,7 @@ async fn bug_search_integration() {
 
 #[tokio::test]
 async fn bug_create_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -169,7 +169,7 @@ async fn bug_create_integration() {
 
 #[tokio::test]
 async fn comment_list_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -207,7 +207,7 @@ async fn comment_list_integration() {
 
 #[tokio::test]
 async fn whoami_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -232,7 +232,7 @@ async fn whoami_integration() {
 
 #[tokio::test]
 async fn product_list_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -272,7 +272,7 @@ async fn product_list_integration() {
 
 #[tokio::test]
 async fn server_info_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -305,7 +305,7 @@ async fn server_info_integration() {
 
 #[tokio::test]
 async fn field_list_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -337,7 +337,7 @@ async fn field_list_integration() {
 
 #[tokio::test]
 async fn classification_view_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -377,7 +377,7 @@ async fn classification_view_integration() {
 
 #[tokio::test]
 async fn user_search_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -411,7 +411,7 @@ async fn user_search_integration() {
 
 #[tokio::test]
 async fn group_view_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -444,7 +444,7 @@ async fn group_view_integration() {
 
 #[tokio::test]
 async fn component_create_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -479,7 +479,7 @@ async fn component_create_integration() {
 
 #[tokio::test]
 async fn attachment_list_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -517,7 +517,7 @@ async fn attachment_list_integration() {
 
 #[test]
 fn config_show_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.blocking_lock();
     let tmp = tempfile::TempDir::new().unwrap();
 
     let config_dir = tmp.path().join("bzr");
@@ -544,7 +544,7 @@ api_key = "key-1234567890"
 
 #[tokio::test]
 async fn command_with_unknown_server_returns_error() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, "http://localhost:1");
 
@@ -576,7 +576,7 @@ async fn command_with_unknown_server_returns_error() {
 
 #[tokio::test]
 async fn api_error_propagates() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -607,7 +607,7 @@ async fn api_error_propagates() {
 
 #[tokio::test]
 async fn bug_history_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -646,7 +646,7 @@ async fn bug_history_integration() {
 
 #[tokio::test]
 async fn bug_update_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -681,7 +681,7 @@ async fn bug_update_integration() {
 
 #[tokio::test]
 async fn comment_add_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -711,7 +711,7 @@ async fn comment_add_integration() {
 
 #[tokio::test]
 async fn comment_tag_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -742,7 +742,7 @@ async fn comment_tag_integration() {
 
 #[tokio::test]
 async fn comment_search_tags_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -774,7 +774,7 @@ async fn comment_search_tags_integration() {
 
 #[tokio::test]
 async fn attachment_download_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -821,7 +821,7 @@ async fn attachment_download_integration() {
 
 #[tokio::test]
 async fn attachment_upload_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -861,7 +861,7 @@ async fn attachment_upload_integration() {
 
 #[tokio::test]
 async fn attachment_update_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -902,7 +902,7 @@ async fn attachment_update_integration() {
 
 #[tokio::test]
 async fn component_update_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -937,7 +937,7 @@ async fn component_update_integration() {
 
 #[tokio::test]
 async fn product_view_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -971,7 +971,7 @@ async fn product_view_integration() {
 
 #[tokio::test]
 async fn product_create_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1003,7 +1003,7 @@ async fn product_create_integration() {
 
 #[tokio::test]
 async fn product_update_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1037,7 +1037,7 @@ async fn product_update_integration() {
 
 #[tokio::test]
 async fn user_create_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1064,7 +1064,7 @@ async fn user_create_integration() {
 
 #[tokio::test]
 async fn user_update_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1095,7 +1095,7 @@ async fn user_update_integration() {
 
 #[tokio::test]
 async fn group_create_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1122,7 +1122,7 @@ async fn group_create_integration() {
 
 #[tokio::test]
 async fn group_update_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1151,7 +1151,7 @@ async fn group_update_integration() {
 
 #[tokio::test]
 async fn group_add_user_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1179,7 +1179,7 @@ async fn group_add_user_integration() {
 
 #[tokio::test]
 async fn group_remove_user_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1210,7 +1210,7 @@ async fn group_remove_user_integration() {
 
 #[tokio::test]
 async fn group_list_users_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1247,7 +1247,7 @@ async fn group_list_users_integration() {
 
 #[test]
 fn config_set_server_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.blocking_lock();
     let tmp = tempfile::TempDir::new().unwrap();
 
     let config_dir = tmp.path().join("bzr");
@@ -1275,7 +1275,7 @@ fn config_set_server_integration() {
 
 #[test]
 fn config_set_default_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.blocking_lock();
     let tmp = tempfile::TempDir::new().unwrap();
 
     let config_dir = tmp.path().join("bzr");
@@ -1317,7 +1317,7 @@ async fn dispatch_cli(args: &[&str]) -> bzr::error::Result<()> {
 
 #[tokio::test]
 async fn e2e_bug_list_via_cli_args() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1347,7 +1347,7 @@ async fn e2e_bug_list_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_bug_view_via_cli_args() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1367,7 +1367,7 @@ async fn e2e_bug_view_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_whoami_via_cli_args() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1389,7 +1389,7 @@ async fn e2e_whoami_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_config_show_via_cli_args() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, "http://localhost:1");
 
@@ -1399,7 +1399,7 @@ async fn e2e_config_show_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_server_info_via_cli_args() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());

@@ -1,6 +1,6 @@
 use tabled::{Table, Tabled};
 
-use super::common::print_formatted;
+use super::common::{print_formatted, yes_no};
 use crate::types::{FieldValue, OutputFormat};
 
 #[derive(Tabled)]
@@ -31,11 +31,7 @@ pub fn print_field_values(values: &[FieldValue], format: OutputFormat) {
                     .unwrap_or_default();
                 FieldValueRow {
                     name: v.name.clone(),
-                    active: if v.is_active {
-                        "yes".into()
-                    } else {
-                        "no".into()
-                    },
+                    active: yes_no(v.is_active).into(),
                     can_change_to: transitions,
                 }
             })
