@@ -11,7 +11,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let (client, _email) = super::shared::connect_client(server, api).await?;
+    let client = super::shared::connect_client(server, api).await?;
 
     match action {
         ProductAction::List { r#type } => {

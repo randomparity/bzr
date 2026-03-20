@@ -1,6 +1,7 @@
 use std::fmt;
 
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum BzrError {
     #[error("HTTP request failed: {0}")]
     Http(#[from] reqwest::Error),

@@ -37,12 +37,31 @@ pub fn print_result(value: &(impl Serialize + ?Sized), human_message: &str, form
     }
 }
 
+/// Resource type for mutation result payloads.
+#[derive(Debug, Serialize)]
+pub enum ResourceKind {
+    #[serde(rename = "bug")]
+    Bug,
+    #[serde(rename = "attachment")]
+    Attachment,
+}
+
+/// Action type for mutation result payloads.
+#[derive(Debug, Serialize)]
+pub enum ActionKind {
+    #[serde(rename = "created")]
+    Created,
+    #[serde(rename = "updated")]
+    Updated,
+}
+
 /// Typed result payload for JSON output of mutation operations.
 #[derive(Debug, Serialize)]
+#[non_exhaustive]
 pub struct ActionResult {
     pub id: u64,
-    pub resource: &'static str,
-    pub action: &'static str,
+    pub resource: ResourceKind,
+    pub action: ActionKind,
 }
 
 fn format_id_list(ids: &[u64]) -> String {

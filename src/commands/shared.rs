@@ -4,15 +4,23 @@ use crate::error::{BzrError, Result};
 use crate::types::ApiMode;
 use crate::types::{FlagStatus, FlagUpdate};
 
-/// Connect to a Bugzilla server, returning the client and the server's
-/// configured email (if any). The email is needed by whoami for Bugzilla 5.0
-/// fallback; other commands can ignore it.
+/// Connect to a Bugzilla server.
 pub async fn connect_client(
+    server: Option<&str>,
+    api_override: Option<ApiMode>,
+) -> Result<BugzillaClient> {
+    let (client, _email) = connect_client_with_email(server, api_override).await?;
+    Ok(client)
+}
+
+/// Connect to a Bugzilla server, also returning the server's configured email
+/// (if any). The email is needed by whoami for Bugzilla 5.0 fallback.
+pub async fn connect_client_with_email(
     server: Option<&str>,
     api_override: Option<ApiMode>,
 ) -> Result<(BugzillaClient, Option<String>)> {
     let mut config = Config::load()?;
-    let (server_name, srv) = config.active_server_named(server)?;
+    let (server_name, srv) = config.resolve_server(server)?;
     let (server_name, url, api_key, email) = (
         server_name.to_string(),
         srv.url.clone(),

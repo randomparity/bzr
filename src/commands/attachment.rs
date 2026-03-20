@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::cli::AttachmentAction;
 use crate::error::Result;
-use crate::output::{self, ActionResult};
+use crate::output::{self, ActionKind, ActionResult, ResourceKind};
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{UpdateAttachmentParams, UploadAttachmentParams};
@@ -13,7 +13,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let (client, _email) = super::shared::connect_client(server, api).await?;
+    let client = super::shared::connect_client(server, api).await?;
 
     match action {
         AttachmentAction::List { bug_id } => {
@@ -100,8 +100,8 @@ pub async fn execute(
             output::print_result(
                 &ActionResult {
                     id: *id,
-                    resource: "attachment",
-                    action: "updated",
+                    resource: ResourceKind::Attachment,
+                    action: ActionKind::Updated,
                 },
                 &format!("Updated attachment #{id}"),
                 format,

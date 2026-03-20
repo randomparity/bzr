@@ -57,7 +57,7 @@ impl Config {
         Ok(())
     }
 
-    pub fn active_server_named<'a>(
+    pub fn resolve_server<'a>(
         &'a self,
         server_name: Option<&'a str>,
     ) -> Result<(&'a str, &'a ServerConfig)> {
@@ -159,17 +159,17 @@ mod tests {
     }
 
     #[test]
-    fn active_server_named_returns_correct_server() {
+    fn resolve_server_returns_correct_server() {
         let config = make_config_with_server();
-        let (name, srv) = config.active_server_named(Some("myserver")).unwrap();
+        let (name, srv) = config.resolve_server(Some("myserver")).unwrap();
         assert_eq!(name, "myserver");
         assert_eq!(srv.url, "https://bugzilla.example.com");
     }
 
     #[test]
-    fn active_server_named_errors_for_unknown_server() {
+    fn resolve_server_errors_for_unknown_server() {
         let config = make_config_with_server();
-        let result = config.active_server_named(Some("nonexistent"));
+        let result = config.resolve_server(Some("nonexistent"));
         assert!(result.is_err());
     }
 
