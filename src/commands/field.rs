@@ -15,7 +15,14 @@ pub async fn execute(
     match action {
         FieldAction::List { name } => {
             let values = client.get_field_values(name).await?;
-            output::print_field_values(&values, name, format);
+            if values.is_empty() && format == OutputFormat::Table {
+                #[expect(clippy::print_stdout)]
+                {
+                    println!("No values for field '{name}'.");
+                }
+            } else {
+                output::print_field_values(&values, format);
+            }
         }
     }
     Ok(())

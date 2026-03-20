@@ -14,12 +14,8 @@ struct FieldValueRow {
 }
 
 #[expect(clippy::print_stdout)]
-pub fn print_field_values(values: &[FieldValue], field_name: &str, format: OutputFormat) {
+pub fn print_field_values(values: &[FieldValue], format: OutputFormat) {
     print_formatted(values, format, |values| {
-        if values.is_empty() {
-            println!("No values for field '{field_name}'.");
-            return;
-        }
         let rows: Vec<FieldValueRow> = values
             .iter()
             .map(|v| {
