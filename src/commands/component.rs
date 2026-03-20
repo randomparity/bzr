@@ -1,6 +1,6 @@
 use crate::cli::ComponentAction;
 use crate::error::Result;
-use crate::output;
+use crate::output::{self, ActionResult, ResourceKind};
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{CreateComponentParams, UpdateComponentParams};
@@ -28,12 +28,7 @@ pub async fn execute(
             };
             let id = client.create_component(&params).await?;
             output::print_result(
-                &serde_json::json!({
-                    "id": id,
-                    "product": product,
-                    "resource": "component",
-                    "action": "created",
-                }),
+                &ActionResult::created(id, ResourceKind::Component),
                 &format!("Created component #{id} in product '{product}'"),
                 format,
             );
@@ -51,11 +46,7 @@ pub async fn execute(
             };
             client.update_component(*id, &params).await?;
             output::print_result(
-                &serde_json::json!({
-                    "id": id,
-                    "resource": "component",
-                    "action": "updated",
-                }),
+                &ActionResult::updated(*id, ResourceKind::Component),
                 &format!("Updated component #{id}"),
                 format,
             );

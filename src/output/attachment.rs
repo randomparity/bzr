@@ -1,11 +1,11 @@
 use colored::Colorize;
 
-use super::format_or_json;
+use super::print_formatted;
 use crate::types::{Attachment, OutputFormat};
 
 #[expect(clippy::print_stdout)]
 pub fn print_attachments(attachments: &[Attachment], format: OutputFormat) {
-    format_or_json(attachments, format, |attachments| {
+    print_formatted(attachments, format, |attachments| {
         if attachments.is_empty() {
             println!("No attachments.");
             return;
@@ -33,7 +33,7 @@ pub fn print_attachments(attachments: &[Attachment], format: OutputFormat) {
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used, clippy::useless_vec, clippy::single_char_pattern)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use crate::types::Attachment;
 

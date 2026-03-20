@@ -18,8 +18,8 @@ pub async fn execute(
             let extensions = client.server_extensions().await?;
             output::print_server_info(
                 &output::ServerInfo {
-                    version: &version,
-                    extensions: &extensions,
+                    version: &version.version,
+                    extensions: &extensions.extensions,
                 },
                 format,
             );

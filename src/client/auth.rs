@@ -298,15 +298,17 @@ struct ValidLoginResponse {
 /// Bugzilla returns `{"result": true}` (bool) or `{"result": 1}` (integer)
 /// depending on version. Accept both.
 #[derive(Deserialize, Default)]
-#[serde(from = "serde_json::Value")]
+#[serde(try_from = "serde_json::Value")]
 struct ValidLoginResult(bool);
 
-impl From<serde_json::Value> for ValidLoginResult {
-    fn from(v: serde_json::Value) -> Self {
+impl TryFrom<serde_json::Value> for ValidLoginResult {
+    type Error = String;
+
+    fn try_from(v: serde_json::Value) -> std::result::Result<Self, Self::Error> {
         match v {
-            serde_json::Value::Bool(b) => Self(b),
-            serde_json::Value::Number(n) => Self(n.as_u64() == Some(1)),
-            _ => Self(false),
+            serde_json::Value::Bool(b) => Ok(Self(b)),
+            serde_json::Value::Number(n) => Ok(Self(n.as_u64() == Some(1))),
+            other => Err(format!("expected bool or integer, got {other}")),
         }
     }
 }

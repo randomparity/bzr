@@ -8,7 +8,9 @@ fn bool_from_int_or_bool<'de, D: Deserializer<'de>>(d: D) -> Result<bool, D::Err
     match v {
         serde_json::Value::Bool(b) => Ok(b),
         serde_json::Value::Number(n) => Ok(n.as_u64() != Some(0)),
-        _ => Ok(false),
+        other => Err(serde::de::Error::custom(format!(
+            "expected bool or integer, got {other}"
+        ))),
     }
 }
 

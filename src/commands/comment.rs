@@ -2,7 +2,7 @@ use std::io::{IsTerminal, Read, Write};
 
 use crate::cli::CommentAction;
 use crate::error::{BzrError, Result};
-use crate::output;
+use crate::output::{self, ActionResult, ResourceKind};
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 
@@ -29,12 +29,7 @@ pub async fn execute(
             }
             let id = client.add_comment(*bug_id, &text).await?;
             output::print_result(
-                &serde_json::json!({
-                    "id": id,
-                    "bug_id": bug_id,
-                    "resource": "comment",
-                    "action": "created",
-                }),
+                &ActionResult::created(id, ResourceKind::Comment),
                 &format!("Added comment #{id} to bug #{bug_id}"),
                 format,
             );

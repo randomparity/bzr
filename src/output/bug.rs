@@ -1,7 +1,10 @@
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
-use super::{colorize_status, format_id_list, format_or_json, shorten_email, truncate};
+use super::{
+    colorize_status, print_formatted, print_colored_field, print_id_list_field, print_list_field,
+    print_optional_field, shorten_email, truncate,
+};
 use crate::types::{Bug, HistoryEntry, OutputFormat};
 
 #[derive(Tabled)]
@@ -33,7 +36,7 @@ impl From<&Bug> for BugRow {
 
 #[expect(clippy::print_stdout)]
 pub fn print_bugs(bugs: &[Bug], format: OutputFormat) {
-    format_or_json(bugs, format, |bugs| {
+    print_formatted(bugs, format, |bugs| {
         if bugs.is_empty() {
             println!("No bugs found.");
             return;
@@ -46,45 +49,32 @@ pub fn print_bugs(bugs: &[Bug], format: OutputFormat) {
 
 #[expect(clippy::print_stdout)]
 pub fn print_bug_detail(bug: &Bug, format: OutputFormat) {
-    format_or_json(bug, format, |bug| {
-        let field = |label: &str, val: Option<&str>| {
-            println!("  {label:<12}{}", val.unwrap_or("-"));
-        };
+    print_formatted(bug, format, |bug| {
         println!(
             "{} #{}\n{}\n",
             "Bug".bold(),
             bug.id.to_string().bold(),
             bug.summary.bold()
         );
-        println!("  Status:      {}", colorize_status(&bug.status));
-        if let Some(ref r) = bug.resolution {
-            if !r.is_empty() {
-                println!("  Resolution:  {r}");
-            }
-        }
-        field("Product:    ", bug.product.as_deref());
-        field("Component:  ", bug.component.as_deref());
-        field("Assignee:   ", bug.assigned_to.as_deref());
-        field("Priority:   ", bug.priority.as_deref());
-        field("Severity:   ", bug.severity.as_deref());
-        field("Creator:    ", bug.creator.as_deref());
-        field("Created:    ", bug.creation_time.as_deref());
-        field("Updated:    ", bug.last_change_time.as_deref());
-        if !bug.keywords.is_empty() {
-            println!("  Keywords:    {}", bug.keywords.join(", "));
-        }
-        if !bug.blocks.is_empty() {
-            println!("  Blocks:      {}", format_id_list(&bug.blocks));
-        }
-        if !bug.depends_on.is_empty() {
-            println!("  Depends on:  {}", format_id_list(&bug.depends_on));
-        }
+        print_colored_field("Status", &colorize_status(&bug.status));
+        print_optional_field("Resolution", bug.resolution.as_deref());
+        print_optional_field("Product", bug.product.as_deref());
+        print_optional_field("Component", bug.component.as_deref());
+        print_optional_field("Assignee", bug.assigned_to.as_deref());
+        print_optional_field("Priority", bug.priority.as_deref());
+        print_optional_field("Severity", bug.severity.as_deref());
+        print_optional_field("Creator", bug.creator.as_deref());
+        print_optional_field("Created", bug.creation_time.as_deref());
+        print_optional_field("Updated", bug.last_change_time.as_deref());
+        print_list_field("Keywords", &bug.keywords);
+        print_id_list_field("Blocks", &bug.blocks);
+        print_id_list_field("Depends on", &bug.depends_on);
     });
 }
 
 #[expect(clippy::print_stdout)]
 pub fn print_history(history: &[HistoryEntry], format: OutputFormat) {
-    format_or_json(history, format, |history| {
+    print_formatted(history, format, |history| {
         for entry in history {
             println!(
                 "{} by {} ({})",
@@ -111,7 +101,7 @@ pub fn print_history(history: &[HistoryEntry], format: OutputFormat) {
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used, clippy::useless_vec, clippy::single_char_pattern)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::types::{Bug, FieldChange, HistoryEntry};

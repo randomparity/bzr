@@ -7,6 +7,7 @@ mod attachment;
 mod bug;
 mod comment;
 mod field;
+mod group;
 mod product;
 mod server;
 mod user;
@@ -18,7 +19,8 @@ pub use comment::print_comments;
 pub use field::print_field_values;
 pub use product::{print_classification, print_product_detail, print_products};
 pub use server::{print_config, print_server_info, ServerInfo};
-pub use user::{print_group_info, print_users, print_whoami};
+pub use group::print_group_info;
+pub use user::{print_users, print_whoami};
 
 // ── Shared primitives ────────────────────────────────────────────────
 
@@ -29,7 +31,7 @@ fn print_json(value: &(impl Serialize + ?Sized)) {
     );
 }
 
-fn format_or_json<T: Serialize + ?Sized>(
+fn print_formatted<T: Serialize + ?Sized>(
     value: &T,
     format: OutputFormat,
     table_fn: impl FnOnce(&T),
@@ -59,6 +61,16 @@ pub enum ResourceKind {
     Bug,
     #[serde(rename = "attachment")]
     Attachment,
+    #[serde(rename = "comment")]
+    Comment,
+    #[serde(rename = "user")]
+    User,
+    #[serde(rename = "group")]
+    Group,
+    #[serde(rename = "product")]
+    Product,
+    #[serde(rename = "component")]
+    Component,
 }
 
 /// Action type for mutation result payloads.
@@ -71,12 +83,84 @@ pub enum ActionKind {
 }
 
 /// Typed result payload for JSON output of mutation operations.
+///
+/// Covers standard CRUD results with an `id` and optional `name`. The following
+/// cases intentionally use ad-hoc `serde_json::json!()` instead:
+/// - **Attachment download** — includes `file` path and `size` fields.
+/// - **Attachment upload** — includes `bug_id` and `size` fields.
+/// - **Group membership add/remove** — relationship-shaped (user + group), not resource-shaped.
+/// - **Comment tags** — returns the resulting tag list, not a simple resource mutation.
+/// - **Config operations** — include config-file path, URL, and default-server flag.
 #[derive(Debug, Serialize)]
 #[non_exhaustive]
 pub struct ActionResult {
     pub id: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     pub resource: ResourceKind,
     pub action: ActionKind,
+}
+
+impl ActionResult {
+    pub fn created(id: u64, resource: ResourceKind) -> Self {
+        Self {
+            id,
+            name: None,
+            resource,
+            action: ActionKind::Created,
+        }
+    }
+
+    pub fn created_named(id: u64, name: impl Into<String>, resource: ResourceKind) -> Self {
+        Self {
+            id,
+            name: Some(name.into()),
+            resource,
+            action: ActionKind::Created,
+        }
+    }
+
+    pub fn updated(id: u64, resource: ResourceKind) -> Self {
+        Self {
+            id,
+            name: None,
+            resource,
+            action: ActionKind::Updated,
+        }
+    }
+
+    pub fn updated_named(name: impl Into<String>, resource: ResourceKind) -> Self {
+        Self {
+            id: 0,
+            name: Some(name.into()),
+            resource,
+            action: ActionKind::Updated,
+        }
+    }
+}
+
+/// Print a detail field with a pre-formatted (e.g. colored) value.
+fn print_colored_field(label: &str, value: &str) {
+    println!("  {label:<12}  {value}");
+}
+
+/// Print an optional detail field, showing "-" when absent.
+fn print_optional_field(label: &str, value: Option<&str>) {
+    println!("  {label:<12}  {}", value.unwrap_or("-"));
+}
+
+/// Print a string-list detail field, only when non-empty.
+fn print_list_field(label: &str, items: &[String]) {
+    if !items.is_empty() {
+        println!("  {label:<12}  {}", items.join(", "));
+    }
+}
+
+/// Print an ID-list detail field, only when non-empty.
+fn print_id_list_field(label: &str, ids: &[u64]) {
+    if !ids.is_empty() {
+        println!("  {label:<12}  {}", format_id_list(ids));
+    }
 }
 
 fn format_id_list(ids: &[u64]) -> String {
@@ -121,7 +205,7 @@ fn mask_api_key(key: &str) -> String {
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used, clippy::useless_vec, clippy::single_char_pattern)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::types::OutputFormat;

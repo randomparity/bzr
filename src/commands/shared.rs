@@ -27,7 +27,7 @@ pub async fn connect_client_with_email(
         srv.email.clone(),
     );
     let (auth, detected_mode) =
-        crate::auth::detect_and_persist_server_settings(&mut config, &server_name).await?;
+        crate::client::auth::detect_and_persist_server_settings(&mut config, &server_name).await?;
     let api_mode = api_override.unwrap_or(detected_mode);
     let client = BugzillaClient::new(&url, &api_key, auth, api_mode)?;
     Ok((client, email))

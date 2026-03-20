@@ -1,3 +1,4 @@
+pub(crate) mod auth;
 mod attachments;
 mod bugs;
 mod classifications;
@@ -278,6 +279,7 @@ impl BugzillaClient {
 }
 
 #[cfg(test)]
+#[expect(clippy::unwrap_used)]
 pub(super) mod test_helpers {
     use super::*;
 

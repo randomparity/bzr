@@ -1,8 +1,8 @@
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
-use super::format_or_json;
-use crate::types::{BugzillaUser, GroupInfo, OutputFormat, WhoamiResponse};
+use super::print_formatted;
+use crate::types::{BugzillaUser, OutputFormat, WhoamiResponse};
 
 #[derive(Tabled)]
 struct UserRow {
@@ -32,6 +32,15 @@ struct DetailedUserRow {
     groups: String,
 }
 
+fn basic_row(user: &BugzillaUser) -> UserRow {
+    UserRow {
+        id: user.id,
+        name: user.name.clone(),
+        real_name: user.real_name.clone().unwrap_or_default(),
+        email: user.email.clone().unwrap_or_default(),
+    }
+}
+
 fn detailed_row(user: &BugzillaUser) -> DetailedUserRow {
     DetailedUserRow {
         id: user.id,
@@ -57,7 +66,7 @@ fn detailed_row(user: &BugzillaUser) -> DetailedUserRow {
 
 #[expect(clippy::print_stdout)]
 pub fn print_users(users: &[BugzillaUser], details: bool, format: OutputFormat) {
-    format_or_json(users, format, |users| {
+    print_formatted(users, format, |users| {
         if users.is_empty() {
             println!("No users found.");
             return;
@@ -66,15 +75,7 @@ pub fn print_users(users: &[BugzillaUser], details: bool, format: OutputFormat) 
             let rows: Vec<DetailedUserRow> = users.iter().map(detailed_row).collect();
             println!("{}", Table::new(rows));
         } else {
-            let rows: Vec<UserRow> = users
-                .iter()
-                .map(|u| UserRow {
-                    id: u.id,
-                    name: u.name.clone(),
-                    real_name: u.real_name.clone().unwrap_or_default(),
-                    email: u.email.clone().unwrap_or_default(),
-                })
-                .collect();
+            let rows: Vec<UserRow> = users.iter().map(basic_row).collect();
             println!("{}", Table::new(rows));
         }
     });
@@ -82,7 +83,7 @@ pub fn print_users(users: &[BugzillaUser], details: bool, format: OutputFormat) 
 
 #[expect(clippy::print_stdout)]
 pub fn print_whoami(whoami: &WhoamiResponse, format: OutputFormat) {
-    format_or_json(whoami, format, |whoami| {
+    print_formatted(whoami, format, |whoami| {
         println!("{} {}", "User".bold(), whoami.name.bold());
         if let Some(ref real_name) = whoami.real_name {
             println!("  Name:   {real_name}");
@@ -94,31 +95,11 @@ pub fn print_whoami(whoami: &WhoamiResponse, format: OutputFormat) {
     });
 }
 
-#[expect(clippy::print_stdout)]
-pub fn print_group_info(group: &GroupInfo, format: OutputFormat) {
-    format_or_json(group, format, |group| {
-        println!("{} {}", "Group".bold(), group.name.bold());
-        println!("  Description:  {}", group.description);
-        println!(
-            "  Active:       {}",
-            if group.is_active { "yes" } else { "no" }
-        );
-        println!("  ID:           {}", group.id);
-        if !group.membership.is_empty() {
-            println!("\n{}:", "Members".bold());
-            for m in &group.membership {
-                let real = m.real_name.as_deref().unwrap_or("");
-                println!("  {} ({real})", m.name);
-            }
-        }
-    });
-}
-
 #[cfg(test)]
-#[expect(clippy::unwrap_used, clippy::useless_vec, clippy::single_char_pattern)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::types::{BugzillaUser, GroupInfo, GroupMember, UserGroup, WhoamiResponse};
+    use crate::types::{BugzillaUser, UserGroup, WhoamiResponse};
     use tabled::Table;
 
     fn make_user(id: u64, name: &str, can_login: Option<bool>, groups: Vec<&str>) -> BugzillaUser {
@@ -145,21 +126,6 @@ mod tests {
             name: "testuser".into(),
             real_name: Some("Test User".into()),
             login: Some("testuser@example.com".into()),
-        }
-    }
-
-    fn make_group_info() -> GroupInfo {
-        GroupInfo {
-            id: 5,
-            name: "core-team".into(),
-            description: "Core development team".into(),
-            is_active: true,
-            membership: vec![GroupMember {
-                id: 1,
-                name: "alice".into(),
-                real_name: Some("Alice Smith".into()),
-                email: Some("alice@example.com".into()),
-            }],
         }
     }
 
@@ -237,38 +203,6 @@ mod tests {
         assert_eq!(parsed["id"], 1);
         assert!(parsed["real_name"].is_null());
         assert!(parsed["login"].is_null());
-    }
-
-    // ── print_group_info ─────────────────────────────────────────────
-
-    #[test]
-    fn print_group_info_json() {
-        let group = make_group_info();
-        let json = serde_json::to_string_pretty(&group).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed["id"], 5);
-        assert_eq!(parsed["name"], "core-team");
-        assert_eq!(parsed["description"], "Core development team");
-        assert_eq!(parsed["is_active"], true);
-        let members = parsed["membership"].as_array().unwrap();
-        assert_eq!(members.len(), 1);
-        assert_eq!(members[0]["name"], "alice");
-        assert_eq!(members[0]["real_name"], "Alice Smith");
-    }
-
-    #[test]
-    fn print_group_info_json_no_members() {
-        let group = GroupInfo {
-            id: 6,
-            name: "empty-group".into(),
-            description: "No members".into(),
-            is_active: false,
-            membership: vec![],
-        };
-        let json = serde_json::to_string_pretty(&group).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed["is_active"], false);
-        assert!(parsed["membership"].as_array().unwrap().is_empty());
     }
 
     // ── print_users (extended) ───────────────────────────────────────

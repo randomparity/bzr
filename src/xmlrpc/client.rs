@@ -23,6 +23,11 @@ impl XmlRpcClient {
     // SECURITY: The request body contains Bugzilla_api_key in plain text.
     // Never log the request body. Response bodies are safe to log at trace
     // level since Bugzilla does not echo auth credentials back.
+    //
+    // NOTE: XML-RPC always transmits the API key in the request body
+    // (as a method parameter), regardless of the REST AuthMethod detected
+    // for this server. This is an inherent XML-RPC protocol constraint —
+    // there is no header-based auth equivalent for XML-RPC calls.
     async fn call(&self, method: &str, mut params: BTreeMap<String, Value>) -> Result<Value> {
         params.insert(AUTH_QUERY_PARAM.into(), Value::from(self.api_key.as_str()));
 

@@ -10,7 +10,6 @@
     reason = "public API is for integration tests, not external consumers"
 )]
 
-pub mod auth;
 pub mod cli;
 pub mod client;
 pub mod commands;

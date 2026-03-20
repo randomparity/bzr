@@ -1,6 +1,6 @@
 use crate::cli::UserAction;
 use crate::error::Result;
-use crate::output;
+use crate::output::{self, ActionResult, ResourceKind};
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{CreateUserParams, UpdateUserParams};
@@ -30,7 +30,7 @@ pub async fn execute(
             };
             let id = client.create_user(&params).await?;
             output::print_result(
-                &serde_json::json!({"id": id, "email": email, "resource": "user", "action": "created"}),
+                &ActionResult::created_named(id, email.as_str(), ResourceKind::User),
                 &format!("Created user #{id} ({email})"),
                 format,
             );
@@ -49,13 +49,14 @@ pub async fn execute(
                 (None, _) => None,
             };
             let params = UpdateUserParams {
+                names: Some(vec![user.clone()]),
                 real_name: real_name.clone(),
                 email: email.clone(),
                 login_denied_text: denied_text,
             };
             client.update_user(user, &params).await?;
             output::print_result(
-                &serde_json::json!({"user": user, "resource": "user", "action": "updated"}),
+                &ActionResult::updated_named(user.as_str(), ResourceKind::User),
                 &format!("Updated user '{user}'"),
                 format,
             );

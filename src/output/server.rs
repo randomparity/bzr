@@ -1,36 +1,27 @@
 use colored::Colorize;
 use serde::Serialize;
 
-use super::{format_or_json, mask_api_key};
-use crate::types::{OutputFormat, ServerExtensions, ServerVersion};
+use super::{print_formatted, mask_api_key};
+use crate::types::OutputFormat;
 
 /// Combined server information for display.
+#[derive(Serialize)]
+#[non_exhaustive]
 pub struct ServerInfo<'a> {
-    pub version: &'a ServerVersion,
-    pub extensions: &'a ServerExtensions,
+    pub version: &'a str,
+    pub extensions: &'a std::collections::HashMap<String, crate::types::ExtensionInfo>,
 }
 
 #[expect(clippy::print_stdout)]
 pub fn print_server_info(info: &ServerInfo<'_>, format: OutputFormat) {
-    #[derive(Serialize)]
-    struct ServerInfoView<'a> {
-        version: &'a str,
-        extensions: &'a std::collections::HashMap<String, crate::types::ExtensionInfo>,
-    }
-
-    let view = ServerInfoView {
-        version: &info.version.version,
-        extensions: &info.extensions.extensions,
-    };
-
-    format_or_json(&view, format, |view| {
-        println!("{} {}", "Bugzilla version:".bold(), view.version);
-        if view.extensions.is_empty() {
+    print_formatted(info, format, |info| {
+        println!("{} {}", "Bugzilla version:".bold(), info.version);
+        if info.extensions.is_empty() {
             println!("\nNo extensions installed.");
         } else {
             println!("\n{}:", "Extensions".bold());
-            for (name, info) in view.extensions {
-                let ver = info.version.as_deref().unwrap_or("unknown");
+            for (name, ext) in info.extensions {
+                let ver = ext.version.as_deref().unwrap_or("unknown");
                 println!("  {name} ({ver})");
             }
         }
@@ -84,7 +75,7 @@ pub fn print_config(
         servers,
     };
 
-    format_or_json(&view, format, |v| {
+    print_formatted(&view, format, |v| {
         println!("Config file: {}\n", v.config_file);
         if let Some(ref def) = v.default_server {
             println!("Default server: {def}");
@@ -106,7 +97,7 @@ pub fn print_config(
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used, clippy::useless_vec, clippy::single_char_pattern)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use crate::types::{ServerExtensions, ServerVersion};
 

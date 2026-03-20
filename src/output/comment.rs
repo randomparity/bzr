@@ -1,11 +1,11 @@
 use colored::Colorize;
 
-use super::format_or_json;
+use super::print_formatted;
 use crate::types::{Comment, OutputFormat};
 
 #[expect(clippy::print_stdout)]
 pub fn print_comments(comments: &[Comment], format: OutputFormat) {
-    format_or_json(comments, format, |comments| {
+    print_formatted(comments, format, |comments| {
         if comments.is_empty() {
             println!("No comments.");
             return;
@@ -32,7 +32,7 @@ pub fn print_comments(comments: &[Comment], format: OutputFormat) {
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used, clippy::useless_vec, clippy::single_char_pattern)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use crate::types::Comment;
 

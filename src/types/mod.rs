@@ -2,6 +2,7 @@ mod attachment;
 mod bug;
 mod comment;
 mod common;
+mod group;
 mod product;
 mod user;
 
@@ -19,9 +20,9 @@ pub use product::{
     Classification, ClassificationProduct, Component, CreateComponentParams, CreateProductParams,
     Milestone, Product, ProductListType, UpdateComponentParams, UpdateProductParams, Version,
 };
+pub use group::{CreateGroupParams, GroupInfo, GroupMember, UpdateGroupParams};
 pub use user::{
-    BugzillaUser, CreateGroupParams, CreateUserParams, GroupInfo, GroupMember, UpdateGroupParams,
-    UpdateUserParams, UserGroup, WhoamiResponse,
+    BugzillaUser, CreateUserParams, UpdateUserParams, UserGroup, WhoamiResponse,
 };
 
 #[cfg(test)]

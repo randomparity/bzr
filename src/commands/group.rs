@@ -1,6 +1,6 @@
 use crate::cli::GroupAction;
 use crate::error::Result;
-use crate::output;
+use crate::output::{self, ActionResult, ResourceKind};
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{CreateGroupParams, UpdateGroupParams};
@@ -60,12 +60,7 @@ pub async fn execute(
             };
             let id = client.create_group(&params).await?;
             output::print_result(
-                &serde_json::json!({
-                    "id": id,
-                    "name": name,
-                    "resource": "group",
-                    "action": "created",
-                }),
+                &ActionResult::created_named(id, name.as_str(), ResourceKind::Group),
                 &format!("Created group #{id} '{name}'"),
                 format,
             );
@@ -81,11 +76,7 @@ pub async fn execute(
             };
             client.update_group(group, &params).await?;
             output::print_result(
-                &serde_json::json!({
-                    "name": group,
-                    "resource": "group",
-                    "action": "updated",
-                }),
+                &ActionResult::updated_named(group.as_str(), ResourceKind::Group),
                 &format!("Updated group '{group}'"),
                 format,
             );

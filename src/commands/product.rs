@@ -1,6 +1,6 @@
 use crate::cli::ProductAction;
 use crate::error::Result;
-use crate::output;
+use crate::output::{self, ActionResult, ResourceKind};
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{CreateProductParams, UpdateProductParams};
@@ -36,7 +36,7 @@ pub async fn execute(
             };
             let id = client.create_product(&params).await?;
             output::print_result(
-                &serde_json::json!({"id": id, "name": name, "resource": "product", "action": "created"}),
+                &ActionResult::created_named(id, name.as_str(), ResourceKind::Product),
                 &format!("Created product #{id} '{name}'"),
                 format,
             );
@@ -54,7 +54,7 @@ pub async fn execute(
             };
             client.update_product(name, &params).await?;
             output::print_result(
-                &serde_json::json!({"name": name, "resource": "product", "action": "updated"}),
+                &ActionResult::updated_named(name.as_str(), ResourceKind::Product),
                 &format!("Updated product '{name}'"),
                 format,
             );

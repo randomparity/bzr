@@ -1,7 +1,7 @@
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
-use super::{format_or_json, truncate};
+use super::{print_formatted, truncate};
 use crate::types::{Classification, OutputFormat, Product};
 
 #[derive(Tabled)]
@@ -18,7 +18,7 @@ struct ProductRow {
 
 #[expect(clippy::print_stdout)]
 pub fn print_products(products: &[Product], format: OutputFormat) {
-    format_or_json(products, format, |products| {
+    print_formatted(products, format, |products| {
         if products.is_empty() {
             println!("No products found.");
             return;
@@ -41,7 +41,7 @@ pub fn print_products(products: &[Product], format: OutputFormat) {
 
 #[expect(clippy::print_stdout)]
 pub fn print_product_detail(product: &Product, format: OutputFormat) {
-    format_or_json(product, format, |product| {
+    print_formatted(product, format, |product| {
         println!(
             "{} {}\n{}\n",
             "Product".bold(),
@@ -77,7 +77,7 @@ pub fn print_product_detail(product: &Product, format: OutputFormat) {
 
 #[expect(clippy::print_stdout)]
 pub fn print_classification(classification: &Classification, format: OutputFormat) {
-    format_or_json(classification, format, |classification| {
+    print_formatted(classification, format, |classification| {
         println!(
             "{} {}\n{}\n",
             "Classification".bold(),
@@ -94,7 +94,7 @@ pub fn print_classification(classification: &Classification, format: OutputForma
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used, clippy::useless_vec, clippy::single_char_pattern)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::types::{Classification, ClassificationProduct, Product};

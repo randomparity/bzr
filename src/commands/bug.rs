@@ -1,6 +1,6 @@
 use crate::cli::BugAction;
 use crate::error::Result;
-use crate::output::{self, ActionKind, ActionResult, ResourceKind};
+use crate::output::{self, ActionResult, ResourceKind};
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{CreateBugParams, SearchParams, UpdateBugParams};
@@ -113,11 +113,7 @@ pub async fn execute(
             };
             let id = client.create_bug(&params).await?;
             output::print_result(
-                &ActionResult {
-                    id,
-                    resource: ResourceKind::Bug,
-                    action: ActionKind::Created,
-                },
+                &ActionResult::created(id, ResourceKind::Bug),
                 &format!("Created bug #{id}"),
                 format,
             );
@@ -146,11 +142,7 @@ pub async fn execute(
             };
             client.update_bug(*id, &params).await?;
             output::print_result(
-                &ActionResult {
-                    id: *id,
-                    resource: ResourceKind::Bug,
-                    action: ActionKind::Updated,
-                },
+                &ActionResult::updated(*id, ResourceKind::Bug),
                 &format!("Updated bug #{id}"),
                 format,
             );

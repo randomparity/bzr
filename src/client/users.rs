@@ -2,7 +2,7 @@ use serde::Deserialize;
 
 use super::encode_path;
 use super::BugzillaClient;
-use crate::error::{BzrError, Result};
+use crate::error::Result;
 use crate::types::{BugzillaUser, CreateUserParams, UpdateUserParams};
 
 #[derive(Deserialize)]
@@ -35,21 +35,11 @@ impl BugzillaClient {
     }
 
     /// Update a user's profile fields.
-    ///
-    /// Note: this method injects a `names` field into the JSON body alongside
-    /// the `UpdateUserParams` fields. Bugzilla 5.0 requires `names` in the
-    /// request body; newer versions accept the user in the URL path alone.
-    /// Including `names` ensures compatibility across both versions.
     pub async fn update_user(&self, user: &str, updates: &UpdateUserParams) -> Result<()> {
-        let mut body = serde_json::to_value(updates)
-            .map_err(|e| BzrError::Other(format!("failed to serialize user update: {e}")))?;
-        if let Some(obj) = body.as_object_mut() {
-            obj.insert("names".into(), serde_json::json!([user]));
-        }
         let req = self.apply_auth(
             self.http
                 .put(self.url(&format!("user/{}", encode_path(user))))
-                .json(&body),
+                .json(updates),
         );
         self.send(req).await?;
         Ok(())
@@ -202,6 +192,7 @@ mod tests {
 
         let client = test_client(&mock.uri());
         let params = UpdateUserParams {
+            names: Some(vec!["alice@example.com".into()]),
             real_name: Some("Alice Smith".into()),
             ..Default::default()
         };

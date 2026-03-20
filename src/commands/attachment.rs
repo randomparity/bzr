@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::cli::AttachmentAction;
 use crate::error::Result;
-use crate::output::{self, ActionKind, ActionResult, ResourceKind};
+use crate::output::{self, ActionResult, ResourceKind};
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{UpdateAttachmentParams, UploadAttachmentParams};
@@ -98,11 +98,7 @@ pub async fn execute(
             };
             client.update_attachment(*id, &params).await?;
             output::print_result(
-                &ActionResult {
-                    id: *id,
-                    resource: ResourceKind::Attachment,
-                    action: ActionKind::Updated,
-                },
+                &ActionResult::updated(*id, ResourceKind::Attachment),
                 &format!("Updated attachment #{id}"),
                 format,
             );

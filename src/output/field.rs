@@ -1,6 +1,6 @@
 use tabled::{Table, Tabled};
 
-use super::format_or_json;
+use super::print_formatted;
 use crate::types::{FieldValue, OutputFormat};
 
 #[derive(Tabled)]
@@ -15,7 +15,7 @@ struct FieldValueRow {
 
 #[expect(clippy::print_stdout)]
 pub fn print_field_values(values: &[FieldValue], field_name: &str, format: OutputFormat) {
-    format_or_json(values, format, |values| {
+    print_formatted(values, format, |values| {
         if values.is_empty() {
             println!("No values for field '{field_name}'.");
             return;
@@ -49,7 +49,7 @@ pub fn print_field_values(values: &[FieldValue], field_name: &str, format: Outpu
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used, clippy::useless_vec, clippy::single_char_pattern)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use crate::types::{FieldValue, StatusTransition};
 

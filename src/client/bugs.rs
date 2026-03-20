@@ -77,11 +77,6 @@ impl BugzillaClient {
 
     async fn search_bugs_rest(&self, params: &SearchParams) -> Result<Vec<Bug>> {
         let mut req_builder = self.http.get(self.url("bug")).query(params);
-        // Vec<u64> can't be serialized by reqwest's query serializer, so
-        // we add each id as a separate query parameter manually.
-        for id in &params.id {
-            req_builder = req_builder.query(&[("id", id)]);
-        }
         if params.include_fields.is_none() {
             req_builder = req_builder.query(&[("include_fields", BUG_DEFAULT_FIELDS)]);
         }
@@ -91,6 +86,11 @@ impl BugzillaClient {
         Ok(data.bugs)
     }
 
+    /// Fetch a single bug by numeric ID or alias string.
+    ///
+    /// Unlike `get_bug_history_since`, `get_comments_since`, and `get_attachments`,
+    /// this method accepts `&str` because Bugzilla supports alias lookup here.
+    /// The returned `Bug.id` (u64) can be passed to those numeric-only methods.
     pub async fn get_bug(
         &self,
         id: &str,
