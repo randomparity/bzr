@@ -37,12 +37,7 @@ impl BugzillaClient {
         data.users
             .into_iter()
             .next()
-            .map(|u| WhoamiResponse {
-                id: u.id,
-                name: u.name,
-                real_name: u.real_name,
-                login: u.email,
-            })
+            .map(WhoamiResponse::from)
             .ok_or_else(|| BzrError::NotFound {
                 resource: "user",
                 id: email.to_string(),

@@ -39,6 +39,17 @@ pub struct WhoamiResponse {
     pub login: Option<String>,
 }
 
+impl From<BugzillaUser> for WhoamiResponse {
+    fn from(user: BugzillaUser) -> Self {
+        Self {
+            id: user.id,
+            name: user.name,
+            real_name: user.real_name,
+            login: user.email,
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[non_exhaustive]
 pub struct CreateUserParams {
