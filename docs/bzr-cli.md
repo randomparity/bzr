@@ -81,11 +81,14 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   ├── search <QUERY> [--limit <N>] [--fields <F>] [--exclude-fields <F>]
 │   ├── history <ID> [--since <DATE>]
 │   ├── my [--created] [--cc] [--all] [--status <S>] [--limit <N>]
-│   ├── create [--template <T>] --product <P> --component <C> --summary <S>
+│   │       [--fields <F>] [--exclude-fields <F>]
+│   ├── create [--template <T>] [--product <P>] [--component <C>] --summary <S>
 │   │          [--version <V>] [--description <D>] [--priority <P>] [--severity <S>]
-│   │          [--assignee <A>] [--blocks <IDs>] [--depends-on <IDs>]
+│   │          [--assignee <A>] [--op-sys <OS>] [--rep-platform <PLAT>]
+│   │          [--blocks <IDs>] [--depends-on <IDs>]
 │   ├── clone <ID> [--summary <S>] [--product <P>] [--component <C>] [--version <V>]
 │   │              [--description <D>] [--priority <P>] [--severity <S>] [--assignee <A>]
+│   │              [--op-sys <OS>] [--rep-platform <PLAT>]
 │   │              [--no-comment] [--add-depends-on] [--add-blocks] [--no-cc] [--no-keywords]
 │   └── update <ID...> [--status <S>] [--resolution <R>] [--assignee <A>]
 │                       [--priority <P>] [--severity <S>] [--summary <S>]
@@ -113,7 +116,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   └── list <FIELD_NAME>
 ├── user
 │   ├── search <QUERY> [--details]
-│   ├── create --email <E> [--full-name <N>] [--password <P>]
+│   ├── create --email <E> [--full-name <N>] [--password <P>] [--login <L>]
 │   └── update <USER> [--real-name <N>] [--email <E>] [--disable-login <BOOL>]
 │                      [--login-denied-text <T>]
 ├── group
@@ -137,7 +140,8 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   └── show
 └── template
     ├── save <NAME> [--product <P>] [--component <C>] [--version <V>] [--priority <P>]
-    │               [--severity <S>] [--assignee <A>] [--description <D>]
+    │               [--severity <S>] [--assignee <A>] [--op-sys <OS>] [--rep-platform <PLAT>]
+    │               [--description <D>]
     ├── list
     ├── show <NAME>
     └── delete <NAME>
@@ -221,61 +225,6 @@ bzr --json bug history 12345
 | `<ID>` | Yes | Bug ID |
 | `--since <DATE>` | No | Only show changes after this date (ISO 8601) |
 
-### `bzr bug create`
-
-File a new bug.
-
-```bash
-bzr bug create --product Fedora --component kernel \
-  --summary "Boot failure on 6.x" \
-  --description "System hangs at initramfs" \
-  --priority high --severity major
-```
-
-| Option | Required | Default | Description |
-|--------|----------|---------|-------------|
-| `--product <P>` | Yes | | Product name |
-| `--component <C>` | Yes | | Component name |
-| `--summary <S>` | Yes | | One-line summary |
-| `--version <V>` | No | "unspecified" | Version |
-| `--description <D>` | No | | Full description |
-| `--priority <P>` | No | | Priority level |
-| `--severity <S>` | No | | Severity level |
-| `--assignee <A>` | No | | Assignee email |
-| `--blocks <IDs>` | No | | Bug IDs this bug blocks (comma-separated) |
-| `--depends-on <IDs>` | No | | Bug IDs this bug depends on (comma-separated) |
-| `--template <T>` | No | | Use a saved template for default field values |
-
-When using `--template`, the template provides defaults for `--product`, `--component`, and other fields. CLI flags override template values. `--summary` is always required.
-
-### `bzr bug clone`
-
-Clone an existing bug, copying its fields into a new bug. All create flags are available as overrides.
-
-```bash
-bzr bug clone 12345
-bzr bug clone 12345 --summary "Variant: different environment"
-bzr bug clone 12345 --component NewComponent --add-depends-on
-bzr bug clone 12345 --no-comment --no-cc
-```
-
-| Option | Required | Description |
-|--------|----------|-------------|
-| `<ID>` | Yes | Source bug ID or alias |
-| `--summary <S>` | No | Override summary (copies from source if omitted) |
-| `--product <P>` | No | Override product |
-| `--component <C>` | No | Override component |
-| `--version <V>` | No | Override version |
-| `--description <D>` | No | Override description (copies comment #0 from source if omitted) |
-| `--priority <P>` | No | Override priority |
-| `--severity <S>` | No | Override severity |
-| `--assignee <A>` | No | Override assignee |
-| `--no-comment` | No | Skip the "Cloned from bug #N" comment |
-| `--add-depends-on` | No | Make the new bug depend on the source bug |
-| `--add-blocks` | No | Make the new bug block the source bug |
-| `--no-cc` | No | Don't copy the CC list from the source bug |
-| `--no-keywords` | No | Don't copy keywords from the source bug |
-
 ### `bzr bug my`
 
 Show bugs related to the authenticated user. Defaults to bugs assigned to you.
@@ -294,9 +243,70 @@ bzr bug my --status OPEN --limit 20
 | `--cc` | No | | Show bugs I'm CC'd on (instead of assigned) |
 | `--all` | No | | Show all bugs related to me (assigned + created + CC'd) |
 | `--status <S>` | No | | Filter by status |
-| `--limit <N>` | No | 50 | Max results per query |
+| `--limit <N>` | No | 50 | Max results per category (assigned/created/cc) |
 | `--fields <F>` | No | | Only return these fields (comma-separated) |
 | `--exclude-fields <F>` | No | | Exclude these fields (comma-separated) |
+
+### `bzr bug create`
+
+File a new bug.
+
+```bash
+bzr bug create --product Fedora --component kernel \
+  --summary "Boot failure on 6.x" \
+  --description "System hangs at initramfs" \
+  --priority high --severity major
+
+bzr bug create --template security-bug --summary "XSS in login form"
+```
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `--product <P>` | Yes* | | Product name |
+| `--component <C>` | Yes* | | Component name |
+| `--summary <S>` | Yes | | One-line summary |
+| `--version <V>` | No | "unspecified" | Version |
+| `--description <D>` | No | | Full description |
+| `--priority <P>` | No | | Priority level |
+| `--severity <S>` | No | | Severity level |
+| `--assignee <A>` | No | | Assignee email |
+| `--op-sys <OS>` | No | | Operating system (required by some Bugzilla installations) |
+| `--rep-platform <PLAT>` | No | | Hardware platform (required by some Bugzilla installations) |
+| `--blocks <IDs>` | No | | Bug IDs this bug blocks (comma-separated) |
+| `--depends-on <IDs>` | No | | Bug IDs this bug depends on (comma-separated) |
+| `--template <T>` | No | | Name of a saved template to use for default field values |
+
+*Required unless a template provides the value. `--summary` is always required regardless of template.
+
+### `bzr bug clone`
+
+Clone an existing bug, copying its fields into a new bug. Override flags (`--summary`, `--product`, `--component`, `--version`, `--description`, `--priority`, `--severity`, `--assignee`, `--op-sys`, `--rep-platform`) take precedence over values copied from the source.
+
+```bash
+bzr bug clone 12345
+bzr bug clone 12345 --summary "Variant: different environment"
+bzr bug clone 12345 --component NewComponent --add-depends-on
+bzr bug clone 12345 --no-comment --no-cc
+```
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `<ID>` | Yes | Source bug ID or alias |
+| `--summary <S>` | No | Override summary (copies from source if omitted) |
+| `--product <P>` | No | Override product |
+| `--component <C>` | No | Override component |
+| `--version <V>` | No | Override version (copies from source if omitted) |
+| `--description <D>` | No | Override description (copies comment #0 from source if omitted) |
+| `--priority <P>` | No | Override priority |
+| `--severity <S>` | No | Override severity |
+| `--assignee <A>` | No | Override assignee |
+| `--op-sys <OS>` | No | Override operating system |
+| `--rep-platform <PLAT>` | No | Override hardware platform |
+| `--no-comment` | No | Skip the "Cloned from bug #N" comment |
+| `--add-depends-on` | No | Make the new bug depend on the source bug |
+| `--add-blocks` | No | Make the new bug block the source bug |
+| `--no-cc` | No | Don't copy the CC list from the source bug |
+| `--no-keywords` | No | Don't copy keywords from the source bug |
 
 ### `bzr bug update`
 
@@ -562,9 +572,11 @@ bzr user create --email carol@example.com --login carol   # Bugzilla 5.3+ with u
 | Option | Required | Description |
 |--------|----------|-------------|
 | `--email <E>` | Yes | User email |
-| `--login <L>` | No | Login name (required on Bugzilla 5.3+ when `use_email_as_login` is disabled; set `api_mode = "hybrid"` to use XML-RPC which avoids the REST login field conflict) |
+| `--login <L>` | No | Login name (if different from email). Required on Bugzilla 5.3+ when `use_email_as_login` is disabled |
 | `--full-name <N>` | No | Full name |
 | `--password <P>` | No | Password (server generates one if omitted) |
+
+> **Note:** On Bugzilla 5.3+ with `use_email_as_login` disabled, the REST API has a conflict with the `login` field. Set `api_mode = "hybrid"` in your server config to use XML-RPC for user creation, which avoids this issue.
 
 ### `bzr user update`
 
@@ -909,7 +921,14 @@ Create, update, and delete commands return structured JSON with `--json`:
 {"id":67890,"file":"/tmp/patch.diff","size":4096,"resource":"attachment","action":"downloaded"}
 ```
 
-All mutation responses include `resource` and `action` fields. Most include `id` for the created/updated resource. Note: `comment tag` responses use `comment_id`, not `id`. Membership responses (`group_membership`) have no `id` field.
+Template mutations use `name` instead of `id`:
+
+```json
+{"name":"security-bug","action":"saved"}
+{"name":"security-bug","action":"deleted"}
+```
+
+All mutation responses include `resource` and `action` fields. Most include `id` for the created/updated resource. Note: `comment tag` responses use `comment_id`, not `id`. Membership responses (`group_membership`) have no `id` field. Template responses use `name` instead of `id`.
 
 ### Error output
 

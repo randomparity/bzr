@@ -82,7 +82,6 @@ fn version_to_api_mode(version: &str) -> ApiMode {
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used)]
 mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};

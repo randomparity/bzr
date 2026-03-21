@@ -2,7 +2,7 @@
 /// Tests that set `XDG_CONFIG_HOME` must hold this lock to avoid races.
 pub(super) use crate::ENV_LOCK;
 
-/// Acquire ENV_LOCK, start a mock server, create a temp dir, and configure it.
+/// Acquire `ENV_LOCK`, start a mock server, create a temp dir, and configure it.
 /// Returns the guard, mock server, and temp dir (all must stay alive for the test).
 #[expect(clippy::unwrap_used)]
 pub async fn setup_test_env() -> (
@@ -89,6 +89,10 @@ where
 /// Extract the first valid JSON value from a string that may contain
 /// other test output mixed in (due to concurrent test threads writing
 /// to the same stdout fd).
+#[expect(
+    clippy::panic,
+    reason = "test helper: unrecoverable if output is not JSON"
+)]
 pub fn extract_json(output: &str) -> serde_json::Value {
     // Try parsing the full output first (common case).
     if let Ok(v) = serde_json::from_str(output) {

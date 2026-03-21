@@ -58,6 +58,7 @@ impl BugzillaClient {
             ApiMode::XmlRpc => self.xmlrpc_client()?.create_user(params).await,
             ApiMode::Hybrid => match self.post_json_id("user", params).await {
                 Ok(id) => Ok(id),
+                Err(e) if matches!(e, crate::error::BzrError::Auth(_)) => Err(e),
                 Err(e) => {
                     tracing::info!("REST user creation failed ({e}), retrying via XML-RPC");
                     self.xmlrpc_client()?.create_user(params).await

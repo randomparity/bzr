@@ -285,7 +285,10 @@ pub async fn execute(
                 product: product.clone().unwrap_or(source_product),
                 component: component.clone().unwrap_or(source_component),
                 summary: summary.clone().unwrap_or(source.summary),
-                version: version.clone().unwrap_or_else(|| "unspecified".to_string()),
+                version: version
+                    .clone()
+                    .or(source.version)
+                    .unwrap_or_else(|| "unspecified".to_string()),
                 description: clone_description,
                 priority: priority.clone().or(source.priority),
                 severity: severity.clone().or(source.severity),
@@ -304,7 +307,7 @@ pub async fn execute(
 
             let new_id = client.create_bug(&params).await?;
 
-            if !no_comment {
+            if !*no_comment {
                 client
                     .add_comment(new_id, &format!("Cloned from bug #{}", source.id))
                     .await?;
@@ -394,9 +397,10 @@ pub async fn execute(
                     }
                 }
                 if has_failures {
-                    return Err(crate::error::BzrError::Other(
-                        "some bugs failed to update".into(),
-                    ));
+                    return Err(crate::error::BzrError::BatchPartialFailure {
+                        succeeded: succeeded.len(),
+                        failed: batch.failed.len(),
+                    });
                 }
             }
         }
@@ -405,7 +409,7 @@ pub async fn execute(
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used)]
+#[expect(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, ResponseTemplate};
@@ -658,5 +662,266 @@ mod tests {
         };
         let result = super::execute(&action, None, OutputFormat::Json, None).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn bug_my_returns_assigned_by_default() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        // Mock whoami
+        Mock::given(method("GET"))
+            .and(path("/rest/whoami"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "name": "dev@test.com",
+                "real_name": "Dev User",
+                "id": 1
+            })))
+            .mount(&mock)
+            .await;
+
+        // Mock assigned-to search
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{
+                    "id": 10,
+                    "summary": "Assigned bug",
+                    "status": "NEW",
+                    "assigned_to": "dev@test.com",
+                    "product": "TestProduct",
+                    "component": "General"
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = BugAction::My {
+            created: false,
+            cc: false,
+            all: false,
+            status: None,
+            limit: 50,
+            fields: None,
+            exclude_fields: None,
+        };
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok(), "bug my failed: {result:?}");
+        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        assert_eq!(parsed[0]["id"], 10);
+        assert_eq!(parsed[0]["summary"], "Assigned bug");
+    }
+
+    #[tokio::test]
+    async fn bug_my_all_deduplicates() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/whoami"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "name": "dev@test.com",
+                "real_name": "Dev User",
+                "id": 1
+            })))
+            .mount(&mock)
+            .await;
+
+        // All three searches return the same bug — should appear only once
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{
+                    "id": 42,
+                    "summary": "Shared bug",
+                    "status": "NEW",
+                    "assigned_to": "dev@test.com",
+                    "product": "TestProduct",
+                    "component": "General"
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = BugAction::My {
+            created: false,
+            cc: false,
+            all: true,
+            status: None,
+            limit: 50,
+            fields: None,
+            exclude_fields: None,
+        };
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok(), "bug my --all failed: {result:?}");
+        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        let bugs = parsed.as_array().expect("expected JSON array");
+        assert_eq!(bugs.len(), 1, "duplicate bug should be deduplicated");
+        assert_eq!(bugs[0]["id"], 42);
+    }
+
+    #[tokio::test]
+    async fn bug_clone_copies_fields() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        // Mock get_bug
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/100"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{
+                    "id": 100,
+                    "summary": "Original bug",
+                    "status": "NEW",
+                    "product": "TestProduct",
+                    "component": "General",
+                    "version": "2.0",
+                    "priority": "P1",
+                    "severity": "major",
+                    "assigned_to": "dev@test.com",
+                    "op_sys": "Linux",
+                    "rep_platform": "x86_64",
+                    "cc": ["watcher@test.com"],
+                    "keywords": ["regression"]
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        // Mock get_comments (for description)
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/100/comment"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": {
+                    "100": {
+                        "comments": [{
+                            "id": 1,
+                            "count": 0,
+                            "text": "Original description",
+                            "creator": "dev@test.com",
+                            "creation_time": "2025-01-01T00:00:00Z"
+                        }]
+                    }
+                }
+            })))
+            .mount(&mock)
+            .await;
+
+        // Mock create_bug
+        Mock::given(method("POST"))
+            .and(path("/rest/bug"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 200})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        // Mock add_comment (for "Cloned from" comment)
+        Mock::given(method("POST"))
+            .and(path("/rest/bug/200/comment"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 300})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let action = BugAction::Clone {
+            id: "100".to_string(),
+            summary: None,
+            product: None,
+            component: None,
+            version: None,
+            description: None,
+            priority: None,
+            severity: None,
+            assignee: None,
+            op_sys: None,
+            rep_platform: None,
+            no_comment: false,
+            add_depends_on: false,
+            add_blocks: false,
+            no_cc: false,
+            no_keywords: false,
+        };
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok(), "bug clone failed: {result:?}");
+        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        assert_eq!(parsed["id"], 200);
+        assert_eq!(parsed["action"], "created");
+    }
+
+    #[tokio::test]
+    async fn bug_clone_no_comment_skips_comment() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/100"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{
+                    "id": 100,
+                    "summary": "Original bug",
+                    "status": "NEW",
+                    "product": "TestProduct",
+                    "component": "General",
+                    "version": "1.0",
+                    "cc": [],
+                    "keywords": []
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/100/comment"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": {
+                    "100": {
+                        "comments": [{
+                            "id": 1,
+                            "count": 0,
+                            "text": "Description",
+                            "creator": "dev@test.com",
+                            "creation_time": "2025-01-01T00:00:00Z"
+                        }]
+                    }
+                }
+            })))
+            .mount(&mock)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/rest/bug"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 201})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        // No comment mock — if comment is posted, the test will fail because there's no mock
+        Mock::given(method("POST"))
+            .and(path("/rest/bug/201/comment"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 301})))
+            .expect(0)
+            .mount(&mock)
+            .await;
+
+        let action = BugAction::Clone {
+            id: "100".to_string(),
+            summary: None,
+            product: None,
+            component: None,
+            version: None,
+            description: None,
+            priority: None,
+            severity: None,
+            assignee: None,
+            op_sys: None,
+            rep_platform: None,
+            no_comment: true,
+            add_depends_on: false,
+            add_blocks: false,
+            no_cc: false,
+            no_keywords: false,
+        };
+        let (result, _output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok(), "bug clone --no-comment failed: {result:?}");
     }
 }

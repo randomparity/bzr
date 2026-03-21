@@ -98,3 +98,93 @@ pub async fn execute(action: &TemplateAction, format: OutputFormat) -> Result<()
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used)]
+mod tests {
+    use super::super::test_helpers::{capture_stdout, setup_test_env};
+    use crate::cli::TemplateAction;
+    use crate::types::OutputFormat;
+
+    #[tokio::test]
+    async fn template_save_and_show() {
+        let (_lock, _mock, _tmp) = setup_test_env().await;
+
+        // Save a template
+        let action = TemplateAction::Save {
+            name: "test-tmpl".into(),
+            product: Some("TestProduct".into()),
+            component: Some("General".into()),
+            version: None,
+            priority: Some("P1".into()),
+            severity: None,
+            assignee: None,
+            op_sys: None,
+            rep_platform: None,
+            description: None,
+        };
+        let (result, _output) = capture_stdout(super::execute(&action, OutputFormat::Json)).await;
+        assert!(result.is_ok(), "template save failed: {result:?}");
+
+        // Show the saved template
+        let action = TemplateAction::Show {
+            name: "test-tmpl".into(),
+        };
+        let (result, output) = capture_stdout(super::execute(&action, OutputFormat::Json)).await;
+        assert!(result.is_ok(), "template show failed: {result:?}");
+        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        assert_eq!(parsed["name"], "test-tmpl");
+        assert_eq!(parsed["product"], "TestProduct");
+        assert_eq!(parsed["priority"], "P1");
+    }
+
+    #[tokio::test]
+    async fn template_save_requires_field() {
+        let (_lock, _mock, _tmp) = setup_test_env().await;
+
+        let action = TemplateAction::Save {
+            name: "empty-tmpl".into(),
+            product: None,
+            component: None,
+            version: None,
+            priority: None,
+            severity: None,
+            assignee: None,
+            op_sys: None,
+            rep_platform: None,
+            description: None,
+        };
+        let result = super::execute(&action, OutputFormat::Json).await;
+        assert!(result.is_err(), "saving empty template should fail");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("at least one field"),
+            "expected validation error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn template_delete_unknown_errors() {
+        let (_lock, _mock, _tmp) = setup_test_env().await;
+
+        let action = TemplateAction::Delete {
+            name: "nonexistent".into(),
+        };
+        let result = super::execute(&action, OutputFormat::Json).await;
+        assert!(result.is_err(), "deleting unknown template should fail");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("not found"),
+            "expected not-found error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn template_list_empty() {
+        let (_lock, _mock, _tmp) = setup_test_env().await;
+
+        let action = TemplateAction::List;
+        let (result, _output) = capture_stdout(super::execute(&action, OutputFormat::Json)).await;
+        assert!(result.is_ok(), "template list failed: {result:?}");
+    }
+}

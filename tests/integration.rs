@@ -60,6 +60,10 @@ where
 }
 
 /// Extract valid JSON from captured output that may contain mixed content.
+#[expect(
+    clippy::panic,
+    reason = "test helper: unrecoverable if output is not JSON"
+)]
 fn extract_json(output: &str) -> serde_json::Value {
     if let Ok(v) = serde_json::from_str(output) {
         return v;

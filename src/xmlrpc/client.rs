@@ -204,6 +204,7 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         resolution: get_nonempty_str(m, "resolution"),
         product: get_nonempty_str(m, "product"),
         component: get_nonempty_str(m, "component"),
+        version: get_nonempty_str(m, "version"),
         assigned_to: get_nonempty_str(m, "assigned_to"),
         priority: get_nonempty_str(m, "priority"),
         severity: get_nonempty_str(m, "severity"),

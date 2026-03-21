@@ -22,6 +22,8 @@ pub struct Bug {
     #[serde(default)]
     pub component: Option<String>,
     #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
     pub assigned_to: Option<String>,
     #[serde(default)]
     pub priority: Option<String>,

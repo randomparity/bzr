@@ -130,7 +130,7 @@ pub enum BugAction {
         /// Filter by status
         #[arg(long)]
         status: Option<String>,
-        /// Max number of results
+        /// Max results per category (assigned/created/cc)
         #[arg(long, default_value = "50")]
         limit: u32,
         /// Only return these fields (comma-separated)

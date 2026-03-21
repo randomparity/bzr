@@ -434,7 +434,7 @@ mod tests {
         );
     }
 
-    /// Exercises detect_server_settings: probes auth and version without Config.
+    /// Exercises `detect_server_settings`: probes auth and version without Config.
     #[tokio::test]
     async fn detect_server_settings_returns_all_fields() {
         let server = MockServer::start().await;

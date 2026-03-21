@@ -42,6 +42,9 @@ pub enum BzrError {
     #[error("Data integrity error: {0}")]
     DataIntegrity(String),
 
+    #[error("batch update: {succeeded} succeeded, {failed} failed")]
+    BatchPartialFailure { succeeded: usize, failed: usize },
+
     #[error("{0}")]
     Other(String),
 }
@@ -95,6 +98,7 @@ impl BzrError {
             BzrError::Deserialize(_) => 8,
             BzrError::Auth(_) => 9,
             BzrError::DataIntegrity(_) => 10,
+            BzrError::BatchPartialFailure { .. } => 11,
             BzrError::Other(_) => 1,
         }
     }
@@ -110,6 +114,7 @@ impl BzrError {
             BzrError::Deserialize(_) => "deserialize",
             BzrError::Auth(_) => "auth",
             BzrError::DataIntegrity(_) => "data_integrity",
+            BzrError::BatchPartialFailure { .. } => "batch_partial_failure",
             BzrError::Other(_) => "other",
         }
     }
