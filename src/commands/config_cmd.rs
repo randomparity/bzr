@@ -21,6 +21,7 @@ pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
             auth_method,
         } => {
             let mut config = Config::load()?;
+            let is_update = config.servers.contains_key(name.as_str());
             config.servers.insert(
                 name.clone(),
                 ServerConfig {
@@ -39,7 +40,8 @@ pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
             let path = Config::path()?;
             config.save()?;
 
-            let mut human = format!("Server '{name}' configured at {url}");
+            let verb = if is_update { "updated" } else { "configured" };
+            let mut human = format!("Server '{name}' {verb} at {url}");
             if is_default {
                 human.push_str("\nSet as default server.");
             }
@@ -51,6 +53,7 @@ pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
                     url.as_str(),
                     is_default,
                     path.to_string_lossy(),
+                    is_update,
                 ),
                 &human,
                 format,

@@ -1,4 +1,5 @@
 use crate::cli::UserAction;
+use crate::client::user::USER_FIELDS_DETAILED;
 use crate::error::Result;
 use crate::output::{self, ActionResult, ResourceKind};
 use crate::types::ApiMode;
@@ -11,10 +12,7 @@ use crate::types::{CreateUserParams, UpdateUserParams};
 /// - `--disable-login` without text → default "Account disabled"
 /// - `--disable-login=false` → empty string (re-enables login)
 /// - neither flag → `None` (leave unchanged)
-fn resolve_login_denied_text(
-    disable: Option<bool>,
-    custom_text: Option<&str>,
-) -> Option<String> {
+fn resolve_login_denied_text(disable: Option<bool>, custom_text: Option<&str>) -> Option<String> {
     match (disable, custom_text) {
         (Some(true), Some(text)) => Some(text.into()),
         (Some(true), None) => Some("Account disabled".into()),
@@ -34,7 +32,7 @@ pub async fn execute(
     match action {
         UserAction::Search { query, details } => {
             let fields = if *details {
-                Some("id,name,real_name,email,can_login,groups")
+                Some(USER_FIELDS_DETAILED)
             } else {
                 None
             };
@@ -188,9 +186,7 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/rest/user"))
-            .respond_with(
-                ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 99})),
-            )
+            .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 99})))
             .expect(1)
             .mount(&mock)
             .await;

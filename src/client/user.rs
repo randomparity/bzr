@@ -5,6 +5,11 @@ use super::BugzillaClient;
 use crate::error::Result;
 use crate::types::{BugzillaUser, CreateUserParams, UpdateUserParams};
 
+/// Default fields for user queries (basic info).
+pub(crate) const USER_FIELDS_BASIC: &str = "id,name,real_name,email,groups";
+/// Extended fields for detailed user queries.
+pub(crate) const USER_FIELDS_DETAILED: &str = "id,name,real_name,email,can_login,groups";
+
 #[derive(Deserialize)]
 pub(super) struct UserSearchResponse {
     pub(super) users: Vec<BugzillaUser>,
@@ -111,7 +116,10 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client.search_users("alice", Some("id,name,real_name,email,can_login,groups")).await.unwrap();
+        let users = client
+            .search_users("alice", Some("id,name,real_name,email,can_login,groups"))
+            .await
+            .unwrap();
         assert_eq!(users.len(), 1);
         assert_eq!(users[0].can_login, Some(true));
         assert_eq!(users[0].groups.len(), 1);

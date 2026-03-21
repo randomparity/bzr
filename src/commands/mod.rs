@@ -19,6 +19,21 @@ pub mod whoami;
 pub(crate) mod test_helpers {
     pub(crate) use crate::ENV_LOCK;
 
+    /// Acquire ENV_LOCK, start a mock server, create a temp dir, and configure it.
+    /// Returns the guard, mock server, and temp dir (all must stay alive for the test).
+    #[expect(clippy::unwrap_used)]
+    pub async fn setup_test_env() -> (
+        tokio::sync::MutexGuard<'static, ()>,
+        wiremock::MockServer,
+        tempfile::TempDir,
+    ) {
+        let lock = ENV_LOCK.lock().await;
+        let mock = wiremock::MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        setup_config(&tmp, &mock.uri());
+        (lock, mock, tmp)
+    }
+
     #[expect(clippy::unwrap_used)]
     pub fn setup_config(tmp: &tempfile::TempDir, server_url: &str) {
         let config_dir = tmp.path().join("bzr");

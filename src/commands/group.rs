@@ -1,4 +1,5 @@
 use crate::cli::GroupAction;
+use crate::client::user::{USER_FIELDS_BASIC, USER_FIELDS_DETAILED};
 use crate::error::Result;
 use crate::output::{self, ActionResult, MembershipResult, ResourceKind};
 use crate::types::ApiMode;
@@ -32,9 +33,9 @@ pub async fn execute(
         }
         GroupAction::ListUsers { group, details } => {
             let fields = if *details {
-                "id,name,real_name,email,can_login,groups"
+                Some(USER_FIELDS_DETAILED)
             } else {
-                "id,name,real_name,email,groups"
+                Some(USER_FIELDS_BASIC)
             };
             let users = client.get_group_members(group, fields).await?;
             output::print_users(&users, *details, format);
@@ -127,9 +128,7 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/rest/group"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 5})),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 5})))
             .expect(1)
             .mount(&mock)
             .await;
@@ -153,7 +152,8 @@ mod tests {
         Mock::given(method("PUT"))
             .and(path("/rest/group/admin"))
             .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"groups": [{"changes": {}}]})),
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"groups": [{"changes": {}}]})),
             )
             .expect(1)
             .mount(&mock)
@@ -179,7 +179,8 @@ mod tests {
         Mock::given(method("PUT"))
             .and(path("/rest/user/alice%40test%2Ecom"))
             .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"users": [{"id": 1, "changes": {}}]})),
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"users": [{"id": 1, "changes": {}}]})),
             )
             .expect(1)
             .mount(&mock)

@@ -1,6 +1,6 @@
 use colored::Colorize;
 
-use super::common::{print_colored_field, print_formatted, print_optional_field};
+use super::common::{print_field, print_formatted, print_optional_field};
 use crate::types::{Attachment, OutputFormat};
 
 #[expect(clippy::print_stdout)]
@@ -21,7 +21,7 @@ pub fn print_attachments(attachments: &[Attachment], format: OutputFormat) {
                 obsolete.red(),
                 private.red(),
             );
-            print_colored_field(
+            print_field(
                 "File",
                 &format!("{} ({}, {} bytes)", a.file_name, a.content_type, a.size),
             );

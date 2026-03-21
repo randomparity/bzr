@@ -1,5 +1,5 @@
+use super::user::UserSearchResponse;
 use super::BugzillaClient;
-use super::users::UserSearchResponse;
 use crate::error::{BzrError, Result};
 use crate::types::{ServerExtensions, ServerInfoResponse, ServerVersion, WhoamiResponse};
 
@@ -9,9 +9,7 @@ impl BugzillaClient {
         let resp = self.send(req).await;
         match resp {
             Ok(r) => self.parse_json(r).await,
-            Err(
-                BzrError::Api { code: 32614, .. } | BzrError::HttpStatus { status: 404, .. },
-            ) => {
+            Err(BzrError::Api { code: 32614, .. } | BzrError::HttpStatus { status: 404, .. }) => {
                 // /rest/whoami not available (Bugzilla < 5.1). May surface as
                 // API error 32614 (JSON response) or raw HTTP 404 (non-JSON server).
                 // Fall back to looking up the user by email if available.
@@ -44,7 +42,7 @@ impl BugzillaClient {
             })
     }
 
-    /// Fetch both version and extensions from the server in a single call.
+    /// Fetch version and extensions from the server (two sequential requests).
     pub async fn server_info(&self) -> Result<ServerInfoResponse> {
         let version = self.server_version().await?;
         let extensions = self.server_extensions().await?;

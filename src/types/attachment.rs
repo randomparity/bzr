@@ -42,6 +42,7 @@ pub struct Attachment {
     pub data: Option<String>,
 }
 
+#[derive(Debug)]
 #[non_exhaustive]
 pub struct UploadAttachmentParams {
     pub bug_id: u64,

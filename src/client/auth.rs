@@ -199,7 +199,9 @@ async fn detect_auth_method(
             // with custom extensions (e.g. IBM LTC). When query_param is
             // detected, verify by probing a real endpoint with header auth.
             // Prefer header when both work — it avoids leaking keys in URLs.
-            if method == AuthMethod::QueryParam && probe_header_on_api(http, base, &key_val).await {
+            if method == AuthMethod::QueryParam
+                && verify_header_auth_via_rest(http, base, &key_val).await
+            {
                 tracing::info!(
                     "header auth works on API endpoints despite valid_login \
                      rejecting it; preferring header"
@@ -385,7 +387,11 @@ async fn probe_valid_login(
 /// Some servers (e.g. IBM LTC Bugzilla) report header auth as unsupported
 /// via `valid_login` but accept it on actual API endpoints. A minimal
 /// `rest/bug?limit=1` request is used — any 2xx confirms header auth works.
-async fn probe_header_on_api(http: &reqwest::Client, base: &str, key_header: &HeaderValue) -> bool {
+async fn verify_header_auth_via_rest(
+    http: &reqwest::Client,
+    base: &str,
+    key_header: &HeaderValue,
+) -> bool {
     let url = format!("{base}/rest/bug");
     let resp = http
         .get(&url)
@@ -868,9 +874,7 @@ mod tests {
         // whoami succeeds with header auth → detects Header auth method
         Mock::given(method("GET"))
             .and(path("/rest/whoami"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
             .mount(&server)
             .await;
 
@@ -878,8 +882,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/version"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"version": "5.1.2"})),
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.1.2"})),
             )
             .mount(&server)
             .await;

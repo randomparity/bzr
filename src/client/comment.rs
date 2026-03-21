@@ -2,7 +2,7 @@ use serde::Deserialize;
 
 use super::encode_path;
 use super::BugzillaClient;
-use crate::error::Result;
+use crate::error::{BzrError, Result};
 use crate::types::Comment;
 
 #[derive(Deserialize)]
@@ -33,7 +33,10 @@ impl BugzillaClient {
             .into_values()
             .next()
             .map(|e| e.comments)
-            .unwrap_or_default();
+            .ok_or_else(|| BzrError::NotFound {
+                resource: "bug",
+                id: bug_id.to_string(),
+            })?;
         Ok(comments)
     }
 

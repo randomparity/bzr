@@ -21,9 +21,7 @@ pub use product::{
     Classification, ClassificationProduct, Component, CreateComponentParams, CreateProductParams,
     Milestone, Product, ProductListType, UpdateComponentParams, UpdateProductParams, Version,
 };
-pub use user::{
-    BugzillaUser, CreateUserParams, UpdateUserParams, UserGroup, WhoamiResponse,
-};
+pub use user::{BugzillaUser, CreateUserParams, UpdateUserParams, UserGroup, WhoamiResponse};
 
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]

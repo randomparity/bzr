@@ -190,6 +190,7 @@ impl ConfigResult {
         url: impl Into<String>,
         is_default: bool,
         config_file: impl Into<String>,
+        is_update: bool,
     ) -> Self {
         Self {
             name: name.into(),
@@ -197,7 +198,11 @@ impl ConfigResult {
             is_default: Some(is_default),
             config_file: config_file.into(),
             resource: ResourceKind::Server,
-            action: ActionKind::Created,
+            action: if is_update {
+                ActionKind::Updated
+            } else {
+                ActionKind::Created
+            },
         }
     }
 
@@ -286,7 +291,7 @@ impl ActionResult {
 // Shared formatting for bug/resource detail views. All use consistent
 // 12-char label alignment and render absent values as "-".
 
-pub(super) fn print_colored_field(label: &str, value: &str) {
+pub(super) fn print_field(label: &str, value: &str) {
     println!("  {label:<12}  {value}");
 }
 
@@ -314,7 +319,11 @@ pub(super) fn format_id_list(ids: &[u64]) -> String {
 }
 
 pub(super) fn yes_no(value: bool) -> &'static str {
-    if value { "Yes" } else { "No" }
+    if value {
+        "Yes"
+    } else {
+        "No"
+    }
 }
 
 /// Three-valued yes/no for `Option<bool>` — returns "Yes", "No", or "-".

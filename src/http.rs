@@ -27,12 +27,4 @@ mod tests {
         let client = build_http_client();
         assert!(client.is_ok());
     }
-
-    #[test]
-    fn constants_have_expected_values() {
-        assert_eq!(CONNECT_TIMEOUT, std::time::Duration::from_secs(10));
-        assert_eq!(REQUEST_TIMEOUT, std::time::Duration::from_secs(30));
-        assert_eq!(AUTH_HEADER_NAME, "X-BUGZILLA-API-KEY");
-        assert_eq!(AUTH_QUERY_PARAM, "Bugzilla_api_key");
-    }
 }

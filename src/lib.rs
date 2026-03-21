@@ -67,4 +67,3 @@ pub async fn dispatch(cli: &cli::Cli, format: types::OutputFormat) -> error::Res
         }
     }
 }
-

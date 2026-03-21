@@ -1,14 +1,14 @@
+mod attachment;
 pub(crate) mod auth;
-mod attachments;
-mod bugs;
-mod classifications;
-mod comments;
-mod components;
-mod fields;
-mod groups;
-mod products;
+mod bug;
+mod classification;
+mod comment;
+mod component;
+mod field;
+mod group;
+mod product;
 mod server;
-mod users;
+pub(crate) mod user;
 
 use reqwest::header::HeaderValue;
 use reqwest::RequestBuilder;
@@ -229,7 +229,9 @@ impl BugzillaClient {
         Self::check_bugzilla_200_error(&value, &safe_url)?;
 
         serde_json::from_value(value).map_err(|e| {
-            BzrError::Deserialize(format!("failed to deserialize response from {safe_url}: {e}"))
+            BzrError::Deserialize(format!(
+                "failed to deserialize response from {safe_url}: {e}"
+            ))
         })
     }
 

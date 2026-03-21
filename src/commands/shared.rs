@@ -52,9 +52,7 @@ mod tests {
         // whoami endpoint used by auth detection (already cached in setup_config)
         Mock::given(method("GET"))
             .and(path("/rest/whoami"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
             .mount(&mock)
             .await;
 
@@ -90,9 +88,7 @@ email = "user@example.com"
 
         Mock::given(method("GET"))
             .and(path("/rest/whoami"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
             .mount(&mock)
             .await;
 
@@ -109,15 +105,12 @@ email = "user@example.com"
 
         Mock::given(method("GET"))
             .and(path("/rest/whoami"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
             .mount(&mock)
             .await;
 
         // Override with XmlRpc mode — connect should still succeed
-        let result =
-            super::connect_client(None, Some(crate::types::ApiMode::XmlRpc)).await;
+        let result = super::connect_client(None, Some(crate::types::ApiMode::XmlRpc)).await;
         assert!(result.is_ok());
     }
 

@@ -78,12 +78,12 @@ fn read_comment_body() -> Result<String> {
         stdin.lock().read_to_string(&mut buf)?;
         return Ok(buf);
     }
-    edit_comment()
+    compose_comment_in_editor()
 }
 
-fn edit_comment() -> Result<String> {
+fn compose_comment_in_editor() -> Result<String> {
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".into());
-    let mut tmpfile = tempfile()?;
+    let mut tmpfile = create_comment_tempfile()?;
     if let Some(ref mut f) = tmpfile.file {
         writeln!(f, "<!-- Enter your comment above this line -->")?;
     }
@@ -103,13 +103,15 @@ fn edit_comment() -> Result<String> {
     let content = std::fs::read_to_string(&tmpfile.path)?;
     // TempFile::drop cleans up the file
 
-    let text: String = content
-        .lines()
+    Ok(filter_comment_body(&content))
+}
+
+/// Strip HTML comment lines (editor instructions) from raw comment text.
+fn filter_comment_body(raw: &str) -> String {
+    raw.lines()
         .filter(|l| !l.starts_with("<!--"))
         .collect::<Vec<_>>()
-        .join("\n");
-
-    Ok(text)
+        .join("\n")
 }
 
 struct TempFile {
@@ -130,7 +132,7 @@ impl Drop for TempFile {
     }
 }
 
-fn tempfile() -> Result<TempFile> {
+fn create_comment_tempfile() -> Result<TempFile> {
     let dir = std::env::temp_dir();
     let path = dir.join(format!("bzr-comment-{}.txt", std::process::id()));
     let file = std::fs::File::create(&path)?;
@@ -225,5 +227,22 @@ mod tests {
             err.contains("empty comment"),
             "expected 'empty comment' error, got: {err}"
         );
+    }
+
+    #[test]
+    fn filter_comment_body_strips_html_comments() {
+        let raw = "Hello\n<!-- Enter your comment above this line -->\nWorld";
+        assert_eq!(super::filter_comment_body(raw), "Hello\nWorld");
+    }
+
+    #[test]
+    fn filter_comment_body_preserves_normal_text() {
+        let raw = "Just a comment\nwith multiple lines";
+        assert_eq!(super::filter_comment_body(raw), raw);
+    }
+
+    #[test]
+    fn filter_comment_body_empty_input() {
+        assert_eq!(super::filter_comment_body(""), "");
     }
 }

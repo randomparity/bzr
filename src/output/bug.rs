@@ -2,7 +2,7 @@ use colored::Colorize;
 use tabled::{Table, Tabled};
 
 use super::common::{
-    colorize_status, print_colored_field, print_formatted, print_id_list_field, print_list_field,
+    colorize_status, print_field, print_formatted, print_id_list_field, print_list_field,
     print_optional_field, shorten_email, truncate,
 };
 use crate::types::{Bug, HistoryEntry, OutputFormat};
@@ -56,7 +56,7 @@ pub fn print_bug_detail(bug: &Bug, format: OutputFormat) {
             bug.id.to_string().bold(),
             bug.summary.bold()
         );
-        print_colored_field("Status", &colorize_status(&bug.status));
+        print_field("Status", &colorize_status(&bug.status));
         print_optional_field("Resolution", bug.resolution.as_deref());
         print_optional_field("Product", bug.product.as_deref());
         print_optional_field("Component", bug.component.as_deref());

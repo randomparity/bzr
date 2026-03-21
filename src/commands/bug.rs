@@ -252,7 +252,8 @@ mod tests {
         Mock::given(method("PUT"))
             .and(path("/rest/bug/42"))
             .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": [{"id": 42, "changes": {}}]})),
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"bugs": [{"id": 42, "changes": {}}]})),
             )
             .expect(1)
             .mount(&mock)
@@ -282,9 +283,7 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/rest/bug"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 99})),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 99})))
             .expect(1)
             .mount(&mock)
             .await;

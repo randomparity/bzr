@@ -2,9 +2,7 @@ use serde::Deserialize;
 
 use super::BugzillaClient;
 use crate::error::{BzrError, Result};
-use crate::types::{
-    ApiMode, Bug, CreateBugParams, HistoryEntry, SearchParams, UpdateBugParams,
-};
+use crate::types::{ApiMode, Bug, CreateBugParams, HistoryEntry, SearchParams, UpdateBugParams};
 
 /// Default fields requested for Bug queries. Matches the fields in [`Bug`] and
 /// avoids requesting server-side fields we don't use — some Bugzilla extensions
@@ -41,12 +39,16 @@ impl BugzillaClient {
         let req = self.apply_auth(req_builder);
         let resp = self.send(req).await?;
         let data: HistoryResponse = self.parse_json(resp).await?;
-        Ok(data
+        let history = data
             .bugs
             .into_iter()
             .next()
             .map(|b| b.history)
-            .unwrap_or_default())
+            .ok_or_else(|| BzrError::NotFound {
+                resource: "bug",
+                id: id.to_string(),
+            })?;
+        Ok(history)
     }
 
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
