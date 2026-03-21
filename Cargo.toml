@@ -3,6 +3,12 @@ name = "bzr"
 version = "0.1.0"
 edition = "2021"
 description = "A CLI for Bugzilla, inspired by gh"
+license = "MIT"
+rust-version = "1.70"
+repository = "https://github.com/randomparity/bzr"
+homepage = "https://github.com/randomparity/bzr"
+keywords = ["bugzilla", "cli", "bug-tracker"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 base64 = "0.22"
