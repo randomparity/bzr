@@ -9,7 +9,7 @@ use crate::types::{ApiMode, Bug, CreateBugParams, HistoryEntry, SearchParams, Up
 /// crash when serializing certain fields (e.g. group visibility) via the REST API.
 const BUG_DEFAULT_FIELDS: &str = "id,summary,status,resolution,product,component,\
     assigned_to,priority,severity,creation_time,last_change_time,creator,\
-    url,whiteboard,keywords,blocks,depends_on,cc";
+    url,whiteboard,keywords,blocks,depends_on,cc,op_sys,rep_platform";
 
 #[derive(Deserialize)]
 struct BugListResponse {

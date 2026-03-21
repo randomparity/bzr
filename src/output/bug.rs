@@ -127,6 +127,8 @@ mod tests {
             blocks: vec![200, 201],
             depends_on: vec![100],
             cc: vec!["watcher@example.com".into()],
+            op_sys: None,
+            rep_platform: None,
         }
     }
 
@@ -193,6 +195,8 @@ mod tests {
             blocks: vec![],
             depends_on: vec![],
             cc: vec![],
+            op_sys: None,
+            rep_platform: None,
         };
         let row = BugRow::from(&bug);
         assert_eq!(row.priority, "");

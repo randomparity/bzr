@@ -45,6 +45,10 @@ pub struct Bug {
     pub depends_on: Vec<u64>,
     #[serde(default)]
     pub cc: Vec<String>,
+    #[serde(default)]
+    pub op_sys: Option<String>,
+    #[serde(default)]
+    pub rep_platform: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize)]
