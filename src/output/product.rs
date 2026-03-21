@@ -166,5 +166,4 @@ mod tests {
         assert!(!parsed["versions"].as_array().unwrap().is_empty());
         assert!(!parsed["milestones"].as_array().unwrap().is_empty());
     }
-
 }

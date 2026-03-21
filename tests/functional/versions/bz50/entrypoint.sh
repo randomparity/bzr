@@ -51,21 +51,8 @@ SQL
 # ── Fix permissions ──────────────────────────────────────────────────
 chown -R apache:apache "$BZ_DIR/data" "$BZ_DIR/lib" 2>/dev/null || true
 
-# ── Verify REST API works ────────────────────────────────────────────
-echo "==> Starting Apache..."
-httpd -k start 2>&1 || true
-sleep 1
-
-# Quick self-test
-if curl -sf http://localhost/rest/version >/dev/null 2>&1; then
-    echo "==> REST API self-test passed"
-else
-    echo "WARN: REST API self-test failed (may still work from outside)"
-fi
-
-# Stop the background Apache and restart in foreground
-httpd -k stop 2>/dev/null || true
-sleep 1
-
+# ── Start Apache ──────────────────────────────────────────────────────
+# Start directly in foreground — the external health check in
+# setup-bugzilla.sh verifies the REST API is working.
 echo "==> Starting Apache in foreground..."
 exec httpd -D FOREGROUND

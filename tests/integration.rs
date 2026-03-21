@@ -127,9 +127,12 @@ async fn bug_list_integration() {
         fields: None,
         exclude_fields: None,
     };
-    let (result, output) = capture_stdout(
-        bzr::commands::bug::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None),
-    )
+    let (result, output) = capture_stdout(bzr::commands::bug::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
     .await;
     assert!(result.is_ok(), "bug list should succeed: {result:?}");
     let parsed = extract_json(&output);
@@ -159,9 +162,12 @@ async fn bug_view_integration() {
         fields: None,
         exclude_fields: None,
     };
-    let (result, output) = capture_stdout(
-        bzr::commands::bug::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None),
-    )
+    let (result, output) = capture_stdout(bzr::commands::bug::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
     .await;
     assert!(result.is_ok(), "bug view should succeed: {result:?}");
     let parsed = extract_json(&output);
@@ -192,9 +198,12 @@ async fn bug_search_integration() {
         fields: None,
         exclude_fields: None,
     };
-    let (result, output) = capture_stdout(
-        bzr::commands::bug::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None),
-    )
+    let (result, output) = capture_stdout(bzr::commands::bug::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
     .await;
     assert!(result.is_ok(), "bug search should succeed: {result:?}");
     let parsed = extract_json(&output);
@@ -228,9 +237,12 @@ async fn bug_create_integration() {
         op_sys: None,
         rep_platform: None,
     };
-    let (result, output) = capture_stdout(
-        bzr::commands::bug::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None),
-    )
+    let (result, output) = capture_stdout(bzr::commands::bug::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
     .await;
     assert!(result.is_ok(), "bug create should succeed: {result:?}");
     let parsed = extract_json(&output);
@@ -298,9 +310,11 @@ async fn whoami_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = capture_stdout(
-        bzr::commands::whoami::execute(Some("test"), bzr::types::OutputFormat::Json, None),
-    )
+    let (result, output) = capture_stdout(bzr::commands::whoami::execute(
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
     .await;
     assert!(result.is_ok(), "whoami should succeed: {result:?}");
     let parsed = extract_json(&output);
@@ -377,9 +391,12 @@ async fn server_info_integration() {
         .await;
 
     let action = bzr::cli::ServerAction::Info;
-    let (result, output) = capture_stdout(
-        bzr::commands::server::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None),
-    )
+    let (result, output) = capture_stdout(bzr::commands::server::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
     .await;
     assert!(result.is_ok(), "server info should succeed: {result:?}");
     let parsed = extract_json(&output);
@@ -412,9 +429,12 @@ async fn field_list_integration() {
     let action = bzr::cli::FieldAction::List {
         name: "status".to_string(),
     };
-    let (result, output) = capture_stdout(
-        bzr::commands::field::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None),
-    )
+    let (result, output) = capture_stdout(bzr::commands::field::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
     .await;
     assert!(result.is_ok(), "field list should succeed: {result:?}");
     let parsed = extract_json(&output);
@@ -491,9 +511,12 @@ async fn user_search_integration() {
         query: "alice".to_string(),
         details: false,
     };
-    let (result, output) = capture_stdout(
-        bzr::commands::user::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None),
-    )
+    let (result, output) = capture_stdout(bzr::commands::user::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
     .await;
     assert!(result.is_ok(), "user search should succeed: {result:?}");
     let parsed = extract_json(&output);
@@ -528,9 +551,12 @@ async fn group_view_integration() {
     let action = bzr::cli::GroupAction::View {
         group: "admin".to_string(),
     };
-    let (result, output) = capture_stdout(
-        bzr::commands::group::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None),
-    )
+    let (result, output) = capture_stdout(bzr::commands::group::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
     .await;
     assert!(result.is_ok(), "group view should succeed: {result:?}");
     let parsed = extract_json(&output);
@@ -738,9 +764,12 @@ async fn bug_history_integration() {
         id: 42,
         since: None,
     };
-    let (result, output) = capture_stdout(
-        bzr::commands::bug::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None),
-    )
+    let (result, output) = capture_stdout(bzr::commands::bug::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
     .await;
     assert!(result.is_ok(), "bug history should succeed: {result:?}");
     let parsed = extract_json(&output);
@@ -777,9 +806,12 @@ async fn bug_update_integration() {
         whiteboard: None,
         flag: vec![],
     };
-    let (result, output) = capture_stdout(
-        bzr::commands::bug::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None),
-    )
+    let (result, output) = capture_stdout(bzr::commands::bug::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
     .await;
     assert!(result.is_ok(), "bug update should succeed: {result:?}");
     let parsed = extract_json(&output);
@@ -1477,9 +1509,10 @@ async fn e2e_bug_view_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let (result, output) =
-        capture_stdout(dispatch_cli(&["bzr", "--server", "test", "--json", "bug", "view", "42"]))
-            .await;
+    let (result, output) = capture_stdout(dispatch_cli(&[
+        "bzr", "--server", "test", "--json", "bug", "view", "42",
+    ]))
+    .await;
     assert!(result.is_ok(), "e2e bug view: {result:?}");
     let parsed = extract_json(&output);
     assert_eq!(parsed["id"], 42);
@@ -1504,8 +1537,10 @@ async fn e2e_whoami_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let (result, output) =
-        capture_stdout(dispatch_cli(&["bzr", "--server", "test", "--json", "whoami"])).await;
+    let (result, output) = capture_stdout(dispatch_cli(&[
+        "bzr", "--server", "test", "--json", "whoami",
+    ]))
+    .await;
     assert!(result.is_ok(), "e2e whoami: {result:?}");
     let parsed = extract_json(&output);
     assert_eq!(parsed["name"], "admin@example.com");

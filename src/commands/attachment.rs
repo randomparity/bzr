@@ -230,10 +230,7 @@ mod tests {
             .mount(&mock)
             .await;
 
-        let action = AttachmentAction::Download {
-            id: 404,
-            out: None,
-        };
+        let action = AttachmentAction::Download { id: 404, out: None };
         let result = super::execute(&action, None, OutputFormat::Json, None).await;
         assert!(result.is_err());
     }
