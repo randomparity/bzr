@@ -6,9 +6,9 @@ use crate::error::Result;
 use crate::types::{BugzillaUser, CreateUserParams, UpdateUserParams};
 
 /// Default fields for user queries (basic info).
-pub(crate) const USER_FIELDS_BASIC: &str = "id,name,real_name,email,groups";
+pub(super) const USER_FIELDS_BASIC: &str = "id,name,real_name,email,groups";
 /// Extended fields for detailed user queries.
-pub(crate) const USER_FIELDS_DETAILED: &str = "id,name,real_name,email,can_login,groups";
+pub(super) const USER_FIELDS_DETAILED: &str = "id,name,real_name,email,can_login,groups";
 
 #[derive(Deserialize)]
 pub(super) struct UserSearchResponse {

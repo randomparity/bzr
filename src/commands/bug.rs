@@ -152,21 +152,17 @@ pub async fn execute(
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used)]
 mod tests {
     use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::{Mock, ResponseTemplate};
 
-    use super::super::test_helpers::{setup_config, ENV_LOCK};
+    use super::super::test_helpers::setup_test_env;
     use crate::cli::BugAction;
     use crate::types::OutputFormat;
 
     #[tokio::test]
     async fn bug_list_returns_bugs() {
-        let _lock = ENV_LOCK.lock().await;
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("GET"))
             .and(path("/rest/bug"))
@@ -208,10 +204,7 @@ mod tests {
 
     #[tokio::test]
     async fn bug_view_returns_detail() {
-        let _lock = ENV_LOCK.lock().await;
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("GET"))
             .and(path("/rest/bug/42"))
@@ -244,10 +237,7 @@ mod tests {
 
     #[tokio::test]
     async fn bug_update_sends_put() {
-        let _lock = ENV_LOCK.lock().await;
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("PUT"))
             .and(path("/rest/bug/42"))
@@ -276,10 +266,7 @@ mod tests {
 
     #[tokio::test]
     async fn bug_create_sends_post() {
-        let _lock = ENV_LOCK.lock().await;
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("POST"))
             .and(path("/rest/bug"))

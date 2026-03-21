@@ -22,21 +22,17 @@ pub async fn execute(
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used)]
 mod tests {
     use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::{Mock, ResponseTemplate};
 
-    use super::super::test_helpers::{setup_config, ENV_LOCK};
+    use super::super::test_helpers::setup_test_env;
     use crate::cli::ServerAction;
     use crate::types::OutputFormat;
 
     #[tokio::test]
     async fn server_info_returns_version_and_extensions() {
-        let _lock = ENV_LOCK.lock().await;
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("GET"))
             .and(path("/rest/version"))

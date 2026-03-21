@@ -42,15 +42,32 @@ pub struct Attachment {
     pub data: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 #[non_exhaustive]
 pub struct UploadAttachmentParams {
+    #[serde(rename = "ids", serialize_with = "serialize_bug_id_as_array")]
     pub bug_id: u64,
     pub file_name: String,
     pub summary: String,
     pub content_type: String,
+    #[serde(serialize_with = "serialize_data_as_base64")]
     pub data: Vec<u8>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub flags: Vec<FlagUpdate>,
+}
+
+// Serde serialize_with requires &T signature for the field type.
+#[expect(clippy::trivially_copy_pass_by_ref)]
+fn serialize_bug_id_as_array<S: serde::Serializer>(id: &u64, s: S) -> Result<S::Ok, S::Error> {
+    use serde::ser::SerializeSeq;
+    let mut seq = s.serialize_seq(Some(1))?;
+    seq.serialize_element(id)?;
+    seq.end()
+}
+
+fn serialize_data_as_base64<S: serde::Serializer>(data: &[u8], s: S) -> Result<S::Ok, S::Error> {
+    use base64::Engine as _;
+    s.serialize_str(&base64::engine::general_purpose::STANDARD.encode(data))
 }
 
 #[derive(Debug, Default, Serialize)]

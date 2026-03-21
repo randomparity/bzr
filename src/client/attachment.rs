@@ -64,19 +64,10 @@ impl BugzillaClient {
     }
 
     pub async fn upload_attachment(&self, params: &UploadAttachmentParams) -> Result<u64> {
-        let encoded = base64::engine::general_purpose::STANDARD.encode(&params.data);
-        let body = serde_json::json!({
-            "ids": [params.bug_id],
-            "file_name": params.file_name,
-            "summary": params.summary,
-            "content_type": params.content_type,
-            "data": encoded,
-            "flags": params.flags,
-        });
         let req = self.apply_auth(
             self.http
                 .post(self.url(&format!("bug/{}/attachment", params.bug_id)))
-                .json(&body),
+                .json(params),
         );
         let resp = self.send(req).await?;
         let data: AttachmentCreateResponse = self.parse_json(resp).await?;

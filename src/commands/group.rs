@@ -1,5 +1,5 @@
 use crate::cli::GroupAction;
-use crate::client::user::{USER_FIELDS_BASIC, USER_FIELDS_DETAILED};
+use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::{self, ActionResult, MembershipResult, ResourceKind};
 use crate::types::ApiMode;
@@ -33,9 +33,9 @@ pub async fn execute(
         }
         GroupAction::ListUsers { group, details } => {
             let fields = if *details {
-                Some(USER_FIELDS_DETAILED)
+                Some(BugzillaClient::USER_FIELDS_DETAILED)
             } else {
-                Some(USER_FIELDS_BASIC)
+                Some(BugzillaClient::USER_FIELDS_BASIC)
             };
             let users = client.get_group_members(group, fields).await?;
             output::print_users(&users, *details, format);
@@ -82,21 +82,17 @@ pub async fn execute(
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used)]
 mod tests {
     use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::{Mock, ResponseTemplate};
 
-    use super::super::test_helpers::{setup_config, ENV_LOCK};
+    use super::super::test_helpers::setup_test_env;
     use crate::cli::GroupAction;
     use crate::types::OutputFormat;
 
     #[tokio::test]
     async fn group_view_returns_info() {
-        let _lock = ENV_LOCK.lock().await;
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("GET"))
             .and(path("/rest/group"))
@@ -121,10 +117,7 @@ mod tests {
 
     #[tokio::test]
     async fn group_create_sends_post() {
-        let _lock = ENV_LOCK.lock().await;
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("POST"))
             .and(path("/rest/group"))
@@ -144,10 +137,7 @@ mod tests {
 
     #[tokio::test]
     async fn group_update_sends_put() {
-        let _lock = ENV_LOCK.lock().await;
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("PUT"))
             .and(path("/rest/group/admin"))
@@ -170,10 +160,7 @@ mod tests {
 
     #[tokio::test]
     async fn group_add_user_sends_put() {
-        let _lock = ENV_LOCK.lock().await;
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, mock, _tmp) = setup_test_env().await;
 
         // add_user_to_group sends PUT /rest/user/{user} with group membership body
         Mock::given(method("PUT"))
@@ -192,5 +179,72 @@ mod tests {
         };
         let result = super::execute(&action, None, OutputFormat::Json, None).await;
         assert!(result.is_ok(), "group add_user failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn group_remove_user_sends_put() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("PUT"))
+            .and(path("/rest/user/bob%40test%2Ecom"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"users": [{"id": 2, "changes": {}}]})),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let action = GroupAction::RemoveUser {
+            group: "admin".into(),
+            user: "bob@test.com".into(),
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_ok(), "group remove_user failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn group_list_users_returns_members() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "users": [
+                    {"id": 10, "name": "alice@test.com", "real_name": "Alice", "email": "alice@test.com"},
+                    {"id": 11, "name": "bob@test.com", "real_name": "Bob", "email": "bob@test.com"}
+                ]
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = GroupAction::ListUsers {
+            group: "admin".to_string(),
+            details: false,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_ok(), "group list_users failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn group_list_users_with_details() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "users": [
+                    {"id": 10, "name": "alice@test.com", "real_name": "Alice", "email": "alice@test.com", "can_login": true}
+                ]
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = GroupAction::ListUsers {
+            group: "admin".to_string(),
+            details: true,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_ok(), "group list_users --details failed: {result:?}");
     }
 }

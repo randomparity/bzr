@@ -6,11 +6,12 @@ mod config;
 mod field;
 mod group;
 mod product;
+mod result_types;
 mod server;
 mod user;
 
 // Re-export shared types and helpers used by commands.
-pub use common::{
+pub use result_types::{
     print_result, ActionResult, ConfigResult, DownloadResult, MembershipResult, ResourceKind,
     SearchResult, TagResult, UploadResult,
 };

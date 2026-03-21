@@ -8,7 +8,7 @@ mod field;
 mod group;
 mod product;
 mod server;
-pub(crate) mod user;
+mod user;
 
 use reqwest::header::HeaderValue;
 use reqwest::RequestBuilder;
@@ -73,6 +73,11 @@ const DATA_KEYS: &[&str] = &[
 ];
 
 impl BugzillaClient {
+    /// Default fields for user queries (basic info).
+    pub const USER_FIELDS_BASIC: &str = user::USER_FIELDS_BASIC;
+    /// Extended fields for detailed user queries.
+    pub const USER_FIELDS_DETAILED: &str = user::USER_FIELDS_DETAILED;
+
     /// Check if a JSON object contains known Bugzilla data keys,
     /// indicating the response has real data alongside any error fields.
     fn has_data_fields(map: &serde_json::Map<String, serde_json::Value>) -> bool {

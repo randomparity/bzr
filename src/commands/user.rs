@@ -1,5 +1,5 @@
 use crate::cli::UserAction;
-use crate::client::user::USER_FIELDS_DETAILED;
+use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::{self, ActionResult, ResourceKind};
 use crate::types::ApiMode;
@@ -32,7 +32,7 @@ pub async fn execute(
     match action {
         UserAction::Search { query, details } => {
             let fields = if *details {
-                Some(USER_FIELDS_DETAILED)
+                Some(BugzillaClient::USER_FIELDS_DETAILED)
             } else {
                 None
             };
@@ -83,23 +83,18 @@ pub async fn execute(
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used)]
 mod tests {
     use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::{Mock, ResponseTemplate};
 
-    use super::super::test_helpers::{setup_config, ENV_LOCK};
+    use super::super::test_helpers::setup_test_env;
     use crate::cli::UserAction;
     use crate::types::OutputFormat;
 
-    // Note: user tests that modify env need ENV_LOCK + setup_config
 
     #[tokio::test]
     async fn user_search_returns_results() {
-        let _lock = ENV_LOCK.lock().await;
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("GET"))
             .and(path("/rest/user"))
@@ -123,10 +118,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_user_disable_login_sends_denied_text() {
-        let _lock = ENV_LOCK.lock().await;
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("PUT"))
             .and(path("/rest/user/alice%40test%2Ecom"))
@@ -151,10 +143,7 @@ mod tests {
 
     #[tokio::test]
     async fn update_user_enable_login_sends_empty_denied_text() {
-        let _lock = ENV_LOCK.lock().await;
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("PUT"))
             .and(path("/rest/user/bob%40test%2Ecom"))
@@ -179,10 +168,7 @@ mod tests {
 
     #[tokio::test]
     async fn user_create_sends_post() {
-        let _lock = ENV_LOCK.lock().await;
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("POST"))
             .and(path("/rest/user"))

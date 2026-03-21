@@ -1,7 +1,6 @@
 use reqwest::header::HeaderValue;
 use serde::Deserialize;
 
-use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::http::{build_http_client, AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::types::{ApiMode, AuthMethod};
@@ -12,62 +11,46 @@ struct WhoamiProbe {
     id: u64,
 }
 
-/// Returns the auth method and API mode for a server.
+/// Result of server settings detection -- auth method, API mode, and
+/// optionally the server version string. Returned by [`detect_server_settings`]
+/// for the caller to persist as appropriate.
+#[derive(Debug, Clone)]
+pub struct DetectedServerSettings {
+    pub auth_method: AuthMethod,
+    pub api_mode: ApiMode,
+    /// `Some` when the version endpoint responded successfully; `None` on
+    /// transient failures. Callers should only persist `api_mode` and
+    /// `server_version` when this is `Some`.
+    pub server_version: Option<String>,
+}
+
+/// Detect auth method, API mode, and server version via network probes.
 ///
-/// If the auth method is already cached, returns it with the cached API mode
-/// (or `Rest` as default). Otherwise, detects auth method and server version
-/// via network probes. Always persists the auth method; only persists API mode
-/// and version when version detection succeeds (avoids caching wrong defaults
-/// on transient failures).
-pub async fn detect_and_persist_server_settings(
-    config: &mut Config,
-    server_name: &str,
-) -> Result<(AuthMethod, ApiMode)> {
-    let srv = config
-        .servers
-        .get(server_name)
-        .ok_or_else(|| BzrError::config(format!("server '{server_name}' not found in config")))?;
-
-    // If auth method is cached, return it with the cached or default API mode.
-    if let Some(method) = srv.auth_method {
-        let mode = srv.api_mode.unwrap_or(ApiMode::Rest);
-        return Ok((method, mode));
-    }
-
-    let url = srv.url.clone();
-    let api_key = srv.api_key.clone();
-    let email = srv.email.clone();
-
+/// This is a pure detection function -- it does not read or write any
+/// configuration. The caller is responsible for caching and persisting
+/// the returned [`DetectedServerSettings`].
+pub async fn detect_server_settings(
+    url: &str,
+    api_key: &str,
+    email: Option<&str>,
+) -> Result<DetectedServerSettings> {
     let http = build_http_client().map_err(BzrError::Http)?;
 
-    let method = detect_auth_method(&http, &url, &api_key, email.as_deref()).await?;
-    let (version, api_mode) = detect_version_and_mode(&http, &url, &api_key, method).await;
+    let method = detect_auth_method(&http, url, api_key, email).await?;
+    let (version, api_mode) = detect_version_and_mode(&http, url, api_key, method).await;
 
     tracing::info!(
-        server = server_name,
         %method,
         %api_mode,
         version = version.as_deref().unwrap_or("unknown"),
         "detected server settings"
     );
 
-    // Second lookup required: the first `get()` borrows `config` immutably for
-    // `url`/`api_key` extraction, but `get_mut()` needs a mutable borrow.
-    let srv_mut = config
-        .servers
-        .get_mut(server_name)
-        .ok_or_else(|| BzrError::config(format!("server '{server_name}' not found in config")))?;
-    srv_mut.auth_method = Some(method);
-    // Only persist api_mode/version when detection succeeded (version is
-    // Some). On transient failures version is None and we should re-detect
-    // next time rather than caching a potentially wrong mode.
-    if version.is_some() {
-        srv_mut.api_mode = Some(api_mode);
-        srv_mut.server_version = version;
-    }
-    config.save()?;
-
-    Ok((method, api_mode))
+    Ok(DetectedServerSettings {
+        auth_method: method,
+        api_mode,
+        server_version: version,
+    })
 }
 
 /// Detect server version and determine API mode.
@@ -126,7 +109,7 @@ async fn detect_version_and_mode(
     };
 
     let Ok(parsed) = serde_json::from_str::<VersionResp>(&body) else {
-        // Endpoint exists (200 OK) but returns non-standard body — assume a
+        // Endpoint exists (200 OK) but returns non-standard body -- assume a
         // modern server with a custom extension; default to Hybrid.
         return (None, ApiMode::Hybrid);
     };
@@ -140,9 +123,9 @@ async fn detect_version_and_mode(
 ///
 /// Version strings can be like "5.0.4", "5.1.2", "5.0.4.rh103", etc.
 /// We extract major.minor and apply:
-///   < 5.0 → xmlrpc
-///   >= 5.0, < 5.1 → hybrid
-///   >= 5.1 → rest
+///   < 5.0 -> xmlrpc
+///   >= 5.0, < 5.1 -> hybrid
+///   >= 5.1 -> rest
 fn version_to_api_mode(version: &str) -> ApiMode {
     let parts: Vec<&str> = version.split('.').collect();
     let major = parts.first().and_then(|s| s.parse::<u32>().ok());
@@ -168,7 +151,7 @@ async fn detect_auth_method(
     if !base.starts_with("https://") {
         tracing::warn!(
             url = base,
-            "server URL is not HTTPS — API key will be sent in plaintext"
+            "server URL is not HTTPS -- API key will be sent in plaintext"
         );
     }
 
@@ -198,7 +181,7 @@ async fn detect_auth_method(
             // valid_login can give false negatives for header auth on servers
             // with custom extensions (e.g. IBM LTC). When query_param is
             // detected, verify by probing a real endpoint with header auth.
-            // Prefer header when both work — it avoids leaking keys in URLs.
+            // Prefer header when both work -- it avoids leaking keys in URLs.
             if method == AuthMethod::QueryParam
                 && verify_header_auth_via_rest(http, base, &key_val).await
             {
@@ -275,7 +258,7 @@ async fn probe_whoami(request: reqwest::RequestBuilder, method: AuthMethod) -> W
     if status.is_success() {
         // A valid whoami response contains a positive user ID. Treat id==0
         // (unauthenticated/anonymous) and unparseable bodies as auth failures
-        // — the server responded but didn't confirm our credentials.
+        // -- the server responded but didn't confirm our credentials.
         if let Ok(parsed) = serde_json::from_str::<WhoamiProbe>(&body) {
             if parsed.id > 0 {
                 return WhoamiOutcome::Authenticated(method);
@@ -386,7 +369,7 @@ async fn probe_valid_login(
 ///
 /// Some servers (e.g. IBM LTC Bugzilla) report header auth as unsupported
 /// via `valid_login` but accept it on actual API endpoints. A minimal
-/// `rest/bug?limit=1` request is used — any 2xx confirms header auth works.
+/// `rest/bug?limit=1` request is used -- any 2xx confirms header auth works.
 async fn verify_header_auth_via_rest(
     http: &reqwest::Client,
     base: &str,
@@ -536,7 +519,9 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/bug"))
             .and(header(AUTH_HEADER_NAME, "test-key"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})),
+            )
             .mount(&server)
             .await;
 
@@ -623,7 +608,7 @@ mod tests {
     #[tokio::test]
     async fn network_error_defaults_to_header() {
         // When the server is unreachable, default to header auth
-        // rather than failing — header is the safest default.
+        // rather than failing -- header is the safest default.
         let result =
             detect_auth_method(&test_client(), "https://127.0.0.1:1", "test-key", None).await;
         assert!(result.is_ok(), "should default to header, got: {result:?}");
@@ -711,59 +696,6 @@ mod tests {
             err.contains("auth detection failed"),
             "unexpected error: {err}"
         );
-    }
-
-    #[tokio::test]
-    async fn cached_method_skips_detection() {
-        let mut config = Config::default();
-        config.servers.insert(
-            "cached".into(),
-            crate::config::ServerConfig {
-                url: "https://example.com".into(),
-                api_key: "key".into(),
-                email: None,
-                auth_method: Some(AuthMethod::Header),
-                api_mode: None,
-                server_version: None,
-            },
-        );
-
-        let (method, mode) = detect_and_persist_server_settings(&mut config, "cached")
-            .await
-            .unwrap();
-        assert_eq!(method, AuthMethod::Header);
-        assert_eq!(mode, ApiMode::Rest);
-    }
-
-    #[tokio::test]
-    async fn cached_method_with_api_mode() {
-        let mut config = Config::default();
-        config.servers.insert(
-            "cached".into(),
-            crate::config::ServerConfig {
-                url: "https://example.com".into(),
-                api_key: "key".into(),
-                email: None,
-                auth_method: Some(AuthMethod::Header),
-                api_mode: Some(ApiMode::Hybrid),
-                server_version: Some("5.0.4".into()),
-            },
-        );
-
-        let (method, mode) = detect_and_persist_server_settings(&mut config, "cached")
-            .await
-            .unwrap();
-        assert_eq!(method, AuthMethod::Header);
-        assert_eq!(mode, ApiMode::Hybrid);
-    }
-
-    #[tokio::test]
-    async fn missing_server_returns_error() {
-        let mut config = Config::default();
-        let result = detect_and_persist_server_settings(&mut config, "nonexistent").await;
-        assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("not found"), "unexpected error: {err}");
     }
 
     #[test]
@@ -866,19 +798,19 @@ mod tests {
         assert_eq!(mode, ApiMode::XmlRpc);
     }
 
-    /// Exercises the full orchestration: no cached auth → probes server → persists result.
+    /// Exercises detect_server_settings: probes auth and version without Config.
     #[tokio::test]
-    async fn uncached_auth_detects_and_persists() {
+    async fn detect_server_settings_returns_all_fields() {
         let server = MockServer::start().await;
 
-        // whoami succeeds with header auth → detects Header auth method
+        // whoami succeeds with header auth
         Mock::given(method("GET"))
             .and(path("/rest/whoami"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
             .mount(&server)
             .await;
 
-        // version endpoint → detects REST mode
+        // version endpoint returns 5.1.2 -> REST mode
         Mock::given(method("GET"))
             .and(path("/rest/version"))
             .respond_with(
@@ -887,48 +819,12 @@ mod tests {
             .mount(&server)
             .await;
 
-        // Set up a real config file so config.save() works
-        let _lock = crate::ENV_LOCK.lock().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        let config_dir = tmp.path().join("bzr");
-        std::fs::create_dir_all(&config_dir).unwrap();
-        let config_content = format!(
-            r#"
-default_server = "test"
-
-[servers.test]
-url = "{}"
-api_key = "test-key"
-"#,
-            server.uri()
-        );
-        std::fs::write(config_dir.join("config.toml"), &config_content).unwrap();
-        // SAFETY: Tests are serialized via ENV_LOCK.
-        unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
-
-        let mut config = Config::load().unwrap();
-        assert!(
-            config.servers["test"].auth_method.is_none(),
-            "precondition: auth_method should not be cached"
-        );
-
-        let (method, mode) = detect_and_persist_server_settings(&mut config, "test")
+        let detected = detect_server_settings(&server.uri(), "test-key", None)
             .await
             .unwrap();
-        assert_eq!(method, AuthMethod::Header);
-        assert_eq!(mode, ApiMode::Rest);
-
-        // Verify persistence: reload from disk
-        let reloaded = Config::load().unwrap();
-        assert_eq!(
-            reloaded.servers["test"].auth_method,
-            Some(AuthMethod::Header)
-        );
-        assert_eq!(reloaded.servers["test"].api_mode, Some(ApiMode::Rest));
-        assert_eq!(
-            reloaded.servers["test"].server_version.as_deref(),
-            Some("5.1.2")
-        );
+        assert_eq!(detected.auth_method, AuthMethod::Header);
+        assert_eq!(detected.api_mode, ApiMode::Rest);
+        assert_eq!(detected.server_version.as_deref(), Some("5.1.2"));
     }
 
     #[tokio::test]

@@ -146,18 +146,15 @@ fn create_comment_tempfile() -> Result<TempFile> {
 #[expect(clippy::unwrap_used)]
 mod tests {
     use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::{Mock, ResponseTemplate};
 
-    use super::super::test_helpers::{setup_config, ENV_LOCK};
+    use super::super::test_helpers::setup_test_env;
     use crate::cli::CommentAction;
     use crate::types::OutputFormat;
 
     #[tokio::test]
     async fn comment_list_returns_comments() {
-        let _lock = ENV_LOCK.lock().await;
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("GET"))
             .and(path("/rest/bug/42/comment"))
@@ -189,10 +186,7 @@ mod tests {
 
     #[tokio::test]
     async fn comment_add_with_body() {
-        let _lock = ENV_LOCK.lock().await;
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("POST"))
             .and(path("/rest/bug/42/comment"))
@@ -210,10 +204,7 @@ mod tests {
 
     #[tokio::test]
     async fn comment_add_empty_body_is_rejected() {
-        let _lock = ENV_LOCK.lock().await;
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, _mock, _tmp) = setup_test_env().await;
 
         // No mock needed — execute() should reject before making any API call
         let action = CommentAction::Add {

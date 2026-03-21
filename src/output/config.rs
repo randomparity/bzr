@@ -4,6 +4,7 @@ use super::common::{mask_api_key, print_field, print_formatted, print_optional_f
 use crate::types::OutputFormat;
 
 #[derive(Serialize)]
+#[non_exhaustive]
 pub struct ServerDisplayInfo {
     url: String,
     email: Option<String>,
@@ -26,6 +27,7 @@ impl ServerDisplayInfo {
 }
 
 #[derive(Serialize)]
+#[non_exhaustive]
 pub struct ConfigView {
     pub config_file: String,
     pub default_server: Option<String>,
