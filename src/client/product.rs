@@ -20,7 +20,7 @@ impl BugzillaClient {
         &self,
         product_type: ProductListType,
     ) -> Result<Vec<Product>> {
-        let endpoint = product_type.as_endpoint();
+        let endpoint = product_type.as_api_path();
         let req = self.apply_auth(self.http.get(self.url(endpoint)));
         let resp = self.send(req).await?;
         let accessible: ProductAccessibleResponse = self.parse_json(resp).await?;

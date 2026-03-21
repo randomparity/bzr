@@ -1,17 +1,13 @@
 use serde::Serialize;
 
+use super::common::print_json;
 use crate::types::OutputFormat;
 
 // ── Result output ───────────────────────────────────────────────────
 
 pub fn print_result(value: &(impl Serialize + ?Sized), human_message: &str, format: OutputFormat) {
     match format {
-        OutputFormat::Json => {
-            println!(
-                "{}",
-                serde_json::to_string(value).expect("serializable to JSON")
-            );
-        }
+        OutputFormat::Json => print_json(value),
         OutputFormat::Table => println!("{human_message}"),
     }
 }
@@ -265,5 +261,92 @@ impl ActionResult {
             resource,
             action: ActionKind::Updated,
         }
+    }
+}
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn action_result_created_json_shape() {
+        let result = ActionResult::created(42, ResourceKind::Bug);
+        let json: serde_json::Value = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["id"], 42);
+        assert_eq!(json["resource"], "bug");
+        assert_eq!(json["action"], "created");
+        assert!(json.get("name").is_none());
+    }
+
+    #[test]
+    fn action_result_created_named_includes_name() {
+        let result = ActionResult::created_named(1, "widget", ResourceKind::Component);
+        let json: serde_json::Value = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["name"], "widget");
+        assert_eq!(json["resource"], "component");
+    }
+
+    #[test]
+    fn upload_result_json_shape() {
+        let result = UploadResult::new(10, 42, 1024);
+        let json: serde_json::Value = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["id"], 10);
+        assert_eq!(json["bug_id"], 42);
+        assert_eq!(json["size"], 1024);
+        assert_eq!(json["resource"], "attachment");
+        assert_eq!(json["action"], "created");
+    }
+
+    #[test]
+    fn download_result_json_shape() {
+        let result = DownloadResult::new(5, "patch.diff", 512);
+        let json: serde_json::Value = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["id"], 5);
+        assert_eq!(json["file"], "patch.diff");
+        assert_eq!(json["resource"], "attachment");
+        assert_eq!(json["action"], "downloaded");
+    }
+
+    #[test]
+    fn membership_result_added_json_shape() {
+        let result = MembershipResult::added("alice", "admin");
+        let json: serde_json::Value = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["user"], "alice");
+        assert_eq!(json["group"], "admin");
+        assert_eq!(json["action"], "added");
+    }
+
+    #[test]
+    fn tag_result_json_shape() {
+        let result = TagResult::updated(7, vec!["important".into()]);
+        let json: serde_json::Value = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["comment_id"], 7);
+        assert_eq!(json["tags"][0], "important");
+        assert_eq!(json["action"], "updated");
+    }
+
+    #[test]
+    fn config_result_skip_none_fields() {
+        let result = ConfigResult::default_set("prod", "/etc/bzr/config.toml");
+        let json: serde_json::Value = serde_json::to_value(&result).unwrap();
+        assert!(json.get("url").is_none());
+        assert!(json.get("is_default").is_none());
+        assert_eq!(json["resource"], "server");
+    }
+
+    #[test]
+    fn search_result_json_shape() {
+        let result = SearchResult::new(vec!["foo".into(), "bar".into()]);
+        let json: serde_json::Value = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["items"][0], "foo");
+        assert_eq!(json["items"][1], "bar");
+    }
+
+    #[test]
+    fn print_result_uses_pretty_json() {
+        let result = ActionResult::created(1, ResourceKind::Bug);
+        let json = serde_json::to_string_pretty(&result).unwrap();
+        assert!(json.contains('\n'), "expected pretty-printed JSON");
     }
 }

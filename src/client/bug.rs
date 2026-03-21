@@ -43,11 +43,7 @@ impl BugzillaClient {
             .bugs
             .into_iter()
             .next()
-            .map(|b| b.history)
-            .ok_or_else(|| BzrError::NotFound {
-                resource: "bug",
-                id: id.to_string(),
-            })?;
+            .map_or_else(Vec::new, |b| b.history);
         Ok(history)
     }
 
@@ -443,24 +439,7 @@ mod tests {
         assert_eq!(bugs[0].id, 217_630);
     }
 
-    fn xmlrpc_bug_response(id: i64, summary: &str) -> String {
-        format!(
-            r#"<?xml version="1.0" encoding="UTF-8"?>
-            <methodResponse><params><param><value><struct>
-              <member><name>bugs</name><value><array><data>
-                <value><struct>
-                  <member><name>id</name><value><int>{id}</int></value></member>
-                  <member><name>summary</name><value><string>{summary}</string></value></member>
-                  <member><name>status</name><value><string>NEW</string></value></member>
-                  <member><name>keywords</name><value><array><data></data></array></value></member>
-                  <member><name>blocks</name><value><array><data></data></array></value></member>
-                  <member><name>depends_on</name><value><array><data></data></array></value></member>
-                  <member><name>cc</name><value><array><data></data></array></value></member>
-                </struct></value>
-              </data></array></value></member>
-            </struct></value></param></params></methodResponse>"#
-        )
-    }
+    use crate::test_fixtures::xmlrpc_bug_response;
 
     #[tokio::test]
     async fn hybrid_search_rest_has_results_no_xmlrpc_call() {

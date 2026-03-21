@@ -186,3 +186,44 @@ pub struct FieldValue {
 pub struct StatusTransition {
     pub name: String,
 }
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bug_deserializes_minimal() {
+        let json = r#"{"id": 42}"#;
+        let bug: Bug = serde_json::from_str(json).unwrap();
+        assert_eq!(bug.id, 42);
+        assert!(bug.summary.is_empty());
+        assert!(bug.keywords.is_empty());
+    }
+
+    #[test]
+    fn bug_deserializes_full() {
+        let json = r#"{"id": 1, "summary": "test bug", "status": "NEW", "product": "Core", "component": "General", "priority": "P1", "keywords": ["regression"]}"#;
+        let bug: Bug = serde_json::from_str(json).unwrap();
+        assert_eq!(bug.summary, "test bug");
+        assert_eq!(bug.status, "NEW");
+        assert_eq!(bug.product.as_deref(), Some("Core"));
+        assert_eq!(bug.keywords, vec!["regression"]);
+    }
+
+    #[test]
+    fn field_value_null_name_becomes_empty() {
+        let json = r#"{"name": null, "sort_key": 0, "is_active": true}"#;
+        let fv: FieldValue = serde_json::from_str(json).unwrap();
+        assert!(fv.name.is_empty());
+    }
+
+    #[test]
+    fn field_value_with_name() {
+        let json = r#"{"name": "RESOLVED", "sort_key": 5, "is_active": true}"#;
+        let fv: FieldValue = serde_json::from_str(json).unwrap();
+        assert_eq!(fv.name, "RESOLVED");
+        assert_eq!(fv.sort_key, 5);
+        assert!(fv.is_active);
+    }
+}

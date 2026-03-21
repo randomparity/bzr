@@ -1,5 +1,6 @@
 mod attachment;
 pub(crate) mod auth;
+pub(crate) use auth::detect_server_settings;
 mod bug;
 mod classification;
 mod comment;
@@ -73,11 +74,6 @@ const DATA_KEYS: &[&str] = &[
 ];
 
 impl BugzillaClient {
-    /// Default fields for user queries (basic info).
-    pub const USER_FIELDS_BASIC: &str = user::USER_FIELDS_BASIC;
-    /// Extended fields for detailed user queries.
-    pub const USER_FIELDS_DETAILED: &str = user::USER_FIELDS_DETAILED;
-
     /// Check if a JSON object contains known Bugzilla data keys,
     /// indicating the response has real data alongside any error fields.
     fn has_data_fields(map: &serde_json::Map<String, serde_json::Value>) -> bool {
@@ -166,7 +162,7 @@ impl BugzillaClient {
                 return Ok(retried);
             }
         }
-        self.check_error(resp).await
+        self.extract_api_error(resp).await
     }
 
     /// On 401, retry the request with the alternate auth method (header ↔ query param).
@@ -285,7 +281,7 @@ impl BugzillaClient {
         Ok(())
     }
 
-    async fn check_error(&self, response: reqwest::Response) -> Result<reqwest::Response> {
+    async fn extract_api_error(&self, response: reqwest::Response) -> Result<reqwest::Response> {
         if response.status().is_client_error() || response.status().is_server_error() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
@@ -418,7 +414,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let err = client.search_users("anyone", None).await.unwrap_err();
+        let err = client.search_users("anyone", false).await.unwrap_err();
         let msg = err.to_string();
         assert!(
             msg.contains("500") || msg.contains("Internal Server Error"),
@@ -453,7 +449,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client.search_users("alice", None).await.unwrap();
+        let users = client.search_users("alice", false).await.unwrap();
         assert_eq!(users.len(), 1);
         assert_eq!(users[0].name, "alice@example.com");
     }
@@ -488,7 +484,7 @@ mod tests {
             .await;
 
         let client = test_client_query_param(&mock.uri());
-        let users = client.search_users("bob", None).await.unwrap();
+        let users = client.search_users("bob", false).await.unwrap();
         assert_eq!(users.len(), 1);
         assert_eq!(users[0].name, "bob@example.com");
     }
@@ -507,7 +503,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let err = client.search_users("anyone", None).await.unwrap_err();
+        let err = client.search_users("anyone", false).await.unwrap_err();
         let msg = err.to_string();
         assert!(
             msg.contains("410") || msg.contains("log in"),
@@ -530,7 +526,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let err = client.search_users("anyone", None).await.unwrap_err();
+        let err = client.search_users("anyone", false).await.unwrap_err();
         assert!(err.to_string().contains("not authorized"));
     }
 }

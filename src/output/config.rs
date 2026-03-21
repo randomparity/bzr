@@ -1,7 +1,7 @@
 use serde::Serialize;
 
 use super::common::{mask_api_key, print_field, print_formatted, print_optional_field};
-use crate::types::OutputFormat;
+use crate::types::{AuthMethod, OutputFormat};
 
 #[derive(Serialize)]
 #[non_exhaustive]
@@ -9,7 +9,8 @@ pub struct ServerDisplayInfo {
     url: String,
     email: Option<String>,
     api_key: String,
-    auth_method: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    auth_method: Option<AuthMethod>,
 }
 
 impl ServerDisplayInfo {
@@ -18,10 +19,7 @@ impl ServerDisplayInfo {
             url: srv.url.clone(),
             email: srv.email.clone(),
             api_key: mask_api_key(&srv.api_key),
-            auth_method: srv
-                .auth_method
-                .as_ref()
-                .map_or_else(|| "auto (not yet detected)".into(), ToString::to_string),
+            auth_method: srv.auth_method,
         }
     }
 }
@@ -64,8 +62,41 @@ pub fn print_config(view: &ConfigView, format: OutputFormat) {
                 print_field("URL", &s.url);
                 print_optional_field("Email", s.email.as_deref());
                 print_field("API Key", &s.api_key);
-                print_field("Auth", &s.auth_method);
+                let auth_display = s
+                    .auth_method
+                    .as_ref()
+                    .map_or_else(|| "auto (not yet detected)".to_string(), ToString::to_string);
+                print_field("Auth", &auth_display);
             }
         }
     });
+}
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_view_json_serialization() {
+        let view = ConfigView {
+            config_file: "/etc/bzr/config.toml".into(),
+            default_server: Some("prod".into()),
+            servers: std::collections::BTreeMap::new(),
+        };
+        let json: serde_json::Value = serde_json::to_value(&view).unwrap();
+        assert_eq!(json["config_file"], "/etc/bzr/config.toml");
+        assert_eq!(json["default_server"], "prod");
+    }
+
+    #[test]
+    fn config_view_no_default_server() {
+        let view = ConfigView {
+            config_file: "/tmp/config.toml".into(),
+            default_server: None,
+            servers: std::collections::BTreeMap::new(),
+        };
+        let json: serde_json::Value = serde_json::to_value(&view).unwrap();
+        assert!(json["default_server"].is_null());
+    }
 }

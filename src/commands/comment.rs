@@ -4,7 +4,7 @@ use crate::cli::CommentAction;
 use crate::error::{BzrError, Result};
 use crate::output::{self, ActionResult, ResourceKind, SearchResult, TagResult};
 use crate::types::ApiMode;
-use crate::types::OutputFormat;
+use crate::types::{OutputFormat, UpdateCommentTagsParams};
 
 pub async fn execute(
     action: &CommentAction,
@@ -39,7 +39,11 @@ pub async fn execute(
             add,
             remove,
         } => {
-            let tags = client.update_comment_tags(*comment_id, add, remove).await?;
+            let params = UpdateCommentTagsParams {
+                add: add.clone(),
+                remove: remove.clone(),
+            };
+            let tags = client.update_comment_tags(*comment_id, &params).await?;
             let display = if tags.is_empty() {
                 "(none)".to_string()
             } else {

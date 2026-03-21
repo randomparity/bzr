@@ -25,14 +25,7 @@ impl BugzillaClient {
         let req = self.apply_auth(self.http.get(self.url(&format!("bug/{bug_id}/attachment"))));
         let resp = self.send(req).await?;
         let data: AttachmentBugResponse = self.parse_json(resp).await?;
-        let attachments = data
-            .bugs
-            .into_values()
-            .next()
-            .ok_or_else(|| BzrError::NotFound {
-                resource: "bug",
-                id: bug_id.to_string(),
-            })?;
+        let attachments = data.bugs.into_values().next().unwrap_or_default();
         Ok(attachments)
     }
 

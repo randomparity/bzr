@@ -11,7 +11,7 @@ pub use bug::{
     Bug, CreateBugParams, FieldChange, FieldValue, HistoryEntry, SearchParams, StatusTransition,
     UpdateBugParams,
 };
-pub use comment::Comment;
+pub use comment::{Comment, UpdateCommentTagsParams};
 pub use common::{
     ApiMode, AuthMethod, ExtensionInfo, FlagStatus, FlagUpdate, OutputFormat, ServerExtensions,
     ServerInfoResponse, ServerVersion,
@@ -53,17 +53,17 @@ mod tests {
     }
 
     #[test]
-    fn product_list_type_as_endpoint() {
+    fn product_list_type_as_api_path() {
         assert_eq!(
-            ProductListType::Accessible.as_endpoint(),
+            ProductListType::Accessible.as_api_path(),
             "product_accessible"
         );
         assert_eq!(
-            ProductListType::Selectable.as_endpoint(),
+            ProductListType::Selectable.as_api_path(),
             "product_selectable"
         );
         assert_eq!(
-            ProductListType::Enterable.as_endpoint(),
+            ProductListType::Enterable.as_api_path(),
             "product_enterable"
         );
     }

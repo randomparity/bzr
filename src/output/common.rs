@@ -5,7 +5,7 @@ use crate::types::OutputFormat;
 
 // ── Formatting primitives ───────────────────────────────────────────
 
-fn print_json(value: &(impl Serialize + ?Sized)) {
+pub(super) fn print_json(value: &(impl Serialize + ?Sized)) {
     println!(
         "{}",
         serde_json::to_string_pretty(value).expect("serializable to JSON")

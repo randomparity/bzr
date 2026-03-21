@@ -1,5 +1,4 @@
 use crate::cli::GroupAction;
-use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::{self, ActionResult, MembershipResult, ResourceKind};
 use crate::types::ApiMode;
@@ -32,12 +31,7 @@ pub async fn execute(
             );
         }
         GroupAction::ListUsers { group, details } => {
-            let fields = if *details {
-                Some(BugzillaClient::USER_FIELDS_DETAILED)
-            } else {
-                Some(BugzillaClient::USER_FIELDS_BASIC)
-            };
-            let users = client.get_group_members(group, fields).await?;
+            let users = client.get_group_members(group, *details).await?;
             if *details {
                 output::print_users_detailed(&users, format);
             } else {

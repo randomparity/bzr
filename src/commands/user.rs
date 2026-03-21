@@ -1,5 +1,4 @@
 use crate::cli::UserAction;
-use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::{self, ActionResult, ResourceKind};
 use crate::types::ApiMode;
@@ -31,12 +30,7 @@ pub async fn execute(
 
     match action {
         UserAction::Search { query, details } => {
-            let fields = if *details {
-                Some(BugzillaClient::USER_FIELDS_DETAILED)
-            } else {
-                None
-            };
-            let users = client.search_users(query, fields).await?;
+            let users = client.search_users(query, *details).await?;
             if *details {
                 output::print_users_detailed(&users, format);
             } else {

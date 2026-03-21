@@ -6,7 +6,7 @@ use crate::http::{build_http_client, AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::types::{ApiMode, AuthMethod};
 
 #[derive(Deserialize)]
-struct WhoamiProbe {
+struct WhoamiProbeResponse {
     #[serde(default)]
     id: u64,
 }
@@ -64,7 +64,7 @@ async fn detect_version_and_mode(
     auth_method: AuthMethod,
 ) -> (Option<String>, ApiMode) {
     #[derive(serde::Deserialize)]
-    struct VersionResp {
+    struct VersionResponse {
         version: String,
     }
 
@@ -108,7 +108,7 @@ async fn detect_version_and_mode(
         return (None, ApiMode::XmlRpc);
     };
 
-    let Ok(parsed) = serde_json::from_str::<VersionResp>(&body) else {
+    let Ok(parsed) = serde_json::from_str::<VersionResponse>(&body) else {
         // Endpoint exists (200 OK) but returns non-standard body -- assume a
         // modern server with a custom extension; default to Hybrid.
         return (None, ApiMode::Hybrid);
@@ -159,7 +159,7 @@ async fn detect_auth_method(
         .map_err(|_| BzrError::config("invalid API key characters"))?;
 
     // Try whoami endpoint first (Bugzilla 5.1+)
-    let whoami = try_whoami(http, base, api_key, &key_val).await;
+    let whoami = detect_whoami_auth(http, base, api_key, &key_val).await;
     match whoami {
         WhoamiOutcome::Authenticated(method) => return Ok(method),
         WhoamiOutcome::NotFound => {
@@ -232,7 +232,7 @@ enum WhoamiOutcome {
     NetworkError,
 }
 
-async fn try_whoami(
+async fn detect_whoami_auth(
     http: &reqwest::Client,
     base: &str,
     api_key: &str,
@@ -269,7 +269,7 @@ async fn probe_whoami(request: reqwest::RequestBuilder, method: AuthMethod) -> W
         // A valid whoami response contains a positive user ID. Treat id==0
         // (unauthenticated/anonymous) and unparseable bodies as auth failures
         // -- the server responded but didn't confirm our credentials.
-        if let Ok(parsed) = serde_json::from_str::<WhoamiProbe>(&body) {
+        if let Ok(parsed) = serde_json::from_str::<WhoamiProbeResponse>(&body) {
             if parsed.id > 0 {
                 return WhoamiOutcome::Authenticated(method);
             }
@@ -324,35 +324,26 @@ async fn try_valid_login(
 ) -> ValidLoginOutcome {
     let url = format!("{base}/rest/valid_login");
 
-    // Probe: header-based auth
-    match probe_valid_login(
-        http,
-        &url,
-        &[("login", login)],
-        Some(key_header),
-        AuthMethod::Header,
-    )
-    .await
-    {
-        ValidLoginOutcome::Authenticated(m) => return ValidLoginOutcome::Authenticated(m),
-        ValidLoginOutcome::NetworkError => return ValidLoginOutcome::NetworkError,
-        ValidLoginOutcome::AuthRejected => {} // try query-param next
-    }
+    let probes: [(_, _, _); 2] = [
+        // Probe: header-based auth
+        (
+            vec![("login", login)],
+            Some(key_header),
+            AuthMethod::Header,
+        ),
+        // Probe: query-param auth
+        (
+            vec![("login", login), (AUTH_QUERY_PARAM, api_key)],
+            None,
+            AuthMethod::QueryParam,
+        ),
+    ];
 
-    // Probe: query-param auth
-    match probe_valid_login(
-        http,
-        &url,
-        &[("login", login), (AUTH_QUERY_PARAM, api_key)],
-        None,
-        AuthMethod::QueryParam,
-    )
-    .await
-    {
-        outcome @ (ValidLoginOutcome::Authenticated(_) | ValidLoginOutcome::NetworkError) => {
-            return outcome;
+    for (query, header, method) in &probes {
+        match probe_valid_login(http, &url, query, *header, *method).await {
+            ValidLoginOutcome::AuthRejected => {} // try next probe
+            outcome => return outcome,
         }
-        ValidLoginOutcome::AuthRejected => {}
     }
 
     tracing::debug!("valid_login probes both failed");

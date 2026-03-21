@@ -19,12 +19,18 @@ impl BugzillaClient {
     pub async fn search_users(
         &self,
         query: &str,
-        include_fields: Option<&str>,
+        detailed: bool,
     ) -> Result<Vec<BugzillaUser>> {
-        let mut req_builder = self.http.get(self.url("user")).query(&[("match", query)]);
-        if let Some(fields) = include_fields {
-            req_builder = req_builder.query(&[("include_fields", fields)]);
-        }
+        let fields = if detailed {
+            USER_FIELDS_DETAILED
+        } else {
+            USER_FIELDS_BASIC
+        };
+        let req_builder = self
+            .http
+            .get(self.url("user"))
+            .query(&[("match", query)])
+            .query(&[("include_fields", fields)]);
         let req = self.apply_auth(req_builder);
         let resp = self.send(req).await?;
         let data: UserSearchResponse = self.parse_json(resp).await?;
@@ -70,7 +76,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client.search_users("example", None).await.unwrap();
+        let users = client.search_users("example", false).await.unwrap();
         assert_eq!(users.len(), 2);
         assert_eq!(users[0].name, "alice@example.com");
         assert_eq!(users[1].real_name.as_deref(), Some("Bob"));
@@ -88,7 +94,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client.search_users("nobody", None).await.unwrap();
+        let users = client.search_users("nobody", false).await.unwrap();
         assert!(users.is_empty());
     }
 
@@ -116,10 +122,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client
-            .search_users("alice", Some(super::USER_FIELDS_DETAILED))
-            .await
-            .unwrap();
+        let users = client.search_users("alice", true).await.unwrap();
         assert_eq!(users.len(), 1);
         assert_eq!(users[0].can_login, Some(true));
         assert_eq!(users[0].groups.len(), 1);

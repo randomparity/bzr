@@ -37,7 +37,7 @@ pub async fn connect_client_with_email(
         (method, mode)
     } else {
         let settings =
-            crate::client::auth::detect_server_settings(&url, &api_key, email.as_deref()).await?;
+            crate::client::detect_server_settings(&url, &api_key, email.as_deref()).await?;
 
         // Persist detected settings to config so future invocations skip detection.
         // Only persist api_mode/version when version detection succeeded (version

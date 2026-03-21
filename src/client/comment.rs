@@ -2,8 +2,8 @@ use serde::Deserialize;
 
 use super::encode_path;
 use super::BugzillaClient;
-use crate::error::{BzrError, Result};
-use crate::types::Comment;
+use crate::error::Result;
+use crate::types::{Comment, UpdateCommentTagsParams};
 
 #[derive(Deserialize)]
 struct CommentResponse {
@@ -32,29 +32,19 @@ impl BugzillaClient {
             .bugs
             .into_values()
             .next()
-            .map(|e| e.comments)
-            .ok_or_else(|| BzrError::NotFound {
-                resource: "bug",
-                id: bug_id.to_string(),
-            })?;
+            .map_or_else(Vec::new, |e| e.comments);
         Ok(comments)
     }
 
     pub async fn update_comment_tags(
         &self,
         comment_id: u64,
-        add: &[String],
-        remove: &[String],
+        params: &UpdateCommentTagsParams,
     ) -> Result<Vec<String>> {
-        let body = serde_json::json!({
-            "comment_id": comment_id,
-            "add": add,
-            "remove": remove,
-        });
         let req = self.apply_auth(
             self.http
                 .put(self.url(&format!("bug/comment/{comment_id}/tags")))
-                .json(&body),
+                .json(params),
         );
         let resp = self.send(req).await?;
         self.parse_json(resp).await
@@ -104,8 +94,12 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
+        let params = crate::types::UpdateCommentTagsParams {
+            add: vec!["needinfo".into()],
+            ..Default::default()
+        };
         let tags = client
-            .update_comment_tags(42, &["needinfo".into()], &[])
+            .update_comment_tags(42, &params)
             .await
             .unwrap();
         assert_eq!(tags, vec!["needinfo", "reviewed"]);

@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
 use super::encode_path;
-use super::user::{UserSearchResponse, USER_FIELDS_BASIC};
+use super::user::{UserSearchResponse, USER_FIELDS_BASIC, USER_FIELDS_DETAILED};
 use super::BugzillaClient;
 use crate::error::{BzrError, Result};
 use crate::types::{BugzillaUser, CreateGroupParams, GroupInfo, UpdateGroupParams};
@@ -20,9 +20,13 @@ impl BugzillaClient {
     pub async fn get_group_members(
         &self,
         group_name: &str,
-        include_fields: Option<&str>,
+        detailed: bool,
     ) -> Result<Vec<BugzillaUser>> {
-        let fields = include_fields.unwrap_or(USER_FIELDS_BASIC);
+        let fields = if detailed {
+            USER_FIELDS_DETAILED
+        } else {
+            USER_FIELDS_BASIC
+        };
         // Bugzilla 5.0 requires at least one of ids/names/match alongside
         // the group filter. Use a broad match pattern to list all members.
         let req = self.apply_auth(self.http.get(self.url("user")).query(&[
@@ -106,7 +110,7 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::super::encode_path;
-    use super::super::user::{USER_FIELDS_BASIC, USER_FIELDS_DETAILED};
+    use super::super::user::USER_FIELDS_BASIC;
     use crate::client::test_helpers::test_client;
     use crate::types::{CreateGroupParams, UpdateGroupParams};
 
@@ -137,7 +141,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client.get_group_members("admin", None).await.unwrap();
+        let users = client.get_group_members("admin", false).await.unwrap();
         assert_eq!(users.len(), 2);
         assert_eq!(users[0].name, "alice@example.com");
     }
@@ -148,7 +152,10 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/user"))
             .and(query_param("group", "admin"))
-            .and(query_param("include_fields", USER_FIELDS_DETAILED))
+            .and(query_param(
+                "include_fields",
+                super::super::user::USER_FIELDS_DETAILED,
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [
                     {
@@ -165,10 +172,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client
-            .get_group_members("admin", Some(USER_FIELDS_DETAILED))
-            .await
-            .unwrap();
+        let users = client.get_group_members("admin", true).await.unwrap();
         assert_eq!(users.len(), 1);
         assert_eq!(users[0].name, "alice@example.com");
         assert_eq!(users[0].groups.len(), 1);
@@ -189,7 +193,7 @@ mod tests {
             .await;
 
         let client = test_client(&mock.uri());
-        let users = client.get_group_members("nobody", None).await.unwrap();
+        let users = client.get_group_members("nobody", false).await.unwrap();
         assert!(users.is_empty());
     }
 
@@ -209,7 +213,7 @@ mod tests {
 
         let client = test_client(&mock.uri());
         let err = client
-            .get_group_members("nonexistent", None)
+            .get_group_members("nonexistent", false)
             .await
             .unwrap_err();
         let msg = err.to_string();
