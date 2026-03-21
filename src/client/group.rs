@@ -1,9 +1,22 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::encode_path;
 use super::BugzillaClient;
 use super::{UserSearchResponse, USER_FIELDS_BASIC, USER_FIELDS_DETAILED};
 use crate::error::{BzrError, Result};
+
+#[derive(Serialize)]
+struct GroupMembershipBody {
+    groups: GroupMembershipAction,
+}
+
+#[derive(Serialize)]
+struct GroupMembershipAction {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    add: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    remove: Vec<String>,
+}
 use crate::types::{BugzillaUser, CreateGroupParams, GroupInfo, UpdateGroupParams};
 
 #[derive(Deserialize)]
@@ -58,22 +71,22 @@ impl BugzillaClient {
         group: &str,
         operation: GroupOp,
     ) -> Result<()> {
-        let key = match operation {
-            GroupOp::Add => "add",
-            GroupOp::Remove => "remove",
+        let body = match operation {
+            GroupOp::Add => GroupMembershipBody {
+                groups: GroupMembershipAction {
+                    add: vec![group.to_string()],
+                    remove: Vec::new(),
+                },
+            },
+            GroupOp::Remove => GroupMembershipBody {
+                groups: GroupMembershipAction {
+                    add: Vec::new(),
+                    remove: vec![group.to_string()],
+                },
+            },
         };
-        let body = serde_json::json!({
-            "groups": {
-                key: [group]
-            }
-        });
-        let req = self.apply_auth(
-            self.http
-                .put(self.url(&format!("user/{}", encode_path(user))))
-                .json(&body),
-        );
-        self.send(req).await?;
-        Ok(())
+        self.put_json(&format!("user/{}", encode_path(user)), &body)
+            .await
     }
 
     pub async fn get_group(&self, group: &str) -> Result<GroupInfo> {
