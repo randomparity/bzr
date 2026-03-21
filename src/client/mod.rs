@@ -1,6 +1,6 @@
 mod attachment;
 pub(crate) mod auth;
-pub(crate) use auth::detect_server_settings;
+pub(crate) use auth::{detect_server_settings, DetectedServerSettings};
 mod bug;
 mod classification;
 mod comment;
@@ -212,11 +212,12 @@ impl BugzillaClient {
                 return Ok(retried);
             }
         }
-        self.extract_api_error(resp).await
+        self.check_response_status(resp).await
     }
 
     /// On 401, retry the request with the alternate auth method (header ↔ query param).
-    /// Returns `Some(response)` if the retry succeeded, `None` if it failed or was not possible.
+    /// Returns `Ok(Some(response))` if the retry succeeded, `Ok(None)` if the retry
+    /// also failed or wasn't possible, or `Err` on transport-level failures.
     async fn retry_with_alternate_auth(
         &self,
         retry_builder: Option<RequestBuilder>,
@@ -306,7 +307,7 @@ impl BugzillaClient {
         let code = map
             .get("code")
             .and_then(serde_json::Value::as_i64)
-            .unwrap_or(0);
+            .unwrap_or(-1);
         let message = map
             .get("message")
             .and_then(|v| v.as_str())
@@ -331,7 +332,10 @@ impl BugzillaClient {
         Ok(())
     }
 
-    async fn extract_api_error(&self, response: reqwest::Response) -> Result<reqwest::Response> {
+    async fn check_response_status(
+        &self,
+        response: reqwest::Response,
+    ) -> Result<reqwest::Response> {
         if response.status().is_client_error() || response.status().is_server_error() {
             let status = response.status();
             let body = response.text().await.unwrap_or_else(|e| {

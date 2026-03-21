@@ -1,5 +1,5 @@
-use crate::client::auth::DetectedServerSettings;
 use crate::client::BugzillaClient;
+use crate::client::DetectedServerSettings;
 use crate::config::Config;
 use crate::error::Result;
 use crate::types::ApiMode;
@@ -45,24 +45,22 @@ pub async fn connect_client(
         srv.api_key.clone(),
         srv.email.clone(),
     );
-    // Use cached auth method if available; otherwise detect via network probes
-    // and persist the results back to config.
-    let (auth, resolved_mode) = if let Some(method) = srv.auth_method {
-        let mode = if let Some(m) = srv.api_mode {
-            m
-        } else {
-            tracing::debug!("auth_method cached but api_mode missing; re-detecting api_mode");
+    // Three cases: fully cached, partially cached (auth only), or uncached.
+    let (auth, resolved_mode) = match (srv.auth_method, srv.api_mode) {
+        (Some(method), Some(mode)) => (method, mode),
+        (Some(method), None) => {
+            tracing::debug!("auth_method cached but api_mode missing; re-detecting");
             let settings =
                 crate::client::detect_server_settings(&url, &api_key, email.as_deref()).await?;
             persist_detected_settings(&mut config, &server_name, &settings, false)?;
-            settings.api_mode
-        };
-        (method, mode)
-    } else {
-        let settings =
-            crate::client::detect_server_settings(&url, &api_key, email.as_deref()).await?;
-        persist_detected_settings(&mut config, &server_name, &settings, true)?;
-        (settings.auth_method, settings.api_mode)
+            (method, settings.api_mode)
+        }
+        _ => {
+            let settings =
+                crate::client::detect_server_settings(&url, &api_key, email.as_deref()).await?;
+            persist_detected_settings(&mut config, &server_name, &settings, true)?;
+            (settings.auth_method, settings.api_mode)
+        }
     };
 
     let api_mode = api_override.unwrap_or(resolved_mode);

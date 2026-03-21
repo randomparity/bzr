@@ -120,7 +120,9 @@ struct TempFile {
 
 impl Drop for TempFile {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
+        if let Err(e) = std::fs::remove_file(&self.path) {
+            tracing::debug!(path = %self.path.display(), "failed to remove temp file: {e}");
+        }
     }
 }
 

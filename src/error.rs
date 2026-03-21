@@ -80,10 +80,7 @@ impl BzrError {
     pub fn is_transport_failure(&self) -> bool {
         matches!(
             self,
-            BzrError::Http(_)
-                | BzrError::HttpStatus { .. }
-                | BzrError::Deserialize(_)
-                | BzrError::XmlRpc(_)
+            BzrError::Http(_) | BzrError::HttpStatus { .. } | BzrError::XmlRpc(_)
         )
     }
 

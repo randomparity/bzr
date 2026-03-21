@@ -145,7 +145,7 @@ fn xml_escape(s: &str) -> String {
     out
 }
 
-fn write_value(buf: &mut String, value: &Value) {
+fn render_xmlrpc_value(buf: &mut String, value: &Value) {
     buf.push_str("<value>");
     match value {
         Value::String(s) => {
@@ -184,7 +184,7 @@ fn write_value(buf: &mut String, value: &Value) {
         Value::Array(items) => {
             buf.push_str("<array><data>");
             for item in items {
-                write_value(buf, item);
+                render_xmlrpc_value(buf, item);
             }
             buf.push_str("</data></array>");
         }
@@ -194,7 +194,7 @@ fn write_value(buf: &mut String, value: &Value) {
                 buf.push_str("<member><name>");
                 buf.push_str(&xml_escape(name));
                 buf.push_str("</name>");
-                write_value(buf, val);
+                render_xmlrpc_value(buf, val);
                 buf.push_str("</member>");
             }
             buf.push_str("</struct>");
@@ -212,7 +212,7 @@ pub fn build_request(method: &str, params: BTreeMap<String, Value>) -> String {
     buf.push_str("<methodCall><methodName>");
     buf.push_str(&xml_escape(method));
     buf.push_str("</methodName><params><param>");
-    write_value(&mut buf, &Value::Struct(params));
+    render_xmlrpc_value(&mut buf, &Value::Struct(params));
     buf.push_str("</param></params></methodCall>");
     buf
 }
