@@ -1,26 +1,10 @@
-use serde::Deserialize;
-
 use super::encode_path;
-use super::BugzillaClient;
+use super::{BugzillaClient, UserSearchResponse, USER_FIELDS_BASIC, USER_FIELDS_DETAILED};
 use crate::error::Result;
 use crate::types::{BugzillaUser, CreateUserParams, UpdateUserParams};
 
-/// Default fields for user queries (basic info).
-pub(super) const USER_FIELDS_BASIC: &str = "id,name,real_name,email,groups";
-/// Extended fields for detailed user queries.
-pub(super) const USER_FIELDS_DETAILED: &str = "id,name,real_name,email,can_login,groups";
-
-#[derive(Deserialize)]
-pub(super) struct UserSearchResponse {
-    pub(super) users: Vec<BugzillaUser>,
-}
-
 impl BugzillaClient {
-    pub async fn search_users(
-        &self,
-        query: &str,
-        detailed: bool,
-    ) -> Result<Vec<BugzillaUser>> {
+    pub async fn search_users(&self, query: &str, detailed: bool) -> Result<Vec<BugzillaUser>> {
         let fields = if detailed {
             USER_FIELDS_DETAILED
         } else {
@@ -101,10 +85,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/user"))
             .and(query_param("match", "alice"))
-            .and(query_param(
-                "include_fields",
-                super::USER_FIELDS_DETAILED,
-            ))
+            .and(query_param("include_fields", super::USER_FIELDS_DETAILED))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [{
                     "id": 1,

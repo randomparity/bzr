@@ -254,7 +254,8 @@ mod tests {
 
     #[test]
     fn version_and_milestone_deserialize() {
-        let ver_json = serde_json::json!({"id": 1, "name": "1.0", "sort_key": 5, "is_active": true});
+        let ver_json =
+            serde_json::json!({"id": 1, "name": "1.0", "sort_key": 5, "is_active": true});
         let ver: Version = serde_json::from_value(ver_json).unwrap();
         assert_eq!(ver.id, 1);
         assert_eq!(ver.sort_key, 5);

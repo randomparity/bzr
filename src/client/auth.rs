@@ -5,6 +5,8 @@ use crate::error::{BzrError, Result};
 use crate::http::{build_http_client, AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::types::{ApiMode, AuthMethod};
 
+use super::version::detect_version_and_mode;
+
 #[derive(Deserialize)]
 struct WhoamiProbeResponse {
     #[serde(default)]
@@ -51,93 +53,6 @@ pub async fn detect_server_settings(
         api_mode,
         server_version: version,
     })
-}
-
-/// Detect server version and determine API mode.
-///
-/// Calls `GET /rest/version` to get the Bugzilla version string, then
-/// applies thresholds to determine the best API transport.
-async fn detect_version_and_mode(
-    http: &reqwest::Client,
-    base_url: &str,
-    api_key: &str,
-    auth_method: AuthMethod,
-) -> (Option<String>, ApiMode) {
-    #[derive(serde::Deserialize)]
-    struct VersionResponse {
-        version: String,
-    }
-
-    let base = base_url.trim_end_matches('/');
-    let url = format!("{base}/rest/version");
-
-    let mut req = http.get(&url);
-    match auth_method {
-        AuthMethod::Header => {
-            if let Ok(val) = reqwest::header::HeaderValue::from_str(api_key) {
-                req = req.header(AUTH_HEADER_NAME, val);
-            } else {
-                tracing::debug!(
-                    "API key has invalid header characters, sending version request without auth"
-                );
-            }
-        }
-        AuthMethod::QueryParam => {
-            req = req.query(&[(AUTH_QUERY_PARAM, api_key)]);
-        }
-    }
-
-    let resp = match req.send().await {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::warn!("version detection failed (falling back to xmlrpc): {e}");
-            return (None, ApiMode::XmlRpc);
-        }
-    };
-
-    if !resp.status().is_success() {
-        tracing::debug!(
-            status = %resp.status(),
-            "version endpoint not available, assuming pre-5.0"
-        );
-        return (None, ApiMode::XmlRpc);
-    }
-
-    let Ok(body) = resp.text().await else {
-        tracing::warn!("version response body unreadable, falling back to xmlrpc");
-        return (None, ApiMode::XmlRpc);
-    };
-
-    let Ok(parsed) = serde_json::from_str::<VersionResponse>(&body) else {
-        // Endpoint exists (200 OK) but returns non-standard body -- assume a
-        // modern server with a custom extension; default to Hybrid.
-        return (None, ApiMode::Hybrid);
-    };
-
-    let mode = version_to_api_mode(&parsed.version);
-    tracing::debug!(version = %parsed.version, %mode, "determined API mode from version");
-    (Some(parsed.version), mode)
-}
-
-/// Parse a Bugzilla version string and determine the API mode.
-///
-/// Version strings can be like "5.0.4", "5.1.2", "5.0.4.rh103", etc.
-/// We extract major.minor and apply:
-///   < 5.0 -> xmlrpc
-///   >= 5.0, < 5.1 -> hybrid
-///   >= 5.1 -> rest
-fn version_to_api_mode(version: &str) -> ApiMode {
-    let parts: Vec<&str> = version.split('.').collect();
-    let major = parts.first().and_then(|s| s.parse::<u32>().ok());
-    let minor = parts.get(1).and_then(|s| s.parse::<u32>().ok());
-
-    match (major, minor) {
-        (Some(major), _) if major < 5 => ApiMode::XmlRpc,
-        (Some(5), Some(minor)) if minor < 1 => ApiMode::Hybrid,
-        (Some(5), None) => ApiMode::Hybrid,
-        (Some(_), _) => ApiMode::Rest,
-        _ => ApiMode::Hybrid,
-    }
 }
 
 async fn detect_auth_method(
@@ -326,11 +241,7 @@ async fn detect_valid_login_auth(
 
     let probes: [(_, _, _); 2] = [
         // Probe: header-based auth
-        (
-            vec![("login", login)],
-            Some(key_header),
-            AuthMethod::Header,
-        ),
+        (vec![("login", login)], Some(key_header), AuthMethod::Header),
         // Probe: query-param auth
         (
             vec![("login", login), (AUTH_QUERY_PARAM, api_key)],
@@ -438,7 +349,7 @@ mod tests {
     use super::*;
 
     fn test_client() -> reqwest::Client {
-        crate::http::build_http_client().unwrap()
+        crate::client::test_helpers::test_http_client()
     }
 
     #[tokio::test]
@@ -547,9 +458,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/bug"))
             .and(header(AUTH_HEADER_NAME, "test-key"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
             .mount(&server)
             .await;
 
@@ -726,106 +635,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn version_to_mode_pre_5() {
-        assert_eq!(version_to_api_mode("4.4.13"), ApiMode::XmlRpc);
-        assert_eq!(version_to_api_mode("3.6.1"), ApiMode::XmlRpc);
-    }
-
-    #[test]
-    fn version_to_mode_5_0() {
-        assert_eq!(version_to_api_mode("5.0"), ApiMode::Hybrid);
-        assert_eq!(version_to_api_mode("5.0.4"), ApiMode::Hybrid);
-        assert_eq!(version_to_api_mode("5.0.4.rh103"), ApiMode::Hybrid);
-    }
-
-    #[test]
-    fn version_to_mode_5_1_plus() {
-        assert_eq!(version_to_api_mode("5.1"), ApiMode::Rest);
-        assert_eq!(version_to_api_mode("5.1.2"), ApiMode::Rest);
-        assert_eq!(version_to_api_mode("6.0"), ApiMode::Rest);
-    }
-
-    #[tokio::test]
-    async fn detect_version_returns_rest_for_5_1() {
-        let server = MockServer::start().await;
-
-        Mock::given(method("GET"))
-            .and(path("/rest/version"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.1.2"})),
-            )
-            .mount(&server)
-            .await;
-
-        let (version, mode) = detect_version_and_mode(
-            &test_client(),
-            &server.uri(),
-            "test-key",
-            AuthMethod::Header,
-        )
-        .await;
-        assert_eq!(version.as_deref(), Some("5.1.2"));
-        assert_eq!(mode, ApiMode::Rest);
-    }
-
-    #[tokio::test]
-    async fn detect_version_returns_hybrid_for_5_0() {
-        let server = MockServer::start().await;
-
-        Mock::given(method("GET"))
-            .and(path("/rest/version"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.0.4"})),
-            )
-            .mount(&server)
-            .await;
-
-        let (version, mode) = detect_version_and_mode(
-            &test_client(),
-            &server.uri(),
-            "test-key",
-            AuthMethod::Header,
-        )
-        .await;
-        assert_eq!(version.as_deref(), Some("5.0.4"));
-        assert_eq!(mode, ApiMode::Hybrid);
-    }
-
-    #[tokio::test]
-    async fn detect_version_404_returns_xmlrpc() {
-        let server = MockServer::start().await;
-
-        Mock::given(method("GET"))
-            .and(path("/rest/version"))
-            .respond_with(ResponseTemplate::new(404))
-            .mount(&server)
-            .await;
-
-        let (version, mode) = detect_version_and_mode(
-            &test_client(),
-            &server.uri(),
-            "test-key",
-            AuthMethod::Header,
-        )
-        .await;
-        assert!(version.is_none());
-        assert_eq!(mode, ApiMode::XmlRpc);
-    }
-
-    #[tokio::test]
-    async fn detect_version_network_error_returns_xmlrpc() {
-        let (version, mode) = detect_version_and_mode(
-            &test_client(),
-            "https://127.0.0.1:1",
-            "test-key",
-            AuthMethod::Header,
-        )
-        .await;
-        assert!(version.is_none());
-        assert_eq!(mode, ApiMode::XmlRpc);
-    }
-
     /// Exercises detect_server_settings: probes auth and version without Config.
     #[tokio::test]
     async fn detect_server_settings_returns_all_fields() {
@@ -853,26 +662,5 @@ mod tests {
         assert_eq!(detected.auth_method, AuthMethod::Header);
         assert_eq!(detected.api_mode, ApiMode::Rest);
         assert_eq!(detected.server_version.as_deref(), Some("5.1.2"));
-    }
-
-    #[tokio::test]
-    async fn detect_version_non_json_returns_hybrid() {
-        let server = MockServer::start().await;
-
-        Mock::given(method("GET"))
-            .and(path("/rest/version"))
-            .respond_with(ResponseTemplate::new(200).set_body_string("not json"))
-            .mount(&server)
-            .await;
-
-        let (version, mode) = detect_version_and_mode(
-            &test_client(),
-            &server.uri(),
-            "test-key",
-            AuthMethod::Header,
-        )
-        .await;
-        assert!(version.is_none());
-        assert_eq!(mode, ApiMode::Hybrid);
     }
 }

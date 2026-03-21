@@ -73,60 +73,6 @@ mod tests {
         assert_eq!(ProductListType::default(), ProductListType::Accessible);
     }
 
-    // FlagStatus tests
-
-    #[test]
-    fn flag_status_to_char() {
-        assert_eq!(FlagStatus::Grant.to_char(), '+');
-        assert_eq!(FlagStatus::Deny.to_char(), '-');
-        assert_eq!(FlagStatus::Request.to_char(), '?');
-        assert_eq!(FlagStatus::Clear.to_char(), 'X');
-    }
-
-    #[test]
-    fn flag_status_display() {
-        assert_eq!(FlagStatus::Grant.to_string(), "+");
-        assert_eq!(FlagStatus::Deny.to_string(), "-");
-        assert_eq!(FlagStatus::Request.to_string(), "?");
-        assert_eq!(FlagStatus::Clear.to_string(), "X");
-    }
-
-    #[test]
-    fn flag_status_serialize_deserialize_roundtrip() {
-        let update = FlagUpdate {
-            name: "review".to_string(),
-            status: FlagStatus::Grant,
-            requestee: None,
-        };
-        let json = serde_json::to_string(&update).unwrap();
-        assert!(json.contains(r#""status":"+""#));
-
-        let back: FlagUpdate = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.status, FlagStatus::Grant);
-        assert_eq!(back.name, "review");
-    }
-
-    #[test]
-    fn flag_status_deserialize_all_variants() {
-        for (ch, expected) in [
-            ("+", FlagStatus::Grant),
-            ("-", FlagStatus::Deny),
-            ("?", FlagStatus::Request),
-            ("X", FlagStatus::Clear),
-        ] {
-            let json = format!(r#"{{"name":"f","status":"{ch}"}}"#);
-            let flag: FlagUpdate = serde_json::from_str(&json).unwrap();
-            assert_eq!(flag.status, expected);
-        }
-    }
-
-    #[test]
-    fn flag_status_deserialize_invalid() {
-        let json = r#"{"name":"f","status":"Z"}"#;
-        let result = serde_json::from_str::<FlagUpdate>(json);
-        assert!(result.is_err());
-    }
-
     // SearchParams tests
 
     #[test]

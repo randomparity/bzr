@@ -139,7 +139,7 @@ mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, ResponseTemplate};
 
-    use super::super::test_helpers::setup_test_env;
+    use super::super::test_helpers::{capture_stdout, setup_test_env};
     use crate::cli::CommentAction;
     use crate::types::OutputFormat;
 
@@ -171,8 +171,13 @@ mod tests {
             bug_id: 42,
             since: None,
         };
-        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
+        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        assert_eq!(parsed[0]["id"], 1);
+        assert_eq!(parsed[0]["text"], "Hello world");
+        assert_eq!(parsed[0]["creator"], "user@test.com");
     }
 
     #[tokio::test]
@@ -226,5 +231,50 @@ mod tests {
     #[test]
     fn filter_comment_body_empty_input() {
         assert_eq!(super::filter_comment_body(""), "");
+    }
+
+    #[tokio::test]
+    async fn comment_list_http_500_returns_error() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42/comment"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+            .mount(&mock)
+            .await;
+
+        let action = CommentAction::List {
+            bug_id: 42,
+            since: None,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("500") || err.contains("Internal Server Error"),
+            "expected HTTP 500 error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn comment_add_api_error_returns_error() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("POST"))
+            .and(path("/rest/bug/42/comment"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 100,
+                "message": "Bug #42 does not exist."
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = CommentAction::Add {
+            bug_id: 42,
+            body: Some("Test comment".to_string()),
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
     }
 }

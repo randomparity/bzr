@@ -71,7 +71,8 @@ impl BugzillaClient {
     }
 
     pub async fn update_attachment(&self, id: u64, updates: &UpdateAttachmentParams) -> Result<()> {
-        self.put_json(&format!("bug/attachment/{id}"), updates).await
+        self.put_json(&format!("bug/attachment/{id}"), updates)
+            .await
     }
 }
 

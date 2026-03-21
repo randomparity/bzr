@@ -1,3 +1,5 @@
+use std::io::{self, Write};
+
 use colored::Colorize;
 use serde::Serialize;
 
@@ -5,11 +7,17 @@ use crate::types::OutputFormat;
 
 // ── Formatting primitives ───────────────────────────────────────────
 
-pub(super) fn print_json(value: &(impl Serialize + ?Sized)) {
-    println!(
+pub(super) fn write_json(w: &mut dyn Write, value: &(impl Serialize + ?Sized)) {
+    writeln!(
+        w,
         "{}",
         serde_json::to_string_pretty(value).expect("serializable to JSON")
-    );
+    )
+    .expect("write to output");
+}
+
+pub(super) fn print_json(value: &(impl Serialize + ?Sized)) {
+    write_json(&mut io::stdout(), value);
 }
 
 pub(super) fn print_formatted<T: Serialize + ?Sized>(
@@ -27,24 +35,44 @@ pub(super) fn print_formatted<T: Serialize + ?Sized>(
 // Shared formatting for bug/resource detail views. All use consistent
 // 12-char label alignment and render absent values as "-".
 
+pub(super) fn write_field(w: &mut dyn Write, label: &str, value: &str) {
+    writeln!(w, "  {label:<12}  {value}").expect("write to output");
+}
+
+pub(super) fn write_optional_field(w: &mut dyn Write, label: &str, value: Option<&str>) {
+    writeln!(w, "  {label:<12}  {}", value.unwrap_or("-")).expect("write to output");
+}
+
+pub(super) fn write_list_field(w: &mut dyn Write, label: &str, items: &[String]) {
+    if !items.is_empty() {
+        writeln!(w, "  {label:<12}  {}", items.join(", ")).expect("write to output");
+    }
+}
+
+pub(super) fn write_id_list_field(w: &mut dyn Write, label: &str, ids: &[u64]) {
+    if !ids.is_empty() {
+        writeln!(w, "  {label:<12}  {}", format_id_list(ids)).expect("write to output");
+    }
+}
+
+pub(super) fn write_bool_field(w: &mut dyn Write, label: &str, value: bool) {
+    writeln!(w, "  {label:<12}  {}", yes_no(value)).expect("write to output");
+}
+
 pub(super) fn print_field(label: &str, value: &str) {
-    println!("  {label:<12}  {value}");
+    write_field(&mut io::stdout(), label, value);
 }
 
 pub(super) fn print_optional_field(label: &str, value: Option<&str>) {
-    println!("  {label:<12}  {}", value.unwrap_or("-"));
+    write_optional_field(&mut io::stdout(), label, value);
 }
 
 pub(super) fn print_list_field(label: &str, items: &[String]) {
-    if !items.is_empty() {
-        println!("  {label:<12}  {}", items.join(", "));
-    }
+    write_list_field(&mut io::stdout(), label, items);
 }
 
 pub(super) fn print_id_list_field(label: &str, ids: &[u64]) {
-    if !ids.is_empty() {
-        println!("  {label:<12}  {}", format_id_list(ids));
-    }
+    write_id_list_field(&mut io::stdout(), label, ids);
 }
 
 pub(super) fn format_id_list(ids: &[u64]) -> String {
@@ -72,7 +100,7 @@ pub(super) fn opt_yes_no(value: Option<bool>) -> &'static str {
 }
 
 pub(super) fn print_bool_field(label: &str, value: bool) {
-    println!("  {label:<12}  {}", yes_no(value));
+    write_bool_field(&mut io::stdout(), label, value);
 }
 
 // ── Text helpers ────────────────────────────────────────────────────

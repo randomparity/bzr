@@ -251,7 +251,10 @@ mod tests {
 
     #[test]
     fn output_format_from_str_valid() {
-        assert_eq!("table".parse::<OutputFormat>().unwrap(), OutputFormat::Table);
+        assert_eq!(
+            "table".parse::<OutputFormat>().unwrap(),
+            OutputFormat::Table
+        );
         assert_eq!("json".parse::<OutputFormat>().unwrap(), OutputFormat::Json);
     }
 
@@ -292,10 +295,7 @@ mod tests {
 
     #[test]
     fn auth_method_from_str() {
-        assert_eq!(
-            "header".parse::<AuthMethod>().unwrap(),
-            AuthMethod::Header
-        );
+        assert_eq!("header".parse::<AuthMethod>().unwrap(), AuthMethod::Header);
         assert_eq!(
             "query_param".parse::<AuthMethod>().unwrap(),
             AuthMethod::QueryParam

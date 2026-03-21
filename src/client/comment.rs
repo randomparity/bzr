@@ -98,10 +98,7 @@ mod tests {
             add: vec!["needinfo".into()],
             ..Default::default()
         };
-        let tags = client
-            .update_comment_tags(42, &params)
-            .await
-            .unwrap();
+        let tags = client.update_comment_tags(42, &params).await.unwrap();
         assert_eq!(tags, vec!["needinfo", "reviewed"]);
     }
 

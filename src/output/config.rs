@@ -62,10 +62,10 @@ pub fn print_config(view: &ConfigView, format: OutputFormat) {
                 print_field("URL", &s.url);
                 print_optional_field("Email", s.email.as_deref());
                 print_field("API Key", &s.api_key);
-                let auth_display = s
-                    .auth_method
-                    .as_ref()
-                    .map_or_else(|| "auto (not yet detected)".to_string(), ToString::to_string);
+                let auth_display = s.auth_method.as_ref().map_or_else(
+                    || "auto (not yet detected)".to_string(),
+                    ToString::to_string,
+                );
                 print_field("Auth", &auth_display);
             }
         }

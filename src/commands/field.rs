@@ -62,4 +62,21 @@ mod tests {
         let result = super::execute(&action, None, OutputFormat::Json, None).await;
         assert!(result.is_ok());
     }
+
+    #[tokio::test]
+    async fn field_list_http_500_returns_error() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/field/bug/status"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+            .mount(&mock)
+            .await;
+
+        let action = FieldAction::List {
+            name: "status".to_string(),
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
+    }
 }

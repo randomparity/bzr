@@ -10,6 +10,7 @@ mod group;
 mod product;
 mod server;
 mod user;
+mod version;
 
 use reqwest::header::HeaderValue;
 use reqwest::RequestBuilder;
@@ -17,8 +18,19 @@ use serde::Deserialize;
 
 use crate::error::{BzrError, Result};
 use crate::http::{build_http_client, AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
+use crate::types::BugzillaUser;
 use crate::types::{ApiMode, AuthMethod};
 use crate::xmlrpc::client::XmlRpcClient;
+
+/// Default fields for user queries (basic info).
+pub(super) const USER_FIELDS_BASIC: &str = "id,name,real_name,email,groups";
+/// Extended fields for detailed user queries.
+pub(super) const USER_FIELDS_DETAILED: &str = "id,name,real_name,email,can_login,groups";
+
+#[derive(Deserialize)]
+pub(super) struct UserSearchResponse {
+    pub(super) users: Vec<BugzillaUser>,
+}
 
 pub(super) fn encode_path(segment: &str) -> String {
     use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
@@ -135,10 +147,7 @@ impl BugzillaClient {
     }
 
     /// Send a GET request and deserialize the JSON response.
-    pub(super) async fn get_json<T: serde::de::DeserializeOwned>(
-        &self,
-        path: &str,
-    ) -> Result<T> {
+    pub(super) async fn get_json<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T> {
         let req = self.apply_auth(self.http.get(self.url(path)));
         let resp = self.send(req).await?;
         self.parse_json(resp).await
@@ -332,6 +341,10 @@ impl BugzillaClient {
 #[expect(clippy::unwrap_used)]
 pub(super) mod test_helpers {
     use super::*;
+
+    pub fn test_http_client() -> reqwest::Client {
+        crate::http::build_http_client().unwrap()
+    }
 
     pub fn test_client(base_url: &str) -> BugzillaClient {
         BugzillaClient::new(base_url, "test-key", AuthMethod::Header, ApiMode::Rest).unwrap()

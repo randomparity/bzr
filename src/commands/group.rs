@@ -80,11 +80,12 @@ pub async fn execute(
 }
 
 #[cfg(test)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, ResponseTemplate};
 
-    use super::super::test_helpers::setup_test_env;
+    use super::super::test_helpers::{capture_stdout, setup_test_env};
     use crate::cli::GroupAction;
     use crate::types::OutputFormat;
 
@@ -109,8 +110,13 @@ mod tests {
         let action = GroupAction::View {
             group: "admin".to_string(),
         };
-        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "group_view failed: {result:?}");
+        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        assert_eq!(parsed["id"], 1);
+        assert_eq!(parsed["name"], "admin");
+        assert_eq!(parsed["description"], "Admin group");
     }
 
     #[tokio::test]
@@ -129,8 +135,12 @@ mod tests {
             description: "A test group".into(),
             is_active: true,
         };
-        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "group create failed: {result:?}");
+        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        assert_eq!(parsed["action"], "created");
+        assert_eq!(parsed["id"], 5);
     }
 
     #[tokio::test]
@@ -243,6 +253,48 @@ mod tests {
             details: true,
         };
         let result = super::execute(&action, None, OutputFormat::Json, None).await;
-        assert!(result.is_ok(), "group list_users --details failed: {result:?}");
+        assert!(
+            result.is_ok(),
+            "group list_users --details failed: {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn group_view_http_500_returns_error() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/group"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+            .mount(&mock)
+            .await;
+
+        let action = GroupAction::View {
+            group: "admin".to_string(),
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("500") || err.contains("Internal Server Error"),
+            "expected HTTP 500 error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn group_view_malformed_json_returns_error() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/group"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("not json"))
+            .mount(&mock)
+            .await;
+
+        let action = GroupAction::View {
+            group: "admin".to_string(),
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
     }
 }

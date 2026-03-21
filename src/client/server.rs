@@ -1,5 +1,5 @@
-use super::user::UserSearchResponse;
 use super::BugzillaClient;
+use super::UserSearchResponse;
 use crate::error::{BzrError, Result};
 use crate::types::{ServerExtensions, ServerInfoResponse, ServerVersion, WhoamiResponse};
 

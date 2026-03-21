@@ -83,4 +83,24 @@ mod tests {
         let result = super::execute(&action, None, OutputFormat::Json, None).await;
         assert!(result.is_ok());
     }
+
+    #[tokio::test]
+    async fn component_create_http_500_returns_error() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("POST"))
+            .and(path("/rest/component"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+            .mount(&mock)
+            .await;
+
+        let action = ComponentAction::Create {
+            product: "TestProduct".to_string(),
+            name: "Backend".to_string(),
+            description: "Backend component".to_string(),
+            default_assignee: "dev@test.com".to_string(),
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
+    }
 }

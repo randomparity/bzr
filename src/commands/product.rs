@@ -64,6 +64,7 @@ pub async fn execute(
 }
 
 #[cfg(test)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, ResponseTemplate};
@@ -101,5 +102,27 @@ mod tests {
         };
         let result = super::execute(&action, None, OutputFormat::Json, None).await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn product_list_http_500_returns_error() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/product_accessible"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+            .mount(&mock)
+            .await;
+
+        let action = ProductAction::List {
+            r#type: ProductListType::Accessible,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("500") || err.contains("Internal Server Error"),
+            "expected HTTP 500 error, got: {err}"
+        );
     }
 }

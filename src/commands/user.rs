@@ -81,14 +81,14 @@ pub async fn execute(
 }
 
 #[cfg(test)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, ResponseTemplate};
 
-    use super::super::test_helpers::setup_test_env;
+    use super::super::test_helpers::{capture_stdout, setup_test_env};
     use crate::cli::UserAction;
     use crate::types::OutputFormat;
-
 
     #[tokio::test]
     async fn user_search_returns_results() {
@@ -110,8 +110,12 @@ mod tests {
             query: "alice".to_string(),
             details: false,
         };
-        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
+        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        assert_eq!(parsed[0]["id"], 1);
+        assert_eq!(parsed[0]["name"], "alice@test.com");
     }
 
     #[tokio::test]
@@ -180,7 +184,52 @@ mod tests {
             full_name: Some("New User".into()),
             password: None,
         };
-        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "user create failed: {result:?}");
+        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        assert_eq!(parsed["action"], "created");
+        assert_eq!(parsed["id"], 99);
+    }
+
+    #[tokio::test]
+    async fn user_search_http_500_returns_error() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+            .mount(&mock)
+            .await;
+
+        let action = UserAction::Search {
+            query: "alice".to_string(),
+            details: false,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("500") || err.contains("Internal Server Error"),
+            "expected HTTP 500 error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn user_search_malformed_json_returns_error() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/user"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("not valid json"))
+            .mount(&mock)
+            .await;
+
+        let action = UserAction::Search {
+            query: "alice".to_string(),
+            details: false,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
     }
 }

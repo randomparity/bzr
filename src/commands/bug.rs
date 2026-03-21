@@ -152,11 +152,12 @@ pub async fn execute(
 }
 
 #[cfg(test)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, ResponseTemplate};
 
-    use super::super::test_helpers::setup_test_env;
+    use super::super::test_helpers::{capture_stdout, setup_test_env};
     use crate::cli::BugAction;
     use crate::types::OutputFormat;
 
@@ -198,8 +199,14 @@ mod tests {
             fields: None,
             exclude_fields: None,
         };
-        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
+        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        assert_eq!(parsed[0]["id"], 1);
+        assert_eq!(parsed[0]["summary"], "Test bug");
+        assert_eq!(parsed[0]["status"], "NEW");
+        assert_eq!(parsed[0]["product"], "TestProduct");
     }
 
     #[tokio::test]
@@ -231,8 +238,13 @@ mod tests {
             fields: None,
             exclude_fields: None,
         };
-        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
+        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        assert_eq!(parsed["id"], 42);
+        assert_eq!(parsed["summary"], "Test bug");
+        assert_eq!(parsed["assigned_to"], "nobody@test.com");
     }
 
     #[tokio::test]
@@ -260,8 +272,12 @@ mod tests {
             whiteboard: None,
             flag: vec![],
         };
-        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
+        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        assert_eq!(parsed["action"], "updated");
+        assert_eq!(parsed["id"], 42);
     }
 
     #[tokio::test]
@@ -287,7 +303,100 @@ mod tests {
             op_sys: None,
             rep_platform: None,
         };
-        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
+        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        assert_eq!(parsed["action"], "created");
+        assert_eq!(parsed["id"], 99);
+    }
+
+    #[tokio::test]
+    async fn bug_list_http_500_returns_error() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+            .mount(&mock)
+            .await;
+
+        let action = BugAction::List {
+            product: None,
+            component: None,
+            status: None,
+            assignee: None,
+            creator: None,
+            priority: None,
+            severity: None,
+            id: vec![],
+            alias: None,
+            limit: 50,
+            fields: None,
+            exclude_fields: None,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("500") || err.contains("Internal Server Error"),
+            "expected HTTP 500 error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn bug_view_not_found_returns_error() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/999999"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 101,
+                "message": "Bug #999999 does not exist."
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = BugAction::View {
+            id: "999999".to_string(),
+            fields: None,
+            exclude_fields: None,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("does not exist") || err.contains("101"),
+            "expected not-found error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn bug_list_malformed_json_returns_error() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("not valid json"))
+            .mount(&mock)
+            .await;
+
+        let action = BugAction::List {
+            product: None,
+            component: None,
+            status: None,
+            assignee: None,
+            creator: None,
+            priority: None,
+            severity: None,
+            id: vec![],
+            alias: None,
+            limit: 50,
+            fields: None,
+            exclude_fields: None,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
     }
 }

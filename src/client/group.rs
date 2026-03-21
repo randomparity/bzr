@@ -1,8 +1,8 @@
 use serde::Deserialize;
 
 use super::encode_path;
-use super::user::{UserSearchResponse, USER_FIELDS_BASIC, USER_FIELDS_DETAILED};
 use super::BugzillaClient;
+use super::{UserSearchResponse, USER_FIELDS_BASIC, USER_FIELDS_DETAILED};
 use crate::error::{BzrError, Result};
 use crate::types::{BugzillaUser, CreateGroupParams, GroupInfo, UpdateGroupParams};
 
@@ -107,7 +107,7 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::super::encode_path;
-    use super::super::user::USER_FIELDS_BASIC;
+    use super::super::USER_FIELDS_BASIC;
     use crate::client::test_helpers::test_client;
     use crate::types::{CreateGroupParams, UpdateGroupParams};
 
@@ -151,7 +151,7 @@ mod tests {
             .and(query_param("group", "admin"))
             .and(query_param(
                 "include_fields",
-                super::super::user::USER_FIELDS_DETAILED,
+                super::super::USER_FIELDS_DETAILED,
             ))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [

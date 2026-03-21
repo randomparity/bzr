@@ -11,6 +11,16 @@ use quick_xml::Reader;
 
 use crate::error::{BzrError, Result};
 
+/// Convert an XML parse error to a `BzrError::XmlRpc`.
+fn xml_parse_err(e: &quick_xml::Error) -> BzrError {
+    BzrError::XmlRpc(format!("XML parse error: {e}"))
+}
+
+/// Return an `Err(BzrError::XmlRpc)` for unexpected EOF with context.
+fn unexpected_eof(context: &str) -> BzrError {
+    BzrError::XmlRpc(format!("unexpected EOF {context}"))
+}
+
 /// XML-RPC value types used to build requests and parse responses.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -204,12 +214,8 @@ pub fn parse_response(xml: &str) -> Result<Value> {
     loop {
         match reader.read_event() {
             Ok(Event::Start(ref e)) if e.name().as_ref() == b"methodResponse" => break,
-            Ok(Event::Eof) => {
-                return Err(BzrError::XmlRpc(
-                    "unexpected end of XML: no methodResponse".into(),
-                ));
-            }
-            Err(e) => return Err(BzrError::XmlRpc(format!("XML parse error: {e}"))),
+            Ok(Event::Eof) => return Err(unexpected_eof("looking for methodResponse")),
+            Err(ref e) => return Err(xml_parse_err(e)),
             _ => {}
         }
     }
@@ -227,12 +233,8 @@ pub fn parse_response(xml: &str) -> Result<Value> {
                     return parse_first_param(&mut reader);
                 }
             }
-            Ok(Event::Eof) => {
-                return Err(BzrError::XmlRpc(
-                    "unexpected end of XML in methodResponse".into(),
-                ));
-            }
-            Err(e) => return Err(BzrError::XmlRpc(format!("XML parse error: {e}"))),
+            Ok(Event::Eof) => return Err(unexpected_eof("in methodResponse")),
+            Err(ref e) => return Err(xml_parse_err(e)),
             _ => {}
         }
     }
@@ -248,10 +250,8 @@ fn parse_first_param(reader: &mut Reader<&[u8]>) -> Result<Value> {
             Ok(Event::End(ref e)) if e.name().as_ref() == b"params" => {
                 return Err(BzrError::XmlRpc("empty params in response".into()));
             }
-            Ok(Event::Eof) => {
-                return Err(BzrError::XmlRpc("unexpected EOF in params".into()));
-            }
-            Err(e) => return Err(BzrError::XmlRpc(format!("XML parse error: {e}"))),
+            Ok(Event::Eof) => return Err(unexpected_eof("in params")),
+            Err(ref e) => return Err(xml_parse_err(e)),
             _ => {}
         }
     }
@@ -263,10 +263,8 @@ fn parse_value(reader: &mut Reader<&[u8]>) -> Result<Value> {
     loop {
         match reader.read_event() {
             Ok(Event::Start(ref e)) if e.name().as_ref() == b"value" => break,
-            Ok(Event::Eof) => {
-                return Err(BzrError::XmlRpc("unexpected EOF looking for value".into()));
-            }
-            Err(e) => return Err(BzrError::XmlRpc(format!("XML parse error: {e}"))),
+            Ok(Event::Eof) => return Err(unexpected_eof("looking for value")),
+            Err(ref e) => return Err(xml_parse_err(e)),
             _ => {}
         }
     }
@@ -337,10 +335,8 @@ fn parse_value_content(reader: &mut Reader<&[u8]>) -> Result<Value> {
             Ok(Event::End(ref e)) if e.name().as_ref() == b"value" => {
                 return Ok(Value::String(String::new()));
             }
-            Ok(Event::Eof) => {
-                return Err(BzrError::XmlRpc("unexpected EOF in value".into()));
-            }
-            Err(e) => return Err(BzrError::XmlRpc(format!("XML parse error: {e}"))),
+            Ok(Event::Eof) => return Err(unexpected_eof("in value")),
+            Err(ref e) => return Err(xml_parse_err(e)),
             _ => {}
         }
     }
@@ -366,10 +362,12 @@ fn read_text_content(reader: &mut Reader<&[u8]>, end_tag: &[u8]) -> Result<Strin
                 return Ok(text);
             }
             Ok(Event::Eof) => {
-                let tag = String::from_utf8_lossy(end_tag);
-                return Err(BzrError::XmlRpc(format!("unexpected EOF reading <{tag}>")));
+                return Err(unexpected_eof(&format!(
+                    "reading <{}>",
+                    String::from_utf8_lossy(end_tag)
+                )));
             }
-            Err(e) => return Err(BzrError::XmlRpc(format!("XML parse error: {e}"))),
+            Err(ref e) => return Err(xml_parse_err(e)),
             _ => {}
         }
     }
@@ -386,10 +384,8 @@ fn parse_array(reader: &mut Reader<&[u8]>) -> Result<Value> {
             Ok(Event::End(ref e)) if e.name().as_ref() == b"array" => {
                 return Ok(Value::Array(items));
             }
-            Ok(Event::Eof) => {
-                return Err(BzrError::XmlRpc("unexpected EOF in array".into()));
-            }
-            Err(e) => return Err(BzrError::XmlRpc(format!("XML parse error: {e}"))),
+            Ok(Event::Eof) => return Err(unexpected_eof("in array")),
+            Err(ref e) => return Err(xml_parse_err(e)),
             _ => {}
         }
     }
@@ -401,10 +397,8 @@ fn parse_array(reader: &mut Reader<&[u8]>) -> Result<Value> {
                 items.push(parse_value_content(reader)?);
             }
             Ok(Event::End(ref e)) if e.name().as_ref() == b"data" => break,
-            Ok(Event::Eof) => {
-                return Err(BzrError::XmlRpc("unexpected EOF in array data".into()));
-            }
-            Err(e) => return Err(BzrError::XmlRpc(format!("XML parse error: {e}"))),
+            Ok(Event::Eof) => return Err(unexpected_eof("in array data")),
+            Err(ref e) => return Err(xml_parse_err(e)),
             _ => {}
         }
     }
@@ -426,10 +420,8 @@ fn parse_struct(reader: &mut Reader<&[u8]>) -> Result<Value> {
             Ok(Event::End(ref e)) if e.name().as_ref() == b"struct" => {
                 return Ok(Value::Struct(members));
             }
-            Ok(Event::Eof) => {
-                return Err(BzrError::XmlRpc("unexpected EOF in struct".into()));
-            }
-            Err(e) => return Err(BzrError::XmlRpc(format!("XML parse error: {e}"))),
+            Ok(Event::Eof) => return Err(unexpected_eof("in struct")),
+            Err(ref e) => return Err(xml_parse_err(e)),
             _ => {}
         }
     }
@@ -457,10 +449,8 @@ fn parse_member(reader: &mut Reader<&[u8]>) -> Result<(String, Value)> {
                 })?;
                 return Ok((n, v));
             }
-            Ok(Event::Eof) => {
-                return Err(BzrError::XmlRpc("unexpected EOF in member".into()));
-            }
-            Err(e) => return Err(BzrError::XmlRpc(format!("XML parse error: {e}"))),
+            Ok(Event::Eof) => return Err(unexpected_eof("in member")),
+            Err(ref e) => return Err(xml_parse_err(e)),
             _ => {}
         }
     }
@@ -478,12 +468,12 @@ fn skip_to_end(reader: &mut Reader<&[u8]>, tag: &[u8]) -> Result<()> {
                 }
             }
             Ok(Event::Eof) => {
-                let name = String::from_utf8_lossy(tag);
-                return Err(BzrError::XmlRpc(format!(
-                    "unexpected EOF skipping to </{name}>"
+                return Err(unexpected_eof(&format!(
+                    "skipping to </{}>",
+                    String::from_utf8_lossy(tag)
                 )));
             }
-            Err(e) => return Err(BzrError::XmlRpc(format!("XML parse error: {e}"))),
+            Err(ref e) => return Err(xml_parse_err(e)),
             _ => {}
         }
     }
