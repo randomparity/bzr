@@ -1,7 +1,7 @@
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
-use super::common::{print_formatted, truncate};
+use super::formatting::{print_formatted, truncate};
 use crate::types::{OutputFormat, Product};
 
 #[derive(Tabled)]

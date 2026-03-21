@@ -2,7 +2,7 @@ mod attachment;
 mod bug;
 mod classification;
 mod comment;
-mod common;
+mod formatting;
 mod config;
 mod field;
 mod group;

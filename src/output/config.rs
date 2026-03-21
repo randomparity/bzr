@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use super::common::{mask_api_key, print_field, print_formatted, print_optional_field};
+use super::formatting::{mask_api_key, print_field, print_formatted, print_optional_field};
 use crate::types::{AuthMethod, OutputFormat};
 
 #[derive(Serialize)]

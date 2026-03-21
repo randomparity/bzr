@@ -1,7 +1,7 @@
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
-use super::common::{opt_yes_no, print_field, print_formatted, print_optional_field};
+use super::formatting::{opt_yes_no, print_field, print_formatted, print_optional_field};
 use crate::types::{BugzillaUser, OutputFormat, WhoamiResponse};
 
 #[derive(Tabled)]

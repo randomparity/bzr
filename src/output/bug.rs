@@ -1,7 +1,7 @@
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
-use super::common::{
+use super::formatting::{
     colorize_status, print_field, print_formatted, print_id_list_field, print_list_field,
     print_optional_field, shorten_email, truncate,
 };

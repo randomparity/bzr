@@ -69,7 +69,7 @@ mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, ResponseTemplate};
 
-    use super::super::test_helpers::setup_test_env;
+    use super::super::test_helpers::{capture_stdout, extract_json, setup_test_env};
     use crate::cli::ProductAction;
     use crate::types::{OutputFormat, ProductListType};
 
@@ -100,8 +100,11 @@ mod tests {
         let action = ProductAction::List {
             r#type: ProductListType::Accessible,
         };
-        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
+        let parsed = extract_json(&output);
+        assert_eq!(parsed[0]["name"], "TestProduct");
     }
 
     #[tokio::test]

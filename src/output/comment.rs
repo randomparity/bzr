@@ -1,6 +1,6 @@
 use colored::Colorize;
 
-use super::common::print_formatted;
+use super::formatting::print_formatted;
 use crate::types::{Comment, OutputFormat};
 
 #[expect(clippy::print_stdout)]

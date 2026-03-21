@@ -1,6 +1,6 @@
 use colored::Colorize;
 
-use super::common::{print_bool_field, print_field, print_formatted};
+use super::formatting::{print_bool_field, print_field, print_formatted};
 use crate::types::{GroupInfo, OutputFormat};
 
 #[expect(clippy::print_stdout)]

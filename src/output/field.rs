@@ -1,6 +1,6 @@
 use tabled::{Table, Tabled};
 
-use super::common::{print_formatted, yes_no};
+use super::formatting::{print_formatted, yes_no};
 use crate::types::{FieldValue, OutputFormat};
 
 #[derive(Tabled)]

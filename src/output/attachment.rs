@@ -1,6 +1,6 @@
 use colored::Colorize;
 
-use super::common::{print_field, print_formatted, print_optional_field};
+use super::formatting::{print_field, print_formatted, print_optional_field};
 use crate::types::{Attachment, OutputFormat};
 
 #[expect(clippy::print_stdout)]

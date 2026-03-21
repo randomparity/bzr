@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use super::common::print_json;
+use super::formatting::print_json;
 use crate::types::OutputFormat;
 
 // ── Result output ───────────────────────────────────────────────────

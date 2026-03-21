@@ -1,7 +1,7 @@
 use colored::Colorize;
 use serde::Serialize;
 
-use super::common::print_formatted;
+use super::formatting::print_formatted;
 use crate::types::{OutputFormat, ServerInfoResponse};
 
 /// Combined server information for display.

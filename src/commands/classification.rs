@@ -22,11 +22,12 @@ pub async fn execute(
 }
 
 #[cfg(test)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, ResponseTemplate};
 
-    use super::super::test_helpers::setup_test_env;
+    use super::super::test_helpers::{capture_stdout, extract_json, setup_test_env};
     use crate::cli::ClassificationAction;
     use crate::types::OutputFormat;
 
@@ -50,8 +51,12 @@ mod tests {
         let action = ClassificationAction::View {
             name: "Unclassified".to_string(),
         };
-        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
+        let parsed = extract_json(&output);
+        assert_eq!(parsed["name"], "Unclassified");
+        assert_eq!(parsed["description"], "Not yet classified");
     }
 
     #[tokio::test]
