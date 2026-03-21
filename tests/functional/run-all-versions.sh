@@ -3,7 +3,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VERSIONS=("bz50" "bz52")
+VERSIONS=("bz50" "bz52" "bz53")
 FAILED=0
 RESULTS=()
 

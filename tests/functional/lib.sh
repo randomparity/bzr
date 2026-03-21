@@ -9,6 +9,7 @@ bz_version_num() {
     case "$BZ_VERSION" in
         bz50) echo 500 ;;
         bz52) echo 520 ;;
+        bz53) echo 530 ;;
         *)    echo 0 ;;
     esac
 }
