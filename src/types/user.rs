@@ -55,6 +55,8 @@ impl From<BugzillaUser> for WhoamiResponse {
 pub struct CreateUserParams {
     pub email: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub login: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub full_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub password: Option<String>,

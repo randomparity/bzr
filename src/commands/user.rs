@@ -39,11 +39,13 @@ pub async fn execute(
         }
         UserAction::Create {
             email,
+            login,
             full_name,
             password,
         } => {
             let params = CreateUserParams {
                 email: email.clone(),
+                login: login.clone(),
                 full_name: full_name.clone(),
                 password: password.clone(),
             };
@@ -181,6 +183,7 @@ mod tests {
 
         let action = UserAction::Create {
             email: "new@test.com".into(),
+            login: None,
             full_name: Some("New User".into()),
             password: None,
         };

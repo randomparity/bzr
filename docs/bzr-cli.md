@@ -556,11 +556,13 @@ Create a new user (requires admin privileges).
 ```bash
 bzr user create --email alice@example.com --full-name "Alice Smith"
 bzr user create --email bob@example.com --password s3cret
+bzr user create --email carol@example.com --login carol   # Bugzilla 5.3+ with use_email_as_login disabled
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
 | `--email <E>` | Yes | User email |
+| `--login <L>` | No | Login name (required on Bugzilla 5.3+ when `use_email_as_login` is disabled; set `api_mode = "hybrid"` to use XML-RPC which avoids the REST login field conflict) |
 | `--full-name <N>` | No | Full name |
 | `--password <P>` | No | Password (server generates one if omitted) |
 

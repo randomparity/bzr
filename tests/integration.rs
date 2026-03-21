@@ -1214,6 +1214,7 @@ async fn user_create_integration() {
 
     let action = bzr::cli::UserAction::Create {
         email: "new@example.com".to_string(),
+        login: None,
         full_name: Some("New User".to_string()),
         password: None,
     };
