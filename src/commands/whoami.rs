@@ -13,10 +13,8 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let (client, email_hint) = super::shared::connect_client_with_email(server, api).await?;
-    // Email hint is used for Bugzilla 5.0 fallback (whoami endpoint
-    // was added in 5.1; older servers need a user lookup by email).
-    let whoami = client.whoami(email_hint.as_deref()).await?;
+    let client = super::shared::connect_client(server, api).await?;
+    let whoami = client.whoami().await?;
     output::print_whoami(&whoami, format);
     Ok(())
 }

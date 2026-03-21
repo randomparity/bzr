@@ -643,9 +643,9 @@ async fn attachment_list_integration() {
 
 // ── Config commands (no mock server needed) ───────────────────────────
 
-#[test]
-fn config_show_integration() {
-    let _lock = ENV_LOCK.blocking_lock();
+#[tokio::test]
+async fn config_show_integration() {
+    let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
 
     let config_dir = tmp.path().join("bzr");
@@ -664,7 +664,7 @@ api_key = "key-1234567890"
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let action = bzr::cli::ConfigAction::Show;
-    let result = bzr::commands::config::execute(&action, bzr::types::OutputFormat::Json);
+    let result = bzr::commands::config::execute(&action, bzr::types::OutputFormat::Json).await;
     assert!(result.is_ok(), "config show should succeed: {result:?}");
 }
 
@@ -1391,9 +1391,9 @@ async fn group_list_users_integration() {
 
 // ── Config set-server and set-default ────────────────────────────────
 
-#[test]
-fn config_set_server_integration() {
-    let _lock = ENV_LOCK.blocking_lock();
+#[tokio::test]
+async fn config_set_server_integration() {
+    let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
 
     let config_dir = tmp.path().join("bzr");
@@ -1412,16 +1412,16 @@ fn config_set_server_integration() {
         email: None,
         auth_method: None,
     };
-    let result = bzr::commands::config::execute(&action, bzr::types::OutputFormat::Json);
+    let result = bzr::commands::config::execute(&action, bzr::types::OutputFormat::Json).await;
     assert!(
         result.is_ok(),
         "config set-server should succeed: {result:?}"
     );
 }
 
-#[test]
-fn config_set_default_integration() {
-    let _lock = ENV_LOCK.blocking_lock();
+#[tokio::test]
+async fn config_set_default_integration() {
+    let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
 
     let config_dir = tmp.path().join("bzr");
@@ -1436,7 +1436,7 @@ fn config_set_default_integration() {
     let action = bzr::cli::ConfigAction::SetDefault {
         name: "staging".to_string(),
     };
-    let result = bzr::commands::config::execute(&action, bzr::types::OutputFormat::Json);
+    let result = bzr::commands::config::execute(&action, bzr::types::OutputFormat::Json).await;
     assert!(
         result.is_ok(),
         "config set-default should succeed: {result:?}"

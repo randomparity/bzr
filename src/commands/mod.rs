@@ -16,8 +16,8 @@ pub mod whoami;
 /// Shared test utilities for command module tests.
 /// Tests that set `XDG_CONFIG_HOME` must hold this lock to avoid races.
 #[cfg(test)]
-pub(crate) mod test_helpers {
-    pub(crate) use crate::ENV_LOCK;
+pub(super) mod test_helpers {
+    pub(super) use crate::ENV_LOCK;
 
     /// Acquire ENV_LOCK, start a mock server, create a temp dir, and configure it.
     /// Returns the guard, mock server, and temp dir (all must stay alive for the test).
@@ -77,30 +77,24 @@ api_mode = "rest"
         let tmp = tempfile::NamedTempFile::new().unwrap();
         let tmp_fd = tmp.as_file().as_raw_fd();
 
-        // Save original stdout fd.
         // SAFETY: dup() on a valid fd is safe; tests are serialized via ENV_LOCK.
         let saved_stdout = unsafe { dup(1) };
         assert!(saved_stdout >= 0, "dup(1) failed");
 
-        // Redirect stdout to temp file.
         // SAFETY: dup2() on valid fds is safe.
         unsafe {
             dup2(tmp_fd, 1);
         }
 
         let result = f.await;
-
-        // Flush stdout to ensure all output is written to the file.
         std::io::stdout().flush().unwrap();
 
-        // Restore original stdout.
         // SAFETY: Restoring the saved fd.
         unsafe {
             dup2(saved_stdout, 1);
             close(saved_stdout);
         }
 
-        // Read captured output.
         let mut captured = String::new();
         let mut file = tmp.reopen().unwrap();
         file.seek(std::io::SeekFrom::Start(0)).unwrap();

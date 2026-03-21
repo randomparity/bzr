@@ -29,13 +29,16 @@ impl BugzillaClient {
         };
         // Bugzilla 5.0 requires at least one of ids/names/match alongside
         // the group filter. Use a broad match pattern to list all members.
-        let req = self.apply_auth(self.http.get(self.url("user")).query(&[
-            ("group", group_name),
-            ("include_fields", fields),
-            ("match", "*"),
-        ]));
-        let resp = self.send(req).await?;
-        let data: UserSearchResponse = self.parse_json(resp).await?;
+        let data: UserSearchResponse = self
+            .get_json_query(
+                "user",
+                &[
+                    ("group", group_name),
+                    ("include_fields", fields),
+                    ("match", "*"),
+                ],
+            )
+            .await?;
         Ok(data.users)
     }
 

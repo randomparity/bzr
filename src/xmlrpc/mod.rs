@@ -58,7 +58,10 @@ impl Value {
         }
     }
 
-    #[cfg(test)]
+    #[expect(
+        dead_code,
+        reason = "API completeness — all Value variants should be accessible"
+    )]
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             Value::Bool(b) => Some(*b),
@@ -80,7 +83,10 @@ impl Value {
         }
     }
 
-    #[cfg(test)]
+    #[expect(
+        dead_code,
+        reason = "API completeness — all Value variants should be accessible"
+    )]
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             Value::Double(d) => Some(*d),
@@ -219,7 +225,6 @@ pub fn parse_response(xml: &str) -> Result<Value> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
 
-    // Find methodResponse
     loop {
         match next_event(&mut reader, "looking for methodResponse")? {
             Event::Start(ref e) if e.name().as_ref() == b"methodResponse" => break,
@@ -227,7 +232,6 @@ pub fn parse_response(xml: &str) -> Result<Value> {
         }
     }
 
-    // Check for fault or params
     loop {
         match next_event(&mut reader, "in methodResponse")? {
             Event::Start(ref e) if e.name().as_ref() == b"fault" => {
@@ -243,7 +247,6 @@ pub fn parse_response(xml: &str) -> Result<Value> {
 }
 
 fn parse_first_param(reader: &mut Reader<&[u8]>) -> Result<Value> {
-    // Find <param>, then <value>
     loop {
         match next_event(reader, "in params")? {
             Event::Start(ref e) if e.name().as_ref() == b"param" => {
@@ -259,7 +262,6 @@ fn parse_first_param(reader: &mut Reader<&[u8]>) -> Result<Value> {
 
 /// Parse a `<value>` element. Advances the reader past the closing `</value>`.
 fn parse_value(reader: &mut Reader<&[u8]>) -> Result<Value> {
-    // Find opening <value>
     loop {
         match next_event(reader, "looking for value")? {
             Event::Start(ref e) if e.name().as_ref() == b"value" => break,

@@ -70,7 +70,7 @@ pub async fn dispatch(cli: &cli::Cli, format: types::OutputFormat) -> error::Res
         cli::Commands::Attachment { action } => {
             commands::attachment::execute(action, server, format, api).await
         }
-        cli::Commands::Config { action } => commands::config::execute(action, format),
+        cli::Commands::Config { action } => commands::config::execute(action, format).await,
         cli::Commands::Product { action } => {
             commands::product::execute(action, server, format, api).await
         }

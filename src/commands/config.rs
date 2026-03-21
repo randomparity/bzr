@@ -1,7 +1,8 @@
 //! Configuration management commands.
 //!
-//! Unlike other command modules, `execute()` is **synchronous** because config
-//! operations are pure local file I/O — no network client or auth detection needed.
+//! Config operations are pure local file I/O — no network client or auth
+//! detection needed. The function is async for signature consistency with
+//! sibling command modules.
 
 use std::fmt::Write as _;
 
@@ -11,7 +12,11 @@ use crate::error::Result;
 use crate::output::{self, ConfigResult};
 use crate::types::OutputFormat;
 
-pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
+#[expect(
+    clippy::unused_async,
+    reason = "async for signature consistency with sibling execute fns"
+)]
+pub async fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
     match action {
         ConfigAction::SetServer {
             name,
@@ -98,9 +103,9 @@ mod tests {
     /// Combined test for config operations that require `env::set_var`.
     /// Grouped in a single test to avoid env var race conditions with
     /// parallel test execution.
-    #[test]
-    fn config_operations_with_file_io() {
-        let _lock = crate::ENV_LOCK.blocking_lock();
+    #[tokio::test]
+    async fn config_operations_with_file_io() {
+        let _lock = crate::ENV_LOCK.lock().await;
         let tmp = tempfile::TempDir::new().unwrap();
         // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
         unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
@@ -113,7 +118,8 @@ mod tests {
                 name: "nonexistent".into(),
             },
             OutputFormat::Table,
-        );
+        )
+        .await;
         assert!(result.is_err());
         assert!(
             matches!(result.unwrap_err(), BzrError::Config(_)),
@@ -131,6 +137,7 @@ mod tests {
             },
             OutputFormat::Table,
         )
+        .await
         .unwrap();
         let config = Config::load().unwrap();
         assert_eq!(config.default_server.as_deref(), Some("first"));
@@ -147,6 +154,7 @@ mod tests {
             },
             OutputFormat::Table,
         )
+        .await
         .unwrap();
         let config = Config::load().unwrap();
         assert_eq!(

@@ -42,6 +42,11 @@ enum PreparedAuth {
     QueryParam(String),
 }
 
+/// HTTP client for the Bugzilla REST API.
+///
+/// Update methods use the identifier type that the Bugzilla REST API accepts:
+/// - `u64` for resources identified only by numeric ID (e.g. `update_component`)
+/// - `&str` for resources that accept name-based addressing (e.g. `update_product`, `update_user`)
 pub struct BugzillaClient {
     pub(super) http: reqwest::Client,
     pub(super) base_url: String,
@@ -49,6 +54,8 @@ pub struct BugzillaClient {
     pub(super) api_key: String,
     pub(super) api_mode: ApiMode,
     pub(super) xmlrpc: Option<XmlRpcClient>,
+    /// Email hint for Bugzilla 5.0 compatibility (whoami fallback via user lookup).
+    email_hint: Option<String>,
 }
 
 /// Generic response for endpoints that return a single `id` field.
@@ -97,6 +104,7 @@ impl BugzillaClient {
         api_key: &str,
         auth_method: AuthMethod,
         api_mode: ApiMode,
+        email_hint: Option<&str>,
     ) -> Result<Self> {
         let auth = match auth_method {
             AuthMethod::Header => {
@@ -131,6 +139,7 @@ impl BugzillaClient {
             api_key: api_key.to_string(),
             api_mode,
             xmlrpc,
+            email_hint: email_hint.map(String::from),
         })
     }
 
@@ -149,6 +158,17 @@ impl BugzillaClient {
     /// Send a GET request and deserialize the JSON response.
     pub(super) async fn get_json<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T> {
         let req = self.apply_auth(self.http.get(self.url(path)));
+        let resp = self.send(req).await?;
+        self.parse_json(resp).await
+    }
+
+    /// Send a GET request with query parameters and deserialize the JSON response.
+    pub(super) async fn get_json_query<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+    ) -> Result<T> {
+        let req = self.apply_auth(self.http.get(self.url(path)).query(query));
         let resp = self.send(req).await?;
         self.parse_json(resp).await
     }
@@ -314,7 +334,10 @@ impl BugzillaClient {
     async fn extract_api_error(&self, response: reqwest::Response) -> Result<reqwest::Response> {
         if response.status().is_client_error() || response.status().is_server_error() {
             let status = response.status();
-            let body = response.text().await.unwrap_or_default();
+            let body = response.text().await.unwrap_or_else(|e| {
+                tracing::warn!("failed to read error response body: {e}");
+                String::new()
+            });
             tracing::debug!(
                 %status,
                 body = &body[..body.len().min(512)],
@@ -347,15 +370,36 @@ pub(super) mod test_helpers {
     }
 
     pub fn test_client(base_url: &str) -> BugzillaClient {
-        BugzillaClient::new(base_url, "test-key", AuthMethod::Header, ApiMode::Rest).unwrap()
+        BugzillaClient::new(
+            base_url,
+            "test-key",
+            AuthMethod::Header,
+            ApiMode::Rest,
+            None,
+        )
+        .unwrap()
     }
 
     pub fn test_client_hybrid(base_url: &str) -> BugzillaClient {
-        BugzillaClient::new(base_url, "test-key", AuthMethod::Header, ApiMode::Hybrid).unwrap()
+        BugzillaClient::new(
+            base_url,
+            "test-key",
+            AuthMethod::Header,
+            ApiMode::Hybrid,
+            None,
+        )
+        .unwrap()
     }
 
     pub fn test_client_query_param(base_url: &str) -> BugzillaClient {
-        BugzillaClient::new(base_url, "test-key", AuthMethod::QueryParam, ApiMode::Rest).unwrap()
+        BugzillaClient::new(
+            base_url,
+            "test-key",
+            AuthMethod::QueryParam,
+            ApiMode::Rest,
+            None,
+        )
+        .unwrap()
     }
 }
 
