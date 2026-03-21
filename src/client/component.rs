@@ -10,6 +10,10 @@ impl BugzillaClient {
         Ok(data.id)
     }
 
+    /// Updates a component by numeric ID.
+    ///
+    /// Unlike peer update methods (`update_product`, `update_group`) which accept string names,
+    /// the Bugzilla REST API's component endpoint only accepts numeric IDs.
     pub async fn update_component(&self, id: u64, updates: &UpdateComponentParams) -> Result<()> {
         self.put_json(&format!("component/{id}"), updates).await
     }

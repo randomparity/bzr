@@ -177,21 +177,31 @@ async fn detect_auth_method(
 
     // Fall back to valid_login endpoint (Bugzilla 5.0+, requires email)
     if let Some(login) = email {
-        if let Some(method) = try_valid_login(http, base, api_key, &key_val, login).await {
-            // valid_login can give false negatives for header auth on servers
-            // with custom extensions (e.g. IBM LTC). When query_param is
-            // detected, verify by probing a real endpoint with header auth.
-            // Prefer header when both work -- it avoids leaking keys in URLs.
-            if method == AuthMethod::QueryParam
-                && verify_header_auth_via_rest(http, base, &key_val).await
-            {
-                tracing::info!(
-                    "header auth works on API endpoints despite valid_login \
-                     rejecting it; preferring header"
+        match try_valid_login(http, base, api_key, &key_val, login).await {
+            ValidLoginOutcome::Authenticated(method) => {
+                // valid_login can give false negatives for header auth on servers
+                // with custom extensions (e.g. IBM LTC). When query_param is
+                // detected, verify by probing a real endpoint with header auth.
+                // Prefer header when both work -- it avoids leaking keys in URLs.
+                if method == AuthMethod::QueryParam
+                    && verify_header_auth_via_rest(http, base, &key_val).await
+                {
+                    tracing::info!(
+                        "header auth works on API endpoints despite valid_login \
+                         rejecting it; preferring header"
+                    );
+                    return Ok(AuthMethod::Header);
+                }
+                return Ok(method);
+            }
+            ValidLoginOutcome::NetworkError => {
+                tracing::warn!(
+                    "valid_login probes failed due to network error; \
+                     defaulting to header auth"
                 );
                 return Ok(AuthMethod::Header);
             }
-            return Ok(method);
+            ValidLoginOutcome::AuthRejected => {}
         }
     }
 
@@ -298,17 +308,24 @@ impl TryFrom<serde_json::Value> for ValidLoginResult {
     }
 }
 
+/// Outcome of a `valid_login` probe, mirroring [`WhoamiOutcome`].
+enum ValidLoginOutcome {
+    Authenticated(AuthMethod),
+    AuthRejected,
+    NetworkError,
+}
+
 async fn try_valid_login(
     http: &reqwest::Client,
     base: &str,
     api_key: &str,
     key_header: &HeaderValue,
     login: &str,
-) -> Option<AuthMethod> {
+) -> ValidLoginOutcome {
     let url = format!("{base}/rest/valid_login");
 
     // Probe: header-based auth
-    if let Some(method) = probe_valid_login(
+    match probe_valid_login(
         http,
         &url,
         &[("login", login)],
@@ -317,11 +334,13 @@ async fn try_valid_login(
     )
     .await
     {
-        return Some(method);
+        ValidLoginOutcome::Authenticated(m) => return ValidLoginOutcome::Authenticated(m),
+        ValidLoginOutcome::NetworkError => return ValidLoginOutcome::NetworkError,
+        ValidLoginOutcome::AuthRejected => {} // try query-param next
     }
 
     // Probe: query-param auth
-    if let Some(method) = probe_valid_login(
+    match probe_valid_login(
         http,
         &url,
         &[("login", login), (AUTH_QUERY_PARAM, api_key)],
@@ -330,11 +349,14 @@ async fn try_valid_login(
     )
     .await
     {
-        return Some(method);
+        outcome @ (ValidLoginOutcome::Authenticated(_) | ValidLoginOutcome::NetworkError) => {
+            return outcome;
+        }
+        ValidLoginOutcome::AuthRejected => {}
     }
 
     tracing::debug!("valid_login probes both failed");
-    None
+    ValidLoginOutcome::AuthRejected
 }
 
 async fn probe_valid_login(
@@ -343,25 +365,40 @@ async fn probe_valid_login(
     query: &[(&str, &str)],
     key_header: Option<&HeaderValue>,
     method: AuthMethod,
-) -> Option<AuthMethod> {
+) -> ValidLoginOutcome {
     let mut req = http.get(url).query(query);
     if let Some(hdr) = key_header {
         req = req.header(AUTH_HEADER_NAME, hdr.clone());
     }
-    let resp = req.send().await.ok()?;
+    let resp = match req.send().await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(error = %e, "valid_login probe network error");
+            return ValidLoginOutcome::NetworkError;
+        }
+    };
     let status = resp.status();
     if !status.is_success() {
         tracing::debug!(%status, %method, "valid_login probe failed");
-        return None;
+        return ValidLoginOutcome::AuthRejected;
     }
-    let body_text = resp.text().await.ok()?;
+    let body_text = match resp.text().await {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::warn!(error = %e, "valid_login response read error");
+            return ValidLoginOutcome::NetworkError;
+        }
+    };
     tracing::trace!(probe = "valid_login", %method, body = body_text, "auth probe response");
-    let parsed: ValidLoginResponse = serde_json::from_str(&body_text).ok()?;
+    let parsed: ValidLoginResponse = match serde_json::from_str(&body_text) {
+        Ok(p) => p,
+        Err(_) => return ValidLoginOutcome::AuthRejected,
+    };
     if parsed.result.0 {
-        Some(method)
+        ValidLoginOutcome::Authenticated(method)
     } else {
         tracing::debug!(%method, "valid_login returned false");
-        None
+        ValidLoginOutcome::AuthRejected
     }
 }
 
