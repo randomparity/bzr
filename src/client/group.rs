@@ -19,12 +19,6 @@ struct GroupMembershipAction {
 }
 use crate::types::{BugzillaUser, CreateGroupParams, GroupInfo, UpdateGroupParams};
 
-#[derive(Serialize)]
-struct GroupGetParams<'a> {
-    names: &'a [&'a str],
-    membership: bool,
-}
-
 #[derive(Deserialize)]
 struct GroupResponse {
     groups: Vec<GroupInfo>,
@@ -79,13 +73,14 @@ impl BugzillaClient {
     }
 
     pub async fn get_group(&self, group: &str) -> Result<GroupInfo> {
-        // Bugzilla 5.3+ requires POST for Group.get (error 32610 if GET is used).
-        // POST is backward-compatible with older versions.
-        let params = GroupGetParams {
-            names: &[group],
-            membership: true,
-        };
-        let req = self.apply_auth(self.http.post(self.url("group")).json(&params));
+        // Use GET /rest/group/<name> with the group name in the URL path.
+        // This avoids POST (which Bugzilla routes to Group.create) and works
+        // across all Bugzilla versions including 5.3+.
+        let req = self.apply_auth(
+            self.http
+                .get(self.url(&format!("group/{}", encode_path(group))))
+                .query(&[("membership", "1")]),
+        );
         let resp = self.send(req).await?;
         let data: GroupResponse = self.parse_json(resp).await?;
         data.groups
@@ -280,8 +275,9 @@ mod tests {
     #[tokio::test]
     async fn get_group_returns_info() {
         let mock = MockServer::start().await;
-        Mock::given(method("POST"))
-            .and(path("/rest/group"))
+        Mock::given(method("GET"))
+            .and(path("/rest/group/admin"))
+            .and(query_param("membership", "1"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "groups": [{
                     "id": 1,
@@ -303,8 +299,8 @@ mod tests {
     #[tokio::test]
     async fn get_group_forbidden() {
         let mock = MockServer::start().await;
-        Mock::given(method("POST"))
-            .and(path("/rest/group"))
+        Mock::given(method("GET"))
+            .and(path("/rest/group/secret"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "error": true,
                 "code": 51,

@@ -289,8 +289,6 @@ test_begin "26. group view functest-grp"
 run_bzr group view functest-grp
 if [[ $BZR_EXIT -eq 0 ]] && assert_json '.name' "functest-grp"; then
     test_pass
-elif grep -q "32610" "$BZR_STDERR" 2>/dev/null; then
-    test_skip "group get requires POST on Bugzilla 5.3+"
 else
     assert_success
 fi
