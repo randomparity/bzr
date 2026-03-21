@@ -93,7 +93,7 @@ mod tests {
     async fn group_view_returns_info() {
         let (_lock, mock, _tmp) = setup_test_env().await;
 
-        Mock::given(method("GET"))
+        Mock::given(method("POST"))
             .and(path("/rest/group"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "groups": [{
@@ -263,7 +263,7 @@ mod tests {
     async fn group_view_http_500_returns_error() {
         let (_lock, mock, _tmp) = setup_test_env().await;
 
-        Mock::given(method("GET"))
+        Mock::given(method("POST"))
             .and(path("/rest/group"))
             .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
             .mount(&mock)
@@ -285,7 +285,7 @@ mod tests {
     async fn group_view_malformed_json_returns_error() {
         let (_lock, mock, _tmp) = setup_test_env().await;
 
-        Mock::given(method("GET"))
+        Mock::given(method("POST"))
             .and(path("/rest/group"))
             .respond_with(ResponseTemplate::new(200).set_body_string("not json"))
             .mount(&mock)

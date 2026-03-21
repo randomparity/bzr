@@ -73,10 +73,12 @@ impl BugzillaClient {
     }
 
     pub async fn get_group(&self, group: &str) -> Result<GroupInfo> {
+        // Bugzilla 5.3+ requires POST for Group.get (error 32610 if GET is used).
+        // POST is backward-compatible with older versions.
         let req = self.apply_auth(
             self.http
-                .get(self.url("group"))
-                .query(&[("names", group), ("membership", "1")]),
+                .post(self.url("group"))
+                .json(&serde_json::json!({"names": [group], "membership": true})),
         );
         let resp = self.send(req).await?;
         let data: GroupResponse = self.parse_json(resp).await?;
@@ -272,9 +274,8 @@ mod tests {
     #[tokio::test]
     async fn get_group_returns_info() {
         let mock = MockServer::start().await;
-        Mock::given(method("GET"))
+        Mock::given(method("POST"))
             .and(path("/rest/group"))
-            .and(query_param("names", "admin"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "groups": [{
                     "id": 1,
@@ -296,7 +297,7 @@ mod tests {
     #[tokio::test]
     async fn get_group_forbidden() {
         let mock = MockServer::start().await;
-        Mock::given(method("GET"))
+        Mock::given(method("POST"))
             .and(path("/rest/group"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "error": true,
