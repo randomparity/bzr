@@ -58,17 +58,6 @@ impl Value {
         }
     }
 
-    #[expect(
-        dead_code,
-        reason = "API completeness — all Value variants should be accessible"
-    )]
-    pub fn as_bool(&self) -> Option<bool> {
-        match self {
-            Value::Bool(b) => Some(*b),
-            _ => None,
-        }
-    }
-
     pub fn as_struct(&self) -> Option<&BTreeMap<String, Value>> {
         match self {
             Value::Struct(m) => Some(m),
@@ -83,10 +72,15 @@ impl Value {
         }
     }
 
-    #[expect(
-        dead_code,
-        reason = "API completeness — all Value variants should be accessible"
-    )]
+    #[cfg(test)]
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Value::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+
+    #[cfg(test)]
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             Value::Double(d) => Some(*d),

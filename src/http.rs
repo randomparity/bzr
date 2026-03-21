@@ -12,9 +12,12 @@ pub(crate) const AUTH_QUERY_PARAM: &str = "Bugzilla_api_key";
 
 /// Apply auth credentials to a request builder based on the configured method.
 ///
+/// This is the fallible version used during auth detection (before a
+/// [`crate::client::BugzillaClient`] is constructed). The client has an
+/// infallible version that uses a pre-validated `HeaderValue`.
+///
 /// Returns `Err` if the API key contains characters invalid for HTTP headers
-/// when using header-based auth. Callers that want best-effort auth should
-/// handle the error (e.g. fall back to sending without auth).
+/// when using header-based auth.
 pub(crate) fn apply_auth(
     builder: reqwest::RequestBuilder,
     api_key: &str,

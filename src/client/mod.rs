@@ -203,6 +203,9 @@ impl BugzillaClient {
         self.parse_json(resp).await
     }
 
+    /// Apply auth credentials to a request. Infallible because the API key
+    /// was validated at client construction time. See also [`crate::http::apply_auth`]
+    /// which is the fallible version used during auth detection (before the client exists).
     pub(super) fn apply_auth(&self, builder: RequestBuilder) -> RequestBuilder {
         match &self.auth {
             PreparedAuth::Header(value) => builder.header(AUTH_HEADER_NAME, value.clone()),

@@ -55,10 +55,10 @@ impl XmlRpcClient {
                 String::new()
             });
             tracing::debug!(%status, body = &body[..body.len().min(512)], "XML-RPC HTTP error");
-            return Err(BzrError::XmlRpc(format!(
-                "HTTP {status}: {}",
-                &body[..body.len().min(256)]
-            )));
+            return Err(BzrError::HttpStatus {
+                status: status.as_u16(),
+                body,
+            });
         }
 
         let body_text = resp.text().await?;
