@@ -38,10 +38,7 @@ impl BugzillaClient {
     }
 
     pub async fn create_user(&self, params: &CreateUserParams) -> Result<u64> {
-        let req = self.apply_auth(self.http.post(self.url("user")).json(params));
-        let resp = self.send(req).await?;
-        let data: super::IdResponse = self.parse_json(resp).await?;
-        Ok(data.id)
+        self.post_json_id("user", params).await
     }
 
     /// Update a user's profile fields.

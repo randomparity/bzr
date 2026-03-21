@@ -42,10 +42,7 @@ impl BugzillaClient {
     }
 
     pub async fn create_product(&self, params: &CreateProductParams) -> Result<u64> {
-        let req = self.apply_auth(self.http.post(self.url("product")).json(params));
-        let resp = self.send(req).await?;
-        let data: super::IdResponse = self.parse_json(resp).await?;
-        Ok(data.id)
+        self.post_json_id("product", params).await
     }
 
     pub async fn update_product(&self, name: &str, updates: &UpdateProductParams) -> Result<()> {

@@ -71,13 +71,7 @@ impl BugzillaClient {
     }
 
     pub async fn update_attachment(&self, id: u64, updates: &UpdateAttachmentParams) -> Result<()> {
-        let req = self.apply_auth(
-            self.http
-                .put(self.url(&format!("bug/attachment/{id}")))
-                .json(updates),
-        );
-        self.send(req).await?;
-        Ok(())
+        self.put_json(&format!("bug/attachment/{id}"), updates).await
     }
 }
 

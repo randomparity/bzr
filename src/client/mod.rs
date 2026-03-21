@@ -134,8 +134,29 @@ impl BugzillaClient {
         })
     }
 
+    /// Send a GET request and deserialize the JSON response.
+    pub(super) async fn get_json<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+    ) -> Result<T> {
+        let req = self.apply_auth(self.http.get(self.url(path)));
+        let resp = self.send(req).await?;
+        self.parse_json(resp).await
+    }
+
+    /// Send a POST request with a JSON body and return the created resource ID.
+    pub(super) async fn post_json_id(
+        &self,
+        path: &str,
+        body: &impl serde::Serialize,
+    ) -> Result<u64> {
+        let req = self.apply_auth(self.http.post(self.url(path)).json(body));
+        let resp = self.send(req).await?;
+        let data: IdResponse = self.parse_json(resp).await?;
+        Ok(data.id)
+    }
+
     /// Send a PUT request with a JSON body to a REST resource path.
-    /// Used by update methods across resource modules.
     pub(super) async fn put_json(&self, path: &str, body: &impl serde::Serialize) -> Result<()> {
         let req = self.apply_auth(self.http.put(self.url(path)).json(body));
         self.send(req).await?;

@@ -193,16 +193,11 @@ impl BugzillaClient {
     }
 
     pub async fn create_bug(&self, params: &CreateBugParams) -> Result<u64> {
-        let req = self.apply_auth(self.http.post(self.url("bug")).json(params));
-        let resp = self.send(req).await?;
-        let data: super::IdResponse = self.parse_json(resp).await?;
-        Ok(data.id)
+        self.post_json_id("bug", params).await
     }
 
     pub async fn update_bug(&self, id: u64, updates: &UpdateBugParams) -> Result<()> {
-        let req = self.apply_auth(self.http.put(self.url(&format!("bug/{id}"))).json(updates));
-        self.send(req).await?;
-        Ok(())
+        self.put_json(&format!("bug/{id}"), updates).await
     }
 }
 

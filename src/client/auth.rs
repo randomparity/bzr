@@ -177,7 +177,7 @@ async fn detect_auth_method(
 
     // Fall back to valid_login endpoint (Bugzilla 5.0+, requires email)
     if let Some(login) = email {
-        match try_valid_login(http, base, api_key, &key_val, login).await {
+        match detect_valid_login_auth(http, base, api_key, &key_val, login).await {
             ValidLoginOutcome::Authenticated(method) => {
                 // valid_login can give false negatives for header auth on servers
                 // with custom extensions (e.g. IBM LTC). When query_param is
@@ -315,7 +315,7 @@ enum ValidLoginOutcome {
     NetworkError,
 }
 
-async fn try_valid_login(
+async fn detect_valid_login_auth(
     http: &reqwest::Client,
     base: &str,
     api_key: &str,

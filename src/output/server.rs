@@ -15,7 +15,7 @@ pub struct ServerInfo<'a> {
 impl<'a> From<&'a ServerInfoResponse> for ServerInfo<'a> {
     fn from(info: &'a ServerInfoResponse) -> Self {
         Self {
-            version: &info.version.version,
+            version: &info.version.value,
             extensions: &info.extensions.extensions,
         }
     }
@@ -45,7 +45,7 @@ mod tests {
     #[test]
     fn print_server_info_json_combined() {
         let version = ServerVersion {
-            version: "5.0.4".into(),
+            value: "5.0.4".into(),
         };
         let extensions = ServerExtensions {
             extensions: {
@@ -60,7 +60,7 @@ mod tests {
             },
         };
         let combined = serde_json::json!({
-            "version": version.version,
+            "version": version.value,
             "extensions": extensions.extensions,
         });
         let json = serde_json::to_string_pretty(&combined).unwrap();

@@ -87,11 +87,7 @@ fn read_comment_body() -> Result<String> {
 
 fn compose_comment_in_editor() -> Result<String> {
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".into());
-    let mut tmpfile = create_comment_tempfile()?;
-    if let Some(ref mut f) = tmpfile.file {
-        writeln!(f, "<!-- Enter your comment above this line -->")?;
-    }
-    tmpfile.close_file();
+    let tmpfile = create_comment_tempfile("<!-- Enter your comment above this line -->\n")?;
 
     let status = std::process::Command::new(&editor)
         .arg(&tmpfile.path)
@@ -120,14 +116,6 @@ fn filter_comment_body(raw: &str) -> String {
 
 struct TempFile {
     path: std::path::PathBuf,
-    file: Option<std::fs::File>,
-}
-
-impl TempFile {
-    /// Close the file handle (flushes writes) while keeping the path for reading.
-    fn close_file(&mut self) {
-        self.file.take();
-    }
 }
 
 impl Drop for TempFile {
@@ -136,14 +124,13 @@ impl Drop for TempFile {
     }
 }
 
-fn create_comment_tempfile() -> Result<TempFile> {
+fn create_comment_tempfile(initial_content: &str) -> Result<TempFile> {
     let dir = std::env::temp_dir();
     let path = dir.join(format!("bzr-comment-{}.txt", std::process::id()));
-    let file = std::fs::File::create(&path)?;
-    Ok(TempFile {
-        path,
-        file: Some(file),
-    })
+    let mut file = std::fs::File::create(&path)?;
+    file.write_all(initial_content.as_bytes())?;
+    drop(file);
+    Ok(TempFile { path })
 }
 
 #[cfg(test)]

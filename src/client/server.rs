@@ -53,15 +53,11 @@ impl BugzillaClient {
     }
 
     pub async fn server_version(&self) -> Result<ServerVersion> {
-        let req = self.apply_auth(self.http.get(self.url("version")));
-        let resp = self.send(req).await?;
-        self.parse_json(resp).await
+        self.get_json("version").await
     }
 
     pub async fn server_extensions(&self) -> Result<ServerExtensions> {
-        let req = self.apply_auth(self.http.get(self.url("extensions")));
-        let resp = self.send(req).await?;
-        self.parse_json(resp).await
+        self.get_json("extensions").await
     }
 }
 
@@ -107,7 +103,7 @@ mod tests {
 
         let client = test_client(&mock.uri());
         let ver = client.server_version().await.unwrap();
-        assert_eq!(ver.version, "5.0.4");
+        assert_eq!(ver.value, "5.0.4");
     }
 
     #[tokio::test]

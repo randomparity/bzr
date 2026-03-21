@@ -4,10 +4,7 @@ use crate::types::{CreateComponentParams, UpdateComponentParams};
 
 impl BugzillaClient {
     pub async fn create_component(&self, params: &CreateComponentParams) -> Result<u64> {
-        let req = self.apply_auth(self.http.post(self.url("component")).json(params));
-        let resp = self.send(req).await?;
-        let data: super::IdResponse = self.parse_json(resp).await?;
-        Ok(data.id)
+        self.post_json_id("component", params).await
     }
 
     /// Updates a component by numeric ID.
