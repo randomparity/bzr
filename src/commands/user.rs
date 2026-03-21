@@ -37,7 +37,11 @@ pub async fn execute(
                 None
             };
             let users = client.search_users(query, fields).await?;
-            output::print_users(&users, *details, format);
+            if *details {
+                output::print_users_detailed(&users, format);
+            } else {
+                output::print_users(&users, format);
+            }
         }
         UserAction::Create {
             email,

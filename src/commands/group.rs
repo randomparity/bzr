@@ -38,7 +38,11 @@ pub async fn execute(
                 Some(BugzillaClient::USER_FIELDS_BASIC)
             };
             let users = client.get_group_members(group, fields).await?;
-            output::print_users(&users, *details, format);
+            if *details {
+                output::print_users_detailed(&users, format);
+            } else {
+                output::print_users(&users, format);
+            }
         }
         GroupAction::View { group } => {
             let info = client.get_group(group).await?;

@@ -106,6 +106,7 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::super::encode_path;
+    use super::super::user::{USER_FIELDS_BASIC, USER_FIELDS_DETAILED};
     use crate::client::test_helpers::test_client;
     use crate::types::{CreateGroupParams, UpdateGroupParams};
 
@@ -115,10 +116,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/user"))
             .and(query_param("group", "admin"))
-            .and(query_param(
-                "include_fields",
-                "id,name,real_name,email,groups",
-            ))
+            .and(query_param("include_fields", USER_FIELDS_BASIC))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [
                     {
@@ -150,10 +148,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/user"))
             .and(query_param("group", "admin"))
-            .and(query_param(
-                "include_fields",
-                "id,name,real_name,email,can_login,groups",
-            ))
+            .and(query_param("include_fields", USER_FIELDS_DETAILED))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [
                     {
@@ -171,7 +166,7 @@ mod tests {
 
         let client = test_client(&mock.uri());
         let users = client
-            .get_group_members("admin", Some("id,name,real_name,email,can_login,groups"))
+            .get_group_members("admin", Some(USER_FIELDS_DETAILED))
             .await
             .unwrap();
         assert_eq!(users.len(), 1);

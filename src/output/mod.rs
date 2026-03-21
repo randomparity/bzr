@@ -25,4 +25,4 @@ pub use field::print_field_values;
 pub use group::print_group_info;
 pub use product::{print_classification, print_product_detail, print_products};
 pub use server::{print_server_info, ServerInfo};
-pub use user::{print_users, print_whoami};
+pub use user::{print_users, print_users_detailed, print_whoami};

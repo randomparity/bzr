@@ -61,19 +61,26 @@ fn detailed_row(user: &BugzillaUser) -> DetailedUserRow {
 }
 
 #[expect(clippy::print_stdout)]
-pub fn print_users(users: &[BugzillaUser], details: bool, format: OutputFormat) {
+pub fn print_users(users: &[BugzillaUser], format: OutputFormat) {
     print_formatted(users, format, |users| {
         if users.is_empty() {
             println!("No users found.");
             return;
         }
-        if details {
-            let rows: Vec<DetailedUserRow> = users.iter().map(detailed_row).collect();
-            println!("{}", Table::new(rows));
-        } else {
-            let rows: Vec<UserRow> = users.iter().map(basic_row).collect();
-            println!("{}", Table::new(rows));
+        let rows: Vec<UserRow> = users.iter().map(basic_row).collect();
+        println!("{}", Table::new(rows));
+    });
+}
+
+#[expect(clippy::print_stdout)]
+pub fn print_users_detailed(users: &[BugzillaUser], format: OutputFormat) {
+    print_formatted(users, format, |users| {
+        if users.is_empty() {
+            println!("No users found.");
+            return;
         }
+        let rows: Vec<DetailedUserRow> = users.iter().map(detailed_row).collect();
+        println!("{}", Table::new(rows));
     });
 }
 

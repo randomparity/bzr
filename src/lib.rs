@@ -16,6 +16,7 @@ pub mod commands;
 pub mod config;
 pub mod error;
 pub(crate) mod http;
+// Output formatting — exposed for integration tests, not a stable public API.
 #[expect(clippy::print_stdout, clippy::expect_used)]
 pub mod output;
 pub mod types;

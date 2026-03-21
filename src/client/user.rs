@@ -100,7 +100,7 @@ mod tests {
             .and(query_param("match", "alice"))
             .and(query_param(
                 "include_fields",
-                "id,name,real_name,email,can_login,groups",
+                super::USER_FIELDS_DETAILED,
             ))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [{
@@ -117,7 +117,7 @@ mod tests {
 
         let client = test_client(&mock.uri());
         let users = client
-            .search_users("alice", Some("id,name,real_name,email,can_login,groups"))
+            .search_users("alice", Some(super::USER_FIELDS_DETAILED))
             .await
             .unwrap();
         assert_eq!(users.len(), 1);

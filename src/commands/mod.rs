@@ -3,6 +3,7 @@ pub mod bug;
 pub mod classification;
 pub mod comment;
 pub mod component;
+// Named config_cmd to avoid collision with the top-level config data module (src/config.rs).
 pub mod config_cmd;
 pub mod field;
 mod flags;
