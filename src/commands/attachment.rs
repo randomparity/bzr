@@ -23,7 +23,7 @@ pub async fn execute(
         AttachmentAction::Download { id, out } => {
             let (filename, data) = client.download_attachment(*id).await?;
             let dest = out.as_deref().unwrap_or(&filename);
-            write_attachment(dest, &data)?;
+            std::fs::write(dest, &data)?;
             output::print_result(
                 &DownloadResult::new(*id, dest, data.len()),
                 &format!(
@@ -92,11 +92,6 @@ pub async fn execute(
             );
         }
     }
-    Ok(())
-}
-
-fn write_attachment(dest: &str, data: &[u8]) -> Result<()> {
-    std::fs::write(dest, data)?;
     Ok(())
 }
 
@@ -241,6 +236,65 @@ mod tests {
         };
         let result = super::execute(&action, None, OutputFormat::Json, None).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn attachment_upload_returns_id() {
+        let (_lock, mock, tmp) = setup_test_env().await;
+
+        Mock::given(method("POST"))
+            .and(path("/rest/bug/42/attachment"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [200]})),
+            )
+            .mount(&mock)
+            .await;
+
+        let upload_file = tmp.path().join("upload.txt");
+        std::fs::write(&upload_file, "test content").unwrap();
+
+        let action = AttachmentAction::Upload {
+            bug_id: 42,
+            file: upload_file.to_string_lossy().into_owned(),
+            summary: Some("Test upload".into()),
+            content_type: Some("text/plain".into()),
+            flag: vec![],
+        };
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok());
+        let parsed = extract_json(&output);
+        assert_eq!(parsed["id"], 200);
+    }
+
+    #[tokio::test]
+    async fn attachment_update_succeeds() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("PUT"))
+            .and(path("/rest/bug/attachment/99"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "attachments": [{"id": 99, "changes": {}}]
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = AttachmentAction::Update {
+            id: 99,
+            summary: Some("Updated summary".into()),
+            file_name: None,
+            content_type: None,
+            obsolete: None,
+            is_patch: None,
+            is_private: None,
+            flag: vec![],
+        };
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok());
+        let parsed = extract_json(&output);
+        assert_eq!(parsed["id"], 99);
+        assert_eq!(parsed["action"], "updated");
     }
 
     #[test]

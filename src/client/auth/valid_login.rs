@@ -16,6 +16,12 @@ struct ValidLoginResponse {
 #[serde(try_from = "serde_json::Value")]
 struct ValidLoginResult(bool);
 
+impl ValidLoginResult {
+    fn is_valid(&self) -> bool {
+        self.0
+    }
+}
+
 impl TryFrom<serde_json::Value> for ValidLoginResult {
     type Error = String;
 
@@ -101,7 +107,7 @@ async fn probe_valid_login(
         Ok(p) => p,
         Err(_) => return ValidLoginOutcome::AuthRejected,
     };
-    if parsed.result.0 {
+    if parsed.result.is_valid() {
         ValidLoginOutcome::Authenticated(method)
     } else {
         tracing::debug!(%method, "valid_login returned false");

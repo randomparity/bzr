@@ -560,17 +560,19 @@ async fn component_create_integration() {
         description: "Backend component".to_string(),
         default_assignee: "dev@test.com".to_string(),
     };
-    let result = bzr::commands::component::execute(
+    let (result, output) = capture_stdout(bzr::commands::component::execute(
         &action,
         Some("test"),
         bzr::types::OutputFormat::Json,
         None,
-    )
+    ))
     .await;
     assert!(
         result.is_ok(),
         "component create should succeed: {result:?}"
     );
+    let parsed = extract_json(&output);
+    assert_eq!(parsed["id"], 10);
 }
 
 // ── Attachment commands ───────────────────────────────────────────────

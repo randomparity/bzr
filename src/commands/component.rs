@@ -107,4 +107,28 @@ mod tests {
         let result = super::execute(&action, None, OutputFormat::Json, None).await;
         assert!(result.is_err());
     }
+
+    #[tokio::test]
+    async fn component_update_succeeds() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("PUT"))
+            .and(path("/rest/component/10"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 10})))
+            .mount(&mock)
+            .await;
+
+        let action = ComponentAction::Update {
+            id: 10,
+            name: Some("Updated".to_string()),
+            description: None,
+            default_assignee: None,
+        };
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok());
+        let parsed = extract_json(&output);
+        assert_eq!(parsed["id"], 10);
+        assert_eq!(parsed["action"], "updated");
+    }
 }
