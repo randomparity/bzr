@@ -26,13 +26,13 @@ log() { echo "==> [$BZ_VERSION] $*"; }
 err() { echo "ERROR: [$BZ_VERSION] $*" >&2; }
 
 wait_for_ready() {
-    local url="http://localhost:${BZ_PORT}/rest/version"
+    local url="http://127.0.0.1:${BZ_PORT}/rest/version"
     log "Waiting for Bugzilla REST API at ${url} (timeout: ${HEALTH_TIMEOUT}s)..."
 
     for i in $(seq 1 "$HEALTH_TIMEOUT"); do
         if curl -sf "$url" >/dev/null 2>&1; then
             log "Bugzilla ready after ${i}s"
-            curl -s "$url" | python3 -m json.tool 2>/dev/null || curl -s "$url"
+            curl -s "$url" | python3 -m json.tool 2>/dev/null || curl -s "$url" || true
             return 0
         fi
         sleep 1
@@ -104,7 +104,7 @@ cmd_status() {
             'Name: {{.Name}}  State: {{.State.Status}}  Running: {{.State.Running}}  Pid: {{.State.Pid}}' \
             "$CONTAINER_NAME"
         # Check REST API
-        if curl -sf "http://localhost:${BZ_PORT}/rest/version" >/dev/null 2>&1; then
+        if curl -sf "http://127.0.0.1:${BZ_PORT}/rest/version" >/dev/null 2>&1; then
             echo "REST API: reachable"
         else
             echo "REST API: not reachable"

@@ -1,85 +1,22 @@
 use std::collections::HashMap;
-use std::fmt;
 use std::fs;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::{BzrError, Result};
+use crate::types::{ApiMode, AuthMethod};
 
 #[derive(Debug, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub struct Config {
     pub default_server: Option<String>,
     #[serde(default)]
     pub servers: HashMap<String, ServerConfig>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum AuthMethod {
-    Header,
-    QueryParam,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ApiMode {
-    Rest,
-    #[serde(rename = "xmlrpc")]
-    XmlRpc,
-    Hybrid,
-}
-
-impl fmt::Display for ApiMode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ApiMode::Rest => write!(f, "rest"),
-            ApiMode::XmlRpc => write!(f, "xmlrpc"),
-            ApiMode::Hybrid => write!(f, "hybrid"),
-        }
-    }
-}
-
-impl FromStr for ApiMode {
-    type Err = String;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "rest" => Ok(ApiMode::Rest),
-            "xmlrpc" => Ok(ApiMode::XmlRpc),
-            "hybrid" => Ok(ApiMode::Hybrid),
-            _ => Err(format!(
-                "invalid API mode '{s}': expected 'rest', 'xmlrpc', or 'hybrid'"
-            )),
-        }
-    }
-}
-
-impl FromStr for AuthMethod {
-    type Err = String;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "header" => Ok(AuthMethod::Header),
-            "query_param" => Ok(AuthMethod::QueryParam),
-            _ => Err(format!(
-                "invalid auth method '{s}': expected 'header' or 'query_param'"
-            )),
-        }
-    }
-}
-
-impl fmt::Display for AuthMethod {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            AuthMethod::Header => write!(f, "header"),
-            AuthMethod::QueryParam => write!(f, "query_param"),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ServerConfig {
     pub url: String,
     pub api_key: String,
@@ -95,13 +32,8 @@ pub struct ServerConfig {
 
 impl Config {
     pub fn path() -> Result<PathBuf> {
-        let config_dir = if let Ok(val) = std::env::var("XDG_CONFIG_HOME") {
-            PathBuf::from(val)
-        } else {
-            let home = dirs::home_dir()
-                .ok_or_else(|| BzrError::config("cannot determine home directory"))?;
-            home.join(".config")
-        };
+        let config_dir = dirs::config_dir()
+            .ok_or_else(|| BzrError::config("cannot determine config directory"))?;
         Ok(config_dir.join("bzr").join("config.toml"))
     }
 
@@ -125,7 +57,7 @@ impl Config {
         Ok(())
     }
 
-    pub fn active_server_named<'a>(
+    pub fn resolve_server<'a>(
         &'a self,
         server_name: Option<&'a str>,
     ) -> Result<(&'a str, &'a ServerConfig)> {
@@ -153,6 +85,7 @@ impl Config {
 mod tests {
     use super::*;
     use std::env;
+    use std::str::FromStr;
 
     fn make_server_config(url: &str) -> ServerConfig {
         ServerConfig {
@@ -182,8 +115,9 @@ mod tests {
     /// parallel test execution.
     #[test]
     fn config_file_io_operations() {
-        let _lock = crate::ENV_LOCK.lock().unwrap();
+        let _lock = crate::ENV_LOCK.blocking_lock();
         let tmp = tempfile::tempdir().unwrap();
+        // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
         unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
         // 1. Load returns default when no file exists
@@ -225,17 +159,17 @@ mod tests {
     }
 
     #[test]
-    fn active_server_named_returns_correct_server() {
+    fn resolve_server_returns_correct_server() {
         let config = make_config_with_server();
-        let (name, srv) = config.active_server_named(Some("myserver")).unwrap();
+        let (name, srv) = config.resolve_server(Some("myserver")).unwrap();
         assert_eq!(name, "myserver");
         assert_eq!(srv.url, "https://bugzilla.example.com");
     }
 
     #[test]
-    fn active_server_named_errors_for_unknown_server() {
+    fn resolve_server_errors_for_unknown_server() {
         let config = make_config_with_server();
-        let result = config.active_server_named(Some("nonexistent"));
+        let result = config.resolve_server(Some("nonexistent"));
         assert!(result.is_err());
     }
 

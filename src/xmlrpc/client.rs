@@ -23,6 +23,11 @@ impl XmlRpcClient {
     // SECURITY: The request body contains Bugzilla_api_key in plain text.
     // Never log the request body. Response bodies are safe to log at trace
     // level since Bugzilla does not echo auth credentials back.
+    //
+    // NOTE: XML-RPC always transmits the API key in the request body
+    // (as a method parameter), regardless of the REST AuthMethod detected
+    // for this server. This is an inherent XML-RPC protocol constraint —
+    // there is no header-based auth equivalent for XML-RPC calls.
     async fn call(&self, method: &str, mut params: BTreeMap<String, Value>) -> Result<Value> {
         params.insert(AUTH_QUERY_PARAM.into(), Value::from(self.api_key.as_str()));
 
@@ -58,8 +63,6 @@ impl XmlRpcClient {
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
         let mut rpc_params = BTreeMap::new();
 
-        // Bugzilla XML-RPC uses the same parameter names as REST but expects
-        // typed values (Value::String) rather than query-string encoding.
         let string_fields: &[(&str, &Option<String>)] = &[
             ("product", &params.product),
             ("component", &params.component),
@@ -86,7 +89,7 @@ impl XmlRpcClient {
         if let Some(limit) = params.limit {
             rpc_params.insert("limit".into(), Value::Int(i64::from(limit)));
         }
-        // REST accepts comma-separated field lists; XML-RPC requires arrays.
+        // Bugzilla XML-RPC requires field lists as arrays; the REST API accepts CSV strings.
         for (key, value) in [
             ("include_fields", &params.include_fields),
             ("exclude_fields", &params.exclude_fields),
@@ -240,82 +243,7 @@ mod tests {
         reqwest::Client::new()
     }
 
-    fn xmlrpc_bug_response(id: i64, summary: &str) -> String {
-        format!(
-            r#"<?xml version="1.0" encoding="UTF-8"?>
-            <methodResponse>
-              <params>
-                <param>
-                  <value>
-                    <struct>
-                      <member>
-                        <name>bugs</name>
-                        <value>
-                          <array>
-                            <data>
-                              <value>
-                                <struct>
-                                  <member>
-                                    <name>id</name>
-                                    <value><int>{id}</int></value>
-                                  </member>
-                                  <member>
-                                    <name>summary</name>
-                                    <value><string>{summary}</string></value>
-                                  </member>
-                                  <member>
-                                    <name>status</name>
-                                    <value><string>NEW</string></value>
-                                  </member>
-                                  <member>
-                                    <name>product</name>
-                                    <value><string>TestProduct</string></value>
-                                  </member>
-                                  <member>
-                                    <name>component</name>
-                                    <value><string>General</string></value>
-                                  </member>
-                                  <member>
-                                    <name>priority</name>
-                                    <value><string>P1</string></value>
-                                  </member>
-                                  <member>
-                                    <name>severity</name>
-                                    <value><string>normal</string></value>
-                                  </member>
-                                  <member>
-                                    <name>assigned_to</name>
-                                    <value><string>user@example.com</string></value>
-                                  </member>
-                                  <member>
-                                    <name>keywords</name>
-                                    <value><array><data></data></array></value>
-                                  </member>
-                                  <member>
-                                    <name>blocks</name>
-                                    <value><array><data></data></array></value>
-                                  </member>
-                                  <member>
-                                    <name>depends_on</name>
-                                    <value><array><data></data></array></value>
-                                  </member>
-                                  <member>
-                                    <name>cc</name>
-                                    <value><array><data></data></array></value>
-                                  </member>
-                                </struct>
-                              </value>
-                            </data>
-                          </array>
-                        </value>
-                      </member>
-                    </struct>
-                  </value>
-                </param>
-              </params>
-            </methodResponse>"#
-        )
-    }
+    use crate::test_fixtures::xmlrpc_bug_response;
 
     fn xmlrpc_fault_response(code: i64, message: &str) -> String {
         format!(

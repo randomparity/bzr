@@ -17,7 +17,7 @@ case "$BZ_VERSION" in
     *)    DEFAULT_PORT=8089 ;;
 esac
 BZ_PORT="${BZR_FUNC_PORT:-$DEFAULT_PORT}"
-BZ_URL="http://localhost:${BZ_PORT}"
+BZ_URL="http://127.0.0.1:${BZ_PORT}"
 ADMIN_EMAIL="admin@test.bzr"
 API_KEY="FuncTest0123456789abcdef0123456789abcdef"
 

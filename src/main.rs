@@ -1,15 +1,15 @@
 use std::io::IsTerminal;
+use std::process::ExitCode;
 
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
-use bzr::cli::{Cli, Commands};
-use bzr::commands;
+use bzr::cli::Cli;
 use bzr::error::{self, BzrError};
 use bzr::types::OutputFormat;
 
-#[tokio::main]
-async fn main() {
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> ExitCode {
     let cli = Cli::parse();
 
     let filter = if std::env::var("RUST_LOG").is_ok() {
@@ -42,11 +42,15 @@ async fn main() {
             {
                 eprintln!("error: {e}");
             }
-            std::process::exit(e.exit_code());
+            return exit_code(&e);
         }
     };
 
-    if let Err(e) = run(cli, format).await {
+    if cli.quiet {
+        suppress_stdout();
+    }
+
+    if let Err(e) = bzr::dispatch(&cli, format).await {
         #[expect(clippy::print_stderr)]
         {
             if format == OutputFormat::Json {
@@ -67,9 +71,36 @@ async fn main() {
                 eprintln!("error: {e}");
             }
         }
-        std::process::exit(e.exit_code());
+        return exit_code(&e);
+    }
+
+    ExitCode::SUCCESS
+}
+
+/// Convert a `BzrError` exit code (1-10) to a `std::process::ExitCode`.
+fn exit_code(e: &BzrError) -> ExitCode {
+    // All BzrError exit codes are in the range 1..=10.
+    ExitCode::from(u8::try_from(e.exit_code()).unwrap_or(1))
+}
+
+/// Redirect stdout to /dev/null for --quiet mode.
+#[cfg(unix)]
+fn suppress_stdout() {
+    use std::os::unix::io::AsRawFd;
+    if let Ok(devnull) = std::fs::File::open("/dev/null") {
+        extern "C" {
+            fn dup2(oldfd: std::ffi::c_int, newfd: std::ffi::c_int) -> std::ffi::c_int;
+        }
+        // SAFETY: dup2 replaces stdout fd with /dev/null. Called once at startup
+        // before any other threads write to stdout.
+        unsafe {
+            dup2(devnull.as_raw_fd(), 1);
+        }
     }
 }
+
+#[cfg(not(unix))]
+fn suppress_stdout() {}
 
 /// Resolve output format from flags, env var, and TTY detection.
 ///
@@ -95,75 +126,11 @@ fn resolve_format(cli: &Cli) -> error::Result<OutputFormat> {
     }
 }
 
-async fn run(cli: Cli, format: OutputFormat) -> error::Result<()> {
-    // When --quiet, suppress all stdout by discarding writes.
-    if cli.quiet {
-        suppress_stdout();
-    }
-
-    let api = cli.api;
-    match &cli.command {
-        Commands::Bug { action } => {
-            commands::bug::execute(action, cli.server.as_deref(), format, api).await
-        }
-        Commands::Comment { action } => {
-            commands::comment::execute(action, cli.server.as_deref(), format, api).await
-        }
-        Commands::Attachment { action } => {
-            commands::attachment::execute(action, cli.server.as_deref(), format, api).await
-        }
-        Commands::Config { action } => commands::config_cmd::execute(action, format),
-        Commands::Product { action } => {
-            commands::product::execute(action, cli.server.as_deref(), format, api).await
-        }
-        Commands::Field { action } => {
-            commands::field::execute(action, cli.server.as_deref(), format, api).await
-        }
-        Commands::User { action } => {
-            commands::user::execute(action, cli.server.as_deref(), format, api).await
-        }
-        Commands::Group { action } => {
-            commands::group::execute(action, cli.server.as_deref(), format, api).await
-        }
-        Commands::Whoami => commands::whoami::execute(cli.server.as_deref(), format, api).await,
-        Commands::Server { action } => {
-            commands::server::execute(action, cli.server.as_deref(), format, api).await
-        }
-        Commands::Classification { action } => {
-            commands::classification::execute(action, cli.server.as_deref(), format, api).await
-        }
-        Commands::Component { action } => {
-            commands::component::execute(action, cli.server.as_deref(), format, api).await
-        }
-    }
-}
-
-/// Redirect stdout to /dev/null for --quiet mode.
-#[cfg(unix)]
-fn suppress_stdout() {
-    use std::os::unix::io::AsRawFd;
-    if let Ok(devnull) = std::fs::File::open("/dev/null") {
-        extern "C" {
-            fn dup2(oldfd: std::ffi::c_int, newfd: std::ffi::c_int) -> std::ffi::c_int;
-        }
-        // SAFETY: dup2 replaces stdout fd with /dev/null fd.
-        // We own the process and only call this once at startup, before any
-        // other threads are writing to stdout. We declare the libc dup2
-        // symbol directly to avoid pulling in the full libc crate.
-        unsafe {
-            dup2(devnull.as_raw_fd(), 1); // STDOUT_FILENO = 1
-        }
-    }
-}
-
-/// No-op on non-Unix platforms.
-#[cfg(not(unix))]
-fn suppress_stdout() {}
-
 #[cfg(test)]
 #[expect(clippy::expect_used)]
 mod tests {
     use super::*;
+    use bzr::cli::Commands;
 
     fn base_cli(command: Commands) -> Cli {
         Cli {

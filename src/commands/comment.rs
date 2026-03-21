@@ -1,10 +1,10 @@
 use std::io::{IsTerminal, Read, Write};
 
 use crate::cli::CommentAction;
-use crate::config::ApiMode;
 use crate::error::{BzrError, Result};
-use crate::output;
-use crate::types::OutputFormat;
+use crate::output::{self, ActionResult, ResourceKind, SearchResult, TagResult};
+use crate::types::ApiMode;
+use crate::types::{OutputFormat, UpdateCommentTagsParams};
 
 pub async fn execute(
     action: &CommentAction,
@@ -29,12 +29,7 @@ pub async fn execute(
             }
             let id = client.add_comment(*bug_id, &text).await?;
             output::print_result(
-                &serde_json::json!({
-                    "id": id,
-                    "bug_id": bug_id,
-                    "resource": "comment",
-                    "action": "created",
-                }),
+                &ActionResult::created(id, ResourceKind::Comment),
                 &format!("Added comment #{id} to bug #{bug_id}"),
                 format,
             );
@@ -44,29 +39,26 @@ pub async fn execute(
             add,
             remove,
         } => {
-            let tags = client.update_comment_tags(*comment_id, add, remove).await?;
+            let params = UpdateCommentTagsParams {
+                add: add.clone(),
+                remove: remove.clone(),
+            };
+            let tags = client.update_comment_tags(*comment_id, &params).await?;
+            let display = if tags.is_empty() {
+                "(none)".to_string()
+            } else {
+                tags.join(", ")
+            };
             output::print_result(
-                &serde_json::json!({
-                    "comment_id": comment_id,
-                    "tags": tags,
-                    "resource": "comment_tag",
-                    "action": "updated",
-                }),
-                &format!(
-                    "Tags on comment #{comment_id}: {}",
-                    if tags.is_empty() {
-                        "(none)".to_string()
-                    } else {
-                        tags.join(", ")
-                    }
-                ),
+                &TagResult::updated(*comment_id, tags),
+                &format!("Tags on comment #{comment_id}: {display}"),
                 format,
             );
         }
         CommentAction::SearchTags { query } => {
             let tags = client.search_comment_tags(query).await?;
             output::print_result(
-                &serde_json::json!(tags),
+                &SearchResult::new(tags.clone()),
                 &if tags.is_empty() {
                     "No tags.".to_string()
                 } else {
@@ -90,16 +82,12 @@ fn read_comment_body() -> Result<String> {
         stdin.lock().read_to_string(&mut buf)?;
         return Ok(buf);
     }
-    edit_comment()
+    compose_comment_in_editor()
 }
 
-fn edit_comment() -> Result<String> {
+fn compose_comment_in_editor() -> Result<String> {
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".into());
-    let mut tmpfile = tempfile()?;
-    if let Some(ref mut f) = tmpfile.file {
-        writeln!(f, "<!-- Enter your comment above this line -->")?;
-    }
-    tmpfile.close_file();
+    let tmpfile = create_comment_tempfile("<!-- Enter your comment above this line -->\n")?;
 
     let status = std::process::Command::new(&editor)
         .arg(&tmpfile.path)
@@ -115,25 +103,19 @@ fn edit_comment() -> Result<String> {
     let content = std::fs::read_to_string(&tmpfile.path)?;
     // TempFile::drop cleans up the file
 
-    let text: String = content
-        .lines()
+    Ok(filter_comment_body(&content))
+}
+
+/// Strip HTML comment lines (editor instructions) from raw comment text.
+fn filter_comment_body(raw: &str) -> String {
+    raw.lines()
         .filter(|l| !l.starts_with("<!--"))
         .collect::<Vec<_>>()
-        .join("\n");
-
-    Ok(text)
+        .join("\n")
 }
 
 struct TempFile {
     path: std::path::PathBuf,
-    file: Option<std::fs::File>,
-}
-
-impl TempFile {
-    /// Close the file handle (flushes writes) while keeping the path for reading.
-    fn close_file(&mut self) {
-        self.file.take();
-    }
 }
 
 impl Drop for TempFile {
@@ -142,32 +124,28 @@ impl Drop for TempFile {
     }
 }
 
-fn tempfile() -> Result<TempFile> {
+fn create_comment_tempfile(initial_content: &str) -> Result<TempFile> {
     let dir = std::env::temp_dir();
     let path = dir.join(format!("bzr-comment-{}.txt", std::process::id()));
-    let file = std::fs::File::create(&path)?;
-    Ok(TempFile {
-        path,
-        file: Some(file),
-    })
+    let mut file = std::fs::File::create(&path)?;
+    file.write_all(initial_content.as_bytes())?;
+    drop(file);
+    Ok(TempFile { path })
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used, clippy::await_holding_lock)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::{Mock, ResponseTemplate};
 
-    use super::super::test_helpers::{setup_config, ENV_LOCK};
+    use super::super::test_helpers::{capture_stdout, setup_test_env};
     use crate::cli::CommentAction;
     use crate::types::OutputFormat;
 
     #[tokio::test]
     async fn comment_list_returns_comments() {
-        let _lock = ENV_LOCK.lock().unwrap();
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("GET"))
             .and(path("/rest/bug/42/comment"))
@@ -193,16 +171,18 @@ mod tests {
             bug_id: 42,
             since: None,
         };
-        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
+        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        assert_eq!(parsed[0]["id"], 1);
+        assert_eq!(parsed[0]["text"], "Hello world");
+        assert_eq!(parsed[0]["creator"], "user@test.com");
     }
 
     #[tokio::test]
     async fn comment_add_with_body() {
-        let _lock = ENV_LOCK.lock().unwrap();
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("POST"))
             .and(path("/rest/bug/42/comment"))
@@ -220,10 +200,7 @@ mod tests {
 
     #[tokio::test]
     async fn comment_add_empty_body_is_rejected() {
-        let _lock = ENV_LOCK.lock().unwrap();
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, _mock, _tmp) = setup_test_env().await;
 
         // No mock needed — execute() should reject before making any API call
         let action = CommentAction::Add {
@@ -237,5 +214,67 @@ mod tests {
             err.contains("empty comment"),
             "expected 'empty comment' error, got: {err}"
         );
+    }
+
+    #[test]
+    fn filter_comment_body_strips_html_comments() {
+        let raw = "Hello\n<!-- Enter your comment above this line -->\nWorld";
+        assert_eq!(super::filter_comment_body(raw), "Hello\nWorld");
+    }
+
+    #[test]
+    fn filter_comment_body_preserves_normal_text() {
+        let raw = "Just a comment\nwith multiple lines";
+        assert_eq!(super::filter_comment_body(raw), raw);
+    }
+
+    #[test]
+    fn filter_comment_body_empty_input() {
+        assert_eq!(super::filter_comment_body(""), "");
+    }
+
+    #[tokio::test]
+    async fn comment_list_http_500_returns_error() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42/comment"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+            .mount(&mock)
+            .await;
+
+        let action = CommentAction::List {
+            bug_id: 42,
+            since: None,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("500") || err.contains("Internal Server Error"),
+            "expected HTTP 500 error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn comment_add_api_error_returns_error() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("POST"))
+            .and(path("/rest/bug/42/comment"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 100,
+                "message": "Bug #42 does not exist."
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = CommentAction::Add {
+            bug_id: 42,
+            body: Some("Test comment".to_string()),
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
     }
 }

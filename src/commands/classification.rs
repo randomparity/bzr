@@ -1,7 +1,7 @@
 use crate::cli::ClassificationAction;
-use crate::config::ApiMode;
 use crate::error::Result;
 use crate::output;
+use crate::types::ApiMode;
 use crate::types::OutputFormat;
 
 pub async fn execute(
@@ -22,21 +22,18 @@ pub async fn execute(
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used, clippy::await_holding_lock)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::{Mock, ResponseTemplate};
 
-    use super::super::test_helpers::{setup_config, ENV_LOCK};
+    use super::super::test_helpers::{capture_stdout, extract_json, setup_test_env};
     use crate::cli::ClassificationAction;
     use crate::types::OutputFormat;
 
     #[tokio::test]
     async fn classification_view_returns_data() {
-        let _lock = ENV_LOCK.lock().unwrap();
-        let mock = MockServer::start().await;
-        let tmp = tempfile::TempDir::new().unwrap();
-        setup_config(&tmp, &mock.uri());
+        let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("GET"))
             .and(path("/rest/classification/Unclassified"))
@@ -54,7 +51,28 @@ mod tests {
         let action = ClassificationAction::View {
             name: "Unclassified".to_string(),
         };
-        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
+        let parsed = extract_json(&output);
+        assert_eq!(parsed["name"], "Unclassified");
+        assert_eq!(parsed["description"], "Not yet classified");
+    }
+
+    #[tokio::test]
+    async fn classification_view_http_500_returns_error() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/classification/Missing"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+            .mount(&mock)
+            .await;
+
+        let action = ClassificationAction::View {
+            name: "Missing".to_string(),
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
     }
 }

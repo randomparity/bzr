@@ -8,7 +8,7 @@ use std::fmt::Write as _;
 use crate::cli::ConfigAction;
 use crate::config::{Config, ServerConfig};
 use crate::error::Result;
-use crate::output;
+use crate::output::{self, ConfigResult};
 use crate::types::OutputFormat;
 
 pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
@@ -21,6 +21,7 @@ pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
             auth_method,
         } => {
             let mut config = Config::load()?;
+            let is_update = config.servers.contains_key(name.as_str());
             config.servers.insert(
                 name.clone(),
                 ServerConfig {
@@ -39,21 +40,21 @@ pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
             let path = Config::path()?;
             config.save()?;
 
-            let mut human = format!("Server '{name}' configured at {url}");
+            let verb = if is_update { "updated" } else { "configured" };
+            let mut human = format!("Server '{name}' {verb} at {url}");
             if is_default {
                 human.push_str("\nSet as default server.");
             }
             let _ = write!(human, "\nConfig file: {}", path.display());
 
             output::print_result(
-                &serde_json::json!({
-                    "name": name,
-                    "url": url,
-                    "is_default": is_default,
-                    "config_file": path.to_string_lossy(),
-                    "resource": "server_config",
-                    "action": "configured",
-                }),
+                &ConfigResult::configured(
+                    name.as_str(),
+                    url.as_str(),
+                    is_default,
+                    path.to_string_lossy(),
+                    is_update,
+                ),
                 &human,
                 format,
             );
@@ -70,12 +71,7 @@ pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
             config.save()?;
 
             output::print_result(
-                &serde_json::json!({
-                    "name": name,
-                    "config_file": path.to_string_lossy(),
-                    "resource": "default_server",
-                    "action": "updated",
-                }),
+                &ConfigResult::default_set(name.as_str(), path.to_string_lossy()),
                 &format!(
                     "Default server set to '{name}'\nConfig file: {}",
                     path.display()
@@ -86,7 +82,8 @@ pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
         ConfigAction::Show => {
             let config = Config::load()?;
             let path = Config::path()?;
-            output::print_config(&config, &path, format);
+            let view = output::ConfigView::from_config(&config, &path);
+            output::print_config(&view, format);
         }
     }
     Ok(())
@@ -103,8 +100,9 @@ mod tests {
     /// parallel test execution.
     #[test]
     fn config_operations_with_file_io() {
-        let _lock = crate::ENV_LOCK.lock().unwrap();
+        let _lock = crate::ENV_LOCK.blocking_lock();
         let tmp = tempfile::TempDir::new().unwrap();
+        // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
         unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
         // 1. set-default on empty config returns error

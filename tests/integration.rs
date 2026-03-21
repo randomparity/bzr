@@ -4,9 +4,9 @@
 //! These tests are serialized via a mutex because they set the
 //! process-global `XDG_CONFIG_HOME` environment variable.
 
-#![expect(clippy::unwrap_used, clippy::await_holding_lock)]
+#![expect(clippy::unwrap_used)]
 
-use std::sync::Mutex;
+use tokio::sync::Mutex;
 
 use clap::Parser;
 
@@ -14,7 +14,64 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 /// Serializes tests that modify `XDG_CONFIG_HOME`.
-static ENV_LOCK: Mutex<()> = Mutex::new(());
+static ENV_LOCK: Mutex<()> = Mutex::const_new(());
+
+/// Capture stdout from an async operation via fd-level redirection.
+///
+/// Uses the same technique as `commands::test_helpers::capture_stdout`
+/// but available to integration tests (which are external to the crate).
+#[cfg(unix)]
+async fn capture_stdout<F, T>(f: F) -> (T, String)
+where
+    F: std::future::Future<Output = T>,
+{
+    use std::io::{Read, Seek, Write};
+    use std::os::unix::io::AsRawFd;
+
+    extern "C" {
+        fn dup(fd: std::ffi::c_int) -> std::ffi::c_int;
+        fn dup2(oldfd: std::ffi::c_int, newfd: std::ffi::c_int) -> std::ffi::c_int;
+        fn close(fd: std::ffi::c_int) -> std::ffi::c_int;
+    }
+
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    let tmp_fd = tmp.as_file().as_raw_fd();
+
+    // SAFETY: dup/dup2 on valid fds; tests serialized via ENV_LOCK.
+    let saved_stdout = unsafe { dup(1) };
+    assert!(saved_stdout >= 0, "dup(1) failed");
+    unsafe { dup2(tmp_fd, 1) };
+
+    let result = f.await;
+
+    std::io::stdout().flush().unwrap();
+    unsafe {
+        dup2(saved_stdout, 1);
+        close(saved_stdout);
+    }
+
+    let mut captured = String::new();
+    let mut file = tmp.reopen().unwrap();
+    file.seek(std::io::SeekFrom::Start(0)).unwrap();
+    file.read_to_string(&mut captured).unwrap();
+
+    (result, captured)
+}
+
+/// Extract valid JSON from captured output that may contain mixed content.
+fn extract_json(output: &str) -> serde_json::Value {
+    if let Ok(v) = serde_json::from_str(output) {
+        return v;
+    }
+    for (i, ch) in output.char_indices() {
+        if ch == '[' || ch == '{' {
+            if let Ok(v) = serde_json::from_str(&output[i..]) {
+                return v;
+            }
+        }
+    }
+    panic!("no valid JSON found in captured output: {output}");
+}
 
 /// Writes a config file to a temp directory with the given server URL
 /// and pre-cached auth method (Header) so auth detection is skipped.
@@ -40,7 +97,7 @@ api_mode = "rest"
 
 #[tokio::test]
 async fn bug_list_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -70,16 +127,23 @@ async fn bug_list_integration() {
         fields: None,
         exclude_fields: None,
     };
-    let result =
-        bzr::commands::bug::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None)
-            .await;
+    let (result, output) = capture_stdout(bzr::commands::bug::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
+    .await;
     assert!(result.is_ok(), "bug list should succeed: {result:?}");
-    // Verify mock was called (wiremock panics on drop if expect(1) not satisfied)
+    let parsed = extract_json(&output);
+    assert_eq!(parsed[0]["id"], 1);
+    assert_eq!(parsed[0]["summary"], "Test bug");
+    assert_eq!(parsed[0]["status"], "NEW");
 }
 
 #[tokio::test]
 async fn bug_view_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -98,15 +162,22 @@ async fn bug_view_integration() {
         fields: None,
         exclude_fields: None,
     };
-    let result =
-        bzr::commands::bug::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None)
-            .await;
+    let (result, output) = capture_stdout(bzr::commands::bug::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
+    .await;
     assert!(result.is_ok(), "bug view should succeed: {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed["id"], 42);
+    assert_eq!(parsed["summary"], "Test bug");
 }
 
 #[tokio::test]
 async fn bug_search_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -127,15 +198,22 @@ async fn bug_search_integration() {
         fields: None,
         exclude_fields: None,
     };
-    let result =
-        bzr::commands::bug::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None)
-            .await;
+    let (result, output) = capture_stdout(bzr::commands::bug::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
+    .await;
     assert!(result.is_ok(), "bug search should succeed: {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed[0]["id"], 99);
+    assert_eq!(parsed[0]["summary"], "Crash on startup");
 }
 
 #[tokio::test]
 async fn bug_create_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -159,17 +237,23 @@ async fn bug_create_integration() {
         op_sys: None,
         rep_platform: None,
     };
-    let result =
-        bzr::commands::bug::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None)
-            .await;
+    let (result, output) = capture_stdout(bzr::commands::bug::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
+    .await;
     assert!(result.is_ok(), "bug create should succeed: {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed["id"], 100);
 }
 
 // ── Comment commands ──────────────────────────────────────────────────
 
 #[tokio::test]
 async fn comment_list_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -193,21 +277,24 @@ async fn comment_list_integration() {
         bug_id: 42,
         since: None,
     };
-    let result = bzr::commands::comment::execute(
+    let (result, output) = capture_stdout(bzr::commands::comment::execute(
         &action,
         Some("test"),
         bzr::types::OutputFormat::Json,
         None,
-    )
+    ))
     .await;
     assert!(result.is_ok(), "comment list should succeed: {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed[0]["id"], 1);
+    assert_eq!(parsed[0]["text"], "First comment");
 }
 
 // ── Whoami command ────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn whoami_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -223,16 +310,23 @@ async fn whoami_integration() {
         .mount(&mock)
         .await;
 
-    let result =
-        bzr::commands::whoami::execute(Some("test"), bzr::types::OutputFormat::Json, None).await;
+    let (result, output) = capture_stdout(bzr::commands::whoami::execute(
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
+    .await;
     assert!(result.is_ok(), "whoami should succeed: {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed["name"], "admin@example.com");
+    assert_eq!(parsed["real_name"], "Admin User");
 }
 
 // ── Product commands ──────────────────────────────────────────────────
 
 #[tokio::test]
 async fn product_list_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -258,21 +352,23 @@ async fn product_list_integration() {
     let action = bzr::cli::ProductAction::List {
         r#type: bzr::types::ProductListType::Accessible,
     };
-    let result = bzr::commands::product::execute(
+    let (result, output) = capture_stdout(bzr::commands::product::execute(
         &action,
         Some("test"),
         bzr::types::OutputFormat::Json,
         None,
-    )
+    ))
     .await;
     assert!(result.is_ok(), "product list should succeed: {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed[0]["name"], "Firefox");
 }
 
 // ── Server command ────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn server_info_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -295,17 +391,23 @@ async fn server_info_integration() {
         .await;
 
     let action = bzr::cli::ServerAction::Info;
-    let result =
-        bzr::commands::server::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None)
-            .await;
+    let (result, output) = capture_stdout(bzr::commands::server::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
+    .await;
     assert!(result.is_ok(), "server info should succeed: {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed["version"], "5.1.2");
 }
 
 // ── Field command ─────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn field_list_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -327,17 +429,23 @@ async fn field_list_integration() {
     let action = bzr::cli::FieldAction::List {
         name: "status".to_string(),
     };
-    let result =
-        bzr::commands::field::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None)
-            .await;
+    let (result, output) = capture_stdout(bzr::commands::field::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
+    .await;
     assert!(result.is_ok(), "field list should succeed: {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed[0]["name"], "NEW");
 }
 
 // ── Classification command ────────────────────────────────────────────
 
 #[tokio::test]
 async fn classification_view_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -360,24 +468,26 @@ async fn classification_view_integration() {
     let action = bzr::cli::ClassificationAction::View {
         name: "Unclassified".to_string(),
     };
-    let result = bzr::commands::classification::execute(
+    let (result, output) = capture_stdout(bzr::commands::classification::execute(
         &action,
         Some("test"),
         bzr::types::OutputFormat::Json,
         None,
-    )
+    ))
     .await;
     assert!(
         result.is_ok(),
         "classification view should succeed: {result:?}"
     );
+    let parsed = extract_json(&output);
+    assert_eq!(parsed["name"], "Unclassified");
 }
 
 // ── User commands ─────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn user_search_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -401,17 +511,24 @@ async fn user_search_integration() {
         query: "alice".to_string(),
         details: false,
     };
-    let result =
-        bzr::commands::user::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None)
-            .await;
+    let (result, output) = capture_stdout(bzr::commands::user::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
+    .await;
     assert!(result.is_ok(), "user search should succeed: {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed[0]["name"], "alice@example.com");
+    assert_eq!(parsed[0]["real_name"], "Alice");
 }
 
 // ── Group commands ────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn group_view_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -434,17 +551,24 @@ async fn group_view_integration() {
     let action = bzr::cli::GroupAction::View {
         group: "admin".to_string(),
     };
-    let result =
-        bzr::commands::group::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None)
-            .await;
+    let (result, output) = capture_stdout(bzr::commands::group::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
+    .await;
     assert!(result.is_ok(), "group view should succeed: {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed["name"], "admin");
+    assert_eq!(parsed["description"], "Administrators");
 }
 
 // ── Component commands ────────────────────────────────────────────────
 
 #[tokio::test]
 async fn component_create_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -462,24 +586,26 @@ async fn component_create_integration() {
         description: "Backend component".to_string(),
         default_assignee: "dev@test.com".to_string(),
     };
-    let result = bzr::commands::component::execute(
+    let (result, output) = capture_stdout(bzr::commands::component::execute(
         &action,
         Some("test"),
         bzr::types::OutputFormat::Json,
         None,
-    )
+    ))
     .await;
     assert!(
         result.is_ok(),
         "component create should succeed: {result:?}"
     );
+    let parsed = extract_json(&output);
+    assert_eq!(parsed["id"], 10);
 }
 
 // ── Attachment commands ───────────────────────────────────────────────
 
 #[tokio::test]
 async fn attachment_list_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -503,21 +629,23 @@ async fn attachment_list_integration() {
         .await;
 
     let action = bzr::cli::AttachmentAction::List { bug_id: 42 };
-    let result = bzr::commands::attachment::execute(
+    let (result, output) = capture_stdout(bzr::commands::attachment::execute(
         &action,
         Some("test"),
         bzr::types::OutputFormat::Json,
         None,
-    )
+    ))
     .await;
     assert!(result.is_ok(), "attachment list should succeed: {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed[0]["file_name"], "patch.diff");
 }
 
 // ── Config commands (no mock server needed) ───────────────────────────
 
 #[test]
 fn config_show_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.blocking_lock();
     let tmp = tempfile::TempDir::new().unwrap();
 
     let config_dir = tmp.path().join("bzr");
@@ -536,7 +664,7 @@ api_key = "key-1234567890"
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let action = bzr::cli::ConfigAction::Show;
-    let result = bzr::commands::config_cmd::execute(&action, bzr::types::OutputFormat::Json);
+    let result = bzr::commands::config::execute(&action, bzr::types::OutputFormat::Json);
     assert!(result.is_ok(), "config show should succeed: {result:?}");
 }
 
@@ -544,7 +672,7 @@ api_key = "key-1234567890"
 
 #[tokio::test]
 async fn command_with_unknown_server_returns_error() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, "http://localhost:1");
 
@@ -576,7 +704,7 @@ async fn command_with_unknown_server_returns_error() {
 
 #[tokio::test]
 async fn api_error_propagates() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -607,7 +735,7 @@ async fn api_error_propagates() {
 
 #[tokio::test]
 async fn bug_history_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -636,17 +764,24 @@ async fn bug_history_integration() {
         id: 42,
         since: None,
     };
-    let result =
-        bzr::commands::bug::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None)
-            .await;
+    let (result, output) = capture_stdout(bzr::commands::bug::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
+    .await;
     assert!(result.is_ok(), "bug history should succeed: {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed[0]["who"], "dev@example.com");
+    assert_eq!(parsed[0]["changes"][0]["field_name"], "status");
 }
 
 // ── Bug update ───────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn bug_update_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -671,17 +806,24 @@ async fn bug_update_integration() {
         whiteboard: None,
         flag: vec![],
     };
-    let result =
-        bzr::commands::bug::execute(&action, Some("test"), bzr::types::OutputFormat::Json, None)
-            .await;
+    let (result, output) = capture_stdout(bzr::commands::bug::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
+    .await;
     assert!(result.is_ok(), "bug update should succeed: {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed["id"], 42);
+    assert_eq!(parsed["action"], "updated");
 }
 
 // ── Comment add ──────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn comment_add_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -697,21 +839,23 @@ async fn comment_add_integration() {
         bug_id: 42,
         body: Some("This is a test comment".to_string()),
     };
-    let result = bzr::commands::comment::execute(
+    let (result, output) = capture_stdout(bzr::commands::comment::execute(
         &action,
         Some("test"),
         bzr::types::OutputFormat::Json,
         None,
-    )
+    ))
     .await;
     assert!(result.is_ok(), "comment add should succeed: {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed["id"], 999);
 }
 
 // ── Comment tag ──────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn comment_tag_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -742,7 +886,7 @@ async fn comment_tag_integration() {
 
 #[tokio::test]
 async fn comment_search_tags_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -774,7 +918,7 @@ async fn comment_search_tags_integration() {
 
 #[tokio::test]
 async fn attachment_download_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -815,13 +959,15 @@ async fn attachment_download_integration() {
         "attachment download should succeed: {result:?}"
     );
     assert!(out_path.exists(), "downloaded file should exist");
+    let content = std::fs::read_to_string(&out_path).unwrap();
+    assert_eq!(content, "Hello world");
 }
 
 // ── Attachment upload ────────────────────────────────────────────────
 
 #[tokio::test]
 async fn attachment_upload_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -861,7 +1007,7 @@ async fn attachment_upload_integration() {
 
 #[tokio::test]
 async fn attachment_update_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -902,7 +1048,7 @@ async fn attachment_update_integration() {
 
 #[tokio::test]
 async fn component_update_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -937,7 +1083,7 @@ async fn component_update_integration() {
 
 #[tokio::test]
 async fn product_view_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -971,7 +1117,7 @@ async fn product_view_integration() {
 
 #[tokio::test]
 async fn product_create_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1003,7 +1149,7 @@ async fn product_create_integration() {
 
 #[tokio::test]
 async fn product_update_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1037,7 +1183,7 @@ async fn product_update_integration() {
 
 #[tokio::test]
 async fn user_create_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1064,7 +1210,7 @@ async fn user_create_integration() {
 
 #[tokio::test]
 async fn user_update_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1095,7 +1241,7 @@ async fn user_update_integration() {
 
 #[tokio::test]
 async fn group_create_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1122,7 +1268,7 @@ async fn group_create_integration() {
 
 #[tokio::test]
 async fn group_update_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1151,7 +1297,7 @@ async fn group_update_integration() {
 
 #[tokio::test]
 async fn group_add_user_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1179,7 +1325,7 @@ async fn group_add_user_integration() {
 
 #[tokio::test]
 async fn group_remove_user_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1210,7 +1356,7 @@ async fn group_remove_user_integration() {
 
 #[tokio::test]
 async fn group_list_users_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1247,7 +1393,7 @@ async fn group_list_users_integration() {
 
 #[test]
 fn config_set_server_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.blocking_lock();
     let tmp = tempfile::TempDir::new().unwrap();
 
     let config_dir = tmp.path().join("bzr");
@@ -1266,7 +1412,7 @@ fn config_set_server_integration() {
         email: None,
         auth_method: None,
     };
-    let result = bzr::commands::config_cmd::execute(&action, bzr::types::OutputFormat::Json);
+    let result = bzr::commands::config::execute(&action, bzr::types::OutputFormat::Json);
     assert!(
         result.is_ok(),
         "config set-server should succeed: {result:?}"
@@ -1275,7 +1421,7 @@ fn config_set_server_integration() {
 
 #[test]
 fn config_set_default_integration() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.blocking_lock();
     let tmp = tempfile::TempDir::new().unwrap();
 
     let config_dir = tmp.path().join("bzr");
@@ -1290,7 +1436,7 @@ fn config_set_default_integration() {
     let action = bzr::cli::ConfigAction::SetDefault {
         name: "staging".to_string(),
     };
-    let result = bzr::commands::config_cmd::execute(&action, bzr::types::OutputFormat::Json);
+    let result = bzr::commands::config::execute(&action, bzr::types::OutputFormat::Json);
     assert!(
         result.is_ok(),
         "config set-default should succeed: {result:?}"
@@ -1312,48 +1458,12 @@ async fn dispatch_cli(args: &[&str]) -> bzr::error::Result<()> {
         cli.output.unwrap_or(bzr::types::OutputFormat::Json)
     };
 
-    let api = cli.api;
-    let server = cli.server.as_deref();
-
-    match &cli.command {
-        bzr::cli::Commands::Bug { action } => {
-            bzr::commands::bug::execute(action, server, format, api).await
-        }
-        bzr::cli::Commands::Comment { action } => {
-            bzr::commands::comment::execute(action, server, format, api).await
-        }
-        bzr::cli::Commands::Attachment { action } => {
-            bzr::commands::attachment::execute(action, server, format, api).await
-        }
-        bzr::cli::Commands::Config { action } => bzr::commands::config_cmd::execute(action, format),
-        bzr::cli::Commands::Product { action } => {
-            bzr::commands::product::execute(action, server, format, api).await
-        }
-        bzr::cli::Commands::Field { action } => {
-            bzr::commands::field::execute(action, server, format, api).await
-        }
-        bzr::cli::Commands::User { action } => {
-            bzr::commands::user::execute(action, server, format, api).await
-        }
-        bzr::cli::Commands::Group { action } => {
-            bzr::commands::group::execute(action, server, format, api).await
-        }
-        bzr::cli::Commands::Whoami => bzr::commands::whoami::execute(server, format, api).await,
-        bzr::cli::Commands::Server { action } => {
-            bzr::commands::server::execute(action, server, format, api).await
-        }
-        bzr::cli::Commands::Classification { action } => {
-            bzr::commands::classification::execute(action, server, format, api).await
-        }
-        bzr::cli::Commands::Component { action } => {
-            bzr::commands::component::execute(action, server, format, api).await
-        }
-    }
+    bzr::dispatch(&cli, format).await
 }
 
 #[tokio::test]
 async fn e2e_bug_list_via_cli_args() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1367,7 +1477,7 @@ async fn e2e_bug_list_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
+    let (result, output) = capture_stdout(dispatch_cli(&[
         "bzr",
         "--server",
         "test",
@@ -1376,14 +1486,16 @@ async fn e2e_bug_list_via_cli_args() {
         "list",
         "--product",
         "Firefox",
-    ])
+    ]))
     .await;
     assert!(result.is_ok(), "e2e bug list: {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed[0]["summary"], "CLI test");
 }
 
 #[tokio::test]
 async fn e2e_bug_view_via_cli_args() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1397,13 +1509,19 @@ async fn e2e_bug_view_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&["bzr", "--server", "test", "--json", "bug", "view", "42"]).await;
+    let (result, output) = capture_stdout(dispatch_cli(&[
+        "bzr", "--server", "test", "--json", "bug", "view", "42",
+    ]))
+    .await;
     assert!(result.is_ok(), "e2e bug view: {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed["id"], 42);
+    assert_eq!(parsed["summary"], "CLI view test");
 }
 
 #[tokio::test]
 async fn e2e_whoami_via_cli_args() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -1419,13 +1537,18 @@ async fn e2e_whoami_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&["bzr", "--server", "test", "--json", "whoami"]).await;
+    let (result, output) = capture_stdout(dispatch_cli(&[
+        "bzr", "--server", "test", "--json", "whoami",
+    ]))
+    .await;
     assert!(result.is_ok(), "e2e whoami: {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed["name"], "admin@example.com");
 }
 
 #[tokio::test]
 async fn e2e_config_show_via_cli_args() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, "http://localhost:1");
 
@@ -1435,7 +1558,7 @@ async fn e2e_config_show_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_server_info_via_cli_args() {
-    let _lock = ENV_LOCK.lock().unwrap();
+    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());

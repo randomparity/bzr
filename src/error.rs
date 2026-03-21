@@ -1,8 +1,9 @@
 use std::fmt;
 
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum BzrError {
-    #[error("HTTP request failed: {0}")]
+    #[error("HTTP request failed: {}", sanitize_http_error(.0))]
     Http(#[from] reqwest::Error),
 
     #[error("Config error: {0}")]
@@ -47,9 +48,43 @@ pub enum BzrError {
 
 pub type Result<T> = std::result::Result<T, BzrError>;
 
+/// Strip API keys from reqwest error messages to avoid leaking credentials.
+///
+/// Reqwest includes the full URL (with query params) in its error Display.
+/// When using query-param auth, this exposes the `Bugzilla_api_key` value.
+fn sanitize_http_error(err: &reqwest::Error) -> String {
+    sanitize_http_error_str(&err.to_string())
+}
+
+fn sanitize_http_error_str(msg: &str) -> String {
+    const MARKER: &str = "Bugzilla_api_key=";
+    if let Some(idx) = msg.find(MARKER) {
+        let prefix = &msg[..idx + MARKER.len()];
+        // Find the end of the key value (next & or ) or end of string)
+        let rest = &msg[idx + MARKER.len()..];
+        let end = rest.find(['&', ')', ' ']).unwrap_or(rest.len());
+        format!("{prefix}[REDACTED]{}", &rest[end..])
+    } else {
+        msg.to_string()
+    }
+}
+
 impl BzrError {
     pub fn config(msg: impl fmt::Display) -> Self {
         BzrError::Config(msg.to_string())
+    }
+
+    /// Returns `true` for transport-level failures that may succeed on retry
+    /// via a different protocol (e.g. XML-RPC fallback in Hybrid mode).
+    /// Domain errors like `Auth`, `NotFound`, and `Config` are not retriable.
+    pub fn is_transport_failure(&self) -> bool {
+        matches!(
+            self,
+            BzrError::Http(_)
+                | BzrError::HttpStatus { .. }
+                | BzrError::Deserialize(_)
+                | BzrError::XmlRpc(_)
+        )
     }
 
     pub fn exit_code(&self) -> i32 {
@@ -210,5 +245,45 @@ mod tests {
         let err = BzrError::DataIntegrity("attachment has no data".into());
         assert_eq!(err.exit_code(), 10);
         assert_eq!(err.error_type(), "data_integrity");
+    }
+
+    #[test]
+    fn sanitize_http_error_redacts_api_key() {
+        let input = "error sending request for url (http://localhost:8090/rest/extensions?Bugzilla_api_key=SecretKey123)";
+        let result = sanitize_http_error_str(input);
+        assert!(
+            !result.contains("SecretKey123"),
+            "API key should be redacted: {result}"
+        );
+        assert!(
+            result.contains("Bugzilla_api_key=[REDACTED]"),
+            "should contain redacted placeholder: {result}"
+        );
+        assert!(
+            result.contains("rest/extensions"),
+            "path should be preserved: {result}"
+        );
+    }
+
+    #[test]
+    fn sanitize_http_error_preserves_message_without_key() {
+        let input = "connection refused";
+        let result = sanitize_http_error_str(input);
+        assert_eq!(result, "connection refused");
+    }
+
+    #[test]
+    fn sanitize_http_error_handles_key_with_other_params() {
+        let input =
+            "error for url (http://host/rest/bug?Bugzilla_api_key=secret&include_fields=id)";
+        let result = sanitize_http_error_str(input);
+        assert!(
+            !result.contains("secret"),
+            "API key should be redacted: {result}"
+        );
+        assert!(
+            result.contains("&include_fields=id"),
+            "other params should be preserved: {result}"
+        );
     }
 }

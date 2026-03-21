@@ -1,9 +1,9 @@
 use std::path::Path;
 
 use crate::cli::AttachmentAction;
-use crate::config::ApiMode;
 use crate::error::Result;
-use crate::output;
+use crate::output::{self, ActionResult, DownloadResult, ResourceKind, UploadResult};
+use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{UpdateAttachmentParams, UploadAttachmentParams};
 
@@ -25,13 +25,7 @@ pub async fn execute(
             let dest = out.as_deref().unwrap_or(&filename);
             std::fs::write(dest, &data)?;
             output::print_result(
-                &serde_json::json!({
-                    "id": id,
-                    "file": dest,
-                    "size": data.len(),
-                    "resource": "attachment",
-                    "action": "downloaded",
-                }),
+                &DownloadResult::new(*id, dest, data.len()),
                 &format!(
                     "Downloaded attachment #{id} to {dest} ({} bytes)",
                     data.len()
@@ -53,7 +47,7 @@ pub async fn execute(
             let ct = content_type
                 .as_deref()
                 .unwrap_or_else(|| guess_content_type(file_name));
-            let flags = super::shared::parse_flags(flag)?;
+            let flags = super::flags::parse_flags(flag)?;
             let size = data.len();
             let upload_params = UploadAttachmentParams {
                 bug_id: *bug_id,
@@ -65,13 +59,7 @@ pub async fn execute(
             };
             let att_id = client.upload_attachment(&upload_params).await?;
             output::print_result(
-                &serde_json::json!({
-                    "id": att_id,
-                    "bug_id": bug_id,
-                    "size": size,
-                    "resource": "attachment",
-                    "action": "created",
-                }),
+                &UploadResult::new(att_id, *bug_id, size),
                 &format!("Uploaded attachment #{att_id} to bug #{bug_id} ({size} bytes)",),
                 format,
             );
@@ -86,7 +74,7 @@ pub async fn execute(
             is_private,
             flag,
         } => {
-            let flags = super::shared::parse_flags(flag)?;
+            let flags = super::flags::parse_flags(flag)?;
             let params = UpdateAttachmentParams {
                 summary: summary.clone(),
                 file_name: file_name.clone(),
@@ -98,7 +86,7 @@ pub async fn execute(
             };
             client.update_attachment(*id, &params).await?;
             output::print_result(
-                &serde_json::json!({"id": id, "resource": "attachment", "action": "updated"}),
+                &ActionResult::updated(*id, ResourceKind::Attachment),
                 &format!("Updated attachment #{id}"),
                 format,
             );
@@ -134,8 +122,177 @@ fn guess_content_type(filename: &str) -> &'static str {
 }
 
 #[cfg(test)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, ResponseTemplate};
+
+    use super::super::test_helpers::{capture_stdout, extract_json, setup_test_env};
+    use crate::cli::AttachmentAction;
+    use crate::types::OutputFormat;
+
+    #[tokio::test]
+    async fn attachment_list_returns_attachments() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42/attachment"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": {
+                    "42": [{
+                        "id": 100,
+                        "bug_id": 42,
+                        "file_name": "patch.diff",
+                        "summary": "Fix patch",
+                        "content_type": "text/x-diff",
+                        "creator": "dev@test.com",
+                        "creation_time": "2025-01-01T00:00:00Z",
+                        "last_change_time": "2025-01-01T00:00:00Z",
+                        "is_obsolete": false,
+                        "is_patch": true,
+                        "size": 1024
+                    }]
+                }
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = AttachmentAction::List { bug_id: 42 };
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok());
+        let parsed = extract_json(&output);
+        assert_eq!(parsed[0]["id"], 100);
+        assert_eq!(parsed[0]["file_name"], "patch.diff");
+        assert_eq!(parsed[0]["creator"], "dev@test.com");
+    }
+
+    #[tokio::test]
+    async fn attachment_list_api_error_propagates() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/999/attachment"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+            .mount(&mock)
+            .await;
+
+        let action = AttachmentAction::List { bug_id: 999 };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn attachment_upload_api_error_propagates() {
+        let (_lock, mock, tmp) = setup_test_env().await;
+
+        Mock::given(method("POST"))
+            .and(path("/rest/bug/42/attachment"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 600,
+                "message": "You cannot attach files to this bug."
+            })))
+            .mount(&mock)
+            .await;
+
+        let upload_file = tmp.path().join("upload.txt");
+        std::fs::write(&upload_file, "test content").unwrap();
+
+        let action = AttachmentAction::Upload {
+            bug_id: 42,
+            file: upload_file.to_string_lossy().into_owned(),
+            summary: Some("Test".into()),
+            content_type: None,
+            flag: vec![],
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("cannot attach"),
+            "expected API error message, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn attachment_download_api_error_propagates() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/attachment/404"))
+            .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 100,
+                "message": "Attachment 404 does not exist."
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = AttachmentAction::Download { id: 404, out: None };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn attachment_upload_returns_id() {
+        let (_lock, mock, tmp) = setup_test_env().await;
+
+        Mock::given(method("POST"))
+            .and(path("/rest/bug/42/attachment"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [200]})),
+            )
+            .mount(&mock)
+            .await;
+
+        let upload_file = tmp.path().join("upload.txt");
+        std::fs::write(&upload_file, "test content").unwrap();
+
+        let action = AttachmentAction::Upload {
+            bug_id: 42,
+            file: upload_file.to_string_lossy().into_owned(),
+            summary: Some("Test upload".into()),
+            content_type: Some("text/plain".into()),
+            flag: vec![],
+        };
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok());
+        let parsed = extract_json(&output);
+        assert_eq!(parsed["id"], 200);
+    }
+
+    #[tokio::test]
+    async fn attachment_update_succeeds() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("PUT"))
+            .and(path("/rest/bug/attachment/99"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "attachments": [{"id": 99, "changes": {}}]
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = AttachmentAction::Update {
+            id: 99,
+            summary: Some("Updated summary".into()),
+            file_name: None,
+            content_type: None,
+            obsolete: None,
+            is_patch: None,
+            is_private: None,
+            flag: vec![],
+        };
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok());
+        let parsed = extract_json(&output);
+        assert_eq!(parsed["id"], 99);
+        assert_eq!(parsed["action"], "updated");
+    }
 
     #[test]
     fn guess_content_type_text_plain() {
