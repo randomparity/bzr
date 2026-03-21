@@ -13,5 +13,7 @@ mod shared;
 pub mod user;
 pub mod whoami;
 
+// ── Test infrastructure ──────────────────────────────────────────────
+
 #[cfg(test)]
 pub(super) mod test_helpers;

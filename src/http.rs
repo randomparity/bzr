@@ -10,14 +10,29 @@ pub(crate) const AUTH_HEADER_NAME: &str = "X-BUGZILLA-API-KEY";
 /// Bugzilla's query-param auth key — used by servers that reject header auth.
 pub(crate) const AUTH_QUERY_PARAM: &str = "Bugzilla_api_key";
 
+/// Apply a pre-validated header value or query-param key to a request builder.
+///
+/// This is the shared auth-application primitive. Both the pre-client
+/// [`apply_auth`] and [`crate::client::BugzillaClient::apply_auth`] delegate here.
+pub(crate) fn apply_auth_to_request(
+    builder: reqwest::RequestBuilder,
+    header: Option<&reqwest::header::HeaderValue>,
+    query_key: Option<&str>,
+) -> reqwest::RequestBuilder {
+    if let Some(val) = header {
+        builder.header(AUTH_HEADER_NAME, val.clone())
+    } else if let Some(key) = query_key {
+        builder.query(&[(AUTH_QUERY_PARAM, key)])
+    } else {
+        builder
+    }
+}
+
 /// Apply auth credentials to a request builder based on the configured method.
 ///
 /// This is the fallible version used during auth detection (before a
-/// [`crate::client::BugzillaClient`] is constructed). The client has an
-/// infallible version that uses a pre-validated `HeaderValue`.
-///
-/// Returns `Err` if the API key contains characters invalid for HTTP headers
-/// when using header-based auth.
+/// [`crate::client::BugzillaClient`] is constructed). Returns `Err` if the
+/// API key contains characters invalid for HTTP headers.
 pub(crate) fn apply_auth(
     builder: reqwest::RequestBuilder,
     api_key: &str,
@@ -28,9 +43,11 @@ pub(crate) fn apply_auth(
             let val = reqwest::header::HeaderValue::from_str(api_key).map_err(|_| {
                 crate::error::BzrError::config("API key contains invalid header characters")
             })?;
-            Ok(builder.header(AUTH_HEADER_NAME, val))
+            Ok(apply_auth_to_request(builder, Some(&val), None))
         }
-        crate::types::AuthMethod::QueryParam => Ok(builder.query(&[(AUTH_QUERY_PARAM, api_key)])),
+        crate::types::AuthMethod::QueryParam => {
+            Ok(apply_auth_to_request(builder, None, Some(api_key)))
+        }
     }
 }
 
