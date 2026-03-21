@@ -236,16 +236,19 @@ async fn bug_create_integration() {
         .await;
 
     let action = bzr::cli::BugAction::Create {
-        product: "TestProduct".to_string(),
-        component: "General".to_string(),
+        template: None,
+        product: Some("TestProduct".to_string()),
+        component: Some("General".to_string()),
         summary: "New bug".to_string(),
-        version: "unspecified".to_string(),
+        version: Some("unspecified".to_string()),
         description: None,
         priority: None,
         severity: None,
         assignee: None,
         op_sys: None,
         rep_platform: None,
+        blocks: vec![],
+        depends_on: vec![],
     };
     let (result, output) = capture_stdout(bzr::commands::bug::execute(
         &action,
@@ -806,7 +809,7 @@ async fn bug_update_integration() {
         .await;
 
     let action = bzr::cli::BugAction::Update {
-        id: 42,
+        ids: vec![42],
         status: Some("RESOLVED".to_string()),
         resolution: Some("FIXED".to_string()),
         assignee: None,
@@ -815,6 +818,10 @@ async fn bug_update_integration() {
         summary: None,
         whiteboard: None,
         flag: vec![],
+        blocks_add: vec![],
+        blocks_remove: vec![],
+        depends_on_add: vec![],
+        depends_on_remove: vec![],
     };
     let (result, output) = capture_stdout(bzr::commands::bug::execute(
         &action,

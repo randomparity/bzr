@@ -13,6 +13,32 @@ pub struct Config {
     pub default_server: Option<String>,
     #[serde(default)]
     pub servers: HashMap<String, ServerConfig>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub templates: HashMap<String, BugTemplate>,
+}
+
+/// A named set of default field values for bug creation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct BugTemplate {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub product: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub component: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub severity: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assignee: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub op_sys: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rep_platform: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,6 +133,7 @@ mod tests {
         Config {
             default_server: Some("myserver".to_string()),
             servers,
+            templates: HashMap::new(),
         }
     }
 

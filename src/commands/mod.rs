@@ -10,6 +10,7 @@ pub mod group;
 pub mod product;
 pub mod server;
 mod shared;
+pub mod template;
 pub mod user;
 pub mod whoami;
 

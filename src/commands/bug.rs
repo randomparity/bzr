@@ -1,9 +1,9 @@
 use crate::cli::BugAction;
 use crate::error::Result;
-use crate::output::{self, ActionResult, ResourceKind};
+use crate::output::{self, ActionResult, BatchFailure, BatchResult, ResourceKind};
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
-use crate::types::{CreateBugParams, SearchParams, UpdateBugParams};
+use crate::types::{CreateBugParams, IdListUpdate, SearchParams, UpdateBugParams};
 
 #[expect(
     clippy::too_many_lines,
@@ -87,7 +87,75 @@ pub async fn execute(
             let bugs = client.search_bugs(&params).await?;
             output::print_bugs(&bugs, format);
         }
+        BugAction::My {
+            created,
+            cc,
+            all,
+            status,
+            limit,
+            fields,
+            exclude_fields,
+        } => {
+            let whoami = client.whoami().await?;
+            let email = whoami.name;
+            let mut all_bugs: Vec<crate::types::Bug> = Vec::new();
+            let mut seen_ids = std::collections::HashSet::new();
+
+            // Determine which searches to run
+            let search_assigned = *all || (!created && !cc);
+            let search_created = *all || *created;
+            let search_cc = *all || *cc;
+
+            if search_assigned {
+                let params = SearchParams {
+                    assigned_to: Some(email.clone()),
+                    status: status.clone(),
+                    limit: Some(*limit),
+                    include_fields: fields.clone(),
+                    exclude_fields: exclude_fields.clone(),
+                    ..Default::default()
+                };
+                for bug in client.search_bugs(&params).await? {
+                    if seen_ids.insert(bug.id) {
+                        all_bugs.push(bug);
+                    }
+                }
+            }
+            if search_created {
+                let params = SearchParams {
+                    creator: Some(email.clone()),
+                    status: status.clone(),
+                    limit: Some(*limit),
+                    include_fields: fields.clone(),
+                    exclude_fields: exclude_fields.clone(),
+                    ..Default::default()
+                };
+                for bug in client.search_bugs(&params).await? {
+                    if seen_ids.insert(bug.id) {
+                        all_bugs.push(bug);
+                    }
+                }
+            }
+            if search_cc {
+                let params = SearchParams {
+                    cc: Some(email.clone()),
+                    status: status.clone(),
+                    limit: Some(*limit),
+                    include_fields: fields.clone(),
+                    exclude_fields: exclude_fields.clone(),
+                    ..Default::default()
+                };
+                for bug in client.search_bugs(&params).await? {
+                    if seen_ids.insert(bug.id) {
+                        all_bugs.push(bug);
+                    }
+                }
+            }
+
+            output::print_bugs(&all_bugs, format);
+        }
         BugAction::Create {
+            template: template_name,
             product,
             component,
             summary,
@@ -98,18 +166,68 @@ pub async fn execute(
             assignee,
             op_sys,
             rep_platform,
+            blocks,
+            depends_on,
         } => {
+            // Load template defaults if specified
+            let tmpl = if let Some(name) = template_name {
+                let config = crate::config::Config::load()?;
+                let t = config.templates.get(name.as_str()).ok_or_else(|| {
+                    crate::error::BzrError::config(format!("template '{name}' not found"))
+                })?;
+                Some(t.clone())
+            } else {
+                None
+            };
+
+            // Merge: CLI flags win over template defaults
+            let resolved_product = product
+                .clone()
+                .or_else(|| tmpl.as_ref().and_then(|t| t.product.clone()))
+                .ok_or_else(|| {
+                    crate::error::BzrError::InputValidation(
+                        "--product is required (provide it directly or via a template)".into(),
+                    )
+                })?;
+            let resolved_component = component
+                .clone()
+                .or_else(|| tmpl.as_ref().and_then(|t| t.component.clone()))
+                .ok_or_else(|| {
+                    crate::error::BzrError::InputValidation(
+                        "--component is required (provide it directly or via a template)".into(),
+                    )
+                })?;
+
             let params = CreateBugParams {
-                product: product.clone(),
-                component: component.clone(),
+                product: resolved_product,
+                component: resolved_component,
                 summary: summary.clone(),
-                version: version.clone(),
-                description: description.clone(),
-                priority: priority.clone(),
-                severity: severity.clone(),
-                assigned_to: assignee.clone(),
-                op_sys: op_sys.clone(),
-                rep_platform: rep_platform.clone(),
+                version: version
+                    .clone()
+                    .or_else(|| tmpl.as_ref().and_then(|t| t.version.clone()))
+                    .unwrap_or_else(|| "unspecified".to_string()),
+                description: description
+                    .clone()
+                    .or_else(|| tmpl.as_ref().and_then(|t| t.description.clone())),
+                priority: priority
+                    .clone()
+                    .or_else(|| tmpl.as_ref().and_then(|t| t.priority.clone())),
+                severity: severity
+                    .clone()
+                    .or_else(|| tmpl.as_ref().and_then(|t| t.severity.clone())),
+                assigned_to: assignee
+                    .clone()
+                    .or_else(|| tmpl.as_ref().and_then(|t| t.assignee.clone())),
+                op_sys: op_sys
+                    .clone()
+                    .or_else(|| tmpl.as_ref().and_then(|t| t.op_sys.clone())),
+                rep_platform: rep_platform
+                    .clone()
+                    .or_else(|| tmpl.as_ref().and_then(|t| t.rep_platform.clone())),
+                blocks: blocks.clone(),
+                depends_on: depends_on.clone(),
+                cc: vec![],
+                keywords: vec![],
             };
             let id = client.create_bug(&params).await?;
             output::print_result(
@@ -118,8 +236,88 @@ pub async fn execute(
                 format,
             );
         }
-        BugAction::Update {
+        BugAction::Clone {
             id,
+            summary,
+            product,
+            component,
+            version,
+            description,
+            priority,
+            severity,
+            assignee,
+            op_sys,
+            rep_platform,
+            no_comment,
+            add_depends_on,
+            add_blocks,
+            no_cc,
+            no_keywords,
+        } => {
+            // Fetch source bug with all fields needed for cloning
+            let source = client.get_bug(id, None, None).await?;
+
+            // Get description from comment #0
+            let clone_description = if description.is_some() {
+                description.clone()
+            } else {
+                let comments = client.get_comments_since(source.id, None).await?;
+                comments.into_iter().find(|c| c.count == 0).map(|c| c.text)
+            };
+
+            let source_product = source.product.ok_or_else(|| {
+                crate::error::BzrError::DataIntegrity("source bug missing product field".into())
+            })?;
+            let source_component = source.component.ok_or_else(|| {
+                crate::error::BzrError::DataIntegrity("source bug missing component field".into())
+            })?;
+
+            let mut blocks = Vec::new();
+            if *add_blocks {
+                blocks.push(source.id);
+            }
+            let mut depends_on = Vec::new();
+            if *add_depends_on {
+                depends_on.push(source.id);
+            }
+
+            let params = CreateBugParams {
+                product: product.clone().unwrap_or(source_product),
+                component: component.clone().unwrap_or(source_component),
+                summary: summary.clone().unwrap_or(source.summary),
+                version: version.clone().unwrap_or_else(|| "unspecified".to_string()),
+                description: clone_description,
+                priority: priority.clone().or(source.priority),
+                severity: severity.clone().or(source.severity),
+                assigned_to: assignee.clone().or(source.assigned_to),
+                op_sys: op_sys.clone(),
+                rep_platform: rep_platform.clone(),
+                blocks,
+                depends_on,
+                cc: if *no_cc { vec![] } else { source.cc },
+                keywords: if *no_keywords {
+                    vec![]
+                } else {
+                    source.keywords
+                },
+            };
+
+            let new_id = client.create_bug(&params).await?;
+
+            if !no_comment {
+                client
+                    .add_comment(new_id, &format!("Cloned from bug #{}", source.id))
+                    .await?;
+            }
+
+            output::print_result(
+                &ActionResult::created(new_id, ResourceKind::Bug),
+                &format!("Cloned bug #{} → #{new_id}", source.id),
+                format,
+            );
+        }
+        BugAction::Update {
+            ids,
             status,
             resolution,
             assignee,
@@ -128,6 +326,10 @@ pub async fn execute(
             summary,
             whiteboard,
             flag,
+            blocks_add,
+            blocks_remove,
+            depends_on_add,
+            depends_on_remove,
         } => {
             let flags = super::flags::parse_flags(flag)?;
             let params = UpdateBugParams {
@@ -139,13 +341,64 @@ pub async fn execute(
                 summary: summary.clone(),
                 whiteboard: whiteboard.clone(),
                 flags,
+                blocks: IdListUpdate {
+                    add: blocks_add.clone(),
+                    remove: blocks_remove.clone(),
+                },
+                depends_on: IdListUpdate {
+                    add: depends_on_add.clone(),
+                    remove: depends_on_remove.clone(),
+                },
             };
-            client.update_bug(*id, &params).await?;
-            output::print_result(
-                &ActionResult::updated(*id, ResourceKind::Bug),
-                &format!("Updated bug #{id}"),
-                format,
-            );
+
+            if ids.len() == 1 {
+                // Single bug update — original behavior
+                let id = ids[0];
+                client.update_bug(id, &params).await?;
+                output::print_result(
+                    &ActionResult::updated(id, ResourceKind::Bug),
+                    &format!("Updated bug #{id}"),
+                    format,
+                );
+            } else {
+                // Batch update — continue on failure
+                let mut succeeded = Vec::new();
+                let mut failed = Vec::new();
+                for &id in ids {
+                    match client.update_bug(id, &params).await {
+                        Ok(()) => succeeded.push(id),
+                        Err(e) => failed.push(BatchFailure {
+                            id,
+                            error: e.to_string(),
+                        }),
+                    }
+                }
+                let has_failures = !failed.is_empty();
+                let batch = BatchResult::new(succeeded.clone(), failed);
+                #[expect(clippy::print_stdout, clippy::print_stderr)]
+                {
+                    match format {
+                        crate::types::OutputFormat::Json => {
+                            output::print_result(&batch, "", format);
+                        }
+                        crate::types::OutputFormat::Table => {
+                            if !succeeded.is_empty() {
+                                let ids_str: Vec<String> =
+                                    succeeded.iter().map(|id| format!("#{id}")).collect();
+                                println!("Updated bugs: {}", ids_str.join(", "));
+                            }
+                            for f in &batch.failed {
+                                eprintln!("Failed to update bug #{}: {}", f.id, f.error);
+                            }
+                        }
+                    }
+                }
+                if has_failures {
+                    return Err(crate::error::BzrError::Other(
+                        "some bugs failed to update".into(),
+                    ));
+                }
+            }
         }
     }
     Ok(())
@@ -262,7 +515,7 @@ mod tests {
             .await;
 
         let action = BugAction::Update {
-            id: 42,
+            ids: vec![42],
             status: Some("RESOLVED".into()),
             resolution: Some("FIXED".into()),
             assignee: None,
@@ -271,6 +524,10 @@ mod tests {
             summary: None,
             whiteboard: None,
             flag: vec![],
+            blocks_add: vec![],
+            blocks_remove: vec![],
+            depends_on_add: vec![],
+            depends_on_remove: vec![],
         };
         let (result, output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
@@ -292,16 +549,19 @@ mod tests {
             .await;
 
         let action = BugAction::Create {
-            product: "TestProduct".into(),
-            component: "General".into(),
+            template: None,
+            product: Some("TestProduct".into()),
+            component: Some("General".into()),
             summary: "New bug".into(),
-            version: "unspecified".into(),
+            version: Some("unspecified".into()),
             description: None,
             priority: None,
             severity: None,
             assignee: None,
             op_sys: None,
             rep_platform: None,
+            blocks: vec![],
+            depends_on: vec![],
         };
         let (result, output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;

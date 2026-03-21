@@ -14,12 +14,13 @@ mod group;
 mod product;
 mod result_types;
 mod server;
+mod template;
 mod user;
 
 // Re-export shared types and helpers used by commands.
 pub use result_types::{
-    print_result, ActionResult, ConfigResult, DownloadResult, MembershipResult, ResourceKind,
-    SearchResult, TagResult, UploadResult,
+    print_result, ActionResult, BatchFailure, BatchResult, ConfigResult, DownloadResult,
+    MembershipResult, ResourceKind, SearchResult, TagResult, UploadResult,
 };
 
 // Re-export all public items from submodules.
@@ -37,4 +38,5 @@ pub use field::print_field_values;
 pub use group::print_group_info;
 pub use product::{print_product_detail, print_products};
 pub use server::print_server_info;
+pub use template::{print_template_detail, print_template_list, print_template_saved};
 pub use user::{print_users, print_users_detailed, print_whoami};

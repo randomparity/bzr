@@ -76,18 +76,21 @@ pub enum BugAction {
     },
     /// Create a new bug
     Create {
-        /// Product name
+        /// Use a saved template for default field values
         #[arg(long)]
-        product: String,
-        /// Component name
+        template: Option<String>,
+        /// Product name (required unless provided by template)
         #[arg(long)]
-        component: String,
+        product: Option<String>,
+        /// Component name (required unless provided by template)
+        #[arg(long)]
+        component: Option<String>,
         /// Bug summary
         #[arg(long)]
         summary: String,
         /// Version
-        #[arg(long, default_value = "unspecified")]
-        version: String,
+        #[arg(long)]
+        version: Option<String>,
         /// Bug description
         #[arg(long)]
         description: Option<String>,
@@ -106,11 +109,92 @@ pub enum BugAction {
         /// Hardware platform (required by some Bugzilla installations)
         #[arg(long)]
         rep_platform: Option<String>,
+        /// Bug IDs that this bug blocks (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        blocks: Vec<u64>,
+        /// Bug IDs that this bug depends on (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        depends_on: Vec<u64>,
     },
-    /// Update an existing bug
+    /// Show bugs related to the authenticated user
+    My {
+        /// Show bugs I created (instead of assigned to me)
+        #[arg(long)]
+        created: bool,
+        /// Show bugs I'm CC'd on (instead of assigned to me)
+        #[arg(long)]
+        cc: bool,
+        /// Show all bugs related to me (assigned + created + CC'd)
+        #[arg(long, conflicts_with_all = ["created", "cc"])]
+        all: bool,
+        /// Filter by status
+        #[arg(long)]
+        status: Option<String>,
+        /// Max number of results
+        #[arg(long, default_value = "50")]
+        limit: u32,
+        /// Only return these fields (comma-separated)
+        #[arg(long)]
+        fields: Option<String>,
+        /// Exclude these fields (comma-separated)
+        #[arg(long)]
+        exclude_fields: Option<String>,
+    },
+    /// Clone an existing bug, optionally overriding fields
+    Clone {
+        /// Source bug ID or alias
+        id: String,
+        /// Override summary
+        #[arg(long)]
+        summary: Option<String>,
+        /// Override product
+        #[arg(long)]
+        product: Option<String>,
+        /// Override component
+        #[arg(long)]
+        component: Option<String>,
+        /// Override version
+        #[arg(long)]
+        version: Option<String>,
+        /// Override description
+        #[arg(long)]
+        description: Option<String>,
+        /// Override priority
+        #[arg(long)]
+        priority: Option<String>,
+        /// Override severity
+        #[arg(long)]
+        severity: Option<String>,
+        /// Override assignee
+        #[arg(long)]
+        assignee: Option<String>,
+        /// Override operating system
+        #[arg(long)]
+        op_sys: Option<String>,
+        /// Override hardware platform
+        #[arg(long)]
+        rep_platform: Option<String>,
+        /// Skip adding "Cloned from bug #N" comment
+        #[arg(long)]
+        no_comment: bool,
+        /// Make the new bug depend on the source bug
+        #[arg(long)]
+        add_depends_on: bool,
+        /// Make the new bug block the source bug
+        #[arg(long)]
+        add_blocks: bool,
+        /// Don't copy the CC list from the source bug
+        #[arg(long)]
+        no_cc: bool,
+        /// Don't copy keywords from the source bug
+        #[arg(long)]
+        no_keywords: bool,
+    },
+    /// Update an existing bug (supports multiple IDs for batch updates)
     Update {
-        /// Bug ID
-        id: u64,
+        /// Bug ID(s)
+        #[arg(required = true, num_args = 1..)]
+        ids: Vec<u64>,
         /// New status
         #[arg(long)]
         status: Option<String>,
@@ -135,5 +219,17 @@ pub enum BugAction {
         /// Set flags (e.g. "review?(user@example.com)")
         #[arg(long)]
         flag: Vec<String>,
+        /// Add bug IDs to blocks list (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        blocks_add: Vec<u64>,
+        /// Remove bug IDs from blocks list (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        blocks_remove: Vec<u64>,
+        /// Add bug IDs to depends-on list (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        depends_on_add: Vec<u64>,
+        /// Remove bug IDs from depends-on list (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        depends_on_remove: Vec<u64>,
     },
 }

@@ -20,6 +20,7 @@ For installation and quick start, see [README.md](../README.md).
 - [classification](#bzr-classification----classification-operations)
 - [component](#bzr-component----component-operations)
 - [config](#bzr-config----configuration-management)
+- [template](#bzr-template----bug-template-management)
 - [Flag Syntax](#flag-syntax)
 - [JSON Output](#json-output)
 - [Configuration File Format](#configuration-file-format)
@@ -79,11 +80,18 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   ├── view <ID> [--fields <F>] [--exclude-fields <F>]
 │   ├── search <QUERY> [--limit <N>] [--fields <F>] [--exclude-fields <F>]
 │   ├── history <ID> [--since <DATE>]
-│   ├── create --product <P> --component <C> --summary <S> [--version <V>]
-│   │          [--description <D>] [--priority <P>] [--severity <S>] [--assignee <A>]
-│   └── update <ID> [--status <S>] [--resolution <R>] [--assignee <A>]
-│                    [--priority <P>] [--severity <S>] [--summary <S>]
-│                    [--whiteboard <W>] [--flag <F>...]
+│   ├── my [--created] [--cc] [--all] [--status <S>] [--limit <N>]
+│   ├── create [--template <T>] --product <P> --component <C> --summary <S>
+│   │          [--version <V>] [--description <D>] [--priority <P>] [--severity <S>]
+│   │          [--assignee <A>] [--blocks <IDs>] [--depends-on <IDs>]
+│   ├── clone <ID> [--summary <S>] [--product <P>] [--component <C>] [--version <V>]
+│   │              [--description <D>] [--priority <P>] [--severity <S>] [--assignee <A>]
+│   │              [--no-comment] [--add-depends-on] [--add-blocks] [--no-cc] [--no-keywords]
+│   └── update <ID...> [--status <S>] [--resolution <R>] [--assignee <A>]
+│                       [--priority <P>] [--severity <S>] [--summary <S>]
+│                       [--whiteboard <W>] [--flag <F>...] [--blocks-add <IDs>]
+│                       [--blocks-remove <IDs>] [--depends-on-add <IDs>]
+│                       [--depends-on-remove <IDs>]
 ├── comment
 │   ├── list <BUG_ID> [--since <DATE>]
 │   ├── add <BUG_ID> [--body <TEXT>]
@@ -123,10 +131,16 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 ├── component
 │   ├── create --product <P> --name <N> --description <D> --default-assignee <E>
 │   └── update <ID> [--name <N>] [--description <D>] [--default-assignee <E>]
-└── config
-    ├── set-server <NAME> --url <URL> --api-key <KEY> [--email <EMAIL>] [--auth-method <METHOD>]
-    ├── set-default <NAME>
-    └── show
+├── config
+│   ├── set-server <NAME> --url <URL> --api-key <KEY> [--email <EMAIL>] [--auth-method <METHOD>]
+│   ├── set-default <NAME>
+│   └── show
+└── template
+    ├── save <NAME> [--product <P>] [--component <C>] [--version <V>] [--priority <P>]
+    │               [--severity <S>] [--assignee <A>] [--description <D>]
+    ├── list
+    ├── show <NAME>
+    └── delete <NAME>
 ```
 
 ---
@@ -228,20 +242,77 @@ bzr bug create --product Fedora --component kernel \
 | `--priority <P>` | No | | Priority level |
 | `--severity <S>` | No | | Severity level |
 | `--assignee <A>` | No | | Assignee email |
+| `--blocks <IDs>` | No | | Bug IDs this bug blocks (comma-separated) |
+| `--depends-on <IDs>` | No | | Bug IDs this bug depends on (comma-separated) |
+| `--template <T>` | No | | Use a saved template for default field values |
+
+When using `--template`, the template provides defaults for `--product`, `--component`, and other fields. CLI flags override template values. `--summary` is always required.
+
+### `bzr bug clone`
+
+Clone an existing bug, copying its fields into a new bug. All create flags are available as overrides.
+
+```bash
+bzr bug clone 12345
+bzr bug clone 12345 --summary "Variant: different environment"
+bzr bug clone 12345 --component NewComponent --add-depends-on
+bzr bug clone 12345 --no-comment --no-cc
+```
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `<ID>` | Yes | Source bug ID or alias |
+| `--summary <S>` | No | Override summary (copies from source if omitted) |
+| `--product <P>` | No | Override product |
+| `--component <C>` | No | Override component |
+| `--version <V>` | No | Override version |
+| `--description <D>` | No | Override description (copies comment #0 from source if omitted) |
+| `--priority <P>` | No | Override priority |
+| `--severity <S>` | No | Override severity |
+| `--assignee <A>` | No | Override assignee |
+| `--no-comment` | No | Skip the "Cloned from bug #N" comment |
+| `--add-depends-on` | No | Make the new bug depend on the source bug |
+| `--add-blocks` | No | Make the new bug block the source bug |
+| `--no-cc` | No | Don't copy the CC list from the source bug |
+| `--no-keywords` | No | Don't copy keywords from the source bug |
+
+### `bzr bug my`
+
+Show bugs related to the authenticated user. Defaults to bugs assigned to you.
+
+```bash
+bzr bug my                    # bugs assigned to me
+bzr bug my --created          # bugs I created
+bzr bug my --cc               # bugs I'm CC'd on
+bzr bug my --all              # all of the above
+bzr bug my --status OPEN --limit 20
+```
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `--created` | No | | Show bugs I created (instead of assigned) |
+| `--cc` | No | | Show bugs I'm CC'd on (instead of assigned) |
+| `--all` | No | | Show all bugs related to me (assigned + created + CC'd) |
+| `--status <S>` | No | | Filter by status |
+| `--limit <N>` | No | 50 | Max results per query |
+| `--fields <F>` | No | | Only return these fields (comma-separated) |
+| `--exclude-fields <F>` | No | | Exclude these fields (comma-separated) |
 
 ### `bzr bug update`
 
-Modify fields on an existing bug.
+Modify fields on an existing bug. Supports multiple IDs for batch updates.
 
 ```bash
 bzr bug update 12345 --status ASSIGNED --assignee dev@example.com
 bzr bug update 12345 --status RESOLVED --resolution FIXED
 bzr bug update 12345 --flag "review?(alice@example.com)"
+bzr bug update 12345 --blocks-add 100,200 --depends-on-add 50
+bzr bug update 100 200 300 --status RESOLVED --resolution DUPLICATE
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `<ID>` | Yes | Bug ID |
+| `<ID...>` | Yes | Bug ID(s) — pass multiple for batch updates |
 | `--status <S>` | No | New status |
 | `--resolution <R>` | No | Resolution (FIXED, WONTFIX, DUPLICATE, etc.) |
 | `--assignee <A>` | No | Reassign to email |
@@ -250,6 +321,12 @@ bzr bug update 12345 --flag "review?(alice@example.com)"
 | `--summary <S>` | No | Update summary text |
 | `--whiteboard <W>` | No | Set whiteboard text |
 | `--flag <F>` | No | Set flags (repeatable; see [Flag Syntax](#flag-syntax)) |
+| `--blocks-add <IDs>` | No | Add bug IDs to the blocks list (comma-separated) |
+| `--blocks-remove <IDs>` | No | Remove bug IDs from the blocks list (comma-separated) |
+| `--depends-on-add <IDs>` | No | Add bug IDs to the depends-on list (comma-separated) |
+| `--depends-on-remove <IDs>` | No | Remove bug IDs from the depends-on list (comma-separated) |
+
+When updating multiple bugs, failures on individual bugs do not abort the batch. A summary is printed showing which bugs succeeded and which failed.
 
 ---
 
@@ -707,6 +784,62 @@ bzr --json config show
 
 ---
 
+## `bzr template` -- Bug Template Management
+
+Templates store named sets of default field values for bug creation. They are saved in the config file and can be used with `bzr bug create --template`.
+
+### `bzr template save`
+
+Save a named template with default field values.
+
+```bash
+bzr template save security-bug --product Security --component Triage --priority P1 --severity critical
+bzr template save kernel-bug --product Fedora --component kernel --assignee dev@example.com
+```
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `<NAME>` | Yes | Template name |
+| `--product <P>` | No | Default product |
+| `--component <C>` | No | Default component |
+| `--version <V>` | No | Default version |
+| `--priority <P>` | No | Default priority |
+| `--severity <S>` | No | Default severity |
+| `--assignee <A>` | No | Default assignee |
+| `--op-sys <OS>` | No | Default operating system |
+| `--rep-platform <PLAT>` | No | Default hardware platform |
+| `--description <D>` | No | Default description |
+
+At least one field must be set.
+
+### `bzr template list`
+
+List all saved templates.
+
+```bash
+bzr template list
+bzr --json template list
+```
+
+### `bzr template show`
+
+Show details of a template.
+
+```bash
+bzr template show security-bug
+bzr --json template show security-bug
+```
+
+### `bzr template delete`
+
+Delete a saved template.
+
+```bash
+bzr template delete security-bug
+```
+
+---
+
 ## Flag Syntax
 
 Flags use the pattern `name[status](requestee)`:
@@ -808,6 +941,12 @@ api_key = "old-server-key"
 email = "you@example.com"
 api_mode = "hybrid"        # auto-detected: rest, xmlrpc, or hybrid
 server_version = "5.0.4"   # auto-detected (absent if version endpoint unavailable)
+
+[templates.security-bug]
+product = "Security"
+component = "Triage"
+priority = "P1"
+severity = "critical"
 ```
 
 ---

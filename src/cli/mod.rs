@@ -8,6 +8,7 @@ mod field;
 mod group;
 mod product;
 mod server;
+mod template;
 mod user;
 
 pub use attachment::AttachmentAction;
@@ -20,6 +21,7 @@ pub use field::FieldAction;
 pub use group::GroupAction;
 pub use product::ProductAction;
 pub use server::ServerAction;
+pub use template::TemplateAction;
 pub use user::UserAction;
 
 use clap::{Parser, Subcommand};
@@ -119,6 +121,11 @@ pub enum Commands {
     Component {
         #[command(subcommand)]
         action: ComponentAction,
+    },
+    /// Bug template management
+    Template {
+        #[command(subcommand)]
+        action: TemplateAction,
     },
 }
 
@@ -260,10 +267,10 @@ mod tests {
                         ..
                     },
             } => {
-                assert_eq!(product, "TestProduct");
-                assert_eq!(component, "General");
+                assert_eq!(product.as_deref(), Some("TestProduct"));
+                assert_eq!(component.as_deref(), Some("General"));
                 assert_eq!(summary, "Test bug");
-                assert_eq!(version, "unspecified");
+                assert_eq!(version, None);
             }
             _ => panic!("expected Bug Create"),
         }
@@ -279,10 +286,10 @@ mod tests {
             Commands::Bug {
                 action:
                     BugAction::Update {
-                        id, status, flag, ..
+                        ids, status, flag, ..
                     },
             } => {
-                assert_eq!(id, 42);
+                assert_eq!(ids, vec![42]);
                 assert_eq!(status.as_deref(), Some("RESOLVED"));
                 assert_eq!(flag, vec!["review+"]);
             }

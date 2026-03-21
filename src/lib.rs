@@ -93,5 +93,6 @@ pub async fn dispatch(cli: &cli::Cli, format: types::OutputFormat) -> error::Res
         cli::Commands::Component { action } => {
             commands::component::execute(action, server, format, api).await
         }
+        cli::Commands::Template { action } => commands::template::execute(action, format).await,
     }
 }
