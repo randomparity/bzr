@@ -188,6 +188,61 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[tokio::test]
+    async fn attachment_upload_api_error_propagates() {
+        let (_lock, mock, tmp) = setup_test_env().await;
+
+        Mock::given(method("POST"))
+            .and(path("/rest/bug/42/attachment"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 600,
+                "message": "You cannot attach files to this bug."
+            })))
+            .mount(&mock)
+            .await;
+
+        let upload_file = tmp.path().join("upload.txt");
+        std::fs::write(&upload_file, "test content").unwrap();
+
+        let action = AttachmentAction::Upload {
+            bug_id: 42,
+            file: upload_file.to_string_lossy().into_owned(),
+            summary: Some("Test".into()),
+            content_type: None,
+            flag: vec![],
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("cannot attach"),
+            "expected API error message, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn attachment_download_api_error_propagates() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/attachment/404"))
+            .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 100,
+                "message": "Attachment 404 does not exist."
+            })))
+            .mount(&mock)
+            .await;
+
+        let action = AttachmentAction::Download {
+            id: 404,
+            out: None,
+        };
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
+        assert!(result.is_err());
+    }
+
     #[test]
     fn guess_content_type_text_plain() {
         assert_eq!(guess_content_type("file.txt"), "text/plain");
