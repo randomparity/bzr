@@ -1,17 +1,20 @@
+//! Auth detection orchestrator — split into submodules because the two
+//! probing strategies (`whoami` for Bugzilla 5.1+, `valid_login` for 5.0+)
+//! are each self-contained with their own types and logic.
+
+mod valid_login;
+mod whoami;
+
 use reqwest::header::HeaderValue;
-use serde::Deserialize;
 
 use crate::error::{BzrError, Result};
-use crate::http::{build_http_client, AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
+use crate::http::build_http_client;
 use crate::types::{ApiMode, AuthMethod};
 
-use super::version::detect_version_and_mode;
+use self::valid_login::{detect_valid_login_auth, verify_header_auth_via_rest, ValidLoginOutcome};
+use self::whoami::{detect_whoami_auth, WhoamiOutcome};
 
-#[derive(Deserialize)]
-struct WhoamiProbeResponse {
-    #[serde(default)]
-    id: u64,
-}
+use super::version::detect_version_and_mode;
 
 /// Result of server settings detection -- auth method, API mode, and
 /// optionally the server version string. Returned by [`detect_server_settings`]
@@ -138,208 +141,6 @@ async fn detect_auth_method(
     Err(BzrError::Auth(hint.into()))
 }
 
-enum WhoamiOutcome {
-    Authenticated(AuthMethod),
-    NotFound,
-    /// Server responded but auth was rejected (e.g. 401).
-    AuthRejected,
-    /// Could not reach the server at all (network/TLS/timeout).
-    NetworkError,
-}
-
-async fn detect_whoami_auth(
-    http: &reqwest::Client,
-    base: &str,
-    api_key: &str,
-    key_header: &HeaderValue,
-) -> WhoamiOutcome {
-    let url = format!("{base}/rest/whoami");
-
-    // Probe: header-based auth
-    let header_req = http.get(&url).header(AUTH_HEADER_NAME, key_header.clone());
-    let outcome = probe_whoami(header_req, AuthMethod::Header).await;
-    match outcome {
-        WhoamiOutcome::AuthRejected => {} // try query-param next
-        other => return other,
-    }
-
-    // Probe: query-param auth
-    let query_req = http.get(&url).query(&[(AUTH_QUERY_PARAM, api_key)]);
-    probe_whoami(query_req, AuthMethod::QueryParam).await
-}
-
-async fn probe_whoami(request: reqwest::RequestBuilder, method: AuthMethod) -> WhoamiOutcome {
-    let resp = match request.send().await {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::debug!("whoami {method} request failed: {e:#}");
-            return WhoamiOutcome::NetworkError;
-        }
-    };
-
-    let status = resp.status();
-    let body = resp.text().await.unwrap_or_default();
-    tracing::trace!(probe = "whoami", %method, %status, body, "auth probe response");
-    if status.is_success() {
-        // A valid whoami response contains a positive user ID. Treat id==0
-        // (unauthenticated/anonymous) and unparseable bodies as auth failures
-        // -- the server responded but didn't confirm our credentials.
-        if let Ok(parsed) = serde_json::from_str::<WhoamiProbeResponse>(&body) {
-            if parsed.id > 0 {
-                return WhoamiOutcome::Authenticated(method);
-            }
-        }
-    } else if status == reqwest::StatusCode::NOT_FOUND {
-        tracing::debug!("rest/whoami not available on this server");
-        return WhoamiOutcome::NotFound;
-    } else {
-        tracing::debug!(%status, %method, "whoami auth probe failed");
-    }
-
-    WhoamiOutcome::AuthRejected
-}
-
-#[derive(Deserialize)]
-struct ValidLoginResponse {
-    #[serde(default)]
-    result: ValidLoginResult,
-}
-
-/// Bugzilla returns `{"result": true}` (bool) or `{"result": 1}` (integer)
-/// depending on version. Accept both.
-#[derive(Deserialize, Default)]
-#[serde(try_from = "serde_json::Value")]
-struct ValidLoginResult(bool);
-
-impl TryFrom<serde_json::Value> for ValidLoginResult {
-    type Error = String;
-
-    fn try_from(v: serde_json::Value) -> std::result::Result<Self, Self::Error> {
-        match v {
-            serde_json::Value::Bool(b) => Ok(Self(b)),
-            serde_json::Value::Number(n) => Ok(Self(n.as_u64() == Some(1))),
-            other => Err(format!("expected bool or integer, got {other}")),
-        }
-    }
-}
-
-/// Outcome of a `valid_login` probe, mirroring [`WhoamiOutcome`].
-enum ValidLoginOutcome {
-    Authenticated(AuthMethod),
-    AuthRejected,
-    NetworkError,
-}
-
-async fn detect_valid_login_auth(
-    http: &reqwest::Client,
-    base: &str,
-    api_key: &str,
-    key_header: &HeaderValue,
-    login: &str,
-) -> ValidLoginOutcome {
-    let url = format!("{base}/rest/valid_login");
-
-    let probes: [(_, _, _); 2] = [
-        // Probe: header-based auth
-        (vec![("login", login)], Some(key_header), AuthMethod::Header),
-        // Probe: query-param auth
-        (
-            vec![("login", login), (AUTH_QUERY_PARAM, api_key)],
-            None,
-            AuthMethod::QueryParam,
-        ),
-    ];
-
-    for (query, header, method) in &probes {
-        match probe_valid_login(http, &url, query, *header, *method).await {
-            ValidLoginOutcome::AuthRejected => {} // try next probe
-            outcome => return outcome,
-        }
-    }
-
-    tracing::debug!("valid_login probes both failed");
-    ValidLoginOutcome::AuthRejected
-}
-
-async fn probe_valid_login(
-    http: &reqwest::Client,
-    url: &str,
-    query: &[(&str, &str)],
-    key_header: Option<&HeaderValue>,
-    method: AuthMethod,
-) -> ValidLoginOutcome {
-    let mut req = http.get(url).query(query);
-    if let Some(hdr) = key_header {
-        req = req.header(AUTH_HEADER_NAME, hdr.clone());
-    }
-    let resp = match req.send().await {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::warn!(error = %e, "valid_login probe network error");
-            return ValidLoginOutcome::NetworkError;
-        }
-    };
-    let status = resp.status();
-    if !status.is_success() {
-        tracing::debug!(%status, %method, "valid_login probe failed");
-        return ValidLoginOutcome::AuthRejected;
-    }
-    let body_text = match resp.text().await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::warn!(error = %e, "valid_login response read error");
-            return ValidLoginOutcome::NetworkError;
-        }
-    };
-    tracing::trace!(probe = "valid_login", %method, body = body_text, "auth probe response");
-    let parsed: ValidLoginResponse = match serde_json::from_str(&body_text) {
-        Ok(p) => p,
-        Err(_) => return ValidLoginOutcome::AuthRejected,
-    };
-    if parsed.result.0 {
-        ValidLoginOutcome::Authenticated(method)
-    } else {
-        tracing::debug!(%method, "valid_login returned false");
-        ValidLoginOutcome::AuthRejected
-    }
-}
-
-/// Try header auth on a real API endpoint to verify it works.
-///
-/// Some servers (e.g. IBM LTC Bugzilla) report header auth as unsupported
-/// via `valid_login` but accept it on actual API endpoints. A minimal
-/// `rest/bug?limit=1` request is used -- any 2xx confirms header auth works.
-async fn verify_header_auth_via_rest(
-    http: &reqwest::Client,
-    base: &str,
-    key_header: &HeaderValue,
-) -> bool {
-    let url = format!("{base}/rest/bug");
-    let resp = http
-        .get(&url)
-        .query(&[("limit", "1")])
-        .header(AUTH_HEADER_NAME, key_header.clone())
-        .send()
-        .await;
-    match resp {
-        Ok(r) if r.status().is_success() => {
-            tracing::debug!("header auth probe on rest/bug succeeded");
-            true
-        }
-        Ok(r) => {
-            tracing::debug!(
-                status = %r.status(),
-                "header auth probe on rest/bug failed"
-            );
-            false
-        }
-        Err(e) => {
-            tracing::debug!("header auth probe request failed: {e}");
-            false
-        }
-    }
-}
-
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 mod tests {
@@ -347,10 +148,8 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
-
-    fn test_client() -> reqwest::Client {
-        crate::client::test_helpers::test_http_client()
-    }
+    use crate::client::test_helpers::test_http_client;
+    use crate::http::AUTH_HEADER_NAME;
 
     #[tokio::test]
     async fn header_auth_succeeds() {
@@ -362,7 +161,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let result = detect_auth_method(&test_client(), &server.uri(), "test-key", None)
+        let result = detect_auth_method(&test_http_client(), &server.uri(), "test-key", None)
             .await
             .unwrap();
         assert_eq!(result, AuthMethod::Header);
@@ -381,12 +180,12 @@ mod tests {
 
         Mock::given(method("GET"))
             .and(path("/rest/whoami"))
-            .and(query_param(AUTH_QUERY_PARAM, "test-key"))
+            .and(query_param(crate::http::AUTH_QUERY_PARAM, "test-key"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 7})))
             .mount(&server)
             .await;
 
-        let result = detect_auth_method(&test_client(), &server.uri(), "test-key", None)
+        let result = detect_auth_method(&test_http_client(), &server.uri(), "test-key", None)
             .await
             .unwrap();
         assert_eq!(result, AuthMethod::QueryParam);
@@ -413,7 +212,7 @@ mod tests {
             .await;
 
         let result = detect_auth_method(
-            &test_client(),
+            &test_http_client(),
             &server.uri(),
             "test-key",
             Some("user@example.com"),
@@ -447,7 +246,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/valid_login"))
             .and(query_param("login", "user@example.com"))
-            .and(query_param(AUTH_QUERY_PARAM, "test-key"))
+            .and(query_param(crate::http::AUTH_QUERY_PARAM, "test-key"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": true})),
             )
@@ -463,7 +262,7 @@ mod tests {
             .await;
 
         let result = detect_auth_method(
-            &test_client(),
+            &test_http_client(),
             &server.uri(),
             "test-key",
             Some("user@example.com"),
@@ -497,7 +296,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/valid_login"))
             .and(query_param("login", "user@example.com"))
-            .and(query_param(AUTH_QUERY_PARAM, "test-key"))
+            .and(query_param(crate::http::AUTH_QUERY_PARAM, "test-key"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": true})),
             )
@@ -513,7 +312,7 @@ mod tests {
             .await;
 
         let result = detect_auth_method(
-            &test_client(),
+            &test_http_client(),
             &server.uri(),
             "test-key",
             Some("user@example.com"),
@@ -533,7 +332,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let result = detect_auth_method(&test_client(), &server.uri(), "test-key", None).await;
+        let result = detect_auth_method(&test_http_client(), &server.uri(), "test-key", None).await;
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(
@@ -547,7 +346,7 @@ mod tests {
         // When the server is unreachable, default to header auth
         // rather than failing -- header is the safest default.
         let result =
-            detect_auth_method(&test_client(), "https://127.0.0.1:1", "test-key", None).await;
+            detect_auth_method(&test_http_client(), "https://127.0.0.1:1", "test-key", None).await;
         assert!(result.is_ok(), "should default to header, got: {result:?}");
         assert_eq!(result.unwrap(), AuthMethod::Header);
     }
@@ -562,7 +361,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let result = detect_auth_method(&test_client(), &server.uri(), "test-key", None).await;
+        let result = detect_auth_method(&test_http_client(), &server.uri(), "test-key", None).await;
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(
@@ -592,7 +391,7 @@ mod tests {
             .await;
 
         let result = detect_auth_method(
-            &test_client(),
+            &test_http_client(),
             &server.uri(),
             "test-key",
             Some("user@example.com"),
@@ -621,7 +420,7 @@ mod tests {
             .await;
 
         let result = detect_auth_method(
-            &test_client(),
+            &test_http_client(),
             &server.uri(),
             "test-key",
             Some("bad@example.com"),

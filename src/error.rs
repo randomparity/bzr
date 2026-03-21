@@ -53,6 +53,19 @@ impl BzrError {
         BzrError::Config(msg.to_string())
     }
 
+    /// Returns `true` for transport-level failures that may succeed on retry
+    /// via a different protocol (e.g. XML-RPC fallback in Hybrid mode).
+    /// Domain errors like `Auth`, `NotFound`, and `Config` are not retriable.
+    pub fn is_transport_failure(&self) -> bool {
+        matches!(
+            self,
+            BzrError::Http(_)
+                | BzrError::HttpStatus { .. }
+                | BzrError::Deserialize(_)
+                | BzrError::XmlRpc(_)
+        )
+    }
+
     pub fn exit_code(&self) -> i32 {
         match self {
             BzrError::Config(_) | BzrError::TomlParse(_) | BzrError::TomlSerialize(_) => 3,

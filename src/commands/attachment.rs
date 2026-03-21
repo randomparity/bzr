@@ -23,7 +23,7 @@ pub async fn execute(
         AttachmentAction::Download { id, out } => {
             let (filename, data) = client.download_attachment(*id).await?;
             let dest = out.as_deref().unwrap_or(&filename);
-            std::fs::write(dest, &data)?;
+            write_attachment(dest, &data)?;
             output::print_result(
                 &DownloadResult::new(*id, dest, data.len()),
                 &format!(
@@ -92,6 +92,11 @@ pub async fn execute(
             );
         }
     }
+    Ok(())
+}
+
+fn write_attachment(dest: &str, data: &[u8]) -> Result<()> {
+    std::fs::write(dest, data)?;
     Ok(())
 }
 

@@ -156,8 +156,7 @@ pub struct FlagUpdate {
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ServerVersion {
-    #[serde(rename = "version")]
-    pub value: String,
+    pub version: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -273,7 +272,7 @@ mod tests {
     fn server_version_deserializes() {
         let json = serde_json::json!({"version": "5.0.4"});
         let ver: ServerVersion = serde_json::from_value(json).unwrap();
-        assert_eq!(ver.value, "5.0.4");
+        assert_eq!(ver.version, "5.0.4");
     }
 
     #[test]

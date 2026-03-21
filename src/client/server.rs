@@ -103,7 +103,7 @@ mod tests {
 
         let client = test_client(&mock.uri());
         let ver = client.server_version().await.unwrap();
-        assert_eq!(ver.value, "5.0.4");
+        assert_eq!(ver.version, "5.0.4");
     }
 
     #[tokio::test]

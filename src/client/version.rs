@@ -1,4 +1,4 @@
-use crate::http::{AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
+use crate::http::apply_auth;
 use crate::types::{ApiMode, AuthMethod};
 
 /// Detect server version and determine API mode.
@@ -19,21 +19,14 @@ pub(super) async fn detect_version_and_mode(
     let base = base_url.trim_end_matches('/');
     let url = format!("{base}/rest/version");
 
-    let mut req = http.get(&url);
-    match auth_method {
-        AuthMethod::Header => {
-            if let Ok(val) = reqwest::header::HeaderValue::from_str(api_key) {
-                req = req.header(AUTH_HEADER_NAME, val);
-            } else {
-                tracing::debug!(
-                    "API key has invalid header characters, sending version request without auth"
-                );
-            }
+    let req = match apply_auth(http.get(&url), api_key, auth_method) {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::debug!("auth setup failed for version probe: {e}");
+            // Fall back to unauthenticated request — version endpoint is often public.
+            http.get(&url)
         }
-        AuthMethod::QueryParam => {
-            req = req.query(&[(AUTH_QUERY_PARAM, api_key)]);
-        }
-    }
+    };
 
     let resp = match req.send().await {
         Ok(r) => r,
@@ -95,10 +88,7 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
-
-    fn test_client() -> reqwest::Client {
-        crate::client::test_helpers::test_http_client()
-    }
+    use crate::client::test_helpers::test_http_client;
 
     #[test]
     fn version_to_mode_pre_5() {
@@ -133,7 +123,7 @@ mod tests {
             .await;
 
         let (version, mode) = detect_version_and_mode(
-            &test_client(),
+            &test_http_client(),
             &server.uri(),
             "test-key",
             AuthMethod::Header,
@@ -156,7 +146,7 @@ mod tests {
             .await;
 
         let (version, mode) = detect_version_and_mode(
-            &test_client(),
+            &test_http_client(),
             &server.uri(),
             "test-key",
             AuthMethod::Header,
@@ -177,7 +167,7 @@ mod tests {
             .await;
 
         let (version, mode) = detect_version_and_mode(
-            &test_client(),
+            &test_http_client(),
             &server.uri(),
             "test-key",
             AuthMethod::Header,
@@ -190,7 +180,7 @@ mod tests {
     #[tokio::test]
     async fn detect_version_network_error_returns_xmlrpc() {
         let (version, mode) = detect_version_and_mode(
-            &test_client(),
+            &test_http_client(),
             "https://127.0.0.1:1",
             "test-key",
             AuthMethod::Header,
@@ -211,7 +201,7 @@ mod tests {
             .await;
 
         let (version, mode) = detect_version_and_mode(
-            &test_client(),
+            &test_http_client(),
             &server.uri(),
             "test-key",
             AuthMethod::Header,

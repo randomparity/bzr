@@ -2,7 +2,7 @@ use colored::Colorize;
 use tabled::{Table, Tabled};
 
 use super::common::{print_formatted, truncate};
-use crate::types::{Classification, OutputFormat, Product};
+use crate::types::{OutputFormat, Product};
 
 #[derive(Tabled)]
 struct ProductRow {
@@ -84,29 +84,11 @@ pub fn print_product_detail(product: &Product, format: OutputFormat) {
     });
 }
 
-#[expect(clippy::print_stdout)]
-pub fn print_classification(classification: &Classification, format: OutputFormat) {
-    print_formatted(classification, format, |classification| {
-        println!(
-            "{} {}\n{}\n",
-            "Classification".bold(),
-            classification.name.bold(),
-            classification.description,
-        );
-        if !classification.products.is_empty() {
-            println!("{}:", "Products".bold());
-            for p in &classification.products {
-                println!("  {} - {}", p.name, truncate(&p.description, 60));
-            }
-        }
-    });
-}
-
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::types::{Classification, ClassificationProduct, Product};
+    use crate::types::Product;
     use tabled::Table;
 
     fn make_product(id: u64, name: &str) -> Product {
@@ -133,20 +115,6 @@ mod tests {
                 name: "M1".into(),
                 sort_key: 0,
                 is_active: true,
-            }],
-        }
-    }
-
-    fn make_classification() -> Classification {
-        Classification {
-            id: 1,
-            name: "Software".into(),
-            description: "Software products".into(),
-            sort_key: 0,
-            products: vec![ClassificationProduct {
-                id: 10,
-                name: "Widget".into(),
-                description: "Widget product".into(),
             }],
         }
     }
@@ -199,32 +167,4 @@ mod tests {
         assert!(!parsed["milestones"].as_array().unwrap().is_empty());
     }
 
-    // ── print_classification ─────────────────────────────────────────
-
-    #[test]
-    fn print_classification_json() {
-        let classification = make_classification();
-        let json = serde_json::to_string_pretty(&classification).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed["id"], 1);
-        assert_eq!(parsed["name"], "Software");
-        assert_eq!(parsed["description"], "Software products");
-        let products = parsed["products"].as_array().unwrap();
-        assert_eq!(products.len(), 1);
-        assert_eq!(products[0]["name"], "Widget");
-    }
-
-    #[test]
-    fn print_classification_json_empty_products() {
-        let classification = Classification {
-            id: 2,
-            name: "Empty".into(),
-            description: "No products".into(),
-            sort_key: 0,
-            products: vec![],
-        };
-        let json = serde_json::to_string_pretty(&classification).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert!(parsed["products"].as_array().unwrap().is_empty());
-    }
 }

@@ -105,12 +105,7 @@ impl BugzillaClient {
             ApiMode::Hybrid => {
                 let rest_result = self.get_bug_rest(id, include_fields, exclude_fields).await;
                 match &rest_result {
-                    Err(
-                        BzrError::Http(_)
-                        | BzrError::HttpStatus { .. }
-                        | BzrError::Deserialize(_)
-                        | BzrError::XmlRpc(_),
-                    ) => {
+                    Err(e) if e.is_transport_failure() => {
                         tracing::info!("REST bug lookup failed, retrying via XML-RPC");
                         self.xmlrpc_client()?.get_bug(id).await
                     }

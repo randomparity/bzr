@@ -1,4 +1,5 @@
 use std::io::IsTerminal;
+use std::process::ExitCode;
 
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
@@ -8,7 +9,7 @@ use bzr::error::{self, BzrError};
 use bzr::types::OutputFormat;
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() {
+async fn main() -> ExitCode {
     let cli = Cli::parse();
 
     let filter = if std::env::var("RUST_LOG").is_ok() {
@@ -41,7 +42,7 @@ async fn main() {
             {
                 eprintln!("error: {e}");
             }
-            std::process::exit(e.exit_code());
+            return exit_code(&e);
         }
     };
 
@@ -70,8 +71,16 @@ async fn main() {
                 eprintln!("error: {e}");
             }
         }
-        std::process::exit(e.exit_code());
+        return exit_code(&e);
     }
+
+    ExitCode::SUCCESS
+}
+
+/// Convert a `BzrError` exit code (1-10) to a `std::process::ExitCode`.
+fn exit_code(e: &BzrError) -> ExitCode {
+    // All BzrError exit codes are in the range 1..=10.
+    ExitCode::from(u8::try_from(e.exit_code()).unwrap_or(1))
 }
 
 /// Redirect stdout to /dev/null for --quiet mode.
