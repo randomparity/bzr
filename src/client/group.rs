@@ -24,11 +24,6 @@ struct GroupResponse {
     groups: Vec<GroupInfo>,
 }
 
-enum GroupOp {
-    Add,
-    Remove,
-}
-
 impl BugzillaClient {
     pub async fn get_group_members(
         &self,
@@ -56,33 +51,21 @@ impl BugzillaClient {
     }
 
     pub async fn add_user_to_group(&self, user: &str, group: &str) -> Result<()> {
-        self.modify_group_membership(user, group, GroupOp::Add)
+        let body = GroupMembershipBody {
+            groups: GroupMembershipAction {
+                add: vec![group.to_string()],
+                remove: Vec::new(),
+            },
+        };
+        self.put_json(&format!("user/{}", encode_path(user)), &body)
             .await
     }
 
     pub async fn remove_user_from_group(&self, user: &str, group: &str) -> Result<()> {
-        self.modify_group_membership(user, group, GroupOp::Remove)
-            .await
-    }
-
-    async fn modify_group_membership(
-        &self,
-        user: &str,
-        group: &str,
-        operation: GroupOp,
-    ) -> Result<()> {
-        let body = match operation {
-            GroupOp::Add => GroupMembershipBody {
-                groups: GroupMembershipAction {
-                    add: vec![group.to_string()],
-                    remove: Vec::new(),
-                },
-            },
-            GroupOp::Remove => GroupMembershipBody {
-                groups: GroupMembershipAction {
-                    add: Vec::new(),
-                    remove: vec![group.to_string()],
-                },
+        let body = GroupMembershipBody {
+            groups: GroupMembershipAction {
+                add: Vec::new(),
+                remove: vec![group.to_string()],
             },
         };
         self.put_json(&format!("user/{}", encode_path(user)), &body)

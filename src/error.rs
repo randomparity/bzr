@@ -53,10 +53,10 @@ pub type Result<T> = std::result::Result<T, BzrError>;
 /// Reqwest includes the full URL (with query params) in its error Display.
 /// When using query-param auth, this exposes the `Bugzilla_api_key` value.
 fn sanitize_http_error(err: &reqwest::Error) -> String {
-    sanitize_http_error_str(&err.to_string())
+    redact_api_key(&err.to_string())
 }
 
-fn sanitize_http_error_str(msg: &str) -> String {
+fn redact_api_key(msg: &str) -> String {
     const MARKER: &str = "Bugzilla_api_key=";
     if let Some(idx) = msg.find(MARKER) {
         let prefix = &msg[..idx + MARKER.len()];
@@ -247,7 +247,7 @@ mod tests {
     #[test]
     fn sanitize_http_error_redacts_api_key() {
         let input = "error sending request for url (http://localhost:8090/rest/extensions?Bugzilla_api_key=SecretKey123)";
-        let result = sanitize_http_error_str(input);
+        let result = redact_api_key(input);
         assert!(
             !result.contains("SecretKey123"),
             "API key should be redacted: {result}"
@@ -265,7 +265,7 @@ mod tests {
     #[test]
     fn sanitize_http_error_preserves_message_without_key() {
         let input = "connection refused";
-        let result = sanitize_http_error_str(input);
+        let result = redact_api_key(input);
         assert_eq!(result, "connection refused");
     }
 
@@ -273,7 +273,7 @@ mod tests {
     fn sanitize_http_error_handles_key_with_other_params() {
         let input =
             "error for url (http://host/rest/bug?Bugzilla_api_key=secret&include_fields=id)";
-        let result = sanitize_http_error_str(input);
+        let result = redact_api_key(input);
         assert!(
             !result.contains("secret"),
             "API key should be redacted: {result}"

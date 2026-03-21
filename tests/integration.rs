@@ -18,8 +18,9 @@ static ENV_LOCK: Mutex<()> = Mutex::const_new(());
 
 /// Capture stdout from an async operation via fd-level redirection.
 ///
-/// Uses the same technique as `commands::test_helpers::capture_stdout`
-/// but available to integration tests (which are external to the crate).
+/// This duplicates the logic in `commands::test_helpers::capture_stdout` because
+/// integration tests cannot access `pub(super)` modules. Both implementations
+/// must be kept in sync.
 #[cfg(unix)]
 async fn capture_stdout<F, T>(f: F) -> (T, String)
 where
@@ -67,6 +68,15 @@ fn extract_json(output: &str) -> serde_json::Value {
         if ch == '[' || ch == '{' {
             if let Ok(v) = serde_json::from_str(&output[i..]) {
                 return v;
+            }
+            let rest = &output[i..];
+            for (j, jch) in rest.char_indices().rev() {
+                let closing = if ch == '[' { ']' } else { '}' };
+                if jch == closing {
+                    if let Ok(v) = serde_json::from_str(&rest[..=j]) {
+                        return v;
+                    }
+                }
             }
         }
     }
