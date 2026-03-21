@@ -54,7 +54,7 @@ pub async fn execute(
             };
             client.update_product(name, &params).await?;
             output::print_result(
-                &ActionResult::updated_named(name.as_str(), ResourceKind::Product),
+                &ActionResult::updated_named(name.as_str(), None, ResourceKind::Product),
                 &format!("Updated product '{name}'"),
                 format,
             );

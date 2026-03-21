@@ -466,8 +466,10 @@ fn fault_to_error(value: &Value) -> BzrError {
         let msg = members
             .get("faultString")
             .and_then(Value::as_str)
-            .unwrap_or("unknown XML-RPC fault");
-        BzrError::XmlRpc(format!("fault {code}: {msg}"))
+            .unwrap_or("unknown fault")
+            .to_string();
+        // Map to Api error for consistent formatting with REST API errors.
+        BzrError::Api { code, message: msg }
     } else {
         BzrError::XmlRpc("malformed fault response".into())
     }

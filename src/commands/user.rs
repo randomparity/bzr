@@ -71,7 +71,7 @@ pub async fn execute(
             };
             client.update_user(user, &params).await?;
             output::print_result(
-                &ActionResult::updated_named(user.as_str(), ResourceKind::User),
+                &ActionResult::updated_named(user.as_str(), None, ResourceKind::User),
                 &format!("Updated user '{user}'"),
                 format,
             );

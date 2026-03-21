@@ -254,9 +254,9 @@ impl ActionResult {
         }
     }
 
-    pub fn updated_named(name: impl Into<String>, resource: ResourceKind) -> Self {
+    pub fn updated_named(name: impl Into<String>, id: Option<u64>, resource: ResourceKind) -> Self {
         Self {
-            id: None,
+            id,
             name: Some(name.into()),
             resource,
             action: ActionKind::Updated,

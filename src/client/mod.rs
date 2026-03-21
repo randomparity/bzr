@@ -192,6 +192,17 @@ impl BugzillaClient {
         Ok(())
     }
 
+    /// Send a PUT request and deserialize the JSON response.
+    pub(super) async fn put_json_response<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &impl serde::Serialize,
+    ) -> Result<T> {
+        let req = self.apply_auth(self.http.put(self.url(path)).json(body));
+        let resp = self.send(req).await?;
+        self.parse_json(resp).await
+    }
+
     pub(super) fn apply_auth(&self, builder: RequestBuilder) -> RequestBuilder {
         match &self.auth {
             PreparedAuth::Header(value) => builder.header(AUTH_HEADER_NAME, value.clone()),

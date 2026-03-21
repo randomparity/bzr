@@ -41,22 +41,13 @@ impl BugzillaClient {
         comment_id: u64,
         params: &UpdateCommentTagsParams,
     ) -> Result<Vec<String>> {
-        let req = self.apply_auth(
-            self.http
-                .put(self.url(&format!("bug/comment/{comment_id}/tags")))
-                .json(params),
-        );
-        let resp = self.send(req).await?;
-        self.parse_json(resp).await
+        self.put_json_response(&format!("bug/comment/{comment_id}/tags"), params)
+            .await
     }
 
     pub async fn search_comment_tags(&self, query: &str) -> Result<Vec<String>> {
-        let req = self.apply_auth(
-            self.http
-                .get(self.url(&format!("bug/comment/tags/{}", encode_path(query)))),
-        );
-        let resp = self.send(req).await?;
-        self.parse_json(resp).await
+        self.get_json(&format!("bug/comment/tags/{}", encode_path(query)))
+            .await
     }
 
     pub async fn add_comment(&self, bug_id: u64, text: &str) -> Result<u64> {
