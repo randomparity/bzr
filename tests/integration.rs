@@ -536,7 +536,7 @@ api_key = "key-1234567890"
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let action = bzr::cli::ConfigAction::Show;
-    let result = bzr::commands::config_cmd::execute(&action, bzr::types::OutputFormat::Json);
+    let result = bzr::commands::config::execute(&action, bzr::types::OutputFormat::Json);
     assert!(result.is_ok(), "config show should succeed: {result:?}");
 }
 
@@ -1266,7 +1266,7 @@ fn config_set_server_integration() {
         email: None,
         auth_method: None,
     };
-    let result = bzr::commands::config_cmd::execute(&action, bzr::types::OutputFormat::Json);
+    let result = bzr::commands::config::execute(&action, bzr::types::OutputFormat::Json);
     assert!(
         result.is_ok(),
         "config set-server should succeed: {result:?}"
@@ -1290,7 +1290,7 @@ fn config_set_default_integration() {
     let action = bzr::cli::ConfigAction::SetDefault {
         name: "staging".to_string(),
     };
-    let result = bzr::commands::config_cmd::execute(&action, bzr::types::OutputFormat::Json);
+    let result = bzr::commands::config::execute(&action, bzr::types::OutputFormat::Json);
     assert!(
         result.is_ok(),
         "config set-default should succeed: {result:?}"

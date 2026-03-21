@@ -8,7 +8,7 @@
 - `auth.rs` — resolve_auth_method(), detect_auth_method() for header vs query-param
 - `error.rs` — BzrError enum (thiserror), Result alias; now has exit_code() and error_type()
 - `output.rs` — print_* display functions, OutputFormat (Table/Json), print_result()
-- `commands/{bug,comment,attachment,config_cmd,product,field,user,group,component,...}.rs`
+- `commands/{bug,comment,attachment,config,product,field,user,group,component,...}.rs`
 
 ## Key conventions
 - Auth: `X-BUGZILLA-API-KEY` header OR `Bugzilla_api_key` query param (server-detected, cached)
@@ -37,7 +37,7 @@
 ## Known gaps / issues to track
 - `suppress_stdout()` is Unix-only with no `#[cfg(unix)]` guard — won't compile on Windows
 - `print_comment_tags()` (SearchTags command) ignores `format` — JSON output broken for search-tags
-- `let _ = write!(human, ...)` in config_cmd.rs is unconventional; `human.push_str` preferred
+- `let _ = write!(human, ...)` in commands/config.rs is unconventional; `human.push_str` preferred
 - JSON error fallback string in main.rs uses `format!("{e}")` interpolation — invalid JSON if e contains `"`
 - `--json` and `--output` conflict silently (`--json` wins); no user-visible error
 - No tests for `resolve_format()`, `print_result()`, `exit_code()`, `error_type()`
