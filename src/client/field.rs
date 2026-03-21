@@ -21,9 +21,7 @@ impl BugzillaClient {
     /// (empty `fields` array). An empty `Vec` means the field exists but has
     /// no legal values.
     pub async fn get_field_values(&self, field_name: &str) -> Result<Vec<FieldValue>> {
-        let req = self.apply_auth(self.http.get(self.url(&format!("field/bug/{field_name}"))));
-        let resp = self.send(req).await?;
-        let data: FieldBugResponse = self.parse_json(resp).await?;
+        let data: FieldBugResponse = self.get_json(&format!("field/bug/{field_name}")).await?;
         let field = data
             .fields
             .into_iter()

@@ -66,6 +66,9 @@ pub struct SearchParams {
     pub severity: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub alias: Option<String>,
+    /// Bug IDs to search for. Skipped from serde because Bugzilla's REST API
+    /// requires these as repeated `ids=N` query params, which `client/bug.rs`
+    /// appends manually via `reqwest::RequestBuilder::query`.
     #[serde(skip)]
     pub id: Vec<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]

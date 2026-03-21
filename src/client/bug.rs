@@ -29,16 +29,15 @@ struct HistoryBugEntry {
 impl BugzillaClient {
     pub async fn get_bug_history_since(
         &self,
-        id: u64,
+        bug_id: u64,
         since: Option<&str>,
     ) -> Result<Vec<HistoryEntry>> {
-        let mut req_builder = self.http.get(self.url(&format!("bug/{id}/history")));
-        if let Some(since) = since {
-            req_builder = req_builder.query(&[("new_since", since)]);
-        }
-        let req = self.apply_auth(req_builder);
-        let resp = self.send(req).await?;
-        let data: HistoryResponse = self.parse_json(resp).await?;
+        let data: HistoryResponse = if let Some(since) = since {
+            self.get_json_query(&format!("bug/{bug_id}/history"), &[("new_since", since)])
+                .await?
+        } else {
+            self.get_json(&format!("bug/{bug_id}/history")).await?
+        };
         let history = data
             .bugs
             .into_iter()
@@ -94,6 +93,10 @@ impl BugzillaClient {
     /// Unlike `get_bug_history_since`, `get_comments_since`, and `get_attachments`,
     /// this method accepts `&str` because Bugzilla supports alias lookup here.
     /// The returned `Bug.id` (u64) can be passed to those numeric-only methods.
+    ///
+    /// In Hybrid mode, the retry chain is: REST direct → REST search (on 100500)
+    /// → XML-RPC. The first two steps happen inside `get_bug_rest`; the XML-RPC
+    /// fallback here catches transport failures and residual 100500 errors.
     pub async fn get_bug(
         &self,
         id: &str,
@@ -187,10 +190,12 @@ impl BugzillaClient {
             })
     }
 
+    /// Create a new bug. Always uses REST (XML-RPC mutation support is not implemented).
     pub async fn create_bug(&self, params: &CreateBugParams) -> Result<u64> {
         self.post_json_id("bug", params).await
     }
 
+    /// Update a bug. Always uses REST (XML-RPC mutation support is not implemented).
     pub async fn update_bug(&self, id: u64, updates: &UpdateBugParams) -> Result<()> {
         self.put_json(&format!("bug/{id}"), updates).await
     }

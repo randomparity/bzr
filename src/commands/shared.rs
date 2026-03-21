@@ -1,27 +1,42 @@
 use crate::client::BugzillaClient;
+use crate::client::DetectedServerSettings;
 use crate::config::Config;
 use crate::error::Result;
 use crate::types::ApiMode;
 
-/// Like [`connect_client_with_email`], but discards the server email.
-/// Used by all commands that do not need the Bugzilla 5.0 `valid_login` fallback.
+/// Persist detected server settings to config.
+/// Always persists `auth_method` when `persist_auth` is true.
+/// Only persists `api_mode` and `server_version` when version detection
+/// succeeded (`server_version` is `Some`).
+fn persist_detected_settings(
+    config: &mut Config,
+    server_name: &str,
+    settings: &DetectedServerSettings,
+    persist_auth: bool,
+) -> Result<()> {
+    if let Some(srv_mut) = config.servers.get_mut(server_name) {
+        if persist_auth {
+            srv_mut.auth_method = Some(settings.auth_method);
+        }
+        if settings.server_version.is_some() {
+            srv_mut.api_mode = Some(settings.api_mode);
+            srv_mut.server_version.clone_from(&settings.server_version);
+        }
+        config.save()?;
+    }
+    Ok(())
+}
+
+/// Connect to a Bugzilla server.
+///
+/// On first connection to a server, detects auth method and API mode, then
+/// persists these settings to the config file for subsequent connections.
+/// The server's configured email (if any) is stored in the client for
+/// Bugzilla 5.0 whoami fallback.
 pub async fn connect_client(
     server: Option<&str>,
     api_override: Option<ApiMode>,
 ) -> Result<BugzillaClient> {
-    let (client, _email) = connect_client_with_email(server, api_override).await?;
-    Ok(client)
-}
-
-/// Connect to a Bugzilla server, also returning the server's configured email
-/// (if any). The email is needed by whoami for Bugzilla 5.0 fallback.
-///
-/// On first connection to a server, detects auth method and API mode, then
-/// persists these settings to the config file for subsequent connections.
-pub async fn connect_client_with_email(
-    server: Option<&str>,
-    api_override: Option<ApiMode>,
-) -> Result<(BugzillaClient, Option<String>)> {
     let mut config = Config::load()?;
     let (server_name, srv) = config.resolve_server(server)?;
     let (server_name, url, api_key, email) = (
@@ -30,33 +45,27 @@ pub async fn connect_client_with_email(
         srv.api_key.clone(),
         srv.email.clone(),
     );
-    // Use cached auth method if available; otherwise detect via network probes
-    // and persist the results back to config.
-    let (auth, detected_mode) = if let Some(method) = srv.auth_method {
-        let mode = srv.api_mode.unwrap_or(ApiMode::Rest);
-        (method, mode)
-    } else {
-        let settings =
-            crate::client::detect_server_settings(&url, &api_key, email.as_deref()).await?;
-
-        // Persist detected settings to config so future invocations skip detection.
-        // Only persist api_mode/version when version detection succeeded (version
-        // is Some). On transient failures we leave them unset so next run re-detects.
-        if let Some(srv_mut) = config.servers.get_mut(&server_name) {
-            srv_mut.auth_method = Some(settings.auth_method);
-            if settings.server_version.is_some() {
-                srv_mut.api_mode = Some(settings.api_mode);
-                srv_mut.server_version.clone_from(&settings.server_version);
-            }
-            config.save()?;
+    // Three cases: fully cached, partially cached (auth only), or uncached.
+    let (auth, resolved_mode) = match (srv.auth_method, srv.api_mode) {
+        (Some(method), Some(mode)) => (method, mode),
+        (Some(method), None) => {
+            tracing::debug!("auth_method cached but api_mode missing; re-detecting");
+            let settings =
+                crate::client::detect_server_settings(&url, &api_key, email.as_deref()).await?;
+            persist_detected_settings(&mut config, &server_name, &settings, false)?;
+            (method, settings.api_mode)
         }
-
-        (settings.auth_method, settings.api_mode)
+        _ => {
+            let settings =
+                crate::client::detect_server_settings(&url, &api_key, email.as_deref()).await?;
+            persist_detected_settings(&mut config, &server_name, &settings, true)?;
+            (settings.auth_method, settings.api_mode)
+        }
     };
 
-    let api_mode = api_override.unwrap_or(detected_mode);
-    let client = BugzillaClient::new(&url, &api_key, auth, api_mode)?;
-    Ok((client, email))
+    let api_mode = api_override.unwrap_or(resolved_mode);
+    let client = BugzillaClient::new(&url, &api_key, auth, api_mode, email.as_deref())?;
+    Ok(client)
 }
 
 #[cfg(test)]
@@ -83,7 +92,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn connect_client_with_email_returns_email() {
+    async fn connect_client_with_email_config_succeeds() {
         let _lock = ENV_LOCK.lock().await;
         let mock = MockServer::start().await;
         let tmp = tempfile::TempDir::new().unwrap();
@@ -114,8 +123,11 @@ email = "user@example.com"
             .mount(&mock)
             .await;
 
-        let (_, email) = super::connect_client_with_email(None, None).await.unwrap();
-        assert_eq!(email.as_deref(), Some("user@example.com"));
+        let result = super::connect_client(None, None).await;
+        assert!(
+            result.is_ok(),
+            "connect_client with email config should succeed"
+        );
     }
 
     #[tokio::test]

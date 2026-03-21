@@ -1,9 +1,14 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::encode_path;
 use super::BugzillaClient;
 use crate::error::Result;
 use crate::types::{Comment, UpdateCommentTagsParams};
+
+#[derive(Serialize)]
+struct AddCommentBody<'a> {
+    comment: &'a str,
+}
 
 #[derive(Deserialize)]
 struct CommentResponse {
@@ -21,13 +26,12 @@ impl BugzillaClient {
         bug_id: u64,
         since: Option<&str>,
     ) -> Result<Vec<Comment>> {
-        let mut req_builder = self.http.get(self.url(&format!("bug/{bug_id}/comment")));
-        if let Some(since) = since {
-            req_builder = req_builder.query(&[("new_since", since)]);
-        }
-        let req = self.apply_auth(req_builder);
-        let resp = self.send(req).await?;
-        let data: CommentResponse = self.parse_json(resp).await?;
+        let data: CommentResponse = if let Some(since) = since {
+            self.get_json_query(&format!("bug/{bug_id}/comment"), &[("new_since", since)])
+                .await?
+        } else {
+            self.get_json(&format!("bug/{bug_id}/comment")).await?
+        };
         let comments = data
             .bugs
             .into_values()
@@ -41,34 +45,21 @@ impl BugzillaClient {
         comment_id: u64,
         params: &UpdateCommentTagsParams,
     ) -> Result<Vec<String>> {
-        let req = self.apply_auth(
-            self.http
-                .put(self.url(&format!("bug/comment/{comment_id}/tags")))
-                .json(params),
-        );
-        let resp = self.send(req).await?;
-        self.parse_json(resp).await
+        self.put_json_response(&format!("bug/comment/{comment_id}/tags"), params)
+            .await
     }
 
     pub async fn search_comment_tags(&self, query: &str) -> Result<Vec<String>> {
-        let req = self.apply_auth(
-            self.http
-                .get(self.url(&format!("bug/comment/tags/{}", encode_path(query)))),
-        );
-        let resp = self.send(req).await?;
-        self.parse_json(resp).await
+        self.get_json(&format!("bug/comment/tags/{}", encode_path(query)))
+            .await
     }
 
     pub async fn add_comment(&self, bug_id: u64, text: &str) -> Result<u64> {
-        let body = serde_json::json!({ "comment": text });
-        let req = self.apply_auth(
-            self.http
-                .post(self.url(&format!("bug/{bug_id}/comment")))
-                .json(&body),
-        );
-        let resp = self.send(req).await?;
-        let data: super::IdResponse = self.parse_json(resp).await?;
-        Ok(data.id)
+        self.post_json_id(
+            &format!("bug/{bug_id}/comment"),
+            &AddCommentBody { comment: text },
+        )
+        .await
     }
 }
 

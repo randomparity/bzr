@@ -61,7 +61,7 @@ impl Config {
         &'a self,
         server_name: Option<&'a str>,
     ) -> Result<(&'a str, &'a ServerConfig)> {
-        let name = self.resolve_server_name(server_name)?;
+        let name = self.resolve_server_name_only(server_name)?;
         let srv = self
             .servers
             .get(name)
@@ -69,7 +69,7 @@ impl Config {
         Ok((name, srv))
     }
 
-    pub fn resolve_server_name<'a>(&'a self, server_name: Option<&'a str>) -> Result<&'a str> {
+    pub fn resolve_server_name_only<'a>(&'a self, server_name: Option<&'a str>) -> Result<&'a str> {
         server_name
             .or(self.default_server.as_deref())
             .ok_or_else(|| {
@@ -138,23 +138,23 @@ mod tests {
     }
 
     #[test]
-    fn resolve_server_name_returns_default_when_none() {
+    fn resolve_server_name_only_returns_default_when_none() {
         let config = make_config_with_server();
-        let name = config.resolve_server_name(None).unwrap();
+        let name = config.resolve_server_name_only(None).unwrap();
         assert_eq!(name, "myserver");
     }
 
     #[test]
-    fn resolve_server_name_returns_explicit_name() {
+    fn resolve_server_name_only_returns_explicit_name() {
         let config = make_config_with_server();
-        let name = config.resolve_server_name(Some("other")).unwrap();
+        let name = config.resolve_server_name_only(Some("other")).unwrap();
         assert_eq!(name, "other");
     }
 
     #[test]
-    fn resolve_server_name_errors_when_no_default_and_no_name() {
+    fn resolve_server_name_only_errors_when_no_default_and_no_name() {
         let config = Config::default();
-        let result = config.resolve_server_name(None);
+        let result = config.resolve_server_name_only(None);
         assert!(result.is_err());
     }
 

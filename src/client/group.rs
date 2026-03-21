@@ -1,19 +1,27 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::encode_path;
 use super::BugzillaClient;
 use super::{UserSearchResponse, USER_FIELDS_BASIC, USER_FIELDS_DETAILED};
 use crate::error::{BzrError, Result};
+
+#[derive(Serialize)]
+struct GroupMembershipBody {
+    groups: GroupMembershipAction,
+}
+
+#[derive(Serialize)]
+struct GroupMembershipAction {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    add: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    remove: Vec<String>,
+}
 use crate::types::{BugzillaUser, CreateGroupParams, GroupInfo, UpdateGroupParams};
 
 #[derive(Deserialize)]
 struct GroupResponse {
     groups: Vec<GroupInfo>,
-}
-
-enum GroupOp {
-    Add,
-    Remove,
 }
 
 impl BugzillaClient {
@@ -29,48 +37,39 @@ impl BugzillaClient {
         };
         // Bugzilla 5.0 requires at least one of ids/names/match alongside
         // the group filter. Use a broad match pattern to list all members.
-        let req = self.apply_auth(self.http.get(self.url("user")).query(&[
-            ("group", group_name),
-            ("include_fields", fields),
-            ("match", "*"),
-        ]));
-        let resp = self.send(req).await?;
-        let data: UserSearchResponse = self.parse_json(resp).await?;
+        let data: UserSearchResponse = self
+            .get_json_query(
+                "user",
+                &[
+                    ("group", group_name),
+                    ("include_fields", fields),
+                    ("match", "*"),
+                ],
+            )
+            .await?;
         Ok(data.users)
     }
 
     pub async fn add_user_to_group(&self, user: &str, group: &str) -> Result<()> {
-        self.modify_group_membership(user, group, GroupOp::Add)
+        let body = GroupMembershipBody {
+            groups: GroupMembershipAction {
+                add: vec![group.to_string()],
+                remove: Vec::new(),
+            },
+        };
+        self.put_json(&format!("user/{}", encode_path(user)), &body)
             .await
     }
 
     pub async fn remove_user_from_group(&self, user: &str, group: &str) -> Result<()> {
-        self.modify_group_membership(user, group, GroupOp::Remove)
-            .await
-    }
-
-    async fn modify_group_membership(
-        &self,
-        user: &str,
-        group: &str,
-        operation: GroupOp,
-    ) -> Result<()> {
-        let key = match operation {
-            GroupOp::Add => "add",
-            GroupOp::Remove => "remove",
+        let body = GroupMembershipBody {
+            groups: GroupMembershipAction {
+                add: Vec::new(),
+                remove: vec![group.to_string()],
+            },
         };
-        let body = serde_json::json!({
-            "groups": {
-                key: [group]
-            }
-        });
-        let req = self.apply_auth(
-            self.http
-                .put(self.url(&format!("user/{}", encode_path(user))))
-                .json(&body),
-        );
-        self.send(req).await?;
-        Ok(())
+        self.put_json(&format!("user/{}", encode_path(user)), &body)
+            .await
     }
 
     pub async fn get_group(&self, group: &str) -> Result<GroupInfo> {

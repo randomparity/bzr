@@ -70,7 +70,7 @@ pub async fn execute(
             };
             client.update_group(group, &params).await?;
             output::print_result(
-                &ActionResult::updated_named(group.as_str(), ResourceKind::Group),
+                &ActionResult::updated_named(group.as_str(), None, ResourceKind::Group),
                 &format!("Updated group '{group}'"),
                 format,
             );

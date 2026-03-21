@@ -27,6 +27,11 @@ pub use attachment::print_attachments;
 pub use bug::{print_bug_detail, print_bugs, print_history};
 pub use classification::print_classification;
 pub use comment::print_comments;
+#[expect(
+    unused_imports,
+    reason = "re-exported for API completeness — used as ConfigView field type"
+)]
+pub use config::ServerDisplayInfo;
 pub use config::{print_config, ConfigView};
 pub use field::print_field_values;
 pub use group::print_group_info;

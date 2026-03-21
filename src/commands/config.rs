@@ -1,7 +1,8 @@
 //! Configuration management commands.
 //!
-//! Unlike other command modules, `execute()` is **synchronous** because config
-//! operations are pure local file I/O — no network client or auth detection needed.
+//! Config operations are pure local file I/O — no network client or auth
+//! detection needed. The function is async for signature consistency with
+//! sibling command modules.
 
 use std::fmt::Write as _;
 
@@ -11,7 +12,11 @@ use crate::error::Result;
 use crate::output::{self, ConfigResult};
 use crate::types::OutputFormat;
 
-pub fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
+#[expect(
+    clippy::unused_async,
+    reason = "async for signature consistency with sibling execute fns"
+)]
+pub async fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
     match action {
         ConfigAction::SetServer {
             name,
@@ -95,17 +100,19 @@ mod tests {
     use super::*;
     use crate::error::BzrError;
 
-    /// Combined test for config operations that require `env::set_var`.
-    /// Grouped in a single test to avoid env var race conditions with
-    /// parallel test execution.
-    #[test]
-    fn config_operations_with_file_io() {
-        let _lock = crate::ENV_LOCK.blocking_lock();
+    async fn setup_config_env() -> (tokio::sync::MutexGuard<'static, ()>, tempfile::TempDir) {
+        let lock = crate::ENV_LOCK.lock().await;
         let tmp = tempfile::TempDir::new().unwrap();
+        let config_dir = tmp.path().join("bzr");
+        std::fs::create_dir_all(&config_dir).unwrap();
         // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
         unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+        (lock, tmp)
+    }
 
-        // 1. set-default on empty config returns error
+    #[tokio::test]
+    async fn set_default_on_empty_config_returns_error() {
+        let (_lock, _tmp) = setup_config_env().await;
         let config = Config::default();
         config.save().unwrap();
         let result = execute(
@@ -113,14 +120,18 @@ mod tests {
                 name: "nonexistent".into(),
             },
             OutputFormat::Table,
-        );
+        )
+        .await;
         assert!(result.is_err());
         assert!(
             matches!(result.unwrap_err(), BzrError::Config(_)),
             "expected Config error for unknown server"
         );
+    }
 
-        // 2. First set-server auto-sets default
+    #[tokio::test]
+    async fn first_set_server_auto_sets_default() {
+        let (_lock, _tmp) = setup_config_env().await;
         execute(
             &ConfigAction::SetServer {
                 name: "first".into(),
@@ -131,12 +142,30 @@ mod tests {
             },
             OutputFormat::Table,
         )
+        .await
         .unwrap();
         let config = Config::load().unwrap();
         assert_eq!(config.default_server.as_deref(), Some("first"));
         assert!(config.servers.contains_key("first"));
+    }
 
-        // 3. Second set-server does not override default
+    #[tokio::test]
+    async fn second_set_server_does_not_override_default() {
+        let (_lock, _tmp) = setup_config_env().await;
+        // Set up first server
+        execute(
+            &ConfigAction::SetServer {
+                name: "first".into(),
+                url: "https://first.example.com".into(),
+                api_key: "first-key-1234567890".into(),
+                email: None,
+                auth_method: None,
+            },
+            OutputFormat::Table,
+        )
+        .await
+        .unwrap();
+        // Add second server
         execute(
             &ConfigAction::SetServer {
                 name: "second".into(),
@@ -147,6 +176,7 @@ mod tests {
             },
             OutputFormat::Table,
         )
+        .await
         .unwrap();
         let config = Config::load().unwrap();
         assert_eq!(

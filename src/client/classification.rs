@@ -12,12 +12,9 @@ struct ClassificationResponse {
 
 impl BugzillaClient {
     pub async fn get_classification(&self, name: &str) -> Result<Classification> {
-        let req = self.apply_auth(
-            self.http
-                .get(self.url(&format!("classification/{}", encode_path(name)))),
-        );
-        let resp = self.send(req).await?;
-        let data: ClassificationResponse = self.parse_json(resp).await?;
+        let data: ClassificationResponse = self
+            .get_json(&format!("classification/{}", encode_path(name)))
+            .await?;
         data.classifications
             .into_iter()
             .next()

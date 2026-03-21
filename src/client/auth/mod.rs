@@ -73,11 +73,11 @@ async fn detect_auth_method(
         );
     }
 
-    let key_val = HeaderValue::from_str(api_key)
+    let key_header = HeaderValue::from_str(api_key)
         .map_err(|_| BzrError::config("invalid API key characters"))?;
 
     // Try whoami endpoint first (Bugzilla 5.1+)
-    let whoami = detect_whoami_auth(http, base, api_key, &key_val).await;
+    let whoami = detect_whoami_auth(http, base, api_key, &key_header).await;
     match whoami {
         WhoamiOutcome::Authenticated(method) => return Ok(method),
         WhoamiOutcome::NotFound => {
@@ -90,19 +90,19 @@ async fn detect_auth_method(
             );
             return Ok(AuthMethod::Header);
         }
-        WhoamiOutcome::AuthRejected => {}
+        WhoamiOutcome::AuthRejected | WhoamiOutcome::UnparseableResponse => {}
     }
 
     // Fall back to valid_login endpoint (Bugzilla 5.0+, requires email)
     if let Some(login) = email {
-        match detect_valid_login_auth(http, base, api_key, &key_val, login).await {
+        match detect_valid_login_auth(http, base, api_key, &key_header, login).await {
             ValidLoginOutcome::Authenticated(method) => {
                 // valid_login can give false negatives for header auth on servers
                 // with custom extensions (e.g. IBM LTC). When query_param is
                 // detected, verify by probing a real endpoint with header auth.
                 // Prefer header when both work -- it avoids leaking keys in URLs.
                 if method == AuthMethod::QueryParam
-                    && verify_header_auth_via_rest(http, base, &key_val).await
+                    && verify_header_auth_via_rest(http, base, &key_header).await
                 {
                     tracing::info!(
                         "header auth works on API endpoints despite valid_login \

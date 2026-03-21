@@ -21,9 +21,7 @@ impl BugzillaClient {
         product_type: ProductListType,
     ) -> Result<Vec<Product>> {
         let endpoint = product_type.as_api_path();
-        let req = self.apply_auth(self.http.get(self.url(endpoint)));
-        let resp = self.send(req).await?;
-        let accessible: ProductAccessibleResponse = self.parse_json(resp).await?;
+        let accessible: ProductAccessibleResponse = self.get_json(endpoint).await?;
 
         if accessible.ids.is_empty() {
             return Ok(Vec::new());
@@ -53,9 +51,7 @@ impl BugzillaClient {
     /// Fetch a product by name. Note: components, versions, and milestones
     /// may require `include_fields` on some Bugzilla versions to be populated.
     pub async fn get_product(&self, name: &str) -> Result<Product> {
-        let req = self.apply_auth(self.http.get(self.url("product")).query(&[("names", name)]));
-        let resp = self.send(req).await?;
-        let data: ProductResponse = self.parse_json(resp).await?;
+        let data: ProductResponse = self.get_json_query("product", &[("names", name)]).await?;
         data.products
             .into_iter()
             .next()

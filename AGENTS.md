@@ -25,7 +25,7 @@ Pre-commit hooks run `cargo fmt` and `cargo clippy` on commit, `cargo test` on p
 
 ## Architecture
 
-Layered CLI pattern: `main.rs` parses args → matches `Commands` enum → delegates to `commands/*.rs::execute()` → which loads `Config`, resolves auth, builds `BugzillaClient`, calls API, and formats output.
+Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches `Commands` enum → delegates to `commands/*.rs::execute()` → which loads `Config`, resolves auth, builds `BugzillaClient`, calls API, and formats output.
 
 ### Key modules
 

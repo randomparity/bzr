@@ -58,14 +58,6 @@ impl Value {
         }
     }
 
-    #[cfg(test)]
-    pub fn as_bool(&self) -> Option<bool> {
-        match self {
-            Value::Bool(b) => Some(*b),
-            _ => None,
-        }
-    }
-
     pub fn as_struct(&self) -> Option<&BTreeMap<String, Value>> {
         match self {
             Value::Struct(m) => Some(m),
@@ -76,6 +68,14 @@ impl Value {
     pub fn as_array(&self) -> Option<&[Value]> {
         match self {
             Value::Array(a) => Some(a),
+            _ => None,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Value::Bool(b) => Some(*b),
             _ => None,
         }
     }
@@ -139,7 +139,7 @@ fn xml_escape(s: &str) -> String {
     out
 }
 
-fn write_value(buf: &mut String, value: &Value) {
+fn render_xmlrpc_value(buf: &mut String, value: &Value) {
     buf.push_str("<value>");
     match value {
         Value::String(s) => {
@@ -178,7 +178,7 @@ fn write_value(buf: &mut String, value: &Value) {
         Value::Array(items) => {
             buf.push_str("<array><data>");
             for item in items {
-                write_value(buf, item);
+                render_xmlrpc_value(buf, item);
             }
             buf.push_str("</data></array>");
         }
@@ -188,7 +188,7 @@ fn write_value(buf: &mut String, value: &Value) {
                 buf.push_str("<member><name>");
                 buf.push_str(&xml_escape(name));
                 buf.push_str("</name>");
-                write_value(buf, val);
+                render_xmlrpc_value(buf, val);
                 buf.push_str("</member>");
             }
             buf.push_str("</struct>");
@@ -206,7 +206,7 @@ pub fn build_request(method: &str, params: BTreeMap<String, Value>) -> String {
     buf.push_str("<methodCall><methodName>");
     buf.push_str(&xml_escape(method));
     buf.push_str("</methodName><params><param>");
-    write_value(&mut buf, &Value::Struct(params));
+    render_xmlrpc_value(&mut buf, &Value::Struct(params));
     buf.push_str("</param></params></methodCall>");
     buf
 }
@@ -219,7 +219,6 @@ pub fn parse_response(xml: &str) -> Result<Value> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
 
-    // Find methodResponse
     loop {
         match next_event(&mut reader, "looking for methodResponse")? {
             Event::Start(ref e) if e.name().as_ref() == b"methodResponse" => break,
@@ -227,7 +226,6 @@ pub fn parse_response(xml: &str) -> Result<Value> {
         }
     }
 
-    // Check for fault or params
     loop {
         match next_event(&mut reader, "in methodResponse")? {
             Event::Start(ref e) if e.name().as_ref() == b"fault" => {
@@ -243,7 +241,6 @@ pub fn parse_response(xml: &str) -> Result<Value> {
 }
 
 fn parse_first_param(reader: &mut Reader<&[u8]>) -> Result<Value> {
-    // Find <param>, then <value>
     loop {
         match next_event(reader, "in params")? {
             Event::Start(ref e) if e.name().as_ref() == b"param" => {
@@ -259,7 +256,6 @@ fn parse_first_param(reader: &mut Reader<&[u8]>) -> Result<Value> {
 
 /// Parse a `<value>` element. Advances the reader past the closing `</value>`.
 fn parse_value(reader: &mut Reader<&[u8]>) -> Result<Value> {
-    // Find opening <value>
     loop {
         match next_event(reader, "looking for value")? {
             Event::Start(ref e) if e.name().as_ref() == b"value" => break,
@@ -464,8 +460,10 @@ fn fault_to_error(value: &Value) -> BzrError {
         let msg = members
             .get("faultString")
             .and_then(Value::as_str)
-            .unwrap_or("unknown XML-RPC fault");
-        BzrError::XmlRpc(format!("fault {code}: {msg}"))
+            .unwrap_or("unknown fault")
+            .to_string();
+        // Map to Api error for consistent formatting with REST API errors.
+        BzrError::Api { code, message: msg }
     } else {
         BzrError::XmlRpc("malformed fault response".into())
     }

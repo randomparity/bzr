@@ -22,20 +22,16 @@ struct AttachmentCreateResponse {
 
 impl BugzillaClient {
     pub async fn get_attachments(&self, bug_id: u64) -> Result<Vec<Attachment>> {
-        let req = self.apply_auth(self.http.get(self.url(&format!("bug/{bug_id}/attachment"))));
-        let resp = self.send(req).await?;
-        let data: AttachmentBugResponse = self.parse_json(resp).await?;
+        let data: AttachmentBugResponse =
+            self.get_json(&format!("bug/{bug_id}/attachment")).await?;
         let attachments = data.bugs.into_values().next().unwrap_or_default();
         Ok(attachments)
     }
 
     pub async fn get_attachment(&self, attachment_id: u64) -> Result<Attachment> {
-        let req = self.apply_auth(
-            self.http
-                .get(self.url(&format!("bug/attachment/{attachment_id}"))),
-        );
-        let resp = self.send(req).await?;
-        let data: AttachmentByIdResponse = self.parse_json(resp).await?;
+        let data: AttachmentByIdResponse = self
+            .get_json(&format!("bug/attachment/{attachment_id}"))
+            .await?;
         data.attachments
             .into_values()
             .next()
