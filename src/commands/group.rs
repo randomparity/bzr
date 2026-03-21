@@ -85,8 +85,8 @@ mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, ResponseTemplate};
 
-    use super::super::test_helpers::{capture_stdout, setup_test_env};
     use crate::cli::GroupAction;
+    use crate::test_helpers::{capture_stdout, setup_test_env};
     use crate::types::OutputFormat;
 
     #[tokio::test]
@@ -113,7 +113,7 @@ mod tests {
         let (result, output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "group_view failed: {result:?}");
-        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
         assert_eq!(parsed["id"], 1);
         assert_eq!(parsed["name"], "admin");
         assert_eq!(parsed["description"], "Admin group");
@@ -138,7 +138,7 @@ mod tests {
         let (result, output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "group create failed: {result:?}");
-        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
         assert_eq!(parsed["action"], "created");
         assert_eq!(parsed["id"], 5);
     }

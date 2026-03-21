@@ -101,51 +101,33 @@ pub async fn execute(
             let mut all_bugs: Vec<crate::types::Bug> = Vec::new();
             let mut seen_ids = std::collections::HashSet::new();
 
-            // Determine which searches to run
-            let search_assigned = *all || (!created && !cc);
-            let search_created = *all || *created;
-            let search_cc = *all || *cc;
+            // Build search params for each enabled filter, varying one field.
+            let base = SearchParams {
+                status: status.clone(),
+                limit: Some(*limit),
+                include_fields: fields.clone(),
+                exclude_fields: exclude_fields.clone(),
+                ..Default::default()
+            };
+            let mut searches = Vec::new();
+            if *all || (!created && !cc) {
+                let mut p = base.clone();
+                p.assigned_to = Some(email.clone());
+                searches.push(p);
+            }
+            if *all || *created {
+                let mut p = base.clone();
+                p.creator = Some(email.clone());
+                searches.push(p);
+            }
+            if *all || *cc {
+                let mut p = base;
+                p.cc = Some(email.clone());
+                searches.push(p);
+            }
 
-            if search_assigned {
-                let params = SearchParams {
-                    assigned_to: Some(email.clone()),
-                    status: status.clone(),
-                    limit: Some(*limit),
-                    include_fields: fields.clone(),
-                    exclude_fields: exclude_fields.clone(),
-                    ..Default::default()
-                };
-                for bug in client.search_bugs(&params).await? {
-                    if seen_ids.insert(bug.id) {
-                        all_bugs.push(bug);
-                    }
-                }
-            }
-            if search_created {
-                let params = SearchParams {
-                    creator: Some(email.clone()),
-                    status: status.clone(),
-                    limit: Some(*limit),
-                    include_fields: fields.clone(),
-                    exclude_fields: exclude_fields.clone(),
-                    ..Default::default()
-                };
-                for bug in client.search_bugs(&params).await? {
-                    if seen_ids.insert(bug.id) {
-                        all_bugs.push(bug);
-                    }
-                }
-            }
-            if search_cc {
-                let params = SearchParams {
-                    cc: Some(email.clone()),
-                    status: status.clone(),
-                    limit: Some(*limit),
-                    include_fields: fields.clone(),
-                    exclude_fields: exclude_fields.clone(),
-                    ..Default::default()
-                };
-                for bug in client.search_bugs(&params).await? {
+            for params in &searches {
+                for bug in client.search_bugs(params).await? {
                     if seen_ids.insert(bug.id) {
                         all_bugs.push(bug);
                     }
@@ -414,8 +396,8 @@ mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, ResponseTemplate};
 
-    use super::super::test_helpers::{capture_stdout, setup_test_env};
     use crate::cli::BugAction;
+    use crate::test_helpers::{capture_stdout, setup_test_env};
     use crate::types::OutputFormat;
 
     #[tokio::test]
@@ -459,7 +441,7 @@ mod tests {
         let (result, output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
-        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
         assert_eq!(parsed[0]["id"], 1);
         assert_eq!(parsed[0]["summary"], "Test bug");
         assert_eq!(parsed[0]["status"], "NEW");
@@ -498,7 +480,7 @@ mod tests {
         let (result, output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
-        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
         assert_eq!(parsed["id"], 42);
         assert_eq!(parsed["summary"], "Test bug");
         assert_eq!(parsed["assigned_to"], "nobody@test.com");
@@ -536,7 +518,7 @@ mod tests {
         let (result, output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
-        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
         assert_eq!(parsed["action"], "updated");
         assert_eq!(parsed["id"], 42);
     }
@@ -570,7 +552,7 @@ mod tests {
         let (result, output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
-        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
         assert_eq!(parsed["action"], "created");
         assert_eq!(parsed["id"], 99);
     }
@@ -707,7 +689,7 @@ mod tests {
         let (result, output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "bug my failed: {result:?}");
-        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
         assert_eq!(parsed[0]["id"], 10);
         assert_eq!(parsed[0]["summary"], "Assigned bug");
     }
@@ -754,7 +736,7 @@ mod tests {
         let (result, output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "bug my --all failed: {result:?}");
-        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
         let bugs = parsed.as_array().expect("expected JSON array");
         assert_eq!(bugs.len(), 1, "duplicate bug should be deduplicated");
         assert_eq!(bugs[0]["id"], 42);
@@ -843,7 +825,7 @@ mod tests {
         let (result, output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "bug clone failed: {result:?}");
-        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
         assert_eq!(parsed["id"], 200);
         assert_eq!(parsed["action"], "created");
     }

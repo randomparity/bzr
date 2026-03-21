@@ -71,3 +71,82 @@ pub fn print_template_detail(name: &str, template: &BugTemplate, format: OutputF
         print_optional_field("Description", view.template.description.as_deref());
     });
 }
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    fn make_template() -> BugTemplate {
+        BugTemplate {
+            product: Some("Widget".into()),
+            component: Some("Backend".into()),
+            version: None,
+            priority: Some("P1".into()),
+            severity: Some("major".into()),
+            assignee: None,
+            op_sys: None,
+            rep_platform: None,
+            description: Some("Default description".into()),
+        }
+    }
+
+    #[test]
+    fn template_saved_json() {
+        let json = serde_json::json!({"name": "my-tmpl", "action": "saved"});
+        let parsed: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&json).unwrap()).unwrap();
+        assert_eq!(parsed["name"], "my-tmpl");
+        assert_eq!(parsed["action"], "saved");
+    }
+
+    #[test]
+    fn template_list_json_serializes() {
+        let mut templates: HashMap<String, BugTemplate> = HashMap::new();
+        templates.insert("default".into(), make_template());
+        let json = serde_json::to_string_pretty(&templates).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(parsed["default"].is_object());
+        assert_eq!(parsed["default"]["product"], "Widget");
+        assert_eq!(parsed["default"]["component"], "Backend");
+    }
+
+    #[test]
+    fn template_detail_json_with_flatten() {
+        let template = make_template();
+        #[derive(serde::Serialize)]
+        struct TemplateView<'a> {
+            name: &'a str,
+            #[serde(flatten)]
+            template: &'a BugTemplate,
+        }
+        let view = TemplateView {
+            name: "test-tmpl",
+            template: &template,
+        };
+        let json = serde_json::to_string_pretty(&view).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["name"], "test-tmpl");
+        assert_eq!(parsed["product"], "Widget");
+        assert_eq!(parsed["priority"], "P1");
+        assert!(parsed["version"].is_null());
+    }
+
+    #[test]
+    fn template_empty_fields_omitted_in_json() {
+        let template = BugTemplate {
+            product: None,
+            component: None,
+            version: None,
+            priority: None,
+            severity: None,
+            assignee: None,
+            op_sys: None,
+            rep_platform: None,
+            description: None,
+        };
+        let json = serde_json::to_string(&template).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(parsed.as_object().unwrap().is_empty());
+    }
+}

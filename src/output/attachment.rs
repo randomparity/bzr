@@ -74,6 +74,17 @@ mod tests {
     }
 
     #[test]
+    fn attachment_text_format_fields() {
+        let att = make_attachment(10, "Fix patch");
+        assert_eq!(att.file_name, "file_10.patch");
+        assert_eq!(att.content_type, "text/plain");
+        assert_eq!(att.size, 1234);
+        assert_eq!(att.creator.as_deref(), Some("author@example.com"));
+        assert!(!att.is_obsolete);
+        assert!(!att.is_private);
+    }
+
+    #[test]
     fn print_attachments_json_obsolete_and_private() {
         let mut att = make_attachment(11, "Old patch");
         att.is_obsolete = true;

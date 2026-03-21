@@ -434,7 +434,7 @@ mod tests {
         assert_eq!(bugs[0].id, 217_630);
     }
 
-    use crate::test_fixtures::xmlrpc_bug_response;
+    use crate::test_helpers::xmlrpc_bug_response;
 
     #[tokio::test]
     async fn hybrid_search_rest_has_results_no_xmlrpc_call() {

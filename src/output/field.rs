@@ -77,6 +77,34 @@ mod tests {
     }
 
     #[test]
+    fn print_field_values_table_renders_rows() {
+        use super::FieldValueRow;
+        use tabled::Table;
+
+        let rows = vec![
+            FieldValueRow {
+                name: "NEW".into(),
+                active: "Yes".into(),
+                can_change_to: "ASSIGNED, RESOLVED".into(),
+            },
+            FieldValueRow {
+                name: "CLOSED".into(),
+                active: "No".into(),
+                can_change_to: String::new(),
+            },
+        ];
+        let table = Table::new(rows).to_string();
+        assert!(table.contains("NEW"));
+        assert!(table.contains("CLOSED"));
+        assert!(table.contains("Yes"));
+        assert!(table.contains("No"));
+        assert!(table.contains("ASSIGNED, RESOLVED"));
+        assert!(table.contains("NAME"));
+        assert!(table.contains("ACTIVE"));
+        assert!(table.contains("CAN CHANGE TO"));
+    }
+
+    #[test]
     fn print_field_values_json_active_and_inactive() {
         let values = vec![
             FieldValue {

@@ -284,7 +284,7 @@ mod tests {
         reqwest::Client::new()
     }
 
-    use crate::test_fixtures::xmlrpc_bug_response;
+    use crate::test_helpers::xmlrpc_bug_response;
 
     fn xmlrpc_fault_response(code: i64, message: &str) -> String {
         format!(

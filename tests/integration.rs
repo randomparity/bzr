@@ -6,106 +6,13 @@
 
 #![expect(clippy::unwrap_used)]
 
-use tokio::sync::Mutex;
+use bzr::test_helpers::{capture_stdout, extract_json, setup_config};
+use bzr::ENV_LOCK;
 
 use clap::Parser;
 
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-
-/// Serializes tests that modify `XDG_CONFIG_HOME`.
-static ENV_LOCK: Mutex<()> = Mutex::const_new(());
-
-/// Capture stdout from an async operation via fd-level redirection.
-///
-/// This duplicates the logic in `commands::test_helpers::capture_stdout` because
-/// integration tests cannot access `pub(super)` modules. Both implementations
-/// must be kept in sync.
-#[cfg(unix)]
-async fn capture_stdout<F, T>(f: F) -> (T, String)
-where
-    F: std::future::Future<Output = T>,
-{
-    use std::io::{Read, Seek, Write};
-    use std::os::unix::io::AsRawFd;
-
-    extern "C" {
-        fn dup(fd: std::ffi::c_int) -> std::ffi::c_int;
-        fn dup2(oldfd: std::ffi::c_int, newfd: std::ffi::c_int) -> std::ffi::c_int;
-        fn close(fd: std::ffi::c_int) -> std::ffi::c_int;
-    }
-
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let tmp_fd = tmp.as_file().as_raw_fd();
-
-    // SAFETY: dup/dup2 on valid fds; tests serialized via ENV_LOCK.
-    let saved_stdout = unsafe { dup(1) };
-    assert!(saved_stdout >= 0, "dup(1) failed");
-    unsafe { dup2(tmp_fd, 1) };
-
-    let result = f.await;
-
-    std::io::stdout().flush().unwrap();
-    unsafe {
-        dup2(saved_stdout, 1);
-        close(saved_stdout);
-    }
-
-    let mut captured = String::new();
-    let mut file = tmp.reopen().unwrap();
-    file.seek(std::io::SeekFrom::Start(0)).unwrap();
-    file.read_to_string(&mut captured).unwrap();
-
-    (result, captured)
-}
-
-/// Extract valid JSON from captured output that may contain mixed content.
-#[expect(
-    clippy::panic,
-    reason = "test helper: unrecoverable if output is not JSON"
-)]
-fn extract_json(output: &str) -> serde_json::Value {
-    if let Ok(v) = serde_json::from_str(output) {
-        return v;
-    }
-    for (i, ch) in output.char_indices() {
-        if ch == '[' || ch == '{' {
-            if let Ok(v) = serde_json::from_str(&output[i..]) {
-                return v;
-            }
-            let rest = &output[i..];
-            for (j, jch) in rest.char_indices().rev() {
-                let closing = if ch == '[' { ']' } else { '}' };
-                if jch == closing {
-                    if let Ok(v) = serde_json::from_str(&rest[..=j]) {
-                        return v;
-                    }
-                }
-            }
-        }
-    }
-    panic!("no valid JSON found in captured output: {output}");
-}
-
-/// Writes a config file to a temp directory with the given server URL
-/// and pre-cached auth method (Header) so auth detection is skipped.
-fn setup_config(tmp: &tempfile::TempDir, server_url: &str) {
-    let config_dir = tmp.path().join("bzr");
-    std::fs::create_dir_all(&config_dir).unwrap();
-    let config_content = format!(
-        r#"
-default_server = "test"
-
-[servers.test]
-url = "{server_url}"
-api_key = "test-api-key-12345"
-auth_method = "header"
-api_mode = "rest"
-"#,
-    );
-    std::fs::write(config_dir.join("config.toml"), config_content).unwrap();
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
-}
 
 // ── Bug commands ──────────────────────────────────────────────────────
 

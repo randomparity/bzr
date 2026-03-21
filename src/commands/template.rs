@@ -102,8 +102,8 @@ pub async fn execute(action: &TemplateAction, format: OutputFormat) -> Result<()
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 mod tests {
-    use super::super::test_helpers::{capture_stdout, setup_test_env};
     use crate::cli::TemplateAction;
+    use crate::test_helpers::{capture_stdout, setup_test_env};
     use crate::types::OutputFormat;
 
     #[tokio::test]
@@ -132,7 +132,7 @@ mod tests {
         };
         let (result, output) = capture_stdout(super::execute(&action, OutputFormat::Json)).await;
         assert!(result.is_ok(), "template show failed: {result:?}");
-        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
         assert_eq!(parsed["name"], "test-tmpl");
         assert_eq!(parsed["product"], "TestProduct");
         assert_eq!(parsed["priority"], "P1");

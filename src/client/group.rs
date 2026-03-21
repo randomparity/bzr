@@ -19,6 +19,12 @@ struct GroupMembershipAction {
 }
 use crate::types::{BugzillaUser, CreateGroupParams, GroupInfo, UpdateGroupParams};
 
+#[derive(Serialize)]
+struct GroupGetParams<'a> {
+    names: &'a [&'a str],
+    membership: bool,
+}
+
 #[derive(Deserialize)]
 struct GroupResponse {
     groups: Vec<GroupInfo>,
@@ -75,11 +81,11 @@ impl BugzillaClient {
     pub async fn get_group(&self, group: &str) -> Result<GroupInfo> {
         // Bugzilla 5.3+ requires POST for Group.get (error 32610 if GET is used).
         // POST is backward-compatible with older versions.
-        let req = self.apply_auth(
-            self.http
-                .post(self.url("group"))
-                .json(&serde_json::json!({"names": [group], "membership": true})),
-        );
+        let params = GroupGetParams {
+            names: &[group],
+            membership: true,
+        };
+        let req = self.apply_auth(self.http.post(self.url("group")).json(&params));
         let resp = self.send(req).await?;
         let data: GroupResponse = self.parse_json(resp).await?;
         data.groups

@@ -56,6 +56,20 @@ mod tests {
     }
 
     #[test]
+    fn group_text_format_fields() {
+        let group = make_group_info();
+        assert_eq!(group.name, "core-team");
+        assert_eq!(group.description, "Core development team");
+        assert!(group.is_active);
+        assert_eq!(group.membership.len(), 1);
+        assert_eq!(group.membership[0].name, "alice");
+        assert_eq!(
+            group.membership[0].real_name.as_deref(),
+            Some("Alice Smith")
+        );
+    }
+
+    #[test]
     fn print_group_info_json_no_members() {
         let group = GroupInfo {
             id: 6,

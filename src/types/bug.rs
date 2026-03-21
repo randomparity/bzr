@@ -53,7 +53,7 @@ pub struct Bug {
     pub rep_platform: Option<String>,
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Clone, Debug, Default, Serialize)]
 #[non_exhaustive]
 pub struct SearchParams {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -148,6 +148,7 @@ pub struct CreateBugParams {
 /// Represents an incremental update to a list field (blocks, `depends_on`).
 /// Bugzilla accepts `{ "add": [...], "remove": [...] }` for these fields.
 #[derive(Debug, Default, Serialize)]
+#[non_exhaustive]
 pub struct IdListUpdate {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub add: Vec<u64>,

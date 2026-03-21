@@ -220,6 +220,7 @@ pub struct BatchResult {
 
 /// A single failure in a batch operation.
 #[derive(Debug, Serialize)]
+#[non_exhaustive]
 pub struct BatchFailure {
     pub id: u64,
     pub error: String,

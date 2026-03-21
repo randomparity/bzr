@@ -65,34 +65,9 @@ pub async fn dispatch(cli: &cli::Cli, format: types::OutputFormat) -> error::Res
 
 /// Shared mutex for tests that modify the process-global `XDG_CONFIG_HOME` env var.
 /// All such tests must acquire this lock to avoid racing with each other.
-#[cfg(test)]
-pub(crate) static ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+#[cfg(any(test, feature = "test-helpers"))]
+pub static ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-/// Shared XML-RPC test fixtures used across client/ and xmlrpc/ tests.
-#[cfg(test)]
-pub(crate) mod test_fixtures {
-    /// Build a mock XML-RPC Bug.search response containing one bug.
-    pub fn xmlrpc_bug_response(id: i64, summary: &str) -> String {
-        format!(
-            r#"<?xml version="1.0" encoding="UTF-8"?>
-            <methodResponse><params><param><value><struct>
-              <member><name>bugs</name><value><array><data>
-                <value><struct>
-                  <member><name>id</name><value><int>{id}</int></value></member>
-                  <member><name>summary</name><value><string>{summary}</string></value></member>
-                  <member><name>status</name><value><string>NEW</string></value></member>
-                  <member><name>product</name><value><string>TestProduct</string></value></member>
-                  <member><name>component</name><value><string>General</string></value></member>
-                  <member><name>assigned_to</name><value><string>dev@example.com</string></value></member>
-                  <member><name>priority</name><value><string>P1</string></value></member>
-                  <member><name>severity</name><value><string>normal</string></value></member>
-                  <member><name>keywords</name><value><array><data></data></array></value></member>
-                  <member><name>blocks</name><value><array><data></data></array></value></member>
-                  <member><name>depends_on</name><value><array><data></data></array></value></member>
-                  <member><name>cc</name><value><array><data></data></array></value></member>
-                </struct></value>
-              </data></array></value></member>
-            </struct></value></param></params></methodResponse>"#
-        )
-    }
-}
+/// Shared test helpers used by both unit tests and integration tests.
+#[cfg(any(test, feature = "test-helpers"))]
+pub mod test_helpers;

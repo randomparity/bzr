@@ -10,6 +10,11 @@ homepage = "https://github.com/randomparity/bzr"
 keywords = ["bugzilla", "cli", "bug-tracker"]
 categories = ["command-line-utilities"]
 
+[features]
+# Exposes test helpers from the library for integration tests.
+# Activated automatically via dev-dependency below.
+test-helpers = ["dep:wiremock", "dep:tempfile"]
+
 [dependencies]
 base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
@@ -26,11 +31,15 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 percent-encoding = "2"
 quick-xml = "0.37"
+# Optional: used only by test-helpers feature
+wiremock = { version = "0.6", optional = true }
+tempfile = { version = "3", optional = true }
 
 [dev-dependencies]
 serde_urlencoded = "0.7"
 tempfile = "3"
 wiremock = "0.6"
+bzr = { path = ".", features = ["test-helpers"] }
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
