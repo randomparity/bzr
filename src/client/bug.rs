@@ -32,13 +32,12 @@ impl BugzillaClient {
         bug_id: u64,
         since: Option<&str>,
     ) -> Result<Vec<HistoryEntry>> {
-        let mut req_builder = self.http.get(self.url(&format!("bug/{bug_id}/history")));
-        if let Some(since) = since {
-            req_builder = req_builder.query(&[("new_since", since)]);
-        }
-        let req = self.apply_auth(req_builder);
-        let resp = self.send(req).await?;
-        let data: HistoryResponse = self.parse_json(resp).await?;
+        let data: HistoryResponse = if let Some(since) = since {
+            self.get_json_query(&format!("bug/{bug_id}/history"), &[("new_since", since)])
+                .await?
+        } else {
+            self.get_json(&format!("bug/{bug_id}/history")).await?
+        };
         let history = data
             .bugs
             .into_iter()

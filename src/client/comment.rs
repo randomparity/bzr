@@ -26,13 +26,12 @@ impl BugzillaClient {
         bug_id: u64,
         since: Option<&str>,
     ) -> Result<Vec<Comment>> {
-        let mut req_builder = self.http.get(self.url(&format!("bug/{bug_id}/comment")));
-        if let Some(since) = since {
-            req_builder = req_builder.query(&[("new_since", since)]);
-        }
-        let req = self.apply_auth(req_builder);
-        let resp = self.send(req).await?;
-        let data: CommentResponse = self.parse_json(resp).await?;
+        let data: CommentResponse = if let Some(since) = since {
+            self.get_json_query(&format!("bug/{bug_id}/comment"), &[("new_since", since)])
+                .await?
+        } else {
+            self.get_json(&format!("bug/{bug_id}/comment")).await?
+        };
         let comments = data
             .bugs
             .into_values()
