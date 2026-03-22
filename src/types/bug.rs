@@ -22,6 +22,8 @@ pub struct Bug {
     #[serde(default)]
     pub component: Option<String>,
     #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
     pub assigned_to: Option<String>,
     #[serde(default)]
     pub priority: Option<String>,
@@ -45,9 +47,13 @@ pub struct Bug {
     pub depends_on: Vec<u64>,
     #[serde(default)]
     pub cc: Vec<String>,
+    #[serde(default)]
+    pub op_sys: Option<String>,
+    #[serde(default)]
+    pub rep_platform: Option<String>,
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Clone, Debug, Default, Serialize)]
 #[non_exhaustive]
 pub struct SearchParams {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -64,6 +70,8 @@ pub struct SearchParams {
     pub priority: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub severity: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cc: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub alias: Option<String>,
     /// Bug IDs to search for. Skipped from serde because Bugzilla's REST API
@@ -100,6 +108,7 @@ impl SearchParams {
             || self.creator.is_some()
             || self.priority.is_some()
             || self.severity.is_some()
+            || self.cc.is_some()
             || self.alias.is_some()
             || !self.id.is_empty()
             || self.summary.is_some()
@@ -126,6 +135,31 @@ pub struct CreateBugParams {
     pub op_sys: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rep_platform: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub blocks: Vec<u64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub depends_on: Vec<u64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub cc: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub keywords: Vec<String>,
+}
+
+/// Represents an incremental update to a list field (blocks, `depends_on`).
+/// Bugzilla accepts `{ "add": [...], "remove": [...] }` for these fields.
+#[derive(Debug, Default, Serialize)]
+#[non_exhaustive]
+pub struct IdListUpdate {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub add: Vec<u64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub remove: Vec<u64>,
+}
+
+impl IdListUpdate {
+    pub fn is_empty(&self) -> bool {
+        self.add.is_empty() && self.remove.is_empty()
+    }
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -147,6 +181,10 @@ pub struct UpdateBugParams {
     pub whiteboard: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub flags: Vec<FlagUpdate>,
+    #[serde(skip_serializing_if = "IdListUpdate::is_empty")]
+    pub blocks: IdListUpdate,
+    #[serde(skip_serializing_if = "IdListUpdate::is_empty")]
+    pub depends_on: IdListUpdate,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

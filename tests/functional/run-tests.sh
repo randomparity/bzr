@@ -14,6 +14,7 @@ BZ_VERSION="${BZR_BZ_VERSION:-bz50}"
 case "$BZ_VERSION" in
     bz50) DEFAULT_PORT=8089 ;;
     bz52) DEFAULT_PORT=8090 ;;
+    bz53) DEFAULT_PORT=8091 ;;
     *)    DEFAULT_PORT=8089 ;;
 esac
 BZ_PORT="${BZR_FUNC_PORT:-$DEFAULT_PORT}"
@@ -26,6 +27,10 @@ PRODUCT_ID=""
 COMP_ID=""
 BUG1=""
 BUG2=""
+BUG3=""
+BUG4=""
+CLONE_ID=""
+TMPL_BUG=""
 COMMENT_ID=""
 ATTACH_ID=""
 
@@ -282,7 +287,11 @@ fi
 
 test_begin "26. group view functest-grp"
 run_bzr group view functest-grp
-if assert_success && assert_json '.name' "functest-grp"; then test_pass; fi
+if [[ $BZR_EXIT -eq 0 ]] && assert_json '.name' "functest-grp"; then
+    test_pass
+else
+    assert_success
+fi
 
 test_begin "27. group update functest-grp"
 run_bzr group update functest-grp --description "Updated group desc"
@@ -402,14 +411,196 @@ test_begin "46. bug view 999999 (negative test)"
 run_bzr bug view 999999
 if assert_failure; then test_pass; fi
 
+test_begin "47. bug create (bug three — clone source)"
+run_bzr bug create --product FuncTestProd --component Backend --summary "Clone source bug" --description "Description for cloning" --priority Highest --severity critical --op-sys Linux --rep-platform PC
+if assert_success && assert_json_exists '.id'; then
+    BUG3=$(jq -r '.id' "$BZR_STDOUT")
+    test_pass
+fi
+
+test_begin "48. bug create (bug four — with relationships)"
+if [[ -n "$BUG1" ]] && [[ -n "$BUG2" ]]; then
+    run_bzr bug create --product FuncTestProd --component Backend --summary "Bug with relationships" --blocks "$BUG1" --depends-on "$BUG2" --op-sys All --rep-platform All
+    if assert_success && assert_json_exists '.id'; then
+        BUG4=$(jq -r '.id' "$BZR_STDOUT")
+        test_pass
+    fi
+else test_skip "no BUG1/BUG2"; fi
+
 echo ""
 
 # ══════════════════════════════════════════════════════════════════════
-# Phase 9: Comments
+# Phase 9: Bug Relationships
 # ══════════════════════════════════════════════════════════════════════
-echo "── Phase 9: Comments ───────────────────────────────────────"
+echo "── Phase 9: Bug Relationships ────────────────────────────────"
 
-test_begin "47. comment add (first)"
+test_begin "49. bug view (verify create relationships)"
+if [[ -n "$BUG4" ]]; then
+    run_bzr bug view "$BUG4"
+    if assert_success && assert_stdout_contains "$BUG1"; then test_pass; fi
+else test_skip "no BUG4"; fi
+
+test_begin "50. bug update --blocks-add"
+if [[ -n "$BUG2" ]] && [[ -n "$BUG3" ]]; then
+    run_bzr bug update "$BUG2" --blocks-add "$BUG3"
+    if assert_success; then test_pass; fi
+else test_skip "no BUG2/BUG3"; fi
+
+test_begin "51. bug update --depends-on-add"
+# Use BUG3 on BUG3 itself (add BUG2 to BUG3's depends_on — independent of blocks chain)
+if [[ -n "$BUG3" ]] && [[ -n "$BUG2" ]]; then
+    run_bzr bug update "$BUG3" --depends-on-add "$BUG2"
+    if assert_success; then test_pass; fi
+else test_skip "no BUG3/BUG2"; fi
+
+test_begin "52. bug update --blocks-remove"
+if [[ -n "$BUG2" ]] && [[ -n "$BUG3" ]]; then
+    run_bzr bug update "$BUG2" --blocks-remove "$BUG3"
+    if assert_success; then test_pass; fi
+else test_skip "no BUG2/BUG3"; fi
+
+test_begin "53. bug update --depends-on-remove"
+if [[ -n "$BUG3" ]] && [[ -n "$BUG2" ]]; then
+    run_bzr bug update "$BUG3" --depends-on-remove "$BUG2"
+    if assert_success; then test_pass; fi
+else test_skip "no BUG3/BUG2"; fi
+
+echo ""
+
+# ══════════════════════════════════════════════════════════════════════
+# Phase 10: Bug Clone
+# ══════════════════════════════════════════════════════════════════════
+echo "── Phase 10: Bug Clone ───────────────────────────────────────"
+
+test_begin "54. bug clone (defaults)"
+if [[ -n "$BUG3" ]]; then
+    # Pass --op-sys and --rep-platform since some Bugzilla versions require them
+    # and the Bug struct doesn't include these fields for automatic copying
+    run_bzr bug clone "$BUG3" --op-sys Linux --rep-platform PC
+    if assert_success && assert_json_exists '.id'; then
+        CLONE_ID=$(jq -r '.id' "$BZR_STDOUT")
+        test_pass
+    fi
+else test_skip "no BUG3"; fi
+
+test_begin "55. bug view (verify clone fields)"
+if [[ -n "$CLONE_ID" ]]; then
+    run_bzr bug view "$CLONE_ID"
+    if assert_success && assert_json '.summary' "Clone source bug" && assert_json '.priority' "Highest"; then
+        test_pass
+    fi
+else test_skip "no CLONE_ID"; fi
+
+test_begin "56. bug clone (with overrides)"
+if [[ -n "$BUG3" ]]; then
+    run_bzr bug clone "$BUG3" --summary "Overridden summary" --no-comment --op-sys Linux --rep-platform PC
+    if assert_success && assert_json_exists '.id'; then test_pass; fi
+else test_skip "no BUG3"; fi
+
+test_begin "57. bug clone --add-depends-on"
+if [[ -n "$BUG3" ]]; then
+    run_bzr bug clone "$BUG3" --summary "Depends on source" --add-depends-on --no-cc --no-keywords --op-sys Linux --rep-platform PC
+    if assert_success && assert_json_exists '.id'; then test_pass; fi
+else test_skip "no BUG3"; fi
+
+echo ""
+
+# ══════════════════════════════════════════════════════════════════════
+# Phase 11: Batch Update
+# ══════════════════════════════════════════════════════════════════════
+echo "── Phase 11: Batch Update ────────────────────────────────────"
+
+test_begin "58. bug update (batch — two bugs)"
+if [[ -n "$BUG2" ]] && [[ -n "$BUG4" ]]; then
+    run_bzr bug update "$BUG2" "$BUG4" --whiteboard "batch-test"
+    if assert_success; then test_pass; fi
+else test_skip "no BUG2/BUG4"; fi
+
+test_begin "59. bug view (verify batch — bug2)"
+if [[ -n "$BUG2" ]]; then
+    run_bzr bug view "$BUG2"
+    if assert_success && assert_json '.whiteboard' "batch-test"; then test_pass; fi
+else test_skip "no BUG2"; fi
+
+test_begin "60. bug view (verify batch — bug4)"
+if [[ -n "$BUG4" ]]; then
+    run_bzr bug view "$BUG4"
+    if assert_success && assert_json '.whiteboard' "batch-test"; then test_pass; fi
+else test_skip "no BUG4"; fi
+
+echo ""
+
+# ══════════════════════════════════════════════════════════════════════
+# Phase 12: My Bugs
+# ══════════════════════════════════════════════════════════════════════
+echo "── Phase 12: My Bugs ─────────────────────────────────────────"
+
+test_begin "61. bug my (assigned)"
+run_bzr bug my
+if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
+
+test_begin "62. bug my --created"
+run_bzr bug my --created
+if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
+
+test_begin "63. bug my --all"
+run_bzr bug my --all
+if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
+
+test_begin "64. bug my --all --status NEW"
+run_bzr bug my --all --status NEW
+if assert_success; then test_pass; fi
+
+echo ""
+
+# ══════════════════════════════════════════════════════════════════════
+# Phase 13: Templates
+# ══════════════════════════════════════════════════════════════════════
+echo "── Phase 13: Templates ───────────────────────────────────────"
+
+test_begin "65. template save"
+run_bzr template save func-tmpl --product FuncTestProd --component Backend --priority Normal --severity normal
+if assert_success; then test_pass; fi
+
+test_begin "66. template list"
+run_bzr_raw template list
+if assert_success && assert_stdout_contains "func-tmpl"; then test_pass; fi
+
+test_begin "67. template show"
+run_bzr template show func-tmpl
+if assert_success && assert_json '.product' "FuncTestProd"; then test_pass; fi
+
+test_begin "68. bug create --template"
+run_bzr bug create --template func-tmpl --summary "Bug from template" --op-sys All --rep-platform All
+if assert_success && assert_json_exists '.id'; then
+    TMPL_BUG=$(jq -r '.id' "$BZR_STDOUT")
+    test_pass
+fi
+
+test_begin "69. bug view (verify template fields)"
+if [[ -n "$TMPL_BUG" ]]; then
+    run_bzr bug view "$TMPL_BUG"
+    if assert_success && assert_json '.product' "FuncTestProd" && assert_json '.component' "Backend" && assert_json '.priority' "Normal"; then
+        test_pass
+    fi
+else test_skip "no TMPL_BUG"; fi
+
+test_begin "70. template delete"
+run_bzr template delete func-tmpl
+if assert_success; then test_pass; fi
+
+test_begin "71. template show (deleted, expect failure)"
+run_bzr template show func-tmpl
+if assert_failure; then test_pass; fi
+
+echo ""
+
+# ══════════════════════════════════════════════════════════════════════
+# Phase 14: Comments
+# ══════════════════════════════════════════════════════════════════════
+echo "── Phase 14: Comments ───────────────────────────────────────"
+
+test_begin "72. comment add (first)"
 if [[ -n "$BUG1" ]]; then
     run_bzr comment add "$BUG1" --body "First test comment"
     if assert_success && assert_json_exists '.id'; then
@@ -418,26 +609,26 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "48. comment add (second)"
+test_begin "73. comment add (second)"
 if [[ -n "$BUG1" ]]; then
     run_bzr comment add "$BUG1" --body "Second comment"
     if assert_success; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "49. comment list"
+test_begin "74. comment list"
 if [[ -n "$BUG1" ]]; then
     run_bzr comment list "$BUG1"
     # Bug description counts as comment 0, plus our 2 = at least 3
     if assert_success && assert_json_array_min_length '.' 3; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "50. comment list --since"
+test_begin "75. comment list --since"
 if [[ -n "$BUG1" ]]; then
     run_bzr comment list "$BUG1" --since 2020-01-01
     if assert_success; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "51. comment tag --add"
+test_begin "76. comment tag --add"
 if [[ -n "${COMMENT_ID:-}" ]] && [[ "$COMMENT_ID" != "null" ]]; then
     run_bzr comment tag "$COMMENT_ID" --add important
     if assert_success; then test_pass; fi
@@ -445,7 +636,7 @@ else
     test_skip "no comment ID"
 fi
 
-test_begin "52. comment tag --remove"
+test_begin "77. comment tag --remove"
 if [[ -n "${COMMENT_ID:-}" ]] && [[ "$COMMENT_ID" != "null" ]]; then
     run_bzr comment tag "$COMMENT_ID" --remove important
     if assert_success; then test_pass; fi
@@ -453,7 +644,7 @@ else
     test_skip "no comment ID"
 fi
 
-test_begin "53. comment search-tags"
+test_begin "78. comment search-tags"
 run_bzr comment search-tags important
 # May return empty if tag was fully removed, but should succeed
 if assert_success; then test_pass; fi
@@ -461,15 +652,15 @@ if assert_success; then test_pass; fi
 echo ""
 
 # ══════════════════════════════════════════════════════════════════════
-# Phase 10: Attachments
+# Phase 15: Attachments
 # ══════════════════════════════════════════════════════════════════════
-echo "── Phase 10: Attachments ───────────────────────────────────"
+echo "── Phase 15: Attachments ───────────────────────────────────"
 
-test_begin "54. create temp file"
+test_begin "79. create temp file"
 echo "bzr functional test content $(date +%s)" > /tmp/bzr-func-test.txt
 test_pass
 
-test_begin "55. attachment upload"
+test_begin "80. attachment upload"
 if [[ -n "$BUG1" ]]; then
     run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt --summary "Test file"
     if assert_success && assert_json_exists '.id'; then
@@ -478,13 +669,13 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "56. attachment list"
+test_begin "81. attachment list"
 if [[ -n "$BUG1" ]]; then
     run_bzr attachment list "$BUG1"
     if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "57. attachment download"
+test_begin "82. attachment download"
 if [[ -n "${ATTACH_ID:-}" ]] && [[ "$ATTACH_ID" != "null" ]]; then
     rm -f /tmp/bzr-func-downloaded.txt
     run_bzr attachment download "$ATTACH_ID" --out /tmp/bzr-func-downloaded.txt
@@ -495,7 +686,7 @@ else
     test_skip "no attachment ID"
 fi
 
-test_begin "58. attachment update"
+test_begin "83. attachment update"
 if [[ -n "${ATTACH_ID:-}" ]] && [[ "$ATTACH_ID" != "null" ]]; then
     run_bzr attachment update "$ATTACH_ID" --summary "Updated summary" --obsolete true
     if assert_success; then test_pass; fi
@@ -503,7 +694,7 @@ else
     test_skip "no attachment ID"
 fi
 
-test_begin "59. attachment upload (explicit MIME)"
+test_begin "84. attachment upload (explicit MIME)"
 if [[ -n "$BUG1" ]]; then
     run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt --content-type text/plain
     if assert_success; then test_pass; fi
@@ -512,11 +703,11 @@ else test_skip "no BUG1"; fi
 echo ""
 
 # ══════════════════════════════════════════════════════════════════════
-# Phase 11: Global Options Smoke Tests
+# Phase 16: Global Options Smoke Tests
 # ══════════════════════════════════════════════════════════════════════
-echo "── Phase 11: Global Options ────────────────────────────────"
+echo "── Phase 16: Global Options ────────────────────────────────"
 
-test_begin "60. --output table"
+test_begin "85. --output table"
 if [[ -n "$BUG1" ]]; then
     run_bzr_raw --output table bug view "$BUG1"
     if assert_success; then
@@ -530,22 +721,22 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "61. --quiet"
+test_begin "86. --quiet"
 if [[ -n "$BUG1" ]]; then
     run_bzr_raw --quiet bug view "$BUG1"
     if assert_success && assert_stdout_empty; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "62. --server test whoami"
+test_begin "87. --server test whoami"
 run_bzr_raw --server test whoami
 if assert_success; then test_pass; fi
 
 echo ""
 
 # ══════════════════════════════════════════════════════════════════════
-# Phase 12: Summary
+# Phase 17: Summary
 # ══════════════════════════════════════════════════════════════════════
-echo "── Phase 12: Cleanup (${BZ_VERSION}) ──────────────────────────────"
+echo "── Phase 17: Cleanup (${BZ_VERSION}) ──────────────────────────────"
 echo "  Cleaning up temp files..."
 # cleanup runs via trap
 

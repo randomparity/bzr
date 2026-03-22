@@ -208,6 +208,35 @@ impl SearchResult {
     }
 }
 
+/// Typed result payload for batch update operations.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct BatchResult {
+    pub resource: ResourceKind,
+    pub action: ActionKind,
+    pub succeeded: Vec<u64>,
+    pub failed: Vec<BatchFailure>,
+}
+
+/// A single failure in a batch operation.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct BatchFailure {
+    pub id: u64,
+    pub error: String,
+}
+
+impl BatchResult {
+    pub fn new(succeeded: Vec<u64>, failed: Vec<BatchFailure>) -> Self {
+        Self {
+            resource: ResourceKind::Bug,
+            action: ActionKind::Updated,
+            succeeded,
+            failed,
+        }
+    }
+}
+
 /// Typed result payload for JSON output of mutation operations.
 ///
 /// Covers standard CRUD results with an `id` and optional `name`.

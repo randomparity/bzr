@@ -27,8 +27,8 @@ mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, ResponseTemplate};
 
-    use super::super::test_helpers::{capture_stdout, setup_test_env};
     use crate::cli::ServerAction;
+    use crate::test_helpers::{capture_stdout, setup_test_env};
     use crate::types::OutputFormat;
 
     #[tokio::test]
@@ -59,7 +59,7 @@ mod tests {
         ))
         .await;
         assert!(result.is_ok());
-        let parsed: serde_json::Value = super::super::test_helpers::extract_json(&output);
+        let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
         assert_eq!(parsed["version"], "5.0.4");
     }
 

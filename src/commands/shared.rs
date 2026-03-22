@@ -74,7 +74,8 @@ mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use super::super::test_helpers::{setup_test_env, ENV_LOCK};
+    use crate::test_helpers::setup_test_env;
+    use crate::ENV_LOCK;
 
     #[tokio::test]
     async fn connect_client_returns_client() {

@@ -1,7 +1,7 @@
 use super::encode_path;
 use super::{BugzillaClient, UserSearchResponse, USER_FIELDS_BASIC, USER_FIELDS_DETAILED};
 use crate::error::{BzrError, Result};
-use crate::types::{BugzillaUser, CreateUserParams, UpdateUserParams, WhoamiResponse};
+use crate::types::{ApiMode, BugzillaUser, CreateUserParams, UpdateUserParams, WhoamiResponse};
 
 impl BugzillaClient {
     pub async fn whoami(&self) -> Result<WhoamiResponse> {
@@ -53,7 +53,18 @@ impl BugzillaClient {
     }
 
     pub async fn create_user(&self, params: &CreateUserParams) -> Result<u64> {
-        self.post_json_id("user", params).await
+        match self.api_mode {
+            ApiMode::Rest => self.post_json_id("user", params).await,
+            ApiMode::XmlRpc => self.xmlrpc_client()?.create_user(params).await,
+            ApiMode::Hybrid => match self.post_json_id("user", params).await {
+                Ok(id) => Ok(id),
+                Err(e) if matches!(e, crate::error::BzrError::Auth(_)) => Err(e),
+                Err(e) => {
+                    tracing::info!("REST user creation failed ({e}), retrying via XML-RPC");
+                    self.xmlrpc_client()?.create_user(params).await
+                }
+            },
+        }
     }
 
     /// Update a user's profile fields.
@@ -176,6 +187,7 @@ mod tests {
         let client = test_client(&mock.uri());
         let params = CreateUserParams {
             email: "new@example.com".into(),
+            login: None,
             full_name: Some("New User".into()),
             password: None,
         };
@@ -199,6 +211,7 @@ mod tests {
         let client = test_client(&mock.uri());
         let params = CreateUserParams {
             email: "x@x.com".into(),
+            login: None,
             full_name: None,
             password: None,
         };

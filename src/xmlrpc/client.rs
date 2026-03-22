@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::error::{BzrError, Result};
 use crate::http::AUTH_QUERY_PARAM;
-use crate::types::{Bug, SearchParams};
+use crate::types::{Bug, CreateUserParams, GroupInfo, GroupMember, SearchParams};
 use crate::xmlrpc::{self, Value};
 
 pub struct XmlRpcClient {
@@ -133,6 +133,57 @@ impl XmlRpcClient {
         }
         Ok(bugs.swap_remove(0))
     }
+
+    pub async fn create_user(&self, params: &CreateUserParams) -> Result<u64> {
+        let mut rpc_params = BTreeMap::new();
+        rpc_params.insert("email".into(), Value::from(params.email.as_str()));
+        if let Some(ref login) = params.login {
+            rpc_params.insert("login".into(), Value::from(login.as_str()));
+        }
+        if let Some(ref full_name) = params.full_name {
+            rpc_params.insert("full_name".into(), Value::from(full_name.as_str()));
+        }
+        if let Some(ref password) = params.password {
+            rpc_params.insert("password".into(), Value::from(password.as_str()));
+        }
+
+        let result = self.call("User.create", rpc_params).await?;
+        extract_id(&result)
+    }
+
+    pub async fn get_group(&self, name: &str) -> Result<GroupInfo> {
+        let mut rpc_params = BTreeMap::new();
+        rpc_params.insert("names".into(), Value::Array(vec![Value::from(name)]));
+        rpc_params.insert("membership".into(), Value::Bool(true));
+
+        let result = self.call("Group.get", rpc_params).await?;
+        let top = result
+            .as_struct()
+            .ok_or_else(|| BzrError::XmlRpc("expected struct response".into()))?;
+        let groups = top
+            .get("groups")
+            .and_then(Value::as_array)
+            .ok_or_else(|| BzrError::XmlRpc("expected groups array".into()))?;
+        let group_val = groups.first().ok_or_else(|| BzrError::NotFound {
+            resource: "group",
+            id: name.to_string(),
+        })?;
+        value_to_group_info(group_val)
+    }
+}
+
+fn extract_id(response: &Value) -> Result<u64> {
+    let m = response
+        .as_struct()
+        .ok_or_else(|| BzrError::XmlRpc("expected struct response".into()))?;
+
+    let id = m
+        .get("id")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| BzrError::XmlRpc("response missing id field".into()))?;
+
+    #[expect(clippy::cast_sign_loss, reason = "user IDs are non-negative")]
+    Ok(id as u64)
 }
 
 fn extract_bugs(response: &Value) -> Result<Vec<Bug>> {
@@ -173,6 +224,7 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         resolution: get_nonempty_str(m, "resolution"),
         product: get_nonempty_str(m, "product"),
         component: get_nonempty_str(m, "component"),
+        version: get_nonempty_str(m, "version"),
         assigned_to: get_nonempty_str(m, "assigned_to"),
         priority: get_nonempty_str(m, "priority"),
         severity: get_nonempty_str(m, "severity"),
@@ -185,6 +237,8 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         blocks: get_int_array(m, "blocks"),
         depends_on: get_int_array(m, "depends_on"),
         cc: get_str_array(m, "cc"),
+        op_sys: get_nonempty_str(m, "op_sys"),
+        rep_platform: get_nonempty_str(m, "rep_platform"),
     })
 }
 
@@ -238,6 +292,49 @@ fn get_int_array(m: &BTreeMap<String, Value>, key: &str) -> Vec<u64> {
         .unwrap_or_default()
 }
 
+fn value_to_group_info(val: &Value) -> Result<GroupInfo> {
+    let m = val
+        .as_struct()
+        .ok_or_else(|| BzrError::XmlRpc("expected struct for group".into()))?;
+
+    let id = m
+        .get("id")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| BzrError::XmlRpc("group missing id".into()))?;
+
+    #[expect(clippy::cast_sign_loss, reason = "group IDs are non-negative")]
+    let id = id as u64;
+
+    let membership = m
+        .get("membership")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| {
+                    let member_map = v.as_struct()?;
+                    let member_id = member_map.get("id").and_then(Value::as_i64)?;
+                    #[expect(clippy::cast_sign_loss, reason = "user IDs are non-negative")]
+                    let member_id = member_id as u64;
+                    Some(GroupMember {
+                        id: member_id,
+                        name: get_str(member_map, "name").unwrap_or_default(),
+                        real_name: get_nonempty_str(member_map, "real_name"),
+                        email: get_nonempty_str(member_map, "email"),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(GroupInfo {
+        id,
+        name: get_str(m, "name").unwrap_or_default(),
+        description: get_str(m, "description").unwrap_or_default(),
+        is_active: m.get("is_active").and_then(Value::as_bool).unwrap_or(false),
+        membership,
+    })
+}
+
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 mod tests {
@@ -250,7 +347,7 @@ mod tests {
         reqwest::Client::new()
     }
 
-    use crate::test_fixtures::xmlrpc_bug_response;
+    use crate::test_helpers::xmlrpc_bug_response;
 
     fn xmlrpc_fault_response(code: i64, message: &str) -> String {
         format!(

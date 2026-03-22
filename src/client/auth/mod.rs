@@ -20,6 +20,7 @@ use super::version::detect_version_and_mode;
 /// optionally the server version string. Returned by [`detect_server_settings`]
 /// for the caller to persist as appropriate.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct DetectedServerSettings {
     pub auth_method: AuthMethod,
     pub api_mode: ApiMode,
@@ -434,7 +435,7 @@ mod tests {
         );
     }
 
-    /// Exercises detect_server_settings: probes auth and version without Config.
+    /// Exercises `detect_server_settings`: probes auth and version without Config.
     #[tokio::test]
     async fn detect_server_settings_returns_all_fields() {
         let server = MockServer::start().await;

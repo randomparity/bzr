@@ -8,6 +8,7 @@ mod field;
 mod group;
 mod product;
 mod server;
+mod template;
 mod user;
 
 pub use attachment::AttachmentAction;
@@ -20,6 +21,7 @@ pub use field::FieldAction;
 pub use group::GroupAction;
 pub use product::ProductAction;
 pub use server::ServerAction;
+pub use template::TemplateAction;
 pub use user::UserAction;
 
 use clap::{Parser, Subcommand};
@@ -119,6 +121,11 @@ pub enum Commands {
     Component {
         #[command(subcommand)]
         action: ComponentAction,
+    },
+    /// Bug template management
+    Template {
+        #[command(subcommand)]
+        action: TemplateAction,
     },
 }
 
@@ -260,10 +267,10 @@ mod tests {
                         ..
                     },
             } => {
-                assert_eq!(product, "TestProduct");
-                assert_eq!(component, "General");
+                assert_eq!(product.as_deref(), Some("TestProduct"));
+                assert_eq!(component.as_deref(), Some("General"));
                 assert_eq!(summary, "Test bug");
-                assert_eq!(version, "unspecified");
+                assert_eq!(version, None);
             }
             _ => panic!("expected Bug Create"),
         }
@@ -279,10 +286,10 @@ mod tests {
             Commands::Bug {
                 action:
                     BugAction::Update {
-                        id, status, flag, ..
+                        ids, status, flag, ..
                     },
             } => {
-                assert_eq!(id, 42);
+                assert_eq!(ids, vec![42]);
                 assert_eq!(status.as_deref(), Some("RESOLVED"));
                 assert_eq!(flag, vec!["review+"]);
             }
@@ -567,6 +574,90 @@ mod tests {
                 assert_eq!(remove, vec!["good"]);
             }
             _ => panic!("expected Comment Tag"),
+        }
+    }
+
+    #[test]
+    fn parse_bug_my_defaults() {
+        let cli = Cli::try_parse_from(["bzr", "bug", "my"]).unwrap();
+        match cli.command {
+            Commands::Bug {
+                action:
+                    BugAction::My {
+                        created,
+                        cc,
+                        all,
+                        limit,
+                        ..
+                    },
+            } => {
+                assert!(!created);
+                assert!(!cc);
+                assert!(!all);
+                assert_eq!(limit, 50);
+            }
+            _ => panic!("expected Bug My"),
+        }
+    }
+
+    #[test]
+    fn parse_bug_my_all_conflicts_with_created() {
+        let result = Cli::try_parse_from(["bzr", "bug", "my", "--all", "--created"]);
+        assert!(result.is_err(), "--all should conflict with --created");
+    }
+
+    #[test]
+    fn parse_bug_my_all_conflicts_with_cc() {
+        let result = Cli::try_parse_from(["bzr", "bug", "my", "--all", "--cc"]);
+        assert!(result.is_err(), "--all should conflict with --cc");
+    }
+
+    #[test]
+    fn parse_bug_clone_minimal() {
+        let cli = Cli::try_parse_from(["bzr", "bug", "clone", "123"]).unwrap();
+        match cli.command {
+            Commands::Bug {
+                action: BugAction::Clone { id, summary, .. },
+            } => {
+                assert_eq!(id, "123");
+                assert!(summary.is_none());
+            }
+            _ => panic!("expected Bug Clone"),
+        }
+    }
+
+    #[test]
+    fn parse_template_save_with_fields() {
+        let cli = Cli::try_parse_from([
+            "bzr",
+            "template",
+            "save",
+            "security-bug",
+            "--product",
+            "Security",
+            "--component",
+            "Vulnerabilities",
+            "--severity",
+            "critical",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Template {
+                action:
+                    TemplateAction::Save {
+                        name,
+                        product,
+                        component,
+                        severity,
+                        ..
+                    },
+            } => {
+                assert_eq!(name, "security-bug");
+                assert_eq!(product.as_deref(), Some("Security"));
+                assert_eq!(component.as_deref(), Some("Vulnerabilities"));
+                assert_eq!(severity.as_deref(), Some("critical"));
+            }
+            _ => panic!("expected Template Save"),
         }
     }
 }

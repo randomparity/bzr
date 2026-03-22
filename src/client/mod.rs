@@ -117,18 +117,16 @@ impl BugzillaClient {
 
         let http = build_http_client().map_err(BzrError::Http)?;
 
-        let xmlrpc = match api_mode {
-            ApiMode::Rest => None,
-            ApiMode::XmlRpc | ApiMode::Hybrid => {
-                if auth_method == AuthMethod::Header {
-                    tracing::info!(
-                        "XML-RPC always sends API key in request body, \
-                         overriding configured header auth for XML-RPC calls"
-                    );
-                }
-                Some(XmlRpcClient::new(http.clone(), base_url, api_key))
-            }
-        };
+        // Always construct the XML-RPC client — even in REST mode, some
+        // methods (e.g. Group.get on Bugzilla 5.3+) require XML-RPC fallback
+        // because the REST endpoint is broken for them.
+        if api_mode != ApiMode::Rest && auth_method == AuthMethod::Header {
+            tracing::info!(
+                "XML-RPC always sends API key in request body, \
+                 overriding configured header auth for XML-RPC calls"
+            );
+        }
+        let xmlrpc = Some(XmlRpcClient::new(http.clone(), base_url, api_key));
 
         tracing::debug!(base_url, %auth_method, %api_mode, "created Bugzilla client");
 

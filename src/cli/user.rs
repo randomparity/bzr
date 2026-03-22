@@ -15,6 +15,10 @@ pub enum UserAction {
         /// User email
         #[arg(long)]
         email: String,
+        /// Login name (required on Bugzilla 5.3+ when `use_email_as_login` is disabled;
+        /// set `api_mode` to "hybrid" to use XML-RPC which avoids the REST login field conflict)
+        #[arg(long)]
+        login: Option<String>,
         /// Full name
         #[arg(long)]
         full_name: Option<String>,

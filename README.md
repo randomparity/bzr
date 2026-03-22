@@ -11,7 +11,8 @@ A command-line interface for Bugzilla servers, written in Rust. Inspired by the 
 
 ## Features
 
-- **Bug management** — list, search, view, create, update, and view change history
+- **Bug management** — list, search, view, create, clone, and update bugs; view change history
+- **Bug workflow** — view your bugs (`bzr bug my`), batch-update, and save reusable field templates
 - **Comments** — list and add comments, with `$EDITOR` integration for composing
 - **Comment tags** — add, remove, and search comment tags
 - **Attachments** — list, download, upload, and update file attachments with auto-detected MIME types

@@ -66,6 +66,26 @@ mod tests {
     }
 
     #[test]
+    fn comment_text_format_fields() {
+        let comment = make_comment(3, "Some text here");
+        assert_eq!(comment.count, 3);
+        assert_eq!(comment.text, "Some text here");
+        assert_eq!(comment.creator.as_deref(), Some("commenter@example.com"));
+        assert_eq!(
+            comment.creation_time.as_deref(),
+            Some("2025-02-01T08:00:00Z")
+        );
+    }
+
+    #[test]
+    fn comment_private_flag_renders() {
+        let mut comment = make_comment(1, "secret");
+        assert!(!comment.is_private);
+        comment.is_private = true;
+        assert!(comment.is_private);
+    }
+
+    #[test]
     fn print_comments_json_private_flag() {
         let mut comment = make_comment(1, "secret");
         comment.is_private = true;

@@ -73,20 +73,31 @@ impl BugzillaClient {
     }
 
     pub async fn get_group(&self, group: &str) -> Result<GroupInfo> {
+        // Try REST GET first (works on Bugzilla 5.0/5.2).
+        // Bugzilla 5.3+ blocks GET for Group.get with error 32610 and POST
+        // maps to Group.create, so REST is unusable — fall back to XML-RPC.
         let req = self.apply_auth(
             self.http
                 .get(self.url("group"))
                 .query(&[("names", group), ("membership", "1")]),
         );
-        let resp = self.send(req).await?;
-        let data: GroupResponse = self.parse_json(resp).await?;
-        data.groups
-            .into_iter()
-            .next()
-            .ok_or_else(|| BzrError::NotFound {
-                resource: "group",
-                id: group.to_string(),
-            })
+        match self.send(req).await {
+            Ok(resp) => {
+                let data: GroupResponse = self.parse_json(resp).await?;
+                data.groups
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| BzrError::NotFound {
+                        resource: "group",
+                        id: group.to_string(),
+                    })
+            }
+            Err(e) if e.to_string().contains("32610") => {
+                tracing::info!("REST Group.get blocked (32610), falling back to XML-RPC");
+                self.xmlrpc_client()?.get_group(group).await
+            }
+            Err(e) => Err(e),
+        }
     }
 
     pub async fn create_group(&self, params: &CreateGroupParams) -> Result<u64> {
@@ -275,6 +286,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/group"))
             .and(query_param("names", "admin"))
+            .and(query_param("membership", "1"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "groups": [{
                     "id": 1,
@@ -298,6 +310,7 @@ mod tests {
         let mock = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/rest/group"))
+            .and(query_param("names", "secret"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "error": true,
                 "code": 51,

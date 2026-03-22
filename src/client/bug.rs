@@ -7,9 +7,9 @@ use crate::types::{ApiMode, Bug, CreateBugParams, HistoryEntry, SearchParams, Up
 /// Default fields requested for Bug queries. Matches the fields in [`Bug`] and
 /// avoids requesting server-side fields we don't use — some Bugzilla extensions
 /// crash when serializing certain fields (e.g. group visibility) via the REST API.
-const BUG_DEFAULT_FIELDS: &str = "id,summary,status,resolution,product,component,\
+const BUG_DEFAULT_FIELDS: &str = "id,summary,status,resolution,product,component,version,\
     assigned_to,priority,severity,creation_time,last_change_time,creator,\
-    url,whiteboard,keywords,blocks,depends_on,cc";
+    url,whiteboard,keywords,blocks,depends_on,cc,op_sys,rep_platform";
 
 #[derive(Deserialize)]
 struct BugListResponse {
@@ -434,7 +434,7 @@ mod tests {
         assert_eq!(bugs[0].id, 217_630);
     }
 
-    use crate::test_fixtures::xmlrpc_bug_response;
+    use crate::test_helpers::xmlrpc_bug_response;
 
     #[tokio::test]
     async fn hybrid_search_rest_has_results_no_xmlrpc_call() {

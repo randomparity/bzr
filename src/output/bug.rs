@@ -115,6 +115,7 @@ mod tests {
             resolution: None,
             product: Some("TestProduct".into()),
             component: Some("TestComponent".into()),
+            version: Some("1.0".into()),
             assigned_to: Some("dev@example.com".into()),
             priority: Some("P1".into()),
             severity: Some("major".into()),
@@ -127,6 +128,8 @@ mod tests {
             blocks: vec![200, 201],
             depends_on: vec![100],
             cc: vec!["watcher@example.com".into()],
+            op_sys: None,
+            rep_platform: None,
         }
     }
 
@@ -181,6 +184,7 @@ mod tests {
             resolution: None,
             product: None,
             component: None,
+            version: None,
             assigned_to: None,
             priority: None,
             severity: None,
@@ -193,6 +197,8 @@ mod tests {
             blocks: vec![],
             depends_on: vec![],
             cc: vec![],
+            op_sys: None,
+            rep_platform: None,
         };
         let row = BugRow::from(&bug);
         assert_eq!(row.priority, "");

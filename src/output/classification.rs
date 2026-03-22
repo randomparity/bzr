@@ -46,6 +46,31 @@ mod tests {
     }
 
     #[test]
+    fn classification_text_format_fields() {
+        let classification = Classification {
+            id: 1,
+            name: "Software".into(),
+            description: "Software products".into(),
+            sort_key: 0,
+            products: vec![
+                ClassificationProduct {
+                    id: 10,
+                    name: "Widget".into(),
+                    description: "A long description that should be truncated by the formatter when displayed".into(),
+                },
+                ClassificationProduct {
+                    id: 11,
+                    name: "Gadget".into(),
+                    description: "Short desc".into(),
+                },
+            ],
+        };
+        assert_eq!(classification.products.len(), 2);
+        assert_eq!(classification.products[0].name, "Widget");
+        assert_eq!(classification.products[1].name, "Gadget");
+    }
+
+    #[test]
     fn print_classification_json_empty_products() {
         let classification = Classification {
             id: 2,

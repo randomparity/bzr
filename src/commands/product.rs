@@ -69,8 +69,8 @@ mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, ResponseTemplate};
 
-    use super::super::test_helpers::{capture_stdout, extract_json, setup_test_env};
     use crate::cli::ProductAction;
+    use crate::test_helpers::{capture_stdout, extract_json, setup_test_env};
     use crate::types::{OutputFormat, ProductListType};
 
     #[tokio::test]

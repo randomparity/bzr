@@ -12,7 +12,8 @@ BZ_VERSION="${BZR_BZ_VERSION:-bz50}"
 case "$BZ_VERSION" in
     bz50) DEFAULT_PORT=8089; DEFAULT_TIMEOUT=90 ;;
     bz52) DEFAULT_PORT=8090; DEFAULT_TIMEOUT=240 ;;
-    *)    echo "ERROR: Unknown BZR_BZ_VERSION=$BZ_VERSION (expected bz50 or bz52)" >&2; exit 1 ;;
+    bz53) DEFAULT_PORT=8091; DEFAULT_TIMEOUT=240 ;;
+    *)    echo "ERROR: Unknown BZR_BZ_VERSION=$BZ_VERSION (expected bz50, bz52, or bz53)" >&2; exit 1 ;;
 esac
 
 CONTAINER_NAME="${BZR_FUNC_CONTAINER:-bzr-func-test-${BZ_VERSION}}"
@@ -139,7 +140,7 @@ case "${1:-}" in
     logs)   shift; cmd_logs "$@" ;;
     *)
         echo "Usage: $0 {build|start|stop|status|reset|logs}"
-        echo "  Set BZR_BZ_VERSION=bz50|bz52 (default: bz50)"
+        echo "  Set BZR_BZ_VERSION=bz50|bz52|bz53 (default: bz50)"
         exit 1
         ;;
 esac

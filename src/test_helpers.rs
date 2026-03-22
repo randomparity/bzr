@@ -1,26 +1,35 @@
-/// Shared test utilities for command module tests.
-/// Tests that set `XDG_CONFIG_HOME` must hold this lock to avoid races.
-pub(super) use crate::ENV_LOCK;
+//! Shared test utilities used by both unit tests (`src/`) and integration tests (`tests/`).
+//!
+//! Tests that set `XDG_CONFIG_HOME` must hold `ENV_LOCK` to avoid races.
 
-/// Acquire ENV_LOCK, start a mock server, create a temp dir, and configure it.
+/// Acquire `ENV_LOCK`, start a mock server, create a temp dir, and configure it.
 /// Returns the guard, mock server, and temp dir (all must stay alive for the test).
+///
+/// # Panics
+///
+/// Panics if the temp directory cannot be created.
 #[expect(clippy::unwrap_used)]
 pub async fn setup_test_env() -> (
     tokio::sync::MutexGuard<'static, ()>,
     wiremock::MockServer,
     tempfile::TempDir,
 ) {
-    let lock = ENV_LOCK.lock().await;
+    let lock = super::ENV_LOCK.lock().await;
     let mock = wiremock::MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
     (lock, mock, tmp)
 }
 
+/// Write a test config file to the given temp directory.
+///
+/// # Panics
+///
+/// Panics if the config directory or file cannot be created.
 #[expect(clippy::unwrap_used)]
 pub fn setup_config(tmp: &tempfile::TempDir, server_url: &str) {
     let config_dir = tmp.path().join("bzr");
-    std::fs::create_dir_all(config_dir.clone()).unwrap();
+    std::fs::create_dir_all(&config_dir).unwrap();
     let config_content = format!(
         r#"
 default_server = "test"
@@ -42,6 +51,10 @@ api_mode = "rest"
 /// Redirects file descriptor 1 to a temp file, runs the future, restores
 /// stdout, then returns the captured content. Must be called while holding
 /// `ENV_LOCK` (tests are single-threaded via `setup_test_env`).
+///
+/// # Panics
+///
+/// Panics if stdout redirection or temp file operations fail.
 #[cfg(unix)]
 #[expect(clippy::unwrap_used)]
 pub async fn capture_stdout<F, T>(f: F) -> (T, String)
@@ -89,6 +102,14 @@ where
 /// Extract the first valid JSON value from a string that may contain
 /// other test output mixed in (due to concurrent test threads writing
 /// to the same stdout fd).
+///
+/// # Panics
+///
+/// Panics if no valid JSON is found in the output.
+#[expect(
+    clippy::panic,
+    reason = "test helper: unrecoverable if output is not JSON"
+)]
 pub fn extract_json(output: &str) -> serde_json::Value {
     // Try parsing the full output first (common case).
     if let Ok(v) = serde_json::from_str(output) {
@@ -114,4 +135,29 @@ pub fn extract_json(output: &str) -> serde_json::Value {
         }
     }
     panic!("no valid JSON found in captured output: {output}");
+}
+
+/// Build a mock XML-RPC Bug.search response containing one bug.
+pub fn xmlrpc_bug_response(id: i64, summary: &str) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+            <methodResponse><params><param><value><struct>
+              <member><name>bugs</name><value><array><data>
+                <value><struct>
+                  <member><name>id</name><value><int>{id}</int></value></member>
+                  <member><name>summary</name><value><string>{summary}</string></value></member>
+                  <member><name>status</name><value><string>NEW</string></value></member>
+                  <member><name>product</name><value><string>TestProduct</string></value></member>
+                  <member><name>component</name><value><string>General</string></value></member>
+                  <member><name>assigned_to</name><value><string>dev@example.com</string></value></member>
+                  <member><name>priority</name><value><string>P1</string></value></member>
+                  <member><name>severity</name><value><string>normal</string></value></member>
+                  <member><name>keywords</name><value><array><data></data></array></value></member>
+                  <member><name>blocks</name><value><array><data></data></array></value></member>
+                  <member><name>depends_on</name><value><array><data></data></array></value></member>
+                  <member><name>cc</name><value><array><data></data></array></value></member>
+                </struct></value>
+              </data></array></value></member>
+            </struct></value></param></params></methodResponse>"#
+    )
 }
