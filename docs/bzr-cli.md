@@ -66,6 +66,7 @@ For installation and quick start, see [README.md](../README.md).
 | 8 | Response deserialization error |
 | 9 | Authentication error |
 | 10 | Data integrity error (e.g. missing attachment data) |
+| 11 | Batch partial failure (some operations succeeded, some failed) |
 
 *Exit code 2 is also produced by clap for invalid or missing arguments before bzr's error handling runs.
 

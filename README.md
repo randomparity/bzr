@@ -31,6 +31,15 @@ A command-line interface for Bugzilla servers, written in Rust. Inspired by the 
 
 ## Installation
 
+### Pre-built binaries
+
+Download the latest release for your platform from
+[GitHub Releases](https://github.com/randomparity/bzr/releases/latest).
+
+Available platforms: Linux (x86_64, aarch64, ppc64le, s390x), macOS (x86_64, Apple Silicon), Windows (x86_64).
+
+### From source
+
 ```bash
 cargo install --path .
 ```
