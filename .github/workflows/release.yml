@@ -34,10 +34,6 @@ jobs:
             os: ubuntu-latest
             use_cross: true
             archive: tar.gz
-          - target: x86_64-apple-darwin
-            os: macos-13
-            use_cross: false
-            archive: tar.gz
           - target: aarch64-apple-darwin
             os: macos-14
             use_cross: false
@@ -47,7 +43,7 @@ jobs:
             use_cross: false
             archive: zip
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -90,7 +86,7 @@ jobs:
           Compress-Archive -Path "$STAGING\*" -DestinationPath "$STAGING.zip"
         shell: pwsh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bzr-${{ matrix.target }}
           path: bzr-${{ github.ref_name }}-${{ matrix.target }}.*
@@ -100,9 +96,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
