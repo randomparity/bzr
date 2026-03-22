@@ -82,7 +82,7 @@ pub async fn execute(
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 mod tests {
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{method, path, query_param};
     use wiremock::{Mock, ResponseTemplate};
 
     use crate::cli::GroupAction;
@@ -94,7 +94,8 @@ mod tests {
         let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("GET"))
-            .and(path("/rest/group/admin"))
+            .and(path("/rest/group"))
+            .and(query_param("names", "admin"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "groups": [{
                     "id": 1,
@@ -264,7 +265,7 @@ mod tests {
         let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("GET"))
-            .and(path("/rest/group/admin"))
+            .and(path("/rest/group"))
             .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
             .mount(&mock)
             .await;

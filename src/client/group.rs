@@ -73,23 +73,31 @@ impl BugzillaClient {
     }
 
     pub async fn get_group(&self, group: &str) -> Result<GroupInfo> {
-        // Use GET /rest/group/<name> with the group name in the URL path.
-        // This avoids POST (which Bugzilla routes to Group.create) and works
-        // across all Bugzilla versions including 5.3+.
+        // Try REST GET first (works on Bugzilla 5.0/5.2).
+        // Bugzilla 5.3+ blocks GET for Group.get with error 32610 and POST
+        // maps to Group.create, so REST is unusable — fall back to XML-RPC.
         let req = self.apply_auth(
             self.http
-                .get(self.url(&format!("group/{}", encode_path(group))))
-                .query(&[("membership", "1")]),
+                .get(self.url("group"))
+                .query(&[("names", group), ("membership", "1")]),
         );
-        let resp = self.send(req).await?;
-        let data: GroupResponse = self.parse_json(resp).await?;
-        data.groups
-            .into_iter()
-            .next()
-            .ok_or_else(|| BzrError::NotFound {
-                resource: "group",
-                id: group.to_string(),
-            })
+        match self.send(req).await {
+            Ok(resp) => {
+                let data: GroupResponse = self.parse_json(resp).await?;
+                data.groups
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| BzrError::NotFound {
+                        resource: "group",
+                        id: group.to_string(),
+                    })
+            }
+            Err(e) if e.to_string().contains("32610") => {
+                tracing::info!("REST Group.get blocked (32610), falling back to XML-RPC");
+                self.xmlrpc_client()?.get_group(group).await
+            }
+            Err(e) => Err(e),
+        }
     }
 
     pub async fn create_group(&self, params: &CreateGroupParams) -> Result<u64> {
@@ -276,7 +284,8 @@ mod tests {
     async fn get_group_returns_info() {
         let mock = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/rest/group/admin"))
+            .and(path("/rest/group"))
+            .and(query_param("names", "admin"))
             .and(query_param("membership", "1"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "groups": [{
@@ -300,7 +309,8 @@ mod tests {
     async fn get_group_forbidden() {
         let mock = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/rest/group/secret"))
+            .and(path("/rest/group"))
+            .and(query_param("names", "secret"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "error": true,
                 "code": 51,

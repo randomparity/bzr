@@ -458,7 +458,8 @@ async fn group_view_integration() {
     setup_config(&tmp, &mock.uri());
 
     Mock::given(method("GET"))
-        .and(path("/rest/group/admin"))
+        .and(path("/rest/group"))
+        .and(query_param("names", "admin"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "groups": [{
                 "id": 1,
