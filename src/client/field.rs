@@ -16,8 +16,6 @@ struct FieldEntry {
     values: Vec<FieldValue>,
 }
 
-// Used by `get_field_values` once alias resolution is wired in.
-#[allow(dead_code)]
 fn resolve_field_alias(name: &str) -> Cow<'_, str> {
     let lower = name.to_ascii_lowercase();
     match lower.as_str() {
@@ -39,7 +37,8 @@ impl BugzillaClient {
     /// (empty `fields` array). An empty `Vec` means the field exists but has
     /// no legal values.
     pub async fn get_field_values(&self, field_name: &str) -> Result<Vec<FieldValue>> {
-        let data: FieldBugResponse = self.get_json(&format!("field/bug/{field_name}")).await?;
+        let resolved = resolve_field_alias(field_name);
+        let data: FieldBugResponse = self.get_json(&format!("field/bug/{resolved}")).await?;
         let field = data
             .fields
             .into_iter()
@@ -123,7 +122,7 @@ mod tests {
     async fn get_field_values_returns_values() {
         let mock = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/rest/field/bug/status"))
+            .and(path("/rest/field/bug/bug_status"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "fields": [{
                     "values": [
@@ -142,6 +141,28 @@ mod tests {
         let transitions = values[0].can_change_to.as_ref().unwrap();
         assert_eq!(transitions.len(), 2);
         assert_eq!(transitions[0].name, "ASSIGNED");
+    }
+
+    #[tokio::test]
+    async fn get_field_values_resolves_severity_alias() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/field/bug/bug_severity"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "fields": [{
+                    "values": [
+                        {"name": "blocker", "sort_key": 100, "is_active": true},
+                        {"name": "normal", "sort_key": 200, "is_active": true}
+                    ]
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let values = client.get_field_values("severity").await.unwrap();
+        assert_eq!(values.len(), 2);
+        assert_eq!(values[0].name, "blocker");
     }
 
     #[tokio::test]
