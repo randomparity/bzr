@@ -1,3 +1,4 @@
+use serde::Serialize;
 use tabled::{Table, Tabled};
 
 use super::formatting::{print_formatted, yes_no};
@@ -36,6 +37,25 @@ pub fn print_field_values(values: &[FieldValue], format: OutputFormat) {
                 }
             })
             .collect();
+        println!("{}", Table::new(rows));
+    });
+}
+
+#[derive(Serialize, Tabled)]
+struct FieldAliasRow {
+    #[tabled(rename = "ALIAS")]
+    alias: &'static str,
+    #[tabled(rename = "API FIELD NAME")]
+    api_name: &'static str,
+}
+
+#[expect(clippy::print_stdout)]
+pub fn print_field_aliases(aliases: &[(&'static str, &'static str)], format: OutputFormat) {
+    let rows: Vec<FieldAliasRow> = aliases
+        .iter()
+        .map(|&(alias, api_name)| FieldAliasRow { alias, api_name })
+        .collect();
+    print_formatted(&rows, format, |rows| {
         println!("{}", Table::new(rows));
     });
 }
@@ -129,5 +149,22 @@ mod tests {
         assert_eq!(parsed[1]["name"], "CLOSED");
         assert_eq!(parsed[1]["is_active"], false);
         assert!(parsed[1]["can_change_to"].is_null());
+    }
+
+    #[test]
+    fn print_field_aliases_json_serialization() {
+        let aliases: &[(&str, &str)] = &[("status", "bug_status"), ("severity", "bug_severity")];
+        let rows: Vec<super::FieldAliasRow> = aliases
+            .iter()
+            .map(|&(alias, api_name)| super::FieldAliasRow { alias, api_name })
+            .collect();
+        let json = serde_json::to_string_pretty(&rows).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let arr = parsed.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0]["alias"], "status");
+        assert_eq!(arr[0]["api_name"], "bug_status");
+        assert_eq!(arr[1]["alias"], "severity");
+        assert_eq!(arr[1]["api_name"], "bug_severity");
     }
 }
