@@ -114,6 +114,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   ├── create --name <N> --description <D> [--version <V>] [--is-open <BOOL>]
 │   └── update <NAME> [--description <D>] [--default-milestone <M>] [--is-open <BOOL>]
 ├── field
+│   ├── aliases
 │   └── list <FIELD_NAME>
 ├── user
 │   ├── search <QUERY> [--details]
@@ -547,12 +548,21 @@ Common field name aliases are resolved automatically:
 | `group` | `bug_group` |
 | `file_loc` | `bug_file_loc` |
 
-Fields without aliases (e.g. `priority`, `resolution`) are passed through as-is.
+Aliases only target built-in `bug_*` fields. Custom fields (which Bugzilla requires to use the `cf_` prefix) are unaffected. Fields without aliases (e.g. `priority`, `resolution`) are passed through as-is.
 
 ```bash
 bzr field list status
 bzr field list priority
 bzr --json field list severity
+```
+
+### `bzr field aliases`
+
+Show all available field name aliases and their corresponding API field names.
+
+```bash
+bzr field aliases
+bzr --json field aliases
 ```
 
 ---
