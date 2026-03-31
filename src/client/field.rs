@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use serde::Deserialize;
 
 use super::BugzillaClient;
@@ -12,6 +14,22 @@ struct FieldBugResponse {
 #[derive(Deserialize)]
 struct FieldEntry {
     values: Vec<FieldValue>,
+}
+
+// Used by `get_field_values` once alias resolution is wired in.
+#[allow(dead_code)]
+fn resolve_field_alias(name: &str) -> Cow<'_, str> {
+    let lower = name.to_ascii_lowercase();
+    match lower.as_str() {
+        "status" => Cow::Borrowed("bug_status"),
+        "severity" => Cow::Borrowed("bug_severity"),
+        "id" => Cow::Borrowed("bug_id"),
+        "type" => Cow::Borrowed("bug_type"),
+        "group" => Cow::Borrowed("bug_group"),
+        "file_loc" => Cow::Borrowed("bug_file_loc"),
+        // Unknown fields pass through unchanged; only known aliases are normalized.
+        _ => Cow::Borrowed(name),
+    }
 }
 
 impl BugzillaClient {
@@ -42,6 +60,64 @@ mod tests {
 
     use crate::client::test_helpers::test_client;
     use crate::error::BzrError;
+
+    #[test]
+    fn resolve_field_alias_maps_status() {
+        assert_eq!(super::resolve_field_alias("status").as_ref(), "bug_status");
+    }
+
+    #[test]
+    fn resolve_field_alias_maps_severity() {
+        assert_eq!(
+            super::resolve_field_alias("severity").as_ref(),
+            "bug_severity"
+        );
+    }
+
+    #[test]
+    fn resolve_field_alias_maps_id() {
+        assert_eq!(super::resolve_field_alias("id").as_ref(), "bug_id");
+    }
+
+    #[test]
+    fn resolve_field_alias_maps_type() {
+        assert_eq!(super::resolve_field_alias("type").as_ref(), "bug_type");
+    }
+
+    #[test]
+    fn resolve_field_alias_maps_group() {
+        assert_eq!(super::resolve_field_alias("group").as_ref(), "bug_group");
+    }
+
+    #[test]
+    fn resolve_field_alias_maps_file_loc() {
+        assert_eq!(
+            super::resolve_field_alias("file_loc").as_ref(),
+            "bug_file_loc"
+        );
+    }
+
+    #[test]
+    fn resolve_field_alias_passes_through_unknown() {
+        assert_eq!(super::resolve_field_alias("priority").as_ref(), "priority");
+    }
+
+    #[test]
+    fn resolve_field_alias_passes_through_already_prefixed() {
+        assert_eq!(
+            super::resolve_field_alias("bug_status").as_ref(),
+            "bug_status"
+        );
+    }
+
+    #[test]
+    fn resolve_field_alias_is_case_insensitive() {
+        assert_eq!(super::resolve_field_alias("Status").as_ref(), "bug_status");
+        assert_eq!(
+            super::resolve_field_alias("SEVERITY").as_ref(),
+            "bug_severity"
+        );
+    }
 
     #[tokio::test]
     async fn get_field_values_returns_values() {
