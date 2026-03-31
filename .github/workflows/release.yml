@@ -28,7 +28,8 @@ jobs:
             archive: tar.gz
           - target: powerpc64le-unknown-linux-gnu
             os: ubuntu-latest
-            use_cross: true
+            use_cross: false
+            use_qemu: true
             archive: tar.gz
           - target: s390x-unknown-linux-gnu
             os: ubuntu-latest
@@ -53,13 +54,22 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
+      - name: Set up QEMU
+        if: matrix.use_qemu
+        uses: docker/setup-qemu-action@v4
+
       - name: Install cross
         if: matrix.use_cross
         run: cargo install cross --locked
 
       - name: Build
         run: |
-          if [ "${{ matrix.use_cross }}" = "true" ]; then
+          if [ "${{ matrix.use_qemu }}" = "true" ]; then
+            docker run --rm --platform linux/ppc64le \
+              -v "${{ github.workspace }}:/workspace" -w /workspace \
+              rust:1.85-bookworm \
+              cargo build --release --locked --target ${{ matrix.target }}
+          elif [ "${{ matrix.use_cross }}" = "true" ]; then
             cross build --release --locked --target ${{ matrix.target }}
           else
             cargo build --release --locked --target ${{ matrix.target }}
