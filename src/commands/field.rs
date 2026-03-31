@@ -43,10 +43,10 @@ mod tests {
         let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("GET"))
-            .and(path("/rest/field/bug/status"))
+            .and(path("/rest/field/bug/bug_status"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "fields": [{
-                    "name": "status",
+                    "name": "bug_status",
                     "values": [
                         {"name": "NEW"},
                         {"name": "ASSIGNED"},
@@ -73,7 +73,7 @@ mod tests {
         let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("GET"))
-            .and(path("/rest/field/bug/status"))
+            .and(path("/rest/field/bug/bug_status"))
             .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
             .mount(&mock)
             .await;
