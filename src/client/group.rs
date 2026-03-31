@@ -364,9 +364,13 @@ mod tests {
         // XML-RPC fallback succeeds
         Mock::given(method("POST"))
             .and(path("/xmlrpc.cgi"))
-            .respond_with(ResponseTemplate::new(200).set_body_string(
-                xmlrpc_group_response(1, "admin", "Administrators"),
-            ))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(xmlrpc_group_response(
+                    1,
+                    "admin",
+                    "Administrators",
+                )),
+            )
             .expect(1)
             .mount(&mock)
             .await;

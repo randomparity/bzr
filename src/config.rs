@@ -70,9 +70,7 @@ impl Config {
         let path = Self::path()?;
         match fs::read_to_string(&path) {
             Ok(content) => Ok(toml::from_str(&content)?),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                Ok(Config::default())
-            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
             Err(e) => Err(e.into()),
         }
     }
