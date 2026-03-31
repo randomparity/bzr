@@ -4,6 +4,7 @@ use super::encode_path;
 use super::BugzillaClient;
 use super::{UserSearchResponse, USER_FIELDS_BASIC, USER_FIELDS_DETAILED};
 use crate::error::{BzrError, Result};
+use crate::types::ApiMode;
 
 #[derive(Serialize)]
 struct GroupMembershipBody {
@@ -73,31 +74,50 @@ impl BugzillaClient {
     }
 
     pub async fn get_group(&self, group: &str) -> Result<GroupInfo> {
-        // Try REST GET first (works on Bugzilla 5.0/5.2).
-        // Bugzilla 5.3+ blocks GET for Group.get with error 32610 and POST
-        // maps to Group.create, so REST is unusable — fall back to XML-RPC.
+        match self.api_mode {
+            ApiMode::Rest => self.get_group_rest(group).await,
+            ApiMode::XmlRpc => self.xmlrpc_client()?.get_group(group).await,
+            ApiMode::Hybrid => {
+                match self.get_group_rest(group).await {
+                    Ok(info) => Ok(info),
+                    // Bugzilla 5.3+ blocks GET for Group.get with error
+                    // 32610, and POST maps to Group.create, so REST is
+                    // unusable — fall back to XML-RPC.
+                    Err(BzrError::Api { code: 32610, .. }) => {
+                        tracing::info!(
+                            "REST Group.get blocked (32610), \
+                             falling back to XML-RPC"
+                        );
+                        self.xmlrpc_client()?.get_group(group).await
+                    }
+                    Err(e) if e.is_transport_failure() => {
+                        tracing::info!(
+                            "REST group lookup failed ({e}), \
+                             retrying via XML-RPC"
+                        );
+                        self.xmlrpc_client()?.get_group(group).await
+                    }
+                    Err(e) => Err(e),
+                }
+            }
+        }
+    }
+
+    async fn get_group_rest(&self, group: &str) -> Result<GroupInfo> {
         let req = self.apply_auth(
             self.http
                 .get(self.url("group"))
                 .query(&[("names", group), ("membership", "1")]),
         );
-        match self.send(req).await {
-            Ok(resp) => {
-                let data: GroupResponse = self.parse_json(resp).await?;
-                data.groups
-                    .into_iter()
-                    .next()
-                    .ok_or_else(|| BzrError::NotFound {
-                        resource: "group",
-                        id: group.to_string(),
-                    })
-            }
-            Err(e) if e.to_string().contains("32610") => {
-                tracing::info!("REST Group.get blocked (32610), falling back to XML-RPC");
-                self.xmlrpc_client()?.get_group(group).await
-            }
-            Err(e) => Err(e),
-        }
+        let resp = self.send(req).await?;
+        let data: GroupResponse = self.parse_json(resp).await?;
+        data.groups
+            .into_iter()
+            .next()
+            .ok_or_else(|| BzrError::NotFound {
+                resource: "group",
+                id: group.to_string(),
+            })
     }
 
     pub async fn create_group(&self, params: &CreateGroupParams) -> Result<u64> {
@@ -118,7 +138,7 @@ mod tests {
 
     use super::super::encode_path;
     use super::super::USER_FIELDS_BASIC;
-    use crate::client::test_helpers::test_client;
+    use crate::client::test_helpers::{test_client, test_client_hybrid};
     use crate::types::{CreateGroupParams, UpdateGroupParams};
 
     #[tokio::test]
@@ -322,6 +342,90 @@ mod tests {
         let client = test_client(&mock.uri());
         let err = client.get_group("secret").await.unwrap_err();
         assert!(err.to_string().contains("not authorized"));
+    }
+
+    #[tokio::test]
+    async fn hybrid_get_group_32610_falls_back_to_xmlrpc() {
+        let mock = MockServer::start().await;
+
+        // REST returns error 32610 (Bugzilla 5.3+ blocks GET for Group.get)
+        Mock::given(method("GET"))
+            .and(path("/rest/group"))
+            .and(query_param("names", "admin"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 32610,
+                "message": "For security reasons, you must use HTTP POST to call the 'get' method."
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        // XML-RPC fallback succeeds
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(
+                xmlrpc_group_response(1, "admin", "Administrators"),
+            ))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client_hybrid(&mock.uri());
+        let info = client.get_group("admin").await.unwrap();
+        assert_eq!(info.name, "admin");
+        assert_eq!(info.description, "Administrators");
+    }
+
+    #[tokio::test]
+    async fn hybrid_get_group_api_error_does_not_fall_back() {
+        let mock = MockServer::start().await;
+
+        // REST returns a non-retriable API error (not 32610, not transport)
+        Mock::given(method("GET"))
+            .and(path("/rest/group"))
+            .and(query_param("names", "secret"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 51,
+                "message": "You are not authorized."
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        // XML-RPC should not be called
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
+            .mount(&mock)
+            .await;
+
+        let client = test_client_hybrid(&mock.uri());
+        let err = client.get_group("secret").await.unwrap_err();
+        assert!(
+            err.to_string().contains("not authorized"),
+            "expected auth error, got: {err}"
+        );
+    }
+
+    /// Build a mock XML-RPC Group.get response containing one group.
+    fn xmlrpc_group_response(id: i64, name: &str, description: &str) -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+            <methodResponse><params><param><value><struct>
+              <member><name>groups</name><value><array><data>
+                <value><struct>
+                  <member><name>id</name><value><int>{id}</int></value></member>
+                  <member><name>name</name><value><string>{name}</string></value></member>
+                  <member><name>description</name><value><string>{description}</string></value></member>
+                  <member><name>is_active</name><value><boolean>1</boolean></value></member>
+                  <member><name>membership</name><value><array><data></data></array></value></member>
+                </struct></value>
+              </data></array></value></member>
+            </struct></value></param></params></methodResponse>"#
+        )
     }
 
     #[tokio::test]
