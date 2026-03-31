@@ -536,6 +536,19 @@ bzr product update "My Product" --default-milestone "2.0"
 
 List valid values for a bug field (e.g. status, priority, severity, resolution). For status fields, shows allowed state transitions.
 
+Common field name aliases are resolved automatically:
+
+| You type | API field name |
+|----------|---------------|
+| `status` | `bug_status` |
+| `severity` | `bug_severity` |
+| `id` | `bug_id` |
+| `type` | `bug_type` |
+| `group` | `bug_group` |
+| `file_loc` | `bug_file_loc` |
+
+Fields without aliases (e.g. `priority`, `resolution`) are passed through as-is.
+
 ```bash
 bzr field list status
 bzr field list priority

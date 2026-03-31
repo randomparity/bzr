@@ -337,7 +337,7 @@ async fn field_list_integration() {
     setup_config(&tmp, &mock.uri());
 
     Mock::given(method("GET"))
-        .and(path("/rest/field/bug/status"))
+        .and(path("/rest/field/bug/bug_status"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "fields": [{
                 "values": [
