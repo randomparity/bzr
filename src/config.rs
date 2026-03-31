@@ -68,12 +68,13 @@ impl Config {
 
     pub fn load() -> Result<Config> {
         let path = Self::path()?;
-        if !path.exists() {
-            return Ok(Config::default());
+        match fs::read_to_string(&path) {
+            Ok(content) => Ok(toml::from_str(&content)?),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                Ok(Config::default())
+            }
+            Err(e) => Err(e.into()),
         }
-        let content = fs::read_to_string(&path)?;
-        let config: Config = toml::from_str(&content)?;
-        Ok(config)
     }
 
     pub fn save(&self) -> Result<()> {
