@@ -24,6 +24,7 @@ pub async fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> 
             api_key,
             email,
             auth_method,
+            tls_insecure,
         } => {
             let mut config = Config::load()?;
             let is_update = config.servers.contains_key(name.as_str());
@@ -36,6 +37,7 @@ pub async fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> 
                     auth_method: *auth_method,
                     api_mode: None,
                     server_version: None,
+                    tls_insecure: *tls_insecure,
                 },
             );
             if config.default_server.is_none() {
@@ -139,6 +141,7 @@ mod tests {
                 api_key: "first-key-1234567890".into(),
                 email: None,
                 auth_method: None,
+                tls_insecure: false,
             },
             OutputFormat::Table,
         )
@@ -160,6 +163,7 @@ mod tests {
                 api_key: "first-key-1234567890".into(),
                 email: None,
                 auth_method: None,
+                tls_insecure: false,
             },
             OutputFormat::Table,
         )
@@ -173,6 +177,7 @@ mod tests {
                 api_key: "second-key-1234567890".into(),
                 email: None,
                 auth_method: None,
+                tls_insecure: false,
             },
             OutputFormat::Table,
         )

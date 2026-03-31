@@ -39,32 +39,55 @@ pub async fn connect_client(
 ) -> Result<BugzillaClient> {
     let mut config = Config::load()?;
     let (server_name, srv) = config.resolve_server(server)?;
-    let (server_name, url, api_key, email) = (
+    let (server_name, url, api_key, email, tls_insecure) = (
         server_name.to_string(),
         srv.url.clone(),
         srv.api_key.clone(),
         srv.email.clone(),
+        srv.tls_insecure,
     );
+
+    if tls_insecure {
+        tracing::warn!("TLS certificate verification disabled for server '{server_name}'");
+    }
+
     // Three cases: fully cached, partially cached (auth only), or uncached.
     let (auth, resolved_mode) = match (srv.auth_method, srv.api_mode) {
         (Some(method), Some(mode)) => (method, mode),
         (Some(method), None) => {
             tracing::debug!("auth_method cached but api_mode missing; re-detecting");
-            let settings =
-                crate::client::detect_server_settings(&url, &api_key, email.as_deref()).await?;
+            let settings = crate::client::detect_server_settings(
+                &url,
+                &api_key,
+                email.as_deref(),
+                tls_insecure,
+            )
+            .await?;
             persist_detected_settings(&mut config, &server_name, &settings, false)?;
             (method, settings.api_mode)
         }
         _ => {
-            let settings =
-                crate::client::detect_server_settings(&url, &api_key, email.as_deref()).await?;
+            let settings = crate::client::detect_server_settings(
+                &url,
+                &api_key,
+                email.as_deref(),
+                tls_insecure,
+            )
+            .await?;
             persist_detected_settings(&mut config, &server_name, &settings, true)?;
             (settings.auth_method, settings.api_mode)
         }
     };
 
     let api_mode = api_override.unwrap_or(resolved_mode);
-    let client = BugzillaClient::new(&url, &api_key, auth, api_mode, email.as_deref())?;
+    let client = BugzillaClient::new(
+        &url,
+        &api_key,
+        auth,
+        api_mode,
+        email.as_deref(),
+        tls_insecure,
+    )?;
     Ok(client)
 }
 

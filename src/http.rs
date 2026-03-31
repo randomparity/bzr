@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::time::Duration;
 
 /// Kept short (10s) to fail fast on unreachable servers.
@@ -52,20 +53,76 @@ pub(crate) fn apply_auth(
 }
 
 /// Build a shared HTTP client with standard timeout configuration.
-pub(crate) fn build_http_client() -> std::result::Result<reqwest::Client, reqwest::Error> {
+///
+/// When `tls_insecure` is true, the client accepts any TLS certificate
+/// (self-signed, expired, wrong hostname). A warning is emitted at the
+/// call site to make this visible to the user.
+pub(crate) fn build_http_client(
+    tls_insecure: bool,
+) -> std::result::Result<reqwest::Client, reqwest::Error> {
     reqwest::Client::builder()
         .connect_timeout(CONNECT_TIMEOUT)
         .timeout(REQUEST_TIMEOUT)
+        .danger_accept_invalid_certs(tls_insecure)
         .build()
 }
 
+/// Check if a reqwest error looks like a TLS certificate verification failure.
+pub(crate) fn is_tls_cert_error(err: &reqwest::Error) -> bool {
+    if !err.is_connect() {
+        return false;
+    }
+    let msg = format!("{err:#}");
+    let lower = msg.to_ascii_lowercase();
+    lower.contains("certificate")
+        || lower.contains("cert")
+        || lower.contains("ssl")
+        || lower.contains("tls")
+        || lower.contains("invalid peer certificate")
+}
+
+/// Append a `--tls-insecure` hint to a message when a TLS certificate
+/// error is detected, returning the enriched string.
+pub(crate) fn tls_hint(base_msg: &str, err: &reqwest::Error) -> String {
+    let mut msg = base_msg.to_string();
+    if is_tls_cert_error(err) {
+        let _ = write!(
+            msg,
+            "\n  hint: if this server uses a self-signed certificate or sits \
+             behind a TLS-intercepting proxy, re-run:\n    \
+             bzr config set-server <NAME> ... --tls-insecure"
+        );
+    }
+    msg
+}
+
 #[cfg(test)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
     #[test]
     fn build_http_client_succeeds() {
-        let client = build_http_client();
+        let client = build_http_client(false);
         assert!(client.is_ok());
+    }
+
+    #[test]
+    fn build_http_client_insecure_succeeds() {
+        let client = build_http_client(true);
+        assert!(client.is_ok());
+    }
+
+    #[tokio::test]
+    async fn tls_hint_no_hint_for_non_tls_error() {
+        // Connection-refused is not a TLS error — should return the message unchanged.
+        let client = build_http_client(false).unwrap();
+        let err = client
+            .get("http://127.0.0.1:1/nope")
+            .send()
+            .await
+            .unwrap_err();
+        let result = tls_hint("connection failed", &err);
+        assert_eq!(result, "connection failed");
     }
 }

@@ -46,7 +46,14 @@ async fn probe_whoami(request: reqwest::RequestBuilder, method: AuthMethod) -> W
     let resp = match request.send().await {
         Ok(r) => r,
         Err(e) => {
-            tracing::debug!("whoami {method} request failed: {e:#}");
+            if crate::http::is_tls_cert_error(&e) {
+                tracing::warn!(
+                    "{}",
+                    crate::http::tls_hint(&format!("whoami {method} request failed: {e:#}"), &e,)
+                );
+            } else {
+                tracing::debug!("whoami {method} request failed: {e:#}");
+            }
             return WhoamiOutcome::NetworkError;
         }
     };

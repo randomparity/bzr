@@ -137,7 +137,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   ├── create --product <P> --name <N> --description <D> --default-assignee <E>
 │   └── update <ID> [--name <N>] [--description <D>] [--default-assignee <E>]
 ├── config
-│   ├── set-server <NAME> --url <URL> --api-key <KEY> [--email <EMAIL>] [--auth-method <METHOD>]
+│   ├── set-server <NAME> --url <URL> --api-key <KEY> [--email <EMAIL>] [--auth-method <METHOD>] [--tls-insecure]
 │   ├── set-default <NAME>
 │   └── show
 └── template
@@ -792,6 +792,8 @@ bzr config set-server mozilla --url https://bugzilla.mozilla.org --api-key xyz78
 ```
 
 The `--email` flag is required for older Bugzilla servers (5.0 or earlier) that don't support the `/rest/whoami` endpoint.
+
+The `--tls-insecure` flag disables TLS certificate verification for the server. Use this for servers with self-signed or otherwise untrusted certificates (e.g. behind corporate firewalls).
 
 The first server added is automatically set as the default.
 

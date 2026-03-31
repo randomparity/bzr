@@ -54,6 +54,9 @@ pub struct ServerConfig {
     pub api_mode: Option<ApiMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub server_version: Option<String>,
+    /// Accept invalid TLS certificates (self-signed, expired, etc.).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub tls_insecure: bool,
 }
 
 impl Config {
@@ -123,6 +126,7 @@ mod tests {
             auth_method: None,
             api_mode: None,
             server_version: None,
+            tls_insecure: false,
         }
     }
 

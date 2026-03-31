@@ -1341,6 +1341,7 @@ async fn config_set_server_integration() {
         api_key: "staging-key-abc".to_string(),
         email: None,
         auth_method: None,
+        tls_insecure: false,
     };
     let result = bzr::commands::config::execute(&action, bzr::types::OutputFormat::Json).await;
     assert!(

@@ -6,6 +6,7 @@ mod classification;
 mod comment;
 mod component;
 mod field;
+pub(crate) use field::FIELD_ALIASES;
 mod group;
 mod product;
 mod server;
@@ -105,6 +106,7 @@ impl BugzillaClient {
         auth_method: AuthMethod,
         api_mode: ApiMode,
         email_hint: Option<&str>,
+        tls_insecure: bool,
     ) -> Result<Self> {
         let auth = match auth_method {
             AuthMethod::Header => {
@@ -115,7 +117,7 @@ impl BugzillaClient {
             AuthMethod::QueryParam => PreparedAuth::QueryParam(api_key.to_string()),
         };
 
-        let http = build_http_client().map_err(BzrError::Http)?;
+        let http = build_http_client(tls_insecure).map_err(BzrError::Http)?;
 
         // Always construct the XML-RPC client — even in REST mode, some
         // methods (e.g. Group.get on Bugzilla 5.3+) require XML-RPC fallback
@@ -386,7 +388,7 @@ pub(super) mod test_helpers {
     use super::*;
 
     pub fn test_http_client() -> reqwest::Client {
-        crate::http::build_http_client().unwrap()
+        crate::http::build_http_client(false).unwrap()
     }
 
     pub fn test_client(base_url: &str) -> BugzillaClient {
@@ -396,6 +398,7 @@ pub(super) mod test_helpers {
             AuthMethod::Header,
             ApiMode::Rest,
             None,
+            false,
         )
         .unwrap()
     }
@@ -407,6 +410,7 @@ pub(super) mod test_helpers {
             AuthMethod::Header,
             ApiMode::Hybrid,
             None,
+            false,
         )
         .unwrap()
     }
@@ -418,6 +422,7 @@ pub(super) mod test_helpers {
             AuthMethod::QueryParam,
             ApiMode::Rest,
             None,
+            false,
         )
         .unwrap()
     }
