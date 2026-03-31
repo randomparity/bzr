@@ -115,6 +115,42 @@ async fn probe_valid_login(
     }
 }
 
+/// Try header auth on a real API endpoint to verify it works.
+///
+/// Some servers (e.g. IBM LTC Bugzilla) report header auth as unsupported
+/// via `valid_login` but accept it on actual API endpoints. A minimal
+/// `rest/bug?limit=1` request is used -- any 2xx confirms header auth works.
+pub(super) async fn verify_header_auth_via_rest(
+    http: &reqwest::Client,
+    base: &str,
+    key_header: &HeaderValue,
+) -> bool {
+    let url = format!("{base}/rest/bug");
+    let resp = http
+        .get(&url)
+        .query(&[("limit", "1")])
+        .header(AUTH_HEADER_NAME, key_header.clone())
+        .send()
+        .await;
+    match resp {
+        Ok(r) if r.status().is_success() => {
+            tracing::debug!("header auth probe on rest/bug succeeded");
+            true
+        }
+        Ok(r) => {
+            tracing::debug!(
+                status = %r.status(),
+                "header auth probe on rest/bug failed"
+            );
+            false
+        }
+        Err(e) => {
+            tracing::debug!("header auth probe request failed: {e}");
+            false
+        }
+    }
+}
+
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 mod tests {
@@ -166,44 +202,8 @@ mod tests {
 
     #[test]
     fn valid_login_response_missing_result_defaults_false() {
-        let json = r#"{}"#;
+        let json = r"{}";
         let resp: ValidLoginResponse = serde_json::from_str(json).unwrap();
         assert!(!resp.result.is_valid());
-    }
-}
-
-/// Try header auth on a real API endpoint to verify it works.
-///
-/// Some servers (e.g. IBM LTC Bugzilla) report header auth as unsupported
-/// via `valid_login` but accept it on actual API endpoints. A minimal
-/// `rest/bug?limit=1` request is used -- any 2xx confirms header auth works.
-pub(super) async fn verify_header_auth_via_rest(
-    http: &reqwest::Client,
-    base: &str,
-    key_header: &HeaderValue,
-) -> bool {
-    let url = format!("{base}/rest/bug");
-    let resp = http
-        .get(&url)
-        .query(&[("limit", "1")])
-        .header(AUTH_HEADER_NAME, key_header.clone())
-        .send()
-        .await;
-    match resp {
-        Ok(r) if r.status().is_success() => {
-            tracing::debug!("header auth probe on rest/bug succeeded");
-            true
-        }
-        Ok(r) => {
-            tracing::debug!(
-                status = %r.status(),
-                "header auth probe on rest/bug failed"
-            );
-            false
-        }
-        Err(e) => {
-            tracing::debug!("header auth probe request failed: {e}");
-            false
-        }
     }
 }

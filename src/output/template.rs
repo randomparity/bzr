@@ -113,13 +113,13 @@ mod tests {
 
     #[test]
     fn template_detail_json_with_flatten() {
-        let template = make_template();
         #[derive(serde::Serialize)]
         struct TemplateView<'a> {
             name: &'a str,
             #[serde(flatten)]
             template: &'a BugTemplate,
         }
+        let template = make_template();
         let view = TemplateView {
             name: "test-tmpl",
             template: &template,

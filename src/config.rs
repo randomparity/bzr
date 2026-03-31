@@ -58,19 +58,21 @@ pub struct ServerConfig {
 
 impl Config {
     pub fn path() -> Result<PathBuf> {
-        let config_dir = dirs::config_dir()
+        let config_dir = std::env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute())
+            .or_else(dirs::config_dir)
             .ok_or_else(|| BzrError::config("cannot determine config directory"))?;
         Ok(config_dir.join("bzr").join("config.toml"))
     }
 
     pub fn load() -> Result<Config> {
         let path = Self::path()?;
-        if !path.exists() {
-            return Ok(Config::default());
+        match fs::read_to_string(&path) {
+            Ok(content) => Ok(toml::from_str(&content)?),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
+            Err(e) => Err(e.into()),
         }
-        let content = fs::read_to_string(&path)?;
-        let config: Config = toml::from_str(&content)?;
-        Ok(config)
     }
 
     pub fn save(&self) -> Result<()> {

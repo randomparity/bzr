@@ -1,10 +1,10 @@
 # bzr Functional Tests
 
-End-to-end tests that exercise every `bzr` CLI command against a real Bugzilla 5.0 instance running in a podman container.
+End-to-end tests that exercise every `bzr` CLI command against a real Bugzilla 5.0 instance running in a container.
 
 ## Prerequisites
 
-- `podman` (rootless configured)
+- `podman` or `docker` (podman preferred; docker used as fallback)
 - `jq`
 - `curl`
 - `cargo` + Rust toolchain
@@ -80,7 +80,7 @@ Tests set `XDG_CONFIG_HOME` to a temp directory, so they never touch `~/.config/
 ## Troubleshooting
 
 **Container build fails with Perl dependency errors:**
-The Containerfile installs Perl modules via dnf + cpanm. Network issues or missing repos can cause failures. Retry, or check `podman logs bzr-func-test`.
+The Containerfile installs Perl modules via dnf + cpanm. Network issues or missing repos can cause failures. Retry, or check container logs with `tests/functional/setup-bugzilla.sh logs`.
 
 **Health check times out:**
 Bugzilla's `checksetup.pl` can take 30-60s on first run. Increase timeout with `BZR_FUNC_TIMEOUT=120`.
