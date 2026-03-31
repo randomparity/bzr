@@ -6,6 +6,16 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# ── Container runtime detection ─────────────────────────────────────
+if command -v podman &>/dev/null; then
+    CONTAINER_RT=podman
+elif command -v docker &>/dev/null; then
+    CONTAINER_RT=docker
+else
+    echo "ERROR: Neither podman nor docker found in PATH" >&2
+    exit 1
+fi
+
 # ── Version-aware defaults ───────────────────────────────────────────
 BZ_VERSION="${BZR_BZ_VERSION:-bz50}"
 
@@ -41,12 +51,12 @@ wait_for_ready() {
 
     err "Bugzilla did not become ready within ${HEALTH_TIMEOUT}s"
     echo "--- Container logs (last 30 lines) ---"
-    podman logs --tail 30 "$CONTAINER_NAME" 2>&1 || true
+    $CONTAINER_RT logs --tail 30 "$CONTAINER_NAME" 2>&1 || true
     return 1
 }
 
 container_exists() {
-    podman container exists "$CONTAINER_NAME" 2>/dev/null
+    $CONTAINER_RT container inspect "$CONTAINER_NAME" >/dev/null 2>&1
 }
 
 # ── Subcommands ──────────────────────────────────────────────────────
@@ -59,7 +69,7 @@ cmd_build() {
         exit 1
     fi
     log "Building image ${IMAGE_NAME}..."
-    podman build \
+    $CONTAINER_RT build \
         -t "$IMAGE_NAME" \
         -f "$containerfile" \
         "$context"
@@ -69,23 +79,23 @@ cmd_build() {
 cmd_start() {
     if container_exists; then
         log "Container ${CONTAINER_NAME} already exists. Use 'reset' to restart."
-        if podman inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null | grep -q true; then
+        if $CONTAINER_RT inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null | grep -q true; then
             log "Container is already running."
             wait_for_ready
             return 0
         fi
         log "Container exists but is not running. Removing and restarting..."
-        podman rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+        $CONTAINER_RT rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
     fi
 
     # Check that the image exists
-    if ! podman image exists "$IMAGE_NAME" 2>/dev/null; then
+    if ! $CONTAINER_RT image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
         log "Image not found. Building first..."
         cmd_build
     fi
 
     log "Starting container ${CONTAINER_NAME} on port ${BZ_PORT}..."
-    podman run -d \
+    $CONTAINER_RT run -d \
         --name "$CONTAINER_NAME" \
         -p "${BZ_PORT}:80" \
         "$IMAGE_NAME"
@@ -95,13 +105,13 @@ cmd_start() {
 
 cmd_stop() {
     log "Stopping and removing container ${CONTAINER_NAME}..."
-    podman rm -f "$CONTAINER_NAME" 2>/dev/null || true
+    $CONTAINER_RT rm -f "$CONTAINER_NAME" 2>/dev/null || true
     log "Container removed."
 }
 
 cmd_status() {
     if container_exists; then
-        podman inspect --format \
+        $CONTAINER_RT inspect --format \
             'Name: {{.Name}}  State: {{.State.Status}}  Running: {{.State.Running}}  Pid: {{.State.Pid}}' \
             "$CONTAINER_NAME"
         # Check REST API
@@ -123,9 +133,9 @@ cmd_reset() {
 
 cmd_logs() {
     if [[ $# -eq 0 ]]; then
-        podman logs --tail 50 "$CONTAINER_NAME" 2>&1
+        $CONTAINER_RT logs --tail 50 "$CONTAINER_NAME" 2>&1
     else
-        podman logs "$@" "$CONTAINER_NAME" 2>&1
+        $CONTAINER_RT logs "$@" "$CONTAINER_NAME" 2>&1
     fi
 }
 
