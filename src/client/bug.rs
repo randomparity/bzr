@@ -781,4 +781,53 @@ mod tests {
         let bugs = client.search_bugs(&params).await.unwrap();
         assert_eq!(bugs.len(), 1);
     }
+
+    #[tokio::test]
+    async fn search_bugs_all_fields_reach_server() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("product", "Firefox"))
+            .and(query_param("component", "General"))
+            .and(query_param("status", "NEW"))
+            .and(query_param("assigned_to", "dev@test.com"))
+            .and(query_param("creator", "reporter@test.com"))
+            .and(query_param("priority", "P1"))
+            .and(query_param("severity", "major"))
+            .and(query_param("cc", "watcher@test.com"))
+            .and(query_param("alias", "my-bug"))
+            .and(query_param("id", "42"))
+            .and(query_param("limit", "10"))
+            .and(query_param("summary", "crash"))
+            .and(query_param("quicksearch", "qs-term"))
+            .and(query_param("include_fields", "id,summary"))
+            .and(query_param("exclude_fields", "cc"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{"id": 42, "summary": "crash", "status": "NEW"}]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = SearchParams {
+            product: vec!["Firefox".into()],
+            component: vec!["General".into()],
+            status: vec!["NEW".into()],
+            assigned_to: vec!["dev@test.com".into()],
+            creator: vec!["reporter@test.com".into()],
+            priority: vec!["P1".into()],
+            severity: vec!["major".into()],
+            cc: Some("watcher@test.com".into()),
+            alias: Some("my-bug".into()),
+            id: vec![42],
+            limit: Some(10),
+            summary: Some("crash".into()),
+            quicksearch: Some("qs-term".into()),
+            include_fields: Some("id,summary".into()),
+            exclude_fields: Some("cc".into()),
+        };
+        let bugs = client.search_bugs(&params).await.unwrap();
+        assert_eq!(bugs.len(), 1);
+    }
 }
