@@ -486,21 +486,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn search_params_limit_sent_as_query_param() {
+    async fn search_bugs_sends_option_fields() {
         let mock = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/rest/bug"))
-            .and(query_param("limit", "50"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(
-                serde_json::json!({"bugs": []}),
-            ))
+            .and(query_param("cc", "user@example.com"))
+            .and(query_param("alias", "my-alias"))
+            .and(query_param("summary", "crash"))
+            .and(query_param("limit", "25"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": []
+            })))
             .expect(1)
             .mount(&mock)
             .await;
 
         let client = test_client(&mock.uri());
         let params = SearchParams {
-            limit: Some(50),
+            cc: Some("user@example.com".into()),
+            alias: Some("my-alias".into()),
+            summary: Some("crash".into()),
+            limit: Some(25),
             ..Default::default()
         };
         let bugs = client.search_bugs(&params).await.unwrap();

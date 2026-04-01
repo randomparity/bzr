@@ -36,7 +36,6 @@ wiremock = { version = "0.6", optional = true }
 tempfile = { version = "3", optional = true }
 
 [dev-dependencies]
-serde_urlencoded = "0.7"
 tempfile = "3"
 wiremock = "0.6"
 bzr = { path = ".", features = ["test-helpers"] }
