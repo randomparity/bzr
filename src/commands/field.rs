@@ -10,10 +10,13 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::connect_client(server, api).await?;
-
     match action {
+        FieldAction::Aliases => {
+            output::print_field_aliases(crate::client::FIELD_ALIASES, format);
+            return Ok(());
+        }
         FieldAction::List { name } => {
+            let client = super::shared::connect_client(server, api).await?;
             let values = client.get_field_values(name).await?;
             if values.is_empty() && format == OutputFormat::Table {
                 #[expect(clippy::print_stdout)]
@@ -43,10 +46,10 @@ mod tests {
         let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("GET"))
-            .and(path("/rest/field/bug/status"))
+            .and(path("/rest/field/bug/bug_status"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "fields": [{
-                    "name": "status",
+                    "name": "bug_status",
                     "values": [
                         {"name": "NEW"},
                         {"name": "ASSIGNED"},
@@ -69,11 +72,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn field_aliases_succeeds_without_server() {
+        let action = FieldAction::Aliases;
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok());
+        let parsed = extract_json(&output);
+        let arr = parsed.as_array().unwrap();
+        assert!(!arr.is_empty());
+        assert_eq!(arr[0]["alias"], "file_loc");
+        assert_eq!(arr[0]["api_name"], "bug_file_loc");
+    }
+
+    #[tokio::test]
     async fn field_list_http_500_returns_error() {
         let (_lock, mock, _tmp) = setup_test_env().await;
 
         Mock::given(method("GET"))
-            .and(path("/rest/field/bug/status"))
+            .and(path("/rest/field/bug/bug_status"))
             .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
             .mount(&mock)
             .await;

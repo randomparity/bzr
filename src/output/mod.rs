@@ -34,7 +34,7 @@ pub use comment::print_comments;
 )]
 pub use config::ServerDisplayInfo;
 pub use config::{print_config, ConfigView};
-pub use field::print_field_values;
+pub use field::{print_field_aliases, print_field_values};
 pub use group::print_group_info;
 pub use product::{print_product_detail, print_products};
 pub use server::print_server_info;

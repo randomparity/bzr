@@ -31,7 +31,13 @@ pub(super) async fn detect_version_and_mode(
     let resp = match req.send().await {
         Ok(r) => r,
         Err(e) => {
-            tracing::warn!("version detection failed (falling back to xmlrpc): {e}");
+            tracing::warn!(
+                "{}",
+                crate::http::tls_hint(
+                    &format!("version detection failed (falling back to xmlrpc): {e}"),
+                    &e,
+                )
+            );
             return (None, ApiMode::XmlRpc);
         }
     };

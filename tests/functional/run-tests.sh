@@ -49,9 +49,9 @@ trap cleanup EXIT
 # Phase 0: Build
 # ══════════════════════════════════════════════════════════════════════
 echo ""
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  bzr functional tests  (${BZ_VERSION})                         ║"
-echo "╚══════════════════════════════════════════════════════════╝"
+echo "╔══════════════════════════════════════════════════════════"
+echo "║  bzr functional tests (${BZ_VERSION})"
+echo "╚══════════════════════════════════════════════════════════"
 echo ""
 
 echo "── Phase 0: Build ──────────────────────────────────────────"
@@ -212,21 +212,33 @@ echo ""
 # ══════════════════════════════════════════════════════════════════════
 echo "── Phase 5: Fields & Classifications ───────────────────────"
 
-test_begin "16. field list bug_status"
-run_bzr field list bug_status
+test_begin "16. field list status (alias resolution)"
+run_bzr field list status
 if assert_success && assert_stdout_contains "CONFIRMED"; then test_pass; fi
 
 test_begin "17. field list priority"
 run_bzr field list priority
 if assert_success; then test_pass; fi
 
-test_begin "18. field list bug_severity"
-run_bzr field list bug_severity
+test_begin "18. field list severity (alias resolution)"
+run_bzr field list severity
 if assert_success; then test_pass; fi
 
 test_begin "19. field list resolution"
 run_bzr field list resolution
 if assert_success && assert_stdout_contains "FIXED"; then test_pass; fi
+
+test_begin "19a. field list bug_status (internal name still works)"
+run_bzr field list bug_status
+if assert_success && assert_stdout_contains "CONFIRMED"; then test_pass; fi
+
+test_begin "19b. field list nonexistent_xyz (error case)"
+run_bzr field list nonexistent_xyz
+if assert_failure; then test_pass; fi
+
+test_begin "19c. field aliases"
+run_bzr field aliases
+if assert_success && assert_stdout_contains "status" && assert_stdout_contains "bug_status"; then test_pass; fi
 
 test_begin "20. classification view Unclassified"
 run_bzr classification view Unclassified

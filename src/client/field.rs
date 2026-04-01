@@ -1,8 +1,27 @@
+use std::borrow::Cow;
+
 use serde::Deserialize;
 
 use super::BugzillaClient;
 use crate::error::{BzrError, Result};
 use crate::types::FieldValue;
+
+/// Known field name aliases mapped to their Bugzilla API internal names.
+/// Sorted alphabetically by alias.
+///
+/// These aliases cannot shadow real Bugzilla field names because Bugzilla
+/// requires custom fields to use the `cf_` prefix (e.g. `cf_status`), and
+/// the built-in fields have fixed names (e.g. `bug_status`, `priority`).
+/// No real field can have a bare name like `status` or `severity`, so eager
+/// resolution is always safe.
+pub(crate) const FIELD_ALIASES: &[(&str, &str)] = &[
+    ("file_loc", "bug_file_loc"),
+    ("group", "bug_group"),
+    ("id", "bug_id"),
+    ("severity", "bug_severity"),
+    ("status", "bug_status"),
+    ("type", "bug_type"),
+];
 
 #[derive(Deserialize)]
 struct FieldBugResponse {
@@ -14,6 +33,17 @@ struct FieldEntry {
     values: Vec<FieldValue>,
 }
 
+fn resolve_field_alias(name: &str) -> Cow<'_, str> {
+    let lower = name.to_ascii_lowercase();
+    for &(alias, api_name) in FIELD_ALIASES {
+        if lower == alias {
+            return Cow::Borrowed(api_name);
+        }
+    }
+    // Unknown fields pass through unchanged; only known aliases are normalized.
+    Cow::Borrowed(name)
+}
+
 impl BugzillaClient {
     /// Fetch legal values for a bug field.
     ///
@@ -21,7 +51,8 @@ impl BugzillaClient {
     /// (empty `fields` array). An empty `Vec` means the field exists but has
     /// no legal values.
     pub async fn get_field_values(&self, field_name: &str) -> Result<Vec<FieldValue>> {
-        let data: FieldBugResponse = self.get_json(&format!("field/bug/{field_name}")).await?;
+        let resolved = resolve_field_alias(field_name);
+        let data: FieldBugResponse = self.get_json(&format!("field/bug/{resolved}")).await?;
         let field = data
             .fields
             .into_iter()
@@ -43,11 +74,69 @@ mod tests {
     use crate::client::test_helpers::test_client;
     use crate::error::BzrError;
 
+    #[test]
+    fn resolve_field_alias_maps_status() {
+        assert_eq!(super::resolve_field_alias("status").as_ref(), "bug_status");
+    }
+
+    #[test]
+    fn resolve_field_alias_maps_severity() {
+        assert_eq!(
+            super::resolve_field_alias("severity").as_ref(),
+            "bug_severity"
+        );
+    }
+
+    #[test]
+    fn resolve_field_alias_maps_id() {
+        assert_eq!(super::resolve_field_alias("id").as_ref(), "bug_id");
+    }
+
+    #[test]
+    fn resolve_field_alias_maps_type() {
+        assert_eq!(super::resolve_field_alias("type").as_ref(), "bug_type");
+    }
+
+    #[test]
+    fn resolve_field_alias_maps_group() {
+        assert_eq!(super::resolve_field_alias("group").as_ref(), "bug_group");
+    }
+
+    #[test]
+    fn resolve_field_alias_maps_file_loc() {
+        assert_eq!(
+            super::resolve_field_alias("file_loc").as_ref(),
+            "bug_file_loc"
+        );
+    }
+
+    #[test]
+    fn resolve_field_alias_passes_through_unknown() {
+        assert_eq!(super::resolve_field_alias("priority").as_ref(), "priority");
+    }
+
+    #[test]
+    fn resolve_field_alias_passes_through_already_prefixed() {
+        assert_eq!(
+            super::resolve_field_alias("bug_status").as_ref(),
+            "bug_status"
+        );
+    }
+
+    #[test]
+    fn resolve_field_alias_is_case_insensitive() {
+        assert_eq!(super::resolve_field_alias("Status").as_ref(), "bug_status");
+        assert_eq!(
+            super::resolve_field_alias("SEVERITY").as_ref(),
+            "bug_severity"
+        );
+    }
+
     #[tokio::test]
     async fn get_field_values_returns_values() {
         let mock = MockServer::start().await;
         Mock::given(method("GET"))
-            .and(path("/rest/field/bug/status"))
+            .and(path("/rest/field/bug/bug_status"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "fields": [{
                     "values": [
@@ -66,6 +155,28 @@ mod tests {
         let transitions = values[0].can_change_to.as_ref().unwrap();
         assert_eq!(transitions.len(), 2);
         assert_eq!(transitions[0].name, "ASSIGNED");
+    }
+
+    #[tokio::test]
+    async fn get_field_values_resolves_severity_alias() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/field/bug/bug_severity"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "fields": [{
+                    "values": [
+                        {"name": "blocker", "sort_key": 100, "is_active": true},
+                        {"name": "normal", "sort_key": 200, "is_active": true}
+                    ]
+                }]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let values = client.get_field_values("severity").await.unwrap();
+        assert_eq!(values.len(), 2);
+        assert_eq!(values[0].name, "blocker");
     }
 
     #[tokio::test]

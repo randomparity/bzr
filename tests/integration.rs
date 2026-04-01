@@ -337,7 +337,7 @@ async fn field_list_integration() {
     setup_config(&tmp, &mock.uri());
 
     Mock::given(method("GET"))
-        .and(path("/rest/field/bug/status"))
+        .and(path("/rest/field/bug/bug_status"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "fields": [{
                 "values": [
@@ -1341,6 +1341,7 @@ async fn config_set_server_integration() {
         api_key: "staging-key-abc".to_string(),
         email: None,
         auth_method: None,
+        tls_insecure: false,
     };
     let result = bzr::commands::config::execute(&action, bzr::types::OutputFormat::Json).await;
     assert!(

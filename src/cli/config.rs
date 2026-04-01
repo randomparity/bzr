@@ -20,6 +20,9 @@ pub enum ConfigAction {
         /// Override auto-detected auth method (`header` or `query_param`)
         #[arg(long)]
         auth_method: Option<AuthMethod>,
+        /// Accept invalid TLS certificates (self-signed, expired, wrong host)
+        #[arg(long)]
+        tls_insecure: bool,
     },
     /// Set the default server
     SetDefault {

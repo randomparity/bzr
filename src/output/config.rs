@@ -11,6 +11,8 @@ pub struct ServerDisplayInfo {
     api_key: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     auth_method: Option<AuthMethod>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    tls_insecure: bool,
 }
 
 impl ServerDisplayInfo {
@@ -20,6 +22,7 @@ impl ServerDisplayInfo {
             email: srv.email.clone(),
             api_key: mask_api_key(&srv.api_key),
             auth_method: srv.auth_method,
+            tls_insecure: srv.tls_insecure,
         }
     }
 }
@@ -67,6 +70,9 @@ pub fn print_config(view: &ConfigView, format: OutputFormat) {
                     ToString::to_string,
                 );
                 print_field("Auth", &auth_display);
+                if s.tls_insecure {
+                    print_field("TLS", "insecure (certificate verification disabled)");
+                }
             }
         }
     });

@@ -39,8 +39,9 @@ pub async fn detect_server_settings(
     url: &str,
     api_key: &str,
     email: Option<&str>,
+    tls_insecure: bool,
 ) -> Result<DetectedServerSettings> {
-    let http = build_http_client().map_err(BzrError::Http)?;
+    let http = build_http_client(tls_insecure).map_err(BzrError::Http)?;
 
     let method = detect_auth_method(&http, url, api_key, email).await?;
     let (version, api_mode) = detect_version_and_mode(&http, url, api_key, method).await;
@@ -456,7 +457,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let detected = detect_server_settings(&server.uri(), "test-key", None)
+        let detected = detect_server_settings(&server.uri(), "test-key", None, false)
             .await
             .unwrap();
         assert_eq!(detected.auth_method, AuthMethod::Header);

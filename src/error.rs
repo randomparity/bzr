@@ -3,7 +3,7 @@ use std::fmt;
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum BzrError {
-    #[error("HTTP request failed: {}", sanitize_http_error(.0))]
+    #[error("HTTP request failed: {}", format_http_error(.0))]
     Http(#[from] reqwest::Error),
 
     #[error("Config error: {0}")]
@@ -51,12 +51,17 @@ pub enum BzrError {
 
 pub type Result<T> = std::result::Result<T, BzrError>;
 
-/// Strip API keys from reqwest error messages to avoid leaking credentials.
-///
-/// Reqwest includes the full URL (with query params) in its error Display.
-/// When using query-param auth, this exposes the `Bugzilla_api_key` value.
-fn sanitize_http_error(err: &reqwest::Error) -> String {
-    redact_api_key(&err.to_string())
+/// Format a reqwest error for display: redact API keys and add TLS hints.
+fn format_http_error(err: &reqwest::Error) -> String {
+    let mut msg = redact_api_key(&err.to_string());
+    if crate::http::is_tls_cert_error(err) {
+        msg.push_str(
+            "\n  hint: if this server uses a self-signed certificate or sits \
+             behind a TLS-intercepting proxy, re-run:\n    \
+             bzr config set-server <NAME> ... --tls-insecure",
+        );
+    }
+    msg
 }
 
 fn redact_api_key(msg: &str) -> String {
