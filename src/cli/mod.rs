@@ -551,8 +551,8 @@ mod tests {
                         ..
                     },
             } => {
-                assert_eq!(product.as_deref(), Some("Firefox"));
-                assert_eq!(status.as_deref(), Some("NEW"));
+                assert_eq!(product, vec!["Firefox"]);
+                assert_eq!(status, vec!["NEW"]);
                 assert_eq!(limit, 25);
             }
             _ => panic!("expected Bug List"),

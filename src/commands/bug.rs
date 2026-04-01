@@ -173,12 +173,12 @@ async fn handle_my(
     let mut searches = Vec::new();
     if *all || (!created && !cc) {
         let mut p = base.clone();
-        p.assigned_to = Some(email.clone());
+        p.assigned_to = vec![email.clone()];
         searches.push(p);
     }
     if *all || *created {
         let mut p = base.clone();
-        p.creator = Some(email.clone());
+        p.creator = vec![email.clone()];
         searches.push(p);
     }
     if *all || *cc {
@@ -517,13 +517,13 @@ mod tests {
             .await;
 
         let action = BugAction::List {
-            product: None,
-            component: None,
-            status: None,
-            assignee: None,
-            creator: None,
-            priority: None,
-            severity: None,
+            product: vec![],
+            component: vec![],
+            status: vec![],
+            assignee: vec![],
+            creator: vec![],
+            priority: vec![],
+            severity: vec![],
             id: vec![],
             alias: None,
             limit: 50,
@@ -660,13 +660,13 @@ mod tests {
             .await;
 
         let action = BugAction::List {
-            product: None,
-            component: None,
-            status: None,
-            assignee: None,
-            creator: None,
-            priority: None,
-            severity: None,
+            product: vec![],
+            component: vec![],
+            status: vec![],
+            assignee: vec![],
+            creator: vec![],
+            priority: vec![],
+            severity: vec![],
             id: vec![],
             alias: None,
             limit: 50,
@@ -721,13 +721,13 @@ mod tests {
             .await;
 
         let action = BugAction::List {
-            product: None,
-            component: None,
-            status: None,
-            assignee: None,
-            creator: None,
-            priority: None,
-            severity: None,
+            product: vec![],
+            component: vec![],
+            status: vec![],
+            assignee: vec![],
+            creator: vec![],
+            priority: vec![],
+            severity: vec![],
             id: vec![],
             alias: None,
             limit: 50,
@@ -773,7 +773,7 @@ mod tests {
             created: false,
             cc: false,
             all: false,
-            status: None,
+            status: vec![],
             limit: 50,
             fields: None,
             exclude_fields: None,
@@ -820,7 +820,7 @@ mod tests {
             created: false,
             cc: false,
             all: true,
-            status: None,
+            status: vec![],
             limit: 50,
             fields: None,
             exclude_fields: None,

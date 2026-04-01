@@ -121,7 +121,6 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "serde_urlencoded",
  "tabled",
  "tempfile",
  "thiserror",

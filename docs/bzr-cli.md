@@ -162,17 +162,22 @@ bzr bug list --product Fedora --status ASSIGNED --limit 20
 bzr bug list --assignee user@example.com
 bzr bug list --product Fedora --fields id,summary,status
 bzr bug list --id 100 --id 200 --id 300
+bzr bug list --status NEW --status ASSIGNED          # OR: match either status
+bzr bug list --status '!CLOSED'                      # NOT: exclude CLOSED
+bzr bug list --status NEW --status '!VERIFIED'       # mixed positive and negated
 ```
+
+Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`, `--priority`, `--severity`) are repeatable for OR semantics and support a `!` prefix for negation (NOT).
 
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
-| `--product <P>` | No | | Filter by product name |
-| `--component <C>` | No | | Filter by component name |
-| `--status <S>` | No | | Filter by status (NEW, ASSIGNED, RESOLVED, etc.) |
-| `--assignee <A>` | No | | Filter by assignee email |
-| `--creator <C>` | No | | Filter by bug creator |
-| `--priority <P>` | No | | Filter by priority |
-| `--severity <S>` | No | | Filter by severity |
+| `--product <P>` | No | | Filter by product name (repeatable; `!` prefix to exclude) |
+| `--component <C>` | No | | Filter by component name (repeatable; `!` prefix to exclude) |
+| `--status <S>` | No | | Filter by status (repeatable; `!` prefix to exclude) |
+| `--assignee <A>` | No | | Filter by assignee email (repeatable; `!` prefix to exclude) |
+| `--creator <C>` | No | | Filter by bug creator (repeatable; `!` prefix to exclude) |
+| `--priority <P>` | No | | Filter by priority (repeatable; `!` prefix to exclude) |
+| `--severity <S>` | No | | Filter by severity (repeatable; `!` prefix to exclude) |
 | `--id <ID>` | No | | Filter by bug ID (repeatable) |
 | `--alias <A>` | No | | Filter by bug alias |
 | `--limit <N>` | No | 50 | Max results |
@@ -237,6 +242,8 @@ bzr bug my --created          # bugs I created
 bzr bug my --cc               # bugs I'm CC'd on
 bzr bug my --all              # all of the above
 bzr bug my --status OPEN --limit 20
+bzr bug my --all --status '!CLOSED'   # all non-closed bugs
+bzr bug my --status NEW --status ASSIGNED  # OR filter
 ```
 
 | Option | Required | Default | Description |
@@ -244,7 +251,7 @@ bzr bug my --status OPEN --limit 20
 | `--created` | No | | Show bugs I created (instead of assigned) |
 | `--cc` | No | | Show bugs I'm CC'd on (instead of assigned) |
 | `--all` | No | | Show all bugs related to me (assigned + created + CC'd) |
-| `--status <S>` | No | | Filter by status |
+| `--status <S>` | No | | Filter by status (repeatable; `!` prefix to exclude) |
 | `--limit <N>` | No | 50 | Max results per category (assigned/created/cc) |
 | `--fields <F>` | No | | Only return these fields (comma-separated) |
 | `--exclude-fields <F>` | No | | Exclude these fields (comma-separated) |

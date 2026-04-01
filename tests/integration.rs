@@ -35,13 +35,13 @@ async fn bug_list_integration() {
         .await;
 
     let action = bzr::cli::BugAction::List {
-        product: None,
-        component: None,
-        status: None,
-        assignee: None,
-        creator: None,
-        priority: None,
-        severity: None,
+        product: vec![],
+        component: vec![],
+        status: vec![],
+        assignee: vec![],
+        creator: vec![],
+        priority: vec![],
+        severity: vec![],
         id: vec![],
         alias: None,
         limit: 50,
@@ -603,13 +603,13 @@ async fn command_with_unknown_server_returns_error() {
     setup_config(&tmp, "http://localhost:1");
 
     let action = bzr::cli::BugAction::List {
-        product: None,
-        component: None,
-        status: None,
-        assignee: None,
-        creator: None,
-        priority: None,
-        severity: None,
+        product: vec![],
+        component: vec![],
+        status: vec![],
+        assignee: vec![],
+        creator: vec![],
+        priority: vec![],
+        severity: vec![],
         id: vec![],
         alias: None,
         limit: 50,
