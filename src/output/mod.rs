@@ -38,10 +38,6 @@ pub use config::{print_config, ConfigView};
 pub use field::{print_field_aliases, print_field_values};
 pub use group::print_group_info;
 pub use product::{print_product_detail, print_products};
-#[expect(
-    unused_imports,
-    reason = "re-exported for API completeness — used by commands/query.rs once implemented"
-)]
 pub use query::{print_query_detail, print_query_list, print_query_saved};
 pub use server::print_server_info;
 pub use template::{print_template_detail, print_template_list, print_template_saved};

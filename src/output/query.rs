@@ -6,7 +6,6 @@ use super::formatting::{
     print_field, print_formatted, print_json, print_list_field, print_optional_field,
 };
 
-#[expect(dead_code, reason = "used by commands/query.rs once implemented")]
 pub fn print_query_saved(name: &str, verb: &str, format: OutputFormat) {
     match format {
         OutputFormat::Json => {
@@ -18,7 +17,6 @@ pub fn print_query_saved(name: &str, verb: &str, format: OutputFormat) {
     }
 }
 
-#[expect(dead_code, reason = "used by commands/query.rs once implemented")]
 pub fn print_query_list(queries: &HashMap<String, SavedQuery>, format: OutputFormat) {
     print_formatted(queries, format, |queries| {
         if queries.is_empty() {
@@ -51,7 +49,6 @@ pub fn print_query_list(queries: &HashMap<String, SavedQuery>, format: OutputFor
     });
 }
 
-#[expect(dead_code, reason = "used by commands/query.rs once implemented")]
 pub fn print_query_detail(name: &str, query: &SavedQuery, format: OutputFormat) {
     #[derive(serde::Serialize)]
     struct QueryView<'a> {
