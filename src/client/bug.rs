@@ -55,6 +55,12 @@ fn append_multi_value_params(
 
 /// Appends negated values (prefixed with `!`) as Bugzilla boolean chart
 /// parameters (`fN`, `oN`, `vN` triples with `notequals` operator).
+///
+/// Multiple negated values on the same field each get their own triple and
+/// are combined with AND (Bugzilla default when no `j_top` join is set).
+/// E.g. `--status '!CLOSED' --status '!VERIFIED'` produces
+/// `f1=bug_status&o1=notequals&v1=CLOSED&f2=bug_status&o2=notequals&v2=VERIFIED`,
+/// meaning "status != CLOSED AND status != VERIFIED" — the desired behavior.
 fn append_negated_params(
     mut builder: reqwest::RequestBuilder,
     params: &SearchParams,

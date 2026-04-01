@@ -371,7 +371,7 @@ fn value_to_group_info(val: &Value) -> Result<GroupInfo> {
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 mod tests {
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{body_string_contains, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -535,5 +535,54 @@ mod tests {
         let err = client.get_bug("1").await.unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("500"), "should contain status code: {msg}");
+    }
+
+    #[tokio::test]
+    async fn search_bugs_multi_value_sends_array() {
+        let mock = MockServer::start().await;
+        // Verify the XML body contains both status values as array members
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .and(body_string_contains("<string>NEW</string>"))
+            .and(body_string_contains("<string>ASSIGNED</string>"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(1, "Multi bug")),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+        let params = SearchParams {
+            status: vec!["NEW".into(), "ASSIGNED".into()],
+            ..Default::default()
+        };
+        let bugs = client.search_bugs(&params).await.unwrap();
+        assert_eq!(bugs.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn search_bugs_negation_sends_boolean_chart() {
+        let mock = MockServer::start().await;
+        // Verify the XML body contains boolean chart params for negation
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .and(body_string_contains("<string>bug_status</string>"))
+            .and(body_string_contains("<string>notequals</string>"))
+            .and(body_string_contains("<string>CLOSED</string>"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(2, "Open bug")),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+        let params = SearchParams {
+            status: vec!["!CLOSED".into()],
+            ..Default::default()
+        };
+        let bugs = client.search_bugs(&params).await.unwrap();
+        assert_eq!(bugs.len(), 1);
     }
 }
