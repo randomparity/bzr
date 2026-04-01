@@ -21,7 +21,7 @@ make functional-test-all           # Run functional tests against real Bugzilla 
 cargo install --path .             # Install locally
 ```
 
-Pre-commit hooks run `cargo fmt` and `cargo clippy` on commit, `cargo test` on push.
+Git hooks: `make install-hooks` installs a pre-commit hook (`cargo fmt --check` + `cargo clippy`) and a pre-push hook (`cargo test`). Run `make setup` to install everything, including hooks.
 
 ## Architecture
 
