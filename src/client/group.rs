@@ -75,32 +75,31 @@ impl BugzillaClient {
 
     pub async fn get_group(&self, group: &str) -> Result<GroupInfo> {
         match self.api_mode {
-            ApiMode::Rest => self.get_group_rest(group).await,
-            ApiMode::XmlRpc => self.xmlrpc_client()?.get_group(group).await,
-            ApiMode::Hybrid => {
-                // Try REST first, fall back to XML-RPC on specific errors
-                let rest_result = self.get_group_rest(group).await;
-                match rest_result {
-                    Ok(info) => return Ok(info),
-                    Err(BzrError::Api { code: 32610, .. }) => {
-                        // Bugzilla 5.3+ blocks GET for Group.get with error
-                        // 32610, and POST maps to Group.create, so REST is
-                        // unusable — fall back to XML-RPC.
-                        tracing::info!(
-                            "REST Group.get blocked (32610), \
-                             falling back to XML-RPC"
-                        );
-                    }
-                    Err(e) if e.is_transport_failure() => {
-                        tracing::info!(
-                            "REST group lookup failed ({e}), \
-                             retrying via XML-RPC"
-                        );
-                    }
-                    Err(e) => return Err(e),
-                }
+            ApiMode::XmlRpc => return self.xmlrpc_client()?.get_group(group).await,
+            ApiMode::Rest | ApiMode::Hybrid => {}
+        }
+
+        // Try REST first, fall back to XML-RPC on specific errors.
+        // Bugzilla 5.3+ blocks GET for Group.get with error 32610, and
+        // POST maps to Group.create, so REST is unusable for this
+        // endpoint regardless of the configured API mode.
+        match self.get_group_rest(group).await {
+            Ok(info) => Ok(info),
+            Err(BzrError::Api { code: 32610, .. }) => {
+                tracing::info!(
+                    "REST Group.get blocked (32610), \
+                     falling back to XML-RPC"
+                );
                 self.xmlrpc_client()?.get_group(group).await
             }
+            Err(e) if self.api_mode == ApiMode::Hybrid && e.is_transport_failure() => {
+                tracing::info!(
+                    "REST group lookup failed ({e}), \
+                     retrying via XML-RPC"
+                );
+                self.xmlrpc_client()?.get_group(group).await
+            }
+            Err(e) => Err(e),
         }
     }
 
@@ -377,6 +376,44 @@ mod tests {
             .await;
 
         let client = test_client_hybrid(&mock.uri());
+        let info = client.get_group("admin").await.unwrap();
+        assert_eq!(info.name, "admin");
+        assert_eq!(info.description, "Administrators");
+    }
+
+    #[tokio::test]
+    async fn rest_get_group_32610_falls_back_to_xmlrpc() {
+        let mock = MockServer::start().await;
+
+        // REST returns error 32610 (Bugzilla 5.3+ blocks GET for Group.get)
+        Mock::given(method("GET"))
+            .and(path("/rest/group"))
+            .and(query_param("names", "admin"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 32610,
+                "message": "For security reasons, you must use HTTP POST to call the 'get' method."
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        // XML-RPC fallback succeeds
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(xmlrpc_group_response(
+                    1,
+                    "admin",
+                    "Administrators",
+                )),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        // Uses test_client (Rest mode), not hybrid
+        let client = test_client(&mock.uri());
         let info = client.get_group("admin").await.unwrap();
         assert_eq!(info.name, "admin");
         assert_eq!(info.description, "Administrators");
