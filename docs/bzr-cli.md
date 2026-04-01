@@ -21,6 +21,7 @@ For installation and quick start, see [README.md](../README.md).
 - [component](#bzr-component----component-operations)
 - [config](#bzr-config----configuration-management)
 - [template](#bzr-template----bug-template-management)
+- [query](#bzr-query----saved-query-management)
 - [Flag Syntax](#flag-syntax)
 - [JSON Output](#json-output)
 - [Configuration File Format](#configuration-file-format)
@@ -140,13 +141,20 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   ├── set-server <NAME> --url <URL> --api-key <KEY> [--email <EMAIL>] [--auth-method <METHOD>] [--tls-insecure]
 │   ├── set-default <NAME>
 │   └── show
-└── template
-    ├── save <NAME> [--product <P>] [--component <C>] [--version <V>] [--priority <P>]
-    │               [--severity <S>] [--assignee <A>] [--op-sys <OS>] [--rep-platform <PLAT>]
-    │               [--description <D>]
+├── template
+│   ├── save <NAME> [--product <P>] [--component <C>] [--version <V>] [--priority <P>]
+│   │               [--severity <S>] [--assignee <A>] [--op-sys <OS>] [--rep-platform <PLAT>]
+│   │               [--description <D>]
+│   ├── list
+│   ├── show <NAME>
+│   └── delete <NAME>
+└── query
+    ├── save <NAME> [--product <P>...] [--component <C>...] [--status <S>...] [--assignee <A>...]
+    │               [--priority <P>...] [--search <Q>] [--limit <N>]
     ├── list
     ├── show <NAME>
-    └── delete <NAME>
+    ├── delete <NAME>
+    └── run <NAME> [--limit <N>] [--fields <F>] [--exclude-fields <F>]
 ```
 
 ---
@@ -887,6 +895,86 @@ Delete a saved template.
 ```bash
 bzr template delete security-bug
 ```
+
+---
+
+## `bzr query` -- Saved Query Management
+
+Manage saved queries — reusable bug searches stored in your config file.
+
+### `bzr query save`
+
+Save a named query with filters.
+
+```bash
+# Save a structured list query
+bzr query save firefox-new --product Firefox --status NEW --status ASSIGNED --limit 25
+
+# Save a free-text search query
+bzr query save crashes --search "crash in tab" --limit 10
+
+# Save with multiple filters
+bzr query save my-p1 --assignee me@example.com --priority P1 --status NEW --status ASSIGNED
+```
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `<NAME>` | Yes | Query name |
+| `--product <P>` | No | Filter by product name (repeatable) |
+| `--component <C>` | No | Filter by component name (repeatable) |
+| `--status <S>` | No | Filter by status (repeatable) |
+| `--assignee <A>` | No | Filter by assignee email (repeatable) |
+| `--priority <P>` | No | Filter by priority (repeatable) |
+| `--search <Q>` | No | Free-text search query |
+| `--limit <N>` | No | Max results |
+
+At least one filter must be set.
+
+### `bzr query list`
+
+List all saved queries.
+
+```bash
+bzr query list
+```
+
+### `bzr query show`
+
+Show details of a saved query.
+
+```bash
+bzr query show firefox-new
+```
+
+### `bzr query delete`
+
+Delete a saved query.
+
+```bash
+bzr query delete firefox-new
+```
+
+### `bzr query run`
+
+Execute a saved query. Supports runtime overrides for limit, fields, and exclude-fields.
+
+```bash
+# Run a saved query
+bzr query run firefox-new
+
+# Run with a different limit
+bzr query run firefox-new --limit 10
+
+# Run with field selection
+bzr query run firefox-new --fields id,summary,status
+```
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `<NAME>` | Yes | Query name |
+| `--limit <N>` | No | Override the saved limit |
+| `--fields <F>` | No | Only return these fields (comma-separated) |
+| `--exclude-fields <F>` | No | Exclude these fields (comma-separated) |
 
 ---
 
