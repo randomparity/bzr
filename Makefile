@@ -34,11 +34,13 @@ check-components:
 
 install-hooks: ## Install git pre-commit and pre-push hooks
 	@echo "Installing git hooks..."
-	@printf '#!/bin/sh\nset -eu\ncargo fmt -- --check || { echo "Run cargo fmt before committing."; exit 1; }\ncargo clippy -- -D warnings\n' > .git/hooks/pre-commit
-	@chmod +x .git/hooks/pre-commit
-	@printf '#!/bin/sh\nset -eu\ncargo test\n' > .git/hooks/pre-push
-	@chmod +x .git/hooks/pre-push
-	@echo "Installed pre-commit (fmt + clippy) and pre-push (test) hooks."
+	@HOOKS_DIR=$$(git rev-parse --git-path hooks) && \
+	mkdir -p "$$HOOKS_DIR" && \
+	printf '#!/bin/sh\nset -eu\ncargo fmt -- --check || { echo "Run cargo fmt before committing."; exit 1; }\ncargo clippy -- -D warnings\n' > "$$HOOKS_DIR/pre-commit" && \
+	chmod +x "$$HOOKS_DIR/pre-commit" && \
+	printf '#!/bin/sh\nset -eu\ncargo test\n' > "$$HOOKS_DIR/pre-push" && \
+	chmod +x "$$HOOKS_DIR/pre-push" && \
+	echo "Installed pre-commit (fmt + clippy) and pre-push (test) hooks."
 
 ## Development
 
