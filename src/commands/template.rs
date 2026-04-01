@@ -4,9 +4,9 @@
 
 use crate::cli::TemplateAction;
 use crate::config::Config;
-use crate::types::BugTemplate;
 use crate::error::{BzrError, Result};
 use crate::output;
+use crate::types::BugTemplate;
 use crate::types::OutputFormat;
 
 #[expect(
@@ -129,14 +129,16 @@ mod tests {
             rep_platform: None,
             description: None,
         };
-        let (result, _output) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        let (result, _output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "template save failed: {result:?}");
 
         // Show the saved template
         let action = TemplateAction::Show {
             name: "test-tmpl".into(),
         };
-        let (result, output) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "template show failed: {result:?}");
         let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
         assert_eq!(parsed["name"], "test-tmpl");
@@ -190,7 +192,8 @@ mod tests {
         let (_lock, _mock, _tmp) = setup_test_env().await;
 
         let action = TemplateAction::List;
-        let (result, _output) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        let (result, _output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "template list failed: {result:?}");
     }
 }

@@ -590,7 +590,8 @@ api_key = "key-1234567890"
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let action = bzr::cli::ConfigAction::Show;
-    let result = bzr::commands::config::execute(&action, None, bzr::types::OutputFormat::Json, None).await;
+    let result =
+        bzr::commands::config::execute(&action, None, bzr::types::OutputFormat::Json, None).await;
     assert!(result.is_ok(), "config show should succeed: {result:?}");
 }
 
@@ -1344,7 +1345,8 @@ async fn config_set_server_integration() {
         auth_method: None,
         tls_insecure: false,
     };
-    let result = bzr::commands::config::execute(&action, None, bzr::types::OutputFormat::Json, None).await;
+    let result =
+        bzr::commands::config::execute(&action, None, bzr::types::OutputFormat::Json, None).await;
     assert!(
         result.is_ok(),
         "config set-server should succeed: {result:?}"
@@ -1368,7 +1370,8 @@ async fn config_set_default_integration() {
     let action = bzr::cli::ConfigAction::SetDefault {
         name: "staging".to_string(),
     };
-    let result = bzr::commands::config::execute(&action, None, bzr::types::OutputFormat::Json, None).await;
+    let result =
+        bzr::commands::config::execute(&action, None, bzr::types::OutputFormat::Json, None).await;
     assert!(
         result.is_ok(),
         "config set-default should succeed: {result:?}"

@@ -85,11 +85,7 @@ fn append_negated_params(
             let f_key = format!("f{idx}");
             let o_key = format!("o{idx}");
             let v_key = format!("v{idx}");
-            builder = builder.query(&[
-                (&f_key, chart_field),
-                (&o_key, "notequals"),
-                (&v_key, v),
-            ]);
+            builder = builder.query(&[(&f_key, chart_field), (&o_key, "notequals"), (&v_key, v)]);
             idx += 1;
         }
     }
@@ -217,7 +213,10 @@ impl BugzillaClient {
                         tracing::info!("REST bug lookup failed, retrying via XML-RPC");
                         self.xmlrpc_client()?.get_bug(id).await
                     }
-                    Err(BzrError::Api { code: BUGZILLA_INTERNAL_ERROR, .. }) => {
+                    Err(BzrError::Api {
+                        code: BUGZILLA_INTERNAL_ERROR,
+                        ..
+                    }) => {
                         // get_bug_rest() already retries 100500 via the search
                         // endpoint; this arm catches the case where the search
                         // endpoint also fails with 100500.
@@ -255,7 +254,11 @@ impl BugzillaClient {
         // If the direct endpoint fails with a server internal error (100500),
         // retry via the search endpoint (/rest/bug?id=X). Some Bugzilla
         // extensions only hook into the direct lookup path and crash there.
-        if let Err(BzrError::Api { code: BUGZILLA_INTERNAL_ERROR, .. }) = &result {
+        if let Err(BzrError::Api {
+            code: BUGZILLA_INTERNAL_ERROR,
+            ..
+        }) = &result
+        {
             tracing::debug!("direct bug lookup returned 100500, retrying via search endpoint");
             return self.get_bug_via_search(id, fields, exclude_fields).await;
         }
