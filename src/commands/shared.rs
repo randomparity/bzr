@@ -27,13 +27,13 @@ fn persist_detected_settings(
     Ok(())
 }
 
-/// Connect to a Bugzilla server.
+/// Connect to a Bugzilla server with auto-configuration.
 ///
 /// On first connection to a server, detects auth method and API mode, then
 /// persists these settings to the config file for subsequent connections.
 /// The server's configured email (if any) is stored in the client for
 /// Bugzilla 5.0 whoami fallback.
-pub async fn connect_client(
+pub async fn connect_and_configure(
     server: Option<&str>,
     api_override: Option<ApiMode>,
 ) -> Result<BugzillaClient> {
@@ -111,7 +111,7 @@ mod tests {
             .mount(&mock)
             .await;
 
-        let result = super::connect_client(None, None).await;
+        let result = super::connect_and_configure(None, None).await;
         assert!(result.is_ok());
     }
 
@@ -147,7 +147,7 @@ email = "user@example.com"
             .mount(&mock)
             .await;
 
-        let result = super::connect_client(None, None).await;
+        let result = super::connect_and_configure(None, None).await;
         assert!(
             result.is_ok(),
             "connect_client with email config should succeed"
@@ -165,7 +165,7 @@ email = "user@example.com"
             .await;
 
         // Override with XmlRpc mode — connect should still succeed
-        let result = super::connect_client(None, Some(crate::types::ApiMode::XmlRpc)).await;
+        let result = super::connect_and_configure(None, Some(crate::types::ApiMode::XmlRpc)).await;
         assert!(result.is_ok());
     }
 
@@ -180,7 +180,7 @@ email = "user@example.com"
         // SAFETY: Tests are serialized via ENV_LOCK.
         unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
-        let result = super::connect_client(None, None).await;
+        let result = super::connect_and_configure(None, None).await;
         assert!(result.is_err());
     }
 
@@ -224,7 +224,7 @@ api_key = "test-key"
         // SAFETY: Tests are serialized via ENV_LOCK.
         unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
-        let result = super::connect_client(None, None).await;
+        let result = super::connect_and_configure(None, None).await;
         assert!(result.is_ok(), "connect_client should succeed");
 
         // Verify persistence: reload from disk

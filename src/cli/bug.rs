@@ -4,27 +4,27 @@ use clap::Subcommand;
 pub enum BugAction {
     /// List bugs with filters
     List {
-        /// Filter by product
+        /// Filter by product (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
-        product: Option<String>,
-        /// Filter by component
+        product: Vec<String>,
+        /// Filter by component (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
-        component: Option<String>,
-        /// Filter by status
+        component: Vec<String>,
+        /// Filter by status (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
-        status: Option<String>,
-        /// Filter by assignee
+        status: Vec<String>,
+        /// Filter by assignee (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
-        assignee: Option<String>,
-        /// Filter by creator
+        assignee: Vec<String>,
+        /// Filter by creator (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
-        creator: Option<String>,
-        /// Filter by priority
+        creator: Vec<String>,
+        /// Filter by priority (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
-        priority: Option<String>,
-        /// Filter by severity
+        priority: Vec<String>,
+        /// Filter by severity (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
-        severity: Option<String>,
+        severity: Vec<String>,
         /// Filter by bug IDs
         #[arg(long)]
         id: Vec<u64>,
@@ -127,9 +127,9 @@ pub enum BugAction {
         /// Show all bugs related to me (assigned + created + CC'd)
         #[arg(long, conflicts_with_all = ["created", "cc"])]
         all: bool,
-        /// Filter by status
+        /// Filter by status (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
-        status: Option<String>,
+        status: Vec<String>,
         /// Max results per category (assigned/created/cc)
         #[arg(long, default_value = "50")]
         limit: u32,

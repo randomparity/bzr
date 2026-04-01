@@ -389,6 +389,18 @@ test_begin "40. bug search"
 run_bzr bug search "Bug two searchable"
 if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
 
+test_begin "40a. bug list --status multiple (OR)"
+run_bzr bug list --product FuncTestProd --status NEW --status CONFIRMED
+if assert_success; then test_pass; fi
+
+test_begin "40b. bug list --status negation (NOT)"
+run_bzr bug list --product FuncTestProd --status '!CONFIRMED'
+if assert_success; then test_pass; fi
+
+test_begin "40c. bug list --product multiple (OR)"
+run_bzr bug list --product FuncTestProd --product TestProduct
+if assert_success; then test_pass; fi
+
 test_begin "41. bug update (priority/severity/whiteboard)"
 if [[ -n "$BUG1" ]]; then
     run_bzr bug update "$BUG1" --priority Highest --severity major --whiteboard "wip"
@@ -561,6 +573,18 @@ if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
 
 test_begin "64. bug my --all --status NEW"
 run_bzr bug my --all --status NEW
+if assert_success; then test_pass; fi
+
+test_begin "64a. bug my --status multiple (OR)"
+run_bzr bug my --all --status NEW --status REOPENED
+if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
+
+test_begin "64b. bug my --status negation (NOT RESOLVED)"
+run_bzr bug my --all --status '!RESOLVED'
+if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
+
+test_begin "64c. bug my --status mixed positive and negated"
+run_bzr bug my --all --status NEW --status '!RESOLVED'
 if assert_success; then test_pass; fi
 
 echo ""

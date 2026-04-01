@@ -2,7 +2,10 @@ use std::collections::BTreeMap;
 
 use crate::error::{BzrError, Result};
 use crate::http::AUTH_QUERY_PARAM;
-use crate::types::{Bug, CreateUserParams, GroupInfo, GroupMember, SearchParams};
+use crate::types::{
+    partition_filters, Bug, CreateUserParams, GroupInfo, GroupMember, SearchParams,
+    BOOLEAN_CHART_FIELD_NAMES,
+};
 use crate::xmlrpc::{self, Value};
 
 pub struct XmlRpcClient {
@@ -70,7 +73,9 @@ impl XmlRpcClient {
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
         let mut rpc_params = BTreeMap::new();
 
-        let string_fields: &[(&str, &Option<String>)] = &[
+        // Multi-value Vec fields: positive values sent as XML-RPC arrays,
+        // negated values sent as fN/oN/vN boolean chart params.
+        let vec_fields: &[(&str, &[String])] = &[
             ("product", &params.product),
             ("component", &params.component),
             ("status", &params.status),
@@ -78,11 +83,39 @@ impl XmlRpcClient {
             ("creator", &params.creator),
             ("priority", &params.priority),
             ("severity", &params.severity),
+        ];
+        let mut chart_idx = 1u32;
+        for &(key, values) in vec_fields {
+            let (positive, negated) = partition_filters(values);
+            if !positive.is_empty() {
+                let arr: Vec<Value> = positive.iter().map(|v| Value::from(*v)).collect();
+                rpc_params.insert(key.into(), Value::Array(arr));
+            }
+            if !negated.is_empty() {
+                let chart_field = BOOLEAN_CHART_FIELD_NAMES
+                    .iter()
+                    .find(|&&(k, _)| k == key)
+                    .map_or(key, |&(_, v)| v);
+                for v in negated {
+                    let f_key = format!("f{chart_idx}");
+                    let o_key = format!("o{chart_idx}");
+                    let v_key = format!("v{chart_idx}");
+                    rpc_params.insert(f_key, Value::from(chart_field));
+                    rpc_params.insert(o_key, Value::from("notequals"));
+                    rpc_params.insert(v_key, Value::from(v));
+                    chart_idx += 1;
+                }
+            }
+        }
+
+        // Single-value Option fields
+        let option_fields: &[(&str, &Option<String>)] = &[
+            ("cc", &params.cc),
             ("alias", &params.alias),
             ("summary", &params.summary),
             ("quicksearch", &params.quicksearch),
         ];
-        for &(key, value) in string_fields {
+        for &(key, value) in option_fields {
             if let Some(ref v) = *value {
                 rpc_params.insert(key.into(), Value::from(v.as_str()));
             }
@@ -338,7 +371,7 @@ fn value_to_group_info(val: &Value) -> Result<GroupInfo> {
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 mod tests {
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{body_string_contains, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -384,7 +417,7 @@ mod tests {
 
         let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
         let params = SearchParams {
-            product: Some("TestProduct".into()),
+            product: vec!["TestProduct".into()],
             limit: Some(10),
             ..Default::default()
         };
@@ -424,7 +457,7 @@ mod tests {
 
         let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
         let params = SearchParams {
-            product: Some("Empty".into()),
+            product: vec!["Empty".into()],
             ..Default::default()
         };
 
@@ -502,5 +535,54 @@ mod tests {
         let err = client.get_bug("1").await.unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("500"), "should contain status code: {msg}");
+    }
+
+    #[tokio::test]
+    async fn search_bugs_multi_value_sends_array() {
+        let mock = MockServer::start().await;
+        // Verify the XML body contains both status values as array members
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .and(body_string_contains("<string>NEW</string>"))
+            .and(body_string_contains("<string>ASSIGNED</string>"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(1, "Multi bug")),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+        let params = SearchParams {
+            status: vec!["NEW".into(), "ASSIGNED".into()],
+            ..Default::default()
+        };
+        let bugs = client.search_bugs(&params).await.unwrap();
+        assert_eq!(bugs.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn search_bugs_negation_sends_boolean_chart() {
+        let mock = MockServer::start().await;
+        // Verify the XML body contains boolean chart params for negation
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .and(body_string_contains("<string>bug_status</string>"))
+            .and(body_string_contains("<string>notequals</string>"))
+            .and(body_string_contains("<string>CLOSED</string>"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(2, "Open bug")),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+        let params = SearchParams {
+            status: vec!["!CLOSED".into()],
+            ..Default::default()
+        };
+        let bugs = client.search_bugs(&params).await.unwrap();
+        assert_eq!(bugs.len(), 1);
     }
 }

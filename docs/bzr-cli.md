@@ -68,20 +68,20 @@ For installation and quick start, see [README.md](../README.md).
 | 10 | Data integrity error (e.g. missing attachment data) |
 | 11 | Batch partial failure (some operations succeeded, some failed) |
 
-*Exit code 2 is also produced by clap for invalid or missing arguments before bzr's error handling runs.
+*Exit code 2 is produced by clap for argument errors before bzr's error handling runs, in addition to resource-not-found errors from bzr itself.
 
 ## Command Tree
 
 ```
 bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--api rest|xmlrpc|hybrid] [-v...]
 ├── bug
-│   ├── list [--product <P>] [--component <C>] [--status <S>] [--assignee <A>]
-│   │        [--creator <C>] [--priority <P>] [--severity <S>] [--id <ID>...]
+│   ├── list [--product <P>...] [--component <C>...] [--status <S>...] [--assignee <A>...]
+│   │        [--creator <C>...] [--priority <P>...] [--severity <S>...] [--id <ID>...]
 │   │        [--alias <A>] [--limit <N>] [--fields <F>] [--exclude-fields <F>]
 │   ├── view <ID> [--fields <F>] [--exclude-fields <F>]
 │   ├── search <QUERY> [--limit <N>] [--fields <F>] [--exclude-fields <F>]
 │   ├── history <ID> [--since <DATE>]
-│   ├── my [--created] [--cc] [--all] [--status <S>] [--limit <N>]
+│   ├── my [--created] [--cc] [--all] [--status <S>...] [--limit <N>]
 │   │       [--fields <F>] [--exclude-fields <F>]
 │   ├── create [--template <T>] [--product <P>] [--component <C>] --summary <S>
 │   │          [--version <V>] [--description <D>] [--priority <P>] [--severity <S>]
@@ -162,18 +162,23 @@ bzr bug list --product Fedora --status ASSIGNED --limit 20
 bzr bug list --assignee user@example.com
 bzr bug list --product Fedora --fields id,summary,status
 bzr bug list --id 100 --id 200 --id 300
+bzr bug list --status NEW --status ASSIGNED          # OR: match either status
+bzr bug list --status '!CLOSED'                      # NOT: exclude CLOSED
+bzr bug list --status NEW --status '!VERIFIED'       # mixed positive and negated
 ```
+
+Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`, `--priority`, `--severity`) are repeatable for OR semantics and support a `!` prefix for negation (NOT).
 
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
-| `--product <P>` | No | | Filter by product name |
-| `--component <C>` | No | | Filter by component name |
-| `--status <S>` | No | | Filter by status (NEW, ASSIGNED, RESOLVED, etc.) |
-| `--assignee <A>` | No | | Filter by assignee email |
-| `--creator <C>` | No | | Filter by bug creator |
-| `--priority <P>` | No | | Filter by priority |
-| `--severity <S>` | No | | Filter by severity |
-| `--id <ID>` | No | | Filter by bug ID (repeatable) |
+| `--product <P>` | No | | Filter by product name (repeatable; `!` prefix to exclude) |
+| `--component <C>` | No | | Filter by component name (repeatable; `!` prefix to exclude) |
+| `--status <S>` | No | | Filter by status (repeatable; `!` prefix to exclude) |
+| `--assignee <A>` | No | | Filter by assignee email (repeatable; `!` prefix to exclude) |
+| `--creator <C>` | No | | Filter by bug creator (repeatable; `!` prefix to exclude) |
+| `--priority <P>` | No | | Filter by priority (repeatable; `!` prefix to exclude) |
+| `--severity <S>` | No | | Filter by severity (repeatable; `!` prefix to exclude) |
+| `--id <ID>` | No | | Filter by bug ID (repeatable; `!` negation not supported) |
 | `--alias <A>` | No | | Filter by bug alias |
 | `--limit <N>` | No | 50 | Max results |
 | `--fields <F>` | No | | Only return these fields (comma-separated) |
@@ -236,7 +241,10 @@ bzr bug my                    # bugs assigned to me
 bzr bug my --created          # bugs I created
 bzr bug my --cc               # bugs I'm CC'd on
 bzr bug my --all              # all of the above
-bzr bug my --status OPEN --limit 20
+bzr bug my --status NEW --limit 20
+bzr bug my --all --status '!CLOSED'         # all non-closed bugs
+bzr bug my --status NEW --status ASSIGNED   # OR filter
+bzr bug my --status NEW --status '!RESOLVED'  # mixed positive and negated
 ```
 
 | Option | Required | Default | Description |
@@ -244,8 +252,8 @@ bzr bug my --status OPEN --limit 20
 | `--created` | No | | Show bugs I created (instead of assigned) |
 | `--cc` | No | | Show bugs I'm CC'd on (instead of assigned) |
 | `--all` | No | | Show all bugs related to me (assigned + created + CC'd) |
-| `--status <S>` | No | | Filter by status |
-| `--limit <N>` | No | 50 | Max results per category (assigned/created/cc) |
+| `--status <S>` | No | | Filter by status (repeatable; `!` prefix to exclude) |
+| `--limit <N>` | No | 50 | Max results per category. With `--all`, each of the three categories (assigned, created, CC'd) is queried separately up to this limit; duplicates across categories are removed. |
 | `--fields <F>` | No | | Only return these fields (comma-separated) |
 | `--exclude-fields <F>` | No | | Exclude these fields (comma-separated) |
 

@@ -36,7 +36,9 @@ pub async fn dispatch(cli: &cli::Cli, format: types::OutputFormat) -> error::Res
         cli::Commands::Attachment { action } => {
             commands::attachment::execute(action, server, format, api).await
         }
-        cli::Commands::Config { action } => commands::config::execute(action, format).await,
+        cli::Commands::Config { action } => {
+            commands::config::execute(action, server, format, api).await
+        }
         cli::Commands::Product { action } => {
             commands::product::execute(action, server, format, api).await
         }
@@ -49,7 +51,10 @@ pub async fn dispatch(cli: &cli::Cli, format: types::OutputFormat) -> error::Res
         cli::Commands::Group { action } => {
             commands::group::execute(action, server, format, api).await
         }
-        cli::Commands::Whoami => commands::whoami::execute(server, format, api).await,
+        cli::Commands::Whoami { action } => {
+            let whoami_action = action.as_ref().unwrap_or(&cli::WhoamiAction::Show);
+            commands::whoami::execute(whoami_action, server, format, api).await
+        }
         cli::Commands::Server { action } => {
             commands::server::execute(action, server, format, api).await
         }
@@ -59,7 +64,9 @@ pub async fn dispatch(cli: &cli::Cli, format: types::OutputFormat) -> error::Res
         cli::Commands::Component { action } => {
             commands::component::execute(action, server, format, api).await
         }
-        cli::Commands::Template { action } => commands::template::execute(action, format).await,
+        cli::Commands::Template { action } => {
+            commands::template::execute(action, server, format, api).await
+        }
     }
 }
 

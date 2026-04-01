@@ -8,8 +8,8 @@ mod user;
 
 pub use attachment::{Attachment, UpdateAttachmentParams, UploadAttachmentParams};
 pub use bug::{
-    Bug, CreateBugParams, FieldChange, FieldValue, HistoryEntry, IdListUpdate, SearchParams,
-    StatusTransition, UpdateBugParams,
+    partition_filters, Bug, BugTemplate, CreateBugParams, FieldChange, FieldValue, HistoryEntry,
+    IdListUpdate, SearchParams, StatusTransition, UpdateBugParams, BOOLEAN_CHART_FIELD_NAMES,
 };
 pub use comment::{Comment, UpdateCommentTagsParams};
 pub use common::{
@@ -84,7 +84,7 @@ mod tests {
     #[test]
     fn search_params_has_filters_with_product() {
         let params = SearchParams {
-            product: Some("TestProduct".into()),
+            product: vec!["TestProduct".into()],
             ..Default::default()
         };
         assert!(params.has_filters());

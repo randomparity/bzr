@@ -78,27 +78,28 @@ impl BugzillaClient {
             ApiMode::Rest => self.get_group_rest(group).await,
             ApiMode::XmlRpc => self.xmlrpc_client()?.get_group(group).await,
             ApiMode::Hybrid => {
-                match self.get_group_rest(group).await {
-                    Ok(info) => Ok(info),
-                    // Bugzilla 5.3+ blocks GET for Group.get with error
-                    // 32610, and POST maps to Group.create, so REST is
-                    // unusable — fall back to XML-RPC.
+                // Try REST first, fall back to XML-RPC on specific errors
+                let rest_result = self.get_group_rest(group).await;
+                match rest_result {
+                    Ok(info) => return Ok(info),
                     Err(BzrError::Api { code: 32610, .. }) => {
+                        // Bugzilla 5.3+ blocks GET for Group.get with error
+                        // 32610, and POST maps to Group.create, so REST is
+                        // unusable — fall back to XML-RPC.
                         tracing::info!(
                             "REST Group.get blocked (32610), \
                              falling back to XML-RPC"
                         );
-                        self.xmlrpc_client()?.get_group(group).await
                     }
                     Err(e) if e.is_transport_failure() => {
                         tracing::info!(
                             "REST group lookup failed ({e}), \
                              retrying via XML-RPC"
                         );
-                        self.xmlrpc_client()?.get_group(group).await
                     }
-                    Err(e) => Err(e),
+                    Err(e) => return Err(e),
                 }
+                self.xmlrpc_client()?.get_group(group).await
             }
         }
     }

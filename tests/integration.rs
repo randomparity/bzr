@@ -35,13 +35,13 @@ async fn bug_list_integration() {
         .await;
 
     let action = bzr::cli::BugAction::List {
-        product: None,
-        component: None,
-        status: None,
-        assignee: None,
-        creator: None,
-        priority: None,
-        severity: None,
+        product: vec![],
+        component: vec![],
+        status: vec![],
+        assignee: vec![],
+        creator: vec![],
+        priority: vec![],
+        severity: vec![],
         id: vec![],
         alias: None,
         limit: 50,
@@ -235,6 +235,7 @@ async fn whoami_integration() {
         .await;
 
     let (result, output) = capture_stdout(bzr::commands::whoami::execute(
+        &bzr::cli::WhoamiAction::Show,
         Some("test"),
         bzr::types::OutputFormat::Json,
         None,
@@ -589,7 +590,8 @@ api_key = "key-1234567890"
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let action = bzr::cli::ConfigAction::Show;
-    let result = bzr::commands::config::execute(&action, bzr::types::OutputFormat::Json).await;
+    let result =
+        bzr::commands::config::execute(&action, None, bzr::types::OutputFormat::Json, None).await;
     assert!(result.is_ok(), "config show should succeed: {result:?}");
 }
 
@@ -602,13 +604,13 @@ async fn command_with_unknown_server_returns_error() {
     setup_config(&tmp, "http://localhost:1");
 
     let action = bzr::cli::BugAction::List {
-        product: None,
-        component: None,
-        status: None,
-        assignee: None,
-        creator: None,
-        priority: None,
-        severity: None,
+        product: vec![],
+        component: vec![],
+        status: vec![],
+        assignee: vec![],
+        creator: vec![],
+        priority: vec![],
+        severity: vec![],
         id: vec![],
         alias: None,
         limit: 50,
@@ -1343,7 +1345,8 @@ async fn config_set_server_integration() {
         auth_method: None,
         tls_insecure: false,
     };
-    let result = bzr::commands::config::execute(&action, bzr::types::OutputFormat::Json).await;
+    let result =
+        bzr::commands::config::execute(&action, None, bzr::types::OutputFormat::Json, None).await;
     assert!(
         result.is_ok(),
         "config set-server should succeed: {result:?}"
@@ -1367,7 +1370,8 @@ async fn config_set_default_integration() {
     let action = bzr::cli::ConfigAction::SetDefault {
         name: "staging".to_string(),
     };
-    let result = bzr::commands::config::execute(&action, bzr::types::OutputFormat::Json).await;
+    let result =
+        bzr::commands::config::execute(&action, None, bzr::types::OutputFormat::Json, None).await;
     assert!(
         result.is_ok(),
         "config set-default should succeed: {result:?}"

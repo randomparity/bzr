@@ -16,7 +16,12 @@ use crate::types::OutputFormat;
     clippy::unused_async,
     reason = "async for signature consistency with sibling execute fns"
 )]
-pub async fn execute(action: &ConfigAction, format: OutputFormat) -> Result<()> {
+pub async fn execute(
+    action: &ConfigAction,
+    _server: Option<&str>,
+    format: OutputFormat,
+    _api: Option<crate::types::ApiMode>,
+) -> Result<()> {
     match action {
         ConfigAction::SetServer {
             name,
@@ -121,7 +126,9 @@ mod tests {
             &ConfigAction::SetDefault {
                 name: "nonexistent".into(),
             },
+            None,
             OutputFormat::Table,
+            None,
         )
         .await;
         assert!(result.is_err());
@@ -143,7 +150,9 @@ mod tests {
                 auth_method: None,
                 tls_insecure: false,
             },
+            None,
             OutputFormat::Table,
+            None,
         )
         .await
         .unwrap();
@@ -165,7 +174,9 @@ mod tests {
                 auth_method: None,
                 tls_insecure: false,
             },
+            None,
             OutputFormat::Table,
+            None,
         )
         .await
         .unwrap();
@@ -179,7 +190,9 @@ mod tests {
                 auth_method: None,
                 tls_insecure: false,
             },
+            None,
             OutputFormat::Table,
+            None,
         )
         .await
         .unwrap();

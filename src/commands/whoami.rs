@@ -1,19 +1,18 @@
 //! Whoami command — shows the authenticated user's identity.
-//!
-//! Unlike other command modules, `execute()` has no action enum parameter
-//! because `whoami` has no subcommands.
 
+use crate::cli::WhoamiAction;
 use crate::error::Result;
 use crate::output;
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 
 pub async fn execute(
+    _action: &WhoamiAction,
     server: Option<&str>,
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::connect_client(server, api).await?;
+    let client = super::shared::connect_and_configure(server, api).await?;
     let whoami = client.whoami().await?;
     output::print_whoami(&whoami, format);
     Ok(())
@@ -42,7 +41,13 @@ mod tests {
             .mount(&mock)
             .await;
 
-        let (result, output) = capture_stdout(super::execute(None, OutputFormat::Json, None)).await;
+        let (result, output) = capture_stdout(super::execute(
+            &crate::cli::WhoamiAction::Show,
+            None,
+            OutputFormat::Json,
+            None,
+        ))
+        .await;
         assert!(result.is_ok());
         let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
         assert_eq!(parsed["id"], 1);
@@ -60,7 +65,13 @@ mod tests {
             .mount(&mock)
             .await;
 
-        let result = super::execute(None, OutputFormat::Json, None).await;
+        let result = super::execute(
+            &crate::cli::WhoamiAction::Show,
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await;
         assert!(result.is_err());
     }
 }
