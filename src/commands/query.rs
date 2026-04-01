@@ -109,19 +109,7 @@ fn handle_delete(action: &QueryAction, format: OutputFormat) -> Result<()> {
     }
     config.save()?;
 
-    #[expect(clippy::print_stdout)]
-    match format {
-        OutputFormat::Json => {
-            output::print_result(
-                &serde_json::json!({"name": name, "action": "deleted"}),
-                "",
-                format,
-            );
-        }
-        OutputFormat::Table => {
-            println!("Deleted query '{name}'");
-        }
-    }
+    output::print_query_saved(name, "Deleted", format);
     Ok(())
 }
 
@@ -372,9 +360,11 @@ mod tests {
 
         wiremock::Mock::given(wiremock::matchers::method("GET"))
             .and(wiremock::matchers::path("/rest/bug"))
+            .and(wiremock::matchers::query_param("limit", "5"))
             .respond_with(
                 wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})),
             )
+            .expect(1)
             .mount(&mock)
             .await;
 
