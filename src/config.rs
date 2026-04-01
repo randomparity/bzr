@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{BzrError, Result};
-use crate::types::{ApiMode, AuthMethod, BugTemplate};
+use crate::types::{ApiMode, AuthMethod, BugTemplate, SavedQuery};
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 #[non_exhaustive]
@@ -15,6 +15,8 @@ pub struct Config {
     pub servers: HashMap<String, ServerConfig>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub templates: HashMap<String, BugTemplate>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub queries: HashMap<String, SavedQuery>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,6 +118,7 @@ mod tests {
             default_server: Some("myserver".to_string()),
             servers,
             templates: HashMap::new(),
+            queries: HashMap::new(),
         }
     }
 
@@ -217,5 +220,41 @@ mod tests {
         assert_eq!(ApiMode::Rest.to_string(), "rest");
         assert_eq!(ApiMode::XmlRpc.to_string(), "xmlrpc");
         assert_eq!(ApiMode::Hybrid.to_string(), "hybrid");
+    }
+
+    #[test]
+    fn config_roundtrips_saved_queries() {
+        let _lock = crate::ENV_LOCK.blocking_lock();
+        let tmp = tempfile::tempdir().unwrap();
+        // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
+        unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+        let mut config = make_config_with_server();
+        let query = crate::types::SavedQuery {
+            kind: crate::types::QueryKind::List,
+            product: vec!["Firefox".into()],
+            status: vec!["NEW".into()],
+            limit: Some(25),
+            ..Default::default()
+        };
+        config.queries.insert("firefox-new".into(), query);
+        config.save().unwrap();
+
+        let loaded = Config::load().unwrap();
+        assert!(loaded.queries.contains_key("firefox-new"));
+        let q = loaded.queries.get("firefox-new").unwrap();
+        assert_eq!(q.product, vec!["Firefox"]);
+        assert_eq!(q.status, vec!["NEW"]);
+        assert_eq!(q.limit, Some(25));
+    }
+
+    #[test]
+    fn config_empty_queries_not_serialized() {
+        let config = make_config_with_server();
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        assert!(
+            !toml_str.contains("[queries"),
+            "empty queries should not appear in TOML"
+        );
     }
 }
