@@ -239,6 +239,78 @@ pub struct StatusTransition {
     pub name: String,
 }
 
+/// The kind of saved query — determines which fields are meaningful.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum QueryKind {
+    /// Structured filter query (product, status, etc.)
+    #[default]
+    List,
+    /// Free-text quicksearch query
+    Search,
+}
+
+/// A reusable bug query stored in the config file.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SavedQuery {
+    #[serde(default)]
+    pub kind: QueryKind,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub product: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub component: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub status: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub assignee: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub creator: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub priority: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub severity: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quicksearch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fields: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exclude_fields: Option<String>,
+}
+
+impl SavedQuery {
+    /// Convert this saved query into `SearchParams` for the Bugzilla client.
+    pub fn to_search_params(&self) -> SearchParams {
+        SearchParams {
+            product: self.product.clone(),
+            component: self.component.clone(),
+            status: self.status.clone(),
+            assigned_to: self.assignee.clone(),
+            creator: self.creator.clone(),
+            priority: self.priority.clone(),
+            severity: self.severity.clone(),
+            quicksearch: self.quicksearch.clone(),
+            limit: self.limit,
+            include_fields: self.fields.clone(),
+            exclude_fields: self.exclude_fields.clone(),
+            ..Default::default()
+        }
+    }
+
+    /// Returns true if the query has any meaningful filters set.
+    pub fn has_filters(&self) -> bool {
+        !self.product.is_empty()
+            || !self.component.is_empty()
+            || !self.status.is_empty()
+            || !self.assignee.is_empty()
+            || !self.creator.is_empty()
+            || !self.priority.is_empty()
+            || !self.severity.is_empty()
+            || self.quicksearch.is_some()
+    }
+}
+
 /// A named set of default field values for bug creation.
 /// Defined in `types::bug` because it represents a domain concept
 /// (bug creation defaults), not configuration infrastructure.
@@ -335,5 +407,101 @@ mod tests {
         assert_eq!(fv.name, "RESOLVED");
         assert_eq!(fv.sort_key, 5);
         assert!(fv.is_active);
+    }
+
+    #[test]
+    fn saved_query_list_roundtrips_json() {
+        let query = SavedQuery {
+            kind: QueryKind::List,
+            product: vec!["Firefox".into()],
+            component: vec![],
+            status: vec!["NEW".into(), "ASSIGNED".into()],
+            assignee: vec![],
+            creator: vec![],
+            priority: vec!["P1".into()],
+            severity: vec![],
+            quicksearch: None,
+            limit: Some(25),
+            fields: None,
+            exclude_fields: None,
+        };
+        let json = serde_json::to_string(&query).unwrap();
+        let roundtripped: SavedQuery = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtripped.kind, QueryKind::List);
+        assert_eq!(roundtripped.product, vec!["Firefox"]);
+        assert_eq!(roundtripped.status, vec!["NEW", "ASSIGNED"]);
+        assert_eq!(roundtripped.limit, Some(25));
+    }
+
+    #[test]
+    fn saved_query_search_roundtrips_json() {
+        let query = SavedQuery {
+            kind: QueryKind::Search,
+            quicksearch: Some("crash in tab".into()),
+            limit: Some(10),
+            ..SavedQuery::default()
+        };
+        let json = serde_json::to_string(&query).unwrap();
+        let roundtripped: SavedQuery = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtripped.kind, QueryKind::Search);
+        assert_eq!(roundtripped.quicksearch.as_deref(), Some("crash in tab"));
+    }
+
+    #[test]
+    fn saved_query_to_search_params_list() {
+        let query = SavedQuery {
+            kind: QueryKind::List,
+            product: vec!["Core".into()],
+            status: vec!["NEW".into()],
+            limit: Some(20),
+            fields: Some("id,summary".into()),
+            ..SavedQuery::default()
+        };
+        let params = query.to_search_params();
+        assert_eq!(params.product, vec!["Core"]);
+        assert_eq!(params.status, vec!["NEW"]);
+        assert_eq!(params.limit, Some(20));
+        assert_eq!(params.include_fields.as_deref(), Some("id,summary"));
+        assert!(params.quicksearch.is_none());
+    }
+
+    #[test]
+    fn saved_query_to_search_params_search() {
+        let query = SavedQuery {
+            kind: QueryKind::Search,
+            quicksearch: Some("memory leak".into()),
+            limit: Some(30),
+            ..SavedQuery::default()
+        };
+        let params = query.to_search_params();
+        assert_eq!(params.quicksearch.as_deref(), Some("memory leak"));
+        assert_eq!(params.limit, Some(30));
+        assert!(params.product.is_empty());
+    }
+
+    #[test]
+    fn saved_query_has_filters_true() {
+        let query = SavedQuery {
+            kind: QueryKind::List,
+            product: vec!["Firefox".into()],
+            ..SavedQuery::default()
+        };
+        assert!(query.has_filters());
+    }
+
+    #[test]
+    fn saved_query_has_filters_false_empty() {
+        let query = SavedQuery::default();
+        assert!(!query.has_filters());
+    }
+
+    #[test]
+    fn saved_query_has_filters_search_only() {
+        let query = SavedQuery {
+            kind: QueryKind::Search,
+            quicksearch: Some("crash".into()),
+            ..SavedQuery::default()
+        };
+        assert!(query.has_filters());
     }
 }
