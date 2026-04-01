@@ -2,7 +2,7 @@
 
 A guide for writing [Claude Code skills](https://docs.anthropic.com/en/docs/claude-code/skills) that drive bzr. Skills turn natural-language prompts into repeatable Bugzilla workflows your agent can execute.
 
-bzr is a good fit for skills because every command supports `--json`, flags are consistent across subcommands, and the CLI covers the full Bugzilla lifecycle (bugs, comments, attachments, flags, products, users, groups, config).
+bzr is a good fit for skills because every command supports `--json`, flags are consistent across subcommands, and the CLI covers the full Bugzilla lifecycle (bugs, comments, attachments, flags, products, users, groups, templates, saved queries, config).
 
 For the full command reference, see [bzr-cli.md](bzr-cli.md).
 
@@ -144,9 +144,13 @@ File a bug in the **$ARGUMENTS** product.
    `bzr --json field list priority`
    `bzr --json field list severity`
 3. Ask the user for: component, summary, description, priority, severity
-4. Create the bug (always pass `--description` to avoid opening `$EDITOR`):
+4. Check for saved templates:
+   `bzr template list`
+   If one matches the product, use it:
+   `bzr bug create --template <TMPL> --summary "<S>" --description "<D>"`
+5. Otherwise, create the bug (always pass `--description` to avoid opening `$EDITOR`):
    `bzr bug create --product "$ARGUMENTS" --component <C> --summary "<S>" --description "<D>" --priority <P> --severity <S>`
-5. Show the created bug ID.
+6. Show the created bug ID.
 ```
 
 ### bzr-review — Review patches on a bug
@@ -256,6 +260,54 @@ Ask the user what they want to do:
 Confirm before every write operation.
 ```
 
+### bzr-saved-queries — Manage and run saved queries
+
+```yaml
+---
+name: bzr-saved-queries
+description: Save, list, and run reusable bug queries
+argument-hint: [action] [name]
+allowed-tools: Bash(bzr *), Bash(jq *)
+---
+
+# Saved Queries
+
+Manage saved bug queries. Saved queries store filter combinations
+locally and can be executed later with `query run`.
+
+## Steps
+
+Parse `$ARGUMENTS` as `<action> [name] [extra]`:
+
+### save
+1. Ask the user for filters: product, component, status, priority,
+   severity, assignee, creator, limit. At least one filter is required.
+   For free-text search queries, use `--search` instead of list filters.
+2. Save the query:
+   `bzr query save <name> --product P --status NEW --status CONFIRMED --limit 50`
+   Or for search queries:
+   `bzr query save <name> --search "crash on startup" --limit 20`
+3. Confirm: the response shows `"action": "saved"` or `"action": "updated"`.
+
+### list
+1. List all saved queries:
+   `bzr query list`
+
+### show
+1. Show details of a saved query:
+   `bzr --json query show <name>`
+
+### run
+1. Execute a saved query against the server:
+   `bzr --json query run <name>`
+   Override limit or fields at runtime:
+   `bzr --json query run <name> --limit 10 --fields id,summary,status`
+
+### delete
+1. Delete a saved query:
+   `bzr query delete <name>`
+```
+
 ## Composing Multi-Step Skills
 
 Skills can chain multiple bzr commands into a pipeline. Two examples:
@@ -347,6 +399,10 @@ Generate a report of resolved bugs in **$ARGUMENTS**.
 - **Flag syntax**: `review?(user@example.com)` requests review, `review+` grants, `review-` denies. See [Flag Syntax](bzr-cli.md#flag-syntax).
 - **Default limit is 50**: `bug list` and `bug search` return at most 50 results by default. Set `--limit` explicitly when you need more (or fewer).
 - **`disable-model-invocation: true`**: Use this for skills with side effects (creating bugs, updating configs, admin ops) so Claude only runs them when you explicitly invoke `/skill-name`.
+- **Templates**: Save common field sets with `bzr template save <name> --product P --component C --priority Normal --severity normal`, then file bugs with `bzr bug create --template <name> --summary "..."`. Templates are local config, not server state.
+- **Saved queries**: Store reusable search filters with `bzr query save <name> --product P --status NEW --limit 50`, then run them with `bzr --json query run <name>`. Supports runtime overrides (`--limit`, `--fields`).
+- **Field aliases**: `bzr field aliases` lists all field name aliases (e.g. `status` → `bug_status`, `severity` → `bug_severity`). Use the short names in skills.
+- **TLS**: For self-signed or internal Bugzilla servers, set `--tls-insecure` when configuring the server: `bzr config set-server internal --url https://bugzilla.internal --api-key KEY --tls-insecure`. The flag is persisted per-server, not passed on every command.
 - **Multi-server**: Pass `--server <name>` to target a non-default server. Works with every command.
 
 ## Quick Reference
@@ -370,6 +426,13 @@ Common tasks mapped to bzr commands for use in skills:
 | List products | `bzr --json product list` |
 | View product | `bzr --json product view NAME` |
 | Look up field values | `bzr --json field list priority` |
+| List field aliases | `bzr --json field aliases` |
+| Save a template | `bzr template save NAME --product P --component C` |
+| Create bug from template | `bzr bug create --template NAME --summary "S"` |
+| List templates | `bzr template list` |
+| Save a query | `bzr query save NAME --product P --status NEW --limit 50` |
+| Run a saved query | `bzr --json query run NAME` |
+| List saved queries | `bzr query list` |
 | Search users | `bzr --json user search "query"` |
 | Check auth | `bzr --json whoami` |
 | Server version | `bzr --json server info` |

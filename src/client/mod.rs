@@ -70,10 +70,42 @@ pub(super) struct IdResponse {
 struct ErrorResponse {
     #[serde(default)]
     error: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_code")]
     code: i64,
     #[serde(default)]
     message: Option<String>,
+}
+
+/// Bugzilla returns error codes as integers on some versions and as
+/// strings on others (e.g. `"32610"` on Bugzilla 5.3). Accept both.
+fn deserialize_code<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<i64, D::Error> {
+    use serde::de;
+
+    struct CodeVisitor;
+
+    impl de::Visitor<'_> for CodeVisitor {
+        type Value = i64;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("an integer or string-encoded integer")
+        }
+
+        fn visit_i64<E: de::Error>(self, v: i64) -> std::result::Result<i64, E> {
+            Ok(v)
+        }
+
+        fn visit_u64<E: de::Error>(self, v: u64) -> std::result::Result<i64, E> {
+            i64::try_from(v).map_err(E::custom)
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> std::result::Result<i64, E> {
+            v.parse::<i64>().map_err(E::custom)
+        }
+    }
+
+    deserializer.deserialize_any(CodeVisitor)
 }
 
 /// Bugzilla response keys that indicate real data is present alongside
@@ -324,7 +356,10 @@ impl BugzillaClient {
 
         let code = map
             .get("code")
-            .and_then(serde_json::Value::as_i64)
+            .and_then(|v| {
+                v.as_i64()
+                    .or_else(|| v.as_str().and_then(|s| s.parse::<i64>().ok()))
+            })
             .unwrap_or(-1);
         let message = map
             .get("message")
@@ -631,5 +666,56 @@ mod tests {
         let client = test_client(&mock.uri());
         let err = client.search_users("anyone", false).await.unwrap_err();
         assert!(err.to_string().contains("not authorized"));
+    }
+
+    #[tokio::test]
+    async fn api_error_with_string_code_parsed_correctly() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/group"))
+            .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
+                "error": true,
+                "code": "32610",
+                "message": "For security reasons, you must use HTTP POST."
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let resp = client
+            .http
+            .get(format!("{}/rest/group", mock.uri()))
+            .send()
+            .await
+            .unwrap();
+        let err = client.check_response_status(resp).await.unwrap_err();
+        assert!(
+            matches!(&err, crate::error::BzrError::Api { code: 32610, .. }),
+            "expected Api error with code 32610, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn api_200_error_with_string_code_parsed_correctly() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/group"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": "32610",
+                "message": "For security reasons, you must use HTTP POST."
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err: crate::error::BzrError = client
+            .get_json_query::<serde_json::Value>("group", &[])
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(&err, crate::error::BzrError::Api { code: 32610, .. }),
+            "expected Api error with code 32610, got: {err}"
+        );
     }
 }

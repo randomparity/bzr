@@ -7,6 +7,7 @@ mod config;
 mod field;
 mod group;
 mod product;
+mod query;
 mod server;
 mod template;
 mod user;
@@ -21,6 +22,7 @@ pub use config::ConfigAction;
 pub use field::FieldAction;
 pub use group::GroupAction;
 pub use product::ProductAction;
+pub use query::QueryAction;
 pub use server::ServerAction;
 pub use template::TemplateAction;
 pub use user::UserAction;
@@ -131,6 +133,11 @@ pub enum Commands {
     Template {
         #[command(subcommand)]
         action: TemplateAction,
+    },
+    /// Saved query management
+    Query {
+        #[command(subcommand)]
+        action: QueryAction,
     },
 }
 
@@ -663,6 +670,138 @@ mod tests {
                 assert_eq!(severity.as_deref(), Some("critical"));
             }
             _ => panic!("expected Template Save"),
+        }
+    }
+
+    #[test]
+    fn parse_query_save_list_kind() {
+        let cli = Cli::try_parse_from([
+            "bzr",
+            "query",
+            "save",
+            "firefox-new",
+            "--product",
+            "Firefox",
+            "--status",
+            "NEW",
+            "--limit",
+            "25",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Query {
+                action:
+                    QueryAction::Save {
+                        name,
+                        product,
+                        status,
+                        limit,
+                        ..
+                    },
+            } => {
+                assert_eq!(name, "firefox-new");
+                assert_eq!(product, vec!["Firefox"]);
+                assert_eq!(status, vec!["NEW"]);
+                assert_eq!(limit, Some(25));
+            }
+            _ => panic!("expected Query Save"),
+        }
+    }
+
+    #[test]
+    fn parse_query_save_search_kind() {
+        let cli = Cli::try_parse_from([
+            "bzr",
+            "query",
+            "save",
+            "crashes",
+            "--search",
+            "crash in tab",
+            "--limit",
+            "10",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Query {
+                action:
+                    QueryAction::Save {
+                        name,
+                        search,
+                        limit,
+                        ..
+                    },
+            } => {
+                assert_eq!(name, "crashes");
+                assert_eq!(search.as_deref(), Some("crash in tab"));
+                assert_eq!(limit, Some(10));
+            }
+            _ => panic!("expected Query Save"),
+        }
+    }
+
+    #[test]
+    fn parse_query_run() {
+        let cli = Cli::try_parse_from(["bzr", "query", "run", "firefox-new"]).unwrap();
+        match cli.command {
+            Commands::Query {
+                action: QueryAction::Run { name, limit, .. },
+            } => {
+                assert_eq!(name, "firefox-new");
+                assert!(limit.is_none());
+            }
+            _ => panic!("expected Query Run"),
+        }
+    }
+
+    #[test]
+    fn parse_query_run_with_limit_override() {
+        let cli =
+            Cli::try_parse_from(["bzr", "query", "run", "firefox-new", "--limit", "10"]).unwrap();
+        match cli.command {
+            Commands::Query {
+                action: QueryAction::Run { name, limit, .. },
+            } => {
+                assert_eq!(name, "firefox-new");
+                assert_eq!(limit, Some(10));
+            }
+            _ => panic!("expected Query Run"),
+        }
+    }
+
+    #[test]
+    fn parse_query_list() {
+        let cli = Cli::try_parse_from(["bzr", "query", "list"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Commands::Query {
+                action: QueryAction::List
+            }
+        ));
+    }
+
+    #[test]
+    fn parse_query_show() {
+        let cli = Cli::try_parse_from(["bzr", "query", "show", "firefox-new"]).unwrap();
+        match cli.command {
+            Commands::Query {
+                action: QueryAction::Show { name },
+            } => {
+                assert_eq!(name, "firefox-new");
+            }
+            _ => panic!("expected Query Show"),
+        }
+    }
+
+    #[test]
+    fn parse_query_delete() {
+        let cli = Cli::try_parse_from(["bzr", "query", "delete", "firefox-new"]).unwrap();
+        match cli.command {
+            Commands::Query {
+                action: QueryAction::Delete { name },
+            } => {
+                assert_eq!(name, "firefox-new");
+            }
+            _ => panic!("expected Query Delete"),
         }
     }
 }
