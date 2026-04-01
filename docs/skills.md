@@ -402,7 +402,7 @@ Generate a report of resolved bugs in **$ARGUMENTS**.
 - **Templates**: Save common field sets with `bzr template save <name> --product P --component C --priority Normal --severity normal`, then file bugs with `bzr bug create --template <name> --summary "..."`. Templates are local config, not server state.
 - **Saved queries**: Store reusable search filters with `bzr query save <name> --product P --status NEW --limit 50`, then run them with `bzr --json query run <name>`. Supports runtime overrides (`--limit`, `--fields`).
 - **Field aliases**: `bzr field aliases` lists all field name aliases (e.g. `status` → `bug_status`, `severity` → `bug_severity`). Use the short names in skills.
-- **TLS**: Pass `--tls-insecure` before the subcommand to skip certificate verification for self-signed Bugzilla servers. Don't use in production.
+- **TLS**: For self-signed or internal Bugzilla servers, set `--tls-insecure` when configuring the server: `bzr config set-server internal --url https://bugzilla.internal --api-key KEY --tls-insecure`. The flag is persisted per-server, not passed on every command.
 - **Multi-server**: Pass `--server <name>` to target a non-default server. Works with every command.
 
 ## Quick Reference
