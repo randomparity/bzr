@@ -147,7 +147,7 @@ mod tests {
 
     fn dummy_command() -> Commands {
         Commands::Whoami {
-            action: bzr::cli::WhoamiAction::Show,
+            action: Some(bzr::cli::WhoamiAction::Show),
         }
     }
 

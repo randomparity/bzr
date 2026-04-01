@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
-use crate::config::BugTemplate;
-use crate::types::OutputFormat;
+use crate::types::{BugTemplate, OutputFormat};
 
 use super::formatting::{print_field, print_formatted, print_json, print_optional_field};
 

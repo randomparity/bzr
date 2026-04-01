@@ -3,7 +3,8 @@
 //! Template operations are pure local file I/O — no network client needed.
 
 use crate::cli::TemplateAction;
-use crate::config::{BugTemplate, Config};
+use crate::config::Config;
+use crate::types::BugTemplate;
 use crate::error::{BzrError, Result};
 use crate::output;
 use crate::types::OutputFormat;
@@ -12,7 +13,12 @@ use crate::types::OutputFormat;
     clippy::unused_async,
     reason = "async for signature consistency with sibling execute fns"
 )]
-pub async fn execute(action: &TemplateAction, format: OutputFormat) -> Result<()> {
+pub async fn execute(
+    action: &TemplateAction,
+    _server: Option<&str>,
+    format: OutputFormat,
+    _api: Option<crate::types::ApiMode>,
+) -> Result<()> {
     match action {
         TemplateAction::Save {
             name,
@@ -123,14 +129,14 @@ mod tests {
             rep_platform: None,
             description: None,
         };
-        let (result, _output) = capture_stdout(super::execute(&action, OutputFormat::Json)).await;
+        let (result, _output) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "template save failed: {result:?}");
 
         // Show the saved template
         let action = TemplateAction::Show {
             name: "test-tmpl".into(),
         };
-        let (result, output) = capture_stdout(super::execute(&action, OutputFormat::Json)).await;
+        let (result, output) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "template show failed: {result:?}");
         let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
         assert_eq!(parsed["name"], "test-tmpl");
@@ -154,7 +160,7 @@ mod tests {
             rep_platform: None,
             description: None,
         };
-        let result = super::execute(&action, OutputFormat::Json).await;
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
         assert!(result.is_err(), "saving empty template should fail");
         let err = result.unwrap_err().to_string();
         assert!(
@@ -170,7 +176,7 @@ mod tests {
         let action = TemplateAction::Delete {
             name: "nonexistent".into(),
         };
-        let result = super::execute(&action, OutputFormat::Json).await;
+        let result = super::execute(&action, None, OutputFormat::Json, None).await;
         assert!(result.is_err(), "deleting unknown template should fail");
         let err = result.unwrap_err().to_string();
         assert!(
@@ -184,7 +190,7 @@ mod tests {
         let (_lock, _mock, _tmp) = setup_test_env().await;
 
         let action = TemplateAction::List;
-        let (result, _output) = capture_stdout(super::execute(&action, OutputFormat::Json)).await;
+        let (result, _output) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "template list failed: {result:?}");
     }
 }

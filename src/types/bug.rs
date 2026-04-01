@@ -228,6 +228,32 @@ pub struct StatusTransition {
     pub name: String,
 }
 
+/// A named set of default field values for bug creation.
+/// Defined in `types::bug` because it represents a domain concept
+/// (bug creation defaults), not configuration infrastructure.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct BugTemplate {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub product: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub component: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub severity: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assignee: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub op_sys: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rep_platform: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 mod tests {

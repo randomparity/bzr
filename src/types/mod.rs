@@ -8,8 +8,8 @@ mod user;
 
 pub use attachment::{Attachment, UpdateAttachmentParams, UploadAttachmentParams};
 pub use bug::{
-    Bug, CreateBugParams, FieldChange, FieldValue, HistoryEntry, IdListUpdate, SearchParams,
-    StatusTransition, UpdateBugParams,
+    Bug, BugTemplate, CreateBugParams, FieldChange, FieldValue, HistoryEntry, IdListUpdate,
+    SearchParams, StatusTransition, UpdateBugParams,
 };
 pub use comment::{Comment, UpdateCommentTagsParams};
 pub use common::{

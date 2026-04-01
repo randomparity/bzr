@@ -13,7 +13,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
-    let client = super::shared::connect_client(server, api).await?;
+    let client = super::shared::connect_and_configure(server, api).await?;
 
     match action {
         BugAction::List { .. } => handle_list(&client, action, format).await,

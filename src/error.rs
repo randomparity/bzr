@@ -51,6 +51,36 @@ pub enum BzrError {
 
 pub type Result<T> = std::result::Result<T, BzrError>;
 
+// Error type constants for type-safe error classification
+const ERROR_TYPE_CONFIG: &str = "config";
+const ERROR_TYPE_API: &str = "api";
+const ERROR_TYPE_HTTP: &str = "http";
+const ERROR_TYPE_IO: &str = "io";
+const ERROR_TYPE_NOT_FOUND: &str = "not_found";
+const ERROR_TYPE_INPUT: &str = "input";
+const ERROR_TYPE_DESERIALIZE: &str = "deserialize";
+const ERROR_TYPE_AUTH: &str = "auth";
+const ERROR_TYPE_DATA_INTEGRITY: &str = "data_integrity";
+const ERROR_TYPE_BATCH_PARTIAL_FAILURE: &str = "batch_partial_failure";
+const ERROR_TYPE_OTHER: &str = "other";
+
+// Exit code constants
+const EXIT_CODE_OTHER: i32 = 1;
+const EXIT_CODE_NOT_FOUND: i32 = 2;
+const EXIT_CODE_CONFIG: i32 = 3;
+const EXIT_CODE_API: i32 = 4;
+const EXIT_CODE_HTTP: i32 = 5;
+const EXIT_CODE_IO: i32 = 6;
+const EXIT_CODE_INPUT: i32 = 7;
+const EXIT_CODE_DESERIALIZE: i32 = 8;
+const EXIT_CODE_AUTH: i32 = 9;
+const EXIT_CODE_DATA_INTEGRITY: i32 = 10;
+const EXIT_CODE_BATCH_PARTIAL_FAILURE: i32 = 11;
+
+/// Bugzilla internal server error code (HTTP 500 with code 100500).
+/// Used for retry logic in hybrid mode when extensions crash.
+pub const BUGZILLA_INTERNAL_ERROR: i64 = 100_500;
+
 /// Format a reqwest error for display: redact API keys and add TLS hints.
 fn format_http_error(err: &reqwest::Error) -> String {
     let mut msg = redact_api_key(&err.to_string());
@@ -94,33 +124,37 @@ impl BzrError {
 
     pub fn exit_code(&self) -> i32 {
         match self {
-            BzrError::Config(_) | BzrError::TomlParse(_) | BzrError::TomlSerialize(_) => 3,
-            BzrError::Api { .. } | BzrError::XmlRpc(_) => 4,
-            BzrError::Http(_) | BzrError::HttpStatus { .. } => 5,
-            BzrError::Io(_) => 6,
-            BzrError::NotFound { .. } => 2,
-            BzrError::InputValidation(_) => 7,
-            BzrError::Deserialize(_) => 8,
-            BzrError::Auth(_) => 9,
-            BzrError::DataIntegrity(_) => 10,
-            BzrError::BatchPartialFailure { .. } => 11,
-            BzrError::Other(_) => 1,
+            BzrError::Config(_) | BzrError::TomlParse(_) | BzrError::TomlSerialize(_) => {
+                EXIT_CODE_CONFIG
+            }
+            BzrError::Api { .. } | BzrError::XmlRpc(_) => EXIT_CODE_API,
+            BzrError::Http(_) | BzrError::HttpStatus { .. } => EXIT_CODE_HTTP,
+            BzrError::Io(_) => EXIT_CODE_IO,
+            BzrError::NotFound { .. } => EXIT_CODE_NOT_FOUND,
+            BzrError::InputValidation(_) => EXIT_CODE_INPUT,
+            BzrError::Deserialize(_) => EXIT_CODE_DESERIALIZE,
+            BzrError::Auth(_) => EXIT_CODE_AUTH,
+            BzrError::DataIntegrity(_) => EXIT_CODE_DATA_INTEGRITY,
+            BzrError::BatchPartialFailure { .. } => EXIT_CODE_BATCH_PARTIAL_FAILURE,
+            BzrError::Other(_) => EXIT_CODE_OTHER,
         }
     }
 
     pub fn error_type(&self) -> &'static str {
         match self {
-            BzrError::Config(_) | BzrError::TomlParse(_) | BzrError::TomlSerialize(_) => "config",
-            BzrError::Api { .. } | BzrError::XmlRpc(_) => "api",
-            BzrError::Http(_) | BzrError::HttpStatus { .. } => "http",
-            BzrError::Io(_) => "io",
-            BzrError::NotFound { .. } => "not_found",
-            BzrError::InputValidation(_) => "input",
-            BzrError::Deserialize(_) => "deserialize",
-            BzrError::Auth(_) => "auth",
-            BzrError::DataIntegrity(_) => "data_integrity",
-            BzrError::BatchPartialFailure { .. } => "batch_partial_failure",
-            BzrError::Other(_) => "other",
+            BzrError::Config(_) | BzrError::TomlParse(_) | BzrError::TomlSerialize(_) => {
+                ERROR_TYPE_CONFIG
+            }
+            BzrError::Api { .. } | BzrError::XmlRpc(_) => ERROR_TYPE_API,
+            BzrError::Http(_) | BzrError::HttpStatus { .. } => ERROR_TYPE_HTTP,
+            BzrError::Io(_) => ERROR_TYPE_IO,
+            BzrError::NotFound { .. } => ERROR_TYPE_NOT_FOUND,
+            BzrError::InputValidation(_) => ERROR_TYPE_INPUT,
+            BzrError::Deserialize(_) => ERROR_TYPE_DESERIALIZE,
+            BzrError::Auth(_) => ERROR_TYPE_AUTH,
+            BzrError::DataIntegrity(_) => ERROR_TYPE_DATA_INTEGRITY,
+            BzrError::BatchPartialFailure { .. } => ERROR_TYPE_BATCH_PARTIAL_FAILURE,
+            BzrError::Other(_) => ERROR_TYPE_OTHER,
         }
     }
 }

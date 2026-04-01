@@ -110,7 +110,7 @@ pub enum Commands {
     /// Show the currently authenticated user
     Whoami {
         #[command(subcommand)]
-        action: WhoamiAction,
+        action: Option<WhoamiAction>,
     },
     /// Server diagnostics
     Server {
