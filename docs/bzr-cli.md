@@ -537,18 +537,18 @@ bzr product update "My Product" --default-milestone "2.0"
 
 List valid values for a bug field (e.g. status, priority, severity, resolution). For status fields, shows allowed state transitions.
 
-Common field name aliases are resolved automatically:
+Common field name aliases are resolved automatically (matching is case-insensitive):
 
-| You type | API field name |
-|----------|---------------|
-| `status` | `bug_status` |
-| `severity` | `bug_severity` |
-| `id` | `bug_id` |
-| `type` | `bug_type` |
-| `group` | `bug_group` |
+| You type | API Field Name |
+|----------|----------------|
 | `file_loc` | `bug_file_loc` |
+| `group` | `bug_group` |
+| `id` | `bug_id` |
+| `severity` | `bug_severity` |
+| `status` | `bug_status` |
+| `type` | `bug_type` |
 
-Aliases only target built-in `bug_*` fields. Custom fields (which Bugzilla requires to use the `cf_` prefix) are unaffected. Fields without aliases (e.g. `priority`, `resolution`) are passed through as-is.
+Aliases only target built-in `bug_*` fields. Custom fields (which Bugzilla requires to use the `cf_` prefix) are unaffected. Fields without aliases (e.g. `priority`, `resolution`) are passed through as-is. Run `bzr field aliases` to see the full alias list.
 
 ```bash
 bzr field list status
@@ -789,11 +789,12 @@ Add or update a named server configuration.
 ```bash
 bzr config set-server redhat --url https://bugzilla.redhat.com --api-key abc123 --email you@redhat.com
 bzr config set-server mozilla --url https://bugzilla.mozilla.org --api-key xyz789
+bzr config set-server internal --url https://bugzilla.internal --api-key abc123 --tls-insecure
 ```
 
 The `--email` flag is required for older Bugzilla servers (5.0 or earlier) that don't support the `/rest/whoami` endpoint.
 
-The `--tls-insecure` flag disables TLS certificate verification for the server. Use this for servers with self-signed or otherwise untrusted certificates (e.g. behind corporate firewalls).
+The `--tls-insecure` flag disables TLS certificate verification for the server. Use this for servers with self-signed, expired, or wrong-hostname certificates (e.g. internal Bugzilla instances behind corporate firewalls).
 
 The first server added is automatically set as the default.
 
@@ -804,6 +805,7 @@ The first server added is automatically set as the default.
 | `--api-key <KEY>` | Yes | API key |
 | `--email <EMAIL>` | No | Login email (required for Bugzilla 5.0 or earlier) |
 | `--auth-method <METHOD>` | No | Override auto-detected auth method (`header` or `query_param`) |
+| `--tls-insecure` | No | Disable TLS certificate verification (self-signed, expired, wrong hostname) |
 
 ### `bzr config set-default`
 
