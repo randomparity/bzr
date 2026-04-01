@@ -24,8 +24,13 @@
 - New CLI flags added to `src/cli.rs` are NOT automatically reflected in:
   1. The Command Tree (fenced text block) in `docs/bzr-cli.md`
   2. The per-command flag/option table in `docs/bzr-cli.md`
-  - `user search --details` on feat/user-details branch: added to the example block and flag table,
-    but MISSING from the Command Tree at line 101 of `docs/bzr-cli.md`. This is the canonical gap to watch.
+  3. The code examples block for the command
+  - `--tls-insecure` on fix/gh-issue-41: Command Tree and prose added correctly, but the option table
+    row and a usage example were missing. Both were added during review.
+- New boolean flags (no argument) must also appear in the option table even though they have no argument.
+  The `--tls-insecure` flag was initially omitted from the table — watch for this pattern.
+- Doc alias tables should match the alphabetical order emitted by `bzr field aliases` output.
+  On fix/gh-issue-41 the table was in a thematic order that differed from live command output.
 - Also check README.md when new top-level commands are added.
 
 ### Key accuracy items to check on each review
@@ -41,7 +46,22 @@
 - All commands in bzr-cli.md: `bug`, `comment`, `attachment`, `product`, `field`, `user`, `group`,
   `whoami`, `server`, `classification`, `component`, `config`
 - `user search` has `--details` flag (feat/user-details branch)
+- `field` has `aliases` and `list` subcommands (fix/gh-issue-41)
+- `config set-server` has `--tls-insecure` boolean flag (fix/gh-issue-41)
 - `shared.rs` — provides `build_client()` helper, not a command
+
+### Field alias resolution behavior (verified in src/client/field.rs)
+- `FIELD_ALIASES` constant in `src/client/field.rs`: 6 pairs sorted alphabetically by alias.
+  Pairs: file_loc→bug_file_loc, group→bug_group, id→bug_id, severity→bug_severity, status→bug_status, type→bug_type.
+- Resolution is CASE-INSENSITIVE (uses `to_ascii_lowercase()`). Doc must mention this.
+- `bzr field aliases` JSON output: `[{"alias": "...", "api_name": "..."}]` — alphabetical order.
+- `bzr field aliases` table output headers: `ALIAS`, `API FIELD NAME`.
+- Doc prose tables should use Title Case headers to match bzr-cli.md convention: `You type`, `API Field Name`.
+
+### --tls-insecure flag behavior (verified in src/cli/config.rs, src/client/mod.rs)
+- Boolean flag on `config set-server`. Clap docstring: "Accept invalid TLS certificates (self-signed, expired, wrong host)".
+- Passed as `tls_insecure: bool` to `BugzillaClient::new()` and then to `build_http_client()`.
+- Three failure modes to document: self-signed, expired, wrong hostname.
 
 ### --details flag behavior (verified in output.rs, user.rs, cli.rs)
 - Boolean flag (no argument value) on `user search`.

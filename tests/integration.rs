@@ -235,6 +235,7 @@ async fn whoami_integration() {
         .await;
 
     let (result, output) = capture_stdout(bzr::commands::whoami::execute(
+        &bzr::cli::WhoamiAction::Show,
         Some("test"),
         bzr::types::OutputFormat::Json,
         None,

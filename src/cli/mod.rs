@@ -10,6 +10,7 @@ mod product;
 mod server;
 mod template;
 mod user;
+mod whoami;
 
 pub use attachment::AttachmentAction;
 pub use bug::BugAction;
@@ -23,6 +24,7 @@ pub use product::ProductAction;
 pub use server::ServerAction;
 pub use template::TemplateAction;
 pub use user::UserAction;
+pub use whoami::WhoamiAction;
 
 use clap::{Parser, Subcommand};
 
@@ -106,7 +108,10 @@ pub enum Commands {
         action: GroupAction,
     },
     /// Show the currently authenticated user
-    Whoami,
+    Whoami {
+        #[command(subcommand)]
+        action: WhoamiAction,
+    },
     /// Server diagnostics
     Server {
         #[command(subcommand)]
@@ -199,8 +204,8 @@ mod tests {
 
     #[test]
     fn parse_whoami() {
-        let cli = Cli::try_parse_from(["bzr", "whoami"]).unwrap();
-        assert!(matches!(cli.command, Commands::Whoami));
+        let cli = Cli::try_parse_from(["bzr", "whoami", "show"]).unwrap();
+        assert!(matches!(cli.command, Commands::Whoami { action: _ }));
     }
 
     #[test]
@@ -478,25 +483,25 @@ mod tests {
 
     #[test]
     fn parse_verbose_flag() {
-        let cli = Cli::try_parse_from(["bzr", "-vvv", "whoami"]).unwrap();
+        let cli = Cli::try_parse_from(["bzr", "-vvv", "whoami", "show"]).unwrap();
         assert_eq!(cli.verbose, 3);
     }
 
     #[test]
     fn parse_no_color_flag() {
-        let cli = Cli::try_parse_from(["bzr", "--no-color", "whoami"]).unwrap();
+        let cli = Cli::try_parse_from(["bzr", "--no-color", "whoami", "show"]).unwrap();
         assert!(cli.no_color);
     }
 
     #[test]
     fn parse_quiet_flag() {
-        let cli = Cli::try_parse_from(["bzr", "--quiet", "whoami"]).unwrap();
+        let cli = Cli::try_parse_from(["bzr", "--quiet", "whoami", "show"]).unwrap();
         assert!(cli.quiet);
     }
 
     #[test]
     fn parse_api_override() {
-        let cli = Cli::try_parse_from(["bzr", "--api", "xmlrpc", "whoami"]).unwrap();
+        let cli = Cli::try_parse_from(["bzr", "--api", "xmlrpc", "whoami", "show"]).unwrap();
         assert_eq!(cli.api, Some(ApiMode::XmlRpc));
     }
 

@@ -49,7 +49,9 @@ pub async fn dispatch(cli: &cli::Cli, format: types::OutputFormat) -> error::Res
         cli::Commands::Group { action } => {
             commands::group::execute(action, server, format, api).await
         }
-        cli::Commands::Whoami => commands::whoami::execute(server, format, api).await,
+        cli::Commands::Whoami { action } => {
+            commands::whoami::execute(action, server, format, api).await
+        }
         cli::Commands::Server { action } => {
             commands::server::execute(action, server, format, api).await
         }
