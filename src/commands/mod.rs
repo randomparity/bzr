@@ -8,6 +8,7 @@ pub mod field;
 mod flags;
 pub mod group;
 pub mod product;
+pub mod query;
 pub mod server;
 mod shared;
 pub mod template;
