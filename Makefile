@@ -1,15 +1,14 @@
 CARGO ?= cargo
-PRE_COMMIT ?= pre-commit
 RUST_MIN_VERSION := 1.70.0
 
-.PHONY: setup check-rust check-components check-pre-commit install-hooks \
+.PHONY: setup check-rust check-components install-hooks \
         build release test fmt clippy lint clean help \
         functional-build functional-start functional-test functional-stop \
         functional-test-bz52 functional-test-bz53 functional-test-all functional-stop-all
 
 ## Setup & Environment
 
-setup: check-rust check-components check-pre-commit install-hooks build ## Set up the development environment
+setup: check-rust check-components install-hooks build ## Set up the development environment
 	@echo
 	@echo "Setup complete. You're ready to develop bzr."
 
@@ -33,17 +32,13 @@ check-components:
 	@rustup component list --installed 2>/dev/null | grep -q clippy || { echo "MISSING"; echo "  Run: rustup component add clippy"; exit 1; }
 	@echo "ok"
 
-check-pre-commit:
-	@printf "Checking for pre-commit... "
-	@command -v $(PRE_COMMIT) >/dev/null 2>&1 || { echo "MISSING (optional)"; echo "  Install: pip install pre-commit"; echo "  Skipping hook installation."; exit 0; }
-	@echo "ok"
-
-install-hooks:
-	@if command -v $(PRE_COMMIT) >/dev/null 2>&1; then \
-		echo "Installing pre-commit hooks..."; \
-		$(PRE_COMMIT) install; \
-		$(PRE_COMMIT) install --hook-type pre-push; \
-	fi
+install-hooks: ## Install git pre-commit and pre-push hooks
+	@echo "Installing git hooks..."
+	@printf '#!/bin/sh\nset -eu\ncargo fmt -- --check || { echo "Run cargo fmt before committing."; exit 1; }\ncargo clippy -- -D warnings\n' > .git/hooks/pre-commit
+	@chmod +x .git/hooks/pre-commit
+	@printf '#!/bin/sh\nset -eu\ncargo test\n' > .git/hooks/pre-push
+	@chmod +x .git/hooks/pre-push
+	@echo "Installed pre-commit (fmt + clippy) and pre-push (test) hooks."
 
 ## Development
 
