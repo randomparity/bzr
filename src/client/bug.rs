@@ -2,7 +2,10 @@ use serde::Deserialize;
 
 use super::BugzillaClient;
 use crate::error::{BzrError, Result, BUGZILLA_INTERNAL_ERROR};
-use crate::types::{ApiMode, Bug, CreateBugParams, HistoryEntry, SearchParams, UpdateBugParams};
+use crate::types::{
+    partition_filters, ApiMode, Bug, CreateBugParams, HistoryEntry, SearchParams, UpdateBugParams,
+    BOOLEAN_CHART_FIELD_NAMES,
+};
 
 /// Default fields requested for Bug queries. Matches the fields in [`Bug`] and
 /// avoids requesting server-side fields we don't use — some Bugzilla extensions
@@ -24,6 +27,93 @@ struct HistoryResponse {
 #[derive(Deserialize)]
 struct HistoryBugEntry {
     history: Vec<HistoryEntry>,
+}
+
+/// Appends positive (non-negated) values from multi-value `SearchParams`
+/// fields as repeated query params (e.g. `&status=NEW&status=ASSIGNED`).
+fn append_multi_value_params(
+    mut builder: reqwest::RequestBuilder,
+    params: &SearchParams,
+) -> reqwest::RequestBuilder {
+    let fields: &[(&str, &[String])] = &[
+        ("product", &params.product),
+        ("component", &params.component),
+        ("status", &params.status),
+        ("assigned_to", &params.assigned_to),
+        ("creator", &params.creator),
+        ("priority", &params.priority),
+        ("severity", &params.severity),
+    ];
+    for &(key, values) in fields {
+        let (positive, _) = partition_filters(values);
+        for v in positive {
+            builder = builder.query(&[(key, v)]);
+        }
+    }
+    builder
+}
+
+/// Appends negated values (prefixed with `!`) as Bugzilla boolean chart
+/// parameters (`fN`, `oN`, `vN` triples with `notequals` operator).
+fn append_negated_params(
+    mut builder: reqwest::RequestBuilder,
+    params: &SearchParams,
+) -> reqwest::RequestBuilder {
+    let fields: &[(&str, &[String])] = &[
+        ("product", &params.product),
+        ("component", &params.component),
+        ("status", &params.status),
+        ("assigned_to", &params.assigned_to),
+        ("creator", &params.creator),
+        ("priority", &params.priority),
+        ("severity", &params.severity),
+    ];
+    let mut idx = 1u32;
+    for &(field_name, values) in fields {
+        let (_, negated) = partition_filters(values);
+        let chart_field = BOOLEAN_CHART_FIELD_NAMES
+            .iter()
+            .find(|&&(k, _)| k == field_name)
+            .map_or(field_name, |&(_, v)| v);
+        for v in negated {
+            let f_key = format!("f{idx}");
+            let o_key = format!("o{idx}");
+            let v_key = format!("v{idx}");
+            builder = builder.query(&[
+                (&f_key, chart_field),
+                (&o_key, "notequals"),
+                (&v_key, v),
+            ]);
+            idx += 1;
+        }
+    }
+    builder
+}
+
+/// Appends the remaining single-value `Option` and scalar fields from
+/// `SearchParams` as query parameters. These were previously handled by
+/// serde `Serialize` on the struct; now all query encoding is explicit.
+fn append_option_params(
+    mut builder: reqwest::RequestBuilder,
+    params: &SearchParams,
+) -> reqwest::RequestBuilder {
+    let option_fields: &[(&str, &Option<String>)] = &[
+        ("cc", &params.cc),
+        ("alias", &params.alias),
+        ("summary", &params.summary),
+        ("quicksearch", &params.quicksearch),
+        ("include_fields", &params.include_fields),
+        ("exclude_fields", &params.exclude_fields),
+    ];
+    for &(key, value) in option_fields {
+        if let Some(v) = value {
+            builder = builder.query(&[(key, v.as_str())]);
+        }
+    }
+    if let Some(limit) = params.limit {
+        builder = builder.query(&[("limit", limit)]);
+    }
+    builder
 }
 
 impl BugzillaClient {
@@ -73,9 +163,18 @@ impl BugzillaClient {
     }
 
     async fn search_bugs_rest(&self, params: &SearchParams) -> Result<Vec<Bug>> {
-        let mut req_builder = self.http.get(self.url("bug")).query(params);
-        // Vec fields can't be serialized by reqwest's query serializer, so we
-        // append them manually as repeated query params (e.g. &id=1&id=2).
+        let mut req_builder = self.http.get(self.url("bug"));
+
+        // Append multi-value positive filters as repeated query params
+        // (e.g. &status=NEW&status=ASSIGNED) for OR semantics.
+        req_builder = append_multi_value_params(req_builder, params);
+
+        // Append negated filters as boolean chart fN/oN/vN triples.
+        req_builder = append_negated_params(req_builder, params);
+
+        // Append single-value Option fields and limit.
+        req_builder = append_option_params(req_builder, params);
+
         for id in &params.id {
             req_builder = req_builder.query(&[("id", id)]);
         }
@@ -386,16 +485,26 @@ mod tests {
         assert_eq!(bug.summary, "fallback bug");
     }
 
-    #[test]
-    fn search_params_serialization_product_only() {
+    #[tokio::test]
+    async fn search_params_limit_sent_as_query_param() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("limit", "50"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({"bugs": []}),
+            ))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
         let params = SearchParams {
-            product: Some("Product".into()),
             limit: Some(50),
             ..Default::default()
         };
-        let qs = serde_urlencoded::to_string(&params).unwrap();
-        assert!(qs.contains("product=Product"));
-        assert!(qs.contains("limit=50"));
+        let bugs = client.search_bugs(&params).await.unwrap();
+        assert!(bugs.is_empty());
     }
 
     #[tokio::test]
@@ -425,7 +534,7 @@ mod tests {
 
         let client = test_client(&mock.uri());
         let params = SearchParams {
-            product: Some("Product".into()),
+            product: vec!["Product".into()],
             limit: Some(50),
             ..Default::default()
         };
@@ -458,7 +567,7 @@ mod tests {
 
         let client = test_client_hybrid(&mock.uri());
         let params = SearchParams {
-            product: Some("P".into()),
+            product: vec!["P".into()],
             ..Default::default()
         };
         let bugs = client.search_bugs(&params).await.unwrap();
@@ -488,7 +597,7 @@ mod tests {
 
         let client = test_client_hybrid(&mock.uri());
         let params = SearchParams {
-            product: Some("P".into()),
+            product: vec!["P".into()],
             ..Default::default()
         };
         let bugs = client.search_bugs(&params).await.unwrap();
@@ -582,7 +691,7 @@ mod tests {
         assert!(!empty.has_filters());
 
         let with_product = SearchParams {
-            product: Some("P".into()),
+            product: vec!["P".into()],
             ..Default::default()
         };
         assert!(with_product.has_filters());
@@ -592,5 +701,78 @@ mod tests {
             ..Default::default()
         };
         assert!(with_quicksearch.has_filters());
+    }
+
+    #[tokio::test]
+    async fn search_bugs_multi_value_sends_repeated_params() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("status", "NEW"))
+            .and(query_param("status", "ASSIGNED"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{"id": 1, "summary": "Bug 1", "status": "NEW"}]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = SearchParams {
+            status: vec!["NEW".into(), "ASSIGNED".into()],
+            ..Default::default()
+        };
+        let bugs = client.search_bugs(&params).await.unwrap();
+        assert_eq!(bugs.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn search_bugs_negation_sends_boolean_chart() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("f1", "bug_status"))
+            .and(query_param("o1", "notequals"))
+            .and(query_param("v1", "CLOSED"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{"id": 2, "summary": "Open bug", "status": "NEW"}]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = SearchParams {
+            status: vec!["!CLOSED".into()],
+            ..Default::default()
+        };
+        let bugs = client.search_bugs(&params).await.unwrap();
+        assert_eq!(bugs.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn search_bugs_mixed_positive_and_negated() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("status", "NEW"))
+            .and(query_param("f1", "bug_severity"))
+            .and(query_param("o1", "notequals"))
+            .and(query_param("v1", "enhancement"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{"id": 3, "summary": "Real bug", "status": "NEW"}]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = SearchParams {
+            status: vec!["NEW".into()],
+            severity: vec!["!enhancement".into()],
+            ..Default::default()
+        };
+        let bugs = client.search_bugs(&params).await.unwrap();
+        assert_eq!(bugs.len(), 1);
     }
 }

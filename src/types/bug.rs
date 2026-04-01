@@ -53,41 +53,24 @@ pub struct Bug {
     pub rep_platform: Option<String>,
 }
 
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Default)]
 #[non_exhaustive]
 pub struct SearchParams {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub product: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub component: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub assigned_to: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub creator: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub priority: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub severity: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    pub product: Vec<String>,
+    pub component: Vec<String>,
+    pub status: Vec<String>,
+    pub assigned_to: Vec<String>,
+    pub creator: Vec<String>,
+    pub priority: Vec<String>,
+    pub severity: Vec<String>,
     pub cc: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub alias: Option<String>,
-    /// Bug IDs to search for. Skipped from serde because Bugzilla's REST API
-    /// requires these as repeated `ids=N` query params, which `client/bug.rs`
-    /// appends manually via `reqwest::RequestBuilder::query`.
-    #[serde(skip)]
+    /// Bug IDs to search for.
     pub id: Vec<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub quicksearch: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub include_fields: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub exclude_fields: Option<String>,
 }
 
@@ -101,13 +84,13 @@ impl SearchParams {
     /// Note: `limit`, `include_fields`, and `exclude_fields` are intentionally
     /// excluded — they control pagination and field selection, not bug filtering.
     pub fn has_filters(&self) -> bool {
-        self.product.is_some()
-            || self.component.is_some()
-            || self.status.is_some()
-            || self.assigned_to.is_some()
-            || self.creator.is_some()
-            || self.priority.is_some()
-            || self.severity.is_some()
+        !self.product.is_empty()
+            || !self.component.is_empty()
+            || !self.status.is_empty()
+            || !self.assigned_to.is_empty()
+            || !self.creator.is_empty()
+            || !self.priority.is_empty()
+            || !self.severity.is_empty()
             || self.cc.is_some()
             || self.alias.is_some()
             || !self.id.is_empty()
@@ -115,6 +98,34 @@ impl SearchParams {
             || self.quicksearch.is_some()
     }
 }
+
+/// Splits filter values into (positive, negated) groups.
+/// Values prefixed with `!` are negated; the prefix is stripped.
+pub fn partition_filters(values: &[String]) -> (Vec<&str>, Vec<&str>) {
+    let mut positive = Vec::new();
+    let mut negated = Vec::new();
+    for v in values {
+        if let Some(stripped) = v.strip_prefix('!') {
+            negated.push(stripped);
+        } else {
+            positive.push(v.as_str());
+        }
+    }
+    (positive, negated)
+}
+
+/// Maps `SearchParams` field names to Bugzilla internal field names
+/// used in boolean chart `fN` parameters. Most are identical, but some
+/// differ (e.g. `status` → `bug_status`, `creator` → `reporter`).
+pub const BOOLEAN_CHART_FIELD_NAMES: &[(&str, &str)] = &[
+    ("product", "product"),
+    ("component", "component"),
+    ("status", "bug_status"),
+    ("assigned_to", "assigned_to"),
+    ("creator", "reporter"),
+    ("priority", "priority"),
+    ("severity", "bug_severity"),
+];
 
 #[derive(Debug, Serialize)]
 #[non_exhaustive]
@@ -276,6 +287,38 @@ mod tests {
         assert_eq!(bug.status, "NEW");
         assert_eq!(bug.product.as_deref(), Some("Core"));
         assert_eq!(bug.keywords, vec!["regression"]);
+    }
+
+    #[test]
+    fn partition_filters_positive_only() {
+        let vals: Vec<String> = vec!["NEW".into(), "ASSIGNED".into()];
+        let (pos, neg) = partition_filters(&vals);
+        assert_eq!(pos, vec!["NEW", "ASSIGNED"]);
+        assert!(neg.is_empty());
+    }
+
+    #[test]
+    fn partition_filters_negated_only() {
+        let vals: Vec<String> = vec!["!CLOSED".into(), "!VERIFIED".into()];
+        let (pos, neg) = partition_filters(&vals);
+        assert!(pos.is_empty());
+        assert_eq!(neg, vec!["CLOSED", "VERIFIED"]);
+    }
+
+    #[test]
+    fn partition_filters_mixed() {
+        let vals: Vec<String> = vec!["NEW".into(), "!CLOSED".into(), "OPEN".into()];
+        let (pos, neg) = partition_filters(&vals);
+        assert_eq!(pos, vec!["NEW", "OPEN"]);
+        assert_eq!(neg, vec!["CLOSED"]);
+    }
+
+    #[test]
+    fn partition_filters_empty() {
+        let vals: Vec<String> = vec![];
+        let (pos, neg) = partition_filters(&vals);
+        assert!(pos.is_empty());
+        assert!(neg.is_empty());
     }
 
     #[test]
