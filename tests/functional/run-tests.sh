@@ -632,11 +632,91 @@ if assert_failure; then test_pass; fi
 echo ""
 
 # ══════════════════════════════════════════════════════════════════════
+# Phase 13.5: Saved Queries
+# ══════════════════════════════════════════════════════════════════════
+echo "── Phase 13.5: Saved Queries ─────────────────────────────────"
+
+# ── CRUD lifecycle ───────────────────────────────────────────────────
+
+test_begin "72. query save (list kind)"
+run_bzr query save prod-bugs --product FuncTestProd --status NEW --status CONFIRMED --limit 10
+if assert_success && assert_json '.action' "saved"; then test_pass; fi
+
+test_begin "73. query save (search kind)"
+run_bzr query save search-bugs --search "Bug one" --limit 5
+if assert_success && assert_json '.action' "saved"; then test_pass; fi
+
+test_begin "74. query save (multi-filter)"
+run_bzr query save complex --product FuncTestProd --component Backend --priority Normal --severity normal --status NEW --status CONFIRMED --limit 20
+if assert_success && assert_json '.action' "saved"; then test_pass; fi
+
+test_begin "75. query list"
+run_bzr_raw query list
+if assert_success && assert_stdout_contains "prod-bugs" && assert_stdout_contains "search-bugs" && assert_stdout_contains "complex"; then test_pass; fi
+
+test_begin "76. query show"
+run_bzr query show complex
+if assert_success && assert_json '.kind' "list" && assert_json '.product[0]' "FuncTestProd" && assert_json '.priority[0]' "Normal"; then test_pass; fi
+
+test_begin "77. query save (update existing)"
+run_bzr query save prod-bugs --product FuncTestProd --status NEW --limit 5
+if assert_success && assert_json '.action' "updated"; then test_pass; fi
+
+# ── Run queries against real Bugzilla ────────────────────────────────
+
+test_begin "78. query run (product+status filter)"
+run_bzr query run prod-bugs
+if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
+
+test_begin "79. query run (quicksearch)"
+run_bzr query run search-bugs
+if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
+
+test_begin "80. query run (multi-filter complex)"
+run_bzr query run complex
+if assert_success; then test_pass; fi
+
+test_begin "81. query run with limit override"
+run_bzr query run prod-bugs --limit 1
+if assert_success && assert_json_array_length '.' 1; then test_pass; fi
+
+test_begin "82. query run with fields override"
+run_bzr query run prod-bugs --fields id,summary,status
+if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
+
+# ── Cleanup and error handling ───────────────────────────────────────
+
+test_begin "83. query delete"
+run_bzr query delete search-bugs
+if assert_success && assert_json '.action' "deleted"; then test_pass; fi
+
+test_begin "84. query show (deleted, expect failure)"
+run_bzr query show search-bugs
+if assert_failure; then test_pass; fi
+
+test_begin "85. query run (deleted, expect failure)"
+run_bzr query run search-bugs
+if assert_failure; then test_pass; fi
+
+test_begin "86. query save (empty, expect failure)"
+run_bzr query save empty-q
+if assert_failure; then test_pass; fi
+
+test_begin "87. query delete remaining"
+run_bzr query delete prod-bugs
+if assert_success; then
+    run_bzr query delete complex
+    if assert_success; then test_pass; fi
+fi
+
+echo ""
+
+# ══════════════════════════════════════════════════════════════════════
 # Phase 14: Comments
 # ══════════════════════════════════════════════════════════════════════
 echo "── Phase 14: Comments ───────────────────────────────────────"
 
-test_begin "72. comment add (first)"
+test_begin "88. comment add (first)"
 if [[ -n "$BUG1" ]]; then
     run_bzr comment add "$BUG1" --body "First test comment"
     if assert_success && assert_json_exists '.id'; then
@@ -645,26 +725,26 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "73. comment add (second)"
+test_begin "89. comment add (second)"
 if [[ -n "$BUG1" ]]; then
     run_bzr comment add "$BUG1" --body "Second comment"
     if assert_success; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "74. comment list"
+test_begin "90. comment list"
 if [[ -n "$BUG1" ]]; then
     run_bzr comment list "$BUG1"
     # Bug description counts as comment 0, plus our 2 = at least 3
     if assert_success && assert_json_array_min_length '.' 3; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "75. comment list --since"
+test_begin "91. comment list --since"
 if [[ -n "$BUG1" ]]; then
     run_bzr comment list "$BUG1" --since 2020-01-01
     if assert_success; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "76. comment tag --add"
+test_begin "92. comment tag --add"
 if [[ -n "${COMMENT_ID:-}" ]] && [[ "$COMMENT_ID" != "null" ]]; then
     run_bzr comment tag "$COMMENT_ID" --add important
     if assert_success; then test_pass; fi
@@ -672,7 +752,7 @@ else
     test_skip "no comment ID"
 fi
 
-test_begin "77. comment tag --remove"
+test_begin "93. comment tag --remove"
 if [[ -n "${COMMENT_ID:-}" ]] && [[ "$COMMENT_ID" != "null" ]]; then
     run_bzr comment tag "$COMMENT_ID" --remove important
     if assert_success; then test_pass; fi
@@ -680,7 +760,7 @@ else
     test_skip "no comment ID"
 fi
 
-test_begin "78. comment search-tags"
+test_begin "94. comment search-tags"
 run_bzr comment search-tags important
 # May return empty if tag was fully removed, but should succeed
 if assert_success; then test_pass; fi
@@ -692,11 +772,11 @@ echo ""
 # ══════════════════════════════════════════════════════════════════════
 echo "── Phase 15: Attachments ───────────────────────────────────"
 
-test_begin "79. create temp file"
+test_begin "95. create temp file"
 echo "bzr functional test content $(date +%s)" > /tmp/bzr-func-test.txt
 test_pass
 
-test_begin "80. attachment upload"
+test_begin "96. attachment upload"
 if [[ -n "$BUG1" ]]; then
     run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt --summary "Test file"
     if assert_success && assert_json_exists '.id'; then
@@ -705,13 +785,13 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "81. attachment list"
+test_begin "97. attachment list"
 if [[ -n "$BUG1" ]]; then
     run_bzr attachment list "$BUG1"
     if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "82. attachment download"
+test_begin "98. attachment download"
 if [[ -n "${ATTACH_ID:-}" ]] && [[ "$ATTACH_ID" != "null" ]]; then
     rm -f /tmp/bzr-func-downloaded.txt
     run_bzr attachment download "$ATTACH_ID" --out /tmp/bzr-func-downloaded.txt
@@ -722,7 +802,7 @@ else
     test_skip "no attachment ID"
 fi
 
-test_begin "83. attachment update"
+test_begin "99. attachment update"
 if [[ -n "${ATTACH_ID:-}" ]] && [[ "$ATTACH_ID" != "null" ]]; then
     run_bzr attachment update "$ATTACH_ID" --summary "Updated summary" --obsolete true
     if assert_success; then test_pass; fi
@@ -730,7 +810,7 @@ else
     test_skip "no attachment ID"
 fi
 
-test_begin "84. attachment upload (explicit MIME)"
+test_begin "100. attachment upload (explicit MIME)"
 if [[ -n "$BUG1" ]]; then
     run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt --content-type text/plain
     if assert_success; then test_pass; fi
@@ -743,7 +823,7 @@ echo ""
 # ══════════════════════════════════════════════════════════════════════
 echo "── Phase 16: Global Options ────────────────────────────────"
 
-test_begin "85. --output table"
+test_begin "101. --output table"
 if [[ -n "$BUG1" ]]; then
     run_bzr_raw --output table bug view "$BUG1"
     if assert_success; then
@@ -757,13 +837,13 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "86. --quiet"
+test_begin "102. --quiet"
 if [[ -n "$BUG1" ]]; then
     run_bzr_raw --quiet bug view "$BUG1"
     if assert_success && assert_stdout_empty; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "87. --server test whoami"
+test_begin "103. --server test whoami"
 run_bzr_raw --server test whoami
 if assert_success; then test_pass; fi
 
