@@ -804,4 +804,54 @@ mod tests {
             _ => panic!("expected Query Delete"),
         }
     }
+
+    #[test]
+    fn parse_whoami_without_subcommand() {
+        let cli = Cli::try_parse_from(["bzr", "whoami"]).unwrap();
+        match cli.command {
+            Commands::Whoami { action } => assert!(action.is_none()),
+            _ => panic!("expected Whoami"),
+        }
+    }
+
+    #[test]
+    fn parse_attachment_upload_with_summary() {
+        let cli = Cli::try_parse_from([
+            "bzr",
+            "attachment",
+            "upload",
+            "42",
+            "patch.diff",
+            "--summary",
+            "Fix crash",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Attachment {
+                action:
+                    AttachmentAction::Upload {
+                        bug_id,
+                        file,
+                        summary,
+                        ..
+                    },
+            } => {
+                assert_eq!(bug_id, 42);
+                assert_eq!(file, "patch.diff");
+                assert_eq!(summary.as_deref(), Some("Fix crash"));
+            }
+            _ => panic!("expected Attachment Upload"),
+        }
+    }
+
+    #[test]
+    fn parse_template_delete() {
+        let cli = Cli::try_parse_from(["bzr", "template", "delete", "security-bug"]).unwrap();
+        match cli.command {
+            Commands::Template {
+                action: TemplateAction::Delete { name },
+            } => assert_eq!(name, "security-bug"),
+            _ => panic!("expected Template Delete"),
+        }
+    }
 }

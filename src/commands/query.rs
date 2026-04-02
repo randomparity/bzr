@@ -380,6 +380,151 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn query_save_existing_entry_reports_updated() {
+        let (_lock, _mock, _tmp) = setup_test_env().await;
+
+        let save_action = QueryAction::Save {
+            name: "existing".into(),
+            search: None,
+            product: vec!["Firefox".into()],
+            component: vec![],
+            status: vec!["NEW".into()],
+            assignee: vec![],
+            creator: vec![],
+            priority: vec![],
+            severity: vec![],
+            limit: Some(10),
+            fields: None,
+            exclude_fields: None,
+        };
+        let (result, _) =
+            capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok());
+
+        let update_action = QueryAction::Save {
+            name: "existing".into(),
+            search: Some("updated".into()),
+            product: vec![],
+            component: vec![],
+            status: vec![],
+            assignee: vec![],
+            creator: vec![],
+            priority: vec![],
+            severity: vec![],
+            limit: Some(5),
+            fields: None,
+            exclude_fields: None,
+        };
+        let (result, output) = capture_stdout(super::execute(
+            &update_action,
+            None,
+            OutputFormat::Json,
+            None,
+        ))
+        .await;
+        assert!(result.is_ok());
+
+        let parsed = crate::test_helpers::extract_json(&output);
+        assert_eq!(parsed["name"], "existing");
+        assert_eq!(parsed["action"], "updated");
+    }
+
+    #[tokio::test]
+    async fn query_delete_removes_saved_query() {
+        let (_lock, _mock, _tmp) = setup_test_env().await;
+
+        let save_action = QueryAction::Save {
+            name: "delete-me".into(),
+            search: None,
+            product: vec!["Firefox".into()],
+            component: vec![],
+            status: vec![],
+            assignee: vec![],
+            creator: vec![],
+            priority: vec![],
+            severity: vec![],
+            limit: Some(1),
+            fields: None,
+            exclude_fields: None,
+        };
+        let (result, _) =
+            capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok());
+
+        let delete_action = QueryAction::Delete {
+            name: "delete-me".into(),
+        };
+        let (result, output) = capture_stdout(super::execute(
+            &delete_action,
+            None,
+            OutputFormat::Json,
+            None,
+        ))
+        .await;
+        assert!(result.is_ok());
+        let parsed = crate::test_helpers::extract_json(&output);
+        assert_eq!(parsed["action"], "deleted");
+
+        let show_action = QueryAction::Show {
+            name: "delete-me".into(),
+        };
+        let err = super::execute(&show_action, None, OutputFormat::Json, None)
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn query_run_applies_field_overrides() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        let save_action = QueryAction::Save {
+            name: "fields-test".into(),
+            search: None,
+            product: vec!["TestProduct".into()],
+            component: vec![],
+            status: vec![],
+            assignee: vec![],
+            creator: vec![],
+            priority: vec![],
+            severity: vec![],
+            limit: Some(10),
+            fields: Some("id,status".into()),
+            exclude_fields: Some("cc".into()),
+        };
+        let (result, _) =
+            capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok());
+
+        wiremock::Mock::given(wiremock::matchers::method("GET"))
+            .and(wiremock::matchers::path("/rest/bug"))
+            .and(wiremock::matchers::query_param(
+                "include_fields",
+                "id,summary",
+            ))
+            .and(wiremock::matchers::query_param(
+                "exclude_fields",
+                "comments",
+            ))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let run_action = QueryAction::Run {
+            name: "fields-test".into(),
+            limit: None,
+            fields: Some("id,summary".into()),
+            exclude_fields: Some("comments".into()),
+        };
+        let (result, _) =
+            capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
     async fn query_run_unknown_errors() {
         let (_lock, _mock, _tmp) = setup_test_env().await;
 
