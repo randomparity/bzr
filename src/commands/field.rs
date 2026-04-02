@@ -73,6 +73,7 @@ mod tests {
 
     #[tokio::test]
     async fn field_aliases_succeeds_without_server() {
+        let _lock = crate::ENV_LOCK.lock().await;
         let action = FieldAction::Aliases;
         let (result, output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
