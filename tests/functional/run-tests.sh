@@ -98,6 +98,10 @@ test_begin "3. config set-server alt"
 run_bzr config set-server alt --url "http://localhost:9999" --api-key "fake-key-for-alt-server"
 if assert_success; then test_pass; fi
 
+test_begin "3a. config set-server auto-detect"
+run_bzr config set-server auto --url "$BZ_URL" --api-key "$API_KEY" --email "$ADMIN_EMAIL"
+if assert_success; then test_pass; fi
+
 test_begin "4. config set-default alt"
 run_bzr config set-default alt
 if assert_success; then test_pass; fi
@@ -123,6 +127,10 @@ if assert_success && assert_json_exists '.version'; then test_pass; fi
 
 test_begin "8. whoami"
 run_bzr whoami
+if assert_success && assert_json_exists '.id'; then test_pass; fi
+
+test_begin "8a. --server auto whoami"
+run_bzr_raw --server auto whoami
 if assert_success && assert_json_exists '.id'; then test_pass; fi
 
 echo ""
@@ -299,6 +307,14 @@ fi
 
 test_begin "26. group view functest-grp"
 run_bzr group view functest-grp
+if [[ $BZR_EXIT -eq 0 ]] && assert_json '.name' "functest-grp"; then
+    test_pass
+else
+    assert_success
+fi
+
+test_begin "26a. group view functest-grp with --api rest"
+run_bzr_raw --server test --api rest group view functest-grp
 if [[ $BZR_EXIT -eq 0 ]] && assert_json '.name' "functest-grp"; then
     test_pass
 else
