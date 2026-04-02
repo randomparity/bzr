@@ -55,6 +55,7 @@ test: ## Run tests
 
 coverage: ## Run tests with coverage via cargo-llvm-cov
 	@command -v cargo-llvm-cov >/dev/null 2>&1 || { echo "cargo-llvm-cov not installed"; echo "  Run: cargo install cargo-llvm-cov"; exit 1; }
+	@rustup component list --installed 2>/dev/null | grep -q llvm-tools-preview || { echo "llvm-tools-preview not installed"; echo "  Run: rustup component add llvm-tools-preview"; exit 1; }
 	cargo llvm-cov --locked --workspace --all-features --summary-only
 
 fmt: ## Format source code

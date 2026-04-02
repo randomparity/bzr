@@ -145,6 +145,7 @@ To reproduce the CI coverage summary locally:
 
 ```bash
 cargo install cargo-llvm-cov
+rustup component add llvm-tools-preview
 make coverage
 ```
 

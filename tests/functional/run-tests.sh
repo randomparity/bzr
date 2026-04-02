@@ -130,7 +130,7 @@ run_bzr whoami
 if assert_success && assert_json_exists '.id'; then test_pass; fi
 
 test_begin "8a. --server auto whoami"
-run_bzr_raw --server auto whoami
+run_bzr_raw --json --server auto whoami
 if assert_success && assert_json_exists '.id'; then test_pass; fi
 
 echo ""
@@ -314,7 +314,7 @@ else
 fi
 
 test_begin "26a. group view functest-grp with --api rest"
-run_bzr_raw --server test --api rest group view functest-grp
+run_bzr_raw --json --server test --api rest group view functest-grp
 if [[ $BZR_EXIT -eq 0 ]] && assert_json '.name' "functest-grp"; then
     test_pass
 else
