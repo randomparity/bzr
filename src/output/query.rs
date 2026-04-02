@@ -208,4 +208,28 @@ mod tests {
         assert!(output.contains("Exclude"));
         assert!(output.contains("comments"));
     }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn query_list_names_sort_before_render() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let mut queries: HashMap<String, SavedQuery> = HashMap::new();
+        queries.insert("zzz".into(), make_list_query());
+        queries.insert("aaa".into(), make_search_query());
+
+        let mut names: Vec<&str> = queries.keys().map(String::as_str).collect();
+        names.sort_unstable();
+        let rendered: Vec<String> = names
+            .into_iter()
+            .map(|name| query_summary_line(name, &queries[name]))
+            .collect();
+
+        assert_eq!(
+            rendered,
+            vec![
+                "aaa (kind=search, search=\"crash in tab\", limit=10)".to_string(),
+                "zzz (kind=list, product=Firefox, status=NEW,ASSIGNED, limit=25)".to_string(),
+            ]
+        );
+    }
 }

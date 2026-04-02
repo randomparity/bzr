@@ -106,6 +106,8 @@ pub async fn execute(
 mod tests {
     use super::*;
     use crate::error::BzrError;
+    use crate::test_helpers::capture_stdout;
+    use crate::types::AuthMethod;
 
     async fn setup_config_env() -> (tokio::sync::MutexGuard<'static, ()>, tempfile::TempDir) {
         let lock = crate::ENV_LOCK.lock().await;
@@ -203,5 +205,134 @@ mod tests {
             "second server should not override existing default"
         );
         assert_eq!(config.servers.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn set_server_update_preserves_existing_default() {
+        let (_lock, _tmp) = setup_config_env().await;
+        for (name, url) in [
+            ("first", "https://first.example.com"),
+            ("second", "https://second.example.com"),
+        ] {
+            execute(
+                &ConfigAction::SetServer {
+                    name: name.into(),
+                    url: url.into(),
+                    api_key: format!("{name}-key-1234567890"),
+                    email: None,
+                    auth_method: None,
+                    tls_insecure: false,
+                },
+                None,
+                OutputFormat::Json,
+                None,
+            )
+            .await
+            .unwrap();
+        }
+
+        let (result, output) = capture_stdout(execute(
+            &ConfigAction::SetServer {
+                name: "second".into(),
+                url: "https://updated.example.com".into(),
+                api_key: "updated-key-1234567890".into(),
+                email: Some("ops@example.com".into()),
+                auth_method: Some(AuthMethod::QueryParam),
+                tls_insecure: true,
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        ))
+        .await;
+        assert!(result.is_ok());
+
+        let parsed = crate::test_helpers::extract_json(&output);
+        assert_eq!(parsed["name"], "second");
+        assert_eq!(parsed["action"], "updated");
+
+        let config = Config::load().unwrap();
+        assert_eq!(config.default_server.as_deref(), Some("first"));
+        let server = &config.servers["second"];
+        assert_eq!(server.url, "https://updated.example.com");
+        assert_eq!(server.email.as_deref(), Some("ops@example.com"));
+        assert_eq!(server.auth_method, Some(AuthMethod::QueryParam));
+        assert!(server.tls_insecure);
+    }
+
+    #[tokio::test]
+    async fn set_default_persists_selected_server() {
+        let (_lock, _tmp) = setup_config_env().await;
+        for (name, url) in [
+            ("first", "https://first.example.com"),
+            ("second", "https://second.example.com"),
+        ] {
+            execute(
+                &ConfigAction::SetServer {
+                    name: name.into(),
+                    url: url.into(),
+                    api_key: format!("{name}-key-1234567890"),
+                    email: None,
+                    auth_method: None,
+                    tls_insecure: false,
+                },
+                None,
+                OutputFormat::Json,
+                None,
+            )
+            .await
+            .unwrap();
+        }
+
+        let (result, output) = capture_stdout(execute(
+            &ConfigAction::SetDefault {
+                name: "second".into(),
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        ))
+        .await;
+        assert!(result.is_ok());
+
+        let parsed = crate::test_helpers::extract_json(&output);
+        assert_eq!(parsed["name"], "second");
+        assert_eq!(parsed["action"], "updated");
+        assert_eq!(
+            Config::load().unwrap().default_server.as_deref(),
+            Some("second")
+        );
+    }
+
+    #[tokio::test]
+    async fn show_json_includes_populated_server_details() {
+        let (_lock, _tmp) = setup_config_env().await;
+        execute(
+            &ConfigAction::SetServer {
+                name: "prod".into(),
+                url: "https://prod.example.com".into(),
+                api_key: "abcdef1234567890".into(),
+                email: Some("admin@example.com".into()),
+                auth_method: Some(AuthMethod::Header),
+                tls_insecure: true,
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let (result, output) =
+            capture_stdout(execute(&ConfigAction::Show, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok());
+
+        let parsed = crate::test_helpers::extract_json(&output);
+        assert_eq!(parsed["default_server"], "prod");
+        assert_eq!(parsed["servers"]["prod"]["url"], "https://prod.example.com");
+        assert_eq!(parsed["servers"]["prod"]["email"], "admin@example.com");
+        assert_eq!(parsed["servers"]["prod"]["auth_method"], "header");
+        assert_eq!(parsed["servers"]["prod"]["tls_insecure"], true);
+        assert_eq!(parsed["servers"]["prod"]["api_key"], "abcdef12...");
     }
 }

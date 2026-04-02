@@ -158,15 +158,15 @@ async fn handle_run(
 #[expect(clippy::unwrap_used)]
 mod tests {
     use crate::cli::QueryAction;
+    use crate::config::Config;
     use crate::test_helpers::{capture_stdout, setup_test_env};
     use crate::types::OutputFormat;
+    use wiremock::matchers::{method, path, query_param};
+    use wiremock::{Mock, ResponseTemplate};
 
-    #[tokio::test]
-    async fn query_save_and_show() {
-        let (_lock, _mock, _tmp) = setup_test_env().await;
-
-        let action = QueryAction::Save {
-            name: "test-q".into(),
+    fn save_action(name: &str) -> QueryAction {
+        QueryAction::Save {
+            name: name.into(),
             search: None,
             product: vec!["Firefox".into()],
             component: vec![],
@@ -178,7 +178,14 @@ mod tests {
             limit: Some(25),
             fields: None,
             exclude_fields: None,
-        };
+        }
+    }
+
+    #[tokio::test]
+    async fn query_save_and_show() {
+        let (_lock, _mock, _tmp) = setup_test_env().await;
+
+        let action = save_action("test-q");
         let (result, _output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "query save failed: {result:?}");
@@ -305,19 +312,17 @@ mod tests {
         assert!(result.is_ok(), "query save failed: {result:?}");
 
         // Mock the bug search endpoint
-        wiremock::Mock::given(wiremock::matchers::method("GET"))
-            .and(wiremock::matchers::path("/rest/bug"))
-            .respond_with(
-                wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                    "bugs": [{
-                        "id": 1,
-                        "summary": "Test bug",
-                        "status": "NEW",
-                        "product": "TestProduct",
-                        "component": "General"
-                    }]
-                })),
-            )
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{
+                    "id": 1,
+                    "summary": "Test bug",
+                    "status": "NEW",
+                    "product": "TestProduct",
+                    "component": "General"
+                }]
+            })))
             .mount(&mock)
             .await;
 
@@ -358,12 +363,10 @@ mod tests {
             capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
 
-        wiremock::Mock::given(wiremock::matchers::method("GET"))
-            .and(wiremock::matchers::path("/rest/bug"))
-            .and(wiremock::matchers::query_param("limit", "5"))
-            .respond_with(
-                wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})),
-            )
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("limit", "5"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
             .expect(1)
             .mount(&mock)
             .await;
@@ -427,6 +430,12 @@ mod tests {
         let parsed = crate::test_helpers::extract_json(&output);
         assert_eq!(parsed["name"], "existing");
         assert_eq!(parsed["action"], "updated");
+
+        let config = Config::load().unwrap();
+        let saved = &config.queries["existing"];
+        assert_eq!(saved.quicksearch.as_deref(), Some("updated"));
+        assert_eq!(saved.limit, Some(5));
+        assert!(saved.product.is_empty());
     }
 
     #[tokio::test]
@@ -496,19 +505,11 @@ mod tests {
             capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
 
-        wiremock::Mock::given(wiremock::matchers::method("GET"))
-            .and(wiremock::matchers::path("/rest/bug"))
-            .and(wiremock::matchers::query_param(
-                "include_fields",
-                "id,summary",
-            ))
-            .and(wiremock::matchers::query_param(
-                "exclude_fields",
-                "comments",
-            ))
-            .respond_with(
-                wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})),
-            )
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("include_fields", "id,summary"))
+            .and(query_param("exclude_fields", "comments"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
             .expect(1)
             .mount(&mock)
             .await;
@@ -541,5 +542,53 @@ mod tests {
             err.contains("not found"),
             "expected not-found error, got: {err}"
         );
+    }
+
+    #[tokio::test]
+    async fn query_list_table_sorts_entries_by_name() {
+        let (_lock, _mock, _tmp) = setup_test_env().await;
+
+        for name in ["zzz", "aaa"] {
+            let (result, _) = capture_stdout(super::execute(
+                &save_action(name),
+                None,
+                OutputFormat::Json,
+                None,
+            ))
+            .await;
+            assert!(result.is_ok());
+        }
+
+        let (result, _) = capture_stdout(super::execute(
+            &QueryAction::List,
+            None,
+            OutputFormat::Table,
+            None,
+        ))
+        .await;
+        assert!(result.is_ok());
+
+        let config = Config::load().unwrap();
+        let mut names: Vec<&str> = config.queries.keys().map(String::as_str).collect();
+        names.sort_unstable();
+        assert_eq!(names, vec!["aaa", "zzz"]);
+    }
+
+    #[tokio::test]
+    async fn query_show_unknown_errors() {
+        let (_lock, _mock, _tmp) = setup_test_env().await;
+
+        let err = super::execute(
+            &QueryAction::Show {
+                name: "missing".into(),
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await
+        .unwrap_err();
+
+        assert!(err.to_string().contains("query 'missing' not found"));
     }
 }
