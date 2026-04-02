@@ -585,4 +585,115 @@ mod tests {
         let bugs = client.search_bugs(&params).await.unwrap();
         assert_eq!(bugs.len(), 1);
     }
+
+    #[tokio::test]
+    async fn search_bugs_fields_and_ids_use_xmlrpc_arrays() {
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .and(body_string_contains("<name>ids</name>"))
+            .and(body_string_contains("<int>42</int>"))
+            .and(body_string_contains("<name>include_fields</name>"))
+            .and(body_string_contains("<string>id</string>"))
+            .and(body_string_contains("<string>summary</string>"))
+            .and(body_string_contains("<name>exclude_fields</name>"))
+            .and(body_string_contains("<string>cc</string>"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(42, "Field bug")),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+        let params = SearchParams {
+            id: vec![42],
+            include_fields: Some("id, summary".into()),
+            exclude_fields: Some("cc".into()),
+            ..Default::default()
+        };
+        let bugs = client.search_bugs(&params).await.unwrap();
+        assert_eq!(bugs.len(), 1);
+        assert_eq!(bugs[0].id, 42);
+    }
+
+    #[tokio::test]
+    async fn get_bug_empty_result_is_not_found() {
+        let mock = MockServer::start().await;
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+            <methodResponse>
+              <params>
+                <param>
+                  <value>
+                    <struct>
+                      <member>
+                        <name>bugs</name>
+                        <value><array><data></data></array></value>
+                      </member>
+                    </struct>
+                  </value>
+                </param>
+              </params>
+            </methodResponse>"#;
+
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(xml))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+        let err = client.get_bug("42").await.unwrap_err();
+        assert!(matches!(
+            err,
+            BzrError::NotFound {
+                resource: "bug",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn extract_id_requires_struct_with_integer_id() {
+        let err = extract_id(&Value::String("oops".into())).unwrap_err();
+        assert!(err.to_string().contains("expected struct response"));
+
+        let err = extract_id(&Value::Struct(BTreeMap::new())).unwrap_err();
+        assert!(err.to_string().contains("missing id field"));
+    }
+
+    #[test]
+    fn extract_bugs_rejects_non_array_payload() {
+        let mut payload = BTreeMap::new();
+        payload.insert("bugs".into(), Value::String("wrong".into()));
+        let err = extract_bugs(&Value::Struct(payload)).unwrap_err();
+        assert!(err.to_string().contains("expected bugs array"));
+    }
+
+    #[test]
+    fn value_to_group_info_parses_membership_and_optional_fields() {
+        let mut member = BTreeMap::new();
+        member.insert("id".into(), Value::Int(7));
+        member.insert("name".into(), Value::String("alice@example.com".into()));
+        member.insert("real_name".into(), Value::String("Alice".into()));
+        member.insert("email".into(), Value::String("alice@example.com".into()));
+
+        let mut group = BTreeMap::new();
+        group.insert("id".into(), Value::Int(1));
+        group.insert("name".into(), Value::String("admin".into()));
+        group.insert("description".into(), Value::String("Administrators".into()));
+        group.insert("is_active".into(), Value::Bool(true));
+        group.insert(
+            "membership".into(),
+            Value::Array(vec![Value::Struct(member)]),
+        );
+
+        let info = value_to_group_info(&Value::Struct(group)).unwrap();
+        assert_eq!(info.name, "admin");
+        assert!(info.is_active);
+        assert_eq!(info.membership.len(), 1);
+        assert_eq!(info.membership[0].id, 7);
+        assert_eq!(info.membership[0].real_name.as_deref(), Some("Alice"));
+    }
 }
