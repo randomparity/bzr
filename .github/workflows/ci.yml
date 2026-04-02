@@ -71,3 +71,17 @@ jobs:
         run: cargo install cross --locked
       - name: Check
         run: cross check --target ${{ matrix.target }}
+
+  windows-cross-check:
+    name: Cross-check aarch64-pc-windows-msvc
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: aarch64-pc-windows-msvc
+      - name: Check
+        run: cargo check --target aarch64-pc-windows-msvc

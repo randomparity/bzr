@@ -43,6 +43,10 @@ jobs:
             os: windows-latest
             use_cross: false
             archive: zip
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            use_cross: false
+            archive: zip
     steps:
       - uses: actions/checkout@v6
 
