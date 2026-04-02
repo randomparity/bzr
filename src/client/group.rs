@@ -139,7 +139,8 @@ mod tests {
     use super::super::encode_path;
     use super::super::USER_FIELDS_BASIC;
     use crate::client::test_helpers::{test_client, test_client_hybrid};
-    use crate::types::{CreateGroupParams, UpdateGroupParams};
+    use crate::error::BzrError;
+    use crate::types::{ApiMode, AuthMethod, CreateGroupParams, UpdateGroupParams};
 
     #[tokio::test]
     async fn get_group_members_returns_users() {
@@ -148,6 +149,7 @@ mod tests {
             .and(path("/rest/user"))
             .and(query_param("group", "admin"))
             .and(query_param("include_fields", USER_FIELDS_BASIC))
+            .and(query_param("match", "*"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [
                     {
@@ -183,6 +185,7 @@ mod tests {
                 "include_fields",
                 super::super::USER_FIELDS_DETAILED,
             ))
+            .and(query_param("match", "*"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "users": [
                     {
@@ -213,6 +216,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/user"))
             .and(query_param("group", "nobody"))
+            .and(query_param("match", "*"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(serde_json::json!({"users": []})),
             )
@@ -230,6 +234,7 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/rest/user"))
             .and(query_param("group", "nonexistent"))
+            .and(query_param("match", "*"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "error": true,
                 "code": 51,
@@ -326,6 +331,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn get_group_rest_empty_response_returns_not_found() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/group"))
+            .and(query_param("names", "missing"))
+            .and(query_param("membership", "1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "groups": []
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client.get_group("missing").await.unwrap_err();
+        assert!(matches!(
+            err,
+            BzrError::NotFound {
+                resource: "group",
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
     async fn get_group_forbidden() {
         let mock = MockServer::start().await;
         Mock::given(method("GET"))
@@ -417,6 +447,44 @@ mod tests {
         let info = client.get_group("admin").await.unwrap();
         assert_eq!(info.name, "admin");
         assert_eq!(info.description, "Administrators");
+    }
+
+    #[tokio::test]
+    async fn xmlrpc_mode_get_group_bypasses_rest() {
+        let mock = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/group"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(0)
+            .mount(&mock)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(xmlrpc_group_response(
+                    1,
+                    "admin",
+                    "Administrators",
+                )),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = super::BugzillaClient::new(
+            &mock.uri(),
+            "test-key",
+            AuthMethod::Header,
+            ApiMode::XmlRpc,
+            None,
+            false,
+        )
+        .unwrap();
+
+        let info = client.get_group("admin").await.unwrap();
+        assert_eq!(info.name, "admin");
     }
 
     #[tokio::test]

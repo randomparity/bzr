@@ -497,6 +497,50 @@ mod tests {
         assert_eq!(safe, "https://bugzilla.example.com/rest/bug/42");
     }
 
+    #[test]
+    fn new_trims_trailing_slash_and_keeps_email_hint() {
+        let client = BugzillaClient::new(
+            "https://bugzilla.example.com/",
+            "test-key",
+            AuthMethod::Header,
+            ApiMode::Rest,
+            Some("user@example.com"),
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(client.base_url, "https://bugzilla.example.com");
+        assert_eq!(client.email_hint.as_deref(), Some("user@example.com"));
+    }
+
+    #[test]
+    fn apply_auth_adds_query_param_credentials() {
+        let client = test_client_query_param("https://bugzilla.example.com");
+        let request = client
+            .apply_auth(client.http.get(client.url("bug")))
+            .build()
+            .unwrap();
+        let expected_query = format!("{AUTH_QUERY_PARAM}=test-key");
+        assert_eq!(request.url().query(), Some(expected_query.as_str()));
+    }
+
+    #[test]
+    fn alternate_auth_rejects_invalid_header_characters() {
+        let client = BugzillaClient::new(
+            "https://bugzilla.example.com",
+            "bad\nkey",
+            AuthMethod::QueryParam,
+            ApiMode::Rest,
+            None,
+            false,
+        )
+        .unwrap();
+
+        let builder = client.http.get(client.url("bug"));
+        let err = client.apply_alternate_auth(builder).unwrap_err();
+        assert!(err.to_string().contains("invalid header characters"));
+    }
+
     #[tokio::test]
     async fn api_error_with_200_status() {
         let mock = MockServer::start().await;
