@@ -66,6 +66,11 @@ jobs:
         if: matrix.use_cross
         run: cargo install cross --locked
 
+      - name: Static CRT link (Windows)
+        if: contains(matrix.target, 'windows-msvc')
+        shell: bash
+        run: echo "RUSTFLAGS=-C target-feature=+crt-static" >> "$GITHUB_ENV"
+
       - name: Build
         run: |
           if [ "${{ matrix.use_qemu }}" = "true" ]; then
