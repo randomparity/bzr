@@ -42,6 +42,17 @@ api_mode = "rest"
 "#,
     );
     std::fs::write(config_dir.join("config.toml"), config_content).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        std::fs::set_permissions(&config_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::set_permissions(
+            config_dir.join("config.toml"),
+            std::fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
+    }
     // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 }

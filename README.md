@@ -71,11 +71,15 @@ cargo install --path .
 ### 2. Configure your first server
 
 ```bash
-# For Bugzilla 5.1+ (REST API)
-bzr config set-server myserver --url https://bugzilla.example.com --api-key YOUR_API_KEY
+# Preferred: read the API key from an environment variable
+export BZR_API_KEY=YOUR_API_KEY
+bzr config set-server myserver --url https://bugzilla.example.com --api-key-env BZR_API_KEY
 
 # For Bugzilla 5.0 or earlier (XMLRPC)
-bzr config set-server myserver --url https://bugzilla.example.com --api-key YOUR_API_KEY --email "user@example.com"
+bzr config set-server myserver --url https://bugzilla.example.com --api-key-env BZR_API_KEY --email "user@example.com"
+
+# Legacy/insecure: stores the API key in config.toml and may leak via shell history
+bzr config set-server myserver --url https://bugzilla.example.com --api-key YOUR_API_KEY
 ```
 
 ### 3. Verify authentication
@@ -209,7 +213,7 @@ Configuration is stored in `~/.config/bzr/config.toml` with support for multiple
 
 ## Authentication
 
-`bzr` authenticates using Bugzilla API keys. When you run `bzr config set-server`, it auto-detects whether your server supports header-based auth (`X-BUGZILLA-API-KEY`) or query parameter auth (`Bugzilla_api_key`), and caches the result. See [docs/bzr-cli.md](docs/bzr-cli.md#authentication) for details on generating and configuring API keys.
+`bzr` authenticates using Bugzilla API keys. Prefer `--api-key-env` so the secret stays out of `config.toml`, shell history, and most process listings. `bzr` warns when the config directory or file permissions are too broad on Unix systems. It also auto-detects whether your server supports header-based auth (`X-BUGZILLA-API-KEY`) or query parameter auth (`Bugzilla_api_key`), and caches the result. See [docs/bzr-cli.md](docs/bzr-cli.md#authentication) for details on generating and configuring API keys.
 
 ## License
 

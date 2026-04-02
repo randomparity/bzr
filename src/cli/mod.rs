@@ -204,6 +204,27 @@ mod tests {
     }
 
     #[test]
+    fn parse_config_set_server_with_env_var() {
+        let cli = Cli::try_parse_from([
+            "bzr",
+            "config",
+            "set-server",
+            "prod",
+            "--url",
+            "https://bz.example.com",
+            "--api-key-env",
+            "BZR_API_KEY",
+        ])
+        .unwrap();
+        assert!(matches!(
+            cli.command,
+            Commands::Config {
+                action: ConfigAction::SetServer { .. }
+            }
+        ));
+    }
+
+    #[test]
     fn parse_unknown_command_fails() {
         let result = Cli::try_parse_from(["bzr", "nonexistent"]);
         assert!(result.is_err());
