@@ -1340,7 +1340,8 @@ async fn config_set_server_integration() {
     let action = bzr::cli::ConfigAction::SetServer {
         name: "staging".to_string(),
         url: "https://staging.bugzilla.example".to_string(),
-        api_key: "staging-key-abc".to_string(),
+        api_key: Some("staging-key-abc".to_string()),
+        api_key_env: None,
         email: None,
         auth_method: None,
         tls_insecure: false,

@@ -27,10 +27,16 @@ pub async fn execute(
             name,
             url,
             api_key,
+            api_key_env,
             email,
             auth_method,
             tls_insecure,
         } => {
+            if api_key.is_some() == api_key_env.is_some() {
+                return Err(crate::error::BzrError::InputValidation(
+                    "provide exactly one of --api-key or --api-key-env".into(),
+                ));
+            }
             let mut config = Config::load()?;
             let is_update = config.servers.contains_key(name.as_str());
             config.servers.insert(
@@ -38,6 +44,7 @@ pub async fn execute(
                 ServerConfig {
                     url: url.clone(),
                     api_key: api_key.clone(),
+                    api_key_env: api_key_env.clone(),
                     email: email.clone(),
                     auth_method: *auth_method,
                     api_mode: None,
@@ -56,6 +63,11 @@ pub async fn execute(
             let mut human = format!("Server '{name}' {verb} at {url}");
             if is_default {
                 human.push_str("\nSet as default server.");
+            }
+            if let Some(var_name) = api_key_env {
+                let _ = write!(human, "\nAPI key source: env var {var_name}");
+            } else {
+                human.push_str("\nAPI key source: inline config value");
             }
             let _ = write!(human, "\nConfig file: {}", path.display());
 
@@ -147,7 +159,8 @@ mod tests {
             &ConfigAction::SetServer {
                 name: "first".into(),
                 url: "https://first.example.com".into(),
-                api_key: "first-key-1234567890".into(),
+                api_key: Some("first-key-1234567890".into()),
+                api_key_env: None,
                 email: None,
                 auth_method: None,
                 tls_insecure: false,
@@ -171,7 +184,8 @@ mod tests {
             &ConfigAction::SetServer {
                 name: "first".into(),
                 url: "https://first.example.com".into(),
-                api_key: "first-key-1234567890".into(),
+                api_key: Some("first-key-1234567890".into()),
+                api_key_env: None,
                 email: None,
                 auth_method: None,
                 tls_insecure: false,
@@ -187,7 +201,8 @@ mod tests {
             &ConfigAction::SetServer {
                 name: "second".into(),
                 url: "https://second.example.com".into(),
-                api_key: "second-key-1234567890".into(),
+                api_key: Some("second-key-1234567890".into()),
+                api_key_env: None,
                 email: None,
                 auth_method: None,
                 tls_insecure: false,
@@ -218,7 +233,8 @@ mod tests {
                 &ConfigAction::SetServer {
                     name: name.into(),
                     url: url.into(),
-                    api_key: format!("{name}-key-1234567890"),
+                    api_key: Some(format!("{name}-key-1234567890")),
+                    api_key_env: None,
                     email: None,
                     auth_method: None,
                     tls_insecure: false,
@@ -235,7 +251,8 @@ mod tests {
             &ConfigAction::SetServer {
                 name: "second".into(),
                 url: "https://updated.example.com".into(),
-                api_key: "updated-key-1234567890".into(),
+                api_key: Some("updated-key-1234567890".into()),
+                api_key_env: None,
                 email: Some("ops@example.com".into()),
                 auth_method: Some(AuthMethod::QueryParam),
                 tls_insecure: true,
@@ -271,7 +288,8 @@ mod tests {
                 &ConfigAction::SetServer {
                     name: name.into(),
                     url: url.into(),
-                    api_key: format!("{name}-key-1234567890"),
+                    api_key: Some(format!("{name}-key-1234567890")),
+                    api_key_env: None,
                     email: None,
                     auth_method: None,
                     tls_insecure: false,
@@ -311,7 +329,8 @@ mod tests {
             &ConfigAction::SetServer {
                 name: "prod".into(),
                 url: "https://prod.example.com".into(),
-                api_key: "abcdef1234567890".into(),
+                api_key: Some("abcdef1234567890".into()),
+                api_key_env: None,
                 email: Some("admin@example.com".into()),
                 auth_method: Some(AuthMethod::Header),
                 tls_insecure: true,
@@ -334,5 +353,32 @@ mod tests {
         assert_eq!(parsed["servers"]["prod"]["auth_method"], "header");
         assert_eq!(parsed["servers"]["prod"]["tls_insecure"], true);
         assert_eq!(parsed["servers"]["prod"]["api_key"], "abcdef12...");
+        assert_eq!(parsed["servers"]["prod"]["api_key_source"], "inline");
+    }
+
+    #[tokio::test]
+    async fn set_server_with_env_var_persists_env_source() {
+        let (_lock, _tmp) = setup_config_env().await;
+        execute(
+            &ConfigAction::SetServer {
+                name: "prod".into(),
+                url: "https://prod.example.com".into(),
+                api_key: None,
+                api_key_env: Some("BZR_API_KEY".into()),
+                email: None,
+                auth_method: None,
+                tls_insecure: false,
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let config = Config::load().unwrap();
+        let server = &config.servers["prod"];
+        assert_eq!(server.api_key, None);
+        assert_eq!(server.api_key_env.as_deref(), Some("BZR_API_KEY"));
     }
 }

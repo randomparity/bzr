@@ -42,7 +42,7 @@ pub async fn connect_and_configure(
     let (server_name, url, api_key, email, tls_insecure) = (
         server_name.to_string(),
         srv.url.clone(),
-        srv.api_key.clone(),
+        srv.resolve_api_key(server_name)?,
         srv.email.clone(),
         srv.tls_insecure,
     );
@@ -241,5 +241,53 @@ api_key = "test-key"
             reloaded.servers["test"].server_version.as_deref(),
             Some("5.1.2")
         );
+    }
+
+    #[tokio::test]
+    async fn connect_client_resolves_env_backed_api_key() {
+        let _lock = ENV_LOCK.lock().await;
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+
+        let config_dir = tmp.path().join("bzr");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        let config_content = format!(
+            r#"
+default_server = "test"
+
+[servers.test]
+url = "{}"
+api_key_env = "BZR_TEST_API_KEY"
+auth_method = "header"
+api_mode = "rest"
+"#,
+            mock.uri()
+        );
+        std::fs::write(config_dir.join("config.toml"), config_content).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            std::fs::set_permissions(&config_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+            std::fs::set_permissions(
+                config_dir.join("config.toml"),
+                std::fs::Permissions::from_mode(0o600),
+            )
+            .unwrap();
+        }
+        // SAFETY: Tests are serialized via ENV_LOCK; no other threads read these vars concurrently.
+        unsafe {
+            std::env::set_var("XDG_CONFIG_HOME", tmp.path());
+            std::env::set_var("BZR_TEST_API_KEY", "test-key");
+        }
+
+        Mock::given(method("GET"))
+            .and(path("/rest/whoami"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
+            .mount(&mock)
+            .await;
+
+        let result = super::connect_and_configure(None, None).await;
+        assert!(result.is_ok(), "env-backed config should succeed");
     }
 }

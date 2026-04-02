@@ -11,9 +11,16 @@ pub enum ConfigAction {
         /// Server URL
         #[arg(long)]
         url: String,
-        /// API key
-        #[arg(long)]
-        api_key: String,
+        /// API key (less secure: may leak via shell history or process args)
+        #[arg(
+            long,
+            conflicts_with = "api_key_env",
+            required_unless_present = "api_key_env"
+        )]
+        api_key: Option<String>,
+        /// Name of an environment variable that contains the API key
+        #[arg(long, conflicts_with = "api_key", required_unless_present = "api_key")]
+        api_key_env: Option<String>,
         /// Login email (required for older Bugzilla servers)
         #[arg(long)]
         email: Option<String>,

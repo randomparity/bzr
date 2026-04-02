@@ -140,7 +140,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   ├── create --product <P> --name <N> --description <D> --default-assignee <E>
 │   └── update <ID> [--name <N>] [--description <D>] [--default-assignee <E>]
 ├── config
-│   ├── set-server <NAME> --url <URL> --api-key <KEY> [--email <EMAIL>] [--auth-method <METHOD>] [--tls-insecure]
+│   ├── set-server <NAME> --url <URL> (--api-key <KEY> | --api-key-env <ENV_VAR>) [--email <EMAIL>] [--auth-method <METHOD>] [--tls-insecure]
 │   ├── set-default <NAME>
 │   └── show
 ├── template
@@ -825,9 +825,11 @@ Configuration is stored in `~/.config/bzr/config.toml`. Multiple servers can be 
 Add or update a named server configuration.
 
 ```bash
-bzr config set-server redhat --url https://bugzilla.redhat.com --api-key abc123 --email you@redhat.com
-bzr config set-server mozilla --url https://bugzilla.mozilla.org --api-key xyz789
-bzr config set-server internal --url https://bugzilla.internal --api-key abc123 --tls-insecure
+export REDHAT_BZ_API_KEY=abc123
+bzr config set-server redhat --url https://bugzilla.redhat.com --api-key-env REDHAT_BZ_API_KEY --email you@redhat.com
+bzr config set-server mozilla --url https://bugzilla.mozilla.org --api-key-env MOZILLA_BZ_API_KEY
+bzr config set-server internal --url https://bugzilla.internal --api-key-env INTERNAL_BZ_API_KEY --tls-insecure
+bzr config set-server legacy --url https://bugzilla.example.com --api-key abc123
 ```
 
 The `--email` flag is required for older Bugzilla servers (5.0 or earlier) that don't support the `/rest/whoami` endpoint.
@@ -840,12 +842,13 @@ The first server added is automatically set as the default.
 |--------|----------|-------------|
 | `<NAME>` | Yes | Server alias name |
 | `--url <URL>` | Yes | Server URL |
-| `--api-key <KEY>` | Yes | API key |
+| `--api-key <KEY>` | One of `--api-key` / `--api-key-env` | API key value (less secure: can leak via shell history or process args) |
+| `--api-key-env <ENV_VAR>` | One of `--api-key` / `--api-key-env` | Environment variable name containing the API key |
 | `--email <EMAIL>` | No | Login email (required for Bugzilla 5.0 or earlier) |
 | `--auth-method <METHOD>` | No | Override auto-detected auth method (`header` or `query_param`) |
 | `--tls-insecure` | No | Disable TLS certificate verification (self-signed, expired, wrong hostname) |
 
-Agent note: API keys passed on the command line may end up in shell history or process listings depending on the environment. Prefer secure secret injection in CI/agent environments, and verify the result with `bzr whoami` or `bzr --json config show`.
+Agent note: prefer `--api-key-env` in local shells, CI, and agent environments. API keys passed on the command line may end up in shell history or process listings, and inline keys are stored in `config.toml`. Verify the result with `bzr whoami` or `bzr --json config show`.
 
 ### `bzr config set-default`
 
@@ -1103,12 +1106,12 @@ default_server = "redhat"
 
 [servers.redhat]
 url = "https://bugzilla.redhat.com"
-api_key = "your-api-key-here"
+api_key_env = "REDHAT_BZ_API_KEY"
 email = "you@redhat.com"
 
 [servers.mozilla]
 url = "https://bugzilla.mozilla.org"
-api_key = "another-api-key"
+api_key_env = "MOZILLA_BZ_API_KEY"
 
 [servers.older]
 url = "https://bugzilla.example.com"
@@ -1128,7 +1131,7 @@ severity = "critical"
 
 ## Authentication
 
-`bzr` authenticates using Bugzilla API keys. On first use, it auto-detects whether your server supports header-based auth (`X-BUGZILLA-API-KEY`) or query parameter auth (`Bugzilla_api_key`), and caches the result.
+`bzr` authenticates using Bugzilla API keys. Prefer `--api-key-env` so the secret is resolved at runtime rather than stored in `~/.config/bzr/config.toml`. On Unix systems, `bzr` warns if the config directory or config file permissions are broader than owner-only access. On first use, it auto-detects whether your server supports header-based auth (`X-BUGZILLA-API-KEY`) or query parameter auth (`Bugzilla_api_key`), and caches the result.
 
 Detection probes endpoints in order:
 
@@ -1141,7 +1144,7 @@ For servers running Bugzilla 5.0 or earlier, provide your `--email` when configu
 If auto-detection picks the wrong method (e.g. on servers with custom extensions), override it with `--auth-method`:
 
 ```bash
-bzr config set-server myserver --url https://bugzilla.example.com --api-key KEY --auth-method header
+bzr config set-server myserver --url https://bugzilla.example.com --api-key-env BZR_API_KEY --auth-method header
 ```
 
 To generate an API key:
@@ -1149,7 +1152,7 @@ To generate an API key:
 1. Log in to your Bugzilla instance
 2. Go to **Preferences > API Keys**
 3. Generate a new key
-4. Add it with `bzr config set-server`
+4. Add it with `bzr config set-server --api-key-env <ENV_VAR>` (preferred) or `--api-key <KEY>` (legacy)
 
 ---
 
