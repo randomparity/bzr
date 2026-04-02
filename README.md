@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/randomparity/bzr/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/randomparity/bzr/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.70](https://img.shields.io/badge/MSRV-1.70-blue.svg)](https://blog.rust-lang.org/2023/07/13/Rust-1.70.0.html)
+[![MSRV: 1.84](https://img.shields.io/badge/MSRV-1.84-blue.svg)](https://blog.rust-lang.org/2025/01/09/Rust-1.84.0.html)
 [![crates.io](https://img.shields.io/crates/v/bzr.svg)](https://crates.io/crates/bzr)
 
 A command-line interface for Bugzilla servers, written in Rust. Inspired by the GitHub CLI (`gh`), `bzr` lets you search, view, create, and update bugs, manage comments and attachments, and switch between multiple Bugzilla instances — all from your terminal.
@@ -48,7 +48,7 @@ cargo install bzr
 cargo install --path .
 ```
 
-Requires Rust 1.70+.
+Requires Rust 1.84+.
 
 ## Onboarding
 

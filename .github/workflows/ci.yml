@@ -10,6 +10,17 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.84.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: msrv-1.84.1
+      - run: cargo test --locked
+
   fmt:
     name: Format
     runs-on: ubuntu-latest
