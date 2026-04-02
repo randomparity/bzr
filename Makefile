@@ -1,5 +1,5 @@
 CARGO ?= cargo
-RUST_MIN_VERSION := 1.70.0
+RUST_MIN_VERSION := 1.84.0
 
 .PHONY: setup check-rust check-components install-hooks \
         build release test fmt clippy lint clean help \
