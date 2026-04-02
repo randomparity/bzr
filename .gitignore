@@ -1,13 +1,14 @@
 # Rust build artifacts
 target/
 
+# IBM Bob
+.bob/
+
 # Claude Flow
 .claude-flow/
 .hive-mind/
 
-# Desloppify
-.desloppify/
-.desloppify/
+# Desloppify 
 .desloppify/
 
 # Superpowers
