@@ -36,6 +36,12 @@ Download the latest release for your platform from
 
 Available platforms: Linux (x86_64, aarch64, ppc64le, s390x), macOS (x86_64, Apple Silicon), Windows (x86_64).
 
+### From crates.io
+
+```bash
+cargo install bzr
+```
+
 ### From source
 
 ```bash
@@ -50,7 +56,13 @@ If you are new to `bzr`, this is the fastest path from install to a working Bugz
 
 ### 1. Install `bzr`
 
-Use a release binary from [GitHub Releases](https://github.com/randomparity/bzr/releases/latest) or install from source:
+Use a release binary from [GitHub Releases](https://github.com/randomparity/bzr/releases/latest), install from crates.io, or install from source:
+
+```bash
+cargo install bzr
+```
+
+For a local source checkout:
 
 ```bash
 cargo install --path .
