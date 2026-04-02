@@ -347,6 +347,15 @@ mod tests {
     }
 
     #[test]
+    fn membership_result_removed_json_shape() {
+        let result = MembershipResult::removed("alice", "admin");
+        let json: serde_json::Value = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["user"], "alice");
+        assert_eq!(json["group"], "admin");
+        assert_eq!(json["action"], "removed");
+    }
+
+    #[test]
     fn tag_result_json_shape() {
         let result = TagResult::updated(7, vec!["important".into()]);
         let json: serde_json::Value = serde_json::to_value(&result).unwrap();
@@ -365,11 +374,87 @@ mod tests {
     }
 
     #[test]
+    fn config_result_configured_created_json_shape() {
+        let result = ConfigResult::configured(
+            "prod",
+            "https://bugzilla.example",
+            true,
+            "/etc/bzr/config.toml",
+            false,
+        );
+        let json: serde_json::Value = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["name"], "prod");
+        assert_eq!(json["url"], "https://bugzilla.example");
+        assert_eq!(json["is_default"], true);
+        assert_eq!(json["action"], "created");
+    }
+
+    #[test]
+    fn config_result_configured_updated_json_shape() {
+        let result = ConfigResult::configured(
+            "prod",
+            "https://bugzilla.example",
+            false,
+            "/etc/bzr/config.toml",
+            true,
+        );
+        let json: serde_json::Value = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["is_default"], false);
+        assert_eq!(json["action"], "updated");
+    }
+
+    #[test]
     fn search_result_json_shape() {
         let result = SearchResult::new(vec!["foo".into(), "bar".into()]);
         let json: serde_json::Value = serde_json::to_value(&result).unwrap();
         assert_eq!(json["items"][0], "foo");
         assert_eq!(json["items"][1], "bar");
+    }
+
+    #[test]
+    fn batch_result_json_shape() {
+        let result = BatchResult::new(
+            vec![1, 2],
+            vec![BatchFailure {
+                id: 3,
+                error: "permission denied".into(),
+            }],
+        );
+        let json: serde_json::Value = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["resource"], "bug");
+        assert_eq!(json["action"], "updated");
+        assert_eq!(json["succeeded"][0], 1);
+        assert_eq!(json["failed"][0]["id"], 3);
+        assert_eq!(json["failed"][0]["error"], "permission denied");
+    }
+
+    #[test]
+    fn action_result_updated_json_shape() {
+        let result = ActionResult::updated(42, ResourceKind::User);
+        let json: serde_json::Value = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["id"], 42);
+        assert_eq!(json["resource"], "user");
+        assert_eq!(json["action"], "updated");
+        assert!(json.get("name").is_none());
+    }
+
+    #[test]
+    fn action_result_updated_named_with_id_json_shape() {
+        let result = ActionResult::updated_named("widget", Some(9), ResourceKind::Component);
+        let json: serde_json::Value = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["id"], 9);
+        assert_eq!(json["name"], "widget");
+        assert_eq!(json["resource"], "component");
+        assert_eq!(json["action"], "updated");
+    }
+
+    #[test]
+    fn action_result_updated_named_without_id_skips_id() {
+        let result = ActionResult::updated_named("widget", None, ResourceKind::Component);
+        let json: serde_json::Value = serde_json::to_value(&result).unwrap();
+        assert!(json.get("id").is_none());
+        assert_eq!(json["name"], "widget");
+        assert_eq!(json["action"], "updated");
     }
 
     #[test]

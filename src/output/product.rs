@@ -1,8 +1,48 @@
-use colored::Colorize;
+use std::fmt::Write as _;
+
 use tabled::{Table, Tabled};
 
 use super::formatting::{print_formatted, truncate};
 use crate::types::{OutputFormat, Product};
+
+fn format_named_list(heading: &str, items: &[(impl AsRef<str>, bool)]) -> String {
+    if items.is_empty() {
+        return String::new();
+    }
+    let mut output = format!("{heading}:\n");
+    for (name, is_active) in items {
+        let active = if *is_active { "" } else { " [inactive]" };
+        let _ = writeln!(output, "  {}{active}", name.as_ref());
+    }
+    output.push('\n');
+    output
+}
+
+fn format_product_detail(product: &Product) -> String {
+    let mut output = format!("Product {}\n{}\n\n", product.name, product.description);
+    if !product.components.is_empty() {
+        output.push_str("Components:\n");
+        for c in &product.components {
+            let assignee = c.default_assignee.as_deref().unwrap_or("-");
+            let active = if c.is_active { "" } else { " [inactive]" };
+            let _ = writeln!(output, "  {}{active}  (assignee: {assignee})", c.name);
+        }
+        output.push('\n');
+    }
+    let versions: Vec<_> = product
+        .versions
+        .iter()
+        .map(|v| (v.name.as_str(), v.is_active))
+        .collect();
+    output.push_str(&format_named_list("Versions", &versions));
+    let milestones: Vec<_> = product
+        .milestones
+        .iter()
+        .map(|m| (m.name.as_str(), m.is_active))
+        .collect();
+    output.push_str(&format_named_list("Milestones", &milestones));
+    output
+}
 
 #[derive(Tabled)]
 struct ProductRow {
@@ -39,48 +79,10 @@ pub fn print_products(products: &[Product], format: OutputFormat) {
     });
 }
 
-fn print_named_list(heading: &str, items: &[(impl AsRef<str>, bool)]) {
-    if items.is_empty() {
-        return;
-    }
-    println!("{}:", heading.bold());
-    for (name, is_active) in items {
-        let active = if *is_active { "" } else { " [inactive]" };
-        println!("  {}{active}", name.as_ref());
-    }
-    println!();
-}
-
 #[expect(clippy::print_stdout)]
 pub fn print_product_detail(product: &Product, format: OutputFormat) {
     print_formatted(product, format, |product| {
-        println!(
-            "{} {}\n{}\n",
-            "Product".bold(),
-            product.name.bold(),
-            product.description
-        );
-        if !product.components.is_empty() {
-            println!("{}:", "Components".bold());
-            for c in &product.components {
-                let assignee = c.default_assignee.as_deref().unwrap_or("-");
-                let active = if c.is_active { "" } else { " [inactive]" };
-                println!("  {}{active}  (assignee: {assignee})", c.name);
-            }
-            println!();
-        }
-        let versions: Vec<_> = product
-            .versions
-            .iter()
-            .map(|v| (v.name.as_str(), v.is_active))
-            .collect();
-        print_named_list("Versions", &versions);
-        let milestones: Vec<_> = product
-            .milestones
-            .iter()
-            .map(|m| (m.name.as_str(), m.is_active))
-            .collect();
-        print_named_list("Milestones", &milestones);
+        print!("{}", format_product_detail(product));
     });
 }
 
@@ -165,5 +167,49 @@ mod tests {
         assert!(!parsed["components"].as_array().unwrap().is_empty());
         assert!(!parsed["versions"].as_array().unwrap().is_empty());
         assert!(!parsed["milestones"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn format_named_list_empty_is_blank() {
+        let empty: [(&str, bool); 0] = [];
+        assert!(format_named_list("Versions", &empty).is_empty());
+    }
+
+    #[test]
+    fn format_product_detail_renders_sections_and_inactive_flags() {
+        let mut product = make_product(3, "Acme");
+        product.components.push(crate::types::Component {
+            id: 2,
+            name: "Inactive".into(),
+            description: "Inactive component".into(),
+            is_active: false,
+            default_assignee: None,
+        });
+        product.versions.push(crate::types::Version {
+            id: 2,
+            name: "2.0".into(),
+            sort_key: 1,
+            is_active: false,
+        });
+        product.milestones.push(crate::types::Milestone {
+            id: 2,
+            name: "M2".into(),
+            sort_key: 1,
+            is_active: false,
+        });
+
+        let output = format_product_detail(&product);
+
+        assert!(output.contains("Product"));
+        assert!(output.contains("Acme"));
+        assert!(output.contains("Components:"));
+        assert!(output.contains("General  (assignee: dev@example.com)"));
+        assert!(output.contains("Inactive [inactive]  (assignee: -)"));
+        assert!(output.contains("Versions:"));
+        assert!(output.contains("1.0"));
+        assert!(output.contains("2.0 [inactive]"));
+        assert!(output.contains("Milestones:"));
+        assert!(output.contains("M1"));
+        assert!(output.contains("M2 [inactive]"));
     }
 }

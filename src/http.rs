@@ -100,6 +100,102 @@ pub(crate) fn tls_hint(base_msg: &str, err: &reqwest::Error) -> String {
 #[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::types::AuthMethod;
+
+    #[test]
+    fn apply_auth_to_request_adds_header_auth() {
+        let client = reqwest::Client::new();
+        let header = reqwest::header::HeaderValue::from_static("secret-key");
+        let request = apply_auth_to_request(
+            client.get("https://bugzilla.example/rest/bug/1"),
+            Some(&header),
+            None,
+        )
+        .build()
+        .unwrap();
+
+        assert_eq!(request.headers().get(AUTH_HEADER_NAME).unwrap(), &header);
+        assert_eq!(request.url().query(), None);
+    }
+
+    #[test]
+    fn apply_auth_to_request_adds_query_param_auth() {
+        let client = reqwest::Client::new();
+        let request = apply_auth_to_request(
+            client.get("https://bugzilla.example/rest/bug/1"),
+            None,
+            Some("secret-key"),
+        )
+        .build()
+        .unwrap();
+
+        assert_eq!(request.url().query(), Some("Bugzilla_api_key=secret-key"));
+        assert!(request.headers().get(AUTH_HEADER_NAME).is_none());
+    }
+
+    #[test]
+    fn apply_auth_to_request_without_auth_leaves_request_unchanged() {
+        let client = reqwest::Client::new();
+        let request = apply_auth_to_request(
+            client.get("https://bugzilla.example/rest/bug/1"),
+            None,
+            None,
+        )
+        .build()
+        .unwrap();
+
+        assert_eq!(
+            request.url().as_str(),
+            "https://bugzilla.example/rest/bug/1"
+        );
+        assert!(request.headers().get(AUTH_HEADER_NAME).is_none());
+    }
+
+    #[test]
+    fn apply_auth_header_method_adds_header() {
+        let client = reqwest::Client::new();
+        let request = apply_auth(
+            client.get("https://bugzilla.example/rest/bug/1"),
+            "header-key",
+            AuthMethod::Header,
+        )
+        .unwrap()
+        .build()
+        .unwrap();
+
+        assert_eq!(
+            request.headers().get(AUTH_HEADER_NAME).unwrap(),
+            "header-key"
+        );
+    }
+
+    #[test]
+    fn apply_auth_query_param_method_adds_query() {
+        let client = reqwest::Client::new();
+        let request = apply_auth(
+            client.get("https://bugzilla.example/rest/bug/1"),
+            "query-key",
+            AuthMethod::QueryParam,
+        )
+        .unwrap()
+        .build()
+        .unwrap();
+
+        assert_eq!(request.url().query(), Some("Bugzilla_api_key=query-key"));
+    }
+
+    #[test]
+    fn apply_auth_header_method_rejects_invalid_value() {
+        let client = reqwest::Client::new();
+        let err = apply_auth(
+            client.get("https://bugzilla.example/rest/bug/1"),
+            "bad\nkey",
+            AuthMethod::Header,
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("invalid header characters"));
+    }
 
     #[test]
     fn build_http_client_succeeds() {

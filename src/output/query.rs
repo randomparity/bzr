@@ -6,13 +6,38 @@ use super::formatting::{
     print_field, print_formatted, print_json, print_list_field, print_optional_field,
 };
 
+fn query_saved_message(name: &str, verb: &str) -> String {
+    format!("{verb} query '{name}'")
+}
+
+fn query_summary_line(name: &str, q: &SavedQuery) -> String {
+    let kind_label = match q.kind {
+        QueryKind::List => "list",
+        QueryKind::Search => "search",
+    };
+    let mut parts = vec![format!("kind={kind_label}")];
+    if !q.product.is_empty() {
+        parts.push(format!("product={}", q.product.join(",")));
+    }
+    if !q.status.is_empty() {
+        parts.push(format!("status={}", q.status.join(",")));
+    }
+    if let Some(qs) = &q.quicksearch {
+        parts.push(format!("search=\"{qs}\""));
+    }
+    if let Some(limit) = q.limit {
+        parts.push(format!("limit={limit}"));
+    }
+    format!("{name} ({})", parts.join(", "))
+}
+
 pub fn print_query_saved(name: &str, verb: &str, format: OutputFormat) {
     match format {
         OutputFormat::Json => {
             print_json(&serde_json::json!({"name": name, "action": verb.to_lowercase()}));
         }
         OutputFormat::Table => {
-            println!("{verb} query '{name}'");
+            println!("{}", query_saved_message(name, verb));
         }
     }
 }
@@ -26,25 +51,7 @@ pub fn print_query_list(queries: &HashMap<String, SavedQuery>, format: OutputFor
         let mut names: Vec<&str> = queries.keys().map(String::as_str).collect();
         names.sort_unstable();
         for name in names {
-            let q = &queries[name];
-            let kind_label = match q.kind {
-                QueryKind::List => "list",
-                QueryKind::Search => "search",
-            };
-            let mut parts = vec![format!("kind={kind_label}")];
-            if !q.product.is_empty() {
-                parts.push(format!("product={}", q.product.join(",")));
-            }
-            if !q.status.is_empty() {
-                parts.push(format!("status={}", q.status.join(",")));
-            }
-            if let Some(qs) = &q.quicksearch {
-                parts.push(format!("search=\"{qs}\""));
-            }
-            if let Some(limit) = q.limit {
-                parts.push(format!("limit={limit}"));
-            }
-            println!("{name} ({})", parts.join(", "));
+            println!("{}", query_summary_line(name, &queries[name]));
         }
     });
 }
@@ -146,5 +153,59 @@ mod tests {
         assert_eq!(parsed["kind"], "list");
         assert_eq!(parsed["product"][0], "Firefox");
         assert_eq!(parsed["limit"], 25);
+    }
+
+    #[test]
+    fn query_saved_message_renders_table_text() {
+        assert_eq!(
+            query_saved_message("firefox-new", "Saved"),
+            "Saved query 'firefox-new'"
+        );
+    }
+
+    #[test]
+    fn query_summary_line_renders_list_query() {
+        let line = query_summary_line("aaa", &make_list_query());
+        assert!(line.starts_with("aaa (kind=list"));
+        assert!(line.contains("product=Firefox"));
+        assert!(line.contains("status=NEW,ASSIGNED"));
+        assert!(line.contains("limit=25"));
+    }
+
+    #[test]
+    fn query_summary_line_renders_search_query() {
+        let line = query_summary_line("zzz", &make_search_query());
+        assert!(line.starts_with("zzz (kind=search"));
+        assert!(line.contains("search=\"crash in tab\""));
+        assert!(line.contains("limit=10"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_query_detail_table_renders_fields() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let mut query = make_list_query();
+        query.component = vec!["General".into()];
+        query.assignee = vec!["dev@example.com".into()];
+        query.fields = Some("id,summary".into());
+        query.exclude_fields = Some("comments".into());
+
+        let (_, output) = crate::test_helpers::capture_stdout(async {
+            print_query_detail("firefox-new", &query, OutputFormat::Table);
+        })
+        .await;
+
+        assert!(output.contains("Name"));
+        assert!(output.contains("firefox-new"));
+        assert!(output.contains("Kind"));
+        assert!(output.contains("list"));
+        assert!(output.contains("Product"));
+        assert!(output.contains("Firefox"));
+        assert!(output.contains("Component"));
+        assert!(output.contains("General"));
+        assert!(output.contains("Fields"));
+        assert!(output.contains("id,summary"));
+        assert!(output.contains("Exclude"));
+        assert!(output.contains("comments"));
     }
 }

@@ -3,6 +3,13 @@ use serde::Serialize;
 use super::formatting::{mask_api_key, print_field, print_formatted, print_optional_field};
 use crate::types::{AuthMethod, OutputFormat};
 
+fn auth_display(auth_method: Option<&AuthMethod>) -> String {
+    auth_method.map_or_else(
+        || "auto (not yet detected)".to_string(),
+        ToString::to_string,
+    )
+}
+
 #[derive(Serialize)]
 #[non_exhaustive]
 pub struct ServerDisplayInfo {
@@ -65,11 +72,7 @@ pub fn print_config(view: &ConfigView, format: OutputFormat) {
                 print_field("URL", &s.url);
                 print_optional_field("Email", s.email.as_deref());
                 print_field("API Key", &s.api_key);
-                let auth_display = s.auth_method.as_ref().map_or_else(
-                    || "auto (not yet detected)".to_string(),
-                    ToString::to_string,
-                );
-                print_field("Auth", &auth_display);
+                print_field("Auth", &auth_display(s.auth_method.as_ref()));
                 if s.tls_insecure {
                     print_field("TLS", "insecure (certificate verification disabled)");
                 }
@@ -82,6 +85,9 @@ pub fn print_config(view: &ConfigView, format: OutputFormat) {
 #[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::config::{Config, ServerConfig};
+    use std::collections::HashMap;
+    use std::path::Path;
 
     #[test]
     fn config_view_json_serialization() {
@@ -104,5 +110,44 @@ mod tests {
         };
         let json: serde_json::Value = serde_json::to_value(&view).unwrap();
         assert!(json["default_server"].is_null());
+    }
+
+    #[test]
+    fn auth_display_formats_detected_and_undetected_states() {
+        assert_eq!(auth_display(None), "auto (not yet detected)");
+        assert_eq!(auth_display(Some(&AuthMethod::Header)), "header");
+    }
+
+    #[test]
+    fn config_view_from_config_masks_key_and_includes_flags() {
+        let mut servers = HashMap::new();
+        servers.insert(
+            "prod".into(),
+            ServerConfig {
+                url: "https://bugzilla.example".into(),
+                email: Some("admin@example.com".into()),
+                api_key: "1234567890abcdef".into(),
+                auth_method: Some(AuthMethod::Header),
+                api_mode: None,
+                server_version: None,
+                tls_insecure: true,
+            },
+        );
+        let config = Config {
+            default_server: Some("prod".into()),
+            servers,
+            queries: HashMap::new(),
+            templates: HashMap::new(),
+        };
+
+        let view = ConfigView::from_config(&config, Path::new("/tmp/bzr/config.toml"));
+        let server = &view.servers["prod"];
+        let json: serde_json::Value = serde_json::to_value(server).unwrap();
+
+        assert_eq!(json["url"], "https://bugzilla.example");
+        assert_eq!(json["email"], "admin@example.com");
+        assert_eq!(json["api_key"], "12345678...");
+        assert_eq!(json["auth_method"], "header");
+        assert_eq!(json["tls_insecure"], true);
     }
 }

@@ -62,19 +62,19 @@ tests/functional/setup-bugzilla.sh stop
 Tests run in dependency order across 12 phases:
 
 1. **Config** — set-server, show, set-default (no network)
-2. **Server & Auth** — server info, whoami
+2. **Server & Auth** — server info, whoami, autodetect path
 3. **Products** — create, list, view, update
 4. **Components** — create, update
 5. **Fields & Classifications** — field list, classification view
 6. **Users** — create, search, update
-7. **Groups** — create, view, update, add/remove/list users
+7. **Groups** — create, view, update, add/remove/list users, REST override fallback
 8. **Bugs** — create, view, list, search, update, history, negative test
 9. **Comments** — add, list, tag, search-tags
 10. **Attachments** — upload, list, download, update
 11. **Global Options** — --output table, --quiet, --server
 12. **Cleanup** — summary and exit code
 
-Total: ~62 tests.
+Total: ~65 tests.
 
 ## Config Isolation
 

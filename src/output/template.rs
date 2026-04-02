@@ -4,13 +4,38 @@ use crate::types::{BugTemplate, OutputFormat};
 
 use super::formatting::{print_field, print_formatted, print_json, print_optional_field};
 
+fn template_saved_message(name: &str, verb: &str) -> String {
+    format!("{verb} template '{name}'")
+}
+
+fn template_summary_line(name: &str, tmpl: &BugTemplate) -> String {
+    let mut parts = Vec::new();
+    if let Some(p) = &tmpl.product {
+        parts.push(format!("product={p}"));
+    }
+    if let Some(c) = &tmpl.component {
+        parts.push(format!("component={c}"));
+    }
+    if let Some(p) = &tmpl.priority {
+        parts.push(format!("priority={p}"));
+    }
+    if let Some(s) = &tmpl.severity {
+        parts.push(format!("severity={s}"));
+    }
+    if parts.is_empty() {
+        name.to_string()
+    } else {
+        format!("{name} ({})", parts.join(", "))
+    }
+}
+
 pub fn print_template_saved(name: &str, verb: &str, format: OutputFormat) {
     match format {
         OutputFormat::Json => {
             print_json(&serde_json::json!({"name": name, "action": verb.to_lowercase()}));
         }
         OutputFormat::Table => {
-            println!("{verb} template '{name}'");
+            println!("{}", template_saved_message(name, verb));
         }
     }
 }
@@ -24,26 +49,7 @@ pub fn print_template_list(templates: &HashMap<String, BugTemplate>, format: Out
         let mut names: Vec<&str> = templates.keys().map(String::as_str).collect();
         names.sort_unstable();
         for name in names {
-            let tmpl = &templates[name];
-            let mut parts = Vec::new();
-            if let Some(p) = &tmpl.product {
-                parts.push(format!("product={p}"));
-            }
-            if let Some(c) = &tmpl.component {
-                parts.push(format!("component={c}"));
-            }
-            if let Some(p) = &tmpl.priority {
-                parts.push(format!("priority={p}"));
-            }
-            if let Some(s) = &tmpl.severity {
-                parts.push(format!("severity={s}"));
-            }
-            let summary = if parts.is_empty() {
-                String::new()
-            } else {
-                format!(" ({})", parts.join(", "))
-            };
-            println!("{name}{summary}");
+            println!("{}", template_summary_line(name, &templates[name]));
         }
     });
 }
@@ -147,5 +153,72 @@ mod tests {
         let json = serde_json::to_string(&template).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert!(parsed.as_object().unwrap().is_empty());
+    }
+
+    #[test]
+    fn template_saved_message_renders_table_text() {
+        assert_eq!(
+            template_saved_message("default", "Saved"),
+            "Saved template 'default'"
+        );
+    }
+
+    #[test]
+    fn template_summary_line_renders_all_present_fields() {
+        let line = template_summary_line("aaa", &make_template());
+        assert_eq!(
+            line,
+            "aaa (product=Widget, component=Backend, priority=P1, severity=major)"
+        );
+    }
+
+    #[test]
+    fn template_summary_line_without_fields_is_name_only() {
+        let line = template_summary_line(
+            "zzz",
+            &BugTemplate {
+                product: None,
+                component: None,
+                version: None,
+                priority: None,
+                severity: None,
+                assignee: None,
+                op_sys: None,
+                rep_platform: None,
+                description: None,
+            },
+        );
+        assert_eq!(line, "zzz");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_template_detail_table_renders_missing_fields_as_dash() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let template = BugTemplate {
+            product: Some("Widget".into()),
+            component: None,
+            version: None,
+            priority: Some("P1".into()),
+            severity: None,
+            assignee: None,
+            op_sys: None,
+            rep_platform: None,
+            description: Some("Default description".into()),
+        };
+
+        let (_, output) = crate::test_helpers::capture_stdout(async {
+            print_template_detail("default", &template, OutputFormat::Table);
+        })
+        .await;
+
+        assert!(output.contains("Name"));
+        assert!(output.contains("default"));
+        assert!(output.contains("Product"));
+        assert!(output.contains("Widget"));
+        assert!(output.contains("Component"));
+        assert!(output.contains("  -"));
+        assert!(output.contains("Description"));
+        assert!(output.contains("Default description"));
     }
 }

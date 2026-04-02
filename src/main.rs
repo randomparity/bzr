@@ -167,8 +167,36 @@ fn resolve_format(cli: &Cli) -> error::Result<OutputFormat> {
 #[cfg(test)]
 #[expect(clippy::expect_used)]
 mod tests {
+    use std::sync::{Mutex, OnceLock};
+
     use super::*;
     use bzr::cli::Commands;
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("env lock poisoned")
+    }
+
+    fn with_bzr_output<T>(value: Option<&str>, f: impl FnOnce() -> T) -> T {
+        let _guard = env_lock();
+        let old = std::env::var("BZR_OUTPUT").ok();
+        match value {
+            Some(value) => unsafe { std::env::set_var("BZR_OUTPUT", value) },
+            None => unsafe { std::env::remove_var("BZR_OUTPUT") },
+        }
+
+        let result = f();
+
+        match old {
+            Some(old) => unsafe { std::env::set_var("BZR_OUTPUT", old) },
+            None => unsafe { std::env::remove_var("BZR_OUTPUT") },
+        }
+
+        result
+    }
 
     fn base_cli(command: Commands) -> Cli {
         Cli {
@@ -220,6 +248,44 @@ mod tests {
         cli.output = Some(OutputFormat::Table);
         let fmt = resolve_format(&cli).expect("should resolve");
         assert_eq!(fmt, OutputFormat::Json);
+    }
+
+    #[test]
+    fn resolve_format_output_overrides_env() {
+        with_bzr_output(Some("json"), || {
+            let mut cli = base_cli(dummy_command());
+            cli.output = Some(OutputFormat::Table);
+            let fmt = resolve_format(&cli).expect("should resolve");
+            assert_eq!(fmt, OutputFormat::Table);
+        });
+    }
+
+    #[test]
+    fn resolve_format_json_overrides_env() {
+        with_bzr_output(Some("table"), || {
+            let mut cli = base_cli(dummy_command());
+            cli.json = true;
+            let fmt = resolve_format(&cli).expect("should resolve");
+            assert_eq!(fmt, OutputFormat::Json);
+        });
+    }
+
+    #[test]
+    fn resolve_format_env_json() {
+        with_bzr_output(Some("json"), || {
+            let cli = base_cli(dummy_command());
+            let fmt = resolve_format(&cli).expect("should resolve");
+            assert_eq!(fmt, OutputFormat::Json);
+        });
+    }
+
+    #[test]
+    fn resolve_format_invalid_env_returns_input_validation_error() {
+        with_bzr_output(Some("xml"), || {
+            let cli = base_cli(dummy_command());
+            let err = resolve_format(&cli).unwrap_err();
+            assert!(matches!(err, BzrError::InputValidation(_)));
+        });
     }
 
     #[test]

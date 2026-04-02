@@ -464,4 +464,47 @@ mod tests {
         assert_eq!(detected.api_mode, ApiMode::Rest);
         assert_eq!(detected.server_version.as_deref(), Some("5.1.2"));
     }
+
+    #[tokio::test]
+    async fn invalid_api_key_characters_are_rejected() {
+        let server = MockServer::start().await;
+        let result = detect_auth_method(
+            &test_http_client(),
+            &server.uri(),
+            "bad\nkey",
+            Some("user@test"),
+        )
+        .await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid API key characters"));
+    }
+
+    #[tokio::test]
+    async fn detect_server_settings_keeps_version_none_when_probe_fails() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/whoami"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/version"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("not json"))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let detected = detect_server_settings(&server.uri(), "test-key", None, false)
+            .await
+            .unwrap();
+        assert_eq!(detected.auth_method, AuthMethod::Header);
+        assert_eq!(detected.api_mode, ApiMode::Hybrid);
+        assert!(detected.server_version.is_none());
+    }
 }
