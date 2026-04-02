@@ -132,6 +132,22 @@ bzr user search "alice"
 bzr group add-user --group testers --user alice@example.com
 ```
 
+## Testing
+
+For regular validation:
+
+```bash
+cargo test
+make functional-test-all
+```
+
+To reproduce the CI coverage summary locally:
+
+```bash
+cargo install cargo-llvm-cov
+make coverage
+```
+
 ## CLI Reference
 
 See [docs/bzr-cli.md](docs/bzr-cli.md) for the full command reference covering all commands and options.

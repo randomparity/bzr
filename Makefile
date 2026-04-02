@@ -2,7 +2,7 @@ CARGO ?= cargo
 RUST_MIN_VERSION := 1.84.0
 
 .PHONY: setup check-rust check-components install-hooks \
-        build release test fmt clippy lint clean help \
+        build release test coverage fmt clippy lint clean help \
         functional-build functional-start functional-test functional-stop \
         functional-test-bz52 functional-test-bz53 functional-test-all functional-stop-all
 
@@ -52,6 +52,10 @@ release: ## Build in release mode
 
 test: ## Run tests
 	$(CARGO) test
+
+coverage: ## Run tests with coverage via cargo-llvm-cov
+	@command -v cargo-llvm-cov >/dev/null 2>&1 || { echo "cargo-llvm-cov not installed"; echo "  Run: cargo install cargo-llvm-cov"; exit 1; }
+	cargo llvm-cov --locked --workspace --all-features --summary-only
 
 fmt: ## Format source code
 	$(CARGO) fmt
