@@ -14,6 +14,7 @@ Skills live in `.claude/skills/` as `SKILL.md` files. Since bzr skills are serve
 ~/.claude/skills/
   bzr-triage/SKILL.md
   bzr-investigate/SKILL.md
+  bzr-bug-summary/SKILL.md
   bzr-file-bug/SKILL.md
   bzr-review/SKILL.md
   bzr-setup/SKILL.md
@@ -63,7 +64,7 @@ Inside the skill body, `$ARGUMENTS` expands to `12345`.
 
 ## Skill Examples
 
-Six complete skills covering common Bugzilla workflows. Copy any of these into `~/.claude/skills/<name>/SKILL.md`.
+Seven complete skills covering common Bugzilla workflows. Copy any of these into `~/.claude/skills/<name>/SKILL.md`.
 
 ### bzr-triage — Search and prioritize NEW bugs
 
@@ -119,6 +120,38 @@ Gather full context for bug **$ARGUMENTS**.
    `bzr --json attachment list $ARGUMENTS`
 5. Summarize findings: current status, key discussion points,
    recent changes, and any pending review requests or needinfo flags.
+```
+
+### bzr-bug-summary — Analyze and summarize bug history
+
+```yaml
+---
+name: bzr-bug-summary
+description: Fetch bug details and generate a concise summary of status, history, blockers, and next actions
+argument-hint: [bug-id...]
+allowed-tools: Bash(bzr *), Bash(jq *)
+---
+
+# Summarize Bugzilla Bugs
+
+Analyze one or more bugs from **$ARGUMENTS** and produce a concise technical summary.
+
+## Steps
+
+1. For each bug, fetch core details:
+   `bzr --json bug view <BUG_ID>`
+2. Fetch change history:
+   `bzr --json bug history <BUG_ID>`
+3. Fetch comments when recent discussion matters:
+   `bzr --json comment list <BUG_ID>`
+4. Fetch attachments when patches, logs, or test cases may affect the summary:
+   `bzr --json attachment list <BUG_ID>`
+5. Extract the important points: status, assignee, component, whiteboard, dependencies, recent activity, and any blockers or next actions.
+6. Present results:
+   - For a single bug, summarize the issue, current state, recent activity, blockers, and recommended next step.
+   - For multiple bugs, start with a comparison table and then give short summaries for each bug.
+
+Keep the summary factual and concise. Do not speculate about root cause when the bug history does not support it.
 ```
 
 ### bzr-file-bug — File a new bug interactively
