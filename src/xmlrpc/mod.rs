@@ -6,7 +6,8 @@ pub(crate) mod client;
 
 use std::collections::BTreeMap;
 
-use quick_xml::events::Event;
+use quick_xml::escape::unescape;
+use quick_xml::events::{BytesText, Event};
 use quick_xml::Reader;
 
 use crate::error::{BzrError, Result};
@@ -28,6 +29,16 @@ fn next_event<'a>(reader: &mut Reader<&'a [u8]>, context: &str) -> Result<Event<
         Err(e) => Err(xml_parse_err(&e)),
         Ok(event) => Ok(event),
     }
+}
+
+/// Decode and unescape XML text content.
+fn decode_text(text: &BytesText<'_>) -> Result<String> {
+    let decoded = text
+        .decode()
+        .map_err(|err| BzrError::XmlRpc(format!("XML decode error: {err}")))?;
+    let unescaped =
+        unescape(&decoded).map_err(|err| BzrError::XmlRpc(format!("XML unescape error: {err}")))?;
+    Ok(unescaped.into_owned())
 }
 
 /// XML-RPC value types used to build requests and parse responses.
@@ -317,10 +328,7 @@ fn parse_value_content(reader: &mut Reader<&[u8]>) -> Result<Value> {
             }
             // Bare text inside <value> without a type tag → treat as string
             Event::Text(ref e) => {
-                let text = e
-                    .unescape()
-                    .map_err(|err| BzrError::XmlRpc(format!("XML unescape error: {err}")))?
-                    .into_owned();
+                let text = decode_text(e)?;
                 skip_to_end(reader, b"value")?;
                 return Ok(Value::String(text));
             }
@@ -339,10 +347,7 @@ fn read_text_content(reader: &mut Reader<&[u8]>, end_tag: &[u8]) -> Result<Strin
     loop {
         match next_event(reader, &context)? {
             Event::Text(ref e) => {
-                text.push_str(
-                    &e.unescape()
-                        .map_err(|err| BzrError::XmlRpc(format!("XML unescape error: {err}")))?,
-                );
+                text.push_str(&decode_text(e)?);
             }
             Event::CData(ref e) => {
                 text.push_str(
