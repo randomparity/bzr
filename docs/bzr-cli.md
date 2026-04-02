@@ -42,6 +42,8 @@ For installation and quick start, see [README.md](../README.md).
 | `-h, --help` | Print help |
 | `-V, --version` | Print version |
 
+Agent note: at an interactive TTY, `bzr` defaults to table output. For agent workflows, prefer `--json` on read operations so downstream parsing is deterministic.
+
 ## Environment Variables
 
 | Variable | Description |
@@ -296,6 +298,8 @@ bzr bug create --template security-bug --summary "XSS in login form"
 
 *Required unless a template provides the value. `--summary` is always required regardless of template.
 
+Agent note: this command is non-interactive, but agent workflows are more reliable when you pass `--description` explicitly and use `--template` for server-specific defaults such as product, component, `op-sys`, or `rep-platform`.
+
 ### `bzr bug clone`
 
 Clone an existing bug, copying its fields into a new bug. Override flags (`--summary`, `--product`, `--component`, `--version`, `--description`, `--priority`, `--severity`, `--assignee`, `--op-sys`, `--rep-platform`) take precedence over values copied from the source.
@@ -326,6 +330,8 @@ bzr bug clone 12345 --no-comment --no-cc
 | `--no-cc` | No | Don't copy the CC list from the source bug |
 | `--no-keywords` | No | Don't copy keywords from the source bug |
 
+Agent note: cloning without overrides copies metadata from the source bug, which may be broader than an agent intends. For predictable automation, use explicit overrides such as `--summary`, `--component`, `--description`, `--no-cc`, or `--no-keywords`.
+
 ### `bzr bug update`
 
 Modify fields on an existing bug. Supports multiple IDs for batch updates.
@@ -355,6 +361,8 @@ bzr bug update 100 200 300 --status RESOLVED --resolution DUPLICATE
 | `--depends-on-remove <IDs>` | No | Remove bug IDs from the depends-on list (comma-separated) |
 
 When updating multiple bugs, failures on individual bugs do not abort the batch. A summary is printed showing which bugs succeeded and which failed.
+
+Agent note: before automated status, priority, severity, or resolution changes, validate allowed values with `bzr field list <field>`, for example `bzr field list status` or `bzr field list resolution`.
 
 ---
 
@@ -389,6 +397,8 @@ echo "Automated comment" | bzr comment add 12345  # reads stdin
 |--------|----------|-------------|
 | `<BUG_ID>` | Yes | Bug ID |
 | `--body <TEXT>` | No | Comment text (reads stdin or opens `$EDITOR` if omitted) |
+
+Agent note: `bzr comment add <BUG_ID>` without `--body` is not agent-friendly at a TTY because it opens `$EDITOR`. Prefer `bzr comment add <BUG_ID> --body "text"`. If you already have generated text on stdin, `echo "text" | bzr comment add <BUG_ID>` is also safe.
 
 ### `bzr comment tag`
 
@@ -446,6 +456,8 @@ bzr attachment download 67890 -o /tmp/patch.diff
 | `<ATTACHMENT_ID>` | Yes | Attachment ID |
 | `-o, --out <FILE>` | No | Output file path (default: original filename) |
 
+Agent note: omit `-o` only when the current working directory and original filename are acceptable. For automation, prefer an explicit path such as `-o /tmp/patch.diff`.
+
 ### `bzr attachment upload`
 
 Upload a file as an attachment to a bug. MIME type is auto-detected from the file extension if not specified.
@@ -463,6 +475,8 @@ bzr attachment upload 12345 patch.diff --flag "review?(alice@example.com)"
 | `--summary <S>` | No | Description of the attachment (default: filename) |
 | `--content-type <MIME>` | No | MIME type (auto-detected if omitted) |
 | `--flag <F>` | No | Set flags (repeatable; see [Flag Syntax](#flag-syntax)) |
+
+Agent note: for clearer audit trails, agents should usually pass `--summary` explicitly instead of relying on the filename-derived default.
 
 ### `bzr attachment update`
 
@@ -527,6 +541,8 @@ bzr product create --name "New Product" --description "Desc" --version "1.0" --i
 | `--description <D>` | Yes | | Product description |
 | `--version <V>` | No | "unspecified" | Initial version |
 | `--is-open <BOOL>` | No | true | Whether the product is open for bugs |
+
+Agent note: this is a write operation with admin impact. For unattended workflows, prefer `--json` plus a preceding `bzr --json product view` or `bzr --json product list` check when you need to avoid duplicate names or confirm current state.
 
 ### `bzr product update`
 
@@ -618,6 +634,8 @@ bzr user create --email carol@example.com --login carol   # Bugzilla 5.3+ with u
 
 > **Note:** On Bugzilla 5.3+ with `use_email_as_login` disabled, the REST API has a conflict with the `login` field. Set `api_mode = "hybrid"` in your server config to use XML-RPC for user creation, which avoids this issue.
 
+Agent note: if the server’s login policy is not known, inspect existing users or server conventions before automating `--login`. On affected Bugzilla 5.3+ setups, prefer `api_mode = "hybrid"` as noted above.
+
 ### `bzr user update`
 
 Update an existing user (requires admin privileges).
@@ -704,6 +722,8 @@ bzr group create --name "qa-team" --description "QA" --is-active true
 | `--description <D>` | Yes | | Group description |
 | `--is-active <BOOL>` | No | true | Whether the group is active |
 
+Agent note: this is an admin write. In automation, pair it with a preceding `bzr --json group view <name>` or existing state check when you need idempotent behavior.
+
 ### `bzr group update`
 
 Update an existing group (requires admin privileges).
@@ -776,6 +796,8 @@ bzr component create --product Fedora --name "new-component" \
 | `--description <D>` | Yes | Component description |
 | `--default-assignee <E>` | Yes | Default assignee email |
 
+Agent note: this is safer after confirming the product exists with `bzr --json product view <product>` and that the assignee is valid with `bzr --json user search "<email-or-name>"`.
+
 ### `bzr component update`
 
 Update an existing component (requires admin privileges).
@@ -823,6 +845,8 @@ The first server added is automatically set as the default.
 | `--auth-method <METHOD>` | No | Override auto-detected auth method (`header` or `query_param`) |
 | `--tls-insecure` | No | Disable TLS certificate verification (self-signed, expired, wrong hostname) |
 
+Agent note: API keys passed on the command line may end up in shell history or process listings depending on the environment. Prefer secure secret injection in CI/agent environments, and verify the result with `bzr whoami` or `bzr --json config show`.
+
 ### `bzr config set-default`
 
 Change which server is used when `--server` is not specified.
@@ -869,6 +893,8 @@ bzr template save kernel-bug --product Fedora --component kernel --assignee dev@
 | `--description <D>` | No | Default description |
 
 At least one field must be set.
+
+Agent note: templates are agent-friendly because they remove repeated server-specific defaults from future `bug create` calls. Prefer them when agents repeatedly file similar bugs.
 
 ### `bzr template list`
 
@@ -929,6 +955,8 @@ bzr query save my-p1 --assignee me@example.com --priority P1 --status NEW --stat
 | `--limit <N>` | No | Max results |
 
 At least one filter must be set.
+
+Agent note: saved queries are useful for agents because they turn multi-flag searches into stable named workflows. Pair them with `bzr --json query run <name>` for deterministic reuse.
 
 ### `bzr query list`
 
@@ -999,6 +1027,8 @@ The `--flag` option is available on `bzr bug update`, `bzr attachment upload`, a
 ### Auto-detection
 
 When stdout is not a TTY (i.e. piped to another program or redirected to a file), bzr automatically outputs JSON. At a TTY, it defaults to table format. Override with `--json`, `--output`, or the `BZR_OUTPUT` env var.
+
+Agent note: rely on explicit `--json` rather than TTY auto-detection when writing skills or scripts. It makes the command behavior stable across terminals, CI, and agent runners.
 
 ### List and view commands
 

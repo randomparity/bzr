@@ -1,6 +1,6 @@
 # bzr Functional Tests
 
-End-to-end tests that exercise every `bzr` CLI command against a real Bugzilla 5.0 instance running in a container.
+End-to-end tests that exercise `bzr` CLI commands against real Bugzilla containers. The default target is Bugzilla 5.0, and the repo also includes Bugzilla 5.2 and 5.3 coverage.
 
 ## Prerequisites
 
@@ -15,8 +15,11 @@ End-to-end tests that exercise every `bzr` CLI command against a real Bugzilla 5
 # Build the Bugzilla container image (one-time, ~5 min)
 make functional-build
 
-# Start the container and run all tests
+# Start the default Bugzilla 5.0 container and run the standard test suite
 make functional-test
+
+# Run the same suite across all supported Bugzilla versions
+make functional-test-all
 
 # Stop the container when done
 make functional-stop

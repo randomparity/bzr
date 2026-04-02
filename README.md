@@ -7,12 +7,10 @@
 
 A command-line interface for Bugzilla servers, written in Rust. Inspired by the GitHub CLI (`gh`), `bzr` lets you search, view, create, and update bugs, manage comments and attachments, and switch between multiple Bugzilla instances — all from your terminal.
 
-![Desloppify Score: 92.5](scorecard.png)
-
 ## Features
 
-- **Bug management** — list, search, view, create, clone, and update bugs; view change history
-- **Bug workflow** — view your bugs (`bzr bug my`), batch-update, and save reusable field templates
+- **Bug management** — list, search, view, create, clone, update, and batch-update bugs; view change history
+- **Bug workflow** — view your bugs (`bzr bug my`), save reusable field templates, and run saved queries
 - **Comments** — list and add comments, with `$EDITOR` integration for composing
 - **Comment tags** — add, remove, and search comment tags
 - **Attachments** — list, download, upload, and update file attachments with auto-detected MIME types
@@ -46,11 +44,40 @@ cargo install --path .
 
 Requires Rust 1.70+.
 
-## Quick Start
+## Onboarding
+
+If you are new to `bzr`, this is the fastest path from install to a working Bugzilla session.
+
+### 1. Install `bzr`
+
+Use a release binary from [GitHub Releases](https://github.com/randomparity/bzr/releases/latest) or install from source:
 
 ```bash
-# Configure a Bugzilla server (add --email for Bugzilla 5.0 or earlier)
+cargo install --path .
+```
+
+### 2. Configure your first server
+
+```bash
+# For Bugzilla 5.1+ (REST API)
 bzr config set-server myserver --url https://bugzilla.example.com --api-key YOUR_API_KEY
+
+# For Bugzilla 5.0 or earlier (XMLRPC)
+bzr config set-server myserver --url https://bugzilla.example.com --api-key YOUR_API_KEY --email "user@example.com"
+```
+
+### 3. Verify authentication
+
+```bash
+bzr whoami
+bzr server info
+```
+
+### 4. Run your first queries
+
+```bash
+# List the user's open bugs
+bzr bug my --status \!CLOSED
 
 # List open bugs in a product
 bzr bug list --product MyProduct --status NEW
@@ -58,41 +85,38 @@ bzr bug list --product MyProduct --status NEW
 # View a specific bug
 bzr bug view 12345
 
-# Search for bugs
+# Search across bugs
 bzr bug search "crash on startup"
+```
 
-# View change history (optionally since a date)
+### 5. Save time with local workflows
+
+```bash
+# Save a reusable bug template
+bzr template save fedora-kernel --product Fedora --component kernel
+
+# Create a bug from the template
+bzr bug create --template fedora-kernel --summary "Boot failure on 6.x" --description "System fails to boot after upgrade"
+
+# Save a reusable query
+bzr query save my-open-bugs --assignee you@example.com --status NEW --status ASSIGNED
+
+# Run the saved query later
+bzr query run my-open-bugs
+```
+
+## Quick Start
+
+```bash
+# Common day-to-day commands
 bzr bug history 12345 --since 2025-01-01
-
-# Create a bug
-bzr bug create --product Fedora --component kernel --summary "Boot failure on 6.x"
-
-# Update a bug with flags
 bzr bug update 12345 --status RESOLVED --resolution FIXED --flag "review+(alice@example.com)"
-
-# Add a comment (opens $EDITOR if --body omitted)
 bzr comment add 12345 --body "I can reproduce this on Fedora 42"
-
-# Tag a comment
 bzr comment tag 98765 --add needs-info
-
-# Upload an attachment with a review flag
 bzr attachment upload 12345 patch.diff --flag "review?(alice@example.com)"
-
-# Check who you're authenticated as
-bzr whoami
-
-# Check server version and extensions
-bzr server info
-
-# List products, view details
 bzr product list
 bzr product view MyProduct
-
-# Search for users
 bzr user search "alice"
-
-# Manage group membership
 bzr group add-user --group testers --user alice@example.com
 ```
 
@@ -100,9 +124,34 @@ bzr group add-user --group testers --user alice@example.com
 
 See [docs/bzr-cli.md](docs/bzr-cli.md) for the full command reference covering all commands and options.
 
-## Claude Code Skills
+## Agent Integration
 
-See [docs/skills.md](docs/skills.md) for writing Claude Code skills that automate Bugzilla workflows with bzr.
+### Claude Code
+
+`bzr` works well with Claude Code skills because the CLI has stable subcommands, global `--json` output, and clear exit codes. See [docs/skills.md](docs/skills.md) for reusable skill definitions such as bug triage, investigation, patch review, and saved-query workflows.
+
+Typical setup:
+
+```text
+~/.claude/skills/
+  bzr-investigate/SKILL.md
+  bzr-bug-summary/SKILL.md
+  bzr-review/SKILL.md
+```
+
+Once installed, invoke them directly from Claude Code, for example `/bzr-investigate 12345`.
+
+### IBM Bob
+
+IBM Bob uses its own `SKILL.md` conventions under `.bob/skills/` or `~/.bob/skills/`. See [docs/bob-skills.md](docs/bob-skills.md) for Bob-specific examples and guidance tuned for `bzr`.
+
+The same workflow design carries over cleanly:
+
+- Prefer `bzr --json ...` so Bob receives structured data it can parse.
+- Keep write operations explicit, for example `bzr bug update`, `bzr comment add --body`, and `bzr attachment upload`.
+- Encode repeatable workflows such as "summarize bug", "review patch attachments", or "run saved query and report results" as Bob prompt templates.
+
+The important compatibility point is that `bzr` is agent-friendly by default: global flags are consistent, machine-readable output is built in, and saved templates and queries let agents reuse local workflows without custom wrappers.
 
 ## JSON Output
 
@@ -136,3 +185,5 @@ Configuration is stored in `~/.config/bzr/config.toml` with support for multiple
 ## License
 
 MIT
+
+![Desloppify Score: 92.5](scorecard.png)

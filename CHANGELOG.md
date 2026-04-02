@@ -5,11 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.1.0] - 2026-03-21
+## [0.1.0] - 2026-04-02
 
 ### Added
 
-- Bug management: list, search, view, create, update, and view change history
+- Bug management: list, search, view, create, clone, update, batch-update, and view change history
+- Personal bug workflows with `bug my`
 - Comments: list and add comments, with `$EDITOR` integration for composing
 - Comment tags: add, remove, and search comment tags
 - Attachments: list, download, upload, and update file attachments with auto-detected MIME types
@@ -22,5 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Groups: list members, add/remove users, view, create, and update groups
 - Server diagnostics: `whoami` and `server info` commands
 - Multi-server configuration with named servers and defaults
+- Local bug templates for reusable creation defaults
+- Saved queries with runtime overrides for `limit`, `fields`, and `exclude-fields`
 - JSON and human-readable table output formats
 - Header-based and query parameter authentication with auto-detection

@@ -1,5 +1,7 @@
 # Writing Claude Code Skills for bzr
 
+This document is specific to Claude Code's skill format. For IBM Bob's skill format, see [bob-skills.md](bob-skills.md).
+
 A guide for writing [Claude Code skills](https://docs.anthropic.com/en/docs/claude-code/skills) that drive bzr. Skills turn natural-language prompts into repeatable Bugzilla workflows your agent can execute.
 
 bzr is a good fit for skills because every command supports `--json`, flags are consistent across subcommands, and the CLI covers the full Bugzilla lifecycle (bugs, comments, attachments, flags, products, users, groups, templates, saved queries, config).
@@ -19,6 +21,7 @@ Skills live in `.claude/skills/` as `SKILL.md` files. Since bzr skills are serve
   bzr-review/SKILL.md
   bzr-setup/SKILL.md
   bzr-admin/SKILL.md
+  bzr-saved-queries/SKILL.md
 ```
 
 One skill per directory. The directory name becomes the `/slash-command` name.
@@ -62,9 +65,19 @@ Use `$ARGUMENTS` for bug IDs, search terms, product names. The user provides the
 
 Inside the skill body, `$ARGUMENTS` expands to `12345`.
 
+### Avoid interactive or ambiguous steps
+
+Skills should prefer explicit, non-interactive commands and should gather missing inputs before invoking write operations.
+
+Examples:
+
+- `bzr comment add 12345` at a TTY opens `$EDITOR`, which hangs non-interactive skill runs. Use `bzr comment add 12345 --body "text"` or pipe stdin instead.
+- "File a bug" is incomplete if the skill has not collected `product`, `component`, and a useful description. Ask for them first, or use `bzr bug create --template <name> --summary "..." --description "..."`.
+- "Resolve this bug" is risky if the skill has not checked valid status and resolution values for that server. Verify them with `bzr field list status` and `bzr field list resolution` before calling `bzr bug update`.
+
 ## Skill Examples
 
-Seven complete skills covering common Bugzilla workflows. Copy any of these into `~/.claude/skills/<name>/SKILL.md`.
+Eight complete skills covering common Bugzilla workflows. Copy any of these into `~/.claude/skills/<name>/SKILL.md`.
 
 ### bzr-triage — Search and prioritize NEW bugs
 
