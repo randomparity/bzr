@@ -146,7 +146,7 @@ mod tests {
         let result = truncate(input, 4);
         assert_eq!(result, input);
         let result = truncate(input, 3);
-        assert!(result.ends_with("..."));
+        assert_eq!(result, "...");
     }
 
     // ── colorize_status ──────────────────────────────────────────────
@@ -198,6 +198,11 @@ mod tests {
         assert_eq!(shorten_email(""), "");
     }
 
+    #[test]
+    fn shorten_email_uses_first_at_symbol() {
+        assert_eq!(shorten_email("alice@dev@example.com"), "alice");
+    }
+
     // ── format_id_list ───────────────────────────────────────────────
 
     #[test]
@@ -213,6 +218,19 @@ mod tests {
     #[test]
     fn format_id_list_multiple() {
         assert_eq!(format_id_list(&[1, 2, 3]), "1, 2, 3");
+    }
+
+    #[test]
+    fn yes_no_formats_boolean_values() {
+        assert_eq!(yes_no(true), "Yes");
+        assert_eq!(yes_no(false), "No");
+    }
+
+    #[test]
+    fn opt_yes_no_formats_optional_boolean_values() {
+        assert_eq!(opt_yes_no(Some(true)), "Yes");
+        assert_eq!(opt_yes_no(Some(false)), "No");
+        assert_eq!(opt_yes_no(None), "-");
     }
 
     // ── OutputFormat parsing ─────────────────────────────────────────
