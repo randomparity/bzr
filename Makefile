@@ -1,14 +1,14 @@
 CARGO ?= cargo
 RUST_MIN_VERSION := 1.84.0
 
-.PHONY: setup check-rust check-components install-hooks \
+.PHONY: setup check-rust ensure-components ensure-coverage-prereqs install-hooks \
         build release test coverage fmt clippy lint clean help \
         functional-build functional-start functional-test functional-stop \
         functional-test-bz52 functional-test-bz53 functional-test-all functional-stop-all
 
 ## Setup & Environment
 
-setup: check-rust check-components install-hooks build ## Set up the development environment
+setup: check-rust ensure-components ensure-coverage-prereqs install-hooks build ## Set up the development environment
 	@echo
 	@echo "Setup complete. You're ready to develop bzr."
 
@@ -24,13 +24,33 @@ check-rust:
 	fi
 	@echo "ok"
 
-check-components:
+ensure-components:
 	@printf "Checking for rustfmt... "
-	@rustup component list --installed 2>/dev/null | grep -q rustfmt || { echo "MISSING"; echo "  Run: rustup component add rustfmt"; exit 1; }
-	@echo "ok"
+	@rustup component list --installed 2>/dev/null | grep -q rustfmt || { \
+		echo "installing"; \
+		rustup component add rustfmt; \
+	}
+	@printf "Checking for rustfmt... ok\n"
 	@printf "Checking for clippy... "
-	@rustup component list --installed 2>/dev/null | grep -q clippy || { echo "MISSING"; echo "  Run: rustup component add clippy"; exit 1; }
-	@echo "ok"
+	@rustup component list --installed 2>/dev/null | grep -q clippy || { \
+		echo "installing"; \
+		rustup component add clippy; \
+	}
+	@printf "Checking for clippy... ok\n"
+
+ensure-coverage-prereqs:
+	@printf "Checking for cargo-llvm-cov... "
+	@command -v cargo-llvm-cov >/dev/null 2>&1 || { \
+		echo "installing"; \
+		$(CARGO) install cargo-llvm-cov; \
+	}
+	@printf "Checking for cargo-llvm-cov... ok\n"
+	@printf "Checking for llvm-tools-preview... "
+	@rustup component list --installed 2>/dev/null | grep -q '^llvm-tools-' || { \
+		echo "installing"; \
+		rustup component add llvm-tools-preview; \
+	}
+	@printf "Checking for llvm-tools-preview... ok\n"
 
 install-hooks: ## Install git pre-commit and pre-push hooks
 	@echo "Installing git hooks..."
@@ -55,7 +75,7 @@ test: ## Run tests
 
 coverage: ## Run tests with coverage via cargo-llvm-cov
 	@command -v cargo-llvm-cov >/dev/null 2>&1 || { echo "cargo-llvm-cov not installed"; echo "  Run: cargo install cargo-llvm-cov"; exit 1; }
-	@rustup component list --installed 2>/dev/null | grep -q llvm-tools-preview || { echo "llvm-tools-preview not installed"; echo "  Run: rustup component add llvm-tools-preview"; exit 1; }
+	@rustup component list --installed 2>/dev/null | grep -q '^llvm-tools-' || { echo "llvm-tools-preview not installed"; echo "  Run: rustup component add llvm-tools-preview"; exit 1; }
 	cargo llvm-cov --locked --workspace --all-features --summary-only
 
 fmt: ## Format source code
