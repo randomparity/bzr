@@ -12,25 +12,19 @@ use bzr::types::OutputFormat;
 async fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    let filter = if std::env::var("RUST_LOG").is_ok() {
-        EnvFilter::from_default_env()
-    } else {
-        // Level strings are compile-time constants; parse_lossy is safe.
-        let level = match cli.verbose {
-            0 => "bzr=warn",
-            1 => "bzr=info",
-            2 => "bzr=debug",
-            _ => "bzr=trace",
+    let filter =
+        match tracing_filter_directive(cli.quiet, cli.verbose, std::env::var("RUST_LOG").is_ok()) {
+            Some(directive) => EnvFilter::new(directive),
+            None => EnvFilter::from_default_env(),
         };
-        EnvFilter::new(level)
-    };
 
     tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_writer(std::io::stderr)
         .init();
 
-    // Disable colors when --no-color is set or stdout is not a TTY.
+    // Resolve format and colors BEFORE suppressing stdout, so that
+    // is_terminal() sees the real fd and format selection is unaffected.
     if cli.no_color || !std::io::stdout().is_terminal() {
         colored::control::set_override(false);
     }
@@ -83,11 +77,30 @@ fn exit_code(e: &BzrError) -> ExitCode {
     ExitCode::from(u8::try_from(e.exit_code()).unwrap_or(1))
 }
 
-/// Redirect stdout to /dev/null for --quiet mode.
+/// Select the tracing filter directive based on CLI flags.
+///
+/// Returns `None` when `RUST_LOG` should be used (caller falls back to
+/// `EnvFilter::from_default_env()`).
+fn tracing_filter_directive(quiet: bool, verbose: u8, rust_log_set: bool) -> Option<&'static str> {
+    if quiet {
+        return Some("off");
+    }
+    if rust_log_set {
+        return None;
+    }
+    Some(match verbose {
+        0 => "bzr=warn",
+        1 => "bzr=info",
+        2 => "bzr=debug",
+        _ => "bzr=trace",
+    })
+}
+
+/// Redirect stdout to the platform null device for --quiet mode.
 #[cfg(unix)]
 fn suppress_stdout() {
     use std::os::unix::io::AsRawFd;
-    if let Ok(devnull) = std::fs::File::open("/dev/null") {
+    if let Ok(devnull) = std::fs::OpenOptions::new().write(true).open("/dev/null") {
         extern "C" {
             fn dup2(oldfd: std::ffi::c_int, newfd: std::ffi::c_int) -> std::ffi::c_int;
         }
@@ -99,8 +112,33 @@ fn suppress_stdout() {
     }
 }
 
-#[cfg(not(unix))]
-fn suppress_stdout() {}
+#[cfg(windows)]
+fn suppress_stdout() {
+    use std::os::windows::io::IntoRawHandle;
+
+    const STD_OUTPUT_HANDLE: u32 = 0xFFFF_FFF5; // -11i32 as u32
+    extern "system" {
+        fn SetStdHandle(nstdhandle: u32, hhandle: *mut std::ffi::c_void) -> i32;
+    }
+
+    if let Ok(nul) = std::fs::OpenOptions::new().write(true).open("NUL") {
+        let handle = nul.into_raw_handle();
+        // SAFETY: SetStdHandle replaces the process-wide stdout handle with
+        // NUL. Rust's std::io::Stdout reads this handle, so all subsequent
+        // println!/write! calls go to NUL. Called once at startup before any
+        // other threads write to stdout. We intentionally leak `nul` (via
+        // into_raw_handle) so the handle stays valid for the process lifetime.
+        unsafe {
+            SetStdHandle(STD_OUTPUT_HANDLE, handle);
+        }
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+fn suppress_stdout() {
+    // No platform-specific suppression available; --quiet will only
+    // suppress tracing output via the EnvFilter.
+}
 
 /// Resolve output format from flags, env var, and TTY detection.
 ///
@@ -182,5 +220,41 @@ mod tests {
         cli.output = Some(OutputFormat::Table);
         let fmt = resolve_format(&cli).expect("should resolve");
         assert_eq!(fmt, OutputFormat::Json);
+    }
+
+    #[test]
+    fn tracing_filter_quiet_returns_off() {
+        assert_eq!(tracing_filter_directive(true, 0, false), Some("off"));
+    }
+
+    #[test]
+    fn tracing_filter_quiet_overrides_verbose() {
+        assert_eq!(tracing_filter_directive(true, 3, false), Some("off"));
+    }
+
+    #[test]
+    fn tracing_filter_quiet_overrides_rust_log() {
+        assert_eq!(tracing_filter_directive(true, 0, true), Some("off"));
+    }
+
+    #[test]
+    fn tracing_filter_rust_log_defers() {
+        assert_eq!(tracing_filter_directive(false, 0, true), None);
+    }
+
+    #[test]
+    fn tracing_filter_default_warn() {
+        assert_eq!(tracing_filter_directive(false, 0, false), Some("bzr=warn"));
+    }
+
+    #[test]
+    fn tracing_filter_verbose_levels() {
+        assert_eq!(tracing_filter_directive(false, 1, false), Some("bzr=info"));
+        assert_eq!(tracing_filter_directive(false, 2, false), Some("bzr=debug"));
+        assert_eq!(tracing_filter_directive(false, 3, false), Some("bzr=trace"));
+        assert_eq!(
+            tracing_filter_directive(false, 10, false),
+            Some("bzr=trace")
+        );
     }
 }

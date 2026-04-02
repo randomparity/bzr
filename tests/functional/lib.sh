@@ -221,6 +221,14 @@ assert_stdout_empty() {
     fi
 }
 
+# assert_stderr_empty
+assert_stderr_empty() {
+    if [[ -s "$BZR_STDERR" ]]; then
+        test_fail "expected empty stderr"
+        return 1
+    fi
+}
+
 # assert_file_contains <path> <string>
 assert_file_contains() {
     local path="$1"

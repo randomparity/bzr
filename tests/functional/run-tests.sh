@@ -843,6 +843,26 @@ if [[ -n "$BUG1" ]]; then
     if assert_success && assert_stdout_empty; then test_pass; fi
 else test_skip "no BUG1"; fi
 
+test_begin "102a. --quiet suppresses stderr tracing"
+if [[ -n "$BUG1" ]]; then
+    run_bzr_raw --quiet -vvv bug view "$BUG1"
+    if assert_success && assert_stdout_empty && assert_stderr_empty; then
+        test_pass
+    fi
+else test_skip "no BUG1"; fi
+
+test_begin "102b. --quiet preserves error exit code"
+if true; then
+    run_bzr_raw --quiet bug view 999999
+    if assert_failure && assert_stdout_empty; then test_pass; fi
+fi
+
+test_begin "102c. --quiet + --json suppresses stdout"
+if [[ -n "$BUG1" ]]; then
+    run_bzr_raw --quiet --json bug view "$BUG1"
+    if assert_success && assert_stdout_empty; then test_pass; fi
+else test_skip "no BUG1"; fi
+
 test_begin "103. --server test whoami"
 run_bzr_raw --server test whoami
 if assert_success; then test_pass; fi
