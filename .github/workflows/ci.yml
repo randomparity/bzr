@@ -51,21 +51,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --locked
 
-  coverage:
-    name: Coverage
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: llvm-tools-preview
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: coverage
-      - uses: taiki-e/install-action@cargo-llvm-cov
-      - name: Generate coverage summary
-        run: cargo llvm-cov --locked --workspace --all-features --summary-only
-
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -111,3 +96,24 @@ jobs:
           key: aarch64-pc-windows-msvc
       - name: Check
         run: cargo check --locked --target aarch64-pc-windows-msvc
+  sonarqube:
+    name: SonarQube
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: sonarqube
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Generate coverage report
+        run: cargo llvm-cov --locked --workspace --all-features --lcov --output-path lcov.info
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
