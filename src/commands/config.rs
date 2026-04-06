@@ -110,6 +110,13 @@ pub async fn execute(
             let view = output::ConfigView::from_config(&config, &path);
             output::print_config(&view, format);
         }
+        ConfigAction::SetKeyring { .. }
+        | ConfigAction::UnsetKeyring { .. }
+        | ConfigAction::MigrateToKeyring { .. } => {
+            return Err(crate::error::BzrError::Other(
+                "keyring subcommands not yet implemented".into(),
+            ));
+        }
     }
     Ok(())
 }
