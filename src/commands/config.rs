@@ -77,9 +77,18 @@ pub async fn execute(
             account,
         } => set_keyring(name, service.as_deref(), account.as_deref(), format),
         ConfigAction::UnsetKeyring { name } => unset_keyring(name.as_str(), format),
-        ConfigAction::MigrateToKeyring { .. } => Err(crate::error::BzrError::Other(
-            "migrate-to-keyring not yet implemented".into(),
-        )),
+        ConfigAction::MigrateToKeyring {
+            name,
+            service,
+            account,
+            yes,
+        } => migrate_to_keyring(
+            name.as_str(),
+            service.as_deref(),
+            account.as_deref(),
+            *yes,
+            format,
+        ),
     }
 }
 
@@ -224,6 +233,74 @@ fn unset_keyring(name: &str, format: OutputFormat) -> Result<()> {
          `bzr config set-keyring` to re-credential.\nConfig file: {}",
         path.display()
     );
+    output::print_result(
+        &ConfigResult::configured(name, "", false, path.to_string_lossy(), true),
+        &human,
+        format,
+    );
+    Ok(())
+}
+
+fn migrate_to_keyring(
+    name: &str,
+    service: Option<&str>,
+    account: Option<&str>,
+    yes: bool,
+    format: OutputFormat,
+) -> Result<()> {
+    if !yes {
+        return Err(crate::error::BzrError::InputValidation(
+            "migrate-to-keyring requires --yes to confirm non-interactive migration".into(),
+        ));
+    }
+
+    let mut config = Config::load()?;
+    let server = config
+        .servers
+        .get(name)
+        .ok_or_else(|| crate::error::BzrError::config(format!("server '{name}' not found")))?;
+    let source_kind = server.credential_source_kind()?;
+    let current_secret = server.resolve_api_key(name)?;
+
+    let service_name = service.unwrap_or("bzr").to_string();
+    let account_name = account.unwrap_or(name).to_string();
+    crate::credentials::keyring::store(&service_name, &account_name, &current_secret)?;
+
+    let path = Config::path()?;
+    let human = match source_kind {
+        crate::config::CredentialSourceKind::Inline => {
+            let server = config.servers.get_mut(name).ok_or_else(|| {
+                crate::error::BzrError::config(format!("server '{name}' disappeared"))
+            })?;
+            server.api_key = None;
+            server.api_key_keyring = Some(crate::config::KeyringRef {
+                service: service.map(str::to_owned),
+                account: account.map(str::to_owned),
+            });
+            config.save()?;
+            format!(
+                "Migrated server '{name}' from inline API key to OS keychain \
+                 (service={service_name}, account={account_name}).\nConfig file: {}",
+                path.display()
+            )
+        }
+        crate::config::CredentialSourceKind::Env => {
+            format!(
+                "Stored API key for server '{name}' in OS keychain \
+                 (service={service_name}, account={account_name}).\n\
+                 The server is still configured to read 'api_key_env'. \
+                 Edit config.toml manually to switch to the keychain if desired; \
+                 the env var may be shared with other tools.\nConfig file: {}",
+                path.display()
+            )
+        }
+        crate::config::CredentialSourceKind::Keyring => {
+            return Err(crate::error::BzrError::config(format!(
+                "server '{name}' already uses a keyring credential source"
+            )));
+        }
+    };
+
     output::print_result(
         &ConfigResult::configured(name, "", false, path.to_string_lossy(), true),
         &human,
@@ -605,6 +682,144 @@ mod tests {
 
         // Cleanup the keychain entry so subsequent tests don't see it.
         crate::credentials::keyring::delete("bzr", "prod").unwrap();
+    }
+
+    #[tokio::test]
+    async fn migrate_to_keyring_from_inline_rewrites_config() {
+        ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+        let (_lock, _tmp) = setup_config_env().await;
+
+        execute(
+            &ConfigAction::SetServer {
+                name: "migrate-inline".into(),
+                url: "https://migrate-inline.example.com".into(),
+                api_key: Some("inline-secret-value".into()),
+                api_key_env: None,
+                email: None,
+                auth_method: None,
+                tls_insecure: false,
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await
+        .unwrap();
+
+        execute(
+            &ConfigAction::MigrateToKeyring {
+                name: "migrate-inline".into(),
+                service: None,
+                account: None,
+                yes: true,
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let config = Config::load().unwrap();
+        let server = &config.servers["migrate-inline"];
+        assert!(server.api_key.is_none(), "inline key should be cleared");
+        assert!(server.api_key_keyring.is_some());
+        assert_eq!(
+            server.resolve_api_key("migrate-inline").unwrap(),
+            "inline-secret-value"
+        );
+        crate::credentials::keyring::delete("bzr", "migrate-inline").unwrap();
+    }
+
+    #[tokio::test]
+    async fn migrate_to_keyring_from_env_preserves_config() {
+        ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+        let (_lock, _tmp) = setup_config_env().await;
+
+        // SAFETY: Serialized via ENV_LOCK through setup_config_env.
+        unsafe { std::env::set_var("BZR_MIGRATE_TEST_KEY", "env-secret-value") };
+        execute(
+            &ConfigAction::SetServer {
+                name: "migrate-env".into(),
+                url: "https://migrate-env.example.com".into(),
+                api_key: None,
+                api_key_env: Some("BZR_MIGRATE_TEST_KEY".into()),
+                email: None,
+                auth_method: None,
+                tls_insecure: false,
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await
+        .unwrap();
+
+        execute(
+            &ConfigAction::MigrateToKeyring {
+                name: "migrate-env".into(),
+                service: None,
+                account: None,
+                yes: true,
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await
+        .unwrap();
+        unsafe { std::env::remove_var("BZR_MIGRATE_TEST_KEY") };
+
+        let config = Config::load().unwrap();
+        let server = &config.servers["migrate-env"];
+        // Env source preserved — config.toml is NOT rewritten.
+        assert_eq!(server.api_key_env.as_deref(), Some("BZR_MIGRATE_TEST_KEY"));
+        assert!(server.api_key_keyring.is_none());
+
+        // The secret IS in the keychain.
+        let stored = crate::credentials::keyring::retrieve("bzr", "migrate-env").unwrap();
+        assert_eq!(stored, "env-secret-value");
+        crate::credentials::keyring::delete("bzr", "migrate-env").unwrap();
+    }
+
+    #[tokio::test]
+    async fn migrate_to_keyring_without_yes_errors() {
+        let (_lock, _tmp) = setup_config_env().await;
+
+        execute(
+            &ConfigAction::SetServer {
+                name: "migrate-noyes".into(),
+                url: "https://migrate-noyes.example.com".into(),
+                api_key: Some("secret".into()),
+                api_key_env: None,
+                email: None,
+                auth_method: None,
+                tls_insecure: false,
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let result = execute(
+            &ConfigAction::MigrateToKeyring {
+                name: "migrate-noyes".into(),
+                service: None,
+                account: None,
+                yes: false,
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
+        assert!(err.to_string().contains("--yes"));
     }
 
     #[tokio::test]
