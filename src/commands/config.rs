@@ -31,59 +31,18 @@ pub async fn execute(
             email,
             auth_method,
             tls_insecure,
-        } => {
-            if api_key.is_some() == api_key_env.is_some() {
-                return Err(crate::error::BzrError::InputValidation(
-                    "provide exactly one of --api-key or --api-key-env".into(),
-                ));
-            }
-            let mut config = Config::load()?;
-            let is_update = config.servers.contains_key(name.as_str());
-            config.servers.insert(
-                name.clone(),
-                ServerConfig {
-                    url: url.clone(),
-                    api_key: api_key.clone(),
-                    api_key_env: api_key_env.clone(),
-                    api_key_keyring: None,
-                    email: email.clone(),
-                    auth_method: *auth_method,
-                    api_mode: None,
-                    server_version: None,
-                    tls_insecure: *tls_insecure,
-                },
-            );
-            if config.default_server.is_none() {
-                config.default_server = Some(name.clone());
-            }
-            let is_default = config.default_server.as_deref() == Some(name.as_str());
-            let path = Config::path()?;
-            config.save()?;
-
-            let verb = if is_update { "updated" } else { "configured" };
-            let mut human = format!("Server '{name}' {verb} at {url}");
-            if is_default {
-                human.push_str("\nSet as default server.");
-            }
-            if let Some(var_name) = api_key_env {
-                let _ = write!(human, "\nAPI key source: env var {var_name}");
-            } else {
-                human.push_str("\nAPI key source: inline config value");
-            }
-            let _ = write!(human, "\nConfig file: {}", path.display());
-
-            output::print_result(
-                &ConfigResult::configured(
-                    name.as_str(),
-                    url.as_str(),
-                    is_default,
-                    path.to_string_lossy(),
-                    is_update,
-                ),
-                &human,
-                format,
-            );
-        }
+        } => set_server(
+            &SetServerArgs {
+                name: name.as_str(),
+                url: url.as_str(),
+                api_key: api_key.as_deref(),
+                api_key_env: api_key_env.as_deref(),
+                email: email.as_deref(),
+                auth_method: *auth_method,
+                tls_insecure: *tls_insecure,
+            },
+            format,
+        ),
         ConfigAction::SetDefault { name } => {
             let mut config = Config::load()?;
             if !config.servers.contains_key(name) {
@@ -103,22 +62,164 @@ pub async fn execute(
                 ),
                 format,
             );
+            Ok(())
         }
         ConfigAction::Show => {
             let config = Config::load()?;
             let path = Config::path()?;
             let view = output::ConfigView::from_config(&config, &path);
             output::print_config(&view, format);
+            Ok(())
         }
-        ConfigAction::SetKeyring { .. }
-        | ConfigAction::UnsetKeyring { .. }
-        | ConfigAction::MigrateToKeyring { .. } => {
-            return Err(crate::error::BzrError::Other(
-                "keyring subcommands not yet implemented".into(),
-            ));
+        ConfigAction::SetKeyring {
+            name,
+            service,
+            account,
+        } => set_keyring(name, service.as_deref(), account.as_deref(), format),
+        ConfigAction::UnsetKeyring { .. } | ConfigAction::MigrateToKeyring { .. } => Err(
+            crate::error::BzrError::Other("keyring subcommand not yet implemented".into()),
+        ),
+    }
+}
+
+struct SetServerArgs<'a> {
+    name: &'a str,
+    url: &'a str,
+    api_key: Option<&'a str>,
+    api_key_env: Option<&'a str>,
+    email: Option<&'a str>,
+    auth_method: Option<crate::types::AuthMethod>,
+    tls_insecure: bool,
+}
+
+fn set_server(args: &SetServerArgs<'_>, format: OutputFormat) -> Result<()> {
+    let SetServerArgs {
+        name,
+        url,
+        api_key,
+        api_key_env,
+        email,
+        auth_method,
+        tls_insecure,
+    } = *args;
+    if api_key.is_some() == api_key_env.is_some() {
+        return Err(crate::error::BzrError::InputValidation(
+            "provide exactly one of --api-key or --api-key-env".into(),
+        ));
+    }
+    let mut config = Config::load()?;
+    let is_update = config.servers.contains_key(name);
+    config.servers.insert(
+        name.to_owned(),
+        ServerConfig {
+            url: url.to_owned(),
+            api_key: api_key.map(str::to_owned),
+            api_key_env: api_key_env.map(str::to_owned),
+            api_key_keyring: None,
+            email: email.map(str::to_owned),
+            auth_method,
+            api_mode: None,
+            server_version: None,
+            tls_insecure,
+        },
+    );
+    if config.default_server.is_none() {
+        config.default_server = Some(name.to_owned());
+    }
+    let is_default = config.default_server.as_deref() == Some(name);
+    let path = Config::path()?;
+    config.save()?;
+
+    let verb = if is_update { "updated" } else { "configured" };
+    let mut human = format!("Server '{name}' {verb} at {url}");
+    if is_default {
+        human.push_str("\nSet as default server.");
+    }
+    if let Some(var_name) = api_key_env {
+        let _ = write!(human, "\nAPI key source: env var {var_name}");
+    } else {
+        human.push_str("\nAPI key source: inline config value");
+    }
+    let _ = write!(human, "\nConfig file: {}", path.display());
+
+    output::print_result(
+        &ConfigResult::configured(name, url, is_default, path.to_string_lossy(), is_update),
+        &human,
+        format,
+    );
+    Ok(())
+}
+
+fn set_keyring(
+    name: &str,
+    service: Option<&str>,
+    account: Option<&str>,
+    format: OutputFormat,
+) -> Result<()> {
+    let mut config = Config::load()?;
+    if !config.servers.contains_key(name) {
+        return Err(crate::error::BzrError::config(format!(
+            "server '{name}' not found; create it first with `bzr config set-server`"
+        )));
+    }
+
+    let service_name = service.unwrap_or("bzr").to_string();
+    let account_name = account.unwrap_or(name).to_string();
+
+    let secret = read_secret_from_prompt_or_env(&service_name, &account_name)?;
+    crate::credentials::keyring::store(&service_name, &account_name, &secret)?;
+
+    let server = config
+        .servers
+        .get_mut(name)
+        .ok_or_else(|| crate::error::BzrError::config(format!("server '{name}' disappeared")))?;
+    server.api_key = None;
+    server.api_key_env = None;
+    server.api_key_keyring = Some(crate::config::KeyringRef {
+        service: service.map(str::to_owned),
+        account: account.map(str::to_owned),
+    });
+    let path = Config::path()?;
+    config.save()?;
+
+    let human = format!(
+        "Stored API key for server '{name}' in OS keychain \
+         (service={service_name}, account={account_name})\nConfig file: {}",
+        path.display()
+    );
+    output::print_result(
+        &ConfigResult::configured(name, "", false, path.to_string_lossy(), true),
+        &human,
+        format,
+    );
+    Ok(())
+}
+
+#[cfg(feature = "keyring")]
+fn read_secret_from_prompt_or_env(service: &str, account: &str) -> crate::error::Result<String> {
+    // Test hook: integration/unit tests inject the secret via env var so
+    // they don't need an interactive TTY.
+    if let Ok(val) = std::env::var("BZR_KEYRING_TEST_SECRET") {
+        if !val.is_empty() {
+            return Ok(val);
         }
     }
-    Ok(())
+    let prompt =
+        format!("Enter API key for service='{service}' account='{account}' (input hidden): ");
+    rpassword::prompt_password(&prompt).map_err(|e| {
+        crate::error::BzrError::Io(std::io::Error::other(format!(
+            "failed to read API key from stdin: {e}"
+        )))
+    })
+}
+
+#[cfg(not(feature = "keyring"))]
+fn read_secret_from_prompt_or_env(_service: &str, _account: &str) -> crate::error::Result<String> {
+    Err(crate::error::BzrError::Keyring(
+        "this bzr build was compiled without keyring support; \
+         rebuild with --features keyring or use api_key_env"
+            .into(),
+    ))
 }
 
 #[cfg(test)]
@@ -388,5 +489,62 @@ mod tests {
         let server = &config.servers["prod"];
         assert_eq!(server.api_key, None);
         assert_eq!(server.api_key_env.as_deref(), Some("BZR_API_KEY"));
+    }
+
+    #[tokio::test]
+    async fn set_keyring_stores_secret_and_rewrites_config() {
+        ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+        let (_lock, _tmp) = setup_config_env().await;
+
+        // Create an inline server first.
+        execute(
+            &ConfigAction::SetServer {
+                name: "prod".into(),
+                url: "https://prod.example.com".into(),
+                api_key: Some("old-inline-value".into()),
+                api_key_env: None,
+                email: None,
+                auth_method: None,
+                tls_insecure: false,
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await
+        .unwrap();
+
+        // Inject the test secret via the BZR_KEYRING_TEST_SECRET env var so we
+        // don't need an interactive stdin.
+        // SAFETY: Serialized via ENV_LOCK through setup_config_env.
+        unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", "new-keyring-value") };
+
+        execute(
+            &ConfigAction::SetKeyring {
+                name: "prod".into(),
+                service: None,
+                account: None,
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await
+        .unwrap();
+
+        unsafe { std::env::remove_var("BZR_KEYRING_TEST_SECRET") };
+
+        // Config should have been rewritten: inline cleared, api_key_keyring set.
+        let config = Config::load().unwrap();
+        let server = &config.servers["prod"];
+        assert!(server.api_key.is_none());
+        assert!(server.api_key_env.is_none());
+        assert!(server.api_key_keyring.is_some());
+
+        // Resolving the API key now fetches from the (mock) keychain.
+        assert_eq!(server.resolve_api_key("prod").unwrap(), "new-keyring-value");
+
+        // Cleanup the keychain entry so subsequent tests don't see it.
+        crate::credentials::keyring::delete("bzr", "prod").unwrap();
     }
 }
