@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-04-06
+
+### Added
+
+- OS keychain-backed API key storage via the `keyring` crate (enabled by
+  default; opt out with `--no-default-features`)
+- `bzr config set-keyring`, `unset-keyring`, and `migrate-to-keyring`
+  subcommands for managing credentials in the system keychain
+- Environment-variable-backed API keys as a secure alternative to plaintext
+  config (`BZR_<SERVER>_API_KEY`)
+- Keyring credential source reporting in `bzr config show`
+- Troubleshooting guide for keyring and credential issues (`docs/troubleshooting.md`)
+- SonarCloud static analysis in CI with coverage reporting
+- Dependabot configuration with grouped updates and cooldowns
+
+### Changed
+
+- MSRV raised to 1.84; `resolver = "3"` enabled for MSRV-aware dependency resolution
+- `clap` capped below 4.6 to preserve MSRV compatibility
+- Expanded test coverage across client transport, auth fallback, dispatch,
+  query, and CLI paths; added functional autodetect coverage
+
+### Fixed
+
+- `quick-xml` 0.39 compatibility in the XML-RPC parser (#63)
+- `migrate-to-keyring` race condition guarded; test-only hook gated to debug builds
+- `clippy` 1.94 lint regressions in tests
+- Dependency supply-chain hardening in CI
+
 ## [0.1.0] - 2026-04-02
 
 ### Added
