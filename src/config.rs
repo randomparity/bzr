@@ -719,6 +719,7 @@ api_key_keyring = { service = "bzr", account = "dave" }
         assert!(err.to_string().contains("multiple API key sources"));
     }
 
+    #[cfg(feature = "keyring")]
     #[test]
     fn resolve_api_key_from_keyring() {
         // Install mock backend (idempotent across tests).
@@ -749,6 +750,7 @@ api_key_keyring = { service = "bzr", account = "dave" }
         crate::credentials::keyring::delete("bzr", "resolve-test-srv1").unwrap();
     }
 
+    #[cfg(feature = "keyring")]
     #[test]
     fn resolve_api_key_from_keyring_with_explicit_service_and_account() {
         ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
@@ -783,6 +785,7 @@ api_key_keyring = { service = "bzr", account = "dave" }
             .unwrap();
     }
 
+    #[cfg(feature = "keyring")]
     #[test]
     fn resolve_api_key_from_keyring_defaults_account_to_server_name() {
         ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());

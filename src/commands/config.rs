@@ -183,6 +183,7 @@ fn set_keyring(
         .servers
         .get_mut(name)
         .ok_or_else(|| crate::error::BzrError::config(format!("server '{name}' disappeared")))?;
+    let server_url = server.url.clone();
     server.api_key = None;
     server.api_key_env = None;
     server.api_key_keyring = Some(crate::config::KeyringRef {
@@ -198,7 +199,7 @@ fn set_keyring(
         path.display()
     );
     output::print_result(
-        &ConfigResult::configured(name, "", false, path.to_string_lossy(), true),
+        &ConfigResult::configured(name, &server_url, false, path.to_string_lossy(), true),
         &human,
         format,
     );
@@ -211,6 +212,7 @@ fn unset_keyring(name: &str, format: OutputFormat) -> Result<()> {
         .servers
         .get_mut(name)
         .ok_or_else(|| crate::error::BzrError::config(format!("server '{name}' not found")))?;
+    let server_url = server.url.clone();
     let keyring_ref = server.api_key_keyring.take().ok_or_else(|| {
         crate::error::BzrError::config(format!(
             "server '{name}' has no keyring credential to unset"
@@ -234,7 +236,7 @@ fn unset_keyring(name: &str, format: OutputFormat) -> Result<()> {
         path.display()
     );
     output::print_result(
-        &ConfigResult::configured(name, "", false, path.to_string_lossy(), true),
+        &ConfigResult::configured(name, &server_url, false, path.to_string_lossy(), true),
         &human,
         format,
     );
@@ -260,6 +262,18 @@ fn migrate_to_keyring(
         .get(name)
         .ok_or_else(|| crate::error::BzrError::config(format!("server '{name}' not found")))?;
     let source_kind = server.credential_source_kind()?;
+    let server_url = server.url.clone();
+
+    // Refuse migration from an already-keyring source BEFORE writing
+    // to the keychain — otherwise we would silently store to an
+    // unintended location when --service/--account differ from the
+    // existing ref.
+    if source_kind == crate::config::CredentialSourceKind::Keyring {
+        return Err(crate::error::BzrError::config(format!(
+            "server '{name}' already uses a keyring credential source"
+        )));
+    }
+
     let current_secret = server.resolve_api_key(name)?;
 
     let service_name = service.unwrap_or("bzr").to_string();
@@ -267,42 +281,35 @@ fn migrate_to_keyring(
     crate::credentials::keyring::store(&service_name, &account_name, &current_secret)?;
 
     let path = Config::path()?;
-    let human = match source_kind {
-        crate::config::CredentialSourceKind::Inline => {
-            let server = config.servers.get_mut(name).ok_or_else(|| {
-                crate::error::BzrError::config(format!("server '{name}' disappeared"))
-            })?;
-            server.api_key = None;
-            server.api_key_keyring = Some(crate::config::KeyringRef {
-                service: service.map(str::to_owned),
-                account: account.map(str::to_owned),
-            });
-            config.save()?;
-            format!(
-                "Migrated server '{name}' from inline API key to OS keychain \
-                 (service={service_name}, account={account_name}).\nConfig file: {}",
-                path.display()
-            )
-        }
-        crate::config::CredentialSourceKind::Env => {
-            format!(
-                "Stored API key for server '{name}' in OS keychain \
-                 (service={service_name}, account={account_name}).\n\
-                 The server is still configured to read 'api_key_env'. \
-                 Edit config.toml manually to switch to the keychain if desired; \
-                 the env var may be shared with other tools.\nConfig file: {}",
-                path.display()
-            )
-        }
-        crate::config::CredentialSourceKind::Keyring => {
-            return Err(crate::error::BzrError::config(format!(
-                "server '{name}' already uses a keyring credential source"
-            )));
-        }
+    let human = if source_kind == crate::config::CredentialSourceKind::Inline {
+        let server = config.servers.get_mut(name).ok_or_else(|| {
+            crate::error::BzrError::config(format!("server '{name}' disappeared"))
+        })?;
+        server.api_key = None;
+        server.api_key_keyring = Some(crate::config::KeyringRef {
+            service: service.map(str::to_owned),
+            account: account.map(str::to_owned),
+        });
+        config.save()?;
+        format!(
+            "Migrated server '{name}' from inline API key to OS keychain \
+             (service={service_name}, account={account_name}).\nConfig file: {}",
+            path.display()
+        )
+    } else {
+        // Env source: store the secret but leave config.toml unchanged.
+        format!(
+            "Stored API key for server '{name}' in OS keychain \
+             (service={service_name}, account={account_name}).\n\
+             The server is still configured to read 'api_key_env'. \
+             Edit config.toml manually to switch to the keychain if desired; \
+             the env var may be shared with other tools.\nConfig file: {}",
+            path.display()
+        )
     };
 
     output::print_result(
-        &ConfigResult::configured(name, "", false, path.to_string_lossy(), true),
+        &ConfigResult::configured(name, &server_url, false, path.to_string_lossy(), true),
         &human,
         format,
     );
@@ -333,13 +340,25 @@ fn save_config_without_validation(config: &Config, path: &std::path::Path) -> Re
 
 #[cfg(feature = "keyring")]
 fn read_secret_from_prompt_or_env(service: &str, account: &str) -> crate::error::Result<String> {
-    // Test hook: integration/unit tests inject the secret via env var so
-    // they don't need an interactive TTY.
-    if let Ok(val) = std::env::var("BZR_KEYRING_TEST_SECRET") {
-        if !val.is_empty() {
-            return Ok(val);
+    // Test hook: integration/unit tests and the functional-test shell
+    // script inject the secret via env var so they don't need an
+    // interactive TTY. Gated on debug_assertions so release binaries
+    // always go through the stdin prompt — the env var cannot be used
+    // to bypass prompts in production.
+    #[cfg(debug_assertions)]
+    {
+        if let Ok(val) = std::env::var("BZR_KEYRING_TEST_SECRET") {
+            if !val.is_empty() {
+                tracing::warn!(
+                    "BZR_KEYRING_TEST_SECRET env var is set; using its value \
+                     instead of prompting. This hook is only available in \
+                     debug builds."
+                );
+                return Ok(val);
+            }
         }
     }
+
     let prompt =
         format!("Enter API key for service='{service}' account='{account}' (input hidden): ");
     rpassword::prompt_password(&prompt).map_err(|e| {
@@ -627,6 +646,7 @@ mod tests {
         assert_eq!(server.api_key_env.as_deref(), Some("BZR_API_KEY"));
     }
 
+    #[cfg(feature = "keyring")]
     #[tokio::test]
     async fn set_keyring_stores_secret_and_rewrites_config() {
         ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
@@ -684,6 +704,7 @@ mod tests {
         crate::credentials::keyring::delete("bzr", "prod").unwrap();
     }
 
+    #[cfg(feature = "keyring")]
     #[tokio::test]
     async fn migrate_to_keyring_from_inline_rewrites_config() {
         ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
@@ -731,6 +752,7 @@ mod tests {
         crate::credentials::keyring::delete("bzr", "migrate-inline").unwrap();
     }
 
+    #[cfg(feature = "keyring")]
     #[tokio::test]
     async fn migrate_to_keyring_from_env_preserves_config() {
         ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
@@ -782,6 +804,73 @@ mod tests {
         crate::credentials::keyring::delete("bzr", "migrate-env").unwrap();
     }
 
+    #[cfg(feature = "keyring")]
+    #[tokio::test]
+    async fn migrate_to_keyring_from_keyring_errors_before_storing() {
+        ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+        let (_lock, _tmp) = setup_config_env().await;
+
+        // Set up a keyring-backed server.
+        execute(
+            &ConfigAction::SetServer {
+                name: "migrate-already-kr".into(),
+                url: "https://example.com".into(),
+                api_key: Some("init".into()),
+                api_key_env: None,
+                email: None,
+                auth_method: None,
+                tls_insecure: false,
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await
+        .unwrap();
+        // SAFETY: Serialized via ENV_LOCK through setup_config_env.
+        unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", "original-secret") };
+        execute(
+            &ConfigAction::SetKeyring {
+                name: "migrate-already-kr".into(),
+                service: None,
+                account: None,
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await
+        .unwrap();
+        unsafe { std::env::remove_var("BZR_KEYRING_TEST_SECRET") };
+
+        // Attempt to migrate with a DIFFERENT service. Must error, and
+        // must NOT have written anything to the new service.
+        let result = execute(
+            &ConfigAction::MigrateToKeyring {
+                name: "migrate-already-kr".into(),
+                service: Some("different-service".into()),
+                account: None,
+                yes: true,
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await;
+        assert!(result.is_err());
+
+        // The "different-service" entry must not exist.
+        let lookup =
+            crate::credentials::keyring::retrieve("different-service", "migrate-already-kr");
+        assert!(
+            lookup.is_err(),
+            "no entry should have been stored at the different-service location"
+        );
+
+        // Cleanup: the original entry still exists.
+        crate::credentials::keyring::delete("bzr", "migrate-already-kr").unwrap();
+    }
+
     #[tokio::test]
     async fn migrate_to_keyring_without_yes_errors() {
         let (_lock, _tmp) = setup_config_env().await;
@@ -822,6 +911,7 @@ mod tests {
         assert!(err.to_string().contains("--yes"));
     }
 
+    #[cfg(feature = "keyring")]
     #[tokio::test]
     async fn unset_keyring_removes_secret_and_clears_config() {
         ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
