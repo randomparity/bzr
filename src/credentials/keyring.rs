@@ -79,6 +79,15 @@ fn map_error(service: &str, account: &str, err: &KrError) -> BzrError {
             "OS keychain unavailable: {inner}. \
              For headless/CI environments, use api_key_env instead — see docs/bzr-cli.md."
         ),
+        KrError::NoStorageAccess(inner) => format!(
+            "OS keychain locked or inaccessible: {inner}. \
+             For headless/CI environments, use api_key_env instead — see docs/bzr-cli.md."
+        ),
+        KrError::TooLong(attr, limit) => format!(
+            "keychain attribute '{attr}' exceeds platform limit of {limit} characters \
+             (service='{service}', account='{account}'). Shorten the server name or \
+             override via --service/--account."
+        ),
         KrError::Ambiguous(_) => format!(
             "multiple matching keychain entries for service='{service}' account='{account}'; \
              please remove duplicates."
@@ -96,15 +105,23 @@ fn map_error(service: &str, account: &str, err: &KrError) -> BzrError {
 mod tests {
     use super::*;
 
+    // Tests share a process-wide cache of Arc<Entry> keyed by
+    // (service, account). Each test must use a unique pair to avoid
+    // hitting another test's state. install_mock() is idempotent across
+    // tests, so calling it in every test is safe.
     fn install_mock() {
-        ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+        use std::sync::OnceLock;
+        static INSTALLED: OnceLock<()> = OnceLock::new();
+        INSTALLED.get_or_init(|| {
+            ::keyring::set_default_credential_builder(
+                ::keyring::mock::default_credential_builder(),
+            );
+        });
     }
 
     #[test]
     fn store_retrieve_delete_roundtrip() {
         install_mock();
-        // Use a unique (service, account) per test so the cache entries
-        // from different tests don't collide.
         store("bzr-test-roundtrip", "acct1", "secret-value").unwrap();
         let got = retrieve("bzr-test-roundtrip", "acct1").unwrap();
         assert_eq!(got, "secret-value");
