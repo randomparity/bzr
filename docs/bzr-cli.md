@@ -896,8 +896,7 @@ Remove a server's API key from the OS keychain and clear the
 preserved; re-run `bzr config set-server` or `bzr config set-keyring`
 afterward to re-credential it.
 
-Idempotent: missing keychain entries are treated as a warning, not an
-error.
+Idempotent: missing keychain entries are silently ignored.
 
 ### `bzr config migrate-to-keyring <server> [--service NAME] [--account NAME] --yes`
 
@@ -923,8 +922,7 @@ Copy an existing inline or env-backed API key into the OS keychain.
 | Environment variable | `api_key_env = "BZR_API_KEY"` | Headless servers, CI/CD, containers |
 | OS keychain | `api_key_keyring = {}` | Desktop workstations with an unlocked keychain daemon |
 
-Exactly one must be set per server; `bzr config load` rejects any
-combination.
+Exactly one must be set per server; config validation rejects any combination at startup.
 
 ### Headless / CI environments
 
@@ -964,9 +962,7 @@ ENV BZR_API_KEY=""
 ```
 
 See also: `docs/troubleshooting.md` for platform-specific keychain
-troubleshooting. (Note: `docs/troubleshooting.md` is created in Task 12.
-If it does not yet exist at the time you read this, still add the
-reference.)
+troubleshooting.
 
 ---
 

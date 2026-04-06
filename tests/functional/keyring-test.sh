@@ -70,6 +70,10 @@ if ! "$BZR" config show --json | grep -q '"api_key_source": *"keyring"'; then
 fi
 
 echo "4. Overwriting the stored secret via set-keyring..."
+# BZR_KEYRING_TEST_SECRET is a debug-build-only hook (guarded by
+# #[cfg(debug_assertions)]); it bypasses the stdin prompt so the
+# functional test does not need an interactive TTY. It has no effect
+# in release builds.
 BZR_KEYRING_TEST_SECRET="$SECRET" "$BZR" config set-keyring "$SERVER_NAME" \
   --service "$SERVICE_NAME"
 
