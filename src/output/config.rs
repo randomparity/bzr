@@ -33,6 +33,14 @@ impl ServerDisplayInfo {
             Ok(CredentialSource::EnvVar(var_name)) => {
                 (var_name.to_string(), CredentialSourceKind::Env.as_str())
             }
+            Ok(CredentialSource::Keyring { service, account }) => {
+                let display = if account.is_empty() {
+                    format!("{service}/<server-name>")
+                } else {
+                    format!("{service}/{account}")
+                };
+                (display, CredentialSourceKind::Keyring.as_str())
+            }
             Err(_) => ("[invalid config]".to_string(), "invalid"),
         };
         Self {
@@ -145,6 +153,7 @@ mod tests {
                 email: Some("admin@example.com".into()),
                 api_key: Some("1234567890abcdef".into()),
                 api_key_env: None,
+                api_key_keyring: None,
                 auth_method: Some(AuthMethod::Header),
                 api_mode: None,
                 server_version: None,
@@ -180,6 +189,7 @@ mod tests {
                 email: None,
                 api_key: None,
                 api_key_env: Some("BZR_API_KEY".into()),
+                api_key_keyring: None,
                 auth_method: None,
                 api_mode: None,
                 server_version: None,

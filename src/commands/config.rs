@@ -45,6 +45,7 @@ pub async fn execute(
                     url: url.clone(),
                     api_key: api_key.clone(),
                     api_key_env: api_key_env.clone(),
+                    api_key_keyring: None,
                     email: email.clone(),
                     auth_method: *auth_method,
                     api_mode: None,
