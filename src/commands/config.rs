@@ -76,9 +76,10 @@ pub async fn execute(
             service,
             account,
         } => set_keyring(name, service.as_deref(), account.as_deref(), format),
-        ConfigAction::UnsetKeyring { .. } | ConfigAction::MigrateToKeyring { .. } => Err(
-            crate::error::BzrError::Other("keyring subcommand not yet implemented".into()),
-        ),
+        ConfigAction::UnsetKeyring { name } => unset_keyring(name.as_str(), format),
+        ConfigAction::MigrateToKeyring { .. } => Err(crate::error::BzrError::Other(
+            "migrate-to-keyring not yet implemented".into(),
+        )),
     }
 }
 
@@ -192,6 +193,64 @@ fn set_keyring(
         &human,
         format,
     );
+    Ok(())
+}
+
+fn unset_keyring(name: &str, format: OutputFormat) -> Result<()> {
+    let mut config = Config::load()?;
+    let server = config
+        .servers
+        .get_mut(name)
+        .ok_or_else(|| crate::error::BzrError::config(format!("server '{name}' not found")))?;
+    let keyring_ref = server.api_key_keyring.take().ok_or_else(|| {
+        crate::error::BzrError::config(format!(
+            "server '{name}' has no keyring credential to unset"
+        ))
+    })?;
+    let service_name = keyring_ref.service_or_default().to_string();
+    let account_name = keyring_ref.account_or_default(name).to_string();
+    // Idempotent: missing entry is not an error.
+    crate::credentials::keyring::delete(&service_name, &account_name)?;
+
+    // Saving would fail validation (the server has no credential source
+    // now). Write TOML directly.
+    let path = Config::path()?;
+    save_config_without_validation(&config, &path)?;
+
+    let human = format!(
+        "Removed keychain entry for server '{name}' (service={service_name}, \
+         account={account_name}).\nThe server entry is still present but has \
+         no API key source — re-run `bzr config set-server` or \
+         `bzr config set-keyring` to re-credential.\nConfig file: {}",
+        path.display()
+    );
+    output::print_result(
+        &ConfigResult::configured(name, "", false, path.to_string_lossy(), true),
+        &human,
+        format,
+    );
+    Ok(())
+}
+
+/// Save a config to disk without running the credential-source validator.
+///
+/// Used by `unset-keyring`, which intentionally leaves the server without
+/// a credential source so the user can re-credential it afterward with
+/// `set-server` or `set-keyring`.
+fn save_config_without_validation(config: &Config, path: &std::path::Path) -> Result<()> {
+    use std::fs;
+    use std::io::Write as IoWrite;
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let content = toml::to_string_pretty(config)?;
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(path)?;
+    file.write_all(content.as_bytes())?;
     Ok(())
 }
 
@@ -546,5 +605,71 @@ mod tests {
 
         // Cleanup the keychain entry so subsequent tests don't see it.
         crate::credentials::keyring::delete("bzr", "prod").unwrap();
+    }
+
+    #[tokio::test]
+    async fn unset_keyring_removes_secret_and_clears_config() {
+        ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+        let (_lock, _tmp) = setup_config_env().await;
+
+        // Build a keyring-backed server by first creating an inline one,
+        // then running set-keyring to migrate to the keychain.
+        execute(
+            &ConfigAction::SetServer {
+                name: "unset-test".into(),
+                url: "https://unset-test.example.com".into(),
+                api_key: Some("tmp".into()),
+                api_key_env: None,
+                email: None,
+                auth_method: None,
+                tls_insecure: false,
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await
+        .unwrap();
+
+        // SAFETY: Serialized via ENV_LOCK through setup_config_env.
+        unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", "unset-test-secret") };
+        execute(
+            &ConfigAction::SetKeyring {
+                name: "unset-test".into(),
+                service: None,
+                account: None,
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await
+        .unwrap();
+        unsafe { std::env::remove_var("BZR_KEYRING_TEST_SECRET") };
+
+        // Now unset.
+        execute(
+            &ConfigAction::UnsetKeyring {
+                name: "unset-test".into(),
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await
+        .unwrap();
+
+        // Reload config directly (bypass Config::load's validator — the
+        // server intentionally has no credential source).
+        let path = Config::path().unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        let config: Config = toml::from_str(&content).unwrap();
+        let server = &config.servers["unset-test"];
+        assert!(server.api_key_keyring.is_none());
+        assert!(server.api_key.is_none());
+        assert!(server.api_key_env.is_none());
+
+        // Keychain entry is gone (idempotent delete returns Ok).
+        crate::credentials::keyring::delete("bzr", "unset-test").unwrap();
     }
 }
