@@ -116,11 +116,22 @@ bzr config migrate-to-keyring <server> --yes
 
 ### Error: "this bzr build was compiled without keyring support"
 
-You installed a `bzr` build without the `keyring` Cargo feature.
-Rebuild with it (it is on by default):
+You installed a `bzr` build that was compiled with
+`--no-default-features`, which strips the `keyring` Cargo feature.
+The feature is on by default, so a standard install restores it:
 
 ```bash
-cargo install --path . --features keyring
+cargo install bzr --locked
+# or, from a local source checkout:
+cargo install --path . --locked
 ```
 
-Or switch the affected server to `api_key_env`.
+If you need to run on a system that can't build `libdbus-1` (headless
+Linux without a Secret Service daemon, minimal containers), keep the
+stripped build and switch the affected server to `api_key_env`
+instead:
+
+```bash
+export BZR_API_KEY=YOUR_API_KEY
+bzr config set-server <server> --api-key-env BZR_API_KEY
+```

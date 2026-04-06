@@ -40,16 +40,44 @@ Available platforms: Linux (x86_64, aarch64, ppc64le, s390x), macOS (x86_64, App
 ### From crates.io
 
 ```bash
-cargo install bzr
+cargo install bzr --locked
 ```
+
+The `--locked` flag tells cargo to use the exact dependency versions
+published in `Cargo.lock`, which are tested against the MSRV. Without it,
+cargo re-resolves to newer transitive dependencies that may exceed the MSRV
+and fail to build.
 
 ### From source
 
 ```bash
-cargo install --path .
+cargo install --path . --locked
 ```
 
 Requires Rust 1.84+.
+
+### OS keychain support (`keyring` feature)
+
+`bzr` can store per-server API keys in the OS keychain (macOS Keychain,
+GNOME Keyring / KWallet via Secret Service on Linux, Windows Credential
+Manager). This is provided by the `keyring` Cargo feature, which is
+**enabled by default** — the install commands above give you keychain
+support automatically. See [Credential storage](#credential-storage)
+below for how to use it.
+
+On headless Linux systems without a running Secret Service daemon
+(servers, containers, CI runners), you can opt out of the feature to
+avoid pulling in `libdbus-1` at build time:
+
+```bash
+cargo install bzr --locked --no-default-features
+```
+
+A build without the feature still supports plaintext and environment
+variable credentials; only the `config set-keyring` /
+`migrate-to-keyring` subcommands become unavailable. See
+[`docs/troubleshooting.md`](docs/troubleshooting.md) for diagnosing
+keychain errors.
 
 ## Onboarding
 
@@ -60,13 +88,13 @@ If you are new to `bzr`, this is the fastest path from install to a working Bugz
 Use a release binary from [GitHub Releases](https://github.com/randomparity/bzr/releases/latest), install from crates.io, or install from source:
 
 ```bash
-cargo install bzr
+cargo install bzr --locked
 ```
 
 For a local source checkout:
 
 ```bash
-cargo install --path .
+cargo install --path . --locked
 ```
 
 ### 2. Configure your first server
@@ -215,6 +243,33 @@ Configuration is stored in `~/.config/bzr/config.toml` with support for multiple
 ## Authentication
 
 `bzr` authenticates using Bugzilla API keys. Prefer `--api-key-env` so the secret stays out of `config.toml`, shell history, and most process listings. `bzr` warns when the config directory or file permissions are too broad on Unix systems. It also auto-detects whether your server supports header-based auth (`X-BUGZILLA-API-KEY`) or query parameter auth (`Bugzilla_api_key`), and caches the result. See [docs/bzr-cli.md](docs/bzr-cli.md#authentication) for details on generating and configuring API keys.
+
+## Credential storage
+
+`bzr` supports three ways to supply a Bugzilla API key, in increasing order of safety:
+
+1. **Plaintext in `config.toml`** (`--api-key`) — simplest, but the key lives on disk in your config file.
+2. **Environment variable** (`--api-key-env BZR_API_KEY`) — keeps the secret out of the config file; resolved at runtime.
+3. **OS keychain** (`--api-key-keyring`) — stores the key in the system secret store (macOS Keychain, GNOME Keyring / KWallet via Secret Service on Linux, Windows Credential Manager). Requires the `keyring` Cargo feature, which is on by default.
+
+Commands for managing keychain-backed credentials:
+
+```bash
+# Store an API key in the OS keychain for a server (prompts for the key)
+bzr config set-keyring myserver
+
+# Remove a keychain entry
+bzr config unset-keyring myserver
+
+# Move an existing plaintext / env-backed credential into the keychain
+bzr config migrate-to-keyring myserver --yes
+```
+
+`bzr config show` labels each server's credential source so you can see
+at a glance which mechanism is in use. See
+[`docs/troubleshooting.md`](docs/troubleshooting.md) for diagnosing
+keychain errors (locked keyring, missing Secret Service daemon, builds
+compiled without the feature, etc.).
 
 ## License
 
