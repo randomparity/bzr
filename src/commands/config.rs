@@ -395,6 +395,49 @@ mod tests {
         (lock, tmp)
     }
 
+    /// Invoke `execute` with a `SetServer` action carrying an inline
+    /// `api_key` and all other optional fields at their defaults.
+    async fn seed_inline_server(name: &str, url: &str, api_key: &str) {
+        execute(
+            &ConfigAction::SetServer {
+                name: name.into(),
+                url: url.into(),
+                api_key: Some(api_key.into()),
+                api_key_env: None,
+                email: None,
+                auth_method: None,
+                tls_insecure: false,
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await
+        .unwrap();
+    }
+
+    /// Store `secret` in the (mock) keychain for `server_name` by priming
+    /// the `BZR_KEYRING_TEST_SECRET` test hook and running `SetKeyring`.
+    #[cfg(feature = "keyring")]
+    async fn seed_keyring_secret(server_name: &str, secret: &str) {
+        // SAFETY: Serialized via ENV_LOCK through setup_config_env.
+        unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", secret) };
+        execute(
+            &ConfigAction::SetKeyring {
+                name: server_name.into(),
+                service: None,
+                account: None,
+            },
+            None,
+            OutputFormat::Json,
+            None,
+        )
+        .await
+        .unwrap();
+        // SAFETY: Serialized via ENV_LOCK through setup_config_env.
+        unsafe { std::env::remove_var("BZR_KEYRING_TEST_SECRET") };
+    }
+
     #[tokio::test]
     async fn set_default_on_empty_config_returns_error() {
         let (_lock, _tmp) = setup_config_env().await;
@@ -493,22 +536,7 @@ mod tests {
             ("first", "https://first.example.com"),
             ("second", "https://second.example.com"),
         ] {
-            execute(
-                &ConfigAction::SetServer {
-                    name: name.into(),
-                    url: url.into(),
-                    api_key: Some(format!("{name}-key-1234567890")),
-                    api_key_env: None,
-                    email: None,
-                    auth_method: None,
-                    tls_insecure: false,
-                },
-                None,
-                OutputFormat::Json,
-                None,
-            )
-            .await
-            .unwrap();
+            seed_inline_server(name, url, &format!("{name}-key-1234567890")).await;
         }
 
         let (result, output) = capture_stdout(execute(
@@ -548,22 +576,7 @@ mod tests {
             ("first", "https://first.example.com"),
             ("second", "https://second.example.com"),
         ] {
-            execute(
-                &ConfigAction::SetServer {
-                    name: name.into(),
-                    url: url.into(),
-                    api_key: Some(format!("{name}-key-1234567890")),
-                    api_key_env: None,
-                    email: None,
-                    auth_method: None,
-                    tls_insecure: false,
-                },
-                None,
-                OutputFormat::Json,
-                None,
-            )
-            .await
-            .unwrap();
+            seed_inline_server(name, url, &format!("{name}-key-1234567890")).await;
         }
 
         let (result, output) = capture_stdout(execute(
@@ -653,42 +666,11 @@ mod tests {
         let (_lock, _tmp) = setup_config_env().await;
 
         // Create an inline server first.
-        execute(
-            &ConfigAction::SetServer {
-                name: "prod".into(),
-                url: "https://prod.example.com".into(),
-                api_key: Some("old-inline-value".into()),
-                api_key_env: None,
-                email: None,
-                auth_method: None,
-                tls_insecure: false,
-            },
-            None,
-            OutputFormat::Json,
-            None,
-        )
-        .await
-        .unwrap();
+        seed_inline_server("prod", "https://prod.example.com", "old-inline-value").await;
 
         // Inject the test secret via the BZR_KEYRING_TEST_SECRET env var so we
         // don't need an interactive stdin.
-        // SAFETY: Serialized via ENV_LOCK through setup_config_env.
-        unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", "new-keyring-value") };
-
-        execute(
-            &ConfigAction::SetKeyring {
-                name: "prod".into(),
-                service: None,
-                account: None,
-            },
-            None,
-            OutputFormat::Json,
-            None,
-        )
-        .await
-        .unwrap();
-
-        unsafe { std::env::remove_var("BZR_KEYRING_TEST_SECRET") };
+        seed_keyring_secret("prod", "new-keyring-value").await;
 
         // Config should have been rewritten: inline cleared, api_key_keyring set.
         let config = Config::load().unwrap();
@@ -710,22 +692,12 @@ mod tests {
         ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
         let (_lock, _tmp) = setup_config_env().await;
 
-        execute(
-            &ConfigAction::SetServer {
-                name: "migrate-inline".into(),
-                url: "https://migrate-inline.example.com".into(),
-                api_key: Some("inline-secret-value".into()),
-                api_key_env: None,
-                email: None,
-                auth_method: None,
-                tls_insecure: false,
-            },
-            None,
-            OutputFormat::Json,
-            None,
+        seed_inline_server(
+            "migrate-inline",
+            "https://migrate-inline.example.com",
+            "inline-secret-value",
         )
-        .await
-        .unwrap();
+        .await;
 
         execute(
             &ConfigAction::MigrateToKeyring {
@@ -811,37 +783,8 @@ mod tests {
         let (_lock, _tmp) = setup_config_env().await;
 
         // Set up a keyring-backed server.
-        execute(
-            &ConfigAction::SetServer {
-                name: "migrate-already-kr".into(),
-                url: "https://example.com".into(),
-                api_key: Some("init".into()),
-                api_key_env: None,
-                email: None,
-                auth_method: None,
-                tls_insecure: false,
-            },
-            None,
-            OutputFormat::Json,
-            None,
-        )
-        .await
-        .unwrap();
-        // SAFETY: Serialized via ENV_LOCK through setup_config_env.
-        unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", "original-secret") };
-        execute(
-            &ConfigAction::SetKeyring {
-                name: "migrate-already-kr".into(),
-                service: None,
-                account: None,
-            },
-            None,
-            OutputFormat::Json,
-            None,
-        )
-        .await
-        .unwrap();
-        unsafe { std::env::remove_var("BZR_KEYRING_TEST_SECRET") };
+        seed_inline_server("migrate-already-kr", "https://example.com", "init").await;
+        seed_keyring_secret("migrate-already-kr", "original-secret").await;
 
         // Attempt to migrate with a DIFFERENT service. Must error, and
         // must NOT have written anything to the new service.
@@ -875,22 +818,12 @@ mod tests {
     async fn migrate_to_keyring_without_yes_errors() {
         let (_lock, _tmp) = setup_config_env().await;
 
-        execute(
-            &ConfigAction::SetServer {
-                name: "migrate-noyes".into(),
-                url: "https://migrate-noyes.example.com".into(),
-                api_key: Some("secret".into()),
-                api_key_env: None,
-                email: None,
-                auth_method: None,
-                tls_insecure: false,
-            },
-            None,
-            OutputFormat::Json,
-            None,
+        seed_inline_server(
+            "migrate-noyes",
+            "https://migrate-noyes.example.com",
+            "secret",
         )
-        .await
-        .unwrap();
+        .await;
 
         let result = execute(
             &ConfigAction::MigrateToKeyring {
@@ -919,38 +852,8 @@ mod tests {
 
         // Build a keyring-backed server by first creating an inline one,
         // then running set-keyring to migrate to the keychain.
-        execute(
-            &ConfigAction::SetServer {
-                name: "unset-test".into(),
-                url: "https://unset-test.example.com".into(),
-                api_key: Some("tmp".into()),
-                api_key_env: None,
-                email: None,
-                auth_method: None,
-                tls_insecure: false,
-            },
-            None,
-            OutputFormat::Json,
-            None,
-        )
-        .await
-        .unwrap();
-
-        // SAFETY: Serialized via ENV_LOCK through setup_config_env.
-        unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", "unset-test-secret") };
-        execute(
-            &ConfigAction::SetKeyring {
-                name: "unset-test".into(),
-                service: None,
-                account: None,
-            },
-            None,
-            OutputFormat::Json,
-            None,
-        )
-        .await
-        .unwrap();
-        unsafe { std::env::remove_var("BZR_KEYRING_TEST_SECRET") };
+        seed_inline_server("unset-test", "https://unset-test.example.com", "tmp").await;
+        seed_keyring_secret("unset-test", "unset-test-secret").await;
 
         // Now unset.
         execute(
