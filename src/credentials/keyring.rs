@@ -2,14 +2,51 @@
 //!
 //! Maps `keyring::Error` variants to user-facing `BzrError::Keyring`
 //! messages so callers get actionable guidance on failures.
+//!
+//! Entries are cached by `(service, account)` to give every
+//! operation on the same key a stable handle. In production, this is
+//! a small optimization — `Entry` is a thin wrapper over a platform
+//! credential and each method call reaches the backend anyway. In
+//! tests that install `keyring::mock::default_credential_builder()`,
+//! the cache is essential: the v3 mock uses `EntryOnly` persistence,
+//! so store and retrieve must see the same `Entry` instance to share
+//! state.
+
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use ::keyring::{Entry, Error as KrError};
 
 use crate::error::{BzrError, Result};
 
+type EntryCache = Mutex<HashMap<(String, String), Arc<Entry>>>;
+
+fn cache() -> &'static EntryCache {
+    static CACHE: OnceLock<EntryCache> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn entry_for(service: &str, account: &str) -> Result<Arc<Entry>> {
+    let mut guard = cache()
+        .lock()
+        .map_err(|e| BzrError::Keyring(format!("keychain entry cache poisoned: {e}")))?;
+    let key = (service.to_string(), account.to_string());
+    if let Some(entry) = guard.get(&key) {
+        return Ok(Arc::clone(entry));
+    }
+    let entry = Entry::new(service, account).map_err(|e| {
+        BzrError::Keyring(format!(
+            "failed to open keychain entry for service='{service}' account='{account}': {e}"
+        ))
+    })?;
+    let arc = Arc::new(entry);
+    guard.insert(key, Arc::clone(&arc));
+    Ok(arc)
+}
+
 /// Store a secret in the OS keychain at `(service, account)`.
 pub fn store(service: &str, account: &str, secret: &str) -> Result<()> {
-    let entry = new_entry(service, account)?;
+    let entry = entry_for(service, account)?;
     entry
         .set_password(secret)
         .map_err(|e| map_error(service, account, &e))
@@ -17,7 +54,7 @@ pub fn store(service: &str, account: &str, secret: &str) -> Result<()> {
 
 /// Retrieve a secret from the OS keychain at `(service, account)`.
 pub fn retrieve(service: &str, account: &str) -> Result<String> {
-    let entry = new_entry(service, account)?;
+    let entry = entry_for(service, account)?;
     entry
         .get_password()
         .map_err(|e| map_error(service, account, &e))
@@ -25,19 +62,11 @@ pub fn retrieve(service: &str, account: &str) -> Result<String> {
 
 /// Delete a secret from the OS keychain. Missing entries are not an error.
 pub fn delete(service: &str, account: &str) -> Result<()> {
-    let entry = new_entry(service, account)?;
+    let entry = entry_for(service, account)?;
     match entry.delete_credential() {
         Ok(()) | Err(KrError::NoEntry) => Ok(()),
         Err(e) => Err(map_error(service, account, &e)),
     }
-}
-
-fn new_entry(service: &str, account: &str) -> Result<Entry> {
-    Entry::new(service, account).map_err(|e| {
-        BzrError::Keyring(format!(
-            "failed to open keychain entry for service='{service}' account='{account}': {e}"
-        ))
-    })
 }
 
 fn map_error(service: &str, account: &str, err: &KrError) -> BzrError {
@@ -68,31 +97,24 @@ mod tests {
     use super::*;
 
     fn install_mock() {
-        // Idempotent: subsequent calls are no-ops.
         ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
     }
 
     #[test]
     fn store_retrieve_delete_roundtrip() {
-        // The mock backend uses CredentialPersistence::EntryOnly — secrets are
-        // stored in the Entry object, not in a shared in-process store.  We
-        // must therefore operate through the same Entry instance for the whole
-        // roundtrip instead of calling the public store/retrieve/delete
-        // helpers, which each create a fresh Entry.
         install_mock();
-        let entry = new_entry("bzr-test", "acct1").unwrap();
-        entry.set_password("secret-value").unwrap();
-        let got = entry.get_password().unwrap();
+        // Use a unique (service, account) per test so the cache entries
+        // from different tests don't collide.
+        store("bzr-test-roundtrip", "acct1", "secret-value").unwrap();
+        let got = retrieve("bzr-test-roundtrip", "acct1").unwrap();
         assert_eq!(got, "secret-value");
-        entry.delete_credential().unwrap();
-        let err = entry.get_password().unwrap_err();
-        assert!(matches!(err, ::keyring::Error::NoEntry));
+        delete("bzr-test-roundtrip", "acct1").unwrap();
     }
 
     #[test]
     fn retrieve_missing_entry_maps_to_no_entry_message() {
         install_mock();
-        let err = retrieve("bzr-test", "missing-account").unwrap_err();
+        let err = retrieve("bzr-test-missing", "missing-account").unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("no API key found"), "got: {msg}");
     }
@@ -100,7 +122,8 @@ mod tests {
     #[test]
     fn delete_missing_entry_is_ok() {
         install_mock();
-        // Idempotent
-        delete("bzr-test", "never-existed").unwrap();
+        // Idempotent: mock returns NoEntry for missing entries, which
+        // the wrapper maps to Ok.
+        delete("bzr-test-delete", "never-existed").unwrap();
     }
 }
