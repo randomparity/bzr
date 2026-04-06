@@ -13,6 +13,7 @@ pub mod cli;
 pub mod client;
 pub mod commands;
 pub mod config;
+pub mod credentials;
 pub mod error;
 pub(crate) mod http;
 #[expect(clippy::print_stdout, clippy::expect_used)]

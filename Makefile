@@ -4,7 +4,8 @@ RUST_MIN_VERSION := 1.84.0
 .PHONY: setup check-rust ensure-components ensure-coverage-prereqs install-hooks \
         build release test coverage fmt clippy lint clean help \
         functional-build functional-start functional-test functional-stop \
-        functional-test-bz52 functional-test-bz53 functional-test-all functional-stop-all
+        functional-test-bz52 functional-test-bz53 functional-test-all functional-stop-all \
+        functional-test-keyring
 
 ## Setup & Environment
 
@@ -118,6 +119,9 @@ functional-stop-all: ## Stop all Bugzilla test containers
 	BZR_BZ_VERSION=bz50 tests/functional/setup-bugzilla.sh stop
 	BZR_BZ_VERSION=bz52 tests/functional/setup-bugzilla.sh stop
 	BZR_BZ_VERSION=bz53 tests/functional/setup-bugzilla.sh stop
+
+functional-test-keyring: ## Run keyring functional test against real OS keychain
+	tests/functional/keyring-test.sh
 
 ## Help
 

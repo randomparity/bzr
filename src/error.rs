@@ -45,6 +45,9 @@ pub enum BzrError {
     #[error("batch update: {succeeded} succeeded, {failed} failed")]
     BatchPartialFailure { succeeded: usize, failed: usize },
 
+    #[error("keyring error: {0}")]
+    Keyring(String),
+
     #[error("{0}")]
     Other(String),
 }
@@ -62,6 +65,7 @@ const ERROR_TYPE_DESERIALIZE: &str = "deserialize";
 const ERROR_TYPE_AUTH: &str = "auth";
 const ERROR_TYPE_DATA_INTEGRITY: &str = "data_integrity";
 const ERROR_TYPE_BATCH_PARTIAL_FAILURE: &str = "batch_partial_failure";
+const ERROR_TYPE_KEYRING: &str = "keyring";
 const ERROR_TYPE_OTHER: &str = "other";
 
 // Exit code constants
@@ -76,6 +80,7 @@ const EXIT_CODE_DESERIALIZE: i32 = 8;
 const EXIT_CODE_AUTH: i32 = 9;
 const EXIT_CODE_DATA_INTEGRITY: i32 = 10;
 const EXIT_CODE_BATCH_PARTIAL_FAILURE: i32 = 11;
+const EXIT_CODE_KEYRING: i32 = 12;
 
 /// Bugzilla internal server error code (HTTP 500 with code 100500).
 /// Used for retry logic in hybrid mode when extensions crash.
@@ -136,6 +141,7 @@ impl BzrError {
             BzrError::Auth(_) => EXIT_CODE_AUTH,
             BzrError::DataIntegrity(_) => EXIT_CODE_DATA_INTEGRITY,
             BzrError::BatchPartialFailure { .. } => EXIT_CODE_BATCH_PARTIAL_FAILURE,
+            BzrError::Keyring(_) => EXIT_CODE_KEYRING,
             BzrError::Other(_) => EXIT_CODE_OTHER,
         }
     }
@@ -154,6 +160,7 @@ impl BzrError {
             BzrError::Auth(_) => ERROR_TYPE_AUTH,
             BzrError::DataIntegrity(_) => ERROR_TYPE_DATA_INTEGRITY,
             BzrError::BatchPartialFailure { .. } => ERROR_TYPE_BATCH_PARTIAL_FAILURE,
+            BzrError::Keyring(_) => ERROR_TYPE_KEYRING,
             BzrError::Other(_) => ERROR_TYPE_OTHER,
         }
     }
@@ -326,5 +333,13 @@ mod tests {
             result.contains("&include_fields=id"),
             "other params should be preserved: {result}"
         );
+    }
+
+    #[test]
+    fn exit_code_keyring() {
+        let err = BzrError::Keyring("keychain locked".into());
+        assert_eq!(err.exit_code(), 12);
+        assert_eq!(err.error_type(), "keyring");
+        assert_eq!(err.to_string(), "keyring error: keychain locked");
     }
 }

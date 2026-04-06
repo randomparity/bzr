@@ -29,6 +29,8 @@ pub struct ServerConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key_env: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_key_keyring: Option<KeyringRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth_method: Option<AuthMethod>,
@@ -41,16 +43,39 @@ pub struct ServerConfig {
     pub tls_insecure: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[non_exhaustive]
+pub struct KeyringRef {
+    /// Keyring service name. Defaults to "bzr" when omitted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service: Option<String>,
+    /// Account/username within the service. Defaults to the server name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
+}
+
+impl KeyringRef {
+    pub fn service_or_default(&self) -> &str {
+        self.service.as_deref().unwrap_or("bzr")
+    }
+
+    pub fn account_or_default<'a>(&'a self, server_name: &'a str) -> &'a str {
+        self.account.as_deref().unwrap_or(server_name)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CredentialSourceKind {
     Inline,
     Env,
+    Keyring,
 }
 
 #[derive(Debug)]
 pub enum CredentialSource<'a> {
     Inline(&'a str),
     EnvVar(&'a str),
+    Keyring { service: &'a str, account: &'a str },
 }
 
 impl CredentialSource<'_> {
@@ -58,6 +83,7 @@ impl CredentialSource<'_> {
         match self {
             CredentialSource::Inline(_) => CredentialSourceKind::Inline,
             CredentialSource::EnvVar(_) => CredentialSourceKind::Env,
+            CredentialSource::Keyring { .. } => CredentialSourceKind::Keyring,
         }
     }
 }
@@ -67,6 +93,7 @@ impl CredentialSourceKind {
         match self {
             CredentialSourceKind::Inline => "inline",
             CredentialSourceKind::Env => "env",
+            CredentialSourceKind::Keyring => "keyring",
         }
     }
 }
@@ -79,14 +106,36 @@ impl ServerConfig {
     }
 
     pub fn credential_source(&self) -> Result<CredentialSource<'_>> {
-        match (self.api_key.as_deref(), self.api_key_env.as_deref()) {
-            (Some(api_key), None) => Ok(CredentialSource::Inline(api_key)),
-            (None, Some(var_name)) => Ok(CredentialSource::EnvVar(var_name)),
-            (Some(_), Some(_)) => Err(BzrError::config(
-                "server config cannot define both 'api_key' and 'api_key_env'",
+        let count = usize::from(self.api_key.is_some())
+            + usize::from(self.api_key_env.is_some())
+            + usize::from(self.api_key_keyring.is_some());
+        match count {
+            0 => Err(BzrError::config(
+                "server config must define one of 'api_key', 'api_key_env', or 'api_key_keyring'",
             )),
-            (None, None) => Err(BzrError::config(
-                "server config must define either 'api_key' or 'api_key_env'",
+            1 => {
+                if let Some(api_key) = self.api_key.as_deref() {
+                    Ok(CredentialSource::Inline(api_key))
+                } else if let Some(var_name) = self.api_key_env.as_deref() {
+                    Ok(CredentialSource::EnvVar(var_name))
+                } else {
+                    let r = self.api_key_keyring.as_ref().ok_or_else(|| {
+                        BzrError::config("internal: keyring credential unexpectedly missing")
+                    })?;
+                    // Empty string means "default to the server_name"; the
+                    // real account is resolved in resolve_api_key() which
+                    // has the server name in scope. We cannot use
+                    // KeyringRef::account_or_default here because that would
+                    // require plumbing the server name through every caller.
+                    Ok(CredentialSource::Keyring {
+                        service: r.service_or_default(),
+                        account: r.account.as_deref().unwrap_or(""),
+                    })
+                }
+            }
+            _ => Err(BzrError::config(
+                "server config cannot define multiple API key sources \
+                 (api_key, api_key_env, api_key_keyring)",
             )),
         }
     }
@@ -110,6 +159,16 @@ impl ServerConfig {
                     )));
                 }
                 Ok(value)
+            }
+            CredentialSource::Keyring { service, account } => {
+                // Empty `account` means "default to server_name" (see the
+                // sentinel explanation in credential_source()).
+                let account = if account.is_empty() {
+                    server_name
+                } else {
+                    account
+                };
+                crate::credentials::keyring::retrieve(service, account)
             }
         }
     }
@@ -275,7 +334,7 @@ fn warn_security(message: &str) {
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used)]
+#[expect(clippy::unwrap_used, clippy::panic)]
 mod tests {
     use super::*;
     use std::env;
@@ -288,6 +347,7 @@ mod tests {
             url: url.to_string(),
             api_key: Some("test-key".to_string()),
             api_key_env: None,
+            api_key_keyring: None,
             email: None,
             auth_method: None,
             api_mode: None,
@@ -478,7 +538,7 @@ api_key_env = "BZR_TEST_API_KEY"
 
         let err = Config::load().unwrap_err();
         assert!(err.to_string().contains("server 'test'"));
-        assert!(err.to_string().contains("both 'api_key' and 'api_key_env'"));
+        assert!(err.to_string().contains("multiple API key sources"));
     }
 
     #[test]
@@ -491,6 +551,7 @@ api_key_env = "BZR_TEST_API_KEY"
             url: "https://bugzilla.example.com".into(),
             api_key: None,
             api_key_env: Some("BZR_TEST_API_KEY".into()),
+            api_key_keyring: None,
             email: None,
             auth_method: None,
             api_mode: None,
@@ -511,6 +572,7 @@ api_key_env = "BZR_TEST_API_KEY"
             url: "https://bugzilla.example.com".into(),
             api_key: Some("inline".into()),
             api_key_env: Some("BZR_TEST_API_KEY".into()),
+            api_key_keyring: None,
             email: None,
             auth_method: None,
             api_mode: None,
@@ -519,7 +581,240 @@ api_key_env = "BZR_TEST_API_KEY"
         };
 
         let err = server.credential_source().unwrap_err();
-        assert!(err.to_string().contains("both 'api_key' and 'api_key_env'"));
+        assert!(err.to_string().contains("multiple API key sources"));
+    }
+
+    #[test]
+    fn keyring_ref_defaults() {
+        let r = KeyringRef {
+            service: None,
+            account: None,
+        };
+        assert_eq!(r.service_or_default(), "bzr");
+        assert_eq!(r.account_or_default("prod"), "prod");
+    }
+
+    #[test]
+    fn keyring_ref_explicit() {
+        let r = KeyringRef {
+            service: Some("custom".into()),
+            account: Some("acct".into()),
+        };
+        assert_eq!(r.service_or_default(), "custom");
+        assert_eq!(r.account_or_default("prod"), "acct");
+    }
+
+    #[test]
+    fn keyring_ref_toml_roundtrip_empty() {
+        let toml_str = r#"
+url = "https://example.com"
+api_key_keyring = {}
+"#;
+        let srv: ServerConfig = toml::from_str(toml_str).unwrap();
+        assert!(srv.api_key_keyring.is_some());
+        let r = srv.api_key_keyring.as_ref().unwrap();
+        assert!(r.service.is_none());
+        assert!(r.account.is_none());
+    }
+
+    #[test]
+    fn keyring_ref_toml_roundtrip_full() {
+        let toml_str = r#"
+url = "https://example.com"
+api_key_keyring = { service = "bzr", account = "dave" }
+"#;
+        let srv: ServerConfig = toml::from_str(toml_str).unwrap();
+        let r = srv.api_key_keyring.as_ref().unwrap();
+        assert_eq!(r.service.as_deref(), Some("bzr"));
+        assert_eq!(r.account.as_deref(), Some("dave"));
+    }
+
+    #[test]
+    fn credential_source_keyring_variant() {
+        let server = ServerConfig {
+            url: "https://example.com".into(),
+            api_key: None,
+            api_key_env: None,
+            api_key_keyring: Some(KeyringRef {
+                service: None,
+                account: None,
+            }),
+            email: None,
+            auth_method: None,
+            api_mode: None,
+            server_version: None,
+            tls_insecure: false,
+        };
+        match server.credential_source().unwrap() {
+            CredentialSource::Keyring { service, account } => {
+                assert_eq!(service, "bzr");
+                // account defaults handled at resolve time via server_name
+                assert_eq!(account, "");
+            }
+            other => panic!("expected Keyring variant, got {other:?}"),
+        }
+        assert_eq!(
+            server.credential_source_kind().unwrap(),
+            CredentialSourceKind::Keyring
+        );
+    }
+
+    #[test]
+    fn credential_source_rejects_keyring_with_inline() {
+        let server = ServerConfig {
+            url: "https://example.com".into(),
+            api_key: Some("k".into()),
+            api_key_env: None,
+            api_key_keyring: Some(KeyringRef {
+                service: None,
+                account: None,
+            }),
+            email: None,
+            auth_method: None,
+            api_mode: None,
+            server_version: None,
+            tls_insecure: false,
+        };
+        let err = server.credential_source().unwrap_err();
+        assert!(err.to_string().contains("multiple API key sources"));
+    }
+
+    #[test]
+    fn credential_source_rejects_keyring_with_env() {
+        let server = ServerConfig {
+            url: "https://example.com".into(),
+            api_key: None,
+            api_key_env: Some("VAR".into()),
+            api_key_keyring: Some(KeyringRef {
+                service: None,
+                account: None,
+            }),
+            email: None,
+            auth_method: None,
+            api_mode: None,
+            server_version: None,
+            tls_insecure: false,
+        };
+        let err = server.credential_source().unwrap_err();
+        assert!(err.to_string().contains("multiple API key sources"));
+    }
+
+    #[test]
+    fn credential_source_rejects_all_three() {
+        let server = ServerConfig {
+            url: "https://example.com".into(),
+            api_key: Some("k".into()),
+            api_key_env: Some("VAR".into()),
+            api_key_keyring: Some(KeyringRef {
+                service: None,
+                account: None,
+            }),
+            email: None,
+            auth_method: None,
+            api_mode: None,
+            server_version: None,
+            tls_insecure: false,
+        };
+        let err = server.credential_source().unwrap_err();
+        assert!(err.to_string().contains("multiple API key sources"));
+    }
+
+    #[cfg(feature = "keyring")]
+    #[test]
+    fn resolve_api_key_from_keyring() {
+        // Install mock backend (idempotent across tests).
+        ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+        crate::credentials::keyring::store("bzr", "resolve-test-srv1", "keyring-secret").unwrap();
+
+        let server = ServerConfig {
+            url: "https://example.com".into(),
+            api_key: None,
+            api_key_env: None,
+            api_key_keyring: Some(KeyringRef {
+                service: None,
+                account: Some("resolve-test-srv1".into()),
+            }),
+            email: None,
+            auth_method: None,
+            api_mode: None,
+            server_version: None,
+            tls_insecure: false,
+        };
+
+        assert_eq!(
+            server.resolve_api_key("resolve-test-srv1").unwrap(),
+            "keyring-secret"
+        );
+
+        // cleanup
+        crate::credentials::keyring::delete("bzr", "resolve-test-srv1").unwrap();
+    }
+
+    #[cfg(feature = "keyring")]
+    #[test]
+    fn resolve_api_key_from_keyring_with_explicit_service_and_account() {
+        ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+        crate::credentials::keyring::store(
+            "resolve-test-myservice",
+            "resolve-test-myacct",
+            "explicit-secret",
+        )
+        .unwrap();
+
+        let server = ServerConfig {
+            url: "https://example.com".into(),
+            api_key: None,
+            api_key_env: None,
+            api_key_keyring: Some(KeyringRef {
+                service: Some("resolve-test-myservice".into()),
+                account: Some("resolve-test-myacct".into()),
+            }),
+            email: None,
+            auth_method: None,
+            api_mode: None,
+            server_version: None,
+            tls_insecure: false,
+        };
+
+        assert_eq!(
+            server.resolve_api_key("any-name").unwrap(),
+            "explicit-secret"
+        );
+
+        crate::credentials::keyring::delete("resolve-test-myservice", "resolve-test-myacct")
+            .unwrap();
+    }
+
+    #[cfg(feature = "keyring")]
+    #[test]
+    fn resolve_api_key_from_keyring_defaults_account_to_server_name() {
+        ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+        // Store under the server name (no explicit account).
+        crate::credentials::keyring::store("bzr", "resolve-test-srv2", "default-account-secret")
+            .unwrap();
+
+        let server = ServerConfig {
+            url: "https://example.com".into(),
+            api_key: None,
+            api_key_env: None,
+            // Neither service nor account set — should default to ("bzr", server_name).
+            api_key_keyring: Some(KeyringRef {
+                service: None,
+                account: None,
+            }),
+            email: None,
+            auth_method: None,
+            api_mode: None,
+            server_version: None,
+            tls_insecure: false,
+        };
+
+        assert_eq!(
+            server.resolve_api_key("resolve-test-srv2").unwrap(),
+            "default-account-secret"
+        );
+
+        crate::credentials::keyring::delete("bzr", "resolve-test-srv2").unwrap();
     }
 
     #[cfg(unix)]

@@ -38,4 +38,34 @@ pub enum ConfigAction {
     },
     /// Show current configuration
     Show,
+    /// Store an API key for a server in the OS keychain (prompts stdin)
+    SetKeyring {
+        /// Server alias name (must already exist)
+        name: String,
+        /// Override keyring service name (defaults to "bzr")
+        #[arg(long)]
+        service: Option<String>,
+        /// Override keyring account name (defaults to the server name)
+        #[arg(long)]
+        account: Option<String>,
+    },
+    /// Remove a server's API key from the OS keychain
+    UnsetKeyring {
+        /// Server alias name
+        name: String,
+    },
+    /// Migrate a server's existing inline/env API key into the OS keychain
+    MigrateToKeyring {
+        /// Server alias name
+        name: String,
+        /// Override keyring service name (defaults to "bzr")
+        #[arg(long)]
+        service: Option<String>,
+        /// Override keyring account name (defaults to the server name)
+        #[arg(long)]
+        account: Option<String>,
+        /// Skip confirmation prompt
+        #[arg(long)]
+        yes: bool,
+    },
 }

@@ -20,6 +20,7 @@ For installation and quick start, see [README.md](../README.md).
 - [classification](#bzr-classification----classification-operations)
 - [component](#bzr-component----component-operations)
 - [config](#bzr-config----configuration-management)
+- [Credential storage](#credential-storage)
 - [template](#bzr-template----bug-template-management)
 - [query](#bzr-query----saved-query-management)
 - [Flag Syntax](#flag-syntax)
@@ -866,6 +867,102 @@ Display the current configuration (API keys are masked). Supports `--json` for s
 bzr config show
 bzr --json config show
 ```
+
+### `bzr config set-keyring <server> [--service NAME] [--account NAME]`
+
+Store an API key for a previously-configured server in the OS keychain
+(macOS Keychain, Windows Credential Manager, or Linux Secret Service).
+The key is read from stdin with echo disabled, so it never appears on
+the command line or in shell history. After storage, `config.toml` is
+rewritten to drop any inline `api_key` / `api_key_env` value and add an
+`api_key_keyring` reference.
+
+- `--service NAME` overrides the keyring service name (default: `bzr`).
+- `--account NAME` overrides the keyring account name (default: the
+  server alias).
+
+Example:
+
+```bash
+$ bzr config set-keyring prod
+Enter API key for service='bzr' account='prod' (input hidden):
+Stored API key for server 'prod' in OS keychain (service=bzr, account=prod)
+```
+
+### `bzr config unset-keyring <server>`
+
+Remove a server's API key from the OS keychain and clear the
+`api_key_keyring` entry from `config.toml`. The server entry itself is
+preserved; re-run `bzr config set-server` or `bzr config set-keyring`
+afterward to re-credential it.
+
+Idempotent: missing keychain entries are silently ignored.
+
+### `bzr config migrate-to-keyring <server> [--service NAME] [--account NAME] --yes`
+
+Copy an existing inline or env-backed API key into the OS keychain.
+
+- For **inline** sources, `config.toml` is rewritten: `api_key` is
+  dropped and `api_key_keyring` is added.
+- For **env** sources, `config.toml` is left unchanged — the env var may
+  be shared with other tools. The secret is still stored in the
+  keychain so you can later edit `config.toml` manually to switch over.
+
+`--yes` is required to confirm the migration.
+
+---
+
+## Credential storage
+
+`bzr` supports three mutually-exclusive API key sources per server:
+
+| Source | Config field | Typical use |
+|---|---|---|
+| Inline | `api_key = "..."` | Personal dev machines with hardened file permissions |
+| Environment variable | `api_key_env = "BZR_API_KEY"` | Headless servers, CI/CD, containers |
+| OS keychain | `api_key_keyring = {}` | Desktop workstations with an unlocked keychain daemon |
+
+Exactly one must be set per server; config validation rejects any combination at startup.
+
+### Headless / CI environments
+
+Keychain access requires an unlocked user keyring daemon, which is
+typically not available in headless servers, CI runners, or containers.
+Use the environment variable source instead:
+
+```toml
+[servers.ci]
+url = "https://bugzilla.example.com"
+api_key_env = "BZR_API_KEY"
+```
+
+Inject the secret at runtime without writing it to disk:
+
+**GitHub Actions:**
+
+```yaml
+    - name: Run bzr
+      env:
+        BZR_API_KEY: ${{ secrets.BZR_API_KEY }}
+      run: bzr bug list --status NEW
+```
+
+**systemd drop-in:**
+
+```ini
+[Service]
+EnvironmentFile=/etc/bzr.env    # mode 0600, owner root
+```
+
+**Docker:**
+
+```dockerfile
+ENV BZR_API_KEY=""
+# Inject at runtime: docker run -e BZR_API_KEY=... ...
+```
+
+See also: `docs/troubleshooting.md` for platform-specific keychain
+troubleshooting.
 
 ---
 

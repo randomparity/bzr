@@ -33,6 +33,14 @@ impl ServerDisplayInfo {
             Ok(CredentialSource::EnvVar(var_name)) => {
                 (var_name.to_string(), CredentialSourceKind::Env.as_str())
             }
+            Ok(CredentialSource::Keyring { service, account }) => {
+                let display = if account.is_empty() {
+                    format!("{service}/<server-name>")
+                } else {
+                    format!("{service}/{account}")
+                };
+                (display, CredentialSourceKind::Keyring.as_str())
+            }
             Err(_) => ("[invalid config]".to_string(), "invalid"),
         };
         Self {
@@ -85,6 +93,8 @@ pub fn print_config(view: &ConfigView, format: OutputFormat) {
                 print_optional_field("Email", s.email.as_deref());
                 if s.api_key_source == "env" {
                     print_field("API Key Env", &s.api_key);
+                } else if s.api_key_source == "keyring" {
+                    print_field("Keyring", &s.api_key);
                 } else {
                     print_field("API Key", &s.api_key);
                 }
@@ -145,6 +155,7 @@ mod tests {
                 email: Some("admin@example.com".into()),
                 api_key: Some("1234567890abcdef".into()),
                 api_key_env: None,
+                api_key_keyring: None,
                 auth_method: Some(AuthMethod::Header),
                 api_mode: None,
                 server_version: None,
@@ -180,6 +191,7 @@ mod tests {
                 email: None,
                 api_key: None,
                 api_key_env: Some("BZR_API_KEY".into()),
+                api_key_keyring: None,
                 auth_method: None,
                 api_mode: None,
                 server_version: None,
@@ -199,5 +211,54 @@ mod tests {
 
         assert_eq!(json["api_key"], "BZR_API_KEY");
         assert_eq!(json["api_key_source"], "env");
+    }
+
+    #[test]
+    fn server_display_info_keyring_source() {
+        let srv = ServerConfig {
+            url: "https://example.com".into(),
+            api_key: None,
+            api_key_env: None,
+            api_key_keyring: Some(crate::config::KeyringRef {
+                service: Some("bzr".into()),
+                account: Some("prod".into()),
+            }),
+            email: None,
+            auth_method: None,
+            api_mode: None,
+            server_version: None,
+            tls_insecure: false,
+        };
+        let info = ServerDisplayInfo::from_config(&srv);
+        assert_eq!(info.api_key_source, "keyring");
+        assert!(info.api_key.contains("bzr"));
+        assert!(info.api_key.contains("prod"));
+    }
+
+    #[test]
+    fn server_display_info_keyring_source_default_account() {
+        // account=None should render with `<server-name>` placeholder per the
+        // Task 3 implementation.
+        let srv = ServerConfig {
+            url: "https://example.com".into(),
+            api_key: None,
+            api_key_env: None,
+            api_key_keyring: Some(crate::config::KeyringRef {
+                service: None,
+                account: None,
+            }),
+            email: None,
+            auth_method: None,
+            api_mode: None,
+            server_version: None,
+            tls_insecure: false,
+        };
+        let info = ServerDisplayInfo::from_config(&srv);
+        assert_eq!(info.api_key_source, "keyring");
+        assert!(info.api_key.contains("bzr"));
+        // The display shows the placeholder, not a real server name (since
+        // ServerDisplayInfo doesn't know the server name — that's higher
+        // up in ConfigView).
+        assert!(info.api_key.contains("<server-name>"));
     }
 }
