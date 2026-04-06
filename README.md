@@ -35,7 +35,9 @@ A command-line interface for Bugzilla servers, written in Rust. Inspired by the 
 Download the latest release for your platform from
 [GitHub Releases](https://github.com/randomparity/bzr/releases/latest).
 
-Available platforms: Linux (x86_64, aarch64, ppc64le, s390x), macOS (x86_64, Apple Silicon), Windows (x86_64).
+Available platforms: Linux (x86_64, aarch64, ppc64le, s390x), macOS (Apple Silicon), Windows (x86_64, aarch64).
+
+Intel Mac users can install from source with `cargo install bzr --locked`.
 
 ### From crates.io
 
@@ -110,6 +112,9 @@ bzr config set-server myserver --url https://bugzilla.example.com --api-key-env 
 # Legacy/insecure: stores the API key in config.toml and may leak via shell history
 bzr config set-server myserver --url https://bugzilla.example.com --api-key YOUR_API_KEY
 ```
+
+To store the API key in your OS keychain instead of an env var, see
+[Credential storage](#credential-storage).
 
 ### 3. Verify authentication
 

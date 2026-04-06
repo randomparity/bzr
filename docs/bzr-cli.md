@@ -61,7 +61,7 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 |------|---------|
 | 0 | Success |
 | 1 | General/unknown error |
-| 2 | Resource not found, or CLI usage error (invalid arguments)* |
+| 2 | Resource not found (from bzr), or invalid CLI arguments (from clap, before bzr runs)* |
 | 3 | Config or TOML parse error |
 | 4 | Bugzilla API or XML-RPC error |
 | 5 | HTTP/network error |
@@ -71,6 +71,7 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 | 9 | Authentication error |
 | 10 | Data integrity error (e.g. missing attachment data) |
 | 11 | Batch partial failure (some operations succeeded, some failed) |
+| 12 | Keyring error (OS keychain access failed, e.g. locked keyring or missing daemon) |
 
 *Exit code 2 is produced by clap for argument errors before bzr's error handling runs, in addition to resource-not-found errors from bzr itself.
 
@@ -132,7 +133,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   ├── view <GROUP>
 │   ├── create --name <N> --description <D> [--is-active <BOOL>]
 │   └── update <GROUP> [--description <D>] [--is-active <BOOL>]
-├── whoami
+├── whoami [show]
 ├── server
 │   └── info
 ├── classification
@@ -153,7 +154,8 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   └── delete <NAME>
 └── query
     ├── save <NAME> [--product <P>...] [--component <C>...] [--status <S>...] [--assignee <A>...]
-    │               [--priority <P>...] [--search <Q>] [--limit <N>]
+    │               [--creator <C>...] [--priority <P>...] [--severity <S>...] [--search <Q>]
+    │               [--limit <N>] [--fields <F>] [--exclude-fields <F>]
     ├── list
     ├── show <NAME>
     ├── delete <NAME>
@@ -751,6 +753,8 @@ bzr whoami
 bzr --json whoami
 ```
 
+`bzr whoami show` is accepted as a synonym for `bzr whoami`.
+
 ---
 
 ## `bzr server` -- Server Diagnostics
@@ -1046,13 +1050,17 @@ bzr query save my-p1 --assignee me@example.com --priority P1 --status NEW --stat
 | Option | Required | Description |
 |--------|----------|-------------|
 | `<NAME>` | Yes | Query name |
-| `--product <P>` | No | Filter by product name (repeatable) |
-| `--component <C>` | No | Filter by component name (repeatable) |
-| `--status <S>` | No | Filter by status (repeatable) |
-| `--assignee <A>` | No | Filter by assignee email (repeatable) |
-| `--priority <P>` | No | Filter by priority (repeatable) |
+| `--product <P>` | No | Filter by product name (repeatable; prefix with `!` to exclude) |
+| `--component <C>` | No | Filter by component name (repeatable; prefix with `!` to exclude) |
+| `--status <S>` | No | Filter by status (repeatable; prefix with `!` to exclude) |
+| `--assignee <A>` | No | Filter by assignee email (repeatable; prefix with `!` to exclude) |
+| `--creator <C>` | No | Filter by bug creator email (repeatable; prefix with `!` to exclude) |
+| `--priority <P>` | No | Filter by priority (repeatable; prefix with `!` to exclude) |
+| `--severity <S>` | No | Filter by severity (repeatable; prefix with `!` to exclude) |
 | `--search <Q>` | No | Free-text search query |
 | `--limit <N>` | No | Max results |
+| `--fields <F>` | No | Only return these fields when the query runs (comma-separated) |
+| `--exclude-fields <F>` | No | Exclude these fields when the query runs (comma-separated) |
 
 At least one filter must be set.
 
