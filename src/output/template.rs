@@ -207,7 +207,7 @@ mod tests {
             description: Some("Default description".into()),
         };
 
-        let (_, output) = crate::test_helpers::capture_stdout(async {
+        let ((), output) = crate::test_helpers::capture_stdout(async {
             print_template_detail("default", &template, OutputFormat::Table);
         })
         .await;

@@ -190,7 +190,7 @@ mod tests {
         query.fields = Some("id,summary".into());
         query.exclude_fields = Some("comments".into());
 
-        let (_, output) = crate::test_helpers::capture_stdout(async {
+        let ((), output) = crate::test_helpers::capture_stdout(async {
             print_query_detail("firefox-new", &query, OutputFormat::Table);
         })
         .await;

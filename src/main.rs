@@ -283,7 +283,7 @@ mod tests {
     fn resolve_format_invalid_env_returns_input_validation_error() {
         with_bzr_output(Some("xml"), || {
             let cli = base_cli(dummy_command());
-            let err = resolve_format(&cli).unwrap_err();
+            let err = resolve_format(&cli).expect_err("invalid format should fail");
             assert!(matches!(err, BzrError::InputValidation(_)));
         });
     }
