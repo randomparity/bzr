@@ -122,6 +122,11 @@ impl ServerConfig {
                     let r = self.api_key_keyring.as_ref().ok_or_else(|| {
                         BzrError::config("internal: keyring credential unexpectedly missing")
                     })?;
+                    // Empty string means "default to the server_name"; the
+                    // real account is resolved in resolve_api_key() which
+                    // has the server name in scope. We cannot use
+                    // KeyringRef::account_or_default here because that would
+                    // require plumbing the server name through every caller.
                     Ok(CredentialSource::Keyring {
                         service: r.service_or_default(),
                         account: r.account.as_deref().unwrap_or(""),
@@ -323,7 +328,7 @@ fn warn_security(message: &str) {
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used)]
+#[expect(clippy::unwrap_used, clippy::panic)]
 mod tests {
     use super::*;
     use std::env;
@@ -634,12 +639,13 @@ api_key_keyring = { service = "bzr", account = "dave" }
             server_version: None,
             tls_insecure: false,
         };
-        let source = server.credential_source().unwrap();
-        assert!(matches!(source, CredentialSource::Keyring { .. }));
-        if let CredentialSource::Keyring { service, account } = source {
-            assert_eq!(service, "bzr");
-            // account defaults handled at resolve time via server_name
-            assert_eq!(account, "");
+        match server.credential_source().unwrap() {
+            CredentialSource::Keyring { service, account } => {
+                assert_eq!(service, "bzr");
+                // account defaults handled at resolve time via server_name
+                assert_eq!(account, "");
+            }
+            other => panic!("expected Keyring variant, got {other:?}"),
         }
         assert_eq!(
             server.credential_source_kind().unwrap(),
@@ -664,8 +670,7 @@ api_key_keyring = { service = "bzr", account = "dave" }
             tls_insecure: false,
         };
         let err = server.credential_source().unwrap_err();
-        assert!(err.to_string().contains("api_key"));
-        assert!(err.to_string().contains("api_key_keyring"));
+        assert!(err.to_string().contains("multiple API key sources"));
     }
 
     #[test]
@@ -685,8 +690,7 @@ api_key_keyring = { service = "bzr", account = "dave" }
             tls_insecure: false,
         };
         let err = server.credential_source().unwrap_err();
-        assert!(err.to_string().contains("api_key_env"));
-        assert!(err.to_string().contains("api_key_keyring"));
+        assert!(err.to_string().contains("multiple API key sources"));
     }
 
     #[test]
