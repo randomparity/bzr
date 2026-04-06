@@ -50,6 +50,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Install libdbus-1-dev (native Linux)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -72,12 +76,18 @@ jobs:
         run: echo "RUSTFLAGS=-C target-feature=+crt-static" >> "$GITHUB_ENV"
 
       - name: Build
+        env:
+          # pkg-config refuses to cross-compile by default; Cross.toml
+          # installs target-arch libdbus via multiarch inside the cross
+          # images, and this tells pkg-config to honour the resulting
+          # target `.pc` files.
+          PKG_CONFIG_ALLOW_CROSS: "1"
         run: |
           if [ "${{ matrix.use_qemu }}" = "true" ]; then
             docker run --rm --platform linux/ppc64le \
               -v "${{ github.workspace }}:/workspace" -w /workspace \
               rust:1.85-bookworm \
-              cargo build --release --locked --target ${{ matrix.target }}
+              bash -c "apt-get update && apt-get install -y libdbus-1-dev pkg-config && cargo build --release --locked --target ${{ matrix.target }}"
           elif [ "${{ matrix.use_cross }}" = "true" ]; then
             cross build --release --locked --target ${{ matrix.target }}
           else
