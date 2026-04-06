@@ -160,10 +160,16 @@ impl ServerConfig {
                 }
                 Ok(value)
             }
-            CredentialSource::Keyring { .. } => Err(BzrError::config(format!(
-                "server '{server_name}' uses keyring storage, \
-                 which is not yet implemented"
-            ))),
+            CredentialSource::Keyring { service, account } => {
+                // Empty `account` means "default to server_name" (see the
+                // sentinel explanation in credential_source()).
+                let account = if account.is_empty() {
+                    server_name
+                } else {
+                    account
+                };
+                crate::credentials::keyring::retrieve(service, account)
+            }
         }
     }
 }
@@ -711,6 +717,101 @@ api_key_keyring = { service = "bzr", account = "dave" }
         };
         let err = server.credential_source().unwrap_err();
         assert!(err.to_string().contains("multiple API key sources"));
+    }
+
+    #[test]
+    fn resolve_api_key_from_keyring() {
+        // Install mock backend (idempotent across tests).
+        ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+        crate::credentials::keyring::store("bzr", "resolve-test-srv1", "keyring-secret").unwrap();
+
+        let server = ServerConfig {
+            url: "https://example.com".into(),
+            api_key: None,
+            api_key_env: None,
+            api_key_keyring: Some(KeyringRef {
+                service: None,
+                account: Some("resolve-test-srv1".into()),
+            }),
+            email: None,
+            auth_method: None,
+            api_mode: None,
+            server_version: None,
+            tls_insecure: false,
+        };
+
+        assert_eq!(
+            server.resolve_api_key("resolve-test-srv1").unwrap(),
+            "keyring-secret"
+        );
+
+        // cleanup
+        crate::credentials::keyring::delete("bzr", "resolve-test-srv1").unwrap();
+    }
+
+    #[test]
+    fn resolve_api_key_from_keyring_with_explicit_service_and_account() {
+        ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+        crate::credentials::keyring::store(
+            "resolve-test-myservice",
+            "resolve-test-myacct",
+            "explicit-secret",
+        )
+        .unwrap();
+
+        let server = ServerConfig {
+            url: "https://example.com".into(),
+            api_key: None,
+            api_key_env: None,
+            api_key_keyring: Some(KeyringRef {
+                service: Some("resolve-test-myservice".into()),
+                account: Some("resolve-test-myacct".into()),
+            }),
+            email: None,
+            auth_method: None,
+            api_mode: None,
+            server_version: None,
+            tls_insecure: false,
+        };
+
+        assert_eq!(
+            server.resolve_api_key("any-name").unwrap(),
+            "explicit-secret"
+        );
+
+        crate::credentials::keyring::delete("resolve-test-myservice", "resolve-test-myacct")
+            .unwrap();
+    }
+
+    #[test]
+    fn resolve_api_key_from_keyring_defaults_account_to_server_name() {
+        ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+        // Store under the server name (no explicit account).
+        crate::credentials::keyring::store("bzr", "resolve-test-srv2", "default-account-secret")
+            .unwrap();
+
+        let server = ServerConfig {
+            url: "https://example.com".into(),
+            api_key: None,
+            api_key_env: None,
+            // Neither service nor account set — should default to ("bzr", server_name).
+            api_key_keyring: Some(KeyringRef {
+                service: None,
+                account: None,
+            }),
+            email: None,
+            auth_method: None,
+            api_mode: None,
+            server_version: None,
+            tls_insecure: false,
+        };
+
+        assert_eq!(
+            server.resolve_api_key("resolve-test-srv2").unwrap(),
+            "default-account-secret"
+        );
+
+        crate::credentials::keyring::delete("bzr", "resolve-test-srv2").unwrap();
     }
 
     #[cfg(unix)]
