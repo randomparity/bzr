@@ -1,7 +1,8 @@
 [package]
 name = "bzr"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
+resolver = "3"
 description = "A CLI for Bugzilla, inspired by gh"
 license = "MIT"
 rust-version = "1.84"
