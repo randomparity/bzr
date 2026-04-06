@@ -44,3 +44,9 @@ Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches `Com
 - Tests use `wiremock` for HTTP mocking. Unit tests are in `#[cfg(test)] mod tests` within each source file. Integration tests live in `tests/integration.rs` and functional tests in `tests/functional/`. All API tests require `#[tokio::test]` (the runtime is tokio). Test modules use `#[expect(clippy::unwrap_used)]` to allow `.unwrap()` in tests.
 - Clippy pedantic is enabled with strict rules (see `[lints.clippy]` in Cargo.toml). `unwrap_used` is denied, `expect_used` and `allow_attributes` are warned.
 - CLI reference documentation lives in `docs/bzr-cli.md`. When adding a new command, update that file.
+- System package dependencies (e.g. `libdbus-1-dev` for the `keyring` default feature) must be installed in **every** place the crate is built, not just one workflow. When adding or changing a native dependency, audit all of:
+  - `.github/workflows/ci.yml` (native host jobs)
+  - `.github/workflows/release.yml` (native host jobs **and** the QEMU container for `powerpc64le`)
+  - `.github/workflows/publish-crates.yml` (native host job)
+  - `Cross.toml` `pre-build` hooks for every `cross`-driven target (adds the target-arch dev package via Debian multiarch: `apt-get install libdbus-1-dev:$CROSS_DEB_ARCH`)
+  Do **not** work around a missing system dep by disabling default features on exotic targets — that silently ships a degraded binary. Make the build environment correct on every target instead.
