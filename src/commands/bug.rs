@@ -443,8 +443,8 @@ async fn update_single(
     Ok(())
 }
 
-#[expect(clippy::print_stdout, clippy::print_stderr)]
 fn print_batch_result(batch: &BatchResult, format: OutputFormat) {
+    use std::io::Write;
     match format {
         crate::types::OutputFormat::Json => {
             output::print_result(batch, "", format);
@@ -453,10 +453,15 @@ fn print_batch_result(batch: &BatchResult, format: OutputFormat) {
             if !batch.succeeded.is_empty() {
                 let ids_str: Vec<String> =
                     batch.succeeded.iter().map(|id| format!("#{id}")).collect();
-                println!("Updated bugs: {}", ids_str.join(", "));
+                let _ = writeln!(std::io::stdout(), "Updated bugs: {}", ids_str.join(", "));
             }
             for f in &batch.failed {
-                eprintln!("Failed to update bug #{}: {}", f.id, f.error);
+                let _ = writeln!(
+                    std::io::stderr(),
+                    "Failed to update bug #{}: {}",
+                    f.id,
+                    f.error
+                );
             }
         }
     }
@@ -634,6 +639,104 @@ mod tests {
         let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
         assert_eq!(parsed["action"], "updated");
         assert_eq!(parsed["id"], 42);
+    }
+
+    #[tokio::test]
+    async fn bug_update_batch_mixed_results() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        // First id succeeds, second id fails — exercises update_batch and
+        // print_batch_result, including the BatchPartialFailure path.
+        Mock::given(method("PUT"))
+            .and(path("/rest/bug/1"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"bugs": [{"id": 1, "changes": {}}]})),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/rest/bug/2"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("boom"))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let action = BugAction::Update {
+            ids: vec![1, 2],
+            status: Some("RESOLVED".into()),
+            resolution: Some("FIXED".into()),
+            assignee: None,
+            priority: None,
+            severity: None,
+            summary: None,
+            whiteboard: None,
+            flag: vec![],
+            blocks_add: vec![],
+            blocks_remove: vec![],
+            depends_on_add: vec![],
+            depends_on_remove: vec![],
+        };
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(matches!(
+            result,
+            Err(crate::error::BzrError::BatchPartialFailure {
+                succeeded: 1,
+                failed: 1,
+            })
+        ));
+        let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+        assert_eq!(parsed["succeeded"], serde_json::json!([1]));
+        assert_eq!(parsed["failed"][0]["id"], 2);
+    }
+
+    #[tokio::test]
+    async fn bug_update_batch_table_format_all_succeed() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        // Table format path through print_batch_result with no failures.
+        Mock::given(method("PUT"))
+            .and(path("/rest/bug/1"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"bugs": [{"id": 1, "changes": {}}]})),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/rest/bug/2"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"bugs": [{"id": 2, "changes": {}}]})),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let action = BugAction::Update {
+            ids: vec![1, 2],
+            status: Some("RESOLVED".into()),
+            resolution: Some("FIXED".into()),
+            assignee: None,
+            priority: None,
+            severity: None,
+            summary: None,
+            whiteboard: None,
+            flag: vec![],
+            blocks_add: vec![],
+            blocks_remove: vec![],
+            depends_on_add: vec![],
+            depends_on_remove: vec![],
+        };
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Table, None)).await;
+        assert!(result.is_ok());
+        assert!(output.contains("Updated bugs:"));
+        assert!(output.contains("#1"));
+        assert!(output.contains("#2"));
     }
 
     #[tokio::test]
