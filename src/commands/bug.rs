@@ -386,11 +386,7 @@ async fn handle_clone(
     Ok(())
 }
 
-async fn handle_update(
-    client: &BugzillaClient,
-    action: &BugAction,
-    format: OutputFormat,
-) -> Result<()> {
+fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)> {
     let BugAction::Update {
         ids,
         status,
@@ -429,57 +425,82 @@ async fn handle_update(
             remove: depends_on_remove.clone(),
         },
     };
+    Ok((ids.clone(), params))
+}
 
-    if ids.len() == 1 {
-        // Single bug update — original behavior
-        let id = ids[0];
-        client.update_bug(id, &params).await?;
-        output::print_result(
-            &ActionResult::updated(id, ResourceKind::Bug),
-            &format!("Updated bug #{id}"),
-            format,
-        );
-    } else {
-        // Batch update — continue on failure
-        let mut succeeded = Vec::new();
-        let mut failed = Vec::new();
-        for &id in ids {
-            match client.update_bug(id, &params).await {
-                Ok(()) => succeeded.push(id),
-                Err(e) => failed.push(BatchFailure {
-                    id,
-                    error: e.to_string(),
-                }),
-            }
+async fn update_single(
+    client: &BugzillaClient,
+    id: u64,
+    params: &UpdateBugParams,
+    format: OutputFormat,
+) -> Result<()> {
+    client.update_bug(id, params).await?;
+    output::print_result(
+        &ActionResult::updated(id, ResourceKind::Bug),
+        &format!("Updated bug #{id}"),
+        format,
+    );
+    Ok(())
+}
+
+#[expect(clippy::print_stdout, clippy::print_stderr)]
+fn print_batch_result(batch: &BatchResult, format: OutputFormat) {
+    match format {
+        crate::types::OutputFormat::Json => {
+            output::print_result(batch, "", format);
         }
-        let has_failures = !failed.is_empty();
-        let batch = BatchResult::new(succeeded.clone(), failed);
-        #[expect(clippy::print_stdout, clippy::print_stderr)]
-        {
-            match format {
-                crate::types::OutputFormat::Json => {
-                    output::print_result(&batch, "", format);
-                }
-                crate::types::OutputFormat::Table => {
-                    if !succeeded.is_empty() {
-                        let ids_str: Vec<String> =
-                            succeeded.iter().map(|id| format!("#{id}")).collect();
-                        println!("Updated bugs: {}", ids_str.join(", "));
-                    }
-                    for f in &batch.failed {
-                        eprintln!("Failed to update bug #{}: {}", f.id, f.error);
-                    }
-                }
+        crate::types::OutputFormat::Table => {
+            if !batch.succeeded.is_empty() {
+                let ids_str: Vec<String> =
+                    batch.succeeded.iter().map(|id| format!("#{id}")).collect();
+                println!("Updated bugs: {}", ids_str.join(", "));
             }
-        }
-        if has_failures {
-            return Err(crate::error::BzrError::BatchPartialFailure {
-                succeeded: succeeded.len(),
-                failed: batch.failed.len(),
-            });
+            for f in &batch.failed {
+                eprintln!("Failed to update bug #{}: {}", f.id, f.error);
+            }
         }
     }
+}
+
+async fn update_batch(
+    client: &BugzillaClient,
+    ids: &[u64],
+    params: &UpdateBugParams,
+    format: OutputFormat,
+) -> Result<()> {
+    let mut succeeded = Vec::new();
+    let mut failed = Vec::new();
+    for &id in ids {
+        match client.update_bug(id, params).await {
+            Ok(()) => succeeded.push(id),
+            Err(e) => failed.push(BatchFailure {
+                id,
+                error: e.to_string(),
+            }),
+        }
+    }
+    let batch = BatchResult::new(succeeded, failed);
+    print_batch_result(&batch, format);
+    if !batch.failed.is_empty() {
+        return Err(crate::error::BzrError::BatchPartialFailure {
+            succeeded: batch.succeeded.len(),
+            failed: batch.failed.len(),
+        });
+    }
     Ok(())
+}
+
+async fn handle_update(
+    client: &BugzillaClient,
+    action: &BugAction,
+    format: OutputFormat,
+) -> Result<()> {
+    let (ids, params) = build_update_params(action)?;
+    if ids.len() == 1 {
+        update_single(client, ids[0], &params, format).await
+    } else {
+        update_batch(client, &ids, &params, format).await
+    }
 }
 
 #[cfg(test)]
