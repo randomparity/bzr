@@ -38,7 +38,8 @@ Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches `Com
 
 ### Conventions
 
-- `#[expect(clippy::print_stdout)]` is used to allow `println!` in command modules and success messages, since `print_stdout` is denied project-wide.
+- User-facing output should use `writeln!(io::stdout(), …)` / `writeln!(io::stderr(), …)` rather than `println!`/`eprintln!`. Two reasons: (a) `print_stdout`/`print_stderr` are denied project-wide, so every `println!` site needs an `#[expect(clippy::print_stdout)]` escape hatch; (b) `test_helpers::capture_stdout` redirects fd 1 via `dup2`, which captures `writeln!(io::stdout(), …)` but **not** `println!` — `println!` goes through cargo test's per-test stdout-capture (a thread-local installed by `set_output_capture`) and bypasses fd 1 entirely. Mixing the two in the same function silently breaks `capture_stdout` tests. The helpers in `src/output/formatting.rs` already follow this convention; new output code should match. Discard the `Result` with `let _ = writeln!(…)` if the function isn't already in a context that allows `.expect()`.
+- `#[expect(clippy::print_stdout)]` is used to allow `println!` in the few remaining sites that haven't been migrated to `writeln!`, since `print_stdout` is denied project-wide.
 - Logging uses `tracing` (not println). Verbosity: `-v`=info, `-vv`=debug, `-vvv`=trace. `RUST_LOG` env var overrides.
 - URLs are sanitized via `safe_url()` in debug logs to avoid leaking API keys in query params.
 - Tests use `wiremock` for HTTP mocking. Unit tests are in `#[cfg(test)] mod tests` within each source file. Integration tests live in `tests/integration.rs` and functional tests in `tests/functional/`. All API tests require `#[tokio::test]` (the runtime is tokio). Test modules use `#[expect(clippy::unwrap_used)]` to allow `.unwrap()` in tests.
