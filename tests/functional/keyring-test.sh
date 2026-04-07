@@ -25,6 +25,7 @@ cleanup() {
       ./target/debug/bzr config unset-keyring "$SERVER_NAME" 2>/dev/null || true
   fi
   rm -rf "$TMP_CONFIG_HOME"
+  return 0
 }
 trap cleanup EXIT
 
