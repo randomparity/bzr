@@ -122,30 +122,35 @@ where
     reason = "test helper: unrecoverable if output is not JSON"
 )]
 pub fn extract_json(output: &str) -> serde_json::Value {
-    // Try parsing the full output first (common case).
     if let Ok(v) = serde_json::from_str(output) {
         return v;
     }
-    // Find first `[` or `{` and try parsing from there.
     for (i, ch) in output.char_indices() {
         if ch == '[' || ch == '{' {
-            if let Ok(v) = serde_json::from_str(&output[i..]) {
+            if let Some(v) = try_parse_from(&output[i..], ch) {
                 return v;
-            }
-            // Try to find the matching close bracket by attempting
-            // progressively shorter substrings from the end.
-            let rest = &output[i..];
-            for (j, jch) in rest.char_indices().rev() {
-                let closing = if ch == '[' { ']' } else { '}' };
-                if jch == closing {
-                    if let Ok(v) = serde_json::from_str(&rest[..=j]) {
-                        return v;
-                    }
-                }
             }
         }
     }
     panic!("no valid JSON found in captured output: {output}");
+}
+
+/// Try to parse JSON starting at `slice`, whose first char is `opener` (`[` or `{`).
+/// First attempts the full slice, then progressively shorter prefixes ending at
+/// each matching close bracket, walking from the end backwards.
+fn try_parse_from(slice: &str, opener: char) -> Option<serde_json::Value> {
+    if let Ok(v) = serde_json::from_str(slice) {
+        return Some(v);
+    }
+    let closing = if opener == '[' { ']' } else { '}' };
+    for (j, jch) in slice.char_indices().rev() {
+        if jch == closing {
+            if let Ok(v) = serde_json::from_str(&slice[..=j]) {
+                return Some(v);
+            }
+        }
+    }
+    None
 }
 
 /// Build a mock XML-RPC Bug.search response containing one bug.

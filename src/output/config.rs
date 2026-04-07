@@ -1,3 +1,5 @@
+use std::io::{self, Write};
+
 use serde::Serialize;
 
 use super::formatting::{mask_api_key, print_field, print_formatted, print_optional_field};
@@ -77,33 +79,40 @@ impl ConfigView {
     }
 }
 
-#[expect(clippy::print_stdout)]
+fn print_api_key(s: &ServerDisplayInfo) {
+    let label = match s.api_key_source.as_str() {
+        "env" => "API Key Env",
+        "keyring" => "Keyring",
+        _ => "API Key",
+    };
+    print_field(label, &s.api_key);
+}
+
+fn print_server(name: &str, s: &ServerDisplayInfo) {
+    writeln!(io::stdout(), "\n[{name}]").expect("write to output");
+    print_field("URL", &s.url);
+    print_optional_field("Email", s.email.as_deref());
+    print_api_key(s);
+    print_field("API Key Source", &s.api_key_source);
+    print_field("Auth", &auth_display(s.auth_method.as_ref()));
+    if s.tls_insecure {
+        print_field("TLS", "insecure (certificate verification disabled)");
+    }
+}
+
 pub fn print_config(view: &ConfigView, format: OutputFormat) {
     print_formatted(view, format, |v| {
-        println!("Config file: {}\n", v.config_file);
+        let mut out = io::stdout();
+        writeln!(out, "Config file: {}\n", v.config_file).expect("write to output");
         if let Some(ref def) = v.default_server {
-            println!("Default server: {def}");
+            writeln!(out, "Default server: {def}").expect("write to output");
         }
         if v.servers.is_empty() {
-            println!("No servers configured.");
-        } else {
-            for (name, s) in &v.servers {
-                println!("\n[{name}]");
-                print_field("URL", &s.url);
-                print_optional_field("Email", s.email.as_deref());
-                if s.api_key_source == "env" {
-                    print_field("API Key Env", &s.api_key);
-                } else if s.api_key_source == "keyring" {
-                    print_field("Keyring", &s.api_key);
-                } else {
-                    print_field("API Key", &s.api_key);
-                }
-                print_field("API Key Source", &s.api_key_source);
-                print_field("Auth", &auth_display(s.auth_method.as_ref()));
-                if s.tls_insecure {
-                    print_field("TLS", "insecure (certificate verification disabled)");
-                }
-            }
+            writeln!(out, "No servers configured.").expect("write to output");
+            return;
+        }
+        for (name, s) in &v.servers {
+            print_server(name, s);
         }
     });
 }
@@ -233,6 +242,96 @@ mod tests {
         assert_eq!(info.api_key_source, "keyring");
         assert!(info.api_key.contains("bzr"));
         assert!(info.api_key.contains("prod"));
+    }
+
+    fn make_display_info(
+        url: &str,
+        api_key: &str,
+        source: &str,
+        tls_insecure: bool,
+    ) -> ServerDisplayInfo {
+        ServerDisplayInfo {
+            url: url.into(),
+            email: None,
+            api_key: api_key.into(),
+            api_key_source: source.into(),
+            auth_method: None,
+            tls_insecure,
+        }
+    }
+
+    async fn capture_print_config(view: &ConfigView) -> String {
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_config(view, OutputFormat::Table);
+        })
+        .await;
+        output
+    }
+
+    #[tokio::test]
+    async fn print_config_renders_table_for_inline_server() {
+        // Exercises print_config / print_server / print_api_key with the
+        // inline credential branch.
+        let _lock = crate::ENV_LOCK.lock().await;
+        let mut info = make_display_info("https://bugzilla.example", "12345678...", "inline", true);
+        info.email = Some("admin@example.com".into());
+        info.auth_method = Some(AuthMethod::Header);
+        let mut servers = std::collections::BTreeMap::new();
+        servers.insert("prod".into(), info);
+        let view = ConfigView {
+            config_file: "/tmp/bzr/config.toml".into(),
+            default_server: Some("prod".into()),
+            servers,
+        };
+        let output = capture_print_config(&view).await;
+        for needle in [
+            "Config file: /tmp/bzr/config.toml",
+            "Default server: prod",
+            "[prod]",
+            "https://bugzilla.example",
+            "admin@example.com",
+            "API Key",
+            "12345678...",
+            "insecure",
+        ] {
+            assert!(output.contains(needle), "missing {needle:?} in output");
+        }
+    }
+
+    #[tokio::test]
+    async fn print_config_renders_env_and_keyring_labels() {
+        // Exercises both non-inline branches of print_api_key in one run.
+        let _lock = crate::ENV_LOCK.lock().await;
+        let mut servers = std::collections::BTreeMap::new();
+        servers.insert(
+            "env-srv".into(),
+            make_display_info("https://env.example", "BZR_API_KEY", "env", false),
+        );
+        servers.insert(
+            "kr-srv".into(),
+            make_display_info("https://kr.example", "bzr/kr-srv", "keyring", false),
+        );
+        let view = ConfigView {
+            config_file: "/tmp/bzr/config.toml".into(),
+            default_server: None,
+            servers,
+        };
+        let output = capture_print_config(&view).await;
+        for needle in ["API Key Env", "BZR_API_KEY", "Keyring", "bzr/kr-srv"] {
+            assert!(output.contains(needle), "missing {needle:?} in output");
+        }
+    }
+
+    #[tokio::test]
+    async fn print_config_renders_empty_servers_message() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let view = ConfigView {
+            config_file: "/tmp/bzr/config.toml".into(),
+            default_server: None,
+            servers: std::collections::BTreeMap::new(),
+        };
+        let output = capture_print_config(&view).await;
+        assert!(output.contains("No servers configured."));
     }
 
     #[test]

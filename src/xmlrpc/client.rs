@@ -84,29 +84,7 @@ impl XmlRpcClient {
             ("priority", &params.priority),
             ("severity", &params.severity),
         ];
-        let mut chart_idx = 1u32;
-        for &(key, values) in vec_fields {
-            let (positive, negated) = partition_filters(values);
-            if !positive.is_empty() {
-                let arr: Vec<Value> = positive.iter().map(|v| Value::from(*v)).collect();
-                rpc_params.insert(key.into(), Value::Array(arr));
-            }
-            if !negated.is_empty() {
-                let chart_field = BOOLEAN_CHART_FIELD_NAMES
-                    .iter()
-                    .find(|&&(k, _)| k == key)
-                    .map_or(key, |&(_, v)| v);
-                for v in negated {
-                    let f_key = format!("f{chart_idx}");
-                    let o_key = format!("o{chart_idx}");
-                    let v_key = format!("v{chart_idx}");
-                    rpc_params.insert(f_key, Value::from(chart_field));
-                    rpc_params.insert(o_key, Value::from("notequals"));
-                    rpc_params.insert(v_key, Value::from(v));
-                    chart_idx += 1;
-                }
-            }
-        }
+        add_vec_filters(&mut rpc_params, vec_fields);
 
         // Single-value Option fields
         let option_fields: &[(&str, &Option<String>)] = &[
@@ -129,16 +107,7 @@ impl XmlRpcClient {
         if let Some(limit) = params.limit {
             rpc_params.insert("limit".into(), Value::Int(i64::from(limit)));
         }
-        // Bugzilla XML-RPC requires field lists as arrays; the REST API accepts CSV strings.
-        for (key, value) in [
-            ("include_fields", &params.include_fields),
-            ("exclude_fields", &params.exclude_fields),
-        ] {
-            if let Some(ref fields) = *value {
-                let arr: Vec<Value> = fields.split(',').map(|f| Value::from(f.trim())).collect();
-                rpc_params.insert(key.into(), Value::Array(arr));
-            }
-        }
+        add_field_lists(&mut rpc_params, params);
 
         let result = self.call("Bug.search", rpc_params).await?;
         extract_bugs(&result)
@@ -217,6 +186,43 @@ fn extract_id(response: &Value) -> Result<u64> {
 
     #[expect(clippy::cast_sign_loss, reason = "user IDs are non-negative")]
     Ok(id as u64)
+}
+
+fn add_vec_filters(rpc_params: &mut BTreeMap<String, Value>, vec_fields: &[(&str, &[String])]) {
+    let mut chart_idx = 1u32;
+    for &(key, values) in vec_fields {
+        let (positive, negated) = partition_filters(values);
+        if !positive.is_empty() {
+            let arr: Vec<Value> = positive.iter().map(|v| Value::from(*v)).collect();
+            rpc_params.insert(key.into(), Value::Array(arr));
+        }
+        if negated.is_empty() {
+            continue;
+        }
+        let chart_field = BOOLEAN_CHART_FIELD_NAMES
+            .iter()
+            .find(|&&(k, _)| k == key)
+            .map_or(key, |&(_, v)| v);
+        for v in negated {
+            rpc_params.insert(format!("f{chart_idx}"), Value::from(chart_field));
+            rpc_params.insert(format!("o{chart_idx}"), Value::from("notequals"));
+            rpc_params.insert(format!("v{chart_idx}"), Value::from(v));
+            chart_idx += 1;
+        }
+    }
+}
+
+fn add_field_lists(rpc_params: &mut BTreeMap<String, Value>, params: &SearchParams) {
+    // Bugzilla XML-RPC requires field lists as arrays; the REST API accepts CSV strings.
+    for (key, value) in [
+        ("include_fields", &params.include_fields),
+        ("exclude_fields", &params.exclude_fields),
+    ] {
+        if let Some(ref fields) = *value {
+            let arr: Vec<Value> = fields.split(',').map(|f| Value::from(f.trim())).collect();
+            rpc_params.insert(key.into(), Value::Array(arr));
+        }
+    }
 }
 
 fn extract_bugs(response: &Value) -> Result<Vec<Bug>> {
