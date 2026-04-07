@@ -244,40 +244,58 @@ mod tests {
         assert!(info.api_key.contains("prod"));
     }
 
+    fn make_display_info(
+        url: &str,
+        api_key: &str,
+        source: &str,
+        tls_insecure: bool,
+    ) -> ServerDisplayInfo {
+        ServerDisplayInfo {
+            url: url.into(),
+            email: None,
+            api_key: api_key.into(),
+            api_key_source: source.into(),
+            auth_method: None,
+            tls_insecure,
+        }
+    }
+
+    async fn capture_print_config(view: &ConfigView) -> String {
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_config(view, OutputFormat::Table);
+        })
+        .await;
+        output
+    }
+
     #[tokio::test]
     async fn print_config_renders_table_for_inline_server() {
         // Exercises print_config / print_server / print_api_key with the
         // inline credential branch.
         let _lock = crate::ENV_LOCK.lock().await;
+        let mut info = make_display_info("https://bugzilla.example", "12345678...", "inline", true);
+        info.email = Some("admin@example.com".into());
+        info.auth_method = Some(AuthMethod::Header);
         let mut servers = std::collections::BTreeMap::new();
-        servers.insert(
-            "prod".to_string(),
-            ServerDisplayInfo {
-                url: "https://bugzilla.example".into(),
-                email: Some("admin@example.com".into()),
-                api_key: "12345678...".into(),
-                api_key_source: "inline".into(),
-                auth_method: Some(AuthMethod::Header),
-                tls_insecure: true,
-            },
-        );
+        servers.insert("prod".into(), info);
         let view = ConfigView {
             config_file: "/tmp/bzr/config.toml".into(),
             default_server: Some("prod".into()),
             servers,
         };
-        let ((), output) = crate::test_helpers::capture_stdout(async {
-            print_config(&view, OutputFormat::Table);
-        })
-        .await;
-        assert!(output.contains("Config file: /tmp/bzr/config.toml"));
-        assert!(output.contains("Default server: prod"));
-        assert!(output.contains("[prod]"));
-        assert!(output.contains("https://bugzilla.example"));
-        assert!(output.contains("admin@example.com"));
-        assert!(output.contains("API Key"));
-        assert!(output.contains("12345678..."));
-        assert!(output.contains("insecure"));
+        let output = capture_print_config(&view).await;
+        for needle in [
+            "Config file: /tmp/bzr/config.toml",
+            "Default server: prod",
+            "[prod]",
+            "https://bugzilla.example",
+            "admin@example.com",
+            "API Key",
+            "12345678...",
+            "insecure",
+        ] {
+            assert!(output.contains(needle), "missing {needle:?} in output");
+        }
     }
 
     #[tokio::test]
@@ -286,40 +304,22 @@ mod tests {
         let _lock = crate::ENV_LOCK.lock().await;
         let mut servers = std::collections::BTreeMap::new();
         servers.insert(
-            "env-srv".to_string(),
-            ServerDisplayInfo {
-                url: "https://env.example".into(),
-                email: None,
-                api_key: "BZR_API_KEY".into(),
-                api_key_source: "env".into(),
-                auth_method: None,
-                tls_insecure: false,
-            },
+            "env-srv".into(),
+            make_display_info("https://env.example", "BZR_API_KEY", "env", false),
         );
         servers.insert(
-            "kr-srv".to_string(),
-            ServerDisplayInfo {
-                url: "https://kr.example".into(),
-                email: None,
-                api_key: "bzr/kr-srv".into(),
-                api_key_source: "keyring".into(),
-                auth_method: None,
-                tls_insecure: false,
-            },
+            "kr-srv".into(),
+            make_display_info("https://kr.example", "bzr/kr-srv", "keyring", false),
         );
         let view = ConfigView {
             config_file: "/tmp/bzr/config.toml".into(),
             default_server: None,
             servers,
         };
-        let ((), output) = crate::test_helpers::capture_stdout(async {
-            print_config(&view, OutputFormat::Table);
-        })
-        .await;
-        assert!(output.contains("API Key Env"));
-        assert!(output.contains("BZR_API_KEY"));
-        assert!(output.contains("Keyring"));
-        assert!(output.contains("bzr/kr-srv"));
+        let output = capture_print_config(&view).await;
+        for needle in ["API Key Env", "BZR_API_KEY", "Keyring", "bzr/kr-srv"] {
+            assert!(output.contains(needle), "missing {needle:?} in output");
+        }
     }
 
     #[tokio::test]
@@ -330,10 +330,7 @@ mod tests {
             default_server: None,
             servers: std::collections::BTreeMap::new(),
         };
-        let ((), output) = crate::test_helpers::capture_stdout(async {
-            print_config(&view, OutputFormat::Table);
-        })
-        .await;
+        let output = capture_print_config(&view).await;
         assert!(output.contains("No servers configured."));
     }
 
