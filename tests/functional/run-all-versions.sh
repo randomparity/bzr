@@ -11,6 +11,7 @@ cleanup_all() {
     for ver in "${VERSIONS[@]}"; do
         BZR_BZ_VERSION="$ver" "$SCRIPT_DIR/setup-bugzilla.sh" stop 2>/dev/null || true
     done
+    return 0
 }
 trap cleanup_all EXIT
 

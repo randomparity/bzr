@@ -42,6 +42,7 @@ cleanup() {
     rm -rf "$FUNC_CONFIG_DIR"
     rm -f /tmp/bzr-func-test.txt /tmp/bzr-func-downloaded.txt
     _cleanup_tmpfiles
+    return 0
 }
 trap cleanup EXIT
 

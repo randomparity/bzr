@@ -33,8 +33,8 @@ HEALTH_TIMEOUT="${BZR_FUNC_TIMEOUT:-$DEFAULT_TIMEOUT}"
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
-log() { echo "==> [$BZ_VERSION] $*"; }
-err() { echo "ERROR: [$BZ_VERSION] $*" >&2; }
+log() { echo "==> [$BZ_VERSION] $*"; return 0; }
+err() { echo "ERROR: [$BZ_VERSION] $*" >&2; return 0; }
 
 wait_for_ready() {
     local url="http://127.0.0.1:${BZ_PORT}/rest/version"
@@ -57,6 +57,7 @@ wait_for_ready() {
 
 container_exists() {
     $CONTAINER_RT container inspect "$CONTAINER_NAME" >/dev/null 2>&1
+    return $?
 }
 
 # ── Subcommands ──────────────────────────────────────────────────────
@@ -74,6 +75,7 @@ cmd_build() {
         -f "$containerfile" \
         "$context"
     log "Image built successfully."
+    return 0
 }
 
 cmd_start() {
@@ -107,6 +109,7 @@ cmd_stop() {
     log "Stopping and removing container ${CONTAINER_NAME}..."
     $CONTAINER_RT rm -f "$CONTAINER_NAME" 2>/dev/null || true
     log "Container removed."
+    return 0
 }
 
 cmd_status() {
@@ -129,6 +132,7 @@ cmd_status() {
 cmd_reset() {
     cmd_stop
     cmd_start
+    return 0
 }
 
 cmd_logs() {
@@ -137,6 +141,7 @@ cmd_logs() {
     else
         $CONTAINER_RT logs "$@" "$CONTAINER_NAME" 2>&1
     fi
+    return 0
 }
 
 # ── Main ─────────────────────────────────────────────────────────────

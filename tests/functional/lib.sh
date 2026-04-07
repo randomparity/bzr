@@ -12,6 +12,7 @@ bz_version_num() {
         bz53) echo 530 ;;
         *)    echo 0 ;;
     esac
+    return 0
 }
 
 # Skip test if version is below minimum. Usage: require_version 520 "reason"
@@ -47,11 +48,13 @@ fi
 test_begin() {
     CURRENT_TEST="$1"
     printf "  ${CYAN}TEST${RESET}  %s ... " "$CURRENT_TEST"
+    return 0
 }
 
 test_pass() {
     PASS_COUNT=$((PASS_COUNT + 1))
     printf "${GREEN}PASS${RESET}\n"
+    return 0
 }
 
 test_fail() {
@@ -69,6 +72,7 @@ test_fail() {
     if [[ -f "$BZR_STDERR" ]]; then
         echo "    stderr: $(head -5 "$BZR_STDERR")"
     fi
+    return 0
 }
 
 test_skip() {
@@ -79,6 +83,7 @@ test_skip() {
         printf "  (%s)" "$reason"
     fi
     printf "\n"
+    return 0
 }
 
 test_summary() {
@@ -105,6 +110,7 @@ BZR_EXIT=0
 
 _cleanup_tmpfiles() {
     rm -f "$BZR_STDOUT" "$BZR_STDERR"
+    return 0
 }
 trap _cleanup_tmpfiles EXIT
 
@@ -113,6 +119,7 @@ run_bzr() {
     "$BZR_BIN" --json "$@" >"$BZR_STDOUT" 2>"$BZR_STDERR"
     BZR_EXIT=$?
     set -e
+    return 0
 }
 
 # Run bzr without --json (for table/quiet tests).
@@ -121,6 +128,7 @@ run_bzr_raw() {
     "$BZR_BIN" "$@" >"$BZR_STDOUT" 2>"$BZR_STDERR"
     BZR_EXIT=$?
     set -e
+    return 0
 }
 
 # ── Assertions ───────────────────────────────────────────────────────
