@@ -77,6 +77,28 @@ impl ConfigView {
     }
 }
 
+fn print_api_key(s: &ServerDisplayInfo) {
+    let label = match s.api_key_source.as_str() {
+        "env" => "API Key Env",
+        "keyring" => "Keyring",
+        _ => "API Key",
+    };
+    print_field(label, &s.api_key);
+}
+
+#[expect(clippy::print_stdout)]
+fn print_server(name: &str, s: &ServerDisplayInfo) {
+    println!("\n[{name}]");
+    print_field("URL", &s.url);
+    print_optional_field("Email", s.email.as_deref());
+    print_api_key(s);
+    print_field("API Key Source", &s.api_key_source);
+    print_field("Auth", &auth_display(s.auth_method.as_ref()));
+    if s.tls_insecure {
+        print_field("TLS", "insecure (certificate verification disabled)");
+    }
+}
+
 #[expect(clippy::print_stdout)]
 pub fn print_config(view: &ConfigView, format: OutputFormat) {
     print_formatted(view, format, |v| {
@@ -86,24 +108,10 @@ pub fn print_config(view: &ConfigView, format: OutputFormat) {
         }
         if v.servers.is_empty() {
             println!("No servers configured.");
-        } else {
-            for (name, s) in &v.servers {
-                println!("\n[{name}]");
-                print_field("URL", &s.url);
-                print_optional_field("Email", s.email.as_deref());
-                if s.api_key_source == "env" {
-                    print_field("API Key Env", &s.api_key);
-                } else if s.api_key_source == "keyring" {
-                    print_field("Keyring", &s.api_key);
-                } else {
-                    print_field("API Key", &s.api_key);
-                }
-                print_field("API Key Source", &s.api_key_source);
-                print_field("Auth", &auth_display(s.auth_method.as_ref()));
-                if s.tls_insecure {
-                    print_field("TLS", "insecure (certificate verification disabled)");
-                }
-            }
+            return;
+        }
+        for (name, s) in &v.servers {
+            print_server(name, s);
         }
     });
 }
