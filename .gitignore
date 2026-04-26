@@ -13,3 +13,6 @@ target/
 
 # Superpowers
 docs/superpowers/
+
+# Git worktrees
+.worktrees/
