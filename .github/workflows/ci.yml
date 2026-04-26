@@ -108,7 +108,10 @@ jobs:
         run: cargo check --locked --target aarch64-pc-windows-msvc
   sonarqube:
     name: SonarQube
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+    # Skip on forked PRs and Dependabot PRs (neither has access to SONAR_TOKEN).
+    if: |
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
+      && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
