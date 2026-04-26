@@ -87,7 +87,7 @@ pub fn print_history(history: &[HistoryEntry], format: OutputFormat) {
                     .attachment_id
                     .map(|id| format!(" [attachment #{id}]"))
                     .unwrap_or_default();
-                println!("  {}{attachment_suffix}:", change.field_name.bold(),);
+                println!("  {}{attachment_suffix}:", change.field_name.bold());
                 if !change.removed.is_empty() {
                     println!("    - {}", change.removed.red());
                 }

@@ -60,7 +60,7 @@ pub async fn execute(
             let att_id = client.upload_attachment(&upload_params).await?;
             output::print_result(
                 &UploadResult::new(att_id, *bug_id, size),
-                &format!("Uploaded attachment #{att_id} to bug #{bug_id} ({size} bytes)",),
+                &format!("Uploaded attachment #{att_id} to bug #{bug_id} ({size} bytes)"),
                 format,
             );
         }
