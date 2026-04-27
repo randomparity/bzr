@@ -5,7 +5,7 @@ pub mod comment;
 pub mod component;
 pub mod config;
 pub mod field;
-mod flags;
+pub mod flags;
 pub mod group;
 pub mod product;
 pub mod query;
