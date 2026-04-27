@@ -19,7 +19,7 @@ pub async fn execute(
         BugAction::List { .. } => handle_list(&client, action, format).await,
         BugAction::View { .. } => handle_view(&client, action, format).await,
         BugAction::History { .. } => handle_history(&client, action, format).await,
-        BugAction::Search { .. } => handle_search(&client, action, format).await,
+        BugAction::Search { .. } => handle_search(action, server, format, api).await,
         BugAction::My { .. } => handle_my(&client, action, format).await,
         BugAction::Create { .. } => handle_create(&client, action, format).await,
         BugAction::Clone { .. } => handle_clone(&client, action, format).await,
@@ -112,13 +112,18 @@ async fn handle_history(
     Ok(())
 }
 
+/// Handles bug search — builds its own client (unlike other handlers) because
+/// `--from-url` may resolve a different server from the URL hostname.
 async fn handle_search(
-    client: &BugzillaClient,
     action: &BugAction,
+    server: Option<&str>,
     format: OutputFormat,
+    api: Option<ApiMode>,
 ) -> Result<()> {
     let BugAction::Search {
         query,
+        from_url,
+        save_as,
         limit,
         fields,
         exclude_fields,
@@ -127,15 +132,54 @@ async fn handle_search(
         unreachable!()
     };
 
-    let params = SearchParams {
-        quicksearch: Some(query.clone()),
-        limit: Some(*limit),
-        include_fields: fields.clone(),
-        exclude_fields: exclude_fields.clone(),
-        ..Default::default()
+    let (client, params, save_info) = if let Some(url_str) = from_url {
+        let config = crate::config::Config::load()?;
+        let parsed = crate::url_parser::parse_bugzilla_url(url_str, &config)?;
+
+        let effective_server = server.or(parsed.query.server.as_deref());
+        let client = super::shared::connect_and_configure(effective_server, api).await?;
+
+        let mut params = parsed.query.to_search_params();
+        if params.limit.is_none() && limit.is_none() {
+            params.limit = Some(50);
+        }
+        params.apply_overrides(*limit, fields.as_deref(), exclude_fields.as_deref());
+
+        // Defer saving until after search succeeds
+        let save_info = save_as
+            .as_ref()
+            .map(|name| (name.clone(), parsed.query.clone()));
+        (client, params, save_info)
+    } else {
+        let query_str = query.as_deref().ok_or_else(|| {
+            crate::error::BzrError::InputValidation(
+                "either a search query or --from-url is required".into(),
+            )
+        })?;
+        let client = super::shared::connect_and_configure(server, api).await?;
+        let params = SearchParams {
+            quicksearch: Some(query_str.to_string()),
+            limit: Some(limit.unwrap_or(50)),
+            include_fields: fields.clone(),
+            exclude_fields: exclude_fields.clone(),
+            ..Default::default()
+        };
+        (client, params, None)
     };
+
     let bugs = client.search_bugs(&params).await?;
     output::print_bugs(&bugs, format);
+
+    // Save query to config after successful search
+    if let Some((name, query)) = save_info {
+        let mut config = crate::config::Config::load()?;
+        let is_update = config.queries.contains_key(name.as_str());
+        config.queries.insert(name.clone(), query);
+        config.save()?;
+        let verb = if is_update { "Updated" } else { "Saved" };
+        crate::output::print_query_saved(&name, verb, format);
+    }
+
     Ok(())
 }
 
@@ -511,11 +555,11 @@ async fn handle_update(
 #[cfg(test)]
 #[expect(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{method, path, query_param};
     use wiremock::{Mock, ResponseTemplate};
 
     use crate::cli::BugAction;
-    use crate::test_helpers::{capture_stdout, setup_test_env};
+    use crate::test_helpers::{capture_stdout, extract_json, setup_test_env};
     use crate::types::OutputFormat;
 
     #[tokio::test]
@@ -1076,5 +1120,97 @@ mod tests {
         let (result, _output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "bug clone --no-comment failed: {result:?}");
+    }
+
+    fn from_url_action(url: String, save_as: Option<String>) -> BugAction {
+        BugAction::Search {
+            query: None,
+            from_url: Some(url),
+            save_as,
+            limit: None,
+            fields: None,
+            exclude_fields: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn handle_search_from_url_executes() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("product", "TestProduct"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{"id": 1, "summary": "Test bug", "status": "NEW",
+                          "product": "TestProduct", "component": "General"}]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let server_url = mock.uri();
+        let url = format!("{server_url}/buglist.cgi?product=TestProduct&limit=10");
+        let action = from_url_action(url, None);
+
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok(), "from-url search failed: {result:?}");
+        let parsed: serde_json::Value = extract_json(&output);
+        assert_eq!(parsed[0]["id"], 1);
+    }
+
+    #[tokio::test]
+    async fn handle_search_from_url_passes_raw_params() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        // Wiremock matcher verifying raw params appear in the request
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("product", "TestProduct"))
+            .and(query_param("f1", "qa_contact"))
+            .and(query_param("o1", "changedfrom"))
+            .and(query_param("v1", "user@example.com"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let server_url = mock.uri();
+        let url = format!(
+            "{server_url}/buglist.cgi?product=TestProduct&f1=qa_contact&o1=changedfrom&v1=user%40example.com"
+        );
+        let action = from_url_action(url, None);
+
+        let (result, _) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(
+            result.is_ok(),
+            "from-url with raw params failed: {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn handle_search_from_url_saves_query() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+            .mount(&mock)
+            .await;
+
+        let server_url = mock.uri();
+        let url = format!("{server_url}/buglist.cgi?product=TestProduct&known_name=my-query");
+        let action = from_url_action(url, Some("my-query".into()));
+
+        let (result, _output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok(), "from-url save failed: {result:?}");
+
+        let config = crate::config::Config::load().unwrap();
+        let saved = config.queries.get("my-query").unwrap();
+        assert_eq!(saved.kind, crate::types::QueryKind::Url);
+        assert_eq!(saved.product, vec!["TestProduct"]);
+        assert!(saved.source_url.is_some());
     }
 }

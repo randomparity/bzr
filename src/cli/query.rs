@@ -6,6 +6,9 @@ pub enum QueryAction {
     Save {
         /// Query name
         name: String,
+        /// Import query from a Bugzilla buglist.cgi URL (mutually exclusive with filter flags)
+        #[arg(long, conflicts_with_all = ["search", "product", "component", "status", "assignee", "creator", "priority", "severity"])]
+        from_url: Option<String>,
         /// Free-text search (creates a "search" kind query)
         #[arg(long)]
         search: Option<String>,
@@ -65,5 +68,8 @@ pub enum QueryAction {
         /// Override the saved exclude-fields selection
         #[arg(long)]
         exclude_fields: Option<String>,
+        /// Override the server to run against
+        #[arg(long)]
+        server: Option<String>,
     },
 }

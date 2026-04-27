@@ -84,7 +84,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   │        [--creator <C>...] [--priority <P>...] [--severity <S>...] [--id <ID>...]
 │   │        [--alias <A>] [--limit <N>] [--fields <F>] [--exclude-fields <F>]
 │   ├── view <ID> [--fields <F>] [--exclude-fields <F>]
-│   ├── search <QUERY> [--limit <N>] [--fields <F>] [--exclude-fields <F>]
+│   ├── search [<QUERY>] [--from-url <URL>] [--save-as <NAME>] [--limit <N>] [--fields <F>] [--exclude-fields <F>]
 │   ├── history <ID> [--since <DATE>]
 │   ├── my [--created] [--cc] [--all] [--status <S>...] [--limit <N>]
 │   │       [--fields <F>] [--exclude-fields <F>]
@@ -153,13 +153,13 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   ├── show <NAME>
 │   └── delete <NAME>
 └── query
-    ├── save <NAME> [--product <P>...] [--component <C>...] [--status <S>...] [--assignee <A>...]
-    │               [--creator <C>...] [--priority <P>...] [--severity <S>...] [--search <Q>]
-    │               [--limit <N>] [--fields <F>] [--exclude-fields <F>]
+    ├── save <NAME> (--from-url <URL> | [--product <P>...] [--component <C>...] [--status <S>...]
+    │               [--assignee <A>...] [--creator <C>...] [--priority <P>...] [--severity <S>...]
+    │               [--search <Q>]) [--limit <N>] [--fields <F>] [--exclude-fields <F>]
     ├── list
     ├── show <NAME>
     ├── delete <NAME>
-    └── run <NAME> [--limit <N>] [--fields <F>] [--exclude-fields <F>]
+    └── run <NAME> [--limit <N>] [--fields <F>] [--exclude-fields <F>] [--server <NAME>]
 ```
 
 ---
@@ -215,20 +215,28 @@ bzr bug view my-alias --fields id,summary,assigned_to
 
 ### `bzr bug search`
 
-Full-text search using Bugzilla's quicksearch syntax.
+Full-text search using Bugzilla's quicksearch syntax, or execute a search from a Bugzilla buglist.cgi URL.
 
 ```bash
 bzr bug search "kernel panic"
 bzr bug search "component:NetworkManager priority:high" --limit 10
 bzr bug search "memory leak" --fields id,summary
+bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?product=Firefox&bug_status=NEW"
+bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?product=Firefox&bug_status=NEW" --save-as "my-query"
 ```
+
+`--from-url` and the positional `<QUERY>` argument are mutually exclusive.
 
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
-| `<QUERY>` | Yes | | Search query |
-| `--limit <N>` | No | 50 | Max results |
+| `<QUERY>` | No* | | Search query (quicksearch syntax) |
+| `--from-url <URL>` | No* | | Execute a search from a Bugzilla buglist.cgi URL. Recognized parameters (product, component, status, etc.) are mapped to structured fields; unrecognized parameters (boolean charts, field-change filters) are passed through to the REST API verbatim. |
+| `--save-as <NAME>` | No | | Save this URL query with the given name for future reuse. Requires `--from-url`. |
+| `--limit <N>` | No | 50 | Max results. When `--from-url` is used, the URL's own limit parameter takes precedence unless overridden here. |
 | `--fields <F>` | No | | Only return these fields (comma-separated) |
 | `--exclude-fields <F>` | No | | Exclude these fields (comma-separated) |
+
+*One of `<QUERY>` or `--from-url` must be provided.
 
 ### `bzr bug history`
 
@@ -1045,24 +1053,32 @@ bzr query save crashes --search "crash in tab" --limit 10
 
 # Save with multiple filters
 bzr query save my-p1 --assignee me@example.com --priority P1 --status NEW --status ASSIGNED
+
+# Import a query from a Bugzilla URL
+bzr query save my-query --from-url "https://bugzilla.example.com/buglist.cgi?product=Firefox&bug_status=NEW"
 ```
+
+`--from-url` and manual filter flags (`--search`, `--product`, `--component`, etc.) are mutually exclusive.
 
 | Option | Required | Description |
 |--------|----------|-------------|
 | `<NAME>` | Yes | Query name |
-| `--product <P>` | No | Filter by product name (repeatable; prefix with `!` to exclude) |
-| `--component <C>` | No | Filter by component name (repeatable; prefix with `!` to exclude) |
-| `--status <S>` | No | Filter by status (repeatable; prefix with `!` to exclude) |
-| `--assignee <A>` | No | Filter by assignee email (repeatable; prefix with `!` to exclude) |
-| `--creator <C>` | No | Filter by bug creator email (repeatable; prefix with `!` to exclude) |
-| `--priority <P>` | No | Filter by priority (repeatable; prefix with `!` to exclude) |
-| `--severity <S>` | No | Filter by severity (repeatable; prefix with `!` to exclude) |
-| `--search <Q>` | No | Free-text search query |
+| `--from-url <URL>` | No* | Import query from a Bugzilla buglist.cgi URL. Mutually exclusive with manual filter flags (`--search`, `--product`, `--component`, etc.). |
+| `--product <P>` | No* | Filter by product name (repeatable; prefix with `!` to exclude) |
+| `--component <C>` | No* | Filter by component name (repeatable; prefix with `!` to exclude) |
+| `--status <S>` | No* | Filter by status (repeatable; prefix with `!` to exclude) |
+| `--assignee <A>` | No* | Filter by assignee email (repeatable; prefix with `!` to exclude) |
+| `--creator <C>` | No* | Filter by bug creator email (repeatable; prefix with `!` to exclude) |
+| `--priority <P>` | No* | Filter by priority (repeatable; prefix with `!` to exclude) |
+| `--severity <S>` | No* | Filter by severity (repeatable; prefix with `!` to exclude) |
+| `--search <Q>` | No* | Free-text search query |
 | `--limit <N>` | No | Max results |
 | `--fields <F>` | No | Only return these fields when the query runs (comma-separated) |
 | `--exclude-fields <F>` | No | Exclude these fields when the query runs (comma-separated) |
 
-At least one filter must be set.
+At least one filter must be set. Use either `--from-url` or one or more manual filter flags.
+
+When `--from-url` is used, `--limit`, `--fields`, and `--exclude-fields` may still be provided and will be stored with the saved query as overrides.
 
 Agent note: saved queries are useful for agents because they turn multi-flag searches into stable named workflows. Pair them with `bzr --json query run <name>` for deterministic reuse.
 
@@ -1082,6 +1098,10 @@ Show details of a saved query.
 bzr query show firefox-new
 ```
 
+For URL-sourced queries (saved with `--from-url`), the output also includes the
+original source URL, the associated server name, and a count of raw passthrough
+parameters. In JSON format, the full list of raw parameters is included.
+
 ### `bzr query delete`
 
 Delete a saved query.
@@ -1092,7 +1112,7 @@ bzr query delete firefox-new
 
 ### `bzr query run`
 
-Execute a saved query. Supports runtime overrides for limit, fields, and exclude-fields.
+Execute a saved query. Supports runtime overrides for limit, fields, exclude-fields, and server.
 
 ```bash
 # Run a saved query
@@ -1103,6 +1123,9 @@ bzr query run firefox-new --limit 10
 
 # Run with field selection
 bzr query run firefox-new --fields id,summary,status
+
+# Run against a different server
+bzr query run my-query --server other-server --limit 50
 ```
 
 | Option | Required | Description |
@@ -1111,6 +1134,7 @@ bzr query run firefox-new --fields id,summary,status
 | `--limit <N>` | No | Override the saved limit |
 | `--fields <F>` | No | Only return these fields (comma-separated) |
 | `--exclude-fields <F>` | No | Exclude these fields (comma-separated) |
+| `--server <NAME>` | No | Override the server to run the query against. Takes precedence over the server stored in the saved query. The global `--server` flag takes precedence over this flag. |
 
 ---
 

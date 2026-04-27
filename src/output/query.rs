@@ -6,16 +6,20 @@ use super::formatting::{
     print_field, print_formatted, print_json, print_list_field, print_optional_field,
 };
 
+fn kind_label(kind: &QueryKind) -> &'static str {
+    match kind {
+        QueryKind::List => "list",
+        QueryKind::Search => "search",
+        QueryKind::Url => "url",
+    }
+}
+
 fn query_saved_message(name: &str, verb: &str) -> String {
     format!("{verb} query '{name}'")
 }
 
 fn query_summary_line(name: &str, q: &SavedQuery) -> String {
-    let kind_label = match q.kind {
-        QueryKind::List => "list",
-        QueryKind::Search => "search",
-    };
-    let mut parts = vec![format!("kind={kind_label}")];
+    let mut parts = vec![format!("kind={}", kind_label(&q.kind))];
     if !q.product.is_empty() {
         parts.push(format!("product={}", q.product.join(",")));
     }
@@ -27,6 +31,9 @@ fn query_summary_line(name: &str, q: &SavedQuery) -> String {
     }
     if let Some(limit) = q.limit {
         parts.push(format!("limit={limit}"));
+    }
+    if !q.raw_params.is_empty() {
+        parts.push(format!("{} raw params", q.raw_params.len()));
     }
     format!("{name} ({})", parts.join(", "))
 }
@@ -66,12 +73,10 @@ pub fn print_query_detail(name: &str, query: &SavedQuery, format: OutputFormat) 
 
     let view = QueryView { name, query };
     print_formatted(&view, format, |view| {
-        let kind_label = match view.query.kind {
-            QueryKind::List => "list",
-            QueryKind::Search => "search",
-        };
         print_field("Name", view.name);
-        print_field("Kind", kind_label);
+        print_field("Kind", kind_label(&view.query.kind));
+        print_optional_field("Source URL", view.query.source_url.as_deref());
+        print_optional_field("Server", view.query.server.as_deref());
         print_list_field("Product", &view.query.product);
         print_list_field("Component", &view.query.component);
         print_list_field("Status", &view.query.status);
@@ -85,6 +90,9 @@ pub fn print_query_detail(name: &str, query: &SavedQuery, format: OutputFormat) 
         }
         print_optional_field("Fields", view.query.fields.as_deref());
         print_optional_field("Exclude", view.query.exclude_fields.as_deref());
+        if !view.query.raw_params.is_empty() {
+            print_field("Raw params", &view.query.raw_params.len().to_string());
+        }
     });
 }
 
@@ -92,6 +100,31 @@ pub fn print_query_detail(name: &str, query: &SavedQuery, format: OutputFormat) 
 #[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    /// Shared test helper — mirrors the `QueryView` in `print_query_detail` for JSON assertions.
+    #[derive(serde::Serialize)]
+    struct QueryView<'a> {
+        name: &'a str,
+        #[serde(flatten)]
+        query: &'a SavedQuery,
+    }
+
+    fn make_url_query() -> SavedQuery {
+        SavedQuery {
+            kind: QueryKind::Url,
+            source_url: Some(
+                "https://bugzilla.example.com/buglist.cgi?product=Firefox&f1=qa_contact".into(),
+            ),
+            server: Some("example".into()),
+            product: vec!["Firefox".into()],
+            raw_params: vec![
+                ("f1".into(), "qa_contact".into()),
+                ("o1".into(), "changedfrom".into()),
+            ],
+            limit: Some(100),
+            ..SavedQuery::default()
+        }
+    }
 
     fn make_list_query() -> SavedQuery {
         SavedQuery {
@@ -136,12 +169,6 @@ mod tests {
 
     #[test]
     fn query_detail_json_with_flatten() {
-        #[derive(serde::Serialize)]
-        struct QueryView<'a> {
-            name: &'a str,
-            #[serde(flatten)]
-            query: &'a SavedQuery,
-        }
         let query = make_list_query();
         let view = QueryView {
             name: "test-q",
@@ -207,6 +234,51 @@ mod tests {
         assert!(output.contains("id,summary"));
         assert!(output.contains("Exclude"));
         assert!(output.contains("comments"));
+    }
+
+    #[test]
+    fn query_detail_json_includes_url_fields() {
+        let query = make_url_query();
+        let view = QueryView {
+            name: "url-q",
+            query: &query,
+        };
+        let json = serde_json::to_string_pretty(&view).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["kind"], "url");
+        assert_eq!(
+            parsed["source_url"],
+            "https://bugzilla.example.com/buglist.cgi?product=Firefox&f1=qa_contact"
+        );
+        assert_eq!(parsed["server"], "example");
+        assert_eq!(parsed["raw_params"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn query_summary_line_renders_url_query() {
+        let line = query_summary_line("url-q", &make_url_query());
+        assert!(line.starts_with("url-q (kind=url"));
+        assert!(line.contains("product=Firefox"));
+        assert!(line.contains("2 raw params"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_query_detail_table_renders_url_fields() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let query = make_url_query();
+
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_query_detail("url-q", &query, OutputFormat::Table);
+        })
+        .await;
+
+        assert!(output.contains("Source URL"));
+        assert!(output.contains("bugzilla.example.com"));
+        assert!(output.contains("Server"));
+        assert!(output.contains("example"));
+        assert!(output.contains("Raw params"));
+        assert!(output.contains('2'));
     }
 
     #[cfg(unix)]

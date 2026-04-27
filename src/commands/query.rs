@@ -27,6 +27,7 @@ pub async fn execute(
 fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
     let QueryAction::Save {
         name,
+        from_url,
         search,
         product,
         component,
@@ -43,25 +44,42 @@ fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
         unreachable!()
     };
 
-    let kind = if search.is_some() {
-        QueryKind::Search
+    let (query, preloaded_config) = if let Some(url_str) = from_url {
+        let config = Config::load()?;
+        let parsed = crate::url_parser::parse_bugzilla_url(url_str, &config)?;
+        let mut query = parsed.query;
+        if let Some(limit) = limit {
+            query.limit = Some(*limit);
+        }
+        if let Some(f) = fields {
+            query.fields = Some(f.clone());
+        }
+        if let Some(ef) = exclude_fields {
+            query.exclude_fields = Some(ef.clone());
+        }
+        (query, Some(config))
     } else {
-        QueryKind::List
-    };
-
-    let query = SavedQuery {
-        kind,
-        product: product.clone(),
-        component: component.clone(),
-        status: status.clone(),
-        assignee: assignee.clone(),
-        creator: creator.clone(),
-        priority: priority.clone(),
-        severity: severity.clone(),
-        quicksearch: search.clone(),
-        limit: *limit,
-        fields: fields.clone(),
-        exclude_fields: exclude_fields.clone(),
+        let kind = if search.is_some() {
+            QueryKind::Search
+        } else {
+            QueryKind::List
+        };
+        let query = SavedQuery {
+            kind,
+            product: product.clone(),
+            component: component.clone(),
+            status: status.clone(),
+            assignee: assignee.clone(),
+            creator: creator.clone(),
+            priority: priority.clone(),
+            severity: severity.clone(),
+            quicksearch: search.clone(),
+            limit: *limit,
+            fields: fields.clone(),
+            exclude_fields: exclude_fields.clone(),
+            ..SavedQuery::default()
+        };
+        (query, None)
     };
 
     if !query.has_filters() {
@@ -70,7 +88,10 @@ fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
         ));
     }
 
-    let mut config = Config::load()?;
+    let mut config = match preloaded_config {
+        Some(c) => c,
+        None => Config::load()?,
+    };
     let is_update = config.queries.contains_key(name.as_str());
     config.queries.insert(name.clone(), query);
     config.save()?;
@@ -124,6 +145,7 @@ async fn handle_run(
         limit,
         fields,
         exclude_fields,
+        server: server_override,
     } = action
     else {
         unreachable!()
@@ -136,19 +158,14 @@ async fn handle_run(
         .ok_or_else(|| BzrError::config(format!("query '{name}' not found")))?;
 
     let mut params = query.to_search_params();
+    params.apply_overrides(*limit, fields.as_deref(), exclude_fields.as_deref());
 
-    // Apply runtime overrides
-    if let Some(limit) = limit {
-        params.limit = Some(*limit);
-    }
-    if let Some(fields) = fields {
-        params.include_fields = Some(fields.clone());
-    }
-    if let Some(exclude_fields) = exclude_fields {
-        params.exclude_fields = Some(exclude_fields.clone());
-    }
+    // Server resolution: CLI --server > query run --server > saved server > default
+    let effective_server = server
+        .or(server_override.as_deref())
+        .or(query.server.as_deref());
 
-    let client = super::shared::connect_and_configure(server, api).await?;
+    let client = super::shared::connect_and_configure(effective_server, api).await?;
     let bugs = client.search_bugs(&params).await?;
     output::print_bugs(&bugs, format);
     Ok(())
@@ -167,6 +184,7 @@ mod tests {
     fn save_action(name: &str) -> QueryAction {
         QueryAction::Save {
             name: name.into(),
+            from_url: None,
             search: None,
             product: vec!["Firefox".into()],
             component: vec![],
@@ -178,6 +196,71 @@ mod tests {
             limit: Some(25),
             fields: None,
             exclude_fields: None,
+        }
+    }
+
+    /// Build a Save action for a single-product query with no status filters.
+    fn product_save_action(name: &str, product: &str, limit: u32) -> QueryAction {
+        QueryAction::Save {
+            name: name.into(),
+            from_url: None,
+            search: None,
+            product: vec![product.into()],
+            component: vec![],
+            status: vec![],
+            assignee: vec![],
+            creator: vec![],
+            priority: vec![],
+            severity: vec![],
+            limit: Some(limit),
+            fields: None,
+            exclude_fields: None,
+        }
+    }
+
+    fn empty_save_action(name: &str, search: Option<String>) -> QueryAction {
+        QueryAction::Save {
+            name: name.into(),
+            from_url: None,
+            search,
+            product: vec![],
+            component: vec![],
+            status: vec![],
+            assignee: vec![],
+            creator: vec![],
+            priority: vec![],
+            severity: vec![],
+            limit: None,
+            fields: None,
+            exclude_fields: None,
+        }
+    }
+
+    fn url_save_action(name: &str, url: String) -> QueryAction {
+        QueryAction::Save {
+            name: name.into(),
+            from_url: Some(url),
+            search: None,
+            product: vec![],
+            component: vec![],
+            status: vec![],
+            assignee: vec![],
+            creator: vec![],
+            priority: vec![],
+            severity: vec![],
+            limit: None,
+            fields: None,
+            exclude_fields: None,
+        }
+    }
+
+    fn run_action(name: &str) -> QueryAction {
+        QueryAction::Run {
+            name: name.into(),
+            limit: None,
+            fields: None,
+            exclude_fields: None,
+            server: None,
         }
     }
 
@@ -206,20 +289,7 @@ mod tests {
     async fn query_save_search_kind() {
         let (_lock, _mock, _tmp) = setup_test_env().await;
 
-        let action = QueryAction::Save {
-            name: "crashes".into(),
-            search: Some("crash in tab".into()),
-            product: vec![],
-            component: vec![],
-            status: vec![],
-            assignee: vec![],
-            creator: vec![],
-            priority: vec![],
-            severity: vec![],
-            limit: Some(10),
-            fields: None,
-            exclude_fields: None,
-        };
+        let action = empty_save_action("crashes", Some("crash in tab".into()));
         let (result, _output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "query save failed: {result:?}");
@@ -239,20 +309,7 @@ mod tests {
     async fn query_save_requires_filter() {
         let (_lock, _mock, _tmp) = setup_test_env().await;
 
-        let action = QueryAction::Save {
-            name: "empty".into(),
-            search: None,
-            product: vec![],
-            component: vec![],
-            status: vec![],
-            assignee: vec![],
-            creator: vec![],
-            priority: vec![],
-            severity: vec![],
-            limit: None,
-            fields: None,
-            exclude_fields: None,
-        };
+        let action = empty_save_action("empty", None);
         let result = super::execute(&action, None, OutputFormat::Json, None).await;
         assert!(result.is_err(), "saving empty query should fail");
         let err = result.unwrap_err().to_string();
@@ -293,20 +350,7 @@ mod tests {
         let (_lock, mock, _tmp) = setup_test_env().await;
 
         // First, save a query
-        let save_action = QueryAction::Save {
-            name: "run-test".into(),
-            search: None,
-            product: vec!["TestProduct".into()],
-            component: vec![],
-            status: vec![],
-            assignee: vec![],
-            creator: vec![],
-            priority: vec![],
-            severity: vec![],
-            limit: Some(10),
-            fields: None,
-            exclude_fields: None,
-        };
+        let save_action = product_save_action("run-test", "TestProduct", 10);
         let (result, _) =
             capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "query save failed: {result:?}");
@@ -327,12 +371,7 @@ mod tests {
             .await;
 
         // Run the saved query
-        let run_action = QueryAction::Run {
-            name: "run-test".into(),
-            limit: None,
-            fields: None,
-            exclude_fields: None,
-        };
+        let run_action = run_action("run-test");
         let (result, output) =
             capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "query run failed: {result:?}");
@@ -345,20 +384,7 @@ mod tests {
     async fn query_run_with_limit_override() {
         let (_lock, mock, _tmp) = setup_test_env().await;
 
-        let save_action = QueryAction::Save {
-            name: "override-test".into(),
-            search: None,
-            product: vec!["TestProduct".into()],
-            component: vec![],
-            status: vec![],
-            assignee: vec![],
-            creator: vec![],
-            priority: vec![],
-            severity: vec![],
-            limit: Some(100),
-            fields: None,
-            exclude_fields: None,
-        };
+        let save_action = product_save_action("override-test", "TestProduct", 100);
         let (result, _) =
             capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
@@ -376,6 +402,7 @@ mod tests {
             limit: Some(5),
             fields: None,
             exclude_fields: None,
+            server: None,
         };
         let (result, _) =
             capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
@@ -388,6 +415,7 @@ mod tests {
 
         let save_action = QueryAction::Save {
             name: "existing".into(),
+            from_url: None,
             search: None,
             product: vec!["Firefox".into()],
             component: vec![],
@@ -406,6 +434,7 @@ mod tests {
 
         let update_action = QueryAction::Save {
             name: "existing".into(),
+            from_url: None,
             search: Some("updated".into()),
             product: vec![],
             component: vec![],
@@ -442,20 +471,7 @@ mod tests {
     async fn query_delete_removes_saved_query() {
         let (_lock, _mock, _tmp) = setup_test_env().await;
 
-        let save_action = QueryAction::Save {
-            name: "delete-me".into(),
-            search: None,
-            product: vec!["Firefox".into()],
-            component: vec![],
-            status: vec![],
-            assignee: vec![],
-            creator: vec![],
-            priority: vec![],
-            severity: vec![],
-            limit: Some(1),
-            fields: None,
-            exclude_fields: None,
-        };
+        let save_action = product_save_action("delete-me", "Firefox", 1);
         let (result, _) =
             capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
@@ -489,6 +505,7 @@ mod tests {
 
         let save_action = QueryAction::Save {
             name: "fields-test".into(),
+            from_url: None,
             search: None,
             product: vec!["TestProduct".into()],
             component: vec![],
@@ -519,6 +536,7 @@ mod tests {
             limit: None,
             fields: Some("id,summary".into()),
             exclude_fields: Some("comments".into()),
+            server: None,
         };
         let (result, _) =
             capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
@@ -529,12 +547,7 @@ mod tests {
     async fn query_run_unknown_errors() {
         let (_lock, _mock, _tmp) = setup_test_env().await;
 
-        let action = QueryAction::Run {
-            name: "nonexistent".into(),
-            limit: None,
-            fields: None,
-            exclude_fields: None,
-        };
+        let action = run_action("nonexistent");
         let result = super::execute(&action, None, OutputFormat::Json, None).await;
         assert!(result.is_err(), "running unknown query should fail");
         let err = result.unwrap_err().to_string();
@@ -590,5 +603,63 @@ mod tests {
         .unwrap_err();
 
         assert!(err.to_string().contains("query 'missing' not found"));
+    }
+
+    #[tokio::test]
+    async fn query_run_with_server_override() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        // Save a query first
+        let save_action = save_action("server-test");
+        let (result, _) =
+            capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok());
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+            .mount(&mock)
+            .await;
+
+        // Run with --server override
+        let run_action = QueryAction::Run {
+            name: "server-test".into(),
+            limit: None,
+            fields: None,
+            exclude_fields: None,
+            server: Some("test".into()),
+        };
+        let (result, _) = capture_stdout(super::execute(
+            &run_action,
+            Some("test"),
+            OutputFormat::Json,
+            None,
+        ))
+        .await;
+        assert!(
+            result.is_ok(),
+            "query run with server override failed: {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn query_save_from_url() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        let server_url = mock.uri();
+        let url = format!(
+            "{server_url}/buglist.cgi?product=TestProduct&f1=qa_contact&o1=changedfrom&v1=user%40example.com"
+        );
+        let action = url_save_action("url-query", url);
+        let (result, _output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok(), "query save --from-url failed: {result:?}");
+
+        let config = Config::load().unwrap();
+        let saved = &config.queries["url-query"];
+        assert_eq!(saved.kind, crate::types::QueryKind::Url);
+        assert_eq!(saved.product, vec!["TestProduct"]);
+        assert!(!saved.raw_params.is_empty());
+        assert!(saved.source_url.is_some());
     }
 }

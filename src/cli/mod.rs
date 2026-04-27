@@ -243,8 +243,8 @@ mod tests {
             Commands::Bug {
                 action: BugAction::Search { query, limit, .. },
             } => {
-                assert_eq!(query, "crash");
-                assert_eq!(limit, 50);
+                assert_eq!(query.as_deref(), Some("crash"));
+                assert_eq!(limit, None);
             }
             _ => panic!("expected Bug Search"),
         }
@@ -256,7 +256,7 @@ mod tests {
         match cli.command {
             Commands::Bug {
                 action: BugAction::Search { limit, .. },
-            } => assert_eq!(limit, 10),
+            } => assert_eq!(limit, Some(10)),
             _ => panic!("expected Bug Search"),
         }
     }

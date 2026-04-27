@@ -118,6 +118,16 @@ fn append_option_params(
     builder
 }
 
+/// Appends raw key-value parameters to the request builder verbatim.
+/// Used for URL-imported queries with boolean chart params that
+/// `bzr` does not natively model.
+fn append_raw_params(
+    builder: reqwest::RequestBuilder,
+    raw_params: &[(String, String)],
+) -> reqwest::RequestBuilder {
+    builder.query(raw_params)
+}
+
 impl BugzillaClient {
     pub async fn get_bug_history_since(
         &self,
@@ -140,6 +150,15 @@ impl BugzillaClient {
 
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
         tracing::debug!(?params, %self.api_mode, "search parameters");
+        // Raw params (boolean charts from URLs) only work with REST.
+        if !params.raw_params.is_empty() && self.api_mode != ApiMode::Rest {
+            tracing::warn!(
+                "query contains raw URL parameters that require REST API; \
+                 ignoring configured {} mode",
+                self.api_mode
+            );
+            return self.search_bugs_rest(params).await;
+        }
         match self.api_mode {
             ApiMode::Rest => self.search_bugs_rest(params).await,
             ApiMode::XmlRpc => self.xmlrpc_client()?.search_bugs(params).await,
@@ -180,6 +199,13 @@ impl BugzillaClient {
         for id in &params.id {
             req_builder = req_builder.query(&[("id", id)]);
         }
+
+        // Note: raw_params and append_negated_params both use fN/oN/vN indices.
+        // Index collision cannot occur because URL-parsed queries store boolean
+        // chart params in raw_params (not as negated structured filters), and
+        // there is no CLI path that combines negated filters with raw params.
+        req_builder = append_raw_params(req_builder, &params.raw_params);
+
         if params.include_fields.is_none() {
             req_builder = req_builder.query(&[("include_fields", BUG_DEFAULT_FIELDS)]);
         }
@@ -835,6 +861,7 @@ mod tests {
             quicksearch: Some("qs-term".into()),
             include_fields: Some("id,summary".into()),
             exclude_fields: Some("cc".into()),
+            ..Default::default()
         };
         let bugs = client.search_bugs(&params).await.unwrap();
         assert_eq!(bugs.len(), 1);
