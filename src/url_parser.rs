@@ -422,57 +422,32 @@ mod tests {
 
     #[test]
     fn parses_known_name_into_suggested_name() {
-        let config = make_config("https://bugzilla.example.com");
-        let result = parse_bugzilla_url(
-            "https://bugzilla.example.com/buglist.cgi?product=Firefox&known_name=my%20saved%20search",
-            &config,
-        )
-        .unwrap();
-        assert_eq!(result.suggested_name, Some("my saved search".into()));
+        let parsed = parse_test_url("product=Firefox&known_name=my%20saved%20search");
+        assert_eq!(parsed.suggested_name, Some("my saved search".into()));
     }
 
     #[test]
     fn prefers_known_name_over_query_based_on() {
-        let config = make_config("https://bugzilla.example.com");
-        let result = parse_bugzilla_url(
-            "https://bugzilla.example.com/buglist.cgi?product=Firefox&known_name=preferred&query_based_on=ancestor",
-            &config,
-        )
-        .unwrap();
-        assert_eq!(result.suggested_name, Some("preferred".into()));
+        let parsed = parse_test_url("product=Firefox&known_name=preferred&query_based_on=ancestor");
+        assert_eq!(parsed.suggested_name, Some("preferred".into()));
     }
 
     #[test]
     fn falls_back_to_query_based_on() {
-        let config = make_config("https://bugzilla.example.com");
-        let result = parse_bugzilla_url(
-            "https://bugzilla.example.com/buglist.cgi?product=Firefox&query_based_on=ancestor%20query",
-            &config,
-        )
-        .unwrap();
-        assert_eq!(result.suggested_name, Some("ancestor query".into()));
+        let parsed = parse_test_url("product=Firefox&query_based_on=ancestor%20query");
+        assert_eq!(parsed.suggested_name, Some("ancestor query".into()));
     }
 
     #[test]
     fn no_suggested_name_when_absent() {
-        let config = make_config("https://bugzilla.example.com");
-        let result = parse_bugzilla_url(
-            "https://bugzilla.example.com/buglist.cgi?product=Firefox",
-            &config,
-        )
-        .unwrap();
-        assert!(result.suggested_name.is_none());
+        let parsed = parse_test_url("product=Firefox");
+        assert!(parsed.suggested_name.is_none());
     }
 
     #[test]
     fn empty_known_name_ignored() {
-        let config = make_config("https://bugzilla.example.com");
-        let result = parse_bugzilla_url(
-            "https://bugzilla.example.com/buglist.cgi?product=Firefox&known_name=",
-            &config,
-        )
-        .unwrap();
-        assert!(result.suggested_name.is_none());
+        let parsed = parse_test_url("product=Firefox&known_name=");
+        assert!(parsed.suggested_name.is_none());
     }
 
     #[test]

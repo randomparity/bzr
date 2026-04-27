@@ -1239,14 +1239,7 @@ mod tests {
         let server_url = mock.uri();
         let url =
             format!("{server_url}/buglist.cgi?product=TestProduct&known_name=my%20saved%20search");
-        let action = BugAction::Search {
-            query: None,
-            from_url: Some(url),
-            save_as: Some(String::new()),
-            limit: None,
-            fields: None,
-            exclude_fields: None,
-        };
+        let action = from_url_action(url, Some(String::new()));
         let (result, _output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(
@@ -1265,14 +1258,10 @@ mod tests {
     async fn handle_search_save_as_no_name_no_known_name_errors() {
         let (_lock, _mock, _tmp) = setup_test_env().await;
 
-        let action = BugAction::Search {
-            query: None,
-            from_url: Some("https://bugzilla.example.com/buglist.cgi?product=Firefox".into()),
-            save_as: Some(String::new()),
-            limit: None,
-            fields: None,
-            exclude_fields: None,
-        };
+        let action = from_url_action(
+            "https://bugzilla.example.com/buglist.cgi?product=Firefox".into(),
+            Some(String::new()),
+        );
         let (result, _output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_err());
