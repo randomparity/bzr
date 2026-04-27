@@ -390,6 +390,26 @@ impl SavedQuery {
         }
     }
 
+    /// Consuming variant of `to_search_params` — moves fields instead of cloning.
+    /// Use when the `SavedQuery` is owned and not needed after conversion.
+    pub fn into_search_params(self) -> SearchParams {
+        SearchParams {
+            product: self.product,
+            component: self.component,
+            status: self.status,
+            assigned_to: self.assignee,
+            creator: self.creator,
+            priority: self.priority,
+            severity: self.severity,
+            quicksearch: self.quicksearch,
+            limit: self.limit,
+            include_fields: self.fields,
+            exclude_fields: self.exclude_fields,
+            raw_params: self.raw_params,
+            ..Default::default()
+        }
+    }
+
     /// Access a multi-value filter field mutably by its `struct_field` name.
     /// Maps `assigned_to` to `self.assignee` (TOML-friendly name).
     pub fn get_field_mut(&mut self, name: &str) -> Option<&mut Vec<String>> {
@@ -782,5 +802,38 @@ mod tests {
     fn saved_query_get_field_mut_returns_none_for_unknown() {
         let mut query = SavedQuery::default();
         assert!(query.get_field_mut("nonexistent").is_none());
+    }
+
+    #[test]
+    fn into_search_params_moves_fields() {
+        let query = SavedQuery {
+            kind: QueryKind::List,
+            product: vec!["Firefox".into()],
+            component: vec!["General".into()],
+            status: vec!["NEW".into()],
+            assignee: vec!["dev@example.com".into()],
+            creator: vec!["reporter@example.com".into()],
+            priority: vec!["P1".into()],
+            severity: vec!["critical".into()],
+            quicksearch: Some("crash".into()),
+            limit: Some(25),
+            fields: Some("id,summary".into()),
+            exclude_fields: Some("comments".into()),
+            raw_params: vec![("f1".into(), "qa_contact".into())],
+            ..Default::default()
+        };
+        let params = query.into_search_params();
+        assert_eq!(params.product, vec!["Firefox"]);
+        assert_eq!(params.component, vec!["General"]);
+        assert_eq!(params.status, vec!["NEW"]);
+        assert_eq!(params.assigned_to, vec!["dev@example.com"]);
+        assert_eq!(params.creator, vec!["reporter@example.com"]);
+        assert_eq!(params.priority, vec!["P1"]);
+        assert_eq!(params.severity, vec!["critical"]);
+        assert_eq!(params.quicksearch, Some("crash".into()));
+        assert_eq!(params.limit, Some(25));
+        assert_eq!(params.include_fields, Some("id,summary".into()));
+        assert_eq!(params.exclude_fields, Some("comments".into()));
+        assert_eq!(params.raw_params, vec![("f1".into(), "qa_contact".into())]);
     }
 }

@@ -139,7 +139,12 @@ async fn handle_search(
         let effective_server = server.or(parsed.query.server.as_deref());
         let client = super::shared::connect_and_configure(effective_server, api).await?;
 
-        let mut params = parsed.query.to_search_params();
+        let save_query = if save_as.is_some() {
+            Some(parsed.query.clone())
+        } else {
+            None
+        };
+        let mut params = parsed.query.into_search_params();
         if params.limit.is_none() && limit.is_none() {
             params.limit = Some(50);
         }
@@ -148,7 +153,8 @@ async fn handle_search(
         // Defer saving until after search succeeds
         let save_info = save_as
             .as_ref()
-            .map(|name| (name.clone(), parsed.query.clone()));
+            .zip(save_query)
+            .map(|(name, query)| (name.clone(), query));
         (client, params, save_info)
     } else {
         let query_str = query.as_deref().ok_or_else(|| {
