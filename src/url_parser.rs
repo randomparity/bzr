@@ -111,12 +111,18 @@ pub fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<ParsedUrl> {
             continue;
         }
 
-        // Recognized vec fields — map Bugzilla URL param names to SavedQuery fields
+        // Recognized vec fields — map Bugzilla URL param names to SavedQuery fields.
+        // get_field_mut is guaranteed to return Some for any struct_field in
+        // FIELD_MAPPINGS — a None here means the two tables are out of sync.
         if let Some(mapping) = FIELD_MAPPINGS.iter().find(|m| m.url_param == key) {
-            if let Some(target) = query.get_field_mut(mapping.struct_field) {
-                target.push(value.to_string());
-                continue;
-            }
+            let Some(target) = query.get_field_mut(mapping.struct_field) else {
+                unreachable!(
+                    "FIELD_MAPPINGS struct_field '{}' missing from get_field_mut",
+                    mapping.struct_field
+                );
+            };
+            target.push(value.to_string());
+            continue;
         }
 
         // Strip credential params — never store or forward these

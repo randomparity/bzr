@@ -84,7 +84,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   │        [--creator <C>...] [--priority <P>...] [--severity <S>...] [--id <ID>...]
 │   │        [--alias <A>] [--limit <N>] [--fields <F>] [--exclude-fields <F>]
 │   ├── view <ID> [--fields <F>] [--exclude-fields <F>]
-│   ├── search [<QUERY>] [--from-url <URL>] [--save-as <NAME>] [--limit <N>] [--fields <F>] [--exclude-fields <F>]
+│   ├── search [<QUERY>] [--from-url <URL>] [--save-as [NAME]] [--limit <N>] [--fields <F>] [--exclude-fields <F>]
 │   ├── history <ID> [--since <DATE>]
 │   ├── my [--created] [--cc] [--all] [--status <S>...] [--limit <N>]
 │   │       [--fields <F>] [--exclude-fields <F>]
@@ -223,6 +223,7 @@ bzr bug search "component:NetworkManager priority:high" --limit 10
 bzr bug search "memory leak" --fields id,summary
 bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?product=Firefox&bug_status=NEW"
 bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?product=Firefox&bug_status=NEW" --save-as "my-query"
+bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?known_name=my%20search&product=Firefox" --save-as
 ```
 
 `--from-url` and the positional `<QUERY>` argument are mutually exclusive.
@@ -231,7 +232,7 @@ bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?product=Fire
 |--------|----------|---------|-------------|
 | `<QUERY>` | No* | | Search query (quicksearch syntax) |
 | `--from-url <URL>` | No* | | Execute a search from a Bugzilla buglist.cgi URL. Recognized parameters (product, component, status, etc.) are mapped to structured fields; unrecognized parameters (boolean charts, field-change filters) are passed through to the REST API verbatim. |
-| `--save-as <NAME>` | No | | Save this URL query with the given name for future reuse. Requires `--from-url`. |
+| `--save-as [NAME]` | No | | Save this URL query for future reuse. If `NAME` is omitted, uses the URL's `known_name` parameter as the query name. Requires `--from-url`. |
 | `--limit <N>` | No | 50 | Max results. When `--from-url` is used, the URL's own limit parameter takes precedence unless overridden here. |
 | `--fields <F>` | No | | Only return these fields (comma-separated) |
 | `--exclude-fields <F>` | No | | Exclude these fields (comma-separated) |

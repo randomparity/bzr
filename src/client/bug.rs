@@ -116,7 +116,7 @@ fn has_raw_boolean_chart_params(params: &SearchParams) -> bool {
     params.raw_params.iter().any(|(k, _)| {
         k.len() >= 2
             && matches!(k.as_bytes()[0], b'f' | b'o' | b'v')
-            && k[1..].parse::<u32>().is_ok()
+            && k[1..].parse::<u32>().is_ok_and(|n| n >= 1)
     })
 }
 
@@ -186,22 +186,6 @@ impl BugzillaClient {
     }
 
     async fn search_bugs_rest(&self, params: &SearchParams) -> Result<Vec<Bug>> {
-        let mut req_builder = self.http.get(self.url("bug"));
-
-        // Append multi-value positive filters as repeated query params
-        // (e.g. &status=NEW&status=ASSIGNED) for OR semantics.
-        req_builder = append_multi_value_params(req_builder, params);
-
-        // Append negated filters as boolean chart fN/oN/vN triples.
-        req_builder = append_negated_params(req_builder, params);
-
-        // Append single-value Option fields and limit.
-        req_builder = append_option_params(req_builder, params);
-
-        for id in &params.id {
-            req_builder = req_builder.query(&[("id", id)]);
-        }
-
         if has_negated_filters(params) && has_raw_boolean_chart_params(params) {
             return Err(crate::error::BzrError::InputValidation(
                 "cannot combine negated filters (e.g. --status '!CLOSED') with a \
@@ -210,6 +194,16 @@ impl BugzillaClient {
                     .into(),
             ));
         }
+
+        let mut req_builder = self.http.get(self.url("bug"));
+        req_builder = append_multi_value_params(req_builder, params);
+        req_builder = append_negated_params(req_builder, params);
+        req_builder = append_option_params(req_builder, params);
+
+        for id in &params.id {
+            req_builder = req_builder.query(&[("id", id)]);
+        }
+
         req_builder = append_raw_params(req_builder, &params.raw_params);
 
         if params.include_fields.is_none() {
