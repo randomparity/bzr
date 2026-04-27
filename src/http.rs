@@ -67,21 +67,15 @@ pub(crate) fn build_http_client(
         .build()
 }
 
+/// Check if an error message string contains TLS-related keywords.
+pub(crate) fn looks_like_tls_error(msg: &str) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    lower.contains("cert") || lower.contains("ssl") || lower.contains("tls")
+}
+
 /// Check if a reqwest error looks like a TLS certificate verification failure.
-///
-/// reqwest's `Display` (and `{:#}`) only shows the error kind and URL,
-/// so we walk the `.source()` chain to find TLS keywords that live in
-/// the underlying `hyper` / `rustls` errors.
 pub(crate) fn is_tls_cert_error(err: &reqwest::Error) -> bool {
-    if !err.is_connect() {
-        return false;
-    }
-    let full = crate::error::format_error_chain(err);
-    let lower = full.to_ascii_lowercase();
-    lower.contains("certificate")
-        || lower.contains("cert")
-        || lower.contains("ssl")
-        || lower.contains("tls")
+    err.is_connect() && looks_like_tls_error(&crate::error::format_error_chain(err))
 }
 
 /// Append a `--tls-insecure` hint to a message when a TLS certificate

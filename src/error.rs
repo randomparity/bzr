@@ -105,8 +105,9 @@ pub(crate) fn format_error_chain(err: &dyn std::error::Error) -> String {
 
 /// Format a reqwest error for display: redact API keys and add TLS hints.
 fn format_http_error(err: &reqwest::Error) -> String {
-    let mut msg = redact_api_key(&format_error_chain(err));
-    if crate::http::is_tls_cert_error(err) {
+    let chain = format_error_chain(err);
+    let mut msg = redact_api_key(&chain);
+    if err.is_connect() && crate::http::looks_like_tls_error(&chain) {
         msg.push_str(
             "\n  hint: if this server uses a self-signed certificate or sits \
              behind a TLS-intercepting proxy, re-run:\n    \

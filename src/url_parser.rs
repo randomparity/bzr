@@ -56,7 +56,7 @@ fn strip_shell_backslashes(url: &str) -> String {
     let mut chars = url.chars().peekable();
     while let Some(ch) = chars.next() {
         if ch == '\\' && matches!(chars.peek(), Some('?' | '&' | '=' | '%')) {
-            continue; // drop the backslash, keep the next char
+            continue;
         }
         out.push(ch);
     }
