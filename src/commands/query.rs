@@ -152,18 +152,19 @@ async fn handle_run(
     };
 
     let config = Config::load()?;
-    let query = config
+    let saved = config
         .queries
         .get(name.as_str())
         .ok_or_else(|| BzrError::config(format!("query '{name}' not found")))?;
 
-    let mut params = query.to_search_params();
-    params.apply_overrides(*limit, fields.as_deref(), exclude_fields.as_deref());
-
-    // Server resolution: CLI --server > query run --server > saved server > default
+    // Extract server before consuming the query
+    let saved_server = saved.server.clone();
     let effective_server = server
         .or(server_override.as_deref())
-        .or(query.server.as_deref());
+        .or(saved_server.as_deref());
+
+    let mut params = saved.clone().into_search_params();
+    params.apply_overrides(*limit, fields.as_deref(), exclude_fields.as_deref());
 
     let client = super::shared::connect_and_configure(effective_server, api).await?;
     let bugs = client.search_bugs(&params).await?;
