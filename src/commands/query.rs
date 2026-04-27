@@ -152,18 +152,17 @@ async fn handle_run(
     };
 
     let config = Config::load()?;
-    let query = config
+    let saved = config
         .queries
         .get(name.as_str())
         .ok_or_else(|| BzrError::config(format!("query '{name}' not found")))?;
 
-    let mut params = query.to_search_params();
-    params.apply_overrides(*limit, fields.as_deref(), exclude_fields.as_deref());
-
-    // Server resolution: CLI --server > query run --server > saved server > default
     let effective_server = server
         .or(server_override.as_deref())
-        .or(query.server.as_deref());
+        .or(saved.server.as_deref());
+
+    let mut params = saved.to_search_params();
+    params.apply_overrides(*limit, fields.as_deref(), exclude_fields.as_deref());
 
     let client = super::shared::connect_and_configure(effective_server, api).await?;
     let bugs = client.search_bugs(&params).await?;
@@ -609,19 +608,27 @@ mod tests {
     async fn query_run_with_server_override() {
         let (_lock, mock, _tmp) = setup_test_env().await;
 
-        // Save a query first
+        // Save a query that records a different server than the mock
         let save_action = save_action("server-test");
         let (result, _) =
             capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
 
-        Mock::given(method("GET"))
+        // Patch the saved query to have a different server
+        let mut config = Config::load().unwrap();
+        let query = config.queries.get_mut("server-test").unwrap();
+        query.server = Some("other-server".into());
+        config.save().unwrap();
+
+        // Mount a mock that expects exactly 1 request
+        let mock_guard = Mock::given(method("GET"))
             .and(path("/rest/bug"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
-            .mount(&mock)
+            .expect(1)
+            .mount_as_scoped(&mock)
             .await;
 
-        // Run with --server override
+        // Run with --server override pointing to the mock server ("test")
         let run_action = QueryAction::Run {
             name: "server-test".into(),
             limit: None,
@@ -629,17 +636,15 @@ mod tests {
             exclude_fields: None,
             server: Some("test".into()),
         };
-        let (result, _) = capture_stdout(super::execute(
-            &run_action,
-            Some("test"),
-            OutputFormat::Json,
-            None,
-        ))
-        .await;
+        let (result, _) =
+            capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
         assert!(
             result.is_ok(),
             "query run with server override failed: {result:?}"
         );
+
+        // Drop the scoped mock to trigger the expect(1) assertion
+        drop(mock_guard);
     }
 
     #[tokio::test]

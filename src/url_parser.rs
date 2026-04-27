@@ -4,24 +4,20 @@ use url::Url;
 
 use crate::config::Config;
 use crate::error::{BzrError, Result};
-use crate::types::{QueryKind, SavedQuery};
+use crate::types::{QueryKind, SavedQuery, FIELD_MAPPINGS};
 
 /// Parameters containing credentials that must not be stored or forwarded.
 const CREDENTIAL_PARAMS: &[&str] = &["bugzilla_api_key", "token", "api_key"];
 
 /// Parameters ignored during URL parsing (display/session metadata).
-const IGNORED_PARAMS: &[&str] = &[
-    "columnlist",
-    "list_id",
-    "query_format",
-    "known_name",
-    "query_based_on",
-];
+const IGNORED_PARAMS: &[&str] = &["columnlist", "list_id", "query_format"];
 
 /// Result of parsing a Bugzilla URL.
 #[derive(Debug)]
 pub struct ParsedUrl {
     pub query: SavedQuery,
+    /// Suggested name extracted from URL's `known_name` or `query_based_on` param.
+    pub suggested_name: Option<String>,
 }
 
 /// Strip credential query parameters from a URL, returning the sanitized string.
@@ -81,11 +77,30 @@ pub fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<ParsedUrl> {
         ..SavedQuery::default()
     };
 
+    let mut known_name: Option<String> = None;
+    let mut query_based_on: Option<String> = None;
+
     for (key, value) in url.query_pairs() {
         let key = key.as_ref();
         let value = value.as_ref();
 
         if IGNORED_PARAMS.contains(&key) {
+            continue;
+        }
+
+        if key == "known_name" {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                known_name = Some(trimmed.to_string());
+            }
+            continue;
+        }
+
+        if key == "query_based_on" {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                query_based_on = Some(trimmed.to_string());
+            }
             continue;
         }
 
@@ -96,18 +111,16 @@ pub fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<ParsedUrl> {
             continue;
         }
 
-        // Recognized vec fields — map Bugzilla URL param names to SavedQuery fields
-        let target = match key {
-            "product" => Some(&mut query.product),
-            "component" => Some(&mut query.component),
-            "bug_status" => Some(&mut query.status),
-            "assigned_to" => Some(&mut query.assignee),
-            "reporter" => Some(&mut query.creator),
-            "priority" => Some(&mut query.priority),
-            "bug_severity" => Some(&mut query.severity),
-            _ => None,
-        };
-        if let Some(target) = target {
+        // Recognized vec fields — map Bugzilla URL param names to SavedQuery fields.
+        // get_field_mut is guaranteed to return Some for any struct_field in
+        // FIELD_MAPPINGS — a None here means the two tables are out of sync.
+        if let Some(mapping) = FIELD_MAPPINGS.iter().find(|m| m.url_param == key) {
+            let Some(target) = query.get_field_mut(mapping.struct_field) else {
+                unreachable!(
+                    "FIELD_MAPPINGS struct_field '{}' missing from get_field_mut",
+                    mapping.struct_field
+                );
+            };
             target.push(value.to_string());
             continue;
         }
@@ -121,7 +134,10 @@ pub fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<ParsedUrl> {
         query.raw_params.push((key.to_string(), value.to_string()));
     }
 
-    Ok(ParsedUrl { query })
+    Ok(ParsedUrl {
+        query,
+        suggested_name: known_name.or(query_based_on),
+    })
 }
 
 fn find_server_by_hostname<'a>(config: &'a Config, hostname: &str) -> Option<&'a str> {
@@ -402,6 +418,36 @@ mod tests {
             source.contains("product=Firefox"),
             "non-credential params should remain: {source}"
         );
+    }
+
+    #[test]
+    fn parses_known_name_into_suggested_name() {
+        let parsed = parse_test_url("product=Firefox&known_name=my%20saved%20search");
+        assert_eq!(parsed.suggested_name, Some("my saved search".into()));
+    }
+
+    #[test]
+    fn prefers_known_name_over_query_based_on() {
+        let parsed = parse_test_url("product=Firefox&known_name=preferred&query_based_on=ancestor");
+        assert_eq!(parsed.suggested_name, Some("preferred".into()));
+    }
+
+    #[test]
+    fn falls_back_to_query_based_on() {
+        let parsed = parse_test_url("product=Firefox&query_based_on=ancestor%20query");
+        assert_eq!(parsed.suggested_name, Some("ancestor query".into()));
+    }
+
+    #[test]
+    fn no_suggested_name_when_absent() {
+        let parsed = parse_test_url("product=Firefox");
+        assert!(parsed.suggested_name.is_none());
+    }
+
+    #[test]
+    fn empty_known_name_ignored() {
+        let parsed = parse_test_url("product=Firefox&known_name=");
+        assert!(parsed.suggested_name.is_none());
     }
 
     #[test]

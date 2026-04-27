@@ -2,6 +2,19 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use super::common::FlagUpdate;
 
+/// Generates a match expression mapping `FIELD_MAPPINGS` `struct_field` names
+/// to struct fields. Used by `SearchParams::get_field` and
+/// `SavedQuery::get_field_mut` to keep both in sync with a single definition.
+macro_rules! match_field {
+    ($name:expr, $self:expr, $wrap:ident, $default:expr,
+     { $($field:literal => $member:ident),+ $(,)? }) => {
+        match $name {
+            $($field => $wrap!($self.$member),)+
+            _ => $default,
+        }
+    };
+}
+
 /// Deserialize a string that may be null into an empty string.
 fn deserialize_null_string<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
     Option::<String>::deserialize(d).map(Option::unwrap_or_default)
@@ -96,6 +109,29 @@ impl SearchParams {
         }
     }
 
+    /// Access a multi-value filter field by its `struct_field` name.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `name` is not one of the 7 known field names in
+    /// `FIELD_MAPPINGS`. Only called with compile-time-known names.
+    pub fn get_field(&self, name: &str) -> &[String] {
+        macro_rules! as_ref {
+            ($e:expr) => {
+                &$e
+            };
+        }
+        match_field!(name, self, as_ref, panic!("unknown field: {name}"), {
+            "product" => product,
+            "component" => component,
+            "status" => status,
+            "assigned_to" => assigned_to,
+            "creator" => creator,
+            "priority" => priority,
+            "severity" => severity,
+        })
+    }
+
     /// Returns true if any filter fields are set (product, component, etc.).
     ///
     /// Used by hybrid mode to decide whether an empty REST result warrants
@@ -136,17 +172,54 @@ pub fn partition_filters(values: &[String]) -> (Vec<&str>, Vec<&str>) {
     (positive, negated)
 }
 
-/// Maps `SearchParams` field names to Bugzilla internal field names
-/// used in boolean chart `fN` parameters. Most are identical, but some
-/// differ (e.g. `status` → `bug_status`, `creator` → `reporter`).
-pub const BOOLEAN_CHART_FIELD_NAMES: &[(&str, &str)] = &[
-    ("product", "product"),
-    ("component", "component"),
-    ("status", "bug_status"),
-    ("assigned_to", "assigned_to"),
-    ("creator", "reporter"),
-    ("priority", "priority"),
-    ("severity", "bug_severity"),
+/// Maps a filterable field across all naming contexts.
+pub struct FieldMapping {
+    /// Name on `SearchParams` / `SavedQuery` (e.g. "status").
+    /// Also used as the REST API query parameter.
+    pub struct_field: &'static str,
+    /// `buglist.cgi` URL parameter name (e.g. `bug_status`).
+    pub url_param: &'static str,
+    /// Bugzilla internal name for boolean charts (e.g. `bug_status`).
+    pub internal_name: &'static str,
+}
+
+/// Canonical field-mapping table for the 7 multi-value filter fields.
+pub const FIELD_MAPPINGS: &[FieldMapping] = &[
+    FieldMapping {
+        struct_field: "product",
+        url_param: "product",
+        internal_name: "product",
+    },
+    FieldMapping {
+        struct_field: "component",
+        url_param: "component",
+        internal_name: "component",
+    },
+    FieldMapping {
+        struct_field: "status",
+        url_param: "bug_status",
+        internal_name: "bug_status",
+    },
+    FieldMapping {
+        struct_field: "assigned_to",
+        url_param: "assigned_to",
+        internal_name: "assigned_to",
+    },
+    FieldMapping {
+        struct_field: "creator",
+        url_param: "reporter",
+        internal_name: "reporter",
+    },
+    FieldMapping {
+        struct_field: "priority",
+        url_param: "priority",
+        internal_name: "priority",
+    },
+    FieldMapping {
+        struct_field: "severity",
+        url_param: "bug_severity",
+        internal_name: "bug_severity",
+    },
 ];
 
 #[derive(Debug, Serialize)]
@@ -314,23 +387,47 @@ pub struct SavedQuery {
 }
 
 impl SavedQuery {
-    /// Convert this saved query into `SearchParams` for the Bugzilla client.
+    /// Convert this saved query into `SearchParams` by cloning.
     pub fn to_search_params(&self) -> SearchParams {
+        self.clone().into_search_params()
+    }
+
+    /// Convert this saved query into `SearchParams`, consuming `self`.
+    pub fn into_search_params(self) -> SearchParams {
         SearchParams {
-            product: self.product.clone(),
-            component: self.component.clone(),
-            status: self.status.clone(),
-            assigned_to: self.assignee.clone(),
-            creator: self.creator.clone(),
-            priority: self.priority.clone(),
-            severity: self.severity.clone(),
-            quicksearch: self.quicksearch.clone(),
+            product: self.product,
+            component: self.component,
+            status: self.status,
+            assigned_to: self.assignee,
+            creator: self.creator,
+            priority: self.priority,
+            severity: self.severity,
+            quicksearch: self.quicksearch,
             limit: self.limit,
-            include_fields: self.fields.clone(),
-            exclude_fields: self.exclude_fields.clone(),
-            raw_params: self.raw_params.clone(),
+            include_fields: self.fields,
+            exclude_fields: self.exclude_fields,
+            raw_params: self.raw_params,
             ..Default::default()
         }
+    }
+
+    /// Access a multi-value filter field mutably by its `struct_field` name.
+    /// Maps `assigned_to` to `self.assignee` (TOML-friendly name).
+    pub fn get_field_mut(&mut self, name: &str) -> Option<&mut Vec<String>> {
+        macro_rules! some_mut {
+            ($e:expr) => {
+                Some(&mut $e)
+            };
+        }
+        match_field!(name, self, some_mut, None, {
+            "product" => product,
+            "component" => component,
+            "status" => status,
+            "assigned_to" => assignee,
+            "creator" => creator,
+            "priority" => priority,
+            "severity" => severity,
+        })
     }
 
     /// Returns true if the query has any meaningful filters set.
@@ -639,5 +736,109 @@ mod tests {
             ..Default::default()
         };
         assert!(params.has_filters());
+    }
+
+    #[test]
+    fn field_mappings_covers_all_search_params_vec_fields() {
+        let params = SearchParams::default();
+        for mapping in FIELD_MAPPINGS {
+            let field = params.get_field(mapping.struct_field);
+            assert!(
+                field.is_empty(),
+                "default field should be empty: {}",
+                mapping.struct_field
+            );
+        }
+    }
+
+    #[test]
+    fn field_mappings_has_expected_count() {
+        assert_eq!(FIELD_MAPPINGS.len(), 7);
+    }
+
+    #[test]
+    fn field_mappings_url_param_lookup() {
+        let status = FIELD_MAPPINGS.iter().find(|m| m.url_param == "bug_status");
+        assert!(status.is_some());
+        assert_eq!(status.unwrap().struct_field, "status");
+        assert_eq!(status.unwrap().internal_name, "bug_status");
+    }
+
+    #[test]
+    fn field_mappings_internal_name_for_creator() {
+        let creator = FIELD_MAPPINGS.iter().find(|m| m.struct_field == "creator");
+        assert!(creator.is_some());
+        assert_eq!(creator.unwrap().internal_name, "reporter");
+    }
+
+    #[test]
+    fn search_params_get_field_returns_correct_data() {
+        let params = SearchParams {
+            product: vec!["Firefox".into()],
+            status: vec!["NEW".into(), "ASSIGNED".into()],
+            ..Default::default()
+        };
+        assert_eq!(params.get_field("product"), &["Firefox"]);
+        assert_eq!(params.get_field("status"), &["NEW", "ASSIGNED"]);
+        assert!(params.get_field("creator").is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "unknown field")]
+    fn search_params_get_field_panics_on_unknown() {
+        let params = SearchParams::default();
+        params.get_field("nonexistent");
+    }
+
+    #[test]
+    fn saved_query_get_field_mut_returns_correct_fields() {
+        let mut query = SavedQuery::default();
+        query
+            .get_field_mut("assigned_to")
+            .unwrap()
+            .push("dev@example.com".into());
+        assert_eq!(query.assignee, vec!["dev@example.com"]);
+
+        query.get_field_mut("status").unwrap().push("NEW".into());
+        assert_eq!(query.status, vec!["NEW"]);
+    }
+
+    #[test]
+    fn saved_query_get_field_mut_returns_none_for_unknown() {
+        let mut query = SavedQuery::default();
+        assert!(query.get_field_mut("nonexistent").is_none());
+    }
+
+    #[test]
+    fn into_search_params_moves_fields() {
+        let query = SavedQuery {
+            kind: QueryKind::List,
+            product: vec!["Firefox".into()],
+            component: vec!["General".into()],
+            status: vec!["NEW".into()],
+            assignee: vec!["dev@example.com".into()],
+            creator: vec!["reporter@example.com".into()],
+            priority: vec!["P1".into()],
+            severity: vec!["critical".into()],
+            quicksearch: Some("crash".into()),
+            limit: Some(25),
+            fields: Some("id,summary".into()),
+            exclude_fields: Some("comments".into()),
+            raw_params: vec![("f1".into(), "qa_contact".into())],
+            ..Default::default()
+        };
+        let params = query.into_search_params();
+        assert_eq!(params.product, vec!["Firefox"]);
+        assert_eq!(params.component, vec!["General"]);
+        assert_eq!(params.status, vec!["NEW"]);
+        assert_eq!(params.assigned_to, vec!["dev@example.com"]);
+        assert_eq!(params.creator, vec!["reporter@example.com"]);
+        assert_eq!(params.priority, vec!["P1"]);
+        assert_eq!(params.severity, vec!["critical"]);
+        assert_eq!(params.quicksearch, Some("crash".into()));
+        assert_eq!(params.limit, Some(25));
+        assert_eq!(params.include_fields, Some("id,summary".into()));
+        assert_eq!(params.exclude_fields, Some("comments".into()));
+        assert_eq!(params.raw_params, vec![("f1".into(), "qa_contact".into())]);
     }
 }

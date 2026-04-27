@@ -8,9 +8,9 @@ mod user;
 
 pub use attachment::{Attachment, UpdateAttachmentParams, UploadAttachmentParams};
 pub use bug::{
-    partition_filters, Bug, BugTemplate, CreateBugParams, FieldChange, FieldValue, HistoryEntry,
-    IdListUpdate, QueryKind, SavedQuery, SearchParams, StatusTransition, UpdateBugParams,
-    BOOLEAN_CHART_FIELD_NAMES,
+    partition_filters, Bug, BugTemplate, CreateBugParams, FieldChange, FieldMapping, FieldValue,
+    HistoryEntry, IdListUpdate, QueryKind, SavedQuery, SearchParams, StatusTransition,
+    UpdateBugParams, FIELD_MAPPINGS,
 };
 pub use comment::{Comment, UpdateCommentTagsParams};
 pub use common::{

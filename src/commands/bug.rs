@@ -139,16 +139,28 @@ async fn handle_search(
         let effective_server = server.or(parsed.query.server.as_deref());
         let client = super::shared::connect_and_configure(effective_server, api).await?;
 
-        let mut params = parsed.query.to_search_params();
+        let save_info = if let Some(raw_name) = save_as {
+            let name = if raw_name.is_empty() {
+                parsed.suggested_name.ok_or_else(|| {
+                    crate::error::BzrError::InputValidation(
+                        "no name provided for --save-as and URL has no known_name; \
+                         specify a name explicitly: --save-as <name>"
+                            .into(),
+                    )
+                })?
+            } else {
+                raw_name.clone()
+            };
+            Some((name, parsed.query.clone()))
+        } else {
+            None
+        };
+
+        let mut params = parsed.query.into_search_params();
         if params.limit.is_none() && limit.is_none() {
             params.limit = Some(50);
         }
         params.apply_overrides(*limit, fields.as_deref(), exclude_fields.as_deref());
-
-        // Defer saving until after search succeeds
-        let save_info = save_as
-            .as_ref()
-            .map(|name| (name.clone(), parsed.query.clone()));
         (client, params, save_info)
     } else {
         let query_str = query.as_deref().ok_or_else(|| {
@@ -1212,5 +1224,51 @@ mod tests {
         assert_eq!(saved.kind, crate::types::QueryKind::Url);
         assert_eq!(saved.product, vec!["TestProduct"]);
         assert!(saved.source_url.is_some());
+    }
+
+    #[tokio::test]
+    async fn handle_search_from_url_auto_names_from_known_name() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+            .mount(&mock)
+            .await;
+
+        let server_url = mock.uri();
+        let url =
+            format!("{server_url}/buglist.cgi?product=TestProduct&known_name=my%20saved%20search");
+        let action = from_url_action(url, Some(String::new()));
+        let (result, _output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(
+            result.is_ok(),
+            "auto-name from known_name failed: {result:?}"
+        );
+
+        let config = crate::config::Config::load().unwrap();
+        assert!(
+            config.queries.contains_key("my saved search"),
+            "query should be saved as 'my saved search'"
+        );
+    }
+
+    #[tokio::test]
+    async fn handle_search_save_as_no_name_no_known_name_errors() {
+        let (_lock, _mock, _tmp) = setup_test_env().await;
+
+        let action = from_url_action(
+            "https://bugzilla.example.com/buglist.cgi?product=Firefox".into(),
+            Some(String::new()),
+        );
+        let (result, _output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("no name provided for --save-as"),
+            "unexpected error: {err}"
+        );
     }
 }

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::{self, Write as _};
 
 use crate::types::{OutputFormat, QueryKind, SavedQuery};
 
@@ -44,7 +45,7 @@ pub fn print_query_saved(name: &str, verb: &str, format: OutputFormat) {
             print_json(&serde_json::json!({"name": name, "action": verb.to_lowercase()}));
         }
         OutputFormat::Table => {
-            println!("{}", query_saved_message(name, verb));
+            let _ = writeln!(io::stdout(), "{}", query_saved_message(name, verb));
         }
     }
 }
@@ -52,13 +53,13 @@ pub fn print_query_saved(name: &str, verb: &str, format: OutputFormat) {
 pub fn print_query_list(queries: &HashMap<String, SavedQuery>, format: OutputFormat) {
     print_formatted(queries, format, |queries| {
         if queries.is_empty() {
-            println!("No saved queries configured.");
+            let _ = writeln!(io::stdout(), "No saved queries configured.");
             return;
         }
         let mut names: Vec<&str> = queries.keys().map(String::as_str).collect();
         names.sort_unstable();
         for name in names {
-            println!("{}", query_summary_line(name, &queries[name]));
+            let _ = writeln!(io::stdout(), "{}", query_summary_line(name, &queries[name]));
         }
     });
 }
