@@ -157,13 +157,11 @@ async fn handle_run(
         .get(name.as_str())
         .ok_or_else(|| BzrError::config(format!("query '{name}' not found")))?;
 
-    // Extract server before consuming the query
-    let saved_server = saved.server.clone();
     let effective_server = server
         .or(server_override.as_deref())
-        .or(saved_server.as_deref());
+        .or(saved.server.as_deref());
 
-    let mut params = saved.clone().into_search_params();
+    let mut params = saved.to_search_params();
     params.apply_overrides(*limit, fields.as_deref(), exclude_fields.as_deref());
 
     let client = super::shared::connect_and_configure(effective_server, api).await?;

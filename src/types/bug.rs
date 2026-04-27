@@ -371,27 +371,12 @@ pub struct SavedQuery {
 }
 
 impl SavedQuery {
-    /// Convert this saved query into `SearchParams` for the Bugzilla client.
+    /// Convert this saved query into `SearchParams` by cloning.
     pub fn to_search_params(&self) -> SearchParams {
-        SearchParams {
-            product: self.product.clone(),
-            component: self.component.clone(),
-            status: self.status.clone(),
-            assigned_to: self.assignee.clone(),
-            creator: self.creator.clone(),
-            priority: self.priority.clone(),
-            severity: self.severity.clone(),
-            quicksearch: self.quicksearch.clone(),
-            limit: self.limit,
-            include_fields: self.fields.clone(),
-            exclude_fields: self.exclude_fields.clone(),
-            raw_params: self.raw_params.clone(),
-            ..Default::default()
-        }
+        self.clone().into_search_params()
     }
 
-    /// Consuming variant of `to_search_params` — moves fields instead of cloning.
-    /// Use when the `SavedQuery` is owned and not needed after conversion.
+    /// Convert this saved query into `SearchParams`, consuming `self`.
     pub fn into_search_params(self) -> SearchParams {
         SearchParams {
             product: self.product,
