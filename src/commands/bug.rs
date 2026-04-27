@@ -1154,6 +1154,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn handle_search_from_url_passes_raw_params() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        // Wiremock matcher verifying raw params appear in the request
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("product", "TestProduct"))
+            .and(query_param("f1", "qa_contact"))
+            .and(query_param("o1", "changedfrom"))
+            .and(query_param("v1", "user@example.com"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let server_url = mock.uri();
+        let url = format!(
+            "{server_url}/buglist.cgi?product=TestProduct&f1=qa_contact&o1=changedfrom&v1=user%40example.com"
+        );
+        let action = BugAction::Search {
+            query: None,
+            from_url: Some(url),
+            save_as: None,
+            limit: None,
+            fields: None,
+            exclude_fields: None,
+        };
+
+        let (result, _) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(
+            result.is_ok(),
+            "from-url with raw params failed: {result:?}"
+        );
+    }
+
+    #[tokio::test]
     async fn handle_search_from_url_saves_query() {
         let (_lock, mock, _tmp) = setup_test_env().await;
 

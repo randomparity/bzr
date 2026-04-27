@@ -628,6 +628,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn query_run_with_server_override() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        // Save a query first
+        let save_action = save_action("server-test");
+        let (result, _) =
+            capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok());
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+            .mount(&mock)
+            .await;
+
+        // Run with --server override
+        let run_action = QueryAction::Run {
+            name: "server-test".into(),
+            limit: None,
+            fields: None,
+            exclude_fields: None,
+            server: Some("test".into()),
+        };
+        let (result, _) = capture_stdout(super::execute(
+            &run_action,
+            Some("test"),
+            OutputFormat::Json,
+            None,
+        ))
+        .await;
+        assert!(
+            result.is_ok(),
+            "query run with server override failed: {result:?}"
+        );
+    }
+
+    #[tokio::test]
     async fn query_save_from_url() {
         let (_lock, mock, _tmp) = setup_test_env().await;
 
