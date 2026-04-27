@@ -112,6 +112,8 @@ jobs:
   sonarqube:
     name: SonarQube
     # Skip on forked PRs and Dependabot PRs (neither has access to SONAR_TOKEN).
+    # Clippy (above) provides unconditional SAST coverage on all PRs including
+    # Dependabot, satisfying OpenSSF Scorecard's SAST check.
     if: |
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
       && github.actor != 'dependabot[bot]'
