@@ -152,6 +152,7 @@ impl BugzillaClient {
     }
 
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
+        tracing::debug!(?params, %self.api_mode, "search parameters");
         // Raw params (boolean charts from URLs) only work with REST.
         if !params.raw_params.is_empty() && self.api_mode != ApiMode::Rest {
             tracing::warn!(
@@ -161,7 +162,6 @@ impl BugzillaClient {
             );
             return self.search_bugs_rest(params).await;
         }
-        tracing::debug!(?params, %self.api_mode, "search parameters");
         match self.api_mode {
             ApiMode::Rest => self.search_bugs_rest(params).await,
             ApiMode::XmlRpc => self.xmlrpc_client()?.search_bugs(params).await,

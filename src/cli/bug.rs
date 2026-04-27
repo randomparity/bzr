@@ -63,9 +63,9 @@ pub enum BugAction {
         /// Save this URL query with the given name for future reuse (requires --from-url)
         #[arg(long, requires = "from_url")]
         save_as: Option<String>,
-        /// Max number of results
-        #[arg(long, default_value = "50")]
-        limit: u32,
+        /// Max number of results (default: 50)
+        #[arg(long)]
+        limit: Option<u32>,
         /// Only return these fields (comma-separated)
         #[arg(long)]
         fields: Option<String>,

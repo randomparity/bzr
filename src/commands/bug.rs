@@ -19,7 +19,7 @@ pub async fn execute(
         BugAction::List { .. } => handle_list(&client, action, format).await,
         BugAction::View { .. } => handle_view(&client, action, format).await,
         BugAction::History { .. } => handle_history(&client, action, format).await,
-        BugAction::Search { .. } => handle_search(&client, action, format).await,
+        BugAction::Search { .. } => handle_search(action, server, format, api).await,
         BugAction::My { .. } => handle_my(&client, action, format).await,
         BugAction::Create { .. } => handle_create(&client, action, format).await,
         BugAction::Clone { .. } => handle_clone(&client, action, format).await,
@@ -113,9 +113,10 @@ async fn handle_history(
 }
 
 async fn handle_search(
-    client: &BugzillaClient,
     action: &BugAction,
+    server: Option<&str>,
     format: OutputFormat,
+    api: Option<ApiMode>,
 ) -> Result<()> {
     let BugAction::Search {
         query,
@@ -129,7 +130,7 @@ async fn handle_search(
         unreachable!()
     };
 
-    let params = if let Some(url_str) = from_url {
+    let (client, params) = if let Some(url_str) = from_url {
         let config = crate::config::Config::load()?;
         let parsed = crate::url_parser::parse_bugzilla_url(url_str, &config)?;
 
@@ -142,9 +143,14 @@ async fn handle_search(
             tracing::info!("{verb} query '{name}'");
         }
 
+        let effective_server = server.or(parsed.query.server.as_deref());
+        let client = super::shared::connect_and_configure(effective_server, api).await?;
+
         let mut params = parsed.query.to_search_params();
-        if *limit != 50 || params.limit.is_none() {
-            params.limit = Some(*limit);
+        if let Some(l) = limit {
+            params.limit = Some(*l);
+        } else if params.limit.is_none() {
+            params.limit = Some(50);
         }
         if let Some(f) = fields {
             params.include_fields = Some(f.clone());
@@ -152,20 +158,22 @@ async fn handle_search(
         if let Some(ef) = exclude_fields {
             params.exclude_fields = Some(ef.clone());
         }
-        params
+        (client, params)
     } else {
         let query_str = query.as_deref().ok_or_else(|| {
             crate::error::BzrError::InputValidation(
                 "either a search query or --from-url is required".into(),
             )
         })?;
-        SearchParams {
+        let client = super::shared::connect_and_configure(server, api).await?;
+        let params = SearchParams {
             quicksearch: Some(query_str.to_string()),
-            limit: Some(*limit),
+            limit: Some(limit.unwrap_or(50)),
             include_fields: fields.clone(),
             exclude_fields: exclude_fields.clone(),
             ..Default::default()
-        }
+        };
+        (client, params)
     };
 
     let bugs = client.search_bugs(&params).await?;
@@ -1133,7 +1141,7 @@ mod tests {
             query: None,
             from_url: Some(url),
             save_as: None,
-            limit: 50,
+            limit: None,
             fields: None,
             exclude_fields: None,
         };
@@ -1161,7 +1169,7 @@ mod tests {
             query: None,
             from_url: Some(url),
             save_as: Some("my-query".into()),
-            limit: 50,
+            limit: None,
             fields: None,
             exclude_fields: None,
         };

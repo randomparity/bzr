@@ -117,7 +117,7 @@ async fn bug_search_integration() {
         query: Some("crash".to_string()),
         from_url: None,
         save_as: None,
-        limit: 50,
+        limit: None,
         fields: None,
         exclude_fields: None,
     };
