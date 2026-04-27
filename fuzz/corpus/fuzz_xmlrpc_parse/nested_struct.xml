@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value><struct>
+        <member><name>bugs</name><value><array><data>
+          <value><struct>
+            <member><name>id</name><value><i4>1</i4></value></member>
+            <member><name>flags</name><value><array><data>
+              <value><struct>
+                <member><name>name</name><value><string>review</string></value></member>
+                <member><name>status</name><value><string>?</string></value></member>
+              </struct></value>
+            </data></array></value></member>
+          </struct></value>
+        </data></array></value></member>
+      </struct></value>
+    </param>
+  </params>
+</methodResponse>
