@@ -36,6 +36,33 @@ fn sanitize_url(url: &Url) -> String {
     sanitized.to_string()
 }
 
+/// Strip backslashes that precede URL-significant characters (`?`, `&`, `=`).
+///
+/// When a user pastes a raw URL into zsh without quotes, the shell
+/// auto-escapes these characters (e.g. `buglist.cgi\?foo\=bar\&baz`).
+/// If the escaped form is then quoted or copied, the backslashes become
+/// literal and pollute every query-param name and value (`chfield%5C`).
+/// Backslashes before these characters are never valid in HTTP URLs, so
+/// stripping them is always safe.
+fn strip_shell_backslashes(url: &str) -> String {
+    if !url.contains('\\') {
+        return url.to_string();
+    }
+    tracing::warn!(
+        "URL contains backslash-escaped characters (e.g. \\? \\& \\=); \
+         stripping shell escapes — quote the URL to avoid this"
+    );
+    let mut out = String::with_capacity(url.len());
+    let mut chars = url.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' && matches!(chars.peek(), Some('?' | '&' | '=' | '%')) {
+            continue;
+        }
+        out.push(ch);
+    }
+    out
+}
+
 /// Parse a Bugzilla `buglist.cgi` URL into a `SavedQuery`.
 ///
 /// Recognized parameters are mapped to structured `SavedQuery` fields.
@@ -43,8 +70,9 @@ fn sanitize_url(url: &Url) -> String {
 /// passthrough to the REST API. Display/session params are ignored.
 /// Credential parameters are stripped from both `source_url` and `raw_params`.
 pub fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<ParsedUrl> {
+    let cleaned = strip_shell_backslashes(url_str);
     let url =
-        Url::parse(url_str).map_err(|e| BzrError::InputValidation(format!("invalid URL: {e}")))?;
+        Url::parse(&cleaned).map_err(|e| BzrError::InputValidation(format!("invalid URL: {e}")))?;
 
     if !url.path().contains("buglist.cgi") {
         return Err(BzrError::InputValidation(
@@ -468,5 +496,73 @@ mod tests {
                     .any(|k| k.to_ascii_lowercase().contains("key")
                         || k.eq_ignore_ascii_case("token"))
         );
+    }
+
+    #[test]
+    fn strip_shell_backslashes_cleans_escaped_url() {
+        let escaped =
+            r"https://bugzilla.example.com/buglist.cgi\?product\=Firefox\&bug_status\=NEW";
+        let cleaned = strip_shell_backslashes(escaped);
+        assert_eq!(
+            cleaned,
+            "https://bugzilla.example.com/buglist.cgi?product=Firefox&bug_status=NEW"
+        );
+    }
+
+    #[test]
+    fn strip_shell_backslashes_preserves_clean_url() {
+        let clean = "https://bugzilla.example.com/buglist.cgi?product=Firefox";
+        let result = strip_shell_backslashes(clean);
+        assert_eq!(result, clean);
+    }
+
+    #[test]
+    fn strip_shell_backslashes_preserves_percent_encoding() {
+        // Backslash before % should be stripped; the %20 must survive intact
+        let escaped = r"https://bugzilla.example.com/buglist.cgi\?product\=PPC64\%20Development";
+        let cleaned = strip_shell_backslashes(escaped);
+        assert_eq!(
+            cleaned,
+            "https://bugzilla.example.com/buglist.cgi?product=PPC64%20Development"
+        );
+    }
+
+    #[test]
+    fn strip_shell_backslashes_ignores_non_special() {
+        // Backslash before a non-URL-significant character is kept
+        let input = r"https://bugzilla.example.com/buglist.cgi?summary=foo\bar";
+        let result = strip_shell_backslashes(input);
+        assert_eq!(result, input);
+    }
+
+    #[test]
+    fn strip_shell_backslashes_trailing_backslash() {
+        // Trailing backslash with no following char is preserved
+        let input = r"https://bugzilla.example.com/buglist.cgi?product=Firefox\";
+        let result = strip_shell_backslashes(input);
+        assert_eq!(result, input);
+    }
+
+    #[test]
+    fn parse_url_with_shell_backslashes_succeeds() {
+        let config = make_config("https://bugzilla.example.com");
+        let escaped =
+            r"https://bugzilla.example.com/buglist.cgi\?product\=Firefox\&bug_status\=NEW";
+        let parsed = parse_bugzilla_url(escaped, &config).unwrap();
+        assert_eq!(parsed.query.product, vec!["Firefox"]);
+        assert_eq!(parsed.query.status, vec!["NEW"]);
+    }
+
+    #[test]
+    fn parse_url_with_shell_backslashes_boolean_chart() {
+        let config = make_config("https://bugzilla.example.com");
+        let escaped = r"https://bugzilla.example.com/buglist.cgi\?f1\=qa_contact\&o1\=changedfrom\&v1\=user\%40example.com\&classification\=Community";
+        let parsed = parse_bugzilla_url(escaped, &config).unwrap();
+
+        let keys = raw_keys(&parsed);
+        assert!(keys.contains(&"f1"), "boolean chart f1 missing: {keys:?}");
+        assert!(keys.contains(&"o1"), "boolean chart o1 missing: {keys:?}");
+        assert_eq!(raw_value(&parsed, "v1"), "user@example.com");
+        assert_eq!(raw_value(&parsed, "classification"), "Community");
     }
 }
