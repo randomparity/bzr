@@ -1,0 +1,37 @@
+[package]
+name = "bzr-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+toml = "0.8"
+
+[dependencies.bzr]
+path = ".."
+default-features = false
+
+[[bin]]
+name = "fuzz_xmlrpc_parse"
+path = "fuzz_targets/fuzz_xmlrpc_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_url_parser"
+path = "fuzz_targets/fuzz_url_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_flag_parser"
+path = "fuzz_targets/fuzz_flag_parser.rs"
+test = false
+doc = false
+bench = false

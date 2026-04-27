@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<methodResponse>
+  <params>
+    <param>
+      <value><struct>
+        <member><name>id</name><value><int>12345</int></value></member>
+        <member><name>summary</name><value><string>test bug</string></value></member>
+        <member><name>is_open</name><value><boolean>1</boolean></value></member>
+      </struct></value>
+    </param>
+  </params>
+</methodResponse>
