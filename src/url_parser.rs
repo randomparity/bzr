@@ -175,6 +175,27 @@ mod tests {
         parse_bugzilla_url(&url, &config).unwrap()
     }
 
+    /// Extract `raw_params` keys as a vec for assertions.
+    fn raw_keys(parsed: &ParsedUrl) -> Vec<&str> {
+        parsed
+            .query
+            .raw_params
+            .iter()
+            .map(|(k, _)| k.as_str())
+            .collect()
+    }
+
+    /// Find a raw param value by key.
+    fn raw_value<'a>(parsed: &'a ParsedUrl, key: &str) -> &'a str {
+        parsed
+            .query
+            .raw_params
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
+            .unwrap()
+    }
+
     #[test]
     fn parse_simple_url_with_recognized_params() {
         let parsed = parse_test_url("product=Firefox&product=Thunderbird&bug_status=NEW&limit=50");
@@ -201,12 +222,7 @@ mod tests {
         );
 
         // Ignored params must not appear in raw_params
-        let keys: Vec<&str> = parsed
-            .query
-            .raw_params
-            .iter()
-            .map(|(k, _)| k.as_str())
-            .collect();
+        let keys = raw_keys(&parsed);
         assert!(!keys.contains(&"query_format"));
         assert!(!keys.contains(&"list_id"));
         assert!(!keys.contains(&"columnlist"));
@@ -221,23 +237,8 @@ mod tests {
         assert!(keys.contains(&"classification"));
 
         // URL-decoded values
-        let v1 = parsed
-            .query
-            .raw_params
-            .iter()
-            .find(|(k, _)| k == "v1")
-            .map(|(_, v)| v.as_str())
-            .unwrap();
-        assert_eq!(v1, "PDF Viewer");
-
-        let chfield = parsed
-            .query
-            .raw_params
-            .iter()
-            .find(|(k, _)| k == "chfield")
-            .map(|(_, v)| v.as_str())
-            .unwrap();
-        assert_eq!(chfield, "[Bug creation]");
+        assert_eq!(raw_value(&parsed, "v1"), "PDF Viewer");
+        assert_eq!(raw_value(&parsed, "chfield"), "[Bug creation]");
     }
 
     #[test]
@@ -371,12 +372,7 @@ mod tests {
         );
 
         // API key must not appear in raw_params
-        let keys: Vec<&str> = parsed
-            .query
-            .raw_params
-            .iter()
-            .map(|(k, _)| k.as_str())
-            .collect();
+        let keys = raw_keys(&parsed);
         assert!(!keys.contains(&"Bugzilla_api_key"));
         assert!(!keys.contains(&"bugzilla_api_key"));
 
@@ -418,12 +414,7 @@ mod tests {
         assert!(!source.contains("abc"));
         assert!(!source.contains("def"));
 
-        let keys: Vec<&str> = parsed
-            .query
-            .raw_params
-            .iter()
-            .map(|(k, _)| k.as_str())
-            .collect();
+        let keys = raw_keys(&parsed);
         assert!(
             keys.is_empty()
                 || !keys

@@ -544,6 +544,13 @@ mod tests {
         assert!(query.has_filters());
     }
 
+    fn sample_raw_params() -> Vec<(String, String)> {
+        vec![
+            ("f1".into(), "qa_contact".into()),
+            ("o1".into(), "changedfrom".into()),
+        ]
+    }
+
     #[test]
     fn query_kind_url_serializes() {
         let json = serde_json::to_string(&QueryKind::Url).unwrap();
@@ -604,10 +611,7 @@ mod tests {
         let query = SavedQuery {
             kind: QueryKind::Url,
             product: vec!["Firefox".into()],
-            raw_params: vec![
-                ("f1".into(), "qa_contact".into()),
-                ("o1".into(), "changedfrom".into()),
-            ],
+            raw_params: sample_raw_params(),
             limit: Some(100),
             ..SavedQuery::default()
         };
