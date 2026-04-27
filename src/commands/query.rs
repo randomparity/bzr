@@ -62,6 +62,7 @@ fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
         limit: *limit,
         fields: fields.clone(),
         exclude_fields: exclude_fields.clone(),
+        ..Default::default()
     };
 
     if !query.has_filters() {

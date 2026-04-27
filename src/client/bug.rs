@@ -835,6 +835,7 @@ mod tests {
             quicksearch: Some("qs-term".into()),
             include_fields: Some("id,summary".into()),
             exclude_fields: Some("cc".into()),
+            ..Default::default()
         };
         let bugs = client.search_bugs(&params).await.unwrap();
         assert_eq!(bugs.len(), 1);

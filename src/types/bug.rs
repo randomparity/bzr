@@ -72,6 +72,9 @@ pub struct SearchParams {
     pub quicksearch: Option<String>,
     pub include_fields: Option<String>,
     pub exclude_fields: Option<String>,
+    /// Raw query parameters passed through verbatim to the REST API.
+    /// Used for URL-imported queries with boolean chart params.
+    pub raw_params: Vec<(String, String)>,
 }
 
 impl SearchParams {
@@ -96,6 +99,7 @@ impl SearchParams {
             || !self.id.is_empty()
             || self.summary.is_some()
             || self.quicksearch.is_some()
+            || !self.raw_params.is_empty()
     }
 }
 
@@ -248,6 +252,8 @@ pub enum QueryKind {
     List,
     /// Free-text quicksearch query
     Search,
+    /// Query imported from a Bugzilla URL (may contain raw passthrough params)
+    Url,
 }
 
 /// A reusable bug query stored in the config file.
@@ -277,6 +283,16 @@ pub struct SavedQuery {
     pub fields: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exclude_fields: Option<String>,
+    /// The original Bugzilla URL this query was parsed from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
+    /// Server name (from config) this query is associated with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
+    /// Raw query parameters not mapped to structured fields.
+    /// Passed through verbatim to the Bugzilla REST API.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub raw_params: Vec<(String, String)>,
 }
 
 impl SavedQuery {
@@ -294,6 +310,7 @@ impl SavedQuery {
             limit: self.limit,
             include_fields: self.fields.clone(),
             exclude_fields: self.exclude_fields.clone(),
+            raw_params: self.raw_params.clone(),
             ..Default::default()
         }
     }
@@ -308,6 +325,7 @@ impl SavedQuery {
             || !self.priority.is_empty()
             || !self.severity.is_empty()
             || self.quicksearch.is_some()
+            || !self.raw_params.is_empty()
     }
 }
 
@@ -424,6 +442,9 @@ mod tests {
             limit: Some(25),
             fields: None,
             exclude_fields: None,
+            source_url: None,
+            server: None,
+            raw_params: vec![],
         };
         let json = serde_json::to_string(&query).unwrap();
         let roundtripped: SavedQuery = serde_json::from_str(&json).unwrap();
@@ -503,5 +524,98 @@ mod tests {
             ..SavedQuery::default()
         };
         assert!(query.has_filters());
+    }
+
+    #[test]
+    fn query_kind_url_serializes() {
+        let json = serde_json::to_string(&QueryKind::Url).unwrap();
+        assert_eq!(json, r#""url""#);
+    }
+
+    #[test]
+    fn query_kind_url_deserializes() {
+        let kind: QueryKind = serde_json::from_str(r#""url""#).unwrap();
+        assert_eq!(kind, QueryKind::Url);
+    }
+
+    #[test]
+    fn saved_query_with_url_fields_roundtrips() {
+        let query = SavedQuery {
+            kind: QueryKind::Url,
+            source_url: Some("https://bugzilla.example.com/buglist.cgi?product=Firefox".into()),
+            server: Some("example".into()),
+            raw_params: vec![
+                ("f1".into(), "qa_contact".into()),
+                ("o1".into(), "changedfrom".into()),
+                ("v1".into(), "user@example.com".into()),
+            ],
+            product: vec!["Firefox".into()],
+            ..SavedQuery::default()
+        };
+        let json = serde_json::to_string(&query).unwrap();
+        let roundtripped: SavedQuery = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtripped.kind, QueryKind::Url);
+        assert_eq!(
+            roundtripped.source_url.as_deref(),
+            Some("https://bugzilla.example.com/buglist.cgi?product=Firefox")
+        );
+        assert_eq!(roundtripped.server.as_deref(), Some("example"));
+        assert_eq!(roundtripped.raw_params.len(), 3);
+        assert_eq!(
+            roundtripped.raw_params[0],
+            ("f1".into(), "qa_contact".into())
+        );
+        assert_eq!(roundtripped.product, vec!["Firefox"]);
+    }
+
+    #[test]
+    fn saved_query_without_url_fields_omits_them_in_json() {
+        let query = SavedQuery {
+            kind: QueryKind::List,
+            product: vec!["Firefox".into()],
+            ..SavedQuery::default()
+        };
+        let json = serde_json::to_string(&query).unwrap();
+        assert!(!json.contains("source_url"));
+        assert!(!json.contains("\"server\""));
+        assert!(!json.contains("raw_params"));
+    }
+
+    #[test]
+    fn saved_query_url_kind_to_search_params_includes_raw_params() {
+        let query = SavedQuery {
+            kind: QueryKind::Url,
+            product: vec!["Firefox".into()],
+            raw_params: vec![
+                ("f1".into(), "qa_contact".into()),
+                ("o1".into(), "changedfrom".into()),
+            ],
+            limit: Some(100),
+            ..SavedQuery::default()
+        };
+        let params = query.to_search_params();
+        assert_eq!(params.product, vec!["Firefox"]);
+        assert_eq!(params.limit, Some(100));
+        assert_eq!(params.raw_params.len(), 2);
+        assert_eq!(params.raw_params[0], ("f1".into(), "qa_contact".into()));
+    }
+
+    #[test]
+    fn saved_query_url_kind_has_filters_with_only_raw_params() {
+        let query = SavedQuery {
+            kind: QueryKind::Url,
+            raw_params: vec![("f1".into(), "qa_contact".into())],
+            ..SavedQuery::default()
+        };
+        assert!(query.has_filters());
+    }
+
+    #[test]
+    fn search_params_has_filters_with_raw_params() {
+        let params = SearchParams {
+            raw_params: vec![("f1".into(), "qa_contact".into())],
+            ..Default::default()
+        };
+        assert!(params.has_filters());
     }
 }

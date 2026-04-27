@@ -14,6 +14,7 @@ fn query_summary_line(name: &str, q: &SavedQuery) -> String {
     let kind_label = match q.kind {
         QueryKind::List => "list",
         QueryKind::Search => "search",
+        QueryKind::Url => "url",
     };
     let mut parts = vec![format!("kind={kind_label}")];
     if !q.product.is_empty() {
@@ -69,6 +70,7 @@ pub fn print_query_detail(name: &str, query: &SavedQuery, format: OutputFormat) 
         let kind_label = match view.query.kind {
             QueryKind::List => "list",
             QueryKind::Search => "search",
+            QueryKind::Url => "url",
         };
         print_field("Name", view.name);
         print_field("Kind", kind_label);
