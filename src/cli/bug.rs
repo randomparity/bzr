@@ -60,8 +60,9 @@ pub enum BugAction {
         /// Execute a search from a Bugzilla buglist.cgi URL
         #[arg(long)]
         from_url: Option<String>,
-        /// Save this URL query with the given name for future reuse (requires --from-url)
-        #[arg(long, requires = "from_url")]
+        /// Save this URL query for future reuse. Optionally provide a name;
+        /// if omitted, uses the URL's `known_name` parameter.
+        #[arg(long, requires = "from_url", num_args = 0..=1, default_missing_value = "")]
         save_as: Option<String>,
         /// Max number of results (default: 50)
         #[arg(long)]
