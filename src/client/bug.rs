@@ -100,6 +100,26 @@ fn append_option_params(
     builder
 }
 
+/// Returns true if any multi-value filter field contains negated values (prefixed with `!`).
+fn has_negated_filters(params: &SearchParams) -> bool {
+    FIELD_MAPPINGS.iter().any(|m| {
+        params
+            .get_field(m.struct_field)
+            .iter()
+            .any(|v| v.starts_with('!'))
+    })
+}
+
+/// Returns true if `raw_params` contains boolean chart parameters (`fN`, `oN`, `vN`
+/// where N is a positive integer).
+fn has_raw_boolean_chart_params(params: &SearchParams) -> bool {
+    params.raw_params.iter().any(|(k, _)| {
+        k.len() >= 2
+            && matches!(k.as_bytes()[0], b'f' | b'o' | b'v')
+            && k[1..].parse::<u32>().is_ok()
+    })
+}
+
 /// Appends raw key-value parameters to the request builder verbatim.
 /// Used for URL-imported queries with boolean chart params that
 /// `bzr` does not natively model.
@@ -182,10 +202,14 @@ impl BugzillaClient {
             req_builder = req_builder.query(&[("id", id)]);
         }
 
-        // Note: raw_params and append_negated_params both use fN/oN/vN indices.
-        // Index collision cannot occur because URL-parsed queries store boolean
-        // chart params in raw_params (not as negated structured filters), and
-        // there is no CLI path that combines negated filters with raw params.
+        if has_negated_filters(params) && has_raw_boolean_chart_params(params) {
+            return Err(crate::error::BzrError::InputValidation(
+                "cannot combine negated filters (e.g. --status '!CLOSED') with a \
+                 URL-imported query containing boolean chart parameters; the chart \
+                 indices would collide"
+                    .into(),
+            ));
+        }
         req_builder = append_raw_params(req_builder, &params.raw_params);
 
         if params.include_fields.is_none() {
@@ -709,6 +733,52 @@ mod tests {
     }
 
     #[test]
+    fn has_negated_filters_detects_negation() {
+        let params = SearchParams {
+            status: vec!["!CLOSED".into()],
+            ..Default::default()
+        };
+        assert!(super::has_negated_filters(&params));
+    }
+
+    #[test]
+    fn has_negated_filters_false_for_positive_only() {
+        let params = SearchParams {
+            status: vec!["NEW".into()],
+            ..Default::default()
+        };
+        assert!(!super::has_negated_filters(&params));
+    }
+
+    #[test]
+    fn has_raw_boolean_chart_params_detects_f1() {
+        let params = SearchParams {
+            raw_params: vec![
+                ("f1".into(), "qa_contact".into()),
+                ("o1".into(), "equals".into()),
+                ("v1".into(), "user@example.com".into()),
+            ],
+            ..Default::default()
+        };
+        assert!(super::has_raw_boolean_chart_params(&params));
+    }
+
+    #[test]
+    fn has_raw_boolean_chart_params_false_for_non_chart() {
+        let params = SearchParams {
+            raw_params: vec![("product".into(), "Firefox".into())],
+            ..Default::default()
+        };
+        assert!(!super::has_raw_boolean_chart_params(&params));
+    }
+
+    #[test]
+    fn has_raw_boolean_chart_params_false_for_empty() {
+        let params = SearchParams::default();
+        assert!(!super::has_raw_boolean_chart_params(&params));
+    }
+
+    #[test]
     fn search_params_has_filters() {
         let empty = SearchParams::default();
         assert!(!empty.has_filters());
@@ -797,6 +867,28 @@ mod tests {
         };
         let bugs = client.search_bugs(&params).await.unwrap();
         assert_eq!(bugs.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn search_bugs_rejects_negated_plus_raw_boolean_chart() {
+        let mock = MockServer::start().await;
+        let client = test_client(&mock.uri());
+        let params = SearchParams {
+            status: vec!["!CLOSED".into()],
+            raw_params: vec![
+                ("f1".into(), "qa_contact".into()),
+                ("o1".into(), "equals".into()),
+                ("v1".into(), "user@example.com".into()),
+            ],
+            ..Default::default()
+        };
+        let result = client.search_bugs(&params).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("cannot combine negated filters"),
+            "unexpected error: {err}"
+        );
     }
 
     #[tokio::test]
