@@ -1,0 +1,50 @@
+name: Fuzz
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    # Longer campaign weekly (Sunday 4 AM UTC)
+    - cron: '0 4 * * 0'
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    name: Fuzz ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - fuzz_xmlrpc_parse
+          - fuzz_url_parser
+          - fuzz_flag_parser
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # nightly
+        with:
+          toolchain: nightly
+
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae  # v2
+        with:
+          key: fuzz-${{ matrix.target }}
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Run fuzzer
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            MAX_TIME=300   # 5 minutes per target on schedule
+          else
+            MAX_TIME=30    # 30 seconds per target on PR
+          fi
+          cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=$MAX_TIME
