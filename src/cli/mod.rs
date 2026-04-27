@@ -243,7 +243,7 @@ mod tests {
             Commands::Bug {
                 action: BugAction::Search { query, limit, .. },
             } => {
-                assert_eq!(query, "crash");
+                assert_eq!(query.as_deref(), Some("crash"));
                 assert_eq!(limit, 50);
             }
             _ => panic!("expected Bug Search"),

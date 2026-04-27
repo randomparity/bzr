@@ -114,7 +114,9 @@ async fn bug_search_integration() {
         .await;
 
     let action = bzr::cli::BugAction::Search {
-        query: "crash".to_string(),
+        query: Some("crash".to_string()),
+        from_url: None,
+        save_as: None,
         limit: 50,
         fields: None,
         exclude_fields: None,

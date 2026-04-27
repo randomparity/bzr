@@ -52,10 +52,17 @@ pub enum BugAction {
         #[arg(long)]
         exclude_fields: Option<String>,
     },
-    /// Search bugs by text query
+    /// Search bugs by text query or Bugzilla URL
     Search {
-        /// Search query
-        query: String,
+        /// Search query (mutually exclusive with --from-url)
+        #[arg(conflicts_with = "from_url")]
+        query: Option<String>,
+        /// Execute a search from a Bugzilla buglist.cgi URL
+        #[arg(long)]
+        from_url: Option<String>,
+        /// Save this URL query with the given name for future reuse (requires --from-url)
+        #[arg(long, requires = "from_url")]
+        save_as: Option<String>,
         /// Max number of results
         #[arg(long, default_value = "50")]
         limit: u32,
