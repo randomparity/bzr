@@ -118,6 +118,19 @@ fn append_option_params(
     builder
 }
 
+/// Appends raw key-value parameters to the request builder verbatim.
+/// Used for URL-imported queries with boolean chart params that
+/// `bzr` does not natively model.
+fn append_raw_params(
+    mut builder: reqwest::RequestBuilder,
+    raw_params: &[(String, String)],
+) -> reqwest::RequestBuilder {
+    for (key, value) in raw_params {
+        builder = builder.query(&[(key, value)]);
+    }
+    builder
+}
+
 impl BugzillaClient {
     pub async fn get_bug_history_since(
         &self,
@@ -139,6 +152,15 @@ impl BugzillaClient {
     }
 
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
+        // Raw params (boolean charts from URLs) only work with REST.
+        if !params.raw_params.is_empty() && self.api_mode != ApiMode::Rest {
+            tracing::warn!(
+                "query contains raw URL parameters that require REST API; \
+                 ignoring configured {} mode",
+                self.api_mode
+            );
+            return self.search_bugs_rest(params).await;
+        }
         tracing::debug!(?params, %self.api_mode, "search parameters");
         match self.api_mode {
             ApiMode::Rest => self.search_bugs_rest(params).await,
@@ -180,6 +202,10 @@ impl BugzillaClient {
         for id in &params.id {
             req_builder = req_builder.query(&[("id", id)]);
         }
+
+        // Append raw passthrough params (from URL-imported queries)
+        req_builder = append_raw_params(req_builder, &params.raw_params);
+
         if params.include_fields.is_none() {
             req_builder = req_builder.query(&[("include_fields", BUG_DEFAULT_FIELDS)]);
         }
@@ -698,6 +724,14 @@ mod tests {
             err.to_string().contains("Invalid API key"),
             "should propagate auth error, got: {err}"
         );
+    }
+
+    #[test]
+    fn append_raw_params_empty_is_noop() {
+        let client = reqwest::Client::new();
+        let builder = client.get("https://example.com/rest/bug");
+        let result = super::append_raw_params(builder, &[]);
+        let _ = result;
     }
 
     #[test]
