@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] - 2026-04-27
+
+### Added
+
+- `bzr bug search --from-url <buglist.cgi URL>` to import Bugzilla web
+  searches into the CLI, with automatic URL parsing and parameter extraction
+- `bzr bug search --save-as <name>` to save searches as named queries in one
+  step
+- `bzr query run --server <name>` to run a saved query against a different
+  server than it was saved from
+- `source_url`, `server`, and `raw_params` fields displayed in `bzr query show`
+  output
+- Auto-suggested save name derived from the URL's `known_name` parameter
+  when using `--from-url`
+- Raw Bugzilla query parameters passthrough (`raw_params`) for search terms
+  the CLI doesn't model directly; forces REST API mode when present
+
+### Changed
+
+- Unified field-mapping tables into a single `FIELD_MAPPINGS` constant,
+  eliminating duplicated field name/alias definitions
+- `to_search_params` now delegates to `into_search_params`, removing duplicate
+  conversion logic
+- Extracted `into_search_params` (owned version) to avoid unnecessary cloning
+  in `query run`
+- Reduced cognitive complexity and test duplication for SonarCloud compliance
+- Dependency bumps: tokio 1.52.1, clap 4.5.61, actions/checkout v6,
+  SonarSource/sonarqube-scan-action v7, rustls-webpki security patch
+  (RUSTSEC-2026-0104)
+
+### Fixed
+
+- `bug search --from-url` now uses the parsed server name instead of the
+  default server
+- Limit override logic corrected so CLI `--limit` takes precedence over the
+  saved query limit
+- Credentials are sanitized from URLs before storing `source_url`
+- Save is deferred until the search succeeds (no orphaned queries on failure)
+- Guard ordering and fallthrough issues in field accessor match arms
+- CI: SonarQube analysis skipped on Dependabot PRs to avoid token permission
+  failures
+
 ## [0.1.1] - 2026-04-06
 
 ### Added
