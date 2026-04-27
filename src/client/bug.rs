@@ -4,7 +4,7 @@ use super::BugzillaClient;
 use crate::error::{BzrError, Result, BUGZILLA_INTERNAL_ERROR};
 use crate::types::{
     partition_filters, ApiMode, Bug, CreateBugParams, HistoryEntry, SearchParams, UpdateBugParams,
-    BOOLEAN_CHART_FIELD_NAMES,
+    FIELD_MAPPINGS,
 };
 
 /// Default fields requested for Bug queries. Matches the fields in [`Bug`] and
@@ -35,19 +35,10 @@ fn append_multi_value_params(
     mut builder: reqwest::RequestBuilder,
     params: &SearchParams,
 ) -> reqwest::RequestBuilder {
-    let fields: &[(&str, &[String])] = &[
-        ("product", &params.product),
-        ("component", &params.component),
-        ("status", &params.status),
-        ("assigned_to", &params.assigned_to),
-        ("creator", &params.creator),
-        ("priority", &params.priority),
-        ("severity", &params.severity),
-    ];
-    for &(key, values) in fields {
-        let (positive, _) = partition_filters(values);
+    for mapping in FIELD_MAPPINGS {
+        let (positive, _) = partition_filters(params.get_field(mapping.struct_field));
         for v in positive {
-            builder = builder.query(&[(key, v)]);
+            builder = builder.query(&[(mapping.struct_field, v)]);
         }
     }
     builder
@@ -65,27 +56,18 @@ fn append_negated_params(
     mut builder: reqwest::RequestBuilder,
     params: &SearchParams,
 ) -> reqwest::RequestBuilder {
-    let fields: &[(&str, &[String])] = &[
-        ("product", &params.product),
-        ("component", &params.component),
-        ("status", &params.status),
-        ("assigned_to", &params.assigned_to),
-        ("creator", &params.creator),
-        ("priority", &params.priority),
-        ("severity", &params.severity),
-    ];
     let mut idx = 1u32;
-    for &(field_name, values) in fields {
-        let (_, negated) = partition_filters(values);
-        let chart_field = BOOLEAN_CHART_FIELD_NAMES
-            .iter()
-            .find(|&&(k, _)| k == field_name)
-            .map_or(field_name, |&(_, v)| v);
+    for mapping in FIELD_MAPPINGS {
+        let (_, negated) = partition_filters(params.get_field(mapping.struct_field));
         for v in negated {
             let f_key = format!("f{idx}");
             let o_key = format!("o{idx}");
             let v_key = format!("v{idx}");
-            builder = builder.query(&[(&f_key, chart_field), (&o_key, "notequals"), (&v_key, v)]);
+            builder = builder.query(&[
+                (&f_key, mapping.internal_name),
+                (&o_key, "notequals"),
+                (&v_key, v),
+            ]);
             idx += 1;
         }
     }

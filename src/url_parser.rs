@@ -4,7 +4,7 @@ use url::Url;
 
 use crate::config::Config;
 use crate::error::{BzrError, Result};
-use crate::types::{QueryKind, SavedQuery};
+use crate::types::{QueryKind, SavedQuery, FIELD_MAPPINGS};
 
 /// Parameters containing credentials that must not be stored or forwarded.
 const CREDENTIAL_PARAMS: &[&str] = &["bugzilla_api_key", "token", "api_key"];
@@ -97,19 +97,11 @@ pub fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<ParsedUrl> {
         }
 
         // Recognized vec fields — map Bugzilla URL param names to SavedQuery fields
-        let target = match key {
-            "product" => Some(&mut query.product),
-            "component" => Some(&mut query.component),
-            "bug_status" => Some(&mut query.status),
-            "assigned_to" => Some(&mut query.assignee),
-            "reporter" => Some(&mut query.creator),
-            "priority" => Some(&mut query.priority),
-            "bug_severity" => Some(&mut query.severity),
-            _ => None,
-        };
-        if let Some(target) = target {
-            target.push(value.to_string());
-            continue;
+        if let Some(mapping) = FIELD_MAPPINGS.iter().find(|m| m.url_param == key) {
+            if let Some(target) = query.get_field_mut(mapping.struct_field) {
+                target.push(value.to_string());
+                continue;
+            }
         }
 
         // Strip credential params — never store or forward these

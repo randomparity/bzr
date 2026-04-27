@@ -3,8 +3,7 @@ use std::collections::BTreeMap;
 use crate::error::{BzrError, Result};
 use crate::http::AUTH_QUERY_PARAM;
 use crate::types::{
-    partition_filters, Bug, CreateUserParams, GroupInfo, GroupMember, SearchParams,
-    BOOLEAN_CHART_FIELD_NAMES,
+    partition_filters, Bug, CreateUserParams, GroupInfo, GroupMember, SearchParams, FIELD_MAPPINGS,
 };
 use crate::xmlrpc::{self, Value};
 
@@ -75,16 +74,7 @@ impl XmlRpcClient {
 
         // Multi-value Vec fields: positive values sent as XML-RPC arrays,
         // negated values sent as fN/oN/vN boolean chart params.
-        let vec_fields: &[(&str, &[String])] = &[
-            ("product", &params.product),
-            ("component", &params.component),
-            ("status", &params.status),
-            ("assigned_to", &params.assigned_to),
-            ("creator", &params.creator),
-            ("priority", &params.priority),
-            ("severity", &params.severity),
-        ];
-        add_vec_filters(&mut rpc_params, vec_fields);
+        add_vec_filters(&mut rpc_params, params);
 
         // Single-value Option fields
         let option_fields: &[(&str, &Option<String>)] = &[
@@ -188,23 +178,16 @@ fn extract_id(response: &Value) -> Result<u64> {
     Ok(id as u64)
 }
 
-fn add_vec_filters(rpc_params: &mut BTreeMap<String, Value>, vec_fields: &[(&str, &[String])]) {
+fn add_vec_filters(rpc_params: &mut BTreeMap<String, Value>, params: &SearchParams) {
     let mut chart_idx = 1u32;
-    for &(key, values) in vec_fields {
-        let (positive, negated) = partition_filters(values);
+    for mapping in FIELD_MAPPINGS {
+        let (positive, negated) = partition_filters(params.get_field(mapping.struct_field));
         if !positive.is_empty() {
             let arr: Vec<Value> = positive.iter().map(|v| Value::from(*v)).collect();
-            rpc_params.insert(key.into(), Value::Array(arr));
+            rpc_params.insert(mapping.struct_field.into(), Value::Array(arr));
         }
-        if negated.is_empty() {
-            continue;
-        }
-        let chart_field = BOOLEAN_CHART_FIELD_NAMES
-            .iter()
-            .find(|&&(k, _)| k == key)
-            .map_or(key, |&(_, v)| v);
         for v in negated {
-            rpc_params.insert(format!("f{chart_idx}"), Value::from(chart_field));
+            rpc_params.insert(format!("f{chart_idx}"), Value::from(mapping.internal_name));
             rpc_params.insert(format!("o{chart_idx}"), Value::from("notequals"));
             rpc_params.insert(format!("v{chart_idx}"), Value::from(v));
             chart_idx += 1;
