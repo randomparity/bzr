@@ -44,7 +44,7 @@ fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
         unreachable!()
     };
 
-    let query = if let Some(url_str) = from_url {
+    let (query, preloaded_config) = if let Some(url_str) = from_url {
         let config = Config::load()?;
         let parsed = crate::url_parser::parse_bugzilla_url(url_str, &config)?;
         let mut query = parsed.query;
@@ -57,14 +57,14 @@ fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
         if let Some(ef) = exclude_fields {
             query.exclude_fields = Some(ef.clone());
         }
-        query
+        (query, Some(config))
     } else {
         let kind = if search.is_some() {
             QueryKind::Search
         } else {
             QueryKind::List
         };
-        SavedQuery {
+        let query = SavedQuery {
             kind,
             product: product.clone(),
             component: component.clone(),
@@ -78,7 +78,8 @@ fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
             fields: fields.clone(),
             exclude_fields: exclude_fields.clone(),
             ..SavedQuery::default()
-        }
+        };
+        (query, None)
     };
 
     if !query.has_filters() {
@@ -87,7 +88,10 @@ fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
         ));
     }
 
-    let mut config = Config::load()?;
+    let mut config = match preloaded_config {
+        Some(c) => c,
+        None => Config::load()?,
+    };
     let is_update = config.queries.contains_key(name.as_str());
     config.queries.insert(name.clone(), query);
     config.save()?;
@@ -154,16 +158,7 @@ async fn handle_run(
         .ok_or_else(|| BzrError::config(format!("query '{name}' not found")))?;
 
     let mut params = query.to_search_params();
-
-    if let Some(limit) = limit {
-        params.limit = Some(*limit);
-    }
-    if let Some(fields) = fields {
-        params.include_fields = Some(fields.clone());
-    }
-    if let Some(exclude_fields) = exclude_fields {
-        params.exclude_fields = Some(exclude_fields.clone());
-    }
+    params.apply_overrides(*limit, fields.as_deref(), exclude_fields.as_deref());
 
     // Server resolution: CLI --server > query run --server > saved server > default
     let effective_server = server

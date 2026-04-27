@@ -6,17 +6,20 @@ use super::formatting::{
     print_field, print_formatted, print_json, print_list_field, print_optional_field,
 };
 
+fn kind_label(kind: &QueryKind) -> &'static str {
+    match kind {
+        QueryKind::List => "list",
+        QueryKind::Search => "search",
+        QueryKind::Url => "url",
+    }
+}
+
 fn query_saved_message(name: &str, verb: &str) -> String {
     format!("{verb} query '{name}'")
 }
 
 fn query_summary_line(name: &str, q: &SavedQuery) -> String {
-    let kind_label = match q.kind {
-        QueryKind::List => "list",
-        QueryKind::Search => "search",
-        QueryKind::Url => "url",
-    };
-    let mut parts = vec![format!("kind={kind_label}")];
+    let mut parts = vec![format!("kind={}", kind_label(&q.kind))];
     if !q.product.is_empty() {
         parts.push(format!("product={}", q.product.join(",")));
     }
@@ -70,13 +73,8 @@ pub fn print_query_detail(name: &str, query: &SavedQuery, format: OutputFormat) 
 
     let view = QueryView { name, query };
     print_formatted(&view, format, |view| {
-        let kind_label = match view.query.kind {
-            QueryKind::List => "list",
-            QueryKind::Search => "search",
-            QueryKind::Url => "url",
-        };
         print_field("Name", view.name);
-        print_field("Kind", kind_label);
+        print_field("Kind", kind_label(&view.query.kind));
         print_optional_field("Source URL", view.query.source_url.as_deref());
         print_optional_field("Server", view.query.server.as_deref());
         print_list_field("Product", &view.query.product);

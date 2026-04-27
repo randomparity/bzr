@@ -140,24 +140,17 @@ async fn handle_search(
             config.queries.insert(name.clone(), parsed.query.clone());
             config.save()?;
             let verb = if is_update { "Updated" } else { "Saved" };
-            tracing::info!("{verb} query '{name}'");
+            crate::output::print_query_saved(name, verb, format);
         }
 
         let effective_server = server.or(parsed.query.server.as_deref());
         let client = super::shared::connect_and_configure(effective_server, api).await?;
 
         let mut params = parsed.query.to_search_params();
-        if let Some(l) = limit {
-            params.limit = Some(*l);
-        } else if params.limit.is_none() {
+        if params.limit.is_none() && limit.is_none() {
             params.limit = Some(50);
         }
-        if let Some(f) = fields {
-            params.include_fields = Some(f.clone());
-        }
-        if let Some(ef) = exclude_fields {
-            params.exclude_fields = Some(ef.clone());
-        }
+        params.apply_overrides(*limit, fields.as_deref(), exclude_fields.as_deref());
         (client, params)
     } else {
         let query_str = query.as_deref().ok_or_else(|| {

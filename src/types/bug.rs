@@ -78,6 +78,24 @@ pub struct SearchParams {
 }
 
 impl SearchParams {
+    /// Apply optional runtime overrides for limit, fields, and `exclude_fields`.
+    pub fn apply_overrides(
+        &mut self,
+        limit: Option<u32>,
+        fields: Option<&str>,
+        exclude_fields: Option<&str>,
+    ) {
+        if let Some(l) = limit {
+            self.limit = Some(l);
+        }
+        if let Some(f) = fields {
+            self.include_fields = Some(f.to_string());
+        }
+        if let Some(ef) = exclude_fields {
+            self.exclude_fields = Some(ef.to_string());
+        }
+    }
+
     /// Returns true if any filter fields are set (product, component, etc.).
     ///
     /// Used by hybrid mode to decide whether an empty REST result warrants
