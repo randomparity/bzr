@@ -2,6 +2,19 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use super::common::FlagUpdate;
 
+/// Generates a match expression mapping `FIELD_MAPPINGS` `struct_field` names
+/// to struct fields. Used by `SearchParams::get_field` and
+/// `SavedQuery::get_field_mut` to keep both in sync with a single definition.
+macro_rules! match_field {
+    ($name:expr, $self:expr, $wrap:ident, $default:expr,
+     { $($field:literal => $member:ident),+ $(,)? }) => {
+        match $name {
+            $($field => $wrap!($self.$member),)+
+            _ => $default,
+        }
+    };
+}
+
 /// Deserialize a string that may be null into an empty string.
 fn deserialize_null_string<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
     Option::<String>::deserialize(d).map(Option::unwrap_or_default)
@@ -102,18 +115,21 @@ impl SearchParams {
     ///
     /// Panics if `name` is not one of the 7 known field names in
     /// `FIELD_MAPPINGS`. Only called with compile-time-known names.
-    #[expect(clippy::panic, reason = "only called with FIELD_MAPPINGS keys")]
     pub fn get_field(&self, name: &str) -> &[String] {
-        match name {
-            "product" => &self.product,
-            "component" => &self.component,
-            "status" => &self.status,
-            "assigned_to" => &self.assigned_to,
-            "creator" => &self.creator,
-            "priority" => &self.priority,
-            "severity" => &self.severity,
-            _ => panic!("unknown field: {name}"),
+        macro_rules! as_ref {
+            ($e:expr) => {
+                &$e
+            };
         }
+        match_field!(name, self, as_ref, panic!("unknown field: {name}"), {
+            "product" => product,
+            "component" => component,
+            "status" => status,
+            "assigned_to" => assigned_to,
+            "creator" => creator,
+            "priority" => priority,
+            "severity" => severity,
+        })
     }
 
     /// Returns true if any filter fields are set (product, component, etc.).
@@ -398,16 +414,20 @@ impl SavedQuery {
     /// Access a multi-value filter field mutably by its `struct_field` name.
     /// Maps `assigned_to` to `self.assignee` (TOML-friendly name).
     pub fn get_field_mut(&mut self, name: &str) -> Option<&mut Vec<String>> {
-        match name {
-            "product" => Some(&mut self.product),
-            "component" => Some(&mut self.component),
-            "status" => Some(&mut self.status),
-            "assigned_to" => Some(&mut self.assignee),
-            "creator" => Some(&mut self.creator),
-            "priority" => Some(&mut self.priority),
-            "severity" => Some(&mut self.severity),
-            _ => None,
+        macro_rules! some_mut {
+            ($e:expr) => {
+                Some(&mut $e)
+            };
         }
+        match_field!(name, self, some_mut, None, {
+            "product" => product,
+            "component" => component,
+            "status" => status,
+            "assigned_to" => assignee,
+            "creator" => creator,
+            "priority" => priority,
+            "severity" => severity,
+        })
     }
 
     /// Returns true if the query has any meaningful filters set.
