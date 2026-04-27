@@ -101,6 +101,14 @@ pub fn print_query_detail(name: &str, query: &SavedQuery, format: OutputFormat) 
 mod tests {
     use super::*;
 
+    /// Shared test helper — mirrors the `QueryView` in `print_query_detail` for JSON assertions.
+    #[derive(serde::Serialize)]
+    struct QueryView<'a> {
+        name: &'a str,
+        #[serde(flatten)]
+        query: &'a SavedQuery,
+    }
+
     fn make_url_query() -> SavedQuery {
         SavedQuery {
             kind: QueryKind::Url,
@@ -161,12 +169,6 @@ mod tests {
 
     #[test]
     fn query_detail_json_with_flatten() {
-        #[derive(serde::Serialize)]
-        struct QueryView<'a> {
-            name: &'a str,
-            #[serde(flatten)]
-            query: &'a SavedQuery,
-        }
         let query = make_list_query();
         let view = QueryView {
             name: "test-q",
@@ -236,12 +238,6 @@ mod tests {
 
     #[test]
     fn query_detail_json_includes_url_fields() {
-        #[derive(serde::Serialize)]
-        struct QueryView<'a> {
-            name: &'a str,
-            #[serde(flatten)]
-            query: &'a SavedQuery,
-        }
         let query = make_url_query();
         let view = QueryView {
             name: "url-q",

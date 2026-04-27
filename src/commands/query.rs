@@ -199,6 +199,25 @@ mod tests {
         }
     }
 
+    /// Build a Save action for a single-product query with no status filters.
+    fn product_save_action(name: &str, product: &str, limit: u32) -> QueryAction {
+        QueryAction::Save {
+            name: name.into(),
+            from_url: None,
+            search: None,
+            product: vec![product.into()],
+            component: vec![],
+            status: vec![],
+            assignee: vec![],
+            creator: vec![],
+            priority: vec![],
+            severity: vec![],
+            limit: Some(limit),
+            fields: None,
+            exclude_fields: None,
+        }
+    }
+
     fn empty_save_action(name: &str, search: Option<String>) -> QueryAction {
         QueryAction::Save {
             name: name.into(),
@@ -270,21 +289,7 @@ mod tests {
     async fn query_save_search_kind() {
         let (_lock, _mock, _tmp) = setup_test_env().await;
 
-        let action = QueryAction::Save {
-            name: "crashes".into(),
-            from_url: None,
-            search: Some("crash in tab".into()),
-            product: vec![],
-            component: vec![],
-            status: vec![],
-            assignee: vec![],
-            creator: vec![],
-            priority: vec![],
-            severity: vec![],
-            limit: Some(10),
-            fields: None,
-            exclude_fields: None,
-        };
+        let action = empty_save_action("crashes", Some("crash in tab".into()));
         let (result, _output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "query save failed: {result:?}");
@@ -345,21 +350,7 @@ mod tests {
         let (_lock, mock, _tmp) = setup_test_env().await;
 
         // First, save a query
-        let save_action = QueryAction::Save {
-            name: "run-test".into(),
-            from_url: None,
-            search: None,
-            product: vec!["TestProduct".into()],
-            component: vec![],
-            status: vec![],
-            assignee: vec![],
-            creator: vec![],
-            priority: vec![],
-            severity: vec![],
-            limit: Some(10),
-            fields: None,
-            exclude_fields: None,
-        };
+        let save_action = product_save_action("run-test", "TestProduct", 10);
         let (result, _) =
             capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "query save failed: {result:?}");
@@ -393,21 +384,7 @@ mod tests {
     async fn query_run_with_limit_override() {
         let (_lock, mock, _tmp) = setup_test_env().await;
 
-        let save_action = QueryAction::Save {
-            name: "override-test".into(),
-            from_url: None,
-            search: None,
-            product: vec!["TestProduct".into()],
-            component: vec![],
-            status: vec![],
-            assignee: vec![],
-            creator: vec![],
-            priority: vec![],
-            severity: vec![],
-            limit: Some(100),
-            fields: None,
-            exclude_fields: None,
-        };
+        let save_action = product_save_action("override-test", "TestProduct", 100);
         let (result, _) =
             capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());
@@ -494,21 +471,7 @@ mod tests {
     async fn query_delete_removes_saved_query() {
         let (_lock, _mock, _tmp) = setup_test_env().await;
 
-        let save_action = QueryAction::Save {
-            name: "delete-me".into(),
-            from_url: None,
-            search: None,
-            product: vec!["Firefox".into()],
-            component: vec![],
-            status: vec![],
-            assignee: vec![],
-            creator: vec![],
-            priority: vec![],
-            severity: vec![],
-            limit: Some(1),
-            fields: None,
-            exclude_fields: None,
-        };
+        let save_action = product_save_action("delete-me", "Firefox", 1);
         let (result, _) =
             capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok());

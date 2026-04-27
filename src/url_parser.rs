@@ -168,13 +168,16 @@ mod tests {
         }
     }
 
+    /// Parse a buglist.cgi URL with the standard test config (bugzilla.example.com).
+    fn parse_test_url(query: &str) -> ParsedUrl {
+        let config = make_config("https://bugzilla.example.com");
+        let url = format!("https://bugzilla.example.com/buglist.cgi?{query}");
+        parse_bugzilla_url(&url, &config).unwrap()
+    }
+
     #[test]
     fn parse_simple_url_with_recognized_params() {
-        let config = make_config("https://bugzilla.example.com");
-        let url = "https://bugzilla.example.com/buglist.cgi\
-            ?product=Firefox&product=Thunderbird&bug_status=NEW&limit=50";
-
-        let parsed = parse_bugzilla_url(url, &config).unwrap();
+        let parsed = parse_test_url("product=Firefox&product=Thunderbird&bug_status=NEW&limit=50");
         assert_eq!(parsed.query.product, vec!["Firefox", "Thunderbird"]);
         assert_eq!(parsed.query.status, vec!["NEW"]);
         assert_eq!(parsed.query.limit, Some(50));
@@ -184,9 +187,8 @@ mod tests {
 
     #[test]
     fn parse_complex_boolean_chart_url() {
-        let config = make_config("https://bugzilla.example.com");
-        let url = "https://bugzilla.example.com/buglist.cgi\
-            ?known_name=My+Query\
+        let parsed = parse_test_url(
+            "known_name=My+Query\
             &query_format=advanced\
             &list_id=12345\
             &columnlist=bug_id%2Csummary\
@@ -195,9 +197,8 @@ mod tests {
             &classification=Client+Software\
             &f1=component\
             &o1=equals\
-            &v1=PDF+Viewer";
-
-        let parsed = parse_bugzilla_url(url, &config).unwrap();
+            &v1=PDF+Viewer",
+        );
 
         // Ignored params must not appear in raw_params
         let keys: Vec<&str> = parsed
@@ -242,9 +243,11 @@ mod tests {
     #[test]
     fn parse_url_without_buglist_cgi_errors() {
         let config = make_config("https://bugzilla.example.com");
-        let url = "https://bugzilla.example.com/show_bug.cgi?id=12345";
-
-        let err = parse_bugzilla_url(url, &config).unwrap_err();
+        let err = parse_bugzilla_url(
+            "https://bugzilla.example.com/show_bug.cgi?id=12345",
+            &config,
+        )
+        .unwrap_err();
         assert!(
             err.to_string().contains("buglist.cgi"),
             "error should mention buglist.cgi: {err}"
@@ -254,7 +257,6 @@ mod tests {
     #[test]
     fn parse_malformed_url_errors() {
         let config = make_config("https://bugzilla.example.com");
-
         let err = parse_bugzilla_url("not a url", &config).unwrap_err();
         assert!(
             err.to_string().contains("invalid URL"),
@@ -264,10 +266,7 @@ mod tests {
 
     #[test]
     fn parse_url_hostname_matches_configured_server() {
-        let config = make_config("https://bugzilla.example.com");
-        let url = "https://bugzilla.example.com/buglist.cgi?product=Firefox&bug_status=NEW";
-
-        let parsed = parse_bugzilla_url(url, &config).unwrap();
+        let parsed = parse_test_url("product=Firefox&bug_status=NEW");
         assert_eq!(parsed.query.server.as_deref(), Some("test"));
     }
 
@@ -276,9 +275,11 @@ mod tests {
         let config = make_config("https://other.example.com");
         // Config has "test" server at other.example.com, with default_server = "test"
         // URL hostname (bugzilla.example.com) won't match
-        let url = "https://bugzilla.example.com/buglist.cgi?product=Firefox";
-
-        let parsed = parse_bugzilla_url(url, &config).unwrap();
+        let parsed = parse_bugzilla_url(
+            "https://bugzilla.example.com/buglist.cgi?product=Firefox",
+            &config,
+        )
+        .unwrap();
         // No hostname match → server field is None (will use default at query time)
         assert!(parsed.query.server.is_none());
     }
@@ -291,9 +292,11 @@ mod tests {
             templates: HashMap::new(),
             queries: HashMap::new(),
         };
-        let url = "https://bugzilla.example.com/buglist.cgi?product=Firefox";
-
-        let err = parse_bugzilla_url(url, &config).unwrap_err();
+        let err = parse_bugzilla_url(
+            "https://bugzilla.example.com/buglist.cgi?product=Firefox",
+            &config,
+        )
+        .unwrap_err();
         assert!(
             err.to_string().contains("does not match"),
             "error should mention does not match: {err}"
@@ -302,11 +305,7 @@ mod tests {
 
     #[test]
     fn parse_url_repeated_product_params_accumulate() {
-        let config = make_config("https://bugzilla.example.com");
-        let url = "https://bugzilla.example.com/buglist.cgi\
-            ?product=Firefox&product=Thunderbird&product=SeaMonkey";
-
-        let parsed = parse_bugzilla_url(url, &config).unwrap();
+        let parsed = parse_test_url("product=Firefox&product=Thunderbird&product=SeaMonkey");
         assert_eq!(
             parsed.query.product,
             vec!["Firefox", "Thunderbird", "SeaMonkey"]
@@ -315,30 +314,23 @@ mod tests {
 
     #[test]
     fn parse_url_decodes_percent_encoded_values() {
-        let config = make_config("https://bugzilla.example.com");
-        let url = "https://bugzilla.example.com/buglist.cgi\
-            ?product=PPC64%20Development\
-            &assigned_to=user%40example.com";
-
-        let parsed = parse_bugzilla_url(url, &config).unwrap();
+        let parsed = parse_test_url("product=PPC64%20Development&assigned_to=user%40example.com");
         assert_eq!(parsed.query.product, vec!["PPC64 Development"]);
         assert_eq!(parsed.query.assignee, vec!["user@example.com"]);
     }
 
     #[test]
     fn parse_url_all_recognized_fields() {
-        let config = make_config("https://bugzilla.example.com");
-        let url = "https://bugzilla.example.com/buglist.cgi\
-            ?product=Firefox\
+        let parsed = parse_test_url(
+            "product=Firefox\
             &component=General\
             &bug_status=NEW\
             &assigned_to=dev@example.com\
             &reporter=reporter@example.com\
             &priority=P1\
             &bug_severity=major\
-            &limit=100";
-
-        let parsed = parse_bugzilla_url(url, &config).unwrap();
+            &limit=100",
+        );
         assert_eq!(parsed.query.product, vec!["Firefox"]);
         assert_eq!(parsed.query.component, vec!["General"]);
         assert_eq!(parsed.query.status, vec!["NEW"]);
@@ -352,11 +344,7 @@ mod tests {
 
     #[test]
     fn parse_url_only_raw_params() {
-        let config = make_config("https://bugzilla.example.com");
-        let url = "https://bugzilla.example.com/buglist.cgi\
-            ?f1=component&o1=equals&v1=PDF+Viewer";
-
-        let parsed = parse_bugzilla_url(url, &config).unwrap();
+        let parsed = parse_test_url("f1=component&o1=equals&v1=PDF+Viewer");
         assert!(parsed.query.product.is_empty());
         assert_eq!(parsed.query.raw_params.len(), 3);
         assert!(parsed.query.has_filters());
@@ -378,10 +366,9 @@ mod tests {
 
     #[test]
     fn parse_url_strips_api_key_from_raw_params() {
-        let config = make_config("https://bugzilla.example.com");
-        let url = "https://bugzilla.example.com/buglist.cgi?\
-            product=Firefox&Bugzilla_api_key=secret123&f1=component&o1=equals&v1=General";
-        let parsed = parse_bugzilla_url(url, &config).unwrap();
+        let parsed = parse_test_url(
+            "product=Firefox&Bugzilla_api_key=secret123&f1=component&o1=equals&v1=General",
+        );
 
         // API key must not appear in raw_params
         let keys: Vec<&str> = parsed
@@ -404,10 +391,7 @@ mod tests {
 
     #[test]
     fn parse_url_strips_credentials_from_source_url() {
-        let config = make_config("https://bugzilla.example.com");
-        let url = "https://bugzilla.example.com/buglist.cgi?\
-            product=Firefox&Bugzilla_api_key=secret123&token=abc";
-        let parsed = parse_bugzilla_url(url, &config).unwrap();
+        let parsed = parse_test_url("product=Firefox&Bugzilla_api_key=secret123&token=abc");
 
         let source = parsed.query.source_url.as_deref().unwrap();
         assert!(
@@ -426,10 +410,8 @@ mod tests {
 
     #[test]
     fn parse_url_strips_credentials_case_insensitive() {
-        let config = make_config("https://bugzilla.example.com");
-        let url = "https://bugzilla.example.com/buglist.cgi?\
-            product=Firefox&BUGZILLA_API_KEY=secret&Token=abc&api_key=def";
-        let parsed = parse_bugzilla_url(url, &config).unwrap();
+        let parsed =
+            parse_test_url("product=Firefox&BUGZILLA_API_KEY=secret&Token=abc&api_key=def");
 
         let source = parsed.query.source_url.as_deref().unwrap();
         assert!(!source.contains("secret"));
