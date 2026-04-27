@@ -86,21 +86,26 @@ const EXIT_CODE_KEYRING: i32 = 12;
 /// Used for retry logic in hybrid mode when extensions crash.
 pub const BUGZILLA_INTERNAL_ERROR: i64 = 100_500;
 
-/// Format a reqwest error for display: redact API keys and add TLS hints.
+/// Walk a `std::error::Error` source chain into a single string.
 ///
-/// reqwest's `Display` impl only shows the error kind and URL, omitting
-/// the source chain (which contains the actual cause like "connection
-/// refused" or "certificate verify failed"). We walk the source chain
-/// manually to build a complete, actionable error message.
-fn format_http_error(err: &reqwest::Error) -> String {
+/// reqwest's `Display` only shows the error kind and URL, omitting the
+/// underlying cause. This helper concatenates the full chain so callers
+/// get actionable messages like "error sending request …: invalid peer
+/// certificate: `UnknownIssuer`".
+pub(crate) fn format_error_chain(err: &dyn std::error::Error) -> String {
     let mut full = err.to_string();
-    let mut source = std::error::Error::source(err);
+    let mut source = err.source();
     while let Some(cause) = source {
         full.push_str(": ");
         full.push_str(&cause.to_string());
         source = cause.source();
     }
-    let mut msg = redact_api_key(&full);
+    full
+}
+
+/// Format a reqwest error for display: redact API keys and add TLS hints.
+fn format_http_error(err: &reqwest::Error) -> String {
+    let mut msg = redact_api_key(&format_error_chain(err));
     if crate::http::is_tls_cert_error(err) {
         msg.push_str(
             "\n  hint: if this server uses a self-signed certificate or sits \
