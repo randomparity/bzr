@@ -6,28 +6,38 @@ use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::types::{QueryKind, SavedQuery};
 
+/// Parameters containing credentials that must not be stored or forwarded.
+const CREDENTIAL_PARAMS: &[&str] = &["bugzilla_api_key", "token", "api_key"];
+
 /// Parameters ignored during URL parsing (display/session metadata).
-const IGNORED_PARAMS: &[&str] = &["columnlist", "list_id", "query_format"];
-
-/// Parameters extracted as the suggested query name, not stored as filters.
-const NAME_PARAMS: &[&str] = &["known_name", "query_based_on"];
-
-/// Maps Bugzilla URL parameter names to `SavedQuery` vec field names.
-const RECOGNIZED_VEC_PARAMS: &[(&str, &str)] = &[
-    ("product", "product"),
-    ("component", "component"),
-    ("bug_status", "status"),
-    ("assigned_to", "assignee"),
-    ("reporter", "creator"),
-    ("priority", "priority"),
-    ("bug_severity", "severity"),
+const IGNORED_PARAMS: &[&str] = &[
+    "columnlist",
+    "list_id",
+    "query_format",
+    "known_name",
+    "query_based_on",
 ];
 
 /// Result of parsing a Bugzilla URL.
 #[derive(Debug)]
 pub struct ParsedUrl {
     pub query: SavedQuery,
-    pub suggested_name: Option<String>,
+}
+
+/// Strip credential query parameters from a URL, returning the sanitized string.
+fn sanitize_url(url: &Url) -> String {
+    let mut sanitized = url.clone();
+    let pairs: Vec<(String, String)> = sanitized
+        .query_pairs()
+        .filter(|(k, _)| !CREDENTIAL_PARAMS.contains(&k.to_ascii_lowercase().as_str()))
+        .map(|(k, v)| (k.into_owned(), v.into_owned()))
+        .collect();
+    if pairs.is_empty() {
+        sanitized.set_query(None);
+    } else {
+        sanitized.query_pairs_mut().clear().extend_pairs(pairs);
+    }
+    sanitized.to_string()
 }
 
 /// Parse a Bugzilla `buglist.cgi` URL into a `SavedQuery`.
@@ -35,6 +45,7 @@ pub struct ParsedUrl {
 /// Recognized parameters are mapped to structured `SavedQuery` fields.
 /// Unrecognized parameters are stored in `raw_params` for verbatim
 /// passthrough to the REST API. Display/session params are ignored.
+/// Credential parameters are stripped from both `source_url` and `raw_params`.
 pub fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<ParsedUrl> {
     let url =
         Url::parse(url_str).map_err(|e| BzrError::InputValidation(format!("invalid URL: {e}")))?;
@@ -65,25 +76,16 @@ pub fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<ParsedUrl> {
 
     let mut query = SavedQuery {
         kind: QueryKind::Url,
-        source_url: Some(url_str.to_string()),
+        source_url: Some(sanitize_url(&url)),
         server: server.map(String::from),
         ..SavedQuery::default()
     };
-
-    let mut suggested_name: Option<String> = None;
 
     for (key, value) in url.query_pairs() {
         let key = key.as_ref();
         let value = value.as_ref();
 
         if IGNORED_PARAMS.contains(&key) {
-            continue;
-        }
-
-        if NAME_PARAMS.contains(&key) {
-            if suggested_name.is_none() && !value.is_empty() {
-                suggested_name = Some(value.to_string());
-            }
             continue;
         }
 
@@ -94,31 +96,32 @@ pub fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<ParsedUrl> {
             continue;
         }
 
-        if let Some(&(_, field_name)) = RECOGNIZED_VEC_PARAMS
-            .iter()
-            .find(|&&(url_key, _)| url_key == key)
-        {
-            let target = match field_name {
-                "product" => &mut query.product,
-                "component" => &mut query.component,
-                "status" => &mut query.status,
-                "assignee" => &mut query.assignee,
-                "creator" => &mut query.creator,
-                "priority" => &mut query.priority,
-                "severity" => &mut query.severity,
-                _ => unreachable!(),
-            };
+        // Recognized vec fields — map Bugzilla URL param names to SavedQuery fields
+        let target = match key {
+            "product" => Some(&mut query.product),
+            "component" => Some(&mut query.component),
+            "bug_status" => Some(&mut query.status),
+            "assigned_to" => Some(&mut query.assignee),
+            "reporter" => Some(&mut query.creator),
+            "priority" => Some(&mut query.priority),
+            "bug_severity" => Some(&mut query.severity),
+            _ => None,
+        };
+        if let Some(target) = target {
             target.push(value.to_string());
+            continue;
+        }
+
+        // Strip credential params — never store or forward these
+        if CREDENTIAL_PARAMS.contains(&key.to_ascii_lowercase().as_str()) {
+            tracing::warn!("stripping credential parameter '{key}' from URL");
             continue;
         }
 
         query.raw_params.push((key.to_string(), value.to_string()));
     }
 
-    Ok(ParsedUrl {
-        query,
-        suggested_name,
-    })
+    Ok(ParsedUrl { query })
 }
 
 fn find_server_by_hostname<'a>(config: &'a Config, hostname: &str) -> Option<&'a str> {
@@ -195,8 +198,6 @@ mod tests {
             &v1=PDF+Viewer";
 
         let parsed = parse_bugzilla_url(url, &config).unwrap();
-
-        assert_eq!(parsed.suggested_name.as_deref(), Some("My Query"));
 
         // Ignored params must not appear in raw_params
         let keys: Vec<&str> = parsed
@@ -373,5 +374,80 @@ mod tests {
         let config = make_config("https://bugzilla.example.com");
         let result = find_server_by_hostname(&config, "other.example.com");
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn parse_url_strips_api_key_from_raw_params() {
+        let config = make_config("https://bugzilla.example.com");
+        let url = "https://bugzilla.example.com/buglist.cgi?\
+            product=Firefox&Bugzilla_api_key=secret123&f1=component&o1=equals&v1=General";
+        let parsed = parse_bugzilla_url(url, &config).unwrap();
+
+        // API key must not appear in raw_params
+        let keys: Vec<&str> = parsed
+            .query
+            .raw_params
+            .iter()
+            .map(|(k, _)| k.as_str())
+            .collect();
+        assert!(!keys.contains(&"Bugzilla_api_key"));
+        assert!(!keys.contains(&"bugzilla_api_key"));
+
+        // Other raw params should still be present
+        assert!(keys.contains(&"f1"));
+        assert!(keys.contains(&"o1"));
+        assert!(keys.contains(&"v1"));
+
+        // Product should be recognized normally
+        assert_eq!(parsed.query.product, vec!["Firefox"]);
+    }
+
+    #[test]
+    fn parse_url_strips_credentials_from_source_url() {
+        let config = make_config("https://bugzilla.example.com");
+        let url = "https://bugzilla.example.com/buglist.cgi?\
+            product=Firefox&Bugzilla_api_key=secret123&token=abc";
+        let parsed = parse_bugzilla_url(url, &config).unwrap();
+
+        let source = parsed.query.source_url.as_deref().unwrap();
+        assert!(
+            !source.contains("secret123"),
+            "API key leaked into source_url: {source}"
+        );
+        assert!(
+            !source.contains("abc"),
+            "token leaked into source_url: {source}"
+        );
+        assert!(
+            source.contains("product=Firefox"),
+            "non-credential params should remain: {source}"
+        );
+    }
+
+    #[test]
+    fn parse_url_strips_credentials_case_insensitive() {
+        let config = make_config("https://bugzilla.example.com");
+        let url = "https://bugzilla.example.com/buglist.cgi?\
+            product=Firefox&BUGZILLA_API_KEY=secret&Token=abc&api_key=def";
+        let parsed = parse_bugzilla_url(url, &config).unwrap();
+
+        let source = parsed.query.source_url.as_deref().unwrap();
+        assert!(!source.contains("secret"));
+        assert!(!source.contains("abc"));
+        assert!(!source.contains("def"));
+
+        let keys: Vec<&str> = parsed
+            .query
+            .raw_params
+            .iter()
+            .map(|(k, _)| k.as_str())
+            .collect();
+        assert!(
+            keys.is_empty()
+                || !keys
+                    .iter()
+                    .any(|k| k.to_ascii_lowercase().contains("key")
+                        || k.eq_ignore_ascii_case("token"))
+        );
     }
 }

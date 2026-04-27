@@ -125,9 +125,6 @@ fn append_raw_params(
     builder: reqwest::RequestBuilder,
     raw_params: &[(String, String)],
 ) -> reqwest::RequestBuilder {
-    if raw_params.is_empty() {
-        return builder;
-    }
     builder.query(raw_params)
 }
 
@@ -203,6 +200,10 @@ impl BugzillaClient {
             req_builder = req_builder.query(&[("id", id)]);
         }
 
+        // Note: raw_params and append_negated_params both use fN/oN/vN indices.
+        // Index collision cannot occur because URL-parsed queries store boolean
+        // chart params in raw_params (not as negated structured filters), and
+        // there is no CLI path that combines negated filters with raw params.
         req_builder = append_raw_params(req_builder, &params.raw_params);
 
         if params.include_fields.is_none() {

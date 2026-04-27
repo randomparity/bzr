@@ -112,6 +112,8 @@ async fn handle_history(
     Ok(())
 }
 
+/// Handles bug search — builds its own client (unlike other handlers) because
+/// `--from-url` may resolve a different server from the URL hostname.
 async fn handle_search(
     action: &BugAction,
     server: Option<&str>,
@@ -130,18 +132,9 @@ async fn handle_search(
         unreachable!()
     };
 
-    let (client, params) = if let Some(url_str) = from_url {
+    let (client, params, save_info) = if let Some(url_str) = from_url {
         let config = crate::config::Config::load()?;
         let parsed = crate::url_parser::parse_bugzilla_url(url_str, &config)?;
-
-        if let Some(name) = save_as {
-            let mut config = config;
-            let is_update = config.queries.contains_key(name.as_str());
-            config.queries.insert(name.clone(), parsed.query.clone());
-            config.save()?;
-            let verb = if is_update { "Updated" } else { "Saved" };
-            crate::output::print_query_saved(name, verb, format);
-        }
 
         let effective_server = server.or(parsed.query.server.as_deref());
         let client = super::shared::connect_and_configure(effective_server, api).await?;
@@ -151,7 +144,12 @@ async fn handle_search(
             params.limit = Some(50);
         }
         params.apply_overrides(*limit, fields.as_deref(), exclude_fields.as_deref());
-        (client, params)
+
+        // Defer saving until after search succeeds
+        let save_info = save_as
+            .as_ref()
+            .map(|name| (name.clone(), parsed.query.clone()));
+        (client, params, save_info)
     } else {
         let query_str = query.as_deref().ok_or_else(|| {
             crate::error::BzrError::InputValidation(
@@ -166,11 +164,22 @@ async fn handle_search(
             exclude_fields: exclude_fields.clone(),
             ..Default::default()
         };
-        (client, params)
+        (client, params, None)
     };
 
     let bugs = client.search_bugs(&params).await?;
     output::print_bugs(&bugs, format);
+
+    // Save query to config after successful search
+    if let Some((name, query)) = save_info {
+        let mut config = crate::config::Config::load()?;
+        let is_update = config.queries.contains_key(name.as_str());
+        config.queries.insert(name.clone(), query);
+        config.save()?;
+        let verb = if is_update { "Updated" } else { "Saved" };
+        crate::output::print_query_saved(&name, verb, format);
+    }
+
     Ok(())
 }
 
