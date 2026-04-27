@@ -528,6 +528,22 @@ mod tests {
     }
 
     #[test]
+    fn strip_shell_backslashes_ignores_non_special() {
+        // Backslash before a non-URL-significant character is kept
+        let input = r"https://bugzilla.example.com/buglist.cgi?summary=foo\bar";
+        let result = strip_shell_backslashes(input);
+        assert_eq!(result, input);
+    }
+
+    #[test]
+    fn strip_shell_backslashes_trailing_backslash() {
+        // Trailing backslash with no following char is preserved
+        let input = r"https://bugzilla.example.com/buglist.cgi?product=Firefox\";
+        let result = strip_shell_backslashes(input);
+        assert_eq!(result, input);
+    }
+
+    #[test]
     fn parse_url_with_shell_backslashes_succeeds() {
         let config = make_config("https://bugzilla.example.com");
         let escaped =
@@ -535,5 +551,18 @@ mod tests {
         let parsed = parse_bugzilla_url(escaped, &config).unwrap();
         assert_eq!(parsed.query.product, vec!["Firefox"]);
         assert_eq!(parsed.query.status, vec!["NEW"]);
+    }
+
+    #[test]
+    fn parse_url_with_shell_backslashes_boolean_chart() {
+        let config = make_config("https://bugzilla.example.com");
+        let escaped = r"https://bugzilla.example.com/buglist.cgi\?f1\=qa_contact\&o1\=changedfrom\&v1\=user\%40example.com\&classification\=Community";
+        let parsed = parse_bugzilla_url(escaped, &config).unwrap();
+
+        let keys = raw_keys(&parsed);
+        assert!(keys.contains(&"f1"), "boolean chart f1 missing: {keys:?}");
+        assert!(keys.contains(&"o1"), "boolean chart o1 missing: {keys:?}");
+        assert_eq!(raw_value(&parsed, "v1"), "user@example.com");
+        assert_eq!(raw_value(&parsed, "classification"), "Community");
     }
 }
