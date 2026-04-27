@@ -19,7 +19,7 @@ pub(crate) mod http;
 #[expect(clippy::print_stdout, clippy::expect_used)]
 pub(crate) mod output;
 pub mod types;
-pub(crate) mod url_parser;
+pub mod url_parser;
 pub mod xmlrpc;
 
 /// Dispatch a parsed CLI to the appropriate command handler.
