@@ -199,6 +199,52 @@ mod tests {
         }
     }
 
+    fn empty_save_action(name: &str, search: Option<String>) -> QueryAction {
+        QueryAction::Save {
+            name: name.into(),
+            from_url: None,
+            search,
+            product: vec![],
+            component: vec![],
+            status: vec![],
+            assignee: vec![],
+            creator: vec![],
+            priority: vec![],
+            severity: vec![],
+            limit: None,
+            fields: None,
+            exclude_fields: None,
+        }
+    }
+
+    fn url_save_action(name: &str, url: String) -> QueryAction {
+        QueryAction::Save {
+            name: name.into(),
+            from_url: Some(url),
+            search: None,
+            product: vec![],
+            component: vec![],
+            status: vec![],
+            assignee: vec![],
+            creator: vec![],
+            priority: vec![],
+            severity: vec![],
+            limit: None,
+            fields: None,
+            exclude_fields: None,
+        }
+    }
+
+    fn run_action(name: &str) -> QueryAction {
+        QueryAction::Run {
+            name: name.into(),
+            limit: None,
+            fields: None,
+            exclude_fields: None,
+            server: None,
+        }
+    }
+
     #[tokio::test]
     async fn query_save_and_show() {
         let (_lock, _mock, _tmp) = setup_test_env().await;
@@ -258,21 +304,7 @@ mod tests {
     async fn query_save_requires_filter() {
         let (_lock, _mock, _tmp) = setup_test_env().await;
 
-        let action = QueryAction::Save {
-            name: "empty".into(),
-            from_url: None,
-            search: None,
-            product: vec![],
-            component: vec![],
-            status: vec![],
-            assignee: vec![],
-            creator: vec![],
-            priority: vec![],
-            severity: vec![],
-            limit: None,
-            fields: None,
-            exclude_fields: None,
-        };
+        let action = empty_save_action("empty", None);
         let result = super::execute(&action, None, OutputFormat::Json, None).await;
         assert!(result.is_err(), "saving empty query should fail");
         let err = result.unwrap_err().to_string();
@@ -348,13 +380,7 @@ mod tests {
             .await;
 
         // Run the saved query
-        let run_action = QueryAction::Run {
-            name: "run-test".into(),
-            limit: None,
-            fields: None,
-            exclude_fields: None,
-            server: None,
-        };
+        let run_action = run_action("run-test");
         let (result, output) =
             capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "query run failed: {result:?}");
@@ -558,13 +584,7 @@ mod tests {
     async fn query_run_unknown_errors() {
         let (_lock, _mock, _tmp) = setup_test_env().await;
 
-        let action = QueryAction::Run {
-            name: "nonexistent".into(),
-            limit: None,
-            fields: None,
-            exclude_fields: None,
-            server: None,
-        };
+        let action = run_action("nonexistent");
         let result = super::execute(&action, None, OutputFormat::Json, None).await;
         assert!(result.is_err(), "running unknown query should fail");
         let err = result.unwrap_err().to_string();
@@ -667,21 +687,7 @@ mod tests {
         let url = format!(
             "{server_url}/buglist.cgi?product=TestProduct&f1=qa_contact&o1=changedfrom&v1=user%40example.com"
         );
-        let action = QueryAction::Save {
-            name: "url-query".into(),
-            from_url: Some(url),
-            search: None,
-            product: vec![],
-            component: vec![],
-            status: vec![],
-            assignee: vec![],
-            creator: vec![],
-            priority: vec![],
-            severity: vec![],
-            limit: None,
-            fields: None,
-            exclude_fields: None,
-        };
+        let action = url_save_action("url-query", url);
         let (result, _output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
         assert!(result.is_ok(), "query save --from-url failed: {result:?}");

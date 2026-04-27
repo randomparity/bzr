@@ -1122,6 +1122,17 @@ mod tests {
         assert!(result.is_ok(), "bug clone --no-comment failed: {result:?}");
     }
 
+    fn from_url_action(url: String, save_as: Option<String>) -> BugAction {
+        BugAction::Search {
+            query: None,
+            from_url: Some(url),
+            save_as,
+            limit: None,
+            fields: None,
+            exclude_fields: None,
+        }
+    }
+
     #[tokio::test]
     async fn handle_search_from_url_executes() {
         let (_lock, mock, _tmp) = setup_test_env().await;
@@ -1139,14 +1150,7 @@ mod tests {
 
         let server_url = mock.uri();
         let url = format!("{server_url}/buglist.cgi?product=TestProduct&limit=10");
-        let action = BugAction::Search {
-            query: None,
-            from_url: Some(url),
-            save_as: None,
-            limit: None,
-            fields: None,
-            exclude_fields: None,
-        };
+        let action = from_url_action(url, None);
 
         let (result, output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
@@ -1175,14 +1179,7 @@ mod tests {
         let url = format!(
             "{server_url}/buglist.cgi?product=TestProduct&f1=qa_contact&o1=changedfrom&v1=user%40example.com"
         );
-        let action = BugAction::Search {
-            query: None,
-            from_url: Some(url),
-            save_as: None,
-            limit: None,
-            fields: None,
-            exclude_fields: None,
-        };
+        let action = from_url_action(url, None);
 
         let (result, _) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
@@ -1204,14 +1201,7 @@ mod tests {
 
         let server_url = mock.uri();
         let url = format!("{server_url}/buglist.cgi?product=TestProduct&known_name=my-query");
-        let action = BugAction::Search {
-            query: None,
-            from_url: Some(url),
-            save_as: Some("my-query".into()),
-            limit: None,
-            fields: None,
-            exclude_fields: None,
-        };
+        let action = from_url_action(url, Some("my-query".into()));
 
         let (result, _output) =
             capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
