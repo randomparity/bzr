@@ -87,8 +87,20 @@ const EXIT_CODE_KEYRING: i32 = 12;
 pub const BUGZILLA_INTERNAL_ERROR: i64 = 100_500;
 
 /// Format a reqwest error for display: redact API keys and add TLS hints.
+///
+/// reqwest's `Display` impl only shows the error kind and URL, omitting
+/// the source chain (which contains the actual cause like "connection
+/// refused" or "certificate verify failed"). We walk the source chain
+/// manually to build a complete, actionable error message.
 fn format_http_error(err: &reqwest::Error) -> String {
-    let mut msg = redact_api_key(&err.to_string());
+    let mut full = err.to_string();
+    let mut source = std::error::Error::source(err);
+    while let Some(cause) = source {
+        full.push_str(": ");
+        full.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    let mut msg = redact_api_key(&full);
     if crate::http::is_tls_cert_error(err) {
         msg.push_str(
             "\n  hint: if this server uses a self-signed certificate or sits \
@@ -341,5 +353,40 @@ mod tests {
         assert_eq!(err.exit_code(), 12);
         assert_eq!(err.error_type(), "keyring");
         assert_eq!(err.to_string(), "keyring error: keychain locked");
+    }
+
+    /// reqwest's `Display` omits the source chain (e.g. "connection refused").
+    /// Verify that `format_http_error` walks the chain so the user sees the
+    /// actual cause, not just "error sending request for url (URL)".
+    #[tokio::test]
+    async fn format_http_error_includes_source_chain() {
+        let client = reqwest::Client::builder().build().unwrap();
+        // Connect to a port that is almost certainly not listening.
+        let err = client
+            .get("http://127.0.0.1:1/unreachable")
+            .send()
+            .await
+            .unwrap_err();
+
+        // reqwest Display: only kind + URL, no cause
+        let display_only = err.to_string();
+        assert!(
+            display_only.contains("error sending request"),
+            "expected reqwest error kind: {display_only}"
+        );
+
+        let formatted = format_http_error(&err);
+        // Our formatter must include the underlying OS-level cause
+        assert!(
+            formatted.len() > display_only.len(),
+            "format_http_error should include source chain, got: {formatted}"
+        );
+        // The source chain should mention connection-level detail
+        assert!(
+            formatted.contains("connect")
+                || formatted.contains("refused")
+                || formatted.contains("tcp"),
+            "expected connection-level detail in: {formatted}"
+        );
     }
 }
