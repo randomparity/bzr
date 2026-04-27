@@ -13,3 +13,10 @@ libfuzzer-sys = "0.4"
 [dependencies.bzr]
 path = ".."
 default-features = false
+
+[[bin]]
+name = "fuzz_xmlrpc_parse"
+path = "fuzz_targets/fuzz_xmlrpc_parse.rs"
+test = false
+doc = false
+bench = false

@@ -20,7 +20,7 @@ pub(crate) mod http;
 pub(crate) mod output;
 pub mod types;
 pub(crate) mod url_parser;
-pub(crate) mod xmlrpc;
+pub mod xmlrpc;
 
 /// Dispatch a parsed CLI to the appropriate command handler.
 ///
