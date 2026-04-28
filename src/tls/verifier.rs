@@ -70,17 +70,19 @@ impl ServerCertVerifier for PinnedCertVerifier {
         let actual_hash: [u8; 32] = Sha256::digest(end_entity.as_ref()).into();
 
         if actual_hash == self.pin_hash {
-            if let Some(expected_issuer) = &self.pin_issuer {
-                let actual_issuer = extract_issuer_dn(end_entity.as_ref());
-                if actual_issuer != *expected_issuer {
-                    return Err(TlsError::General(format!(
-                        "ISSUER_CHANGED for {}: expected \"{}\", \
-                         got \"{}\"",
-                        self.server_name, expected_issuer, actual_issuer
-                    )));
-                }
-            }
             return Ok(ServerCertVerified::assertion());
+        }
+
+        // Pin mismatch — check whether the issuer also changed.
+        if let Some(expected_issuer) = &self.pin_issuer {
+            let actual_issuer = extract_issuer_dn(end_entity.as_ref());
+            if actual_issuer != *expected_issuer {
+                return Err(TlsError::General(format!(
+                    "ISSUER_CHANGED for {}: expected \"{}\", \
+                     got \"{}\"",
+                    self.server_name, expected_issuer, actual_issuer
+                )));
+            }
         }
 
         let actual_fp = compute_fingerprint(end_entity.as_ref());
@@ -462,7 +464,8 @@ mod tests {
     }
 
     #[test]
-    fn pinned_verifier_detects_issuer_change() {
+    fn pinned_verifier_accepts_matching_pin_regardless_of_issuer() {
+        // Pin match always succeeds — even if the stored issuer differs.
         let der = gen_self_signed_cert();
         let fp = compute_fingerprint(&der);
 
@@ -474,7 +477,42 @@ mod tests {
 
         let result = verifier.verify_server_cert(&cert, &[], &server_name, &[], UnixTime::now());
 
-        assert!(result.is_err(), "issuer mismatch should be rejected");
+        assert!(
+            result.is_ok(),
+            "matching pin should always be accepted: {result:?}"
+        );
+    }
+
+    /// Generate a self-signed certificate with a custom CN.
+    fn gen_cert_with_cn(cn: &str) -> Vec<u8> {
+        let mut params = rcgen::CertificateParams::new(vec![cn.to_owned()]).unwrap();
+        let mut dn = rcgen::DistinguishedName::new();
+        dn.push(rcgen::DnType::CommonName, cn);
+        params.distinguished_name = dn;
+        let cert = params
+            .self_signed(&rcgen::KeyPair::generate().unwrap())
+            .unwrap();
+        cert.der().to_vec()
+    }
+
+    #[test]
+    fn pinned_verifier_detects_issuer_change() {
+        // Pin mismatch + different issuer → ISSUER_CHANGED
+        let der1 = gen_cert_with_cn("OriginalCA");
+        let fp1 = compute_fingerprint(&der1);
+
+        // Pin to cert1 with cert1's issuer
+        let issuer1 = extract_issuer_dn(&der1);
+        let verifier = PinnedCertVerifier::new(&fp1, Some(issuer1), "localhost").unwrap();
+
+        // Present a cert with a different CN (different issuer)
+        let der2 = gen_cert_with_cn("EvilCA");
+        let cert2 = CertificateDer::from(der2);
+        let server_name = ServerName::try_from("localhost").unwrap();
+
+        let result = verifier.verify_server_cert(&cert2, &[], &server_name, &[], UnixTime::now());
+
+        assert!(result.is_err(), "issuer change should be rejected");
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("ISSUER_CHANGED"),

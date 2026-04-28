@@ -271,6 +271,41 @@ mod tests {
         assert!(info.api_key.contains("prod"));
     }
 
+    #[test]
+    fn display_server_with_tls_pin() {
+        let mut servers = HashMap::new();
+        servers.insert(
+            "pinned".into(),
+            ServerConfig {
+                url: "https://bugzilla.example".into(),
+                email: None,
+                api_key: Some("1234567890abcdef".into()),
+                api_key_env: None,
+                api_key_keyring: None,
+                auth_method: Some(AuthMethod::Header),
+                api_mode: None,
+                server_version: None,
+                tls_insecure: false,
+                tls_ca_cert: None,
+                tls_pin_sha256: Some("sha256//abc123".into()),
+                tls_pin_issuer: Some("CN=Test CA".into()),
+            },
+        );
+        let config = Config {
+            default_server: Some("pinned".into()),
+            servers,
+            queries: HashMap::new(),
+            templates: HashMap::new(),
+        };
+
+        let view = ConfigView::from_config(&config, Path::new("/tmp/bzr/config.toml"));
+        let server = &view.servers["pinned"];
+        let json: serde_json::Value = serde_json::to_value(server).unwrap();
+
+        assert_eq!(json["tls_pin"], "sha256//abc123 (CN=Test CA)");
+        assert!(json.get("tls_insecure").is_none());
+    }
+
     fn make_display_info(
         url: &str,
         api_key: &str,

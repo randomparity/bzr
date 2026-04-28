@@ -207,6 +207,14 @@ impl ServerConfig {
         if self.tls_ca_cert.is_some() && self.tls_pin_sha256.is_some() {
             return Err(ctx("tls_ca_cert and tls_pin_sha256 are mutually exclusive"));
         }
+        if let Some(path) = &self.tls_ca_cert {
+            if !path.exists() {
+                return Err(BzrError::config(format!(
+                    "server '{server_name}': tls_ca_cert file not found: {}",
+                    path.display()
+                )));
+            }
+        }
         if let Some(pin) = &self.tls_pin_sha256 {
             crate::tls::fingerprint::parse_pin(pin)
                 .map_err(|e| ctx(&format!("invalid tls_pin_sha256: {e}")))?;

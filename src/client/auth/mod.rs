@@ -456,9 +456,14 @@ mod tests {
             .mount(&server)
             .await;
 
-        let detected = detect_server_settings(&server.uri(), "test-key", None, &Default::default())
-            .await
-            .unwrap();
+        let detected = detect_server_settings(
+            &server.uri(),
+            "test-key",
+            None,
+            &crate::tls::TlsConfig::default(),
+        )
+        .await
+        .unwrap();
         assert_eq!(detected.auth_method, AuthMethod::Header);
         assert_eq!(detected.api_mode, ApiMode::Rest);
         assert_eq!(detected.server_version.as_deref(), Some("5.1.2"));
@@ -499,9 +504,14 @@ mod tests {
             .mount(&server)
             .await;
 
-        let detected = detect_server_settings(&server.uri(), "test-key", None, &Default::default())
-            .await
-            .unwrap();
+        let detected = detect_server_settings(
+            &server.uri(),
+            "test-key",
+            None,
+            &crate::tls::TlsConfig::default(),
+        )
+        .await
+        .unwrap();
         assert_eq!(detected.auth_method, AuthMethod::Header);
         assert_eq!(detected.api_mode, ApiMode::Hybrid);
         assert!(detected.server_version.is_none());
