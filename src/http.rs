@@ -94,9 +94,10 @@ pub(crate) fn tls_hint(base_msg: &str, err: &reqwest::Error) -> String {
     if is_tls_cert_error(err) {
         let _ = write!(
             msg,
-            "\n  hint: if this server uses a self-signed certificate or sits \
-             behind a TLS-intercepting proxy, re-run:\n    \
-             bzr config set-server <NAME> ... --tls-insecure"
+            "\n  hint: to trust this server's certificate, re-run interactively,\n    \
+             or pre-pin with:  bzr config set-server <NAME> --tls-pin-now\n    \
+             or provide a CA:  bzr config set-server <NAME> --tls-ca-cert <PATH>\n    \
+             or skip verification: bzr config set-server <NAME> --tls-insecure"
         );
     }
     msg

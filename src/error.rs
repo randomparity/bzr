@@ -128,9 +128,10 @@ fn format_http_error(err: &reqwest::Error) -> String {
     let mut msg = redact_api_key(&chain);
     if err.is_connect() && crate::http::looks_like_tls_error(&chain) {
         msg.push_str(
-            "\n  hint: if this server uses a self-signed certificate or sits \
-             behind a TLS-intercepting proxy, re-run:\n    \
-             bzr config set-server <NAME> ... --tls-insecure",
+            "\n  hint: to trust this server's certificate, re-run interactively,\n    \
+             or pre-pin with:  bzr config set-server <NAME> --tls-pin-now\n    \
+             or provide a CA:  bzr config set-server <NAME> --tls-ca-cert <PATH>\n    \
+             or skip verification: bzr config set-server <NAME> --tls-insecure",
         );
     }
     msg
