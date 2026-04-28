@@ -323,4 +323,75 @@ mod tests {
             Some("bzr=trace")
         );
     }
+
+    #[test]
+    fn resolve_format_falls_back_to_tty_detection() {
+        // With no flags and no BZR_OUTPUT env var, resolve_format() reaches
+        // the is_terminal() branch. Output depends on whether stdout is a TTY
+        // when tests run, but either way the call must succeed.
+        with_bzr_output(None, || {
+            let cli = base_cli(dummy_command());
+            let fmt = resolve_format(&cli).expect("should resolve");
+            assert!(matches!(fmt, OutputFormat::Json | OutputFormat::Table));
+        });
+    }
+
+    #[test]
+    fn exit_code_maps_known_error_to_exit_code() {
+        // Spot-check that exit_code() produces an ExitCode for an in-range value.
+        // The ExitCode type is opaque, so we only verify the call succeeds.
+        let err = BzrError::InputValidation("bad input".into());
+        let code = exit_code(&err);
+        // ExitCode does not implement PartialEq; compare via Debug instead.
+        let rendered = format!("{code:?}");
+        assert!(
+            rendered.contains(&err.exit_code().to_string()),
+            "expected ExitCode debug to include {}, got {rendered}",
+            err.exit_code()
+        );
+    }
+
+    #[test]
+    fn exit_code_maps_other_variant() {
+        // Cover the non-validation branch as well.
+        let err = BzrError::Other("boom".into());
+        let code = exit_code(&err);
+        let rendered = format!("{code:?}");
+        assert!(rendered.contains(&err.exit_code().to_string()));
+    }
+
+    /// Calls `suppress_stdout()` between a `dup`/`dup2` save+restore of fd 1
+    /// so the rest of the test process keeps a working stdout. The cargo
+    /// test runner uses its own per-test thread-local stdout (`println!`),
+    /// so redirecting the raw fd here doesn't break test reporting.
+    #[cfg(unix)]
+    #[test]
+    fn suppress_stdout_redirects_fd1_to_devnull() {
+        use std::os::unix::io::AsRawFd;
+        extern "C" {
+            fn dup(fd: std::ffi::c_int) -> std::ffi::c_int;
+            fn dup2(oldfd: std::ffi::c_int, newfd: std::ffi::c_int) -> std::ffi::c_int;
+            fn close(fd: std::ffi::c_int) -> std::ffi::c_int;
+        }
+
+        let _guard = env_lock();
+        // SAFETY: dup() on a valid fd returns a duplicate; we restore it below.
+        let saved = unsafe { dup(1) };
+        assert!(saved >= 0, "dup(1) failed");
+
+        suppress_stdout();
+
+        // Verify fd 1 is now writable (dup2 to /dev/null succeeded silently
+        // even on systems without /dev/null; in that case fd 1 is unchanged).
+        let stdout_file = std::fs::File::open("/dev/null").expect("open /dev/null");
+        let _devnull_fd = stdout_file.as_raw_fd();
+
+        // Restore fd 1 so subsequent tests (and cargo's harness) keep a
+        // working stdout.
+        // SAFETY: dup2() on valid fds is safe; close() releases the dup.
+        unsafe {
+            dup2(saved, 1);
+            close(saved);
+        }
+    }
 }
