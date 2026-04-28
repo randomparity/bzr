@@ -133,16 +133,35 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      - name: Extract release notes from CHANGELOG.md
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          NOTES_FILE="$(mktemp)"
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { capture = 1; next }
+            capture && /^## \[/      { exit }
+            capture                  { print }
+          ' CHANGELOG.md > "$NOTES_FILE"
+          if ! [ -s "$NOTES_FILE" ]; then
+            echo "::error::No CHANGELOG.md entry found for [$VERSION]"
+            exit 1
+          fi
+          echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           PRERELEASE=""
-          if [[ "${{ github.ref_name }}" == *-* ]]; then
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
             PRERELEASE="--prerelease"
           fi
-          gh release create "${{ github.ref_name }}" \
-            --title "bzr ${{ github.ref_name }}" \
-            --generate-notes \
+          gh release create "$GITHUB_REF_NAME" \
+            --title "bzr $GITHUB_REF_NAME" \
+            --notes-file "${{ steps.notes.outputs.notes_file }}" \
             $PRERELEASE \
             artifacts/*
