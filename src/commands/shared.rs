@@ -55,6 +55,19 @@ fn is_issuer_changed(err: &BzrError) -> bool {
     })
 }
 
+/// Extract the new fingerprint and issuer from a `PIN_MISMATCH` error chain.
+///
+/// Error format: `PIN_MISMATCH for <server>: expected <old>, got <new>, issuer <issuer>`
+fn parse_pin_mismatch_details(chain: &str) -> Option<(String, String)> {
+    let rest = chain.get(chain.find("PIN_MISMATCH")?..)?;
+    let got_start = rest.find(", got ")? + ", got ".len();
+    let after_got = &rest[got_start..];
+    let issuer_pos = after_got.find(", issuer ")?;
+    let new_fp = after_got[..issuer_pos].to_string();
+    let new_issuer = after_got[issuer_pos + ", issuer ".len()..].to_string();
+    Some((new_fp, new_issuer))
+}
+
 /// Extract the hostname from a URL string, falling back to the raw URL
 /// if parsing fails.
 fn extract_hostname(url: &str) -> String {
@@ -125,8 +138,9 @@ async fn handle_tofu(
 }
 
 /// Handle pin mismatch (certificate rotated but issuer unchanged):
-/// probe the new cert, prompt the user, and if accepted, update the
-/// pin and retry.
+/// use the fingerprint and issuer parsed from the `PIN_MISMATCH` error,
+/// prompt the user, and if accepted, update the pin and retry.
+#[expect(clippy::too_many_arguments, reason = "private orchestration fn")]
 async fn handle_pin_rotation(
     server_name: &str,
     url: &str,
@@ -134,17 +148,18 @@ async fn handle_pin_rotation(
     email: Option<&str>,
     api_override: Option<ApiMode>,
     old_pin: &str,
+    new_fingerprint: &str,
+    new_issuer: &str,
     config: &mut Config,
 ) -> Result<BugzillaClient> {
     let hostname = extract_hostname(url);
-    let (new_fingerprint, issuer) = crate::tls::tofu::probe_server_cert(url).await?;
 
     let accepted = crate::tls::tofu::prompt_rotation(
         server_name,
         &hostname,
         old_pin,
-        &new_fingerprint,
-        &issuer,
+        new_fingerprint,
+        new_issuer,
     )?;
 
     if !accepted {
@@ -157,14 +172,14 @@ async fn handle_pin_rotation(
 
     // Update pin in config
     if let Some(srv) = config.servers.get_mut(server_name) {
-        srv.tls_pin_sha256 = Some(new_fingerprint.clone());
-        srv.tls_pin_issuer = Some(issuer.clone());
+        srv.tls_pin_sha256 = Some(new_fingerprint.to_owned());
+        srv.tls_pin_issuer = Some(new_issuer.to_owned());
         config.save()?;
     }
 
     let tls_config = TlsConfig {
-        pin_sha256: Some(new_fingerprint),
-        pin_issuer: Some(issuer),
+        pin_sha256: Some(new_fingerprint.to_owned()),
+        pin_issuer: Some(new_issuer.to_owned()),
         server_name: Some(server_name.to_string()),
         ..Default::default()
     };
@@ -227,6 +242,12 @@ async fn detect_with_tofu_fallback(
         }
         Err(ref e) if is_pin_mismatch(e) => {
             let old_pin = tls_config.pin_sha256.as_deref().unwrap_or("<unknown>");
+            let chain = match e {
+                BzrError::Http(re) => crate::error::format_error_chain(re),
+                _ => String::new(),
+            };
+            let (new_fp, new_issuer) = parse_pin_mismatch_details(&chain)
+                .unwrap_or_else(|| ("<unknown>".to_string(), "<unknown>".to_string()));
             let client = handle_pin_rotation(
                 server_name,
                 url,
@@ -234,6 +255,8 @@ async fn detect_with_tofu_fallback(
                 email,
                 api_override,
                 old_pin,
+                &new_fp,
+                &new_issuer,
                 config,
             )
             .await?;
@@ -538,5 +561,21 @@ api_mode = "rest"
 
         let result = super::connect_and_configure(None, None).await;
         assert!(result.is_ok(), "env-backed config should succeed");
+    }
+
+    #[test]
+    fn parse_pin_mismatch_extracts_fingerprint_and_issuer() {
+        let chain = "error sending request: PIN_MISMATCH for test: \
+                     expected sha256//old==, got sha256//new==, \
+                     issuer CN=Test CA, O=Test";
+        let (fp, issuer) = super::parse_pin_mismatch_details(chain).unwrap();
+        assert_eq!(fp, "sha256//new==");
+        assert_eq!(issuer, "CN=Test CA, O=Test");
+    }
+
+    #[test]
+    fn parse_pin_mismatch_returns_none_for_unrelated_error() {
+        let chain = "connection refused";
+        assert!(super::parse_pin_mismatch_details(chain).is_none());
     }
 }

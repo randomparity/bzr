@@ -73,9 +73,11 @@ impl ServerCertVerifier for PinnedCertVerifier {
             return Ok(ServerCertVerified::assertion());
         }
 
-        // Pin mismatch — check whether the issuer also changed.
+        let actual_fp = compute_fingerprint(end_entity.as_ref());
+        let actual_issuer = extract_issuer_dn(end_entity.as_ref());
+
+        // Check if issuer also changed (possible MITM)
         if let Some(expected_issuer) = &self.pin_issuer {
-            let actual_issuer = extract_issuer_dn(end_entity.as_ref());
             if actual_issuer != *expected_issuer {
                 return Err(TlsError::General(format!(
                     "ISSUER_CHANGED for {}: expected \"{}\", \
@@ -85,10 +87,9 @@ impl ServerCertVerifier for PinnedCertVerifier {
             }
         }
 
-        let actual_fp = compute_fingerprint(end_entity.as_ref());
         Err(TlsError::General(format!(
-            "PIN_MISMATCH for {}: expected {}, got {}",
-            self.server_name, self.pin_str, actual_fp
+            "PIN_MISMATCH for {}: expected {}, got {}, issuer {}",
+            self.server_name, self.pin_str, actual_fp, actual_issuer
         )))
     }
 
