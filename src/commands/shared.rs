@@ -57,12 +57,17 @@ fn tls_uses_default_trust(tls_config: &TlsConfig) -> bool {
 /// store, custom CA, or pin) so any handshake failure mirrors what the
 /// real request would see.
 ///
+/// Redirects are not followed: the probe must validate only the
+/// certificate presented by the configured URL itself, otherwise a 301
+/// to a different host would lead the prompt to describe one endpoint
+/// while pinning (or PIN_MISMATCH-rotating against) another.
+///
 /// HTTP-level responses (any status) are reported as `Ok(())` — the goal
 /// is purely to surface transport errors. Network/transport failures are
 /// returned as the original `BzrError::Http` so callers can classify them
 /// (TLS cert error, pin mismatch, etc.).
 async fn probe_tls(url: &str, tls_config: &TlsConfig) -> Result<()> {
-    let client = crate::tls::build_tls_client(tls_config)?;
+    let client = crate::tls::build_probe_client(tls_config)?;
     match client.head(url).send().await {
         Ok(_) => Ok(()),
         Err(e) => Err(BzrError::Http(e)),

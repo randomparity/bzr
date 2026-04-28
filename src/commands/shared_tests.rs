@@ -755,6 +755,46 @@ async fn cached_path_probes_tls_when_pinned() {
     );
 }
 
+/// The probe must not follow HTTP redirects. If it did, a 301/302 from
+/// the configured server URL to a different host would pin (or
+/// `PIN_MISMATCH` against) the redirect target's certificate — i.e., the
+/// prompt would describe one endpoint while validating another.
+#[tokio::test]
+async fn cached_path_probe_does_not_follow_redirects() {
+    let _lock = ENV_LOCK.lock().await;
+    let primary = MockServer::start().await;
+    let secondary = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    write_config(
+        &tmp,
+        &primary.uri(),
+        "auth_method = \"header\"\napi_mode = \"rest\"",
+    );
+
+    // Primary: 301 -> secondary URI. Secondary: any HEAD must NOT be
+    // received (probe should treat the 301 as a completed handshake and
+    // stop there).
+    Mock::given(method("HEAD"))
+        .respond_with(
+            ResponseTemplate::new(301).insert_header("Location", secondary.uri().as_str()),
+        )
+        .expect(1)
+        .mount(&primary)
+        .await;
+    Mock::given(method("HEAD"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&secondary)
+        .await;
+
+    let result = super::connect_and_configure(None, None).await;
+    assert!(
+        result.is_ok(),
+        "probe should treat 301 as connect-success and not chase redirects"
+    );
+    // Secondary's expect(0) verified on drop — no hit means no redirect followed.
+}
+
 /// Cached-path connect should NOT probe when verification is explicitly
 /// disabled — there is no TLS error class to surface in that mode.
 #[tokio::test]

@@ -37,18 +37,17 @@ pub struct TlsConfig {
     pub server_name: Option<String>,
 }
 
-/// Build a `reqwest::Client` with the appropriate TLS configuration.
+/// Apply the verification mode encoded in `TlsConfig` to a builder.
 ///
-/// Selects the verification mode based on `TlsConfig` fields:
+/// Selects:
 /// 1. `insecure` — accept all certs (`danger_accept_invalid_certs`)
 /// 2. `ca_cert_path` — custom CA added to root store
 /// 3. `pin_sha256` — pinned certificate fingerprint verification
 /// 4. None — default system roots
-pub fn build_tls_client(config: &TlsConfig) -> crate::error::Result<reqwest::Client> {
-    let mut builder = reqwest::Client::builder()
-        .connect_timeout(crate::http::CONNECT_TIMEOUT)
-        .timeout(crate::http::REQUEST_TIMEOUT);
-
+fn apply_tls_verification(
+    mut builder: reqwest::ClientBuilder,
+    config: &TlsConfig,
+) -> crate::error::Result<reqwest::ClientBuilder> {
     if config.insecure {
         builder = builder.danger_accept_invalid_certs(true);
     } else if let Some(ca_path) = &config.ca_cert_path {
@@ -63,8 +62,36 @@ pub fn build_tls_client(config: &TlsConfig) -> crate::error::Result<reqwest::Cli
         )?;
         builder = builder.use_preconfigured_tls(tls_config);
     }
+    Ok(builder)
+}
 
-    builder.build().map_err(crate::error::BzrError::Http)
+/// Build a `reqwest::Client` with the configured TLS verification mode.
+/// Used for real API calls; follows redirects per reqwest defaults.
+pub fn build_tls_client(config: &TlsConfig) -> crate::error::Result<reqwest::Client> {
+    let builder = reqwest::Client::builder()
+        .connect_timeout(crate::http::CONNECT_TIMEOUT)
+        .timeout(crate::http::REQUEST_TIMEOUT);
+    apply_tls_verification(builder, config)?
+        .build()
+        .map_err(crate::error::BzrError::Http)
+}
+
+/// Build a `reqwest::Client` for cert-detection probes.
+///
+/// Same TLS verification mode as `build_tls_client`, but redirects are
+/// disabled so the probe only validates the certificate presented by the
+/// configured URL itself. Following a redirect off-host would surface a
+/// TLS error (or pin mismatch) for an endpoint the user did not
+/// configure, and any subsequent prompt would describe one host while
+/// trusting another.
+pub(crate) fn build_probe_client(config: &TlsConfig) -> crate::error::Result<reqwest::Client> {
+    let builder = reqwest::Client::builder()
+        .connect_timeout(crate::http::CONNECT_TIMEOUT)
+        .timeout(crate::http::REQUEST_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none());
+    apply_tls_verification(builder, config)?
+        .build()
+        .map_err(crate::error::BzrError::Http)
 }
 
 #[cfg(test)]
