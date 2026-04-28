@@ -78,6 +78,39 @@ impl PinnedCertVerifier {
             sig_verifier,
         })
     }
+
+    /// Check whether the leaf certificate's issuer matches the pinned issuer.
+    /// Returns `Err(TlsError::General(..))` with an `ISSUER_CHANGED` message
+    /// when the issuer differs; `Ok(())` when no issuer pin is configured or
+    /// the pinned issuer matches.
+    ///
+    /// Prefers raw DER comparison (tamper-proof). Falls back to string
+    /// comparison for legacy pins created before DER storage was added.
+    fn check_issuer_change(&self, leaf_der: &[u8]) -> std::result::Result<(), TlsError> {
+        if let Some(expected_der) = &self.pin_issuer_der {
+            if let Some(actual_der) = extract_issuer_der(leaf_der) {
+                if *expected_der != actual_der {
+                    return Err(TlsError::General(format!(
+                        "ISSUER_CHANGED for {}: issuer DER mismatch \
+                         (expected {} bytes, got {} bytes)",
+                        self.server_name,
+                        expected_der.len(),
+                        actual_der.len()
+                    )));
+                }
+            }
+        } else if let Some(expected_issuer) = &self.pin_issuer {
+            let actual_issuer = extract_issuer_dn(leaf_der);
+            if actual_issuer != *expected_issuer {
+                return Err(TlsError::General(format!(
+                    "ISSUER_CHANGED for {}: expected \"{}\", \
+                     got \"{}\"",
+                    self.server_name, expected_issuer, actual_issuer
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 impl ServerCertVerifier for PinnedCertVerifier {
@@ -95,34 +128,10 @@ impl ServerCertVerifier for PinnedCertVerifier {
             return Ok(ServerCertVerified::assertion());
         }
 
+        self.check_issuer_change(end_entity.as_ref())?;
+
         let actual_fp = compute_fingerprint(end_entity.as_ref());
         let actual_issuer = extract_issuer_dn(end_entity.as_ref());
-
-        // Check if issuer also changed (possible MITM).
-        // Prefer raw DER comparison (tamper-proof), fall back to string
-        // comparison for pins created before DER storage was added.
-        if let Some(expected_der) = &self.pin_issuer_der {
-            if let Some(actual_der) = extract_issuer_der(end_entity.as_ref()) {
-                if *expected_der != actual_der {
-                    return Err(TlsError::General(format!(
-                        "ISSUER_CHANGED for {}: issuer DER mismatch \
-                         (expected {} bytes, got {} bytes)",
-                        self.server_name,
-                        expected_der.len(),
-                        actual_der.len()
-                    )));
-                }
-            }
-        } else if let Some(expected_issuer) = &self.pin_issuer {
-            if actual_issuer != *expected_issuer {
-                return Err(TlsError::General(format!(
-                    "ISSUER_CHANGED for {}: expected \"{}\", \
-                     got \"{}\"",
-                    self.server_name, expected_issuer, actual_issuer
-                )));
-            }
-        }
-
         Err(TlsError::General(format!(
             "PIN_MISMATCH for {}: expected {}, got {}, issuer {}",
             self.server_name, self.pin_str, actual_fp, actual_issuer
