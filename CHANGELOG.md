@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.2.0-rc2] - 2026-04-28
 
+> Same-day re-spin of rc1 to fix a defect found during smoke testing
+> (PR #102: eager TLS probe on the cached connection path). Both rc1
+> and rc2 carry the 2026-04-28 date because both were cut on the same
+> calendar day.
+
 ### Added
 
 - TLS certificate pinning with trust-on-first-use (TOFU) prompt flow.
