@@ -2,6 +2,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{DigitallySignedStruct, Error as TlsError, RootCertStore, SignatureScheme};
 use sha2::{Digest, Sha256};
@@ -170,8 +171,7 @@ pub(crate) fn build_ca_cert_config(ca_pem_path: &Path) -> Result<rustls::ClientC
     }
 
     // Parse and add custom CA certs from the PEM file.
-    let mut cursor = std::io::Cursor::new(&pem_data);
-    let custom_certs: Vec<_> = rustls_pemfile::certs(&mut cursor)
+    let custom_certs: Vec<CertificateDer<'static>> = CertificateDer::pem_slice_iter(&pem_data)
         .collect::<std::result::Result<Vec<_>, _>>()
         .map_err(|e| {
             BzrError::config(format!(
