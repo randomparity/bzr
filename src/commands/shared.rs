@@ -88,7 +88,7 @@ async fn handle_tofu(
     config: &mut Config,
 ) -> Result<BugzillaClient> {
     let hostname = extract_hostname(url);
-    let (fingerprint, issuer) = crate::tls::tofu::probe_server_cert(url).await?;
+    let (fingerprint, issuer, issuer_der) = crate::tls::tofu::probe_server_cert(url).await?;
 
     let decision = crate::tls::tofu::prompt_tofu(server_name, &hostname, &fingerprint, &issuer)?;
 
@@ -98,11 +98,13 @@ async fn handle_tofu(
             if let Some(srv) = config.servers.get_mut(server_name) {
                 srv.tls_pin_sha256 = Some(fingerprint.clone());
                 srv.tls_pin_issuer = Some(issuer.clone());
+                srv.tls_pin_issuer_der.clone_from(&issuer_der);
                 config.save()?;
             }
             TlsConfig {
                 pin_sha256: Some(fingerprint),
                 pin_issuer: Some(issuer),
+                pin_issuer_der: issuer_der,
                 server_name: Some(server_name.to_string()),
                 ..Default::default()
             }
@@ -112,6 +114,7 @@ async fn handle_tofu(
             TlsConfig {
                 pin_sha256: Some(fingerprint),
                 pin_issuer: Some(issuer),
+                pin_issuer_der: issuer_der,
                 server_name: Some(server_name.to_string()),
                 ..Default::default()
             }
@@ -170,7 +173,13 @@ async fn handle_pin_rotation(
         )));
     }
 
-    // Update pin in config
+    // Update pin in config. Keep the existing pin_issuer_der: since
+    // PIN_MISMATCH only fires when the issuer DER matched (otherwise
+    // ISSUER_CHANGED would have fired), the DER bytes are still valid.
+    let existing_issuer_der = config
+        .servers
+        .get(server_name)
+        .and_then(|s| s.tls_pin_issuer_der.clone());
     if let Some(srv) = config.servers.get_mut(server_name) {
         srv.tls_pin_sha256 = Some(new_fingerprint.to_owned());
         srv.tls_pin_issuer = Some(new_issuer.to_owned());
@@ -180,6 +189,7 @@ async fn handle_pin_rotation(
     let tls_config = TlsConfig {
         pin_sha256: Some(new_fingerprint.to_owned()),
         pin_issuer: Some(new_issuer.to_owned()),
+        pin_issuer_der: existing_issuer_der,
         server_name: Some(server_name.to_string()),
         ..Default::default()
     };

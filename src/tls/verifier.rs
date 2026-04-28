@@ -6,6 +6,8 @@ use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{DigitallySignedStruct, Error as TlsError, RootCertStore, SignatureScheme};
 use sha2::{Digest, Sha256};
 
+use base64::Engine;
+
 use crate::error::{BzrError, Result};
 use crate::tls::fingerprint::{compute_fingerprint, parse_pin};
 
@@ -18,8 +20,12 @@ pub(crate) struct PinnedCertVerifier {
     pin_hash: [u8; 32],
     /// The full `sha256//<base64>` pin string, kept for error messages.
     pin_str: String,
-    /// Optional expected issuer DN string for change detection.
+    /// Optional expected issuer DN string for change detection
+    /// (legacy fallback for pins created before DER comparison).
     pin_issuer: Option<String>,
+    /// Raw DER bytes of the expected issuer SEQUENCE for tamper-proof
+    /// comparison. Takes precedence over `pin_issuer` string.
+    pin_issuer_der: Option<Vec<u8>>,
     /// The server name this verifier was created for (for errors).
     server_name: String,
     /// Delegate for cryptographic signature verification.
@@ -30,13 +36,27 @@ impl PinnedCertVerifier {
     /// Build a pinned certificate verifier.
     ///
     /// `pin_sha256` must be in `sha256//<base64>` format.
+    /// `pin_issuer_der_b64` is the base64-encoded raw DER of the issuer
+    /// SEQUENCE, used for tamper-proof issuer comparison. Falls back to
+    /// `pin_issuer` string comparison when `None` (backward compat).
     pub(crate) fn new(
         pin_sha256: &str,
         pin_issuer: Option<String>,
+        pin_issuer_der_b64: Option<&str>,
         server_name: &str,
     ) -> Result<Self> {
         let pin_hash = parse_pin(pin_sha256)?;
         let provider = super::default_provider();
+
+        let pin_issuer_der = pin_issuer_der_b64
+            .map(|b64| {
+                base64::engine::general_purpose::STANDARD
+                    .decode(b64)
+                    .map_err(|e| {
+                        BzrError::config(format!("invalid base64 in tls_pin_issuer_der: {e}"))
+                    })
+            })
+            .transpose()?;
 
         let mut root_store = RootCertStore::empty();
         root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
@@ -52,6 +72,7 @@ impl PinnedCertVerifier {
             pin_hash,
             pin_str: pin_sha256.to_owned(),
             pin_issuer,
+            pin_issuer_der,
             server_name: server_name.to_owned(),
             sig_verifier,
         })
@@ -76,8 +97,22 @@ impl ServerCertVerifier for PinnedCertVerifier {
         let actual_fp = compute_fingerprint(end_entity.as_ref());
         let actual_issuer = extract_issuer_dn(end_entity.as_ref());
 
-        // Check if issuer also changed (possible MITM)
-        if let Some(expected_issuer) = &self.pin_issuer {
+        // Check if issuer also changed (possible MITM).
+        // Prefer raw DER comparison (tamper-proof), fall back to string
+        // comparison for pins created before DER storage was added.
+        if let Some(expected_der) = &self.pin_issuer_der {
+            if let Some(actual_der) = extract_issuer_der(end_entity.as_ref()) {
+                if *expected_der != actual_der {
+                    return Err(TlsError::General(format!(
+                        "ISSUER_CHANGED for {}: issuer DER mismatch \
+                         (expected {} bytes, got {} bytes)",
+                        self.server_name,
+                        expected_der.len(),
+                        actual_der.len()
+                    )));
+                }
+            }
+        } else if let Some(expected_issuer) = &self.pin_issuer {
             if actual_issuer != *expected_issuer {
                 return Err(TlsError::General(format!(
                     "ISSUER_CHANGED for {}: expected \"{}\", \
@@ -175,9 +210,10 @@ pub(crate) fn build_ca_cert_config(ca_pem_path: &Path) -> Result<rustls::ClientC
 pub(crate) fn build_pinned_config(
     pin_sha256: &str,
     pin_issuer: Option<String>,
+    pin_issuer_der: Option<&str>,
     server_name: &str,
 ) -> Result<rustls::ClientConfig> {
-    let verifier = PinnedCertVerifier::new(pin_sha256, pin_issuer, server_name)?;
+    let verifier = PinnedCertVerifier::new(pin_sha256, pin_issuer, pin_issuer_der, server_name)?;
 
     let config = rustls::ClientConfig::builder_with_provider(super::default_provider())
         .with_safe_default_protocol_versions()
@@ -187,6 +223,33 @@ pub(crate) fn build_pinned_config(
         .with_no_client_auth();
 
     Ok(config)
+}
+
+/// Extract the raw DER bytes of the issuer SEQUENCE (tag + length +
+/// content) from a DER-encoded X.509 certificate.
+///
+/// Returns `None` if the certificate cannot be parsed far enough.
+pub(crate) fn extract_issuer_der(cert_der: &[u8]) -> Option<Vec<u8>> {
+    let (_, content) = parse_der_sequence(cert_der)?;
+    let (_, tbs) = parse_der_sequence(content)?;
+
+    let mut pos = tbs;
+
+    // Skip optional version [0] EXPLICIT
+    if pos.first()? & 0xe0 == 0xa0 {
+        let (rest, _) = skip_der_element(pos)?;
+        pos = rest;
+    }
+    // Skip serialNumber INTEGER
+    let (rest, _) = skip_der_element(pos)?;
+    pos = rest;
+    // Skip signature AlgorithmIdentifier SEQUENCE
+    let (rest, _) = skip_der_element(pos)?;
+    pos = rest;
+    // Now pos points to the issuer SEQUENCE — capture the entire TLV
+    let (rest_after_issuer, _) = skip_der_element(pos)?;
+    let issuer_len = pos.len() - rest_after_issuer.len();
+    Some(pos[..issuer_len].to_vec())
 }
 
 /// Best-effort extraction of issuer information from DER-encoded
@@ -386,7 +449,7 @@ mod tests {
         let der = gen_self_signed_cert();
         let fp = compute_fingerprint(&der);
 
-        let verifier = PinnedCertVerifier::new(&fp, None, "localhost").unwrap();
+        let verifier = PinnedCertVerifier::new(&fp, None, None, "localhost").unwrap();
 
         let cert = CertificateDer::from(der);
         let server_name = ServerName::try_from("localhost").unwrap();
@@ -407,7 +470,7 @@ mod tests {
 
         let der2 = gen_self_signed_cert();
 
-        let verifier = PinnedCertVerifier::new(&fp1, None, "localhost").unwrap();
+        let verifier = PinnedCertVerifier::new(&fp1, None, None, "localhost").unwrap();
 
         let cert = CertificateDer::from(der2);
         let server_name = ServerName::try_from("localhost").unwrap();
@@ -437,7 +500,7 @@ mod tests {
     fn build_pinned_config_succeeds() {
         let der = gen_self_signed_cert();
         let fp = compute_fingerprint(&der);
-        let result = build_pinned_config(&fp, None, "localhost");
+        let result = build_pinned_config(&fp, None, None, "localhost");
         assert!(
             result.is_ok(),
             "build_pinned_config should succeed: {result:?}"
@@ -471,7 +534,8 @@ mod tests {
         let fp = compute_fingerprint(&der);
 
         let verifier =
-            PinnedCertVerifier::new(&fp, Some("CN=SomeOtherCA".to_owned()), "localhost").unwrap();
+            PinnedCertVerifier::new(&fp, Some("CN=SomeOtherCA".to_owned()), None, "localhost")
+                .unwrap();
 
         let cert = CertificateDer::from(der);
         let server_name = ServerName::try_from("localhost").unwrap();
@@ -504,7 +568,7 @@ mod tests {
 
         // Pin to cert1 with cert1's issuer
         let issuer1 = extract_issuer_dn(&der1);
-        let verifier = PinnedCertVerifier::new(&fp1, Some(issuer1), "localhost").unwrap();
+        let verifier = PinnedCertVerifier::new(&fp1, Some(issuer1), None, "localhost").unwrap();
 
         // Present a cert with a different CN (different issuer)
         let der2 = gen_cert_with_cn("EvilCA");
@@ -518,6 +582,81 @@ mod tests {
         assert!(
             err_msg.contains("ISSUER_CHANGED"),
             "error should contain ISSUER_CHANGED: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn extract_issuer_der_returns_consistent_bytes() {
+        let der = gen_self_signed_cert();
+        let issuer1 = extract_issuer_der(&der);
+        let issuer2 = extract_issuer_der(&der);
+        assert_eq!(issuer1, issuer2, "should be deterministic");
+        assert!(issuer1.is_some(), "should extract from valid cert");
+    }
+
+    #[test]
+    fn extract_issuer_der_differs_for_different_issuers() {
+        let der1 = gen_cert_with_cn("CA One");
+        let der2 = gen_cert_with_cn("CA Two");
+        let issuer1 = extract_issuer_der(&der1).unwrap();
+        let issuer2 = extract_issuer_der(&der2).unwrap();
+        assert_ne!(issuer1, issuer2, "different CAs should have different DER");
+    }
+
+    #[test]
+    fn extract_issuer_der_returns_none_for_garbage() {
+        assert!(extract_issuer_der(b"not a certificate").is_none());
+    }
+
+    #[test]
+    fn pinned_verifier_detects_issuer_change_via_der() {
+        // Pin mismatch + different issuer DER → ISSUER_CHANGED
+        let der1 = gen_cert_with_cn("OriginalCA");
+        let fp1 = compute_fingerprint(&der1);
+        let issuer_der_bytes = extract_issuer_der(&der1).unwrap();
+        let issuer_der_b64 = base64::engine::general_purpose::STANDARD.encode(&issuer_der_bytes);
+
+        let verifier =
+            PinnedCertVerifier::new(&fp1, None, Some(&issuer_der_b64), "localhost").unwrap();
+
+        // Present a cert with a different CN (different issuer DER)
+        let der2 = gen_cert_with_cn("EvilCA");
+        let cert2 = CertificateDer::from(der2);
+        let server_name = ServerName::try_from("localhost").unwrap();
+
+        let result = verifier.verify_server_cert(&cert2, &[], &server_name, &[], UnixTime::now());
+
+        assert!(result.is_err(), "issuer DER change should be rejected");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("ISSUER_CHANGED"),
+            "error should contain ISSUER_CHANGED: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn pinned_verifier_allows_pin_mismatch_with_same_issuer_der() {
+        // Pin mismatch but same issuer DER → PIN_MISMATCH (not ISSUER_CHANGED)
+        let der1 = gen_self_signed_cert();
+        let fp1 = compute_fingerprint(&der1);
+        let issuer_der_bytes = extract_issuer_der(&der1).unwrap();
+        let issuer_der_b64 = base64::engine::general_purpose::STANDARD.encode(&issuer_der_bytes);
+
+        let verifier =
+            PinnedCertVerifier::new(&fp1, None, Some(&issuer_der_b64), "localhost").unwrap();
+
+        // Both certs are self-signed with CN=localhost (same issuer)
+        let der2 = gen_self_signed_cert();
+        let cert2 = CertificateDer::from(der2);
+        let server_name = ServerName::try_from("localhost").unwrap();
+
+        let result = verifier.verify_server_cert(&cert2, &[], &server_name, &[], UnixTime::now());
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("PIN_MISMATCH"),
+            "same issuer DER should produce PIN_MISMATCH: {err_msg}"
         );
     }
 }

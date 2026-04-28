@@ -6,8 +6,10 @@ use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{DigitallySignedStruct, SignatureScheme};
 
 use crate::error::{BzrError, Result};
+use base64::Engine;
+
 use crate::tls::fingerprint::compute_fingerprint;
-use crate::tls::verifier::extract_issuer_dn;
+use crate::tls::verifier::{extract_issuer_der, extract_issuer_dn};
 
 /// A TLS verifier that accepts any certificate but captures the leaf
 /// certificate DER bytes and issuer for TOFU inspection.
@@ -60,10 +62,13 @@ impl ServerCertVerifier for CertCapture {
 }
 
 /// Connect to a server with TLS verification disabled and capture the
-/// leaf certificate. Returns `(fingerprint, issuer_dn)`.
+/// leaf certificate. Returns `(fingerprint, issuer_dn, issuer_der_b64)`.
+///
+/// The third element is the base64-encoded raw DER bytes of the issuer
+/// SEQUENCE, or `None` if DER extraction fails.
 ///
 /// No authentication headers are sent — only a HEAD request is made.
-pub(crate) async fn probe_server_cert(url: &str) -> Result<(String, String)> {
+pub(crate) async fn probe_server_cert(url: &str) -> Result<(String, String, Option<String>)> {
     let provider = super::default_provider();
 
     let capture = Arc::new(CertCapture {
@@ -96,7 +101,9 @@ pub(crate) async fn probe_server_cert(url: &str) -> Result<(String, String)> {
         .ok_or_else(|| BzrError::config(format!("no certificate captured from {url}")))?;
 
     let fingerprint = compute_fingerprint(der);
-    Ok((fingerprint, issuer.clone()))
+    let issuer_der_b64 = extract_issuer_der(der)
+        .map(|bytes| base64::engine::general_purpose::STANDARD.encode(&bytes));
+    Ok((fingerprint, issuer.clone(), issuer_der_b64))
 }
 
 /// Read a line from stdin if running interactively.

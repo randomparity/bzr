@@ -136,6 +136,7 @@ async fn set_server(args: &SetServerArgs<'_>, format: OutputFormat) -> Result<()
         if let Some(server) = config.servers.get_mut(name) {
             server.tls_pin_sha256 = None;
             server.tls_pin_issuer = None;
+            server.tls_pin_issuer_der = None;
             config.save()?;
             let _ = writeln!(io::stderr(), "Certificate pin cleared for server '{name}'.");
             return Ok(());
@@ -165,17 +166,20 @@ async fn set_server(args: &SetServerArgs<'_>, format: OutputFormat) -> Result<()
         tls_ca_cert: tls_ca_cert.map(PathBuf::from),
         tls_pin_sha256: tls_pin_sha256.map(str::to_owned),
         tls_pin_issuer: None,
+        tls_pin_issuer_der: None,
     };
 
     // Handle --tls-pin-now: probe the server cert and ask user to confirm.
     if tls_pin_now {
-        let (fingerprint, issuer) = crate::tls::tofu::probe_server_cert(&server_config.url).await?;
+        let (fingerprint, issuer, issuer_der) =
+            crate::tls::tofu::probe_server_cert(&server_config.url).await?;
         let _ = writeln!(io::stderr(), "Certificate fingerprint: {fingerprint}");
         let _ = writeln!(io::stderr(), "Issuer:                  {issuer}");
         let confirmed = crate::tls::tofu::confirm_pin()?;
         if confirmed {
             server_config.tls_pin_sha256 = Some(fingerprint);
             server_config.tls_pin_issuer = Some(issuer);
+            server_config.tls_pin_issuer_der = issuer_der;
         } else {
             return Err(crate::error::BzrError::config(
                 "certificate pinning cancelled by user".to_owned(),

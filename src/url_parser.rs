@@ -201,6 +201,7 @@ mod tests {
             tls_ca_cert: None,
             tls_pin_sha256: None,
             tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         }
     }
 

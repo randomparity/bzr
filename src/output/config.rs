@@ -190,6 +190,7 @@ mod tests {
                 tls_ca_cert: None,
                 tls_pin_sha256: None,
                 tls_pin_issuer: None,
+                tls_pin_issuer_der: None,
             },
         );
         let config = Config {
@@ -229,6 +230,7 @@ mod tests {
                 tls_ca_cert: None,
                 tls_pin_sha256: None,
                 tls_pin_issuer: None,
+                tls_pin_issuer_der: None,
             },
         );
         let config = Config {
@@ -264,6 +266,7 @@ mod tests {
             tls_ca_cert: None,
             tls_pin_sha256: None,
             tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
         let info = ServerDisplayInfo::from_config(&srv);
         assert_eq!(info.api_key_source, "keyring");
@@ -289,6 +292,7 @@ mod tests {
                 tls_ca_cert: None,
                 tls_pin_sha256: Some("sha256//abc123".into()),
                 tls_pin_issuer: Some("CN=Test CA".into()),
+                tls_pin_issuer_der: None,
             },
         );
         let config = Config {
@@ -418,6 +422,7 @@ mod tests {
             tls_ca_cert: None,
             tls_pin_sha256: None,
             tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
         let info = ServerDisplayInfo::from_config(&srv);
         assert_eq!(info.api_key_source, "keyring");

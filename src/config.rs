@@ -50,6 +50,10 @@ pub struct ServerConfig {
     /// Issuer DN stored alongside the pin for rotation detection.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tls_pin_issuer: Option<String>,
+    /// Base64-encoded raw DER bytes of the issuer SEQUENCE for
+    /// tamper-proof issuer comparison.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls_pin_issuer_der: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -114,6 +118,7 @@ impl ServerConfig {
             ca_cert_path: self.tls_ca_cert.clone(),
             pin_sha256: self.tls_pin_sha256.clone(),
             pin_issuer: self.tls_pin_issuer.clone(),
+            pin_issuer_der: self.tls_pin_issuer_der.clone(),
             server_name: Some(server_name.to_string()),
         }
     }
@@ -405,6 +410,7 @@ mod tests {
             tls_ca_cert: None,
             tls_pin_sha256: None,
             tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         }
     }
 
@@ -612,6 +618,7 @@ api_key_env = "BZR_TEST_API_KEY"
             tls_ca_cert: None,
             tls_pin_sha256: None,
             tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
 
         assert_eq!(server.resolve_api_key("test").unwrap(), "secret-from-env");
@@ -636,6 +643,7 @@ api_key_env = "BZR_TEST_API_KEY"
             tls_ca_cert: None,
             tls_pin_sha256: None,
             tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
 
         let err = server.credential_source().unwrap_err();
@@ -705,6 +713,7 @@ api_key_keyring = { service = "bzr", account = "dave" }
             tls_ca_cert: None,
             tls_pin_sha256: None,
             tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
         match server.credential_source().unwrap() {
             CredentialSource::Keyring { service, account } => {
@@ -738,6 +747,7 @@ api_key_keyring = { service = "bzr", account = "dave" }
             tls_ca_cert: None,
             tls_pin_sha256: None,
             tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
         let err = server.credential_source().unwrap_err();
         assert!(err.to_string().contains("multiple API key sources"));
@@ -761,6 +771,7 @@ api_key_keyring = { service = "bzr", account = "dave" }
             tls_ca_cert: None,
             tls_pin_sha256: None,
             tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
         let err = server.credential_source().unwrap_err();
         assert!(err.to_string().contains("multiple API key sources"));
@@ -784,6 +795,7 @@ api_key_keyring = { service = "bzr", account = "dave" }
             tls_ca_cert: None,
             tls_pin_sha256: None,
             tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
         let err = server.credential_source().unwrap_err();
         assert!(err.to_string().contains("multiple API key sources"));
@@ -812,6 +824,7 @@ api_key_keyring = { service = "bzr", account = "dave" }
             tls_ca_cert: None,
             tls_pin_sha256: None,
             tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
 
         assert_eq!(
@@ -850,6 +863,7 @@ api_key_keyring = { service = "bzr", account = "dave" }
             tls_ca_cert: None,
             tls_pin_sha256: None,
             tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
 
         assert_eq!(
@@ -886,6 +900,7 @@ api_key_keyring = { service = "bzr", account = "dave" }
             tls_ca_cert: None,
             tls_pin_sha256: None,
             tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
 
         assert_eq!(
@@ -911,6 +926,7 @@ api_key_keyring = { service = "bzr", account = "dave" }
             tls_ca_cert: Some(PathBuf::from("/tmp/ca.pem")),
             tls_pin_sha256: None,
             tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
         let err = server.validate_tls("srv").unwrap_err();
         assert!(
@@ -934,6 +950,7 @@ api_key_keyring = { service = "bzr", account = "dave" }
             tls_ca_cert: None,
             tls_pin_sha256: Some("sha256//abc".into()),
             tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
         let err = server.validate_tls("srv").unwrap_err();
         assert!(
@@ -957,6 +974,7 @@ api_key_keyring = { service = "bzr", account = "dave" }
             tls_ca_cert: Some(PathBuf::from("/tmp/ca.pem")),
             tls_pin_sha256: Some("sha256//abc".into()),
             tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
         let err = server.validate_tls("srv").unwrap_err();
         assert!(
@@ -980,6 +998,7 @@ api_key_keyring = { service = "bzr", account = "dave" }
             tls_ca_cert: None,
             tls_pin_sha256: None,
             tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
         assert!(server.validate_tls("srv").is_ok());
     }

@@ -19,6 +19,8 @@ pub struct TlsConfig {
     pub ca_cert_path: Option<PathBuf>,
     pub pin_sha256: Option<String>,
     pub pin_issuer: Option<String>,
+    /// Base64-encoded raw DER bytes of the pinned issuer SEQUENCE.
+    pub pin_issuer_der: Option<String>,
     pub server_name: Option<String>,
 }
 
@@ -43,6 +45,7 @@ pub fn build_tls_client(config: &TlsConfig) -> crate::error::Result<reqwest::Cli
         let tls_config = verifier::build_pinned_config(
             pin,
             config.pin_issuer.clone(),
+            config.pin_issuer_der.as_deref(),
             config.server_name.as_deref().unwrap_or("unknown"),
         )?;
         builder = builder.use_preconfigured_tls(tls_config);
