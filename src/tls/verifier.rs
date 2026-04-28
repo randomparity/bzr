@@ -78,6 +78,47 @@ impl PinnedCertVerifier {
             sig_verifier,
         })
     }
+
+    /// Check whether the leaf certificate's issuer matches the pinned issuer.
+    /// Returns `Err(TlsError::General(..))` with an `ISSUER_CHANGED` message
+    /// when the issuer differs; `Ok(Some(actual_issuer))` when the legacy
+    /// string-pin branch ran (so the caller can reuse the computed string in
+    /// a `PIN_MISMATCH` error message); `Ok(None)` when no issuer pin is
+    /// configured or the DER-preferred branch ran.
+    ///
+    /// Prefers raw DER comparison (tamper-proof). Falls back to string
+    /// comparison for legacy pins created before DER storage was added.
+    fn check_issuer_change(
+        &self,
+        leaf_der: &[u8],
+    ) -> std::result::Result<Option<String>, TlsError> {
+        if let Some(expected_der) = &self.pin_issuer_der {
+            if let Some(actual_der) = extract_issuer_der(leaf_der) {
+                if *expected_der != actual_der {
+                    return Err(TlsError::General(format!(
+                        "ISSUER_CHANGED for {}: issuer DER mismatch \
+                         (expected {} bytes, got {} bytes)",
+                        self.server_name,
+                        expected_der.len(),
+                        actual_der.len()
+                    )));
+                }
+            }
+            return Ok(None);
+        }
+        if let Some(expected_issuer) = &self.pin_issuer {
+            let actual_issuer = extract_issuer_dn(leaf_der);
+            if actual_issuer != *expected_issuer {
+                return Err(TlsError::General(format!(
+                    "ISSUER_CHANGED for {}: expected \"{}\", \
+                     got \"{}\"",
+                    self.server_name, expected_issuer, actual_issuer
+                )));
+            }
+            return Ok(Some(actual_issuer));
+        }
+        Ok(None)
+    }
 }
 
 impl ServerCertVerifier for PinnedCertVerifier {
@@ -95,34 +136,10 @@ impl ServerCertVerifier for PinnedCertVerifier {
             return Ok(ServerCertVerified::assertion());
         }
 
+        let cached_issuer = self.check_issuer_change(end_entity.as_ref())?;
+
         let actual_fp = compute_fingerprint(end_entity.as_ref());
-        let actual_issuer = extract_issuer_dn(end_entity.as_ref());
-
-        // Check if issuer also changed (possible MITM).
-        // Prefer raw DER comparison (tamper-proof), fall back to string
-        // comparison for pins created before DER storage was added.
-        if let Some(expected_der) = &self.pin_issuer_der {
-            if let Some(actual_der) = extract_issuer_der(end_entity.as_ref()) {
-                if *expected_der != actual_der {
-                    return Err(TlsError::General(format!(
-                        "ISSUER_CHANGED for {}: issuer DER mismatch \
-                         (expected {} bytes, got {} bytes)",
-                        self.server_name,
-                        expected_der.len(),
-                        actual_der.len()
-                    )));
-                }
-            }
-        } else if let Some(expected_issuer) = &self.pin_issuer {
-            if actual_issuer != *expected_issuer {
-                return Err(TlsError::General(format!(
-                    "ISSUER_CHANGED for {}: expected \"{}\", \
-                     got \"{}\"",
-                    self.server_name, expected_issuer, actual_issuer
-                )));
-            }
-        }
-
+        let actual_issuer = cached_issuer.unwrap_or_else(|| extract_issuer_dn(end_entity.as_ref()));
         Err(TlsError::General(format!(
             "PIN_MISMATCH for {}: expected {}, got {}, issuer {}",
             self.server_name, self.pin_str, actual_fp, actual_issuer
@@ -636,5 +653,208 @@ mod tests {
             err_msg.contains("PIN_MISMATCH"),
             "same issuer DER should produce PIN_MISMATCH: {err_msg}"
         );
+    }
+
+    #[test]
+    fn pinned_verifier_rejects_invalid_base64_issuer_der() {
+        // Invalid base64 → config error
+        let der = gen_self_signed_cert();
+        let fp = compute_fingerprint(&der);
+        let result =
+            PinnedCertVerifier::new(&fp, None, Some("!!!not-valid-base64!!!"), "localhost");
+        assert!(result.is_err(), "invalid base64 should be rejected");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("invalid base64 in tls_pin_issuer_der"),
+            "error should mention invalid base64: {err_msg}"
+        );
+    }
+
+    /// Generate a self-signed certificate and return it as a PEM string.
+    fn gen_self_signed_pem() -> String {
+        let params = rcgen::CertificateParams::new(vec!["localhost".to_owned()]).unwrap();
+        let cert = params
+            .self_signed(&rcgen::KeyPair::generate().unwrap())
+            .unwrap();
+        cert.pem()
+    }
+
+    #[test]
+    fn ca_cert_config_loads_valid_pem() {
+        // Happy path: a real PEM-encoded self-signed cert is accepted as a CA
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let pem = gen_self_signed_pem();
+        std::fs::write(tmp.path(), pem).unwrap();
+        let result = build_ca_cert_config(tmp.path());
+        assert!(
+            result.is_ok(),
+            "valid PEM should produce a config: {result:?}"
+        );
+    }
+
+    #[test]
+    fn ca_cert_config_rejects_empty_pem_file() {
+        // Empty file → no certs found
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), "").unwrap();
+        let result = build_ca_cert_config(tmp.path());
+        assert!(result.is_err(), "empty PEM file should be rejected");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("no valid PEM certificates found"),
+            "error should mention missing certs: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn ca_cert_config_rejects_malformed_pem() {
+        // PEM markers but garbage body → parse failure
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            "-----BEGIN CERTIFICATE-----\nnot valid base64 here !!!\n-----END CERTIFICATE-----\n",
+        )
+        .unwrap();
+        let result = build_ca_cert_config(tmp.path());
+        assert!(result.is_err(), "malformed PEM should be rejected");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("failed to parse PEM certificates")
+                || err_msg.contains("no valid PEM certificates found"),
+            "error should mention parse failure or missing certs: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn parse_der_length_short_form() {
+        // Short form: first byte < 0x80 is the length itself
+        let data = [0x05_u8, 0x01, 0x02, 0x03];
+        let (rest, len) = parse_der_length(&data).unwrap();
+        assert_eq!(len, 5);
+        assert_eq!(rest, &[0x01, 0x02, 0x03]);
+    }
+
+    #[test]
+    fn parse_der_length_long_form_two_bytes() {
+        // Long form: 0x82 = 2 length bytes follow; 0x01 0x00 = 256
+        let data = [0x82_u8, 0x01, 0x00, 0xaa];
+        let (rest, len) = parse_der_length(&data).unwrap();
+        assert_eq!(len, 256);
+        assert_eq!(rest, &[0xaa]);
+    }
+
+    #[test]
+    fn parse_der_length_long_form_one_byte() {
+        // Long form: 0x81 = 1 length byte follows; 0x80 = 128 (>127, so
+        // long form is required even for a single byte).
+        let data = [0x81_u8, 0x80, 0xaa];
+        let (rest, len) = parse_der_length(&data).unwrap();
+        assert_eq!(len, 128);
+        assert_eq!(rest, &[0xaa]);
+    }
+
+    #[test]
+    fn parse_der_length_rejects_indefinite_form() {
+        // 0x80 indicates indefinite length (num_bytes == 0): not allowed
+        let data = [0x80_u8];
+        assert!(parse_der_length(&data).is_none());
+    }
+
+    #[test]
+    fn parse_der_length_rejects_too_many_length_bytes() {
+        // 0x85 = 5 length bytes follow, but we cap at 4
+        let data = [0x85_u8, 0x00, 0x00, 0x00, 0x00, 0x01];
+        assert!(parse_der_length(&data).is_none());
+    }
+
+    #[test]
+    fn parse_der_length_rejects_truncated_long_form() {
+        // 0x82 = 2 length bytes follow, but only 1 is present
+        let data = [0x82_u8, 0x01];
+        assert!(parse_der_length(&data).is_none());
+    }
+
+    #[test]
+    fn parse_der_sequence_rejects_wrong_tag() {
+        // Anything that doesn't start with 0x30 is not a SEQUENCE
+        let data = [0x02_u8, 0x01, 0x05]; // INTEGER 5
+        assert!(parse_der_sequence(&data).is_none());
+    }
+
+    #[test]
+    fn parse_der_sequence_rejects_truncated_content() {
+        // SEQUENCE tag with length 5 but only 2 content bytes
+        let data = [0x30_u8, 0x05, 0x01, 0x02];
+        assert!(parse_der_sequence(&data).is_none());
+    }
+
+    #[test]
+    fn skip_der_element_rejects_empty() {
+        assert!(skip_der_element(&[]).is_none());
+    }
+
+    #[test]
+    fn skip_der_element_rejects_truncated() {
+        // Tag + claimed length 10 but only 2 content bytes
+        let data = [0x04_u8, 0x0a, 0x01, 0x02];
+        assert!(skip_der_element(&data).is_none());
+    }
+
+    #[test]
+    fn oid_short_name_maps_known_oids() {
+        // 2.5.4.3 — CN
+        assert_eq!(oid_short_name(&[0x55, 0x04, 0x03]), "CN");
+        // 2.5.4.6 — C
+        assert_eq!(oid_short_name(&[0x55, 0x04, 0x06]), "C");
+        // 2.5.4.7 — L
+        assert_eq!(oid_short_name(&[0x55, 0x04, 0x07]), "L");
+        // 2.5.4.8 — ST
+        assert_eq!(oid_short_name(&[0x55, 0x04, 0x08]), "ST");
+        // 2.5.4.10 — O
+        assert_eq!(oid_short_name(&[0x55, 0x04, 0x0a]), "O");
+        // 2.5.4.11 — OU
+        assert_eq!(oid_short_name(&[0x55, 0x04, 0x0b]), "OU");
+        // unknown → fallback
+        assert_eq!(oid_short_name(&[0x55, 0x04, 0xff]), "OID");
+        assert_eq!(oid_short_name(&[]), "OID");
+    }
+
+    #[test]
+    fn parse_attribute_type_and_value_rejects_non_oid() {
+        // Starts with INTEGER (0x02), not OID (0x06)
+        let data = [0x02_u8, 0x01, 0x05];
+        assert!(parse_attribute_type_and_value(&data).is_none());
+    }
+
+    #[test]
+    fn parse_attribute_type_and_value_falls_back_to_hex_for_non_utf8() {
+        // OID 2.5.4.3 (CN) followed by an OCTET STRING with invalid UTF-8
+        let mut data = Vec::new();
+        // OID tag, length 3, body 2.5.4.3
+        data.extend_from_slice(&[0x06, 0x03, 0x55, 0x04, 0x03]);
+        // OCTET STRING tag, length 2, invalid UTF-8 bytes
+        data.extend_from_slice(&[0x04, 0x02, 0xff, 0xfe]);
+        let result = parse_attribute_type_and_value(&data).unwrap();
+        // Should be "CN=fffe" (hex-encoded fallback)
+        assert_eq!(result, "CN=fffe");
+    }
+
+    #[test]
+    fn extract_rdns_breaks_on_non_set_tag() {
+        // Starts with SEQUENCE (0x30) instead of SET (0x31)
+        let data = [0x30_u8, 0x00];
+        // Should hit the `break` branch and then return None (no parts)
+        assert!(extract_rdns(&data).is_none());
+    }
+
+    #[test]
+    fn extract_rdns_returns_none_on_empty_input() {
+        assert!(extract_rdns(&[]).is_none());
+    }
+
+    #[test]
+    fn hex_encode_produces_lowercase_pairs() {
+        assert_eq!(hex::encode(&[0x00, 0x0f, 0xff, 0xab]), "000fffab");
+        assert_eq!(hex::encode(&[]), "");
     }
 }

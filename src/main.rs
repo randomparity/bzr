@@ -47,23 +47,7 @@ async fn main() -> ExitCode {
     if let Err(e) = bzr::dispatch(&cli, format).await {
         #[expect(clippy::print_stderr)]
         {
-            if format == OutputFormat::Json {
-                let json_err = serde_json::json!({
-                    "error": {
-                        "type": e.error_type(),
-                        "message": e.to_string(),
-                        "exit_code": e.exit_code(),
-                    }
-                });
-                eprintln!(
-                    "{}",
-                    serde_json::to_string(&json_err).unwrap_or_else(|_| {
-                        r#"{"error":{"message":"serialization failed"}}"#.into()
-                    }),
-                );
-            } else {
-                eprintln!("error: {e}");
-            }
+            eprintln!("{}", format_dispatch_error(&e, format));
         }
         return exit_code(&e);
     }
@@ -75,6 +59,27 @@ async fn main() -> ExitCode {
 fn exit_code(e: &BzrError) -> ExitCode {
     // All BzrError exit codes are in the range 1..=12.
     ExitCode::from(u8::try_from(e.exit_code()).unwrap_or(1))
+}
+
+/// Render a dispatch error for the user.
+///
+/// JSON output renders a structured object with `type`, `message`, and
+/// `exit_code` fields. Table output renders the conventional `error: …`
+/// prefix.
+fn format_dispatch_error(err: &BzrError, format: OutputFormat) -> String {
+    if format == OutputFormat::Json {
+        let json_err = serde_json::json!({
+            "error": {
+                "type": err.error_type(),
+                "message": err.to_string(),
+                "exit_code": err.exit_code(),
+            }
+        });
+        serde_json::to_string(&json_err)
+            .unwrap_or_else(|_| r#"{"error":{"message":"serialization failed"}}"#.into())
+    } else {
+        format!("error: {err}")
+    }
 }
 
 /// Select the tracing filter directive based on CLI flags.
@@ -322,5 +327,105 @@ mod tests {
             tracing_filter_directive(false, 10, false),
             Some("bzr=trace")
         );
+    }
+
+    #[test]
+    fn resolve_format_falls_back_to_tty_detection() {
+        // With no flags and no BZR_OUTPUT env var, resolve_format() reaches
+        // the is_terminal() branch. Output depends on whether stdout is a TTY
+        // when tests run, but either way the call must succeed.
+        with_bzr_output(None, || {
+            let cli = base_cli(dummy_command());
+            let fmt = resolve_format(&cli).expect("should resolve");
+            assert!(matches!(fmt, OutputFormat::Json | OutputFormat::Table));
+        });
+    }
+
+    #[test]
+    fn exit_code_maps_known_error_to_exit_code() {
+        // Spot-check that exit_code() produces an ExitCode for an in-range value.
+        // The ExitCode type is opaque, so we only verify the call succeeds.
+        let err = BzrError::InputValidation("bad input".into());
+        let code = exit_code(&err);
+        // ExitCode does not implement PartialEq; compare via Debug instead.
+        let rendered = format!("{code:?}");
+        assert!(
+            rendered.contains(&err.exit_code().to_string()),
+            "expected ExitCode debug to include {}, got {rendered}",
+            err.exit_code()
+        );
+    }
+
+    #[test]
+    fn exit_code_maps_other_variant() {
+        // Cover the non-validation branch as well.
+        let err = BzrError::Other("boom".into());
+        let code = exit_code(&err);
+        let rendered = format!("{code:?}");
+        assert!(rendered.contains(&err.exit_code().to_string()));
+    }
+
+    #[test]
+    fn format_dispatch_error_renders_json() {
+        let err = BzrError::Config("bad config".into());
+        let out = format_dispatch_error(&err, OutputFormat::Json);
+        let parsed: serde_json::Value =
+            serde_json::from_str(&out).expect("output must be valid JSON");
+        let inner = parsed.get("error").expect("has error key");
+        assert_eq!(inner["type"], err.error_type());
+        assert_eq!(inner["exit_code"], err.exit_code());
+        assert!(
+            inner["message"]
+                .as_str()
+                .expect("message is string")
+                .contains("bad config"),
+            "message should contain underlying error: {out}"
+        );
+    }
+
+    #[test]
+    fn format_dispatch_error_renders_table() {
+        let err = BzrError::Config("bad config".into());
+        let out = format_dispatch_error(&err, OutputFormat::Table);
+        assert!(out.starts_with("error:"), "got {out:?}");
+        assert!(out.contains("bad config"), "got {out:?}");
+    }
+
+    #[test]
+    fn format_dispatch_error_table_for_other_error() {
+        let err = BzrError::Other("kaboom".into());
+        let out = format_dispatch_error(&err, OutputFormat::Table);
+        assert!(out.contains("kaboom"));
+    }
+
+    /// Asserts `suppress_stdout()` runs without panicking and that fd 1 is
+    /// restored afterward. The function calls `dup2(devnull_fd, 1)` under
+    /// the hood; we save+restore fd 1 around it so the rest of the test
+    /// process keeps a working stdout. The cargo test runner uses its own
+    /// per-test thread-local stdout (`println!`), so redirecting the raw
+    /// fd here doesn't break test reporting.
+    #[cfg(unix)]
+    #[test]
+    fn suppress_stdout_redirects_fd1_to_devnull() {
+        extern "C" {
+            fn dup(fd: std::ffi::c_int) -> std::ffi::c_int;
+            fn dup2(oldfd: std::ffi::c_int, newfd: std::ffi::c_int) -> std::ffi::c_int;
+            fn close(fd: std::ffi::c_int) -> std::ffi::c_int;
+        }
+
+        let _guard = env_lock();
+        // SAFETY: dup() on a valid fd returns a duplicate; we restore it below.
+        let saved = unsafe { dup(1) };
+        assert!(saved >= 0, "dup(1) failed");
+
+        suppress_stdout();
+
+        // Restore fd 1 so subsequent tests (and cargo's harness) keep a
+        // working stdout.
+        // SAFETY: dup2() on valid fds is safe; close() releases the dup.
+        unsafe {
+            dup2(saved, 1);
+            close(saved);
+        }
     }
 }

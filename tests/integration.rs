@@ -6,22 +6,19 @@
 
 #![expect(clippy::unwrap_used)]
 
-use bzr::test_helpers::{capture_stdout, extract_json, setup_config};
+use bzr::test_helpers::{capture_stdout, extract_json, setup_test_env};
 use bzr::ENV_LOCK;
 
 use clap::Parser;
 
 use wiremock::matchers::{method, path, query_param};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, ResponseTemplate};
 
 // ── Bug commands ──────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn bug_list_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -64,10 +61,7 @@ async fn bug_list_integration() {
 
 #[tokio::test]
 async fn bug_view_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42"))
@@ -98,10 +92,7 @@ async fn bug_view_integration() {
 
 #[tokio::test]
 async fn bug_search_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -136,10 +127,7 @@ async fn bug_search_integration() {
 
 #[tokio::test]
 async fn bug_create_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/bug"))
@@ -179,10 +167,7 @@ async fn bug_create_integration() {
 
 #[tokio::test]
 async fn comment_list_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42/comment"))
@@ -220,10 +205,7 @@ async fn comment_list_integration() {
 
 #[tokio::test]
 async fn whoami_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/whoami"))
@@ -253,10 +235,7 @@ async fn whoami_integration() {
 
 #[tokio::test]
 async fn product_list_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/product_accessible"))
@@ -295,10 +274,7 @@ async fn product_list_integration() {
 
 #[tokio::test]
 async fn server_info_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/version"))
@@ -334,10 +310,7 @@ async fn server_info_integration() {
 
 #[tokio::test]
 async fn field_list_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/field/bug/bug_status"))
@@ -372,10 +345,7 @@ async fn field_list_integration() {
 
 #[tokio::test]
 async fn classification_view_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/classification/Unclassified"))
@@ -414,10 +384,7 @@ async fn classification_view_integration() {
 
 #[tokio::test]
 async fn user_search_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/user"))
@@ -455,10 +422,7 @@ async fn user_search_integration() {
 
 #[tokio::test]
 async fn group_view_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/group"))
@@ -496,10 +460,7 @@ async fn group_view_integration() {
 
 #[tokio::test]
 async fn component_create_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/component"))
@@ -533,10 +494,7 @@ async fn component_create_integration() {
 
 #[tokio::test]
 async fn attachment_list_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42/attachment"))
@@ -601,9 +559,7 @@ api_key = "key-1234567890"
 
 #[tokio::test]
 async fn command_with_unknown_server_returns_error() {
-    let _lock = ENV_LOCK.lock().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, "http://localhost:1");
+    let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = bzr::cli::BugAction::List {
         product: vec![],
@@ -633,10 +589,7 @@ async fn command_with_unknown_server_returns_error() {
 
 #[tokio::test]
 async fn api_error_propagates() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/99999"))
@@ -664,10 +617,7 @@ async fn api_error_propagates() {
 
 #[tokio::test]
 async fn bug_history_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42/history"))
@@ -710,10 +660,7 @@ async fn bug_history_integration() {
 
 #[tokio::test]
 async fn bug_update_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/bug/42"))
@@ -756,10 +703,7 @@ async fn bug_update_integration() {
 
 #[tokio::test]
 async fn comment_add_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/bug/42/comment"))
@@ -788,10 +732,7 @@ async fn comment_add_integration() {
 
 #[tokio::test]
 async fn comment_tag_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/bug/comment/100/tags"))
@@ -819,10 +760,7 @@ async fn comment_tag_integration() {
 
 #[tokio::test]
 async fn comment_search_tags_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/comment/tags/spam"))
@@ -851,10 +789,7 @@ async fn comment_search_tags_integration() {
 
 #[tokio::test]
 async fn attachment_download_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/attachment/99"))
@@ -900,10 +835,7 @@ async fn attachment_download_integration() {
 
 #[tokio::test]
 async fn attachment_upload_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, tmp) = setup_test_env().await;
 
     // Create a temporary file to upload
     let upload_file = tmp.path().join("upload.txt");
@@ -940,10 +872,7 @@ async fn attachment_upload_integration() {
 
 #[tokio::test]
 async fn attachment_update_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/bug/attachment/99"))
@@ -981,10 +910,7 @@ async fn attachment_update_integration() {
 
 #[tokio::test]
 async fn component_update_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/component/10"))
@@ -1016,10 +942,7 @@ async fn component_update_integration() {
 
 #[tokio::test]
 async fn product_view_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/product"))
@@ -1050,10 +973,7 @@ async fn product_view_integration() {
 
 #[tokio::test]
 async fn product_create_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/product"))
@@ -1082,10 +1002,7 @@ async fn product_create_integration() {
 
 #[tokio::test]
 async fn product_update_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/product/Firefox"))
@@ -1116,10 +1033,7 @@ async fn product_update_integration() {
 
 #[tokio::test]
 async fn user_create_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/user"))
@@ -1144,10 +1058,7 @@ async fn user_create_integration() {
 
 #[tokio::test]
 async fn user_update_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/user/alice%40example%2Ecom"))
@@ -1175,10 +1086,7 @@ async fn user_update_integration() {
 
 #[tokio::test]
 async fn group_create_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/group"))
@@ -1202,10 +1110,7 @@ async fn group_create_integration() {
 
 #[tokio::test]
 async fn group_update_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/group/testers"))
@@ -1231,10 +1136,7 @@ async fn group_update_integration() {
 
 #[tokio::test]
 async fn group_add_user_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/user/alice%40example%2Ecom"))
@@ -1259,10 +1161,7 @@ async fn group_add_user_integration() {
 
 #[tokio::test]
 async fn group_remove_user_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/user/alice%40example%2Ecom"))
@@ -1290,10 +1189,7 @@ async fn group_remove_user_integration() {
 
 #[tokio::test]
 async fn group_list_users_integration() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/user"))
@@ -1405,10 +1301,7 @@ async fn dispatch_cli(args: &[&str]) -> bzr::error::Result<()> {
 
 #[tokio::test]
 async fn e2e_bug_list_via_cli_args() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -1437,10 +1330,7 @@ async fn e2e_bug_list_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_bug_view_via_cli_args() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42"))
@@ -1463,10 +1353,7 @@ async fn e2e_bug_view_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_whoami_via_cli_args() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/whoami"))
@@ -1490,9 +1377,7 @@ async fn e2e_whoami_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_config_show_via_cli_args() {
-    let _lock = ENV_LOCK.lock().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, "http://localhost:1");
+    let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let result = dispatch_cli(&["bzr", "--json", "config", "show"]).await;
     assert!(result.is_ok(), "e2e config show: {result:?}");
@@ -1500,10 +1385,7 @@ async fn e2e_config_show_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_server_info_via_cli_args() {
-    let _lock = ENV_LOCK.lock().await;
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/version"))
@@ -1524,4 +1406,278 @@ async fn e2e_server_info_via_cli_args() {
 
     let result = dispatch_cli(&["bzr", "--server", "test", "--json", "server", "info"]).await;
     assert!(result.is_ok(), "e2e server info: {result:?}");
+}
+
+// ── Dispatch arm coverage: drives lib.rs::dispatch() for each remaining ──
+// Commands::* arm not exercised by the e2e_*_via_cli_args tests above.
+// Each test routes through bzr::dispatch() to ensure the match arm is hit.
+
+#[tokio::test]
+async fn e2e_comment_list_via_cli_args() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": {
+                "42": {
+                    "comments": [
+                        {"id": 1, "bug_id": 42, "text": "First", "count": 0}
+                    ]
+                }
+            }
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let result =
+        dispatch_cli(&["bzr", "--server", "test", "--json", "comment", "list", "42"]).await;
+    assert!(result.is_ok(), "e2e comment list: {result:?}");
+}
+
+#[tokio::test]
+async fn e2e_attachment_list_via_cli_args() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/attachment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": {
+                "42": [{
+                    "id": 1,
+                    "bug_id": 42,
+                    "file_name": "patch.diff",
+                    "summary": "Fix",
+                    "content_type": "text/plain",
+                    "size": 100
+                }]
+            }
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let result = dispatch_cli(&[
+        "bzr",
+        "--server",
+        "test",
+        "--json",
+        "attachment",
+        "list",
+        "42",
+    ])
+    .await;
+    assert!(result.is_ok(), "e2e attachment list: {result:?}");
+}
+
+#[tokio::test]
+async fn e2e_product_view_via_cli_args() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/product"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "products": [{
+                "id": 1, "name": "Firefox", "description": "Browser",
+                "is_active": true, "components": [], "versions": [], "milestones": []
+            }]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let result = dispatch_cli(&[
+        "bzr", "--server", "test", "--json", "product", "view", "Firefox",
+    ])
+    .await;
+    assert!(result.is_ok(), "e2e product view: {result:?}");
+}
+
+#[tokio::test]
+async fn e2e_field_list_via_cli_args() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/field/bug/bug_status"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "fields": [{
+                "values": [
+                    {"name": "NEW", "sort_key": 100, "is_active": true}
+                ]
+            }]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let result = dispatch_cli(&[
+        "bzr", "--server", "test", "--json", "field", "list", "status",
+    ])
+    .await;
+    assert!(result.is_ok(), "e2e field list: {result:?}");
+}
+
+#[tokio::test]
+async fn e2e_user_search_via_cli_args() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "users": [{
+                "id": 1,
+                "name": "alice@example.com",
+                "real_name": "Alice",
+                "email": "alice@example.com",
+                "groups": []
+            }]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let result = dispatch_cli(&[
+        "bzr", "--server", "test", "--json", "user", "search", "alice",
+    ])
+    .await;
+    assert!(result.is_ok(), "e2e user search: {result:?}");
+}
+
+#[tokio::test]
+async fn e2e_group_view_via_cli_args() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/group"))
+        .and(query_param("names", "admin"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "groups": [{
+                "id": 1,
+                "name": "admin",
+                "description": "Administrators",
+                "is_active": true,
+                "membership": []
+            }]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let result = dispatch_cli(&[
+        "bzr", "--server", "test", "--json", "group", "view", "admin",
+    ])
+    .await;
+    assert!(result.is_ok(), "e2e group view: {result:?}");
+}
+
+#[tokio::test]
+async fn e2e_classification_view_via_cli_args() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/classification/Unclassified"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "classifications": [{
+                "id": 1,
+                "name": "Unclassified",
+                "description": "Default",
+                "sort_key": 0,
+                "products": []
+            }]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let result = dispatch_cli(&[
+        "bzr",
+        "--server",
+        "test",
+        "--json",
+        "classification",
+        "view",
+        "Unclassified",
+    ])
+    .await;
+    assert!(result.is_ok(), "e2e classification view: {result:?}");
+}
+
+#[tokio::test]
+async fn e2e_component_create_via_cli_args() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("POST"))
+        .and(path("/rest/component"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 11})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let result = dispatch_cli(&[
+        "bzr",
+        "--server",
+        "test",
+        "--json",
+        "component",
+        "create",
+        "--product",
+        "TestProduct",
+        "--name",
+        "Backend",
+        "--description",
+        "Backend component",
+        "--default-assignee",
+        "dev@test.com",
+    ])
+    .await;
+    assert!(result.is_ok(), "e2e component create: {result:?}");
+}
+
+#[tokio::test]
+async fn e2e_template_list_via_cli_args() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let result = dispatch_cli(&["bzr", "--json", "template", "list"]).await;
+    assert!(result.is_ok(), "e2e template list: {result:?}");
+}
+
+#[tokio::test]
+async fn e2e_query_list_via_cli_args() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let result = dispatch_cli(&["bzr", "--json", "query", "list"]).await;
+    assert!(result.is_ok(), "e2e query list: {result:?}");
+}
+
+// ── CLI parsing: --version / --help exit paths ───────────────────────
+
+#[test]
+fn cli_version_flag_exits_with_display_version() {
+    let result = bzr::cli::Cli::try_parse_from(["bzr", "--version"]);
+    let Err(err) = result else {
+        unreachable!("--version should not produce a parsed Cli");
+    };
+    assert_eq!(err.kind(), clap::error::ErrorKind::DisplayVersion);
+}
+
+#[test]
+fn cli_help_flag_exits_with_display_help() {
+    let result = bzr::cli::Cli::try_parse_from(["bzr", "--help"]);
+    let Err(err) = result else {
+        unreachable!("--help should not produce a parsed Cli");
+    };
+    assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
+}
+
+#[test]
+fn cli_missing_subcommand_errors() {
+    let result = bzr::cli::Cli::try_parse_from(["bzr"]);
+    let Err(err) = result else {
+        unreachable!("bzr without a subcommand should require one");
+    };
+    assert_eq!(
+        err.kind(),
+        clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+    );
 }
