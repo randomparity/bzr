@@ -660,4 +660,101 @@ api_mode = "rest"
         let chain = "connection refused";
         assert!(super::parse_pin_mismatch_details(chain).is_none());
     }
+
+    #[tokio::test]
+    async fn detect_with_tofu_fallback_normal_path() {
+        let _lock = ENV_LOCK.lock().await;
+        let server = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+
+        let config_dir = tmp.path().join("bzr");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        let config_content = format!(
+            r#"
+default_server = "test"
+
+[servers.test]
+url = "{}"
+api_key = "test-key"
+"#,
+            server.uri()
+        );
+        std::fs::write(config_dir.join("config.toml"), &config_content).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&config_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+            std::fs::set_permissions(
+                config_dir.join("config.toml"),
+                std::fs::Permissions::from_mode(0o600),
+            )
+            .unwrap();
+        }
+        // SAFETY: Tests are serialized via ENV_LOCK.
+        unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+        Mock::given(method("GET"))
+            .and(path("/rest/whoami"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/rest/version"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.1.2"})),
+            )
+            .mount(&server)
+            .await;
+
+        let mut config = crate::config::Config::load().unwrap();
+        let tls_config = TlsConfig::default();
+        let result = super::detect_with_tofu_fallback(
+            "test",
+            &server.uri(),
+            "test-key",
+            None,
+            None,
+            &tls_config,
+            &mut config,
+        )
+        .await;
+        assert!(result.is_ok(), "normal path should succeed");
+    }
+
+    #[test]
+    fn is_issuer_changed_returns_false_for_config_error() {
+        let err = BzrError::Config("ISSUER_CHANGED inside config".into());
+        assert!(!super::is_issuer_changed(&err));
+    }
+
+    #[test]
+    fn is_pin_mismatch_returns_false_for_config_error() {
+        let err = BzrError::Config("PIN_MISMATCH inside config".into());
+        assert!(!super::is_pin_mismatch(&err));
+    }
+
+    #[test]
+    fn persist_detected_settings_skips_unknown_server() {
+        // If the server name doesn't exist in config, persist is a no-op
+        let mut config = crate::config::Config::default();
+        let settings = crate::client::DetectedServerSettings {
+            auth_method: crate::types::AuthMethod::Header,
+            api_mode: crate::types::ApiMode::Rest,
+            server_version: Some("5.1".into()),
+        };
+        let result = super::persist_detected_settings(&mut config, "nonexistent", &settings, true);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parse_pin_mismatch_no_got_returns_none() {
+        let chain = "PIN_MISMATCH for test: expected sha256//old==";
+        assert!(super::parse_pin_mismatch_details(chain).is_none());
+    }
+
+    #[test]
+    fn parse_pin_mismatch_no_issuer_returns_none() {
+        let chain = "PIN_MISMATCH for test: expected sha256//old==, got sha256//new==";
+        assert!(super::parse_pin_mismatch_details(chain).is_none());
+    }
 }

@@ -201,6 +201,81 @@ pub(crate) fn prompt_rotation(
 #[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use rustls::client::danger::ServerCertVerifier;
+    use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+
+    #[test]
+    fn cert_capture_accepts_any_cert() {
+        let provider = crate::tls::default_provider();
+        let capture = CertCapture {
+            captured: Mutex::new(None),
+            provider,
+        };
+        let cert_data = b"fake cert data";
+        let cert = CertificateDer::from(cert_data.to_vec());
+        let server_name = ServerName::try_from("localhost").unwrap();
+
+        let result = capture.verify_server_cert(&cert, &[], &server_name, &[], UnixTime::now());
+        assert!(result.is_ok(), "CertCapture should accept any cert");
+
+        let captured = capture.captured.lock().unwrap();
+        assert!(captured.is_some(), "cert should be captured");
+        let (der, _issuer) = captured.as_ref().unwrap();
+        assert_eq!(der, cert_data, "captured DER should match input");
+    }
+
+    #[test]
+    fn cert_capture_supported_verify_schemes_not_empty() {
+        let provider = crate::tls::default_provider();
+        let capture = CertCapture {
+            captured: Mutex::new(None),
+            provider,
+        };
+        assert!(
+            !capture.supported_verify_schemes().is_empty(),
+            "should expose provider's supported schemes"
+        );
+    }
+
+    #[test]
+    fn read_interactive_line_returns_none_in_tests() {
+        let result = read_interactive_line("prompt> ").unwrap();
+        assert!(
+            result.is_none(),
+            "should return None when stdin is not a terminal"
+        );
+    }
+
+    #[test]
+    fn confirm_pin_returns_false_non_interactive() {
+        let result = confirm_pin().unwrap();
+        assert!(!result);
+    }
+
+    #[test]
+    fn prompt_tofu_returns_none_non_interactive() {
+        let result = prompt_tofu("test", "example.com", "sha256//abc", "CN=Test").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn prompt_rotation_returns_false_non_interactive() {
+        let result = prompt_rotation(
+            "test",
+            "example.com",
+            "sha256//old",
+            "sha256//new",
+            "CN=Test",
+        )
+        .unwrap();
+        assert!(!result);
+    }
+
+    #[tokio::test]
+    async fn probe_server_cert_returns_error_for_unreachable() {
+        let result = probe_server_cert("https://127.0.0.1:1/unreachable").await;
+        assert!(result.is_err(), "should fail for unreachable server");
+    }
 
     #[test]
     fn parse_tofu_response_always() {
