@@ -316,4 +316,41 @@ mod tests {
         assert!(!parse_yes_no("no"));
         assert!(!parse_yes_no("anything"));
     }
+
+    /// Construct a minimal `DigitallySignedStruct` for testing the
+    /// signature verifier delegate methods. The constructor is
+    /// `pub(crate)` upstream, so we round-trip through `Codec`. The
+    /// wire format is: 2-byte scheme (big-endian) + 2-byte length + sig.
+    fn dummy_dss() -> DigitallySignedStruct {
+        use rustls::internal::msgs::codec::Codec;
+        // ED25519 (0x0807) with empty signature.
+        let bytes = [0x08_u8, 0x07, 0x00, 0x00];
+        DigitallySignedStruct::read_bytes(&bytes).unwrap()
+    }
+
+    #[test]
+    fn cert_capture_verify_tls12_signature_returns_ok() {
+        let provider = crate::tls::default_provider();
+        let capture = CertCapture {
+            captured: Mutex::new(None),
+            provider,
+        };
+        let cert = CertificateDer::from(b"fake".to_vec());
+        let dss = dummy_dss();
+        let result = capture.verify_tls12_signature(b"msg", &cert, &dss);
+        assert!(result.is_ok(), "tls12 signature should be accepted");
+    }
+
+    #[test]
+    fn cert_capture_verify_tls13_signature_returns_ok() {
+        let provider = crate::tls::default_provider();
+        let capture = CertCapture {
+            captured: Mutex::new(None),
+            provider,
+        };
+        let cert = CertificateDer::from(b"fake".to_vec());
+        let dss = dummy_dss();
+        let result = capture.verify_tls13_signature(b"msg", &cert, &dss);
+        assert!(result.is_ok(), "tls13 signature should be accepted");
+    }
 }
