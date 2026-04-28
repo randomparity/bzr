@@ -13,6 +13,7 @@ env:
 jobs:
   publish:
     name: Publish to crates.io
+    if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
