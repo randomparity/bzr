@@ -22,7 +22,6 @@ pub(crate) fn compute_fingerprint(der: &[u8]) -> String {
 /// - missing `sha256//` prefix
 /// - invalid base64 encoding
 /// - decoded length that is not exactly 32 bytes
-#[cfg_attr(not(test), expect(dead_code, reason = "consumed by later TLS tasks"))]
 pub(crate) fn parse_pin(pin: &str) -> Result<[u8; 32]> {
     let b64 = pin.strip_prefix(PIN_PREFIX).ok_or_else(|| {
         BzrError::InputValidation(format!("pin must start with `sha256//`: {pin}"))

@@ -131,6 +131,9 @@ fn set_server(args: &SetServerArgs<'_>, format: OutputFormat) -> Result<()> {
             api_mode: None,
             server_version: None,
             tls_insecure,
+            tls_ca_cert: None,
+            tls_pin_sha256: None,
+            tls_pin_issuer: None,
         },
     );
     if config.default_server.is_none() {
