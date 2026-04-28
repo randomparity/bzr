@@ -39,15 +39,21 @@ pub async fn connect_and_configure(
 ) -> Result<BugzillaClient> {
     let mut config = Config::load()?;
     let (server_name, srv) = config.resolve_server(server)?;
-    let (server_name, url, api_key, email, tls_insecure) = (
+    let tls_config = crate::tls::TlsConfig {
+        insecure: srv.tls_insecure,
+        ca_cert_path: srv.tls_ca_cert.clone(),
+        pin_sha256: srv.tls_pin_sha256.clone(),
+        pin_issuer: srv.tls_pin_issuer.clone(),
+        server_name: Some(server_name.to_string()),
+    };
+    let (server_name, url, api_key, email) = (
         server_name.to_string(),
         srv.url.clone(),
         srv.resolve_api_key(server_name)?,
         srv.email.clone(),
-        srv.tls_insecure,
     );
 
-    if tls_insecure {
+    if tls_config.insecure {
         tracing::warn!("TLS certificate verification disabled for server '{server_name}'");
     }
 
@@ -60,7 +66,7 @@ pub async fn connect_and_configure(
                 &url,
                 &api_key,
                 email.as_deref(),
-                tls_insecure,
+                tls_config.insecure,
             )
             .await?;
             persist_detected_settings(&mut config, &server_name, &settings, false)?;
@@ -71,7 +77,7 @@ pub async fn connect_and_configure(
                 &url,
                 &api_key,
                 email.as_deref(),
-                tls_insecure,
+                tls_config.insecure,
             )
             .await?;
             persist_detected_settings(&mut config, &server_name, &settings, true)?;
@@ -86,7 +92,7 @@ pub async fn connect_and_configure(
         auth,
         api_mode,
         email.as_deref(),
-        tls_insecure,
+        &tls_config,
     )?;
     Ok(client)
 }

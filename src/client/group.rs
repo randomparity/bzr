@@ -479,7 +479,7 @@ mod tests {
             AuthMethod::Header,
             ApiMode::XmlRpc,
             None,
-            false,
+            &crate::tls::TlsConfig::default(),
         )
         .unwrap();
 

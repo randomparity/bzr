@@ -18,7 +18,7 @@ use reqwest::RequestBuilder;
 use serde::Deserialize;
 
 use crate::error::{BzrError, Result};
-use crate::http::{build_http_client, AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
+use crate::http::{AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::types::BugzillaUser;
 use crate::types::{ApiMode, AuthMethod};
 use crate::xmlrpc::client::XmlRpcClient;
@@ -138,7 +138,7 @@ impl BugzillaClient {
         auth_method: AuthMethod,
         api_mode: ApiMode,
         email_hint: Option<&str>,
-        tls_insecure: bool,
+        tls_config: &crate::tls::TlsConfig,
     ) -> Result<Self> {
         let auth = match auth_method {
             AuthMethod::Header => {
@@ -149,7 +149,7 @@ impl BugzillaClient {
             AuthMethod::QueryParam => PreparedAuth::QueryParam(api_key.to_string()),
         };
 
-        let http = build_http_client(tls_insecure).map_err(BzrError::Http)?;
+        let http = crate::tls::build_tls_client(tls_config)?;
 
         // Always construct the XML-RPC client — even in REST mode, some
         // methods (e.g. Group.get on Bugzilla 5.3+) require XML-RPC fallback
@@ -433,7 +433,7 @@ pub(super) mod test_helpers {
             AuthMethod::Header,
             ApiMode::Rest,
             None,
-            false,
+            &crate::tls::TlsConfig::default(),
         )
         .unwrap()
     }
@@ -445,7 +445,7 @@ pub(super) mod test_helpers {
             AuthMethod::Header,
             ApiMode::Hybrid,
             None,
-            false,
+            &crate::tls::TlsConfig::default(),
         )
         .unwrap()
     }
@@ -457,7 +457,7 @@ pub(super) mod test_helpers {
             AuthMethod::QueryParam,
             ApiMode::Rest,
             None,
-            false,
+            &crate::tls::TlsConfig::default(),
         )
         .unwrap()
     }
@@ -505,7 +505,7 @@ mod tests {
             AuthMethod::Header,
             ApiMode::Rest,
             Some("user@example.com"),
-            false,
+            &crate::tls::TlsConfig::default(),
         )
         .unwrap();
 
@@ -532,7 +532,7 @@ mod tests {
             AuthMethod::QueryParam,
             ApiMode::Rest,
             None,
-            false,
+            &crate::tls::TlsConfig::default(),
         )
         .unwrap();
 
