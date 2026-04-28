@@ -2,9 +2,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use rustls::crypto::CryptoProvider;
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{DigitallySignedStruct, Error as TlsError, RootCertStore, SignatureScheme};
+use sha2::{Digest, Sha256};
 
 use crate::error::{BzrError, Result};
 use crate::tls::fingerprint::{compute_fingerprint, parse_pin};
@@ -36,9 +36,7 @@ impl PinnedCertVerifier {
         server_name: &str,
     ) -> Result<Self> {
         let pin_hash = parse_pin(pin_sha256)?;
-        let provider = CryptoProvider::get_default()
-            .cloned()
-            .unwrap_or_else(|| Arc::new(rustls::crypto::ring::default_provider()));
+        let provider = super::default_provider();
 
         let mut root_store = RootCertStore::empty();
         root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
@@ -69,30 +67,27 @@ impl ServerCertVerifier for PinnedCertVerifier {
         _ocsp_response: &[u8],
         _now: UnixTime,
     ) -> std::result::Result<ServerCertVerified, TlsError> {
-        let actual_fp = compute_fingerprint(end_entity.as_ref());
+        let actual_hash: [u8; 32] = Sha256::digest(end_entity.as_ref()).into();
 
-        let actual_hash: [u8; 32] = parse_pin(&actual_fp)
-            .map_err(|e| TlsError::General(format!("internal fingerprint error: {e}")))?;
-
-        if actual_hash != self.pin_hash {
-            return Err(TlsError::General(format!(
-                "PIN_MISMATCH for {}: expected {}, got {}",
-                self.server_name, self.pin_str, actual_fp
-            )));
-        }
-
-        if let Some(expected_issuer) = &self.pin_issuer {
-            let actual_issuer = extract_issuer_dn(end_entity.as_ref());
-            if actual_issuer != *expected_issuer {
-                return Err(TlsError::General(format!(
-                    "ISSUER_CHANGED for {}: expected \"{}\", \
-                     got \"{}\"",
-                    self.server_name, expected_issuer, actual_issuer
-                )));
+        if actual_hash == self.pin_hash {
+            if let Some(expected_issuer) = &self.pin_issuer {
+                let actual_issuer = extract_issuer_dn(end_entity.as_ref());
+                if actual_issuer != *expected_issuer {
+                    return Err(TlsError::General(format!(
+                        "ISSUER_CHANGED for {}: expected \"{}\", \
+                         got \"{}\"",
+                        self.server_name, expected_issuer, actual_issuer
+                    )));
+                }
             }
+            return Ok(ServerCertVerified::assertion());
         }
 
-        Ok(ServerCertVerified::assertion())
+        let actual_fp = compute_fingerprint(end_entity.as_ref());
+        Err(TlsError::General(format!(
+            "PIN_MISMATCH for {}: expected {}, got {}",
+            self.server_name, self.pin_str, actual_fp
+        )))
     }
 
     fn verify_tls12_signature(
@@ -163,11 +158,7 @@ pub(crate) fn build_ca_cert_config(ca_pem_path: &Path) -> Result<rustls::ClientC
         })?;
     }
 
-    let provider = CryptoProvider::get_default()
-        .cloned()
-        .unwrap_or_else(|| Arc::new(rustls::crypto::ring::default_provider()));
-
-    let config = rustls::ClientConfig::builder_with_provider(provider)
+    let config = rustls::ClientConfig::builder_with_provider(super::default_provider())
         .with_safe_default_protocol_versions()
         .map_err(|e| BzrError::config(format!("failed to configure TLS protocol versions: {e}")))?
         .with_root_certificates(root_store)
@@ -185,11 +176,7 @@ pub(crate) fn build_pinned_config(
 ) -> Result<rustls::ClientConfig> {
     let verifier = PinnedCertVerifier::new(pin_sha256, pin_issuer, server_name)?;
 
-    let provider = CryptoProvider::get_default()
-        .cloned()
-        .unwrap_or_else(|| Arc::new(rustls::crypto::ring::default_provider()));
-
-    let config = rustls::ClientConfig::builder_with_provider(provider)
+    let config = rustls::ClientConfig::builder_with_provider(super::default_provider())
         .with_safe_default_protocol_versions()
         .map_err(|e| BzrError::config(format!("failed to configure TLS protocol versions: {e}")))?
         .dangerous()

@@ -2,7 +2,6 @@ use std::io::{self, IsTerminal, Write};
 use std::sync::{Arc, Mutex};
 
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use rustls::crypto::CryptoProvider;
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{DigitallySignedStruct, SignatureScheme};
 
@@ -15,7 +14,7 @@ use crate::tls::verifier::extract_issuer_dn;
 #[derive(Debug)]
 struct CertCapture {
     captured: Mutex<Option<(Vec<u8>, String)>>,
-    provider: Arc<CryptoProvider>,
+    provider: Arc<rustls::crypto::CryptoProvider>,
 }
 
 impl ServerCertVerifier for CertCapture {
@@ -65,9 +64,7 @@ impl ServerCertVerifier for CertCapture {
 ///
 /// No authentication headers are sent — only a HEAD request is made.
 pub(crate) async fn probe_server_cert(url: &str) -> Result<(String, String)> {
-    let provider = CryptoProvider::get_default()
-        .cloned()
-        .unwrap_or_else(|| Arc::new(rustls::crypto::ring::default_provider()));
+    let provider = super::default_provider();
 
     let capture = Arc::new(CertCapture {
         captured: Mutex::new(None),
@@ -102,22 +99,28 @@ pub(crate) async fn probe_server_cert(url: &str) -> Result<(String, String)> {
     Ok((fingerprint, issuer.clone()))
 }
 
-/// Prompt the user to confirm pinning a certificate. Returns `false`
-/// if stdin is not a terminal.
-pub(crate) fn confirm_pin() -> Result<bool> {
+/// Read a line from stdin if running interactively.
+/// Returns `Ok(None)` when stdin is not a terminal.
+fn read_interactive_line(prompt: &str) -> Result<Option<String>> {
     if !io::stdin().is_terminal() {
-        return Ok(false);
+        return Ok(None);
     }
-
-    let _ = write!(io::stderr(), "Pin this certificate? [y/N] ");
+    let _ = write!(io::stderr(), "{prompt}");
     let _ = io::stderr().flush();
-
     let mut input = String::new();
     io::stdin()
         .read_line(&mut input)
         .map_err(|e| BzrError::config(format!("failed to read input: {e}")))?;
+    Ok(Some(input.trim().to_string()))
+}
 
-    Ok(input.trim().eq_ignore_ascii_case("y"))
+/// Prompt the user to confirm pinning a certificate. Returns `false`
+/// if stdin is not a terminal.
+pub(crate) fn confirm_pin() -> Result<bool> {
+    let input = read_interactive_line("Pin this certificate? [y/N] ")?;
+    Ok(input
+        .as_deref()
+        .is_some_and(|s| s.eq_ignore_ascii_case("y")))
 }
 
 /// Prompt the user for first-contact TOFU decision.
@@ -132,10 +135,6 @@ pub(crate) fn prompt_tofu(
     fingerprint: &str,
     issuer: &str,
 ) -> Result<Option<bool>> {
-    if !io::stdin().is_terminal() {
-        return Ok(None);
-    }
-
     let _ = writeln!(io::stderr());
     let _ = writeln!(
         io::stderr(),
@@ -144,15 +143,11 @@ pub(crate) fn prompt_tofu(
     let _ = writeln!(io::stderr(), "  Fingerprint: {fingerprint}");
     let _ = writeln!(io::stderr(), "  Issuer:      {issuer}");
     let _ = writeln!(io::stderr());
-    let _ = write!(io::stderr(), "Trust this certificate? [y/N/always] ");
-    let _ = io::stderr().flush();
 
-    let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input)
-        .map_err(|e| BzrError::config(format!("failed to read input: {e}")))?;
+    let Some(trimmed) = read_interactive_line("Trust this certificate? [y/N/always] ")? else {
+        return Ok(None);
+    };
 
-    let trimmed = input.trim();
     if trimmed.eq_ignore_ascii_case("always") {
         Ok(Some(true))
     } else if trimmed.eq_ignore_ascii_case("y") || trimmed.eq_ignore_ascii_case("yes") {
@@ -171,10 +166,6 @@ pub(crate) fn prompt_rotation(
     new_pin: &str,
     issuer: &str,
 ) -> Result<bool> {
-    if !io::stdin().is_terminal() {
-        return Ok(false);
-    }
-
     let _ = writeln!(io::stderr());
     let _ = writeln!(
         io::stderr(),
@@ -184,13 +175,9 @@ pub(crate) fn prompt_rotation(
     let _ = writeln!(io::stderr(), "  New pin: {new_pin}");
     let _ = writeln!(io::stderr(), "  Issuer:  {issuer} (unchanged)");
     let _ = writeln!(io::stderr());
-    let _ = write!(io::stderr(), "Accept the new certificate? [y/N] ");
-    let _ = io::stderr().flush();
 
-    let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input)
-        .map_err(|e| BzrError::config(format!("failed to read input: {e}")))?;
-
-    Ok(input.trim().eq_ignore_ascii_case("y"))
+    let input = read_interactive_line("Accept the new certificate? [y/N] ")?;
+    Ok(input
+        .as_deref()
+        .is_some_and(|s| s.eq_ignore_ascii_case("y")))
 }

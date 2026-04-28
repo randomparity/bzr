@@ -1,8 +1,16 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 pub(crate) mod fingerprint;
 pub(crate) mod tofu;
 pub(crate) mod verifier;
+
+/// Get the default crypto provider, falling back to ring.
+pub(crate) fn default_provider() -> Arc<rustls::crypto::CryptoProvider> {
+    rustls::crypto::CryptoProvider::get_default()
+        .cloned()
+        .unwrap_or_else(|| Arc::new(rustls::crypto::ring::default_provider()))
+}
 
 /// TLS configuration for a server connection.
 #[derive(Debug, Clone, Default)]

@@ -423,7 +423,7 @@ pub(super) mod test_helpers {
     use super::*;
 
     pub fn test_http_client() -> reqwest::Client {
-        crate::http::build_http_client(false).unwrap()
+        crate::tls::build_tls_client(&crate::tls::TlsConfig::default()).unwrap()
     }
 
     pub fn test_client(base_url: &str) -> BugzillaClient {

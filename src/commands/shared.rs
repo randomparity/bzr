@@ -111,21 +111,16 @@ async fn handle_tofu(
         }
     };
 
-    // Retry detection with the new trust config
-    let settings =
-        crate::client::detect_server_settings(url, api_key, email, tls_config.insecure).await?;
-    persist_detected_settings(config, server_name, &settings, true)?;
-
-    let api_mode = api_override.unwrap_or(settings.api_mode);
-    let client = BugzillaClient::new(
+    detect_and_build_client(
+        server_name,
         url,
         api_key,
-        settings.auth_method,
-        api_mode,
         email,
+        api_override,
         &tls_config,
-    )?;
-    Ok(client)
+        config,
+    )
+    .await
 }
 
 /// Handle pin mismatch (certificate rotated but issuer unchanged):
@@ -173,20 +168,40 @@ async fn handle_pin_rotation(
         ..Default::default()
     };
 
-    let settings =
-        crate::client::detect_server_settings(url, api_key, email, tls_config.insecure).await?;
-    persist_detected_settings(config, server_name, &settings, true)?;
+    detect_and_build_client(
+        server_name,
+        url,
+        api_key,
+        email,
+        api_override,
+        &tls_config,
+        config,
+    )
+    .await
+}
 
+/// Detect server settings and build a client, persisting the detected
+/// settings to config. Shared tail logic for TOFU and pin rotation flows.
+async fn detect_and_build_client(
+    server_name: &str,
+    url: &str,
+    api_key: &str,
+    email: Option<&str>,
+    api_override: Option<ApiMode>,
+    tls_config: &crate::tls::TlsConfig,
+    config: &mut Config,
+) -> Result<BugzillaClient> {
+    let settings = crate::client::detect_server_settings(url, api_key, email, tls_config).await?;
+    persist_detected_settings(config, server_name, &settings, true)?;
     let api_mode = api_override.unwrap_or(settings.api_mode);
-    let client = BugzillaClient::new(
+    BugzillaClient::new(
         url,
         api_key,
         settings.auth_method,
         api_mode,
         email,
-        &tls_config,
-    )?;
-    Ok(client)
+        tls_config,
+    )
 }
 
 /// Run `detect_server_settings` and handle TLS errors with TOFU or
@@ -200,8 +215,7 @@ async fn detect_with_tofu_fallback(
     tls_config: &TlsConfig,
     config: &mut Config,
 ) -> Result<DetectOrClient> {
-    let result =
-        crate::client::detect_server_settings(url, api_key, email, tls_config.insecure).await;
+    let result = crate::client::detect_server_settings(url, api_key, email, tls_config).await;
 
     match result {
         Ok(settings) => Ok(DetectOrClient::Settings(settings)),
@@ -257,13 +271,7 @@ pub async fn connect_and_configure(
 ) -> Result<BugzillaClient> {
     let mut config = Config::load()?;
     let (server_name, srv) = config.resolve_server(server)?;
-    let tls_config = TlsConfig {
-        insecure: srv.tls_insecure,
-        ca_cert_path: srv.tls_ca_cert.clone(),
-        pin_sha256: srv.tls_pin_sha256.clone(),
-        pin_issuer: srv.tls_pin_issuer.clone(),
-        server_name: Some(server_name.to_string()),
-    };
+    let tls_config = srv.tls_config(server_name);
     let (server_name, url, api_key, email) = (
         server_name.to_string(),
         srv.url.clone(),

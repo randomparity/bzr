@@ -108,6 +108,16 @@ impl CredentialSourceKind {
 }
 
 impl ServerConfig {
+    pub fn tls_config(&self, server_name: &str) -> crate::tls::TlsConfig {
+        crate::tls::TlsConfig {
+            insecure: self.tls_insecure,
+            ca_cert_path: self.tls_ca_cert.clone(),
+            pin_sha256: self.tls_pin_sha256.clone(),
+            pin_issuer: self.tls_pin_issuer.clone(),
+            server_name: Some(server_name.to_string()),
+        }
+    }
+
     pub fn validate(&self, server_name: &str) -> Result<()> {
         self.credential_source()
             .map(|_| ())
@@ -200,14 +210,6 @@ impl ServerConfig {
         if let Some(pin) = &self.tls_pin_sha256 {
             crate::tls::fingerprint::parse_pin(pin)
                 .map_err(|e| ctx(&format!("invalid tls_pin_sha256: {e}")))?;
-        }
-        if let Some(ca_cert) = &self.tls_ca_cert {
-            if !ca_cert.exists() {
-                return Err(ctx(&format!(
-                    "tls_ca_cert '{}' does not exist",
-                    ca_cert.display()
-                )));
-            }
         }
         Ok(())
     }
