@@ -5,7 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.2.0-rc1] - 2026-04-28
+## [0.2.0-rc2] - 2026-04-28
+
+> Same-day re-spin of rc1 to fix a defect found during smoke testing
+> (PR #102: eager TLS probe on the cached connection path). Both rc1
+> and rc2 carry the 2026-04-28 date because both were cut on the same
+> calendar day.
 
 ### Added
 
@@ -38,6 +43,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   diagnostics surface even when wrapped in transport errors.
 - `bzr bug search --from-url` strips shell-escaped backslashes from URL
   arguments pasted from terminals that quote them.
+- TLS verification is now eager at connect time on the fully-cached
+  path. Previously, when both `auth_method` and `api_mode` were cached
+  for a server, `connect_and_configure` returned a client without
+  probing TLS, so untrusted-CA errors and pin rotations only surfaced
+  from the first real API call — bypassing the TOFU and rotation
+  prompts entirely. Cert-detection probes also no longer follow HTTP
+  redirects, so prompts always describe the configured URL itself
+  rather than a redirect target.
 
 ## [0.1.2] - 2026-04-27
 
