@@ -1,7 +1,8 @@
 use crate::client::BugzillaClient;
 use crate::client::DetectedServerSettings;
 use crate::config::Config;
-use crate::error::Result;
+use crate::error::{BzrError, Result};
+use crate::tls::TlsConfig;
 use crate::types::ApiMode;
 
 /// Persist detected server settings to config.
@@ -27,19 +28,236 @@ fn persist_detected_settings(
     Ok(())
 }
 
+/// Check if a TLS error should trigger the TOFU (trust-on-first-use) flow.
+///
+/// Returns `true` when the error is a TLS certificate verification failure
+/// and no trust mechanism (insecure, CA cert, or pin) is already configured.
+fn should_offer_tofu(err: &BzrError, tls_config: &TlsConfig) -> bool {
+    if tls_config.insecure || tls_config.ca_cert_path.is_some() || tls_config.pin_sha256.is_some() {
+        return false;
+    }
+    matches!(err, BzrError::Http(e) if crate::http::is_tls_cert_error(e))
+}
+
+/// Check if a reqwest error contains a `PIN_MISMATCH` from the pinned verifier.
+fn is_pin_mismatch(err: &BzrError) -> bool {
+    matches!(err, BzrError::Http(e) if {
+        let chain = crate::error::format_error_chain(e);
+        chain.contains("PIN_MISMATCH")
+    })
+}
+
+/// Check if a reqwest error contains an `ISSUER_CHANGED` from the pinned verifier.
+fn is_issuer_changed(err: &BzrError) -> bool {
+    matches!(err, BzrError::Http(e) if {
+        let chain = crate::error::format_error_chain(e);
+        chain.contains("ISSUER_CHANGED")
+    })
+}
+
+/// Extract the hostname from a URL string, falling back to the raw URL
+/// if parsing fails.
+fn extract_hostname(url: &str) -> String {
+    url::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(String::from))
+        .unwrap_or_else(|| url.to_string())
+}
+
+/// Handle the TOFU flow: probe the server certificate, prompt the user,
+/// and if accepted, retry detection and build the client.
+async fn handle_tofu(
+    server_name: &str,
+    url: &str,
+    api_key: &str,
+    email: Option<&str>,
+    api_override: Option<ApiMode>,
+    config: &mut Config,
+) -> Result<BugzillaClient> {
+    let hostname = extract_hostname(url);
+    let (fingerprint, issuer) = crate::tls::tofu::probe_server_cert(url).await?;
+
+    let decision = crate::tls::tofu::prompt_tofu(server_name, &hostname, &fingerprint, &issuer)?;
+
+    let tls_config = match decision {
+        Some(true) => {
+            // "always" — persist pin to config
+            if let Some(srv) = config.servers.get_mut(server_name) {
+                srv.tls_pin_sha256 = Some(fingerprint.clone());
+                srv.tls_pin_issuer = Some(issuer.clone());
+                config.save()?;
+            }
+            TlsConfig {
+                pin_sha256: Some(fingerprint),
+                pin_issuer: Some(issuer),
+                server_name: Some(server_name.to_string()),
+                ..Default::default()
+            }
+        }
+        Some(false) => {
+            // "y" — trust for this session only (insecure mode)
+            TlsConfig {
+                insecure: true,
+                server_name: Some(server_name.to_string()),
+                ..Default::default()
+            }
+        }
+        None => {
+            return Err(BzrError::config(
+                "TLS certificate not trusted. To connect, use one of:\n  \
+                 bzr config set-server <NAME> --tls-insecure\n  \
+                 bzr config set-server <NAME> --tls-pin-sha256 <PIN>",
+            ));
+        }
+    };
+
+    // Retry detection with the new trust config
+    let settings =
+        crate::client::detect_server_settings(url, api_key, email, tls_config.insecure).await?;
+    persist_detected_settings(config, server_name, &settings, true)?;
+
+    let api_mode = api_override.unwrap_or(settings.api_mode);
+    let client = BugzillaClient::new(
+        url,
+        api_key,
+        settings.auth_method,
+        api_mode,
+        email,
+        &tls_config,
+    )?;
+    Ok(client)
+}
+
+/// Handle pin mismatch (certificate rotated but issuer unchanged):
+/// probe the new cert, prompt the user, and if accepted, update the
+/// pin and retry.
+async fn handle_pin_rotation(
+    server_name: &str,
+    url: &str,
+    api_key: &str,
+    email: Option<&str>,
+    api_override: Option<ApiMode>,
+    old_pin: &str,
+    config: &mut Config,
+) -> Result<BugzillaClient> {
+    let hostname = extract_hostname(url);
+    let (new_fingerprint, issuer) = crate::tls::tofu::probe_server_cert(url).await?;
+
+    let accepted = crate::tls::tofu::prompt_rotation(
+        server_name,
+        &hostname,
+        old_pin,
+        &new_fingerprint,
+        &issuer,
+    )?;
+
+    if !accepted {
+        return Err(BzrError::config(format!(
+            "certificate rotation rejected for server \"{server_name}\". \
+             To clear the pin: bzr config set-server {server_name} \
+             --tls-pin-clear"
+        )));
+    }
+
+    // Update pin in config
+    if let Some(srv) = config.servers.get_mut(server_name) {
+        srv.tls_pin_sha256 = Some(new_fingerprint.clone());
+        srv.tls_pin_issuer = Some(issuer.clone());
+        config.save()?;
+    }
+
+    let tls_config = TlsConfig {
+        pin_sha256: Some(new_fingerprint),
+        pin_issuer: Some(issuer),
+        server_name: Some(server_name.to_string()),
+        ..Default::default()
+    };
+
+    let settings =
+        crate::client::detect_server_settings(url, api_key, email, tls_config.insecure).await?;
+    persist_detected_settings(config, server_name, &settings, true)?;
+
+    let api_mode = api_override.unwrap_or(settings.api_mode);
+    let client = BugzillaClient::new(
+        url,
+        api_key,
+        settings.auth_method,
+        api_mode,
+        email,
+        &tls_config,
+    )?;
+    Ok(client)
+}
+
+/// Run `detect_server_settings` and handle TLS errors with TOFU or
+/// pin rotation flows as appropriate.
+async fn detect_with_tofu_fallback(
+    server_name: &str,
+    url: &str,
+    api_key: &str,
+    email: Option<&str>,
+    api_override: Option<ApiMode>,
+    tls_config: &TlsConfig,
+    config: &mut Config,
+) -> Result<DetectOrClient> {
+    let result =
+        crate::client::detect_server_settings(url, api_key, email, tls_config.insecure).await;
+
+    match result {
+        Ok(settings) => Ok(DetectOrClient::Settings(settings)),
+        Err(ref e) if should_offer_tofu(e, tls_config) => {
+            let client =
+                handle_tofu(server_name, url, api_key, email, api_override, config).await?;
+            Ok(DetectOrClient::Client(client))
+        }
+        Err(ref e) if is_pin_mismatch(e) => {
+            let old_pin = tls_config.pin_sha256.as_deref().unwrap_or("<unknown>");
+            let client = handle_pin_rotation(
+                server_name,
+                url,
+                api_key,
+                email,
+                api_override,
+                old_pin,
+                config,
+            )
+            .await?;
+            Ok(DetectOrClient::Client(client))
+        }
+        Err(ref e) if is_issuer_changed(e) => Err(BzrError::config(format!(
+            "TLS certificate issuer changed for server \"{server_name}\" \
+                 — this could indicate a MITM attack.\n  \
+                 If this is expected, clear the pin and re-connect:\n    \
+                 bzr config set-server {server_name} --tls-pin-clear"
+        ))),
+        Err(e) => Err(e),
+    }
+}
+
+/// Either detected settings (continue normal flow) or a fully-built
+/// client (TOFU/rotation handled everything).
+enum DetectOrClient {
+    Settings(DetectedServerSettings),
+    Client(BugzillaClient),
+}
+
 /// Connect to a Bugzilla server with auto-configuration.
 ///
 /// On first connection to a server, detects auth method and API mode, then
 /// persists these settings to the config file for subsequent connections.
 /// The server's configured email (if any) is stored in the client for
 /// Bugzilla 5.0 whoami fallback.
+///
+/// When a TLS certificate error occurs and no trust mechanism is configured,
+/// offers an interactive TOFU (trust-on-first-use) prompt. When a pinned
+/// certificate has rotated, offers a rotation prompt.
 pub async fn connect_and_configure(
     server: Option<&str>,
     api_override: Option<ApiMode>,
 ) -> Result<BugzillaClient> {
     let mut config = Config::load()?;
     let (server_name, srv) = config.resolve_server(server)?;
-    let tls_config = crate::tls::TlsConfig {
+    let tls_config = TlsConfig {
         insecure: srv.tls_insecure,
         ca_cert_path: srv.tls_ca_cert.clone(),
         pin_sha256: srv.tls_pin_sha256.clone(),
@@ -62,26 +280,42 @@ pub async fn connect_and_configure(
         (Some(method), Some(mode)) => (method, mode),
         (Some(method), None) => {
             tracing::debug!("auth_method cached but api_mode missing; re-detecting");
-            let settings = crate::client::detect_server_settings(
+            match detect_with_tofu_fallback(
+                &server_name,
                 &url,
                 &api_key,
                 email.as_deref(),
-                tls_config.insecure,
+                api_override,
+                &tls_config,
+                &mut config,
             )
-            .await?;
-            persist_detected_settings(&mut config, &server_name, &settings, false)?;
-            (method, settings.api_mode)
+            .await?
+            {
+                DetectOrClient::Client(client) => return Ok(client),
+                DetectOrClient::Settings(settings) => {
+                    persist_detected_settings(&mut config, &server_name, &settings, false)?;
+                    (method, settings.api_mode)
+                }
+            }
         }
         _ => {
-            let settings = crate::client::detect_server_settings(
+            match detect_with_tofu_fallback(
+                &server_name,
                 &url,
                 &api_key,
                 email.as_deref(),
-                tls_config.insecure,
+                api_override,
+                &tls_config,
+                &mut config,
             )
-            .await?;
-            persist_detected_settings(&mut config, &server_name, &settings, true)?;
-            (settings.auth_method, settings.api_mode)
+            .await?
+            {
+                DetectOrClient::Client(client) => return Ok(client),
+                DetectOrClient::Settings(settings) => {
+                    persist_detected_settings(&mut config, &server_name, &settings, true)?;
+                    (settings.auth_method, settings.api_mode)
+                }
+            }
         }
     };
 
