@@ -795,6 +795,85 @@ async fn cached_path_probe_does_not_follow_redirects() {
     // Secondary's expect(0) verified on drop — no hit means no redirect followed.
 }
 
+/// `classify_and_handle_tls_failure` must silently pass through non-TLS
+/// transport errors so the cached-path probe doesn't block on transient
+/// network issues. The actual command will surface the same error with
+/// full request context.
+#[tokio::test]
+async fn classify_and_handle_tls_failure_returns_none_for_non_tls_error() {
+    // Build a real reqwest::Error from a connection failure — error
+    // chain contains no TLS markers, so all three predicates miss.
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_millis(50))
+        .build()
+        .unwrap();
+    let err = client
+        .get("http://127.0.0.1:1/unreachable")
+        .send()
+        .await
+        .unwrap_err();
+    let bzr_err = BzrError::Http(err);
+
+    let mut config = crate::config::Config::default();
+    let tls_config = TlsConfig::default();
+    let result = super::classify_and_handle_tls_failure(
+        &bzr_err,
+        "test",
+        "http://127.0.0.1:1/unreachable",
+        "key",
+        None,
+        None,
+        &tls_config,
+        &mut config,
+    )
+    .await;
+    match result {
+        Ok(None) => {}
+        Ok(Some(_)) => panic!("expected Ok(None) for non-TLS error, got Some(client)"),
+        Err(e) => panic!("expected Ok(None) for non-TLS error, got Err: {e}"),
+    }
+}
+
+/// `probe_tls` must return `Err` (wrapped in `BzrError::Http`) when the
+/// underlying request fails on transport. The cached-path branch then
+/// delegates to `classify_and_handle_tls_failure`, which for non-TLS
+/// errors returns `Ok(None)` and the cached values flow through.
+#[tokio::test]
+async fn probe_tls_returns_err_on_unreachable_address() {
+    let tls_config = TlsConfig::default();
+    let result = super::probe_tls("http://127.0.0.1:1/unreachable", &tls_config).await;
+    match result {
+        Err(BzrError::Http(_)) => {}
+        Err(other) => panic!("expected Http error, got {other:?}"),
+        Ok(()) => panic!("expected probe to fail against unreachable address"),
+    }
+}
+
+/// Cached-path with default trust where the probe fails on a non-TLS
+/// transport error: the connect call should still succeed (returning
+/// the cached client) because non-TLS probe failures are silent.
+#[tokio::test]
+async fn cached_path_proceeds_when_probe_fails_on_non_tls_error() {
+    let _lock = ENV_LOCK.lock().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    // Point the configured server at an unreachable port so probe_tls
+    // returns Err with a non-TLS connection error. classify_and_handle
+    // _tls_failure should return Ok(None) for that, and the cached
+    // path should fall through to building the client with cached
+    // settings.
+    write_config(
+        &tmp,
+        "http://127.0.0.1:1",
+        "auth_method = \"header\"\napi_mode = \"rest\"",
+    );
+
+    let result = super::connect_and_configure(None, None).await;
+    assert!(
+        result.is_ok(),
+        "non-TLS probe failures must not block the cached path"
+    );
+}
+
 /// Cached-path connect should NOT probe when verification is explicitly
 /// disabled — there is no TLS error class to surface in that mode.
 #[tokio::test]
