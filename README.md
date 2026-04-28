@@ -276,6 +276,52 @@ at a glance which mechanism is in use. See
 keychain errors (locked keyring, missing Secret Service daemon, builds
 compiled without the feature, etc.).
 
+## TLS certificate pinning
+
+By default, `bzr` validates server TLS using the operating system's CA
+trust store. For self-hosted Bugzilla servers — especially those exposed
+on the open internet — you may want stronger guarantees that the
+connection is reaching the same server you initially trusted, even if a
+CA in the trust store is later compromised.
+
+`bzr` supports two pinning models on `bzr config set-server`:
+
+- `--tls-ca-cert <path>`: pin a custom CA certificate (PEM file). The
+  server must present a chain that verifies against this CA.
+- `--tls-pin-sha256 <hex>`: pin the SHA-256 fingerprint of the server's
+  leaf certificate Subject Public Key Info (SPKI). The server must
+  present a leaf certificate whose SPKI matches this fingerprint.
+
+### Trust on first use
+
+If you don't already know the pin, use `--tls-pin-now`. `bzr` connects
+once, captures the leaf certificate's SPKI fingerprint, prints it, and
+prompts before storing it:
+
+```sh
+bzr config set-server my-bz https://bugzilla.example.com --tls-pin-now
+```
+
+Subsequent connections to `my-bz` verify the pin. If the server
+presents a different leaf certificate (rotation, reissue, MITM) bzr
+exits with `PinMismatch` and a hint suggesting `--tls-pin-now` to
+re-pin or `--tls-pin-clear` to remove the pin.
+
+### Clearing a pin
+
+```sh
+bzr config set-server my-bz --tls-pin-clear
+```
+
+Removes both `tls_ca_cert` and `tls_pin_sha256` for the server.
+
+### Storage
+
+Pins live in `~/.config/bzr/config.toml`, per-server, alongside other
+server config. They are not stored in the OS keyring (which is
+reserved for credentials). The full reference for these flags is in
+[`docs/bzr-cli.md`](docs/bzr-cli.md).
+
 ## License
 
 MIT
