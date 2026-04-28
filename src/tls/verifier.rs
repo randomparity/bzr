@@ -1,0 +1,497 @@
+use std::path::Path;
+use std::sync::Arc;
+
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::crypto::CryptoProvider;
+use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+use rustls::{DigitallySignedStruct, Error as TlsError, RootCertStore, SignatureScheme};
+
+use crate::error::{BzrError, Result};
+use crate::tls::fingerprint::{compute_fingerprint, parse_pin};
+
+/// A rustls `ServerCertVerifier` that validates the leaf certificate's
+/// SHA-256 fingerprint against a pinned value, bypassing CA chain
+/// verification entirely.
+#[derive(Debug)]
+pub(crate) struct PinnedCertVerifier {
+    /// The expected SHA-256 hash of the leaf certificate DER bytes.
+    pin_hash: [u8; 32],
+    /// The full `sha256//<base64>` pin string, kept for error messages.
+    pin_str: String,
+    /// Optional expected issuer DN string for change detection.
+    pin_issuer: Option<String>,
+    /// The server name this verifier was created for (for errors).
+    server_name: String,
+    /// Delegate for cryptographic signature verification.
+    sig_verifier: Arc<dyn ServerCertVerifier>,
+}
+
+impl PinnedCertVerifier {
+    /// Build a pinned certificate verifier.
+    ///
+    /// `pin_sha256` must be in `sha256//<base64>` format.
+    pub(crate) fn new(
+        pin_sha256: &str,
+        pin_issuer: Option<String>,
+        server_name: &str,
+    ) -> Result<Self> {
+        let pin_hash = parse_pin(pin_sha256)?;
+        let provider = CryptoProvider::get_default()
+            .cloned()
+            .unwrap_or_else(|| Arc::new(rustls::crypto::ring::default_provider()));
+
+        let mut root_store = RootCertStore::empty();
+        root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+
+        let sig_verifier = rustls::client::WebPkiServerVerifier::builder_with_provider(
+            Arc::new(root_store),
+            provider,
+        )
+        .build()
+        .map_err(|e| BzrError::config(format!("failed to build signature verifier: {e}")))?;
+
+        Ok(Self {
+            pin_hash,
+            pin_str: pin_sha256.to_owned(),
+            pin_issuer,
+            server_name: server_name.to_owned(),
+            sig_verifier,
+        })
+    }
+}
+
+impl ServerCertVerifier for PinnedCertVerifier {
+    fn verify_server_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: UnixTime,
+    ) -> std::result::Result<ServerCertVerified, TlsError> {
+        let actual_fp = compute_fingerprint(end_entity.as_ref());
+
+        let actual_hash: [u8; 32] = parse_pin(&actual_fp)
+            .map_err(|e| TlsError::General(format!("internal fingerprint error: {e}")))?;
+
+        if actual_hash != self.pin_hash {
+            return Err(TlsError::General(format!(
+                "PIN_MISMATCH for {}: expected {}, got {}",
+                self.server_name, self.pin_str, actual_fp
+            )));
+        }
+
+        if let Some(expected_issuer) = &self.pin_issuer {
+            let actual_issuer = extract_issuer_dn(end_entity.as_ref());
+            if actual_issuer != *expected_issuer {
+                return Err(TlsError::General(format!(
+                    "ISSUER_CHANGED for {}: expected \"{}\", \
+                     got \"{}\"",
+                    self.server_name, expected_issuer, actual_issuer
+                )));
+            }
+        }
+
+        Ok(ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> std::result::Result<HandshakeSignatureValid, TlsError> {
+        self.sig_verifier.verify_tls12_signature(message, cert, dss)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> std::result::Result<HandshakeSignatureValid, TlsError> {
+        self.sig_verifier.verify_tls13_signature(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.sig_verifier.supported_verify_schemes()
+    }
+}
+
+/// Build a `rustls::ClientConfig` that trusts system roots plus any
+/// additional CA certificates from a PEM file on disk.
+pub(crate) fn build_ca_cert_config(ca_pem_path: &Path) -> Result<rustls::ClientConfig> {
+    let pem_data = std::fs::read(ca_pem_path).map_err(|e| {
+        BzrError::config(format!(
+            "failed to read CA certificate file {}: {e}",
+            ca_pem_path.display()
+        ))
+    })?;
+
+    let mut root_store = RootCertStore::empty();
+
+    // Add system roots.
+    let native_certs = rustls_native_certs::load_native_certs();
+    for cert in native_certs.certs {
+        let _ = root_store.add(cert);
+    }
+
+    // Parse and add custom CA certs from the PEM file.
+    let mut cursor = std::io::Cursor::new(&pem_data);
+    let custom_certs: Vec<_> = rustls_pemfile::certs(&mut cursor)
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| {
+            BzrError::config(format!(
+                "failed to parse PEM certificates from {}: {e}",
+                ca_pem_path.display()
+            ))
+        })?;
+
+    if custom_certs.is_empty() {
+        return Err(BzrError::config(format!(
+            "no valid PEM certificates found in {}",
+            ca_pem_path.display()
+        )));
+    }
+
+    for cert in custom_certs {
+        root_store.add(cert).map_err(|e| {
+            BzrError::config(format!(
+                "failed to add CA certificate from {}: {e}",
+                ca_pem_path.display()
+            ))
+        })?;
+    }
+
+    let provider = CryptoProvider::get_default()
+        .cloned()
+        .unwrap_or_else(|| Arc::new(rustls::crypto::ring::default_provider()));
+
+    let config = rustls::ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .map_err(|e| BzrError::config(format!("failed to configure TLS protocol versions: {e}")))?
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
+
+    Ok(config)
+}
+
+/// Build a `rustls::ClientConfig` that uses a `PinnedCertVerifier`
+/// for certificate pinning instead of CA chain validation.
+pub(crate) fn build_pinned_config(
+    pin_sha256: &str,
+    pin_issuer: Option<String>,
+    server_name: &str,
+) -> Result<rustls::ClientConfig> {
+    let verifier = PinnedCertVerifier::new(pin_sha256, pin_issuer, server_name)?;
+
+    let provider = CryptoProvider::get_default()
+        .cloned()
+        .unwrap_or_else(|| Arc::new(rustls::crypto::ring::default_provider()));
+
+    let config = rustls::ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .map_err(|e| BzrError::config(format!("failed to configure TLS protocol versions: {e}")))?
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(verifier))
+        .with_no_client_auth();
+
+    Ok(config)
+}
+
+/// Best-effort extraction of issuer information from DER-encoded
+/// certificate bytes. Returns a fallback string if parsing fails.
+pub(crate) fn extract_issuer_dn(der: &[u8]) -> String {
+    // X.509 DER structure (simplified):
+    // SEQUENCE {
+    //   SEQUENCE {                    -- TBSCertificate
+    //     [0] EXPLICIT version       -- optional
+    //     INTEGER serialNumber
+    //     SEQUENCE signature
+    //     SEQUENCE issuer            -- what we want
+    //     ...
+    //   }
+    //   ...
+    // }
+    //
+    // This is a best-effort parser that walks the outer SEQUENCE,
+    // the TBSCertificate SEQUENCE, skips version/serial/signature,
+    // and returns the raw bytes of the issuer field as a hex string.
+    // A proper ASN.1 parser will replace this later.
+    parse_issuer_from_tbs(der).unwrap_or_else(|| format!("<raw DER, {} bytes>", der.len()))
+}
+
+/// Try to extract a human-readable issuer string from DER bytes.
+/// Returns `None` if parsing fails at any point.
+fn parse_issuer_from_tbs(der: &[u8]) -> Option<String> {
+    // Parse outer SEQUENCE
+    let (_, content) = parse_der_sequence(der)?;
+    // Parse TBSCertificate SEQUENCE
+    let (_, tbs) = parse_der_sequence(content)?;
+
+    let mut pos = tbs;
+
+    // Skip optional version [0] EXPLICIT
+    if pos.first()? & 0xe0 == 0xa0 {
+        let (rest, _) = skip_der_element(pos)?;
+        pos = rest;
+    }
+
+    // Skip serialNumber (INTEGER)
+    let (rest, _) = skip_der_element(pos)?;
+    pos = rest;
+
+    // Skip signature algorithm (SEQUENCE)
+    let (rest, _) = skip_der_element(pos)?;
+    pos = rest;
+
+    // Now we're at the issuer SEQUENCE — extract its raw bytes
+    let (_, issuer_bytes) = parse_der_sequence(pos)?;
+
+    // Walk the RDN SEQUENCEs and extract OID=value pairs
+    extract_rdns(issuer_bytes)
+}
+
+/// Parse a DER SEQUENCE tag+length, returning (rest after, content).
+fn parse_der_sequence(data: &[u8]) -> Option<(&[u8], &[u8])> {
+    if data.first()? != &0x30 {
+        return None;
+    }
+    let (rest, content_len) = parse_der_length(&data[1..])?;
+    if rest.len() < content_len {
+        return None;
+    }
+    Some((&rest[content_len..], &rest[..content_len]))
+}
+
+/// Skip one DER element (tag + length + value), returning the
+/// remainder of the slice.
+fn skip_der_element(data: &[u8]) -> Option<(&[u8], &[u8])> {
+    if data.is_empty() {
+        return None;
+    }
+    let (rest, content_len) = parse_der_length(&data[1..])?;
+    if rest.len() < content_len {
+        return None;
+    }
+    Some((&rest[content_len..], &rest[..content_len]))
+}
+
+/// Parse a DER length encoding, returning (rest, length value).
+fn parse_der_length(data: &[u8]) -> Option<(&[u8], usize)> {
+    let first = *data.first()?;
+    if first < 0x80 {
+        Some((&data[1..], first as usize))
+    } else {
+        let num_bytes = (first & 0x7f) as usize;
+        if num_bytes == 0 || num_bytes > 4 || data.len() < 1 + num_bytes {
+            return None;
+        }
+        let mut len: usize = 0;
+        for &b in &data[1..=num_bytes] {
+            len = len.checked_shl(8)?.checked_add(b as usize)?;
+        }
+        Some((&data[1 + num_bytes..], len))
+    }
+}
+
+/// Walk RDN SET/SEQUENCE structures and produce "CN=foo, O=bar" style
+/// output. Falls back to hex if UTF-8 decoding fails.
+fn extract_rdns(mut data: &[u8]) -> Option<String> {
+    let mut parts = Vec::new();
+
+    while !data.is_empty() {
+        // Each RDN is a SET
+        let set_tag = *data.first()?;
+        if set_tag != 0x31 {
+            break;
+        }
+        let (rest, set_content) = skip_der_element(data)?;
+        data = rest;
+
+        // Inside the SET is a SEQUENCE of OID + value
+        if let Some((_, seq_content)) = parse_der_sequence(set_content) {
+            if let Some(part) = parse_attribute_type_and_value(seq_content) {
+                parts.push(part);
+            }
+        }
+    }
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(", "))
+    }
+}
+
+/// Parse an `AttributeTypeAndValue` (OID + string value).
+fn parse_attribute_type_and_value(data: &[u8]) -> Option<String> {
+    // OID tag = 0x06
+    if data.first()? != &0x06 {
+        return None;
+    }
+    let (rest, oid_bytes) = skip_der_element(data)?;
+    let oid_name = oid_short_name(oid_bytes);
+
+    // Value is a string type (UTF8String 0x0C, PrintableString 0x13,
+    // IA5String 0x16, etc.)
+    let (_, value_bytes) = skip_der_element(rest)?;
+    let value =
+        String::from_utf8(value_bytes.to_vec()).unwrap_or_else(|_| hex::encode(value_bytes));
+
+    Some(format!("{oid_name}={value}"))
+}
+
+/// Map common X.500 OID byte sequences to short names.
+fn oid_short_name(oid: &[u8]) -> &'static str {
+    match oid {
+        // 2.5.4.3 — CN
+        [0x55, 0x04, 0x03] => "CN",
+        // 2.5.4.6 — C
+        [0x55, 0x04, 0x06] => "C",
+        // 2.5.4.7 — L
+        [0x55, 0x04, 0x07] => "L",
+        // 2.5.4.8 — ST
+        [0x55, 0x04, 0x08] => "ST",
+        // 2.5.4.10 — O
+        [0x55, 0x04, 0x0a] => "O",
+        // 2.5.4.11 — OU
+        [0x55, 0x04, 0x0b] => "OU",
+        _ => "OID",
+    }
+}
+
+/// Simple hex encoder to avoid adding a dependency just for error
+/// messages in the DER parser fallback path.
+mod hex {
+    use std::fmt::Write as _;
+
+    pub(super) fn encode(data: &[u8]) -> String {
+        let mut s = String::with_capacity(data.len() * 2);
+        for b in data {
+            let _ = write!(s, "{b:02x}");
+        }
+        s
+    }
+}
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::tls::fingerprint::compute_fingerprint;
+
+    /// Generate a self-signed certificate using `rcgen` and return
+    /// the DER-encoded certificate bytes.
+    fn gen_self_signed_cert() -> Vec<u8> {
+        let params = rcgen::CertificateParams::new(vec!["localhost".to_owned()]).unwrap();
+        let cert = params
+            .self_signed(&rcgen::KeyPair::generate().unwrap())
+            .unwrap();
+        cert.der().to_vec()
+    }
+
+    #[test]
+    fn pinned_verifier_accepts_matching_cert() {
+        let der = gen_self_signed_cert();
+        let fp = compute_fingerprint(&der);
+
+        let verifier = PinnedCertVerifier::new(&fp, None, "localhost").unwrap();
+
+        let cert = CertificateDer::from(der);
+        let server_name = ServerName::try_from("localhost").unwrap();
+
+        let result = verifier.verify_server_cert(&cert, &[], &server_name, &[], UnixTime::now());
+
+        assert!(
+            result.is_ok(),
+            "matching pin should be accepted: {result:?}"
+        );
+    }
+
+    #[test]
+    fn pinned_verifier_rejects_mismatched_cert() {
+        // Create a verifier pinned to one cert, present a different one
+        let der1 = gen_self_signed_cert();
+        let fp1 = compute_fingerprint(&der1);
+
+        let der2 = gen_self_signed_cert();
+
+        let verifier = PinnedCertVerifier::new(&fp1, None, "localhost").unwrap();
+
+        let cert = CertificateDer::from(der2);
+        let server_name = ServerName::try_from("localhost").unwrap();
+
+        let result = verifier.verify_server_cert(&cert, &[], &server_name, &[], UnixTime::now());
+
+        assert!(result.is_err(), "mismatched pin should be rejected");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("PIN_MISMATCH"),
+            "error should contain PIN_MISMATCH: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn ca_cert_config_rejects_missing_file() {
+        let result = build_ca_cert_config(Path::new("/nonexistent/ca.pem"));
+        assert!(result.is_err(), "missing file should fail");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("failed to read"),
+            "error should mention 'failed to read': {err_msg}"
+        );
+    }
+
+    #[test]
+    fn build_pinned_config_succeeds() {
+        let der = gen_self_signed_cert();
+        let fp = compute_fingerprint(&der);
+        let result = build_pinned_config(&fp, None, "localhost");
+        assert!(
+            result.is_ok(),
+            "build_pinned_config should succeed: {result:?}"
+        );
+    }
+
+    #[test]
+    fn extract_issuer_dn_returns_fallback_for_garbage() {
+        let result = extract_issuer_dn(b"not a certificate");
+        assert!(
+            result.contains("raw DER"),
+            "garbage input should produce fallback: {result}"
+        );
+    }
+
+    #[test]
+    fn extract_issuer_dn_parses_rcgen_cert() {
+        let der = gen_self_signed_cert();
+        let issuer = extract_issuer_dn(&der);
+        // rcgen self-signed certs have CN=localhost as issuer
+        assert!(
+            issuer.contains("CN="),
+            "should extract CN from issuer: {issuer}"
+        );
+    }
+
+    #[test]
+    fn pinned_verifier_detects_issuer_change() {
+        let der = gen_self_signed_cert();
+        let fp = compute_fingerprint(&der);
+
+        let verifier =
+            PinnedCertVerifier::new(&fp, Some("CN=SomeOtherCA".to_owned()), "localhost").unwrap();
+
+        let cert = CertificateDer::from(der);
+        let server_name = ServerName::try_from("localhost").unwrap();
+
+        let result = verifier.verify_server_cert(&cert, &[], &server_name, &[], UnixTime::now());
+
+        assert!(result.is_err(), "issuer mismatch should be rejected");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("ISSUER_CHANGED"),
+            "error should contain ISSUER_CHANGED: {err_msg}"
+        );
+    }
+}

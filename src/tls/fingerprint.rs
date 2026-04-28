@@ -10,7 +10,6 @@ const PIN_PREFIX: &str = "sha256//";
 ///
 /// The input is a DER-encoded certificate (or any raw bytes). The output
 /// matches the HPKP / TLS certificate pinning pin format.
-#[cfg_attr(not(test), expect(dead_code, reason = "consumed by later TLS tasks"))]
 pub(crate) fn compute_fingerprint(der: &[u8]) -> String {
     let hash = Sha256::digest(der);
     format!("{PIN_PREFIX}{}", BASE64_STANDARD.encode(hash))
