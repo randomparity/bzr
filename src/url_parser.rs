@@ -13,19 +13,19 @@ const CREDENTIAL_PARAMS: &[&str] = &["bugzilla_api_key", "token", "api_key"];
 const IGNORED_PARAMS: &[&str] = &["columnlist", "list_id", "query_format"];
 
 /// Classification of a URL query-pair key.
-enum ParamKind<'a> {
+enum ParamKind {
     Ignored,
     KnownName,
     QueryBasedOn,
     Limit,
-    Mapped(&'a crate::types::FieldMapping),
+    Mapped(&'static crate::types::FieldMapping),
     Credential,
     Raw,
 }
 
 /// Classify a URL query-pair key into a `ParamKind`. Pure dispatch — no I/O,
 /// no allocation other than ASCII lowercasing for credential matching.
-fn classify_param(key: &str) -> ParamKind<'static> {
+fn classify_param(key: &str) -> ParamKind {
     if IGNORED_PARAMS.contains(&key) {
         return ParamKind::Ignored;
     }

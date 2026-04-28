@@ -81,12 +81,17 @@ impl PinnedCertVerifier {
 
     /// Check whether the leaf certificate's issuer matches the pinned issuer.
     /// Returns `Err(TlsError::General(..))` with an `ISSUER_CHANGED` message
-    /// when the issuer differs; `Ok(())` when no issuer pin is configured or
-    /// the pinned issuer matches.
+    /// when the issuer differs; `Ok(Some(actual_issuer))` when the legacy
+    /// string-pin branch ran (so the caller can reuse the computed string in
+    /// a `PIN_MISMATCH` error message); `Ok(None)` when no issuer pin is
+    /// configured or the DER-preferred branch ran.
     ///
     /// Prefers raw DER comparison (tamper-proof). Falls back to string
     /// comparison for legacy pins created before DER storage was added.
-    fn check_issuer_change(&self, leaf_der: &[u8]) -> std::result::Result<(), TlsError> {
+    fn check_issuer_change(
+        &self,
+        leaf_der: &[u8],
+    ) -> std::result::Result<Option<String>, TlsError> {
         if let Some(expected_der) = &self.pin_issuer_der {
             if let Some(actual_der) = extract_issuer_der(leaf_der) {
                 if *expected_der != actual_der {
@@ -99,7 +104,9 @@ impl PinnedCertVerifier {
                     )));
                 }
             }
-        } else if let Some(expected_issuer) = &self.pin_issuer {
+            return Ok(None);
+        }
+        if let Some(expected_issuer) = &self.pin_issuer {
             let actual_issuer = extract_issuer_dn(leaf_der);
             if actual_issuer != *expected_issuer {
                 return Err(TlsError::General(format!(
@@ -108,8 +115,9 @@ impl PinnedCertVerifier {
                     self.server_name, expected_issuer, actual_issuer
                 )));
             }
+            return Ok(Some(actual_issuer));
         }
-        Ok(())
+        Ok(None)
     }
 }
 
@@ -128,10 +136,10 @@ impl ServerCertVerifier for PinnedCertVerifier {
             return Ok(ServerCertVerified::assertion());
         }
 
-        self.check_issuer_change(end_entity.as_ref())?;
+        let cached_issuer = self.check_issuer_change(end_entity.as_ref())?;
 
         let actual_fp = compute_fingerprint(end_entity.as_ref());
-        let actual_issuer = extract_issuer_dn(end_entity.as_ref());
+        let actual_issuer = cached_issuer.unwrap_or_else(|| extract_issuer_dn(end_entity.as_ref()));
         Err(TlsError::General(format!(
             "PIN_MISMATCH for {}: expected {}, got {}, issuer {}",
             self.server_name, self.pin_str, actual_fp, actual_issuer
