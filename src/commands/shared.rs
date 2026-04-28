@@ -33,10 +33,40 @@ fn persist_detected_settings(
 /// Returns `true` when the error is a TLS certificate verification failure
 /// and no trust mechanism (insecure, CA cert, or pin) is already configured.
 fn should_offer_tofu(err: &BzrError, tls_config: &TlsConfig) -> bool {
-    if tls_config.insecure || tls_config.ca_cert_path.is_some() || tls_config.pin_sha256.is_some() {
+    if !tls_uses_default_trust(tls_config) {
         return false;
     }
     matches!(err, BzrError::Http(e) if crate::http::is_tls_cert_error(e))
+}
+
+/// Check whether the connection relies on the default OS trust store with
+/// no user-configured anchor (insecure flag, custom CA, or pinned cert).
+///
+/// When this returns `true`, TLS errors at first contact are eligible for
+/// the TOFU prompt; when `false`, the user has already expressed how they
+/// want the server's certificate verified and we don't override that.
+fn tls_uses_default_trust(tls_config: &TlsConfig) -> bool {
+    !tls_config.insecure && tls_config.ca_cert_path.is_none() && tls_config.pin_sha256.is_none()
+}
+
+/// Probe TLS reachability with a single HEAD against the server URL.
+///
+/// Used on the cached connection path to surface certificate-verification
+/// errors at connect time instead of deferring them to the first real API
+/// call. The probe uses the user's configured `TlsConfig` (default trust
+/// store, custom CA, or pin) so any handshake failure mirrors what the
+/// real request would see.
+///
+/// HTTP-level responses (any status) are reported as `Ok(())` — the goal
+/// is purely to surface transport errors. Network/transport failures are
+/// returned as the original `BzrError::Http` so callers can classify them
+/// (TLS cert error, pin mismatch, etc.).
+async fn probe_tls(url: &str, tls_config: &TlsConfig) -> Result<()> {
+    let client = crate::tls::build_tls_client(tls_config)?;
+    match client.head(url).send().await {
+        Ok(_) => Ok(()),
+        Err(e) => Err(BzrError::Http(e)),
+    }
 }
 
 /// Check if a reqwest error contains a `PIN_MISMATCH` from the pinned verifier.
@@ -319,7 +349,34 @@ pub async fn connect_and_configure(
 
     // Three cases: fully cached, partially cached (auth only), or uncached.
     let (auth, resolved_mode) = match (srv.auth_method, srv.api_mode) {
-        (Some(method), Some(mode)) => (method, mode),
+        (Some(method), Some(mode)) => {
+            // Even with full cache, surface TLS errors at connect-time so
+            // the TOFU/rotation prompts can fire. Skipped when the user
+            // has already configured a trust mechanism (insecure / CA /
+            // pin) — in those cases either no verification happens or
+            // mismatches surface through the existing pinned-verifier
+            // error path.
+            if tls_uses_default_trust(&tls_config) {
+                if let Err(e) = probe_tls(&url, &tls_config).await {
+                    if should_offer_tofu(&e, &tls_config) {
+                        let client = handle_tofu(
+                            &server_name,
+                            &url,
+                            &api_key,
+                            email.as_deref(),
+                            api_override,
+                            &mut config,
+                        )
+                        .await?;
+                        return Ok(client);
+                    }
+                    // Non-TLS transport errors don't block: the actual
+                    // command will hit the same condition and report it
+                    // with full request context.
+                }
+            }
+            (method, mode)
+        }
         (Some(method), None) => {
             tracing::debug!("auth_method cached but api_mode missing; re-detecting");
             match detect_with_tofu_fallback(
