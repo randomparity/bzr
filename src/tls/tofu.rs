@@ -317,10 +317,26 @@ mod tests {
         assert!(!parse_yes_no("anything"));
     }
 
-    /// Construct a minimal `DigitallySignedStruct` for testing the
-    /// signature verifier delegate methods. The constructor is
-    /// `pub(crate)` upstream, so we round-trip through `Codec`. The
-    /// wire format is: 2-byte scheme (big-endian) + 2-byte length + sig.
+    /// Construct a `DigitallySignedStruct` for tests covering `CertCapture`'s
+    /// `verify_tls12_signature` and `verify_tls13_signature` trait methods.
+    ///
+    /// `DigitallySignedStruct::new` is `pub(crate)` in rustls, so there is no
+    /// stable public constructor. The only way to build one in an external crate
+    /// without a live TLS handshake is via the wire-format codec — exposed only
+    /// through `rustls::internal::msgs::codec::Codec`, which rustls explicitly
+    /// marks `#[doc(hidden)]` and "DO NOT form part of the stable interface."
+    ///
+    /// **Risk-vs-reward:** the two methods we cover are one-line delegates that
+    /// return `Ok(HandshakeSignatureValid::assertion())` — they cannot be wrong.
+    /// Without these tests, `tofu.rs` line coverage drops to ~82.5%, below the
+    /// project's 85% per-file floor; the remaining gaps (interactive stdin in
+    /// `prompt_tofu`/`prompt_rotation`, the post-handshake success path in
+    /// `probe_server_cert`) require infrastructure this project doesn't have.
+    ///
+    /// If a future rustls upgrade reorganizes `internal::msgs::codec`, CI will
+    /// break loudly. The right response is to delete this helper and the two
+    /// `cert_capture_verify_*` tests, and accept the lower `tofu.rs` coverage
+    /// with a documented exception in the `SonarCloud` gate config.
     fn dummy_dss() -> DigitallySignedStruct {
         use rustls::internal::msgs::codec::Codec;
         // ED25519 (0x0807) with empty signature.
