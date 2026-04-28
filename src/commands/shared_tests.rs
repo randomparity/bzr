@@ -691,9 +691,10 @@ fn tls_uses_default_trust_false_when_pin_set() {
     assert!(!super::tls_uses_default_trust(&tls));
 }
 
-/// Cached-path connect should probe TLS via a HEAD request when no trust
-/// mechanism is configured, so TLS cert errors surface at connect-time
-/// rather than being deferred to the first real API call.
+/// Cached-path connect should probe TLS via a HEAD request whenever
+/// verification is enabled, so TLS cert errors (TOFU, pin mismatch,
+/// issuer change) surface at connect-time rather than being deferred to
+/// the first real API call.
 #[tokio::test]
 async fn cached_path_probes_tls_when_default_trust() {
     let _lock = ENV_LOCK.lock().await;
@@ -723,9 +724,39 @@ async fn cached_path_probes_tls_when_default_trust() {
     // Mock expectation verified on drop.
 }
 
-/// Cached-path connect should NOT probe when a trust mechanism (pin, CA,
-/// or insecure) is configured — those cases either pin to an explicit
-/// fingerprint (rotation handled separately) or bypass verification.
+/// Pinned cached path must also probe — without this, a rotated cert
+/// would only surface lazily from the first real API call, bypassing
+/// the rotation prompt.
+#[tokio::test]
+async fn cached_path_probes_tls_when_pinned() {
+    let _lock = ENV_LOCK.lock().await;
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    // Cached config with a pinned fingerprint. Wiremock is HTTP, so the
+    // pinned verifier is never invoked; the probe HEAD reaches the
+    // server normally and returns 404.
+    write_config(
+        &tmp,
+        &mock.uri(),
+        "auth_method = \"header\"\napi_mode = \"rest\"\n\
+         tls_pin_sha256 = \"sha256//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\"",
+    );
+
+    Mock::given(method("HEAD"))
+        .respond_with(ResponseTemplate::new(404))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let result = super::connect_and_configure(None, None).await;
+    assert!(
+        result.is_ok(),
+        "cached path with pinned cert should still succeed after probe"
+    );
+}
+
+/// Cached-path connect should NOT probe when verification is explicitly
+/// disabled — there is no TLS error class to surface in that mode.
 #[tokio::test]
 async fn cached_path_skips_probe_when_insecure() {
     let _lock = ENV_LOCK.lock().await;
@@ -737,8 +768,7 @@ async fn cached_path_skips_probe_when_insecure() {
         "auth_method = \"header\"\napi_mode = \"rest\"\ntls_insecure = true",
     );
 
-    // Assert HEAD never reaches the server when trust is explicitly
-    // configured (here, insecure).
+    // Assert HEAD never reaches the server when verification is off.
     Mock::given(method("HEAD"))
         .respond_with(ResponseTemplate::new(200))
         .expect(0)
@@ -748,6 +778,6 @@ async fn cached_path_skips_probe_when_insecure() {
     let result = super::connect_and_configure(None, None).await;
     assert!(
         result.is_ok(),
-        "cached path with explicit trust should skip probe"
+        "cached path with insecure flag should skip probe"
     );
 }
