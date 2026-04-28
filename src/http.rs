@@ -57,14 +57,23 @@ pub(crate) fn apply_auth(
 /// When `tls_insecure` is true, the client accepts any TLS certificate
 /// (self-signed, expired, wrong hostname). A warning is emitted at the
 /// call site to make this visible to the user.
+#[expect(
+    clippy::panic_in_result_fn,
+    clippy::panic,
+    reason = "build_tls_client with default TlsConfig only emits BzrError::Http; \
+              other variants are structurally impossible here"
+)]
 pub(crate) fn build_http_client(
     tls_insecure: bool,
 ) -> std::result::Result<reqwest::Client, reqwest::Error> {
-    reqwest::Client::builder()
-        .connect_timeout(CONNECT_TIMEOUT)
-        .timeout(REQUEST_TIMEOUT)
-        .danger_accept_invalid_certs(tls_insecure)
-        .build()
+    let config = crate::tls::TlsConfig {
+        insecure: tls_insecure,
+        ..Default::default()
+    };
+    crate::tls::build_tls_client(&config).map_err(|e| match e {
+        crate::error::BzrError::Http(reqwest_err) => reqwest_err,
+        other => panic!("unexpected error from build_tls_client: {other}"),
+    })
 }
 
 /// Check if an error message string contains TLS-related keywords.
