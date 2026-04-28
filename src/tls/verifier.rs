@@ -225,16 +225,14 @@ pub(crate) fn build_pinned_config(
     Ok(config)
 }
 
-/// Extract the raw DER bytes of the issuer SEQUENCE (tag + length +
-/// content) from a DER-encoded X.509 certificate.
-///
-/// Returns `None` if the certificate cannot be parsed far enough.
-pub(crate) fn extract_issuer_der(cert_der: &[u8]) -> Option<Vec<u8>> {
+/// Navigate to the start of the issuer field within a DER-encoded
+/// X.509 certificate, returning the remaining bytes starting at the
+/// issuer SEQUENCE. Shared by both `extract_issuer_der` and
+/// `extract_issuer_dn`.
+fn navigate_to_issuer(cert_der: &[u8]) -> Option<&[u8]> {
     let (_, content) = parse_der_sequence(cert_der)?;
     let (_, tbs) = parse_der_sequence(content)?;
-
     let mut pos = tbs;
-
     // Skip optional version [0] EXPLICIT
     if pos.first()? & 0xe0 == 0xa0 {
         let (rest, _) = skip_der_element(pos)?;
@@ -245,8 +243,13 @@ pub(crate) fn extract_issuer_der(cert_der: &[u8]) -> Option<Vec<u8>> {
     pos = rest;
     // Skip signature AlgorithmIdentifier SEQUENCE
     let (rest, _) = skip_der_element(pos)?;
-    pos = rest;
-    // Now pos points to the issuer SEQUENCE — capture the entire TLV
+    Some(rest)
+}
+
+/// Extract the raw DER bytes of the issuer SEQUENCE (tag + length +
+/// content) from a DER-encoded X.509 certificate.
+pub(crate) fn extract_issuer_der(cert_der: &[u8]) -> Option<Vec<u8>> {
+    let pos = navigate_to_issuer(cert_der)?;
     let (rest_after_issuer, _) = skip_der_element(pos)?;
     let issuer_len = pos.len() - rest_after_issuer.len();
     Some(pos[..issuer_len].to_vec())
@@ -277,28 +280,7 @@ pub(crate) fn extract_issuer_dn(der: &[u8]) -> String {
 /// Try to extract a human-readable issuer string from DER bytes.
 /// Returns `None` if parsing fails at any point.
 fn parse_issuer_from_tbs(der: &[u8]) -> Option<String> {
-    // Parse outer SEQUENCE
-    let (_, content) = parse_der_sequence(der)?;
-    // Parse TBSCertificate SEQUENCE
-    let (_, tbs) = parse_der_sequence(content)?;
-
-    let mut pos = tbs;
-
-    // Skip optional version [0] EXPLICIT
-    if pos.first()? & 0xe0 == 0xa0 {
-        let (rest, _) = skip_der_element(pos)?;
-        pos = rest;
-    }
-
-    // Skip serialNumber (INTEGER)
-    let (rest, _) = skip_der_element(pos)?;
-    pos = rest;
-
-    // Skip signature algorithm (SEQUENCE)
-    let (rest, _) = skip_der_element(pos)?;
-    pos = rest;
-
-    // Now we're at the issuer SEQUENCE — extract its raw bytes
+    let pos = navigate_to_issuer(der)?;
     let (_, issuer_bytes) = parse_der_sequence(pos)?;
 
     // Walk the RDN SEQUENCEs and extract OID=value pairs
