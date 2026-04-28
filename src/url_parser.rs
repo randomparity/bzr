@@ -12,6 +12,38 @@ const CREDENTIAL_PARAMS: &[&str] = &["bugzilla_api_key", "token", "api_key"];
 /// Parameters ignored during URL parsing (display/session metadata).
 const IGNORED_PARAMS: &[&str] = &["columnlist", "list_id", "query_format"];
 
+/// Classification of a URL query-pair key.
+enum ParamKind<'a> {
+    Ignored,
+    KnownName,
+    QueryBasedOn,
+    Limit,
+    Mapped(&'a crate::types::FieldMapping),
+    Credential,
+    Raw,
+}
+
+/// Classify a URL query-pair key into a `ParamKind`. Pure dispatch — no I/O,
+/// no allocation other than ASCII lowercasing for credential matching.
+fn classify_param(key: &str) -> ParamKind<'static> {
+    if IGNORED_PARAMS.contains(&key) {
+        return ParamKind::Ignored;
+    }
+    match key {
+        "known_name" => return ParamKind::KnownName,
+        "query_based_on" => return ParamKind::QueryBasedOn,
+        "limit" => return ParamKind::Limit,
+        _ => {}
+    }
+    if let Some(mapping) = FIELD_MAPPINGS.iter().find(|m| m.url_param == key) {
+        return ParamKind::Mapped(mapping);
+    }
+    if CREDENTIAL_PARAMS.contains(&key.to_ascii_lowercase().as_str()) {
+        return ParamKind::Credential;
+    }
+    ParamKind::Raw
+}
+
 /// Result of parsing a Bugzilla URL.
 #[derive(Debug)]
 pub struct ParsedUrl {
@@ -112,54 +144,41 @@ pub fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<ParsedUrl> {
         let key = key.as_ref();
         let value = value.as_ref();
 
-        if IGNORED_PARAMS.contains(&key) {
-            continue;
-        }
-
-        if key == "known_name" {
-            let trimmed = value.trim();
-            if !trimmed.is_empty() {
-                known_name = Some(trimmed.to_string());
+        match classify_param(key) {
+            ParamKind::Ignored => {}
+            ParamKind::KnownName => {
+                let trimmed = value.trim();
+                if !trimmed.is_empty() {
+                    known_name = Some(trimmed.to_string());
+                }
             }
-            continue;
-        }
-
-        if key == "query_based_on" {
-            let trimmed = value.trim();
-            if !trimmed.is_empty() {
-                query_based_on = Some(trimmed.to_string());
+            ParamKind::QueryBasedOn => {
+                let trimmed = value.trim();
+                if !trimmed.is_empty() {
+                    query_based_on = Some(trimmed.to_string());
+                }
             }
-            continue;
-        }
-
-        if key == "limit" {
-            if let Ok(n) = value.parse::<u32>() {
-                query.limit = Some(n);
+            ParamKind::Limit => {
+                if let Ok(n) = value.parse::<u32>() {
+                    query.limit = Some(n);
+                }
             }
-            continue;
+            ParamKind::Mapped(mapping) => {
+                let Some(target) = query.get_field_mut(mapping.struct_field) else {
+                    unreachable!(
+                        "FIELD_MAPPINGS struct_field '{}' missing from get_field_mut",
+                        mapping.struct_field
+                    );
+                };
+                target.push(value.to_string());
+            }
+            ParamKind::Credential => {
+                tracing::warn!("stripping credential parameter '{key}' from URL");
+            }
+            ParamKind::Raw => {
+                query.raw_params.push((key.to_string(), value.to_string()));
+            }
         }
-
-        // Recognized vec fields — map Bugzilla URL param names to SavedQuery fields.
-        // get_field_mut is guaranteed to return Some for any struct_field in
-        // FIELD_MAPPINGS — a None here means the two tables are out of sync.
-        if let Some(mapping) = FIELD_MAPPINGS.iter().find(|m| m.url_param == key) {
-            let Some(target) = query.get_field_mut(mapping.struct_field) else {
-                unreachable!(
-                    "FIELD_MAPPINGS struct_field '{}' missing from get_field_mut",
-                    mapping.struct_field
-                );
-            };
-            target.push(value.to_string());
-            continue;
-        }
-
-        // Strip credential params — never store or forward these
-        if CREDENTIAL_PARAMS.contains(&key.to_ascii_lowercase().as_str()) {
-            tracing::warn!("stripping credential parameter '{key}' from URL");
-            continue;
-        }
-
-        query.raw_params.push((key.to_string(), value.to_string()));
     }
 
     Ok(ParsedUrl {
@@ -214,6 +233,27 @@ mod tests {
             templates: HashMap::new(),
             queries: HashMap::new(),
         }
+    }
+
+    #[test]
+    fn classify_param_kinds() {
+        assert!(matches!(classify_param("columnlist"), ParamKind::Ignored));
+        assert!(matches!(classify_param("known_name"), ParamKind::KnownName));
+        assert!(matches!(
+            classify_param("query_based_on"),
+            ParamKind::QueryBasedOn
+        ));
+        assert!(matches!(classify_param("limit"), ParamKind::Limit));
+        assert!(matches!(classify_param("product"), ParamKind::Mapped(_)));
+        assert!(matches!(
+            classify_param("Bugzilla_api_key"),
+            ParamKind::Credential
+        ));
+        assert!(matches!(classify_param("token"), ParamKind::Credential));
+        assert!(matches!(
+            classify_param("nonexistent_field"),
+            ParamKind::Raw
+        ));
     }
 
     /// Parse a buglist.cgi URL with the standard test config (bugzilla.example.com).
