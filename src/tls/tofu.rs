@@ -81,10 +81,15 @@ pub(crate) async fn probe_server_cert(url: &str) -> Result<(String, String, Opti
         .with_custom_certificate_verifier(capture.clone())
         .with_no_client_auth();
 
+    // Redirects are disabled: the captured certificate must belong to
+    // the configured URL itself. Following a 301/302 off-host would
+    // record a different server's cert and the subsequent prompt would
+    // describe one endpoint while pinning another.
     let client = reqwest::Client::builder()
         .use_preconfigured_tls(tls_config)
         .connect_timeout(crate::http::CONNECT_TIMEOUT)
         .timeout(crate::http::REQUEST_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| BzrError::config(format!("failed to build TLS probe client: {e}")))?;
 

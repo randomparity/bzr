@@ -33,10 +33,45 @@ fn persist_detected_settings(
 /// Returns `true` when the error is a TLS certificate verification failure
 /// and no trust mechanism (insecure, CA cert, or pin) is already configured.
 fn should_offer_tofu(err: &BzrError, tls_config: &TlsConfig) -> bool {
-    if tls_config.insecure || tls_config.ca_cert_path.is_some() || tls_config.pin_sha256.is_some() {
+    if !tls_uses_default_trust(tls_config) {
         return false;
     }
     matches!(err, BzrError::Http(e) if crate::http::is_tls_cert_error(e))
+}
+
+/// Check whether the connection relies on the default OS trust store with
+/// no user-configured anchor (insecure flag, custom CA, or pinned cert).
+///
+/// When this returns `true`, TLS errors at first contact are eligible for
+/// the TOFU prompt; when `false`, the user has already expressed how they
+/// want the server's certificate verified and we don't override that.
+fn tls_uses_default_trust(tls_config: &TlsConfig) -> bool {
+    !tls_config.insecure && tls_config.ca_cert_path.is_none() && tls_config.pin_sha256.is_none()
+}
+
+/// Probe TLS reachability with a single HEAD against the server URL.
+///
+/// Used on the cached connection path to surface certificate-verification
+/// errors at connect time instead of deferring them to the first real API
+/// call. The probe uses the user's configured `TlsConfig` (default trust
+/// store, custom CA, or pin) so any handshake failure mirrors what the
+/// real request would see.
+///
+/// Redirects are not followed: the probe must validate only the
+/// certificate presented by the configured URL itself, otherwise a 301
+/// to a different host would lead the prompt to describe one endpoint
+/// while pinning (or PIN_MISMATCH-rotating against) another.
+///
+/// HTTP-level responses (any status) are reported as `Ok(())` — the goal
+/// is purely to surface transport errors. Network/transport failures are
+/// returned as the original `BzrError::Http` so callers can classify them
+/// (TLS cert error, pin mismatch, etc.).
+async fn probe_tls(url: &str, tls_config: &TlsConfig) -> Result<()> {
+    let client = crate::tls::build_probe_client(tls_config)?;
+    match client.head(url).send().await {
+        Ok(_) => Ok(()),
+        Err(e) => Err(BzrError::Http(e)),
+    }
 }
 
 /// Check if a reqwest error contains a `PIN_MISMATCH` from the pinned verifier.
@@ -230,6 +265,63 @@ async fn detect_and_build_client(
     )
 }
 
+/// Classify a TLS-layer failure and dispatch to the appropriate prompt.
+///
+/// Returns:
+/// - `Ok(Some(client))` — TOFU or rotation fired and produced a client.
+/// - `Ok(None)` — the error is not a TLS verification failure; caller
+///   should propagate the original error (or, on the probe path, ignore
+///   it and let the actual command surface it with full context).
+/// - `Err(_)` — issuer changed (treated as a hard failure with a clear
+///   remediation hint), or a downstream prompt/probe error.
+#[expect(clippy::too_many_arguments, reason = "private orchestration fn")]
+async fn classify_and_handle_tls_failure(
+    err: &BzrError,
+    server_name: &str,
+    url: &str,
+    api_key: &str,
+    email: Option<&str>,
+    api_override: Option<ApiMode>,
+    tls_config: &TlsConfig,
+    config: &mut Config,
+) -> Result<Option<BugzillaClient>> {
+    if should_offer_tofu(err, tls_config) {
+        let client = handle_tofu(server_name, url, api_key, email, api_override, config).await?;
+        return Ok(Some(client));
+    }
+    if is_pin_mismatch(err) {
+        let old_pin = tls_config.pin_sha256.as_deref().unwrap_or("<unknown>");
+        let chain = match err {
+            BzrError::Http(re) => crate::error::format_error_chain(re),
+            _ => String::new(),
+        };
+        let (new_fp, new_issuer) = parse_pin_mismatch_details(&chain)
+            .unwrap_or_else(|| ("<unknown>".to_string(), "<unknown>".to_string()));
+        let client = handle_pin_rotation(
+            server_name,
+            url,
+            api_key,
+            email,
+            api_override,
+            old_pin,
+            &new_fp,
+            &new_issuer,
+            config,
+        )
+        .await?;
+        return Ok(Some(client));
+    }
+    if is_issuer_changed(err) {
+        return Err(BzrError::config(format!(
+            "TLS certificate issuer changed for server \"{server_name}\" \
+                 — this could indicate a MITM attack.\n  \
+                 If this is expected, clear the pin and re-connect:\n    \
+                 bzr config set-server {server_name} --tls-pin-clear"
+        )));
+    }
+    Ok(None)
+}
+
 /// Run `detect_server_settings` and handle TLS errors with TOFU or
 /// pin rotation flows as appropriate.
 async fn detect_with_tofu_fallback(
@@ -241,44 +333,24 @@ async fn detect_with_tofu_fallback(
     tls_config: &TlsConfig,
     config: &mut Config,
 ) -> Result<DetectOrClient> {
-    let result = crate::client::detect_server_settings(url, api_key, email, tls_config).await;
-
-    match result {
-        Ok(settings) => Ok(DetectOrClient::Settings(settings)),
-        Err(ref e) if should_offer_tofu(e, tls_config) => {
-            let client =
-                handle_tofu(server_name, url, api_key, email, api_override, config).await?;
-            Ok(DetectOrClient::Client(client))
-        }
-        Err(ref e) if is_pin_mismatch(e) => {
-            let old_pin = tls_config.pin_sha256.as_deref().unwrap_or("<unknown>");
-            let chain = match e {
-                BzrError::Http(re) => crate::error::format_error_chain(re),
-                _ => String::new(),
-            };
-            let (new_fp, new_issuer) = parse_pin_mismatch_details(&chain)
-                .unwrap_or_else(|| ("<unknown>".to_string(), "<unknown>".to_string()));
-            let client = handle_pin_rotation(
-                server_name,
-                url,
-                api_key,
-                email,
-                api_override,
-                old_pin,
-                &new_fp,
-                &new_issuer,
-                config,
-            )
-            .await?;
-            Ok(DetectOrClient::Client(client))
-        }
-        Err(ref e) if is_issuer_changed(e) => Err(BzrError::config(format!(
-            "TLS certificate issuer changed for server \"{server_name}\" \
-                 — this could indicate a MITM attack.\n  \
-                 If this is expected, clear the pin and re-connect:\n    \
-                 bzr config set-server {server_name} --tls-pin-clear"
-        ))),
-        Err(e) => Err(e),
+    let err = match crate::client::detect_server_settings(url, api_key, email, tls_config).await {
+        Ok(settings) => return Ok(DetectOrClient::Settings(settings)),
+        Err(e) => e,
+    };
+    match classify_and_handle_tls_failure(
+        &err,
+        server_name,
+        url,
+        api_key,
+        email,
+        api_override,
+        tls_config,
+        config,
+    )
+    .await?
+    {
+        Some(client) => Ok(DetectOrClient::Client(client)),
+        None => Err(err),
     }
 }
 
@@ -319,7 +391,36 @@ pub async fn connect_and_configure(
 
     // Three cases: fully cached, partially cached (auth only), or uncached.
     let (auth, resolved_mode) = match (srv.auth_method, srv.api_mode) {
-        (Some(method), Some(mode)) => (method, mode),
+        (Some(method), Some(mode)) => {
+            // Even with full cache, surface TLS errors at connect-time so
+            // TOFU and pin-rotation prompts can fire. Skipped only when
+            // verification is explicitly disabled (`tls_insecure`); for
+            // pinned servers and custom-CA servers we still probe so a
+            // rotated cert / issuer change is caught here rather than at
+            // the first real API call.
+            if !tls_config.insecure {
+                if let Err(e) = probe_tls(&url, &tls_config).await {
+                    if let Some(client) = classify_and_handle_tls_failure(
+                        &e,
+                        &server_name,
+                        &url,
+                        &api_key,
+                        email.as_deref(),
+                        api_override,
+                        &tls_config,
+                        &mut config,
+                    )
+                    .await?
+                    {
+                        return Ok(client);
+                    }
+                    // Non-TLS transport errors don't block: the actual
+                    // command will hit the same condition and report it
+                    // with full request context.
+                }
+            }
+            (method, mode)
+        }
         (Some(method), None) => {
             tracing::debug!("auth_method cached but api_mode missing; re-detecting");
             match detect_with_tofu_fallback(

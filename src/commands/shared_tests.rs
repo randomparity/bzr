@@ -658,3 +658,245 @@ fn parse_pin_mismatch_handles_marker_at_start() {
     assert_eq!(fp, "new");
     assert_eq!(issuer, "CN=X");
 }
+
+#[test]
+fn tls_uses_default_trust_true_for_default_config() {
+    assert!(super::tls_uses_default_trust(&TlsConfig::default()));
+}
+
+#[test]
+fn tls_uses_default_trust_false_when_insecure() {
+    let tls = TlsConfig {
+        insecure: true,
+        ..Default::default()
+    };
+    assert!(!super::tls_uses_default_trust(&tls));
+}
+
+#[test]
+fn tls_uses_default_trust_false_when_ca_cert_set() {
+    let tls = TlsConfig {
+        ca_cert_path: Some("/path/to/ca.pem".into()),
+        ..Default::default()
+    };
+    assert!(!super::tls_uses_default_trust(&tls));
+}
+
+#[test]
+fn tls_uses_default_trust_false_when_pin_set() {
+    let tls = TlsConfig {
+        pin_sha256: Some("sha256//AAAA".into()),
+        ..Default::default()
+    };
+    assert!(!super::tls_uses_default_trust(&tls));
+}
+
+/// Cached-path connect should probe TLS via a HEAD request whenever
+/// verification is enabled, so TLS cert errors (TOFU, pin mismatch,
+/// issuer change) surface at connect-time rather than being deferred to
+/// the first real API call.
+#[tokio::test]
+async fn cached_path_probes_tls_when_default_trust() {
+    let _lock = ENV_LOCK.lock().await;
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    write_config(
+        &tmp,
+        &mock.uri(),
+        "auth_method = \"header\"\napi_mode = \"rest\"",
+    );
+
+    // The probe sends a HEAD to the server URL. Wiremock returns 404 for
+    // unmounted paths; the probe treats any non-transport error response
+    // as "TLS handshake completed, no error to surface." We mount an
+    // explicit expectation here to assert the probe actually fires.
+    Mock::given(method("HEAD"))
+        .respond_with(ResponseTemplate::new(404))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let result = super::connect_and_configure(None, None).await;
+    assert!(
+        result.is_ok(),
+        "cached path with default trust should still succeed after probe"
+    );
+    // Mock expectation verified on drop.
+}
+
+/// Pinned cached path must also probe — without this, a rotated cert
+/// would only surface lazily from the first real API call, bypassing
+/// the rotation prompt.
+#[tokio::test]
+async fn cached_path_probes_tls_when_pinned() {
+    let _lock = ENV_LOCK.lock().await;
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    // Cached config with a pinned fingerprint. Wiremock is HTTP, so the
+    // pinned verifier is never invoked; the probe HEAD reaches the
+    // server normally and returns 404.
+    write_config(
+        &tmp,
+        &mock.uri(),
+        "auth_method = \"header\"\napi_mode = \"rest\"\n\
+         tls_pin_sha256 = \"sha256//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\"",
+    );
+
+    Mock::given(method("HEAD"))
+        .respond_with(ResponseTemplate::new(404))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let result = super::connect_and_configure(None, None).await;
+    assert!(
+        result.is_ok(),
+        "cached path with pinned cert should still succeed after probe"
+    );
+}
+
+/// The probe must not follow HTTP redirects. If it did, a 301/302 from
+/// the configured server URL to a different host would pin (or
+/// `PIN_MISMATCH` against) the redirect target's certificate — i.e., the
+/// prompt would describe one endpoint while validating another.
+#[tokio::test]
+async fn cached_path_probe_does_not_follow_redirects() {
+    let _lock = ENV_LOCK.lock().await;
+    let primary = MockServer::start().await;
+    let secondary = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    write_config(
+        &tmp,
+        &primary.uri(),
+        "auth_method = \"header\"\napi_mode = \"rest\"",
+    );
+
+    // Primary: 301 -> secondary URI. Secondary: any HEAD must NOT be
+    // received (probe should treat the 301 as a completed handshake and
+    // stop there).
+    Mock::given(method("HEAD"))
+        .respond_with(
+            ResponseTemplate::new(301).insert_header("Location", secondary.uri().as_str()),
+        )
+        .expect(1)
+        .mount(&primary)
+        .await;
+    Mock::given(method("HEAD"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&secondary)
+        .await;
+
+    let result = super::connect_and_configure(None, None).await;
+    assert!(
+        result.is_ok(),
+        "probe should treat 301 as connect-success and not chase redirects"
+    );
+    // Secondary's expect(0) verified on drop — no hit means no redirect followed.
+}
+
+/// `classify_and_handle_tls_failure` must silently pass through non-TLS
+/// transport errors so the cached-path probe doesn't block on transient
+/// network issues. The actual command will surface the same error with
+/// full request context.
+#[tokio::test]
+async fn classify_and_handle_tls_failure_returns_none_for_non_tls_error() {
+    // Build a real reqwest::Error from a connection failure — error
+    // chain contains no TLS markers, so all three predicates miss.
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_millis(50))
+        .build()
+        .unwrap();
+    let err = client
+        .get("http://127.0.0.1:1/unreachable")
+        .send()
+        .await
+        .unwrap_err();
+    let bzr_err = BzrError::Http(err);
+
+    let mut config = crate::config::Config::default();
+    let tls_config = TlsConfig::default();
+    let result = super::classify_and_handle_tls_failure(
+        &bzr_err,
+        "test",
+        "http://127.0.0.1:1/unreachable",
+        "key",
+        None,
+        None,
+        &tls_config,
+        &mut config,
+    )
+    .await;
+    match result {
+        Ok(None) => {}
+        Ok(Some(_)) => panic!("expected Ok(None) for non-TLS error, got Some(client)"),
+        Err(e) => panic!("expected Ok(None) for non-TLS error, got Err: {e}"),
+    }
+}
+
+/// `probe_tls` must return `Err` (wrapped in `BzrError::Http`) when the
+/// underlying request fails on transport. The cached-path branch then
+/// delegates to `classify_and_handle_tls_failure`, which for non-TLS
+/// errors returns `Ok(None)` and the cached values flow through.
+#[tokio::test]
+async fn probe_tls_returns_err_on_unreachable_address() {
+    let tls_config = TlsConfig::default();
+    let result = super::probe_tls("http://127.0.0.1:1/unreachable", &tls_config).await;
+    match result {
+        Err(BzrError::Http(_)) => {}
+        Err(other) => panic!("expected Http error, got {other:?}"),
+        Ok(()) => panic!("expected probe to fail against unreachable address"),
+    }
+}
+
+/// Cached-path with default trust where the probe fails on a non-TLS
+/// transport error: the connect call should still succeed (returning
+/// the cached client) because non-TLS probe failures are silent.
+#[tokio::test]
+async fn cached_path_proceeds_when_probe_fails_on_non_tls_error() {
+    let _lock = ENV_LOCK.lock().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    // Point the configured server at an unreachable port so probe_tls
+    // returns Err with a non-TLS connection error. classify_and_handle
+    // _tls_failure should return Ok(None) for that, and the cached
+    // path should fall through to building the client with cached
+    // settings.
+    write_config(
+        &tmp,
+        "http://127.0.0.1:1",
+        "auth_method = \"header\"\napi_mode = \"rest\"",
+    );
+
+    let result = super::connect_and_configure(None, None).await;
+    assert!(
+        result.is_ok(),
+        "non-TLS probe failures must not block the cached path"
+    );
+}
+
+/// Cached-path connect should NOT probe when verification is explicitly
+/// disabled — there is no TLS error class to surface in that mode.
+#[tokio::test]
+async fn cached_path_skips_probe_when_insecure() {
+    let _lock = ENV_LOCK.lock().await;
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    write_config(
+        &tmp,
+        &mock.uri(),
+        "auth_method = \"header\"\napi_mode = \"rest\"\ntls_insecure = true",
+    );
+
+    // Assert HEAD never reaches the server when verification is off.
+    Mock::given(method("HEAD"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let result = super::connect_and_configure(None, None).await;
+    assert!(
+        result.is_ok(),
+        "cached path with insecure flag should skip probe"
+    );
+}
