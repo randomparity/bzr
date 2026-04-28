@@ -28,8 +28,35 @@ pub enum ConfigAction {
         #[arg(long)]
         auth_method: Option<AuthMethod>,
         /// Accept invalid TLS certificates (self-signed, expired, wrong host)
-        #[arg(long)]
+        #[arg(
+            long,
+            conflicts_with_all = ["tls_ca_cert", "tls_pin_sha256", "tls_pin_now"],
+        )]
         tls_insecure: bool,
+        /// Path to a PEM CA certificate file for this server
+        #[arg(
+            long,
+            conflicts_with_all = ["tls_insecure", "tls_pin_sha256", "tls_pin_now"],
+        )]
+        tls_ca_cert: Option<String>,
+        /// Pin a certificate fingerprint (sha256//<base64> format)
+        #[arg(
+            long,
+            conflicts_with_all = ["tls_insecure", "tls_ca_cert", "tls_pin_now", "tls_pin_clear"],
+        )]
+        tls_pin_sha256: Option<String>,
+        /// Connect to server and pin its current certificate
+        #[arg(
+            long,
+            conflicts_with_all = ["tls_insecure", "tls_ca_cert", "tls_pin_sha256", "tls_pin_clear"],
+        )]
+        tls_pin_now: bool,
+        /// Remove a stored certificate pin
+        #[arg(
+            long,
+            conflicts_with_all = ["tls_pin_sha256", "tls_pin_now"],
+        )]
+        tls_pin_clear: bool,
     },
     /// Set the default server
     SetDefault {
