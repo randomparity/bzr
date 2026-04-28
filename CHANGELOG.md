@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0-rc1] - 2026-04-28
+
+### Added
+
+- TLS certificate pinning with trust-on-first-use (TOFU) prompt flow.
+  New CLI flags on `bzr config set-server`: `--tls-ca-cert <path>` to pin
+  a CA certificate, `--tls-pin-sha256 <hex>` to pin a leaf SPKI
+  fingerprint, `--tls-pin-now` to probe the server and prompt before
+  storing the observed pin, and `--tls-pin-clear` to remove an existing
+  pin.
+- Per-server config fields `tls_ca_cert`, `tls_pin_sha256`,
+  `tls_pin_issuer` persisted in `~/.config/bzr/config.toml`.
+- New error variants `PinMismatch` and `IssuerChanged` with distinct
+  exit codes and actionable hints (`--tls-pin-now`, `--tls-ca-cert`).
+- `bzr config show` displays configured CA cert path and pin fingerprint
+  for each server.
+
+### Changed
+
+- Internal: migrated PEM parsing from `rustls-pemfile` to
+  `rustls-pki-types` `PemObject` API. No user-visible change.
+- Internal: `commands/bug.rs` split into per-action submodules;
+  `xmlrpc/mod.rs` split into `call`, `fault`, `parsing`. No public API
+  change.
+- Internal: test modules moved to sibling `_tests.rs` files for
+  SonarCloud copy-paste-detection exclusion.
+
+### Fixed
+
+- HTTP error messages now walk the reqwest error source chain, so TLS
+  diagnostics surface even when wrapped in transport errors.
+- `bzr bug search --from-url` strips shell-escaped backslashes from URL
+  arguments pasted from terminals that quote them.
+
 ## [0.1.2] - 2026-04-27
 
 ### Added
