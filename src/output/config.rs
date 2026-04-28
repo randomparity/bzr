@@ -24,6 +24,10 @@ pub struct ServerDisplayInfo {
     auth_method: Option<AuthMethod>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     tls_insecure: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tls_ca_cert: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tls_pin: Option<String>,
 }
 
 impl ServerDisplayInfo {
@@ -52,6 +56,14 @@ impl ServerDisplayInfo {
             api_key_source: api_key_source.to_string(),
             auth_method: srv.auth_method,
             tls_insecure: srv.tls_insecure,
+            tls_ca_cert: srv.tls_ca_cert.as_ref().map(|p| p.display().to_string()),
+            tls_pin: srv.tls_pin_sha256.as_ref().map(|pin| {
+                if let Some(issuer) = &srv.tls_pin_issuer {
+                    format!("{pin} ({issuer})")
+                } else {
+                    pin.clone()
+                }
+            }),
         }
     }
 }
@@ -97,6 +109,12 @@ fn print_server(name: &str, s: &ServerDisplayInfo) {
     print_field("Auth", &auth_display(s.auth_method.as_ref()));
     if s.tls_insecure {
         print_field("TLS", "insecure (certificate verification disabled)");
+    }
+    if let Some(ca) = &s.tls_ca_cert {
+        print_field("TLS CA Cert", ca);
+    }
+    if let Some(pin) = &s.tls_pin {
+        print_field("TLS Pin", pin);
     }
 }
 
@@ -266,6 +284,8 @@ mod tests {
             api_key_source: source.into(),
             auth_method: None,
             tls_insecure,
+            tls_ca_cert: None,
+            tls_pin: None,
         }
     }
 
