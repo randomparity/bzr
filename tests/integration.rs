@@ -1347,6 +1347,10 @@ async fn config_set_server_integration() {
         email: None,
         auth_method: None,
         tls_insecure: false,
+        tls_ca_cert: None,
+        tls_pin_sha256: None,
+        tls_pin_now: false,
+        tls_pin_clear: false,
     };
     let result =
         bzr::commands::config::execute(&action, None, bzr::types::OutputFormat::Json, None).await;

@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
 pub(crate) mod fingerprint;
+#[expect(dead_code, reason = "functions used by Task 11 (TOFU integration)")]
+pub(crate) mod tofu;
 pub(crate) mod verifier;
 
 /// TLS configuration for a server connection.
