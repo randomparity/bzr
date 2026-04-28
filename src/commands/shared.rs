@@ -95,9 +95,10 @@ async fn handle_tofu(
             }
         }
         Some(false) => {
-            // "y" — trust for this session only (insecure mode)
+            // "y" — trust this specific cert for this session only (no config change)
             TlsConfig {
-                insecure: true,
+                pin_sha256: Some(fingerprint),
+                pin_issuer: Some(issuer),
                 server_name: Some(server_name.to_string()),
                 ..Default::default()
             }
