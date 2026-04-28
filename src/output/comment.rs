@@ -1,17 +1,19 @@
+use std::io::{self, Write as _};
+
 use colored::Colorize;
 
 use super::formatting::print_formatted;
 use crate::types::{Comment, OutputFormat};
 
-#[expect(clippy::print_stdout)]
 pub fn print_comments(comments: &[Comment], format: OutputFormat) {
     print_formatted(comments, format, |comments| {
         if comments.is_empty() {
-            println!("No comments.");
+            let _ = writeln!(io::stdout(), "No comments.");
             return;
         }
         for c in comments {
-            println!(
+            let _ = writeln!(
+                io::stdout(),
                 "{} #{} by {} ({})",
                 "Comment".bold(),
                 c.count,
@@ -19,14 +21,14 @@ pub fn print_comments(comments: &[Comment], format: OutputFormat) {
                 c.creation_time.as_deref().unwrap_or(""),
             );
             if c.is_private {
-                println!("  {}", "[PRIVATE]".red());
+                let _ = writeln!(io::stdout(), "  {}", "[PRIVATE]".red());
             }
-            println!();
+            let _ = writeln!(io::stdout());
             for line in c.text.lines() {
-                println!("  {line}");
+                let _ = writeln!(io::stdout(), "  {line}");
             }
-            println!();
-            println!("{}", "─".repeat(60));
+            let _ = writeln!(io::stdout());
+            let _ = writeln!(io::stdout(), "{}", "─".repeat(60));
         }
     });
 }
@@ -34,7 +36,8 @@ pub fn print_comments(comments: &[Comment], format: OutputFormat) {
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 mod tests {
-    use crate::types::Comment;
+    use super::print_comments;
+    use crate::types::{Comment, OutputFormat};
 
     fn make_comment(count: u64, text: &str) -> Comment {
         Comment {
@@ -92,5 +95,92 @@ mod tests {
         let json = serde_json::to_string(&comment).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed["is_private"], true);
+    }
+
+    // ── capture_stdout-based formatter tests ─────────────────────────
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_comments_table_empty_says_no_comments() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_comments(&[], OutputFormat::Table);
+        })
+        .await;
+        assert!(output.contains("No comments."));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_comments_json_empty_renders_empty_array() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_comments(&[], OutputFormat::Json);
+        })
+        .await;
+        let parsed = crate::test_helpers::extract_json(&output);
+        assert!(parsed.is_array());
+        assert_eq!(parsed.as_array().unwrap().len(), 0);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_comments_table_renders_comment_fields() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let mut c = make_comment(2, "Line one\nLine two");
+        c.is_private = true;
+        let comments = vec![c];
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_comments(&comments, OutputFormat::Table);
+        })
+        .await;
+        assert!(output.contains("Comment"));
+        assert!(output.contains("#2"));
+        assert!(output.contains("commenter@example.com"));
+        assert!(output.contains("2025-02-01T08:00:00Z"));
+        assert!(output.contains("[PRIVATE]"));
+        assert!(output.contains("Line one"));
+        assert!(output.contains("Line two"));
+        // Separator row
+        assert!(output.contains('─'));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_comments_table_handles_missing_creator_and_unicode() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let comments = vec![Comment {
+            id: 1,
+            bug_id: 42,
+            text: "héllo, wörld".into(),
+            creator: None,
+            creation_time: None,
+            count: 0,
+            is_private: false,
+        }];
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_comments(&comments, OutputFormat::Table);
+        })
+        .await;
+        // Falls back to "unknown" for missing creator and "" for missing time
+        assert!(output.contains("unknown"));
+        assert!(output.contains("héllo, wörld"));
+        // Private flag absent — verify [PRIVATE] is NOT present
+        assert!(!output.contains("[PRIVATE]"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_comments_json_one_comment_via_print() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let comments = vec![make_comment(7, "json body")];
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_comments(&comments, OutputFormat::Json);
+        })
+        .await;
+        let parsed = crate::test_helpers::extract_json(&output);
+        assert_eq!(parsed[0]["count"], 7);
+        assert_eq!(parsed[0]["text"], "json body");
+        assert_eq!(parsed[0]["bug_id"], 42);
     }
 }

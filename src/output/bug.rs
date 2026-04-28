@@ -1,3 +1,5 @@
+use std::io::{self, Write as _};
+
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
@@ -34,23 +36,22 @@ impl From<&Bug> for BugRow {
     }
 }
 
-#[expect(clippy::print_stdout)]
 pub fn print_bugs(bugs: &[Bug], format: OutputFormat) {
     print_formatted(bugs, format, |bugs| {
         if bugs.is_empty() {
-            println!("No bugs found.");
+            let _ = writeln!(io::stdout(), "No bugs found.");
             return;
         }
         let rows: Vec<BugRow> = bugs.iter().map(BugRow::from).collect();
         let table = Table::new(rows).to_string();
-        println!("{table}");
+        let _ = writeln!(io::stdout(), "{table}");
     });
 }
 
-#[expect(clippy::print_stdout)]
 pub fn print_bug_detail(bug: &Bug, format: OutputFormat) {
     print_formatted(bug, format, |bug| {
-        println!(
+        let _ = writeln!(
+            io::stdout(),
             "{} #{}\n{}\n",
             "Bug".bold(),
             bug.id.to_string().bold(),
@@ -72,11 +73,11 @@ pub fn print_bug_detail(bug: &Bug, format: OutputFormat) {
     });
 }
 
-#[expect(clippy::print_stdout)]
 pub fn print_history(history: &[HistoryEntry], format: OutputFormat) {
     print_formatted(history, format, |history| {
         for entry in history {
-            println!(
+            let _ = writeln!(
+                io::stdout(),
                 "{} by {} ({})",
                 "Change".bold(),
                 entry.who.cyan(),
@@ -87,15 +88,19 @@ pub fn print_history(history: &[HistoryEntry], format: OutputFormat) {
                     .attachment_id
                     .map(|id| format!(" [attachment #{id}]"))
                     .unwrap_or_default();
-                println!("  {}{attachment_suffix}:", change.field_name.bold());
+                let _ = writeln!(
+                    io::stdout(),
+                    "  {}{attachment_suffix}:",
+                    change.field_name.bold()
+                );
                 if !change.removed.is_empty() {
-                    println!("    - {}", change.removed.red());
+                    let _ = writeln!(io::stdout(), "    - {}", change.removed.red());
                 }
                 if !change.added.is_empty() {
-                    println!("    + {}", change.added.green());
+                    let _ = writeln!(io::stdout(), "    + {}", change.added.green());
                 }
             }
-            println!("{}", "─".repeat(60));
+            let _ = writeln!(io::stdout(), "{}", "─".repeat(60));
         }
     });
 }
@@ -309,5 +314,207 @@ mod tests {
         let history: Vec<HistoryEntry> = vec![];
         let json = serde_json::to_string_pretty(&history).unwrap();
         assert_eq!(json, "[]");
+    }
+
+    // ── capture_stdout-based formatter tests ─────────────────────────
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_bugs_table_empty_says_no_bugs_found() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_bugs(&[], OutputFormat::Table);
+        })
+        .await;
+        assert!(output.contains("No bugs found."));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_bugs_json_empty_renders_empty_array() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_bugs(&[], OutputFormat::Json);
+        })
+        .await;
+        let parsed = crate::test_helpers::extract_json(&output);
+        assert!(parsed.is_array());
+        assert_eq!(parsed.as_array().unwrap().len(), 0);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_bugs_table_renders_columns_and_truncates() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let bugs = vec![make_bug(42, "Login broken", "NEW")];
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_bugs(&bugs, OutputFormat::Table);
+        })
+        .await;
+        assert!(output.contains("ID"));
+        assert!(output.contains("STATUS"));
+        assert!(output.contains("PRIORITY"));
+        assert!(output.contains("ASSIGNEE"));
+        assert!(output.contains("SUMMARY"));
+        assert!(output.contains("42"));
+        assert!(output.contains("NEW"));
+        assert!(output.contains("P1"));
+        // Email is shortened to local part
+        assert!(output.contains("dev"));
+        assert!(output.contains("Login broken"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_bugs_json_via_print() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let bugs = vec![make_bug(99, "Crash on startup", "ASSIGNED")];
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_bugs(&bugs, OutputFormat::Json);
+        })
+        .await;
+        let parsed = crate::test_helpers::extract_json(&output);
+        assert_eq!(parsed[0]["id"], 99);
+        assert_eq!(parsed[0]["summary"], "Crash on startup");
+        assert_eq!(parsed[0]["status"], "ASSIGNED");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_bug_detail_table_renders_all_fields() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let mut bug = make_bug(42, "Detail test", "ASSIGNED");
+        bug.resolution = Some("FIXED".into());
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_bug_detail(&bug, OutputFormat::Table);
+        })
+        .await;
+        assert!(output.contains("Bug"));
+        assert!(output.contains("#42"));
+        assert!(output.contains("Detail test"));
+        assert!(output.contains("Status"));
+        assert!(output.contains("Resolution"));
+        assert!(output.contains("FIXED"));
+        assert!(output.contains("Product"));
+        assert!(output.contains("TestProduct"));
+        assert!(output.contains("Component"));
+        assert!(output.contains("TestComponent"));
+        assert!(output.contains("Assignee"));
+        assert!(output.contains("dev@example.com"));
+        assert!(output.contains("Priority"));
+        assert!(output.contains("P1"));
+        assert!(output.contains("Severity"));
+        assert!(output.contains("major"));
+        assert!(output.contains("Creator"));
+        assert!(output.contains("reporter@example.com"));
+        assert!(output.contains("Keywords"));
+        assert!(output.contains("regression"));
+        assert!(output.contains("Blocks"));
+        assert!(output.contains("200, 201"));
+        assert!(output.contains("Depends on"));
+        assert!(output.contains("100"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_bug_detail_table_handles_minimal_bug() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let bug = Bug {
+            id: 1,
+            summary: "Unicode summary — déjà vu".into(),
+            status: "NEW".into(),
+            resolution: None,
+            product: None,
+            component: None,
+            version: None,
+            assigned_to: None,
+            priority: None,
+            severity: None,
+            creation_time: None,
+            last_change_time: None,
+            creator: None,
+            url: None,
+            whiteboard: None,
+            keywords: vec![],
+            blocks: vec![],
+            depends_on: vec![],
+            cc: vec![],
+            op_sys: None,
+            rep_platform: None,
+        };
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_bug_detail(&bug, OutputFormat::Table);
+        })
+        .await;
+        assert!(output.contains("Unicode summary — déjà vu"));
+        // Optional fields render as "-"
+        assert!(output.contains('-'));
+        // No Keywords/Blocks/Depends on lines when empty
+        assert!(!output.contains("Keywords"));
+        assert!(!output.contains("Blocks"));
+        assert!(!output.contains("Depends on"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_bug_detail_json_via_print() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let bug = make_bug(7, "Json bug", "NEW");
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_bug_detail(&bug, OutputFormat::Json);
+        })
+        .await;
+        let parsed = crate::test_helpers::extract_json(&output);
+        assert_eq!(parsed["id"], 7);
+        assert_eq!(parsed["summary"], "Json bug");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_history_table_renders_changes() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let history = vec![make_history_entry()];
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_history(&history, OutputFormat::Table);
+        })
+        .await;
+        assert!(output.contains("Change"));
+        assert!(output.contains("editor@example.com"));
+        assert!(output.contains("2025-04-01T12:00:00Z"));
+        assert!(output.contains("status"));
+        assert!(output.contains("NEW"));
+        assert!(output.contains("ASSIGNED"));
+        // Attachment-scoped change
+        assert!(output.contains("flagtypes.name"));
+        assert!(output.contains("[attachment #99]"));
+        assert!(output.contains("review?"));
+        // Separator
+        assert!(output.contains('─'));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_history_table_empty_renders_nothing() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_history(&[], OutputFormat::Table);
+        })
+        .await;
+        // No "Change", separator, or other history content
+        assert!(!output.contains("Change"));
+        assert!(!output.contains('─'));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_history_json_via_print() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let history = vec![make_history_entry()];
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_history(&history, OutputFormat::Json);
+        })
+        .await;
+        let parsed = crate::test_helpers::extract_json(&output);
+        assert_eq!(parsed[0]["who"], "editor@example.com");
     }
 }

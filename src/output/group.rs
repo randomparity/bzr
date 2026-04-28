@@ -1,20 +1,21 @@
+use std::io::{self, Write as _};
+
 use colored::Colorize;
 
 use super::formatting::{print_bool_field, print_field, print_formatted};
 use crate::types::{GroupInfo, OutputFormat};
 
-#[expect(clippy::print_stdout)]
 pub fn print_group_info(group: &GroupInfo, format: OutputFormat) {
     print_formatted(group, format, |group| {
-        println!("{} {}", "Group".bold(), group.name.bold());
+        let _ = writeln!(io::stdout(), "{} {}", "Group".bold(), group.name.bold());
         print_field("Description", &group.description);
         print_bool_field("Active", group.is_active);
         print_field("ID", &group.id.to_string());
         if !group.membership.is_empty() {
-            println!("\n{}:", "Members".bold());
+            let _ = writeln!(io::stdout(), "\n{}:", "Members".bold());
             for m in &group.membership {
                 let real = m.real_name.as_deref().unwrap_or("");
-                println!("  {} ({real})", m.name);
+                let _ = writeln!(io::stdout(), "  {} ({real})", m.name);
             }
         }
     });
@@ -23,7 +24,8 @@ pub fn print_group_info(group: &GroupInfo, format: OutputFormat) {
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 mod tests {
-    use crate::types::{GroupInfo, GroupMember};
+    use super::print_group_info;
+    use crate::types::{GroupInfo, GroupMember, OutputFormat};
 
     fn make_group_info() -> GroupInfo {
         GroupInfo {
@@ -82,5 +84,91 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed["is_active"], false);
         assert!(parsed["membership"].as_array().unwrap().is_empty());
+    }
+
+    // ── capture_stdout-based formatter tests ─────────────────────────
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_group_info_table_renders_all_fields() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let group = make_group_info();
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_group_info(&group, OutputFormat::Table);
+        })
+        .await;
+        assert!(output.contains("Group"));
+        assert!(output.contains("core-team"));
+        assert!(output.contains("Description"));
+        assert!(output.contains("Core development team"));
+        assert!(output.contains("Active"));
+        assert!(output.contains("Yes"));
+        assert!(output.contains("ID"));
+        assert!(output.contains('5'));
+        assert!(output.contains("Members"));
+        assert!(output.contains("alice"));
+        assert!(output.contains("Alice Smith"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_group_info_table_no_members_omits_section() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let group = GroupInfo {
+            id: 6,
+            name: "empty-group".into(),
+            description: "No members".into(),
+            is_active: false,
+            membership: vec![],
+        };
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_group_info(&group, OutputFormat::Table);
+        })
+        .await;
+        assert!(output.contains("empty-group"));
+        assert!(output.contains("No"));
+        // No members section should be absent
+        assert!(!output.contains("Members"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_group_info_table_member_with_no_real_name_renders_empty_parens() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let group = GroupInfo {
+            id: 7,
+            name: "ünicode-group".into(),
+            description: "déscription".into(),
+            is_active: true,
+            membership: vec![GroupMember {
+                id: 1,
+                name: "héllo".into(),
+                real_name: None,
+                email: None,
+            }],
+        };
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_group_info(&group, OutputFormat::Table);
+        })
+        .await;
+        assert!(output.contains("ünicode-group"));
+        assert!(output.contains("déscription"));
+        assert!(output.contains("héllo"));
+        assert!(output.contains("()"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_group_info_json_via_print() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let group = make_group_info();
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_group_info(&group, OutputFormat::Json);
+        })
+        .await;
+        let parsed = crate::test_helpers::extract_json(&output);
+        assert_eq!(parsed["id"], 5);
+        assert_eq!(parsed["name"], "core-team");
+        assert_eq!(parsed["membership"][0]["name"], "alice");
     }
 }
