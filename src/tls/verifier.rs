@@ -196,9 +196,7 @@ pub(crate) fn build_ca_cert_config(ca_pem_path: &Path) -> Result<rustls::ClientC
         })?;
     }
 
-    let config = rustls::ClientConfig::builder_with_provider(super::default_provider())
-        .with_safe_default_protocol_versions()
-        .map_err(|e| BzrError::config(format!("failed to configure TLS protocol versions: {e}")))?
+    let config = super::base_tls_builder("protocol versions")?
         .with_root_certificates(root_store)
         .with_no_client_auth();
 
@@ -215,9 +213,7 @@ pub(crate) fn build_pinned_config(
 ) -> Result<rustls::ClientConfig> {
     let verifier = PinnedCertVerifier::new(pin_sha256, pin_issuer, pin_issuer_der, server_name)?;
 
-    let config = rustls::ClientConfig::builder_with_provider(super::default_provider())
-        .with_safe_default_protocol_versions()
-        .map_err(|e| BzrError::config(format!("failed to configure TLS protocol versions: {e}")))?
+    let config = super::base_tls_builder("protocol versions")?
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(verifier))
         .with_no_client_auth();

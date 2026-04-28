@@ -12,6 +12,19 @@ pub(crate) fn default_provider() -> Arc<rustls::crypto::CryptoProvider> {
         .unwrap_or_else(|| Arc::new(rustls::crypto::ring::default_provider()))
 }
 
+/// Create a `rustls::ConfigBuilder` with the default provider and safe
+/// protocol versions. Shared by `build_ca_cert_config`,
+/// `build_pinned_config`, and `probe_server_cert`.
+pub(crate) fn base_tls_builder(
+    context: &str,
+) -> crate::error::Result<rustls::ConfigBuilder<rustls::ClientConfig, rustls::WantsVerifier>> {
+    rustls::ClientConfig::builder_with_provider(default_provider())
+        .with_safe_default_protocol_versions()
+        .map_err(|e| {
+            crate::error::BzrError::config(format!("failed to configure TLS {context}: {e}"))
+        })
+}
+
 /// TLS configuration for a server connection.
 #[derive(Debug, Clone, Default)]
 pub struct TlsConfig {

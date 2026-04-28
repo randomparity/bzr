@@ -379,7 +379,9 @@ mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
+    use crate::error::BzrError;
     use crate::test_helpers::setup_test_env;
+    use crate::tls::TlsConfig;
     use crate::ENV_LOCK;
 
     #[tokio::test]
@@ -571,6 +573,76 @@ api_mode = "rest"
 
         let result = super::connect_and_configure(None, None).await;
         assert!(result.is_ok(), "env-backed config should succeed");
+    }
+
+    #[test]
+    fn should_offer_tofu_false_when_insecure() {
+        let tls = TlsConfig {
+            insecure: true,
+            ..Default::default()
+        };
+        let err = BzrError::Config("test".into());
+        assert!(!super::should_offer_tofu(&err, &tls));
+    }
+
+    #[test]
+    fn should_offer_tofu_false_when_pin_configured() {
+        let tls = TlsConfig {
+            pin_sha256: Some("sha256//test".into()),
+            ..Default::default()
+        };
+        let err = BzrError::Config("test".into());
+        assert!(!super::should_offer_tofu(&err, &tls));
+    }
+
+    #[test]
+    fn should_offer_tofu_false_when_ca_configured() {
+        let tls = TlsConfig {
+            ca_cert_path: Some("/path".into()),
+            ..Default::default()
+        };
+        let err = BzrError::Config("test".into());
+        assert!(!super::should_offer_tofu(&err, &tls));
+    }
+
+    #[test]
+    fn should_offer_tofu_false_for_non_http_error() {
+        let tls = TlsConfig::default();
+        let err = BzrError::Config("not an HTTP error".into());
+        assert!(!super::should_offer_tofu(&err, &tls));
+    }
+
+    #[test]
+    fn extract_hostname_parses_url() {
+        assert_eq!(
+            super::extract_hostname("https://example.com/path"),
+            "example.com"
+        );
+    }
+
+    #[test]
+    fn extract_hostname_with_port() {
+        assert_eq!(
+            super::extract_hostname("https://example.com:8443/path"),
+            "example.com"
+        );
+    }
+
+    #[test]
+    fn extract_hostname_returns_raw_on_invalid() {
+        assert_eq!(super::extract_hostname("not-a-url"), "not-a-url");
+    }
+
+    #[test]
+    fn is_pin_mismatch_returns_false_for_non_http() {
+        let err = BzrError::Config("PIN_MISMATCH".into());
+        assert!(!super::is_pin_mismatch(&err));
+    }
+
+    #[test]
+    fn is_issuer_changed_returns_false_for_non_http() {
+        let err = BzrError::Config("ISSUER_CHANGED".into());
+        assert!(!super::is_issuer_changed(&err));
     }
 
     #[test]

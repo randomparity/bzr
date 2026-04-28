@@ -76,9 +76,7 @@ pub(crate) async fn probe_server_cert(url: &str) -> Result<(String, String, Opti
         provider: provider.clone(),
     });
 
-    let tls_config = rustls::ClientConfig::builder_with_provider(provider)
-        .with_safe_default_protocol_versions()
-        .map_err(|e| BzrError::config(format!("failed to configure TLS for probing: {e}")))?
+    let tls_config = super::base_tls_builder("for probing")?
         .dangerous()
         .with_custom_certificate_verifier(capture.clone())
         .with_no_client_auth();
@@ -121,13 +119,31 @@ fn read_interactive_line(prompt: &str) -> Result<Option<String>> {
     Ok(Some(input.trim().to_string()))
 }
 
+/// Parse a TOFU response from user input.
+///
+/// Returns:
+/// - `Some(true)` for "always" (persist the pin)
+/// - `Some(false)` for "y"/"yes" (trust once)
+/// - `None` for anything else (reject)
+pub(crate) fn parse_tofu_response(input: &str) -> Option<bool> {
+    match input.trim().to_ascii_lowercase().as_str() {
+        "always" => Some(true),
+        "y" | "yes" => Some(false),
+        _ => None,
+    }
+}
+
+/// Parse a yes/no response from user input.
+/// Returns `true` for "y" or "yes" (case-insensitive).
+pub(crate) fn parse_yes_no(input: &str) -> bool {
+    input.trim().eq_ignore_ascii_case("y") || input.trim().eq_ignore_ascii_case("yes")
+}
+
 /// Prompt the user to confirm pinning a certificate. Returns `false`
 /// if stdin is not a terminal.
 pub(crate) fn confirm_pin() -> Result<bool> {
     let input = read_interactive_line("Pin this certificate? [y/N] ")?;
-    Ok(input
-        .as_deref()
-        .is_some_and(|s| s.eq_ignore_ascii_case("y")))
+    Ok(input.as_deref().is_some_and(parse_yes_no))
 }
 
 /// Prompt the user for first-contact TOFU decision.
@@ -155,13 +171,7 @@ pub(crate) fn prompt_tofu(
         return Ok(None);
     };
 
-    if trimmed.eq_ignore_ascii_case("always") {
-        Ok(Some(true))
-    } else if trimmed.eq_ignore_ascii_case("y") || trimmed.eq_ignore_ascii_case("yes") {
-        Ok(Some(false))
-    } else {
-        Ok(None)
-    }
+    Ok(parse_tofu_response(&trimmed))
 }
 
 /// Prompt the user to accept a certificate rotation (pin changed).
@@ -184,7 +194,51 @@ pub(crate) fn prompt_rotation(
     let _ = writeln!(io::stderr());
 
     let input = read_interactive_line("Accept the new certificate? [y/N] ")?;
-    Ok(input
-        .as_deref()
-        .is_some_and(|s| s.eq_ignore_ascii_case("y")))
+    Ok(input.as_deref().is_some_and(parse_yes_no))
+}
+
+#[cfg(test)]
+#[expect(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_tofu_response_always() {
+        assert_eq!(parse_tofu_response("always"), Some(true));
+        assert_eq!(parse_tofu_response("ALWAYS"), Some(true));
+        assert_eq!(parse_tofu_response("  always  "), Some(true));
+    }
+
+    #[test]
+    fn parse_tofu_response_yes() {
+        assert_eq!(parse_tofu_response("y"), Some(false));
+        assert_eq!(parse_tofu_response("Y"), Some(false));
+        assert_eq!(parse_tofu_response("yes"), Some(false));
+        assert_eq!(parse_tofu_response("YES"), Some(false));
+    }
+
+    #[test]
+    fn parse_tofu_response_rejects_other() {
+        assert_eq!(parse_tofu_response("n"), None);
+        assert_eq!(parse_tofu_response(""), None);
+        assert_eq!(parse_tofu_response("no"), None);
+        assert_eq!(parse_tofu_response("anything"), None);
+    }
+
+    #[test]
+    fn parse_yes_no_accepts_y() {
+        assert!(parse_yes_no("y"));
+        assert!(parse_yes_no("Y"));
+        assert!(parse_yes_no("yes"));
+        assert!(parse_yes_no("YES"));
+        assert!(parse_yes_no("  y  "));
+    }
+
+    #[test]
+    fn parse_yes_no_rejects_others() {
+        assert!(!parse_yes_no("n"));
+        assert!(!parse_yes_no(""));
+        assert!(!parse_yes_no("no"));
+        assert!(!parse_yes_no("anything"));
+    }
 }
