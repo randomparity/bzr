@@ -174,10 +174,18 @@ mod tests {
         .await;
         assert!(output.contains("Unicode summary — é"));
         assert!(output.contains("patché.txt"));
-        // Missing creator/created render as "-"
-        assert!(output.contains("Creator"));
-        assert!(output.contains("Created"));
-        assert!(output.contains('-'));
+        // Missing creator/created render as "-" via print_optional_field's
+        // "  {label:<12}  {value}" format. Anchor to the trailing field
+        // value so the assertion fails on rendering bugs, not table-border
+        // changes.
+        assert!(
+            output.contains("Creator       -"),
+            "expected dashed Creator field, got: {output}"
+        );
+        assert!(
+            output.contains("Created       -"),
+            "expected dashed Created field, got: {output}"
+        );
         // Neither flag is set
         assert!(!output.contains("[OBSOLETE]"));
         assert!(!output.contains("[PRIVATE]"));

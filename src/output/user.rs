@@ -321,9 +321,25 @@ mod tests {
             print_users_detailed(&users, OutputFormat::Table);
         })
         .await;
-        assert!(output.contains("minimal"));
-        // None can_login → "-"
-        assert!(output.contains('-'));
+        // Locate the data row that contains the user's name. Both
+        // can_login (None → "-") and groups (empty → "-") render as a
+        // dash in that row, anchored to the field semantics rather than
+        // the table border.
+        let data_row = output
+            .lines()
+            .find(|line| line.contains("minimal"))
+            .expect("data row for 'minimal' user");
+        // Two "-" cells (can_login + groups) should appear inside the
+        // row. Border separators are `|`, so count the dashes that fall
+        // between bars.
+        let dash_cells = data_row
+            .split('|')
+            .filter(|cell| cell.trim() == "-")
+            .count();
+        assert_eq!(
+            dash_cells, 2,
+            "expected 2 dashed cells (can_login, groups) in row: {data_row}"
+        );
     }
 
     #[cfg(unix)]
@@ -372,7 +388,16 @@ mod tests {
         })
         .await;
         assert!(output.contains("bot"));
-        // Missing real_name and login render as "-"
-        assert!(output.contains('-'));
+        // print_optional_field renders "  {label:<12}  -" for missing
+        // values. Anchor to those exact field renderings so the assertion
+        // fails when rendering changes, not when borders do.
+        assert!(
+            output.contains("Name          -"),
+            "expected dashed Name field, got: {output}"
+        );
+        assert!(
+            output.contains("Login         -"),
+            "expected dashed Login field, got: {output}"
+        );
     }
 }

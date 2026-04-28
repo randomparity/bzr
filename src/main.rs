@@ -47,23 +47,7 @@ async fn main() -> ExitCode {
     if let Err(e) = bzr::dispatch(&cli, format).await {
         #[expect(clippy::print_stderr)]
         {
-            if format == OutputFormat::Json {
-                let json_err = serde_json::json!({
-                    "error": {
-                        "type": e.error_type(),
-                        "message": e.to_string(),
-                        "exit_code": e.exit_code(),
-                    }
-                });
-                eprintln!(
-                    "{}",
-                    serde_json::to_string(&json_err).unwrap_or_else(|_| {
-                        r#"{"error":{"message":"serialization failed"}}"#.into()
-                    }),
-                );
-            } else {
-                eprintln!("error: {e}");
-            }
+            eprintln!("{}", format_dispatch_error(&e, format));
         }
         return exit_code(&e);
     }
@@ -75,6 +59,27 @@ async fn main() -> ExitCode {
 fn exit_code(e: &BzrError) -> ExitCode {
     // All BzrError exit codes are in the range 1..=12.
     ExitCode::from(u8::try_from(e.exit_code()).unwrap_or(1))
+}
+
+/// Render a dispatch error for the user.
+///
+/// JSON output renders a structured object with `type`, `message`, and
+/// `exit_code` fields. Table output renders the conventional `error: …`
+/// prefix.
+fn format_dispatch_error(err: &BzrError, format: OutputFormat) -> String {
+    if format == OutputFormat::Json {
+        let json_err = serde_json::json!({
+            "error": {
+                "type": err.error_type(),
+                "message": err.to_string(),
+                "exit_code": err.exit_code(),
+            }
+        });
+        serde_json::to_string(&json_err)
+            .unwrap_or_else(|_| r#"{"error":{"message":"serialization failed"}}"#.into())
+    } else {
+        format!("error: {err}")
+    }
 }
 
 /// Select the tracing filter directive based on CLI flags.
@@ -360,14 +365,48 @@ mod tests {
         assert!(rendered.contains(&err.exit_code().to_string()));
     }
 
-    /// Calls `suppress_stdout()` between a `dup`/`dup2` save+restore of fd 1
-    /// so the rest of the test process keeps a working stdout. The cargo
-    /// test runner uses its own per-test thread-local stdout (`println!`),
-    /// so redirecting the raw fd here doesn't break test reporting.
+    #[test]
+    fn format_dispatch_error_renders_json() {
+        let err = BzrError::Config("bad config".into());
+        let out = format_dispatch_error(&err, OutputFormat::Json);
+        let parsed: serde_json::Value =
+            serde_json::from_str(&out).expect("output must be valid JSON");
+        let inner = parsed.get("error").expect("has error key");
+        assert_eq!(inner["type"], err.error_type());
+        assert_eq!(inner["exit_code"], err.exit_code());
+        assert!(
+            inner["message"]
+                .as_str()
+                .expect("message is string")
+                .contains("bad config"),
+            "message should contain underlying error: {out}"
+        );
+    }
+
+    #[test]
+    fn format_dispatch_error_renders_table() {
+        let err = BzrError::Config("bad config".into());
+        let out = format_dispatch_error(&err, OutputFormat::Table);
+        assert!(out.starts_with("error:"), "got {out:?}");
+        assert!(out.contains("bad config"), "got {out:?}");
+    }
+
+    #[test]
+    fn format_dispatch_error_table_for_other_error() {
+        let err = BzrError::Other("kaboom".into());
+        let out = format_dispatch_error(&err, OutputFormat::Table);
+        assert!(out.contains("kaboom"));
+    }
+
+    /// Asserts `suppress_stdout()` runs without panicking and that fd 1 is
+    /// restored afterward. The function calls `dup2(devnull_fd, 1)` under
+    /// the hood; we save+restore fd 1 around it so the rest of the test
+    /// process keeps a working stdout. The cargo test runner uses its own
+    /// per-test thread-local stdout (`println!`), so redirecting the raw
+    /// fd here doesn't break test reporting.
     #[cfg(unix)]
     #[test]
     fn suppress_stdout_redirects_fd1_to_devnull() {
-        use std::os::unix::io::AsRawFd;
         extern "C" {
             fn dup(fd: std::ffi::c_int) -> std::ffi::c_int;
             fn dup2(oldfd: std::ffi::c_int, newfd: std::ffi::c_int) -> std::ffi::c_int;
@@ -380,11 +419,6 @@ mod tests {
         assert!(saved >= 0, "dup(1) failed");
 
         suppress_stdout();
-
-        // Verify fd 1 is now writable (dup2 to /dev/null succeeded silently
-        // even on systems without /dev/null; in that case fd 1 is unchanged).
-        let stdout_file = std::fs::File::open("/dev/null").expect("open /dev/null");
-        let _devnull_fd = stdout_file.as_raw_fd();
 
         // Restore fd 1 so subsequent tests (and cargo's harness) keep a
         // working stdout.

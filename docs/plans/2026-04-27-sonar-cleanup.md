@@ -1057,7 +1057,7 @@ Currently 67.3% (`main.rs`) and 74.3% (`lib.rs`). Both are thin dispatch glue. M
 
 ## Task 10: Cover `output/{comment,attachment,user,product,field,group}` to ≥85%
 
-Six output formatters under 85%, all structurally identical (`print_X(values, format)` over Human/JSON/CSV variants). One commit because the test pattern is uniform.
+Six output formatters under 85%, all structurally identical (`print_X(values, format)` over the `Table` and `Json` variants of `OutputFormat`). One commit because the test pattern is uniform.
 
 Currently:
 - `output/comment.rs` 71.6%
@@ -1077,7 +1077,7 @@ Currently:
   1. Holds `ENV_LOCK` (`crate::ENV_LOCK.lock().await`)
   2. Builds an input value (or vec)
   3. Calls `capture_stdout` around the `print_X` call
-  4. Asserts on the captured string (substring match for human format, `extract_json` for JSON, raw match for CSV)
+  4. Asserts on the captured string (substring match for `Table` format, `extract_json` for `Json`)
 
 - [ ] **Step 2: For each formatter, add three tests**
 
@@ -1094,25 +1094,24 @@ Currently:
   }
 
   #[tokio::test]
-  async fn print_comments_single_item_human() {
+  async fn print_comments_single_item_table() {
       let _lock = crate::ENV_LOCK.lock().await;
       let comments = vec![/* construct a single Comment with non-empty fields */];
       let ((), output) = crate::test_helpers::capture_stdout(async {
-          print_comments(&comments, OutputFormat::Human);
+          print_comments(&comments, OutputFormat::Table);
       }).await;
       assert!(output.contains("test author"));
       assert!(output.contains("test body"));
   }
 
   #[tokio::test]
-  async fn print_comments_unicode_in_csv() {
+  async fn print_comments_unicode_in_table() {
       let _lock = crate::ENV_LOCK.lock().await;
       let comments = vec![/* construct one with body = "héllo, wörld" */];
       let ((), output) = crate::test_helpers::capture_stdout(async {
-          print_comments(&comments, OutputFormat::Csv);
+          print_comments(&comments, OutputFormat::Table);
       }).await;
-      // CSV must escape commas and quote Unicode
-      assert!(output.contains("\"héllo, wörld\""));
+      assert!(output.contains("héllo, wörld"));
   }
   ```
 
@@ -1141,9 +1140,9 @@ Currently:
   test: cover output formatters to >=85%
 
   Adds empty-input, single-item, and Unicode-edge tests for
-  output/{comment,attachment,user,field,group,bug}.rs across Human,
-  JSON, and CSV formats. Coverage rises from 71.6%-82.0% to >=85%
-  for every output formatter.
+  output/{comment,attachment,user,field,group,bug}.rs across the
+  Table and Json variants of OutputFormat. Coverage rises from
+  71.6%-82.0% to >=85% for every output formatter.
 
   Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
   EOF

@@ -736,6 +736,16 @@ mod tests {
     }
 
     #[test]
+    fn parse_der_length_long_form_one_byte() {
+        // Long form: 0x81 = 1 length byte follows; 0x80 = 128 (>127, so
+        // long form is required even for a single byte).
+        let data = [0x81_u8, 0x80, 0xaa];
+        let (rest, len) = parse_der_length(&data).unwrap();
+        assert_eq!(len, 128);
+        assert_eq!(rest, &[0xaa]);
+    }
+
+    #[test]
     fn parse_der_length_rejects_indefinite_form() {
         // 0x80 indicates indefinite length (num_bytes == 0): not allowed
         let data = [0x80_u8];
