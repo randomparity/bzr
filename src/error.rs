@@ -48,6 +48,23 @@ pub enum BzrError {
     #[error("keyring error: {0}")]
     Keyring(String),
 
+    #[error("TLS pin mismatch for {server}: expected {expected}, got {actual}")]
+    PinMismatch {
+        server: String,
+        expected: String,
+        actual: String,
+    },
+
+    #[error(
+        "TLS certificate issuer changed for {server}: expected \"{expected_issuer}\", \
+         got \"{actual_issuer}\" — possible MITM attack"
+    )]
+    IssuerChanged {
+        server: String,
+        expected_issuer: String,
+        actual_issuer: String,
+    },
+
     #[error("{0}")]
     Other(String),
 }
@@ -66,6 +83,7 @@ const ERROR_TYPE_AUTH: &str = "auth";
 const ERROR_TYPE_DATA_INTEGRITY: &str = "data_integrity";
 const ERROR_TYPE_BATCH_PARTIAL_FAILURE: &str = "batch_partial_failure";
 const ERROR_TYPE_KEYRING: &str = "keyring";
+const ERROR_TYPE_TLS: &str = "tls";
 const ERROR_TYPE_OTHER: &str = "other";
 
 // Exit code constants
@@ -81,6 +99,7 @@ const EXIT_CODE_AUTH: i32 = 9;
 const EXIT_CODE_DATA_INTEGRITY: i32 = 10;
 const EXIT_CODE_BATCH_PARTIAL_FAILURE: i32 = 11;
 const EXIT_CODE_KEYRING: i32 = 12;
+const EXIT_CODE_TLS: i32 = 13;
 
 /// Bugzilla internal server error code (HTTP 500 with code 100500).
 /// Used for retry logic in hybrid mode when extensions crash.
@@ -108,11 +127,7 @@ fn format_http_error(err: &reqwest::Error) -> String {
     let chain = format_error_chain(err);
     let mut msg = redact_api_key(&chain);
     if err.is_connect() && crate::http::looks_like_tls_error(&chain) {
-        msg.push_str(
-            "\n  hint: if this server uses a self-signed certificate or sits \
-             behind a TLS-intercepting proxy, re-run:\n    \
-             bzr config set-server <NAME> ... --tls-insecure",
-        );
+        msg.push_str(crate::http::TLS_HINT);
     }
     msg
 }
@@ -160,6 +175,7 @@ impl BzrError {
             BzrError::DataIntegrity(_) => EXIT_CODE_DATA_INTEGRITY,
             BzrError::BatchPartialFailure { .. } => EXIT_CODE_BATCH_PARTIAL_FAILURE,
             BzrError::Keyring(_) => EXIT_CODE_KEYRING,
+            BzrError::PinMismatch { .. } | BzrError::IssuerChanged { .. } => EXIT_CODE_TLS,
             BzrError::Other(_) => EXIT_CODE_OTHER,
         }
     }
@@ -179,6 +195,7 @@ impl BzrError {
             BzrError::DataIntegrity(_) => ERROR_TYPE_DATA_INTEGRITY,
             BzrError::BatchPartialFailure { .. } => ERROR_TYPE_BATCH_PARTIAL_FAILURE,
             BzrError::Keyring(_) => ERROR_TYPE_KEYRING,
+            BzrError::PinMismatch { .. } | BzrError::IssuerChanged { .. } => ERROR_TYPE_TLS,
             BzrError::Other(_) => ERROR_TYPE_OTHER,
         }
     }
@@ -359,6 +376,30 @@ mod tests {
         assert_eq!(err.exit_code(), 12);
         assert_eq!(err.error_type(), "keyring");
         assert_eq!(err.to_string(), "keyring error: keychain locked");
+    }
+
+    #[test]
+    fn exit_code_pin_mismatch() {
+        let err = BzrError::PinMismatch {
+            server: "test".into(),
+            expected: "sha256//old".into(),
+            actual: "sha256//new".into(),
+        };
+        assert_eq!(err.exit_code(), 13);
+        assert_eq!(err.error_type(), "tls");
+        assert!(err.to_string().contains("pin mismatch"));
+    }
+
+    #[test]
+    fn exit_code_issuer_changed() {
+        let err = BzrError::IssuerChanged {
+            server: "test".into(),
+            expected_issuer: "CN=Good CA".into(),
+            actual_issuer: "CN=Evil CA".into(),
+        };
+        assert_eq!(err.exit_code(), 13);
+        assert_eq!(err.error_type(), "tls");
+        assert!(err.to_string().contains("MITM"));
     }
 
     /// reqwest's `Display` omits the source chain (e.g. "connection refused").

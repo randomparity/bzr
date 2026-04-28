@@ -18,6 +18,7 @@ pub mod error;
 pub(crate) mod http;
 #[expect(clippy::print_stdout, clippy::expect_used)]
 pub(crate) mod output;
+pub(crate) mod tls;
 pub mod types;
 pub mod url_parser;
 pub mod xmlrpc;

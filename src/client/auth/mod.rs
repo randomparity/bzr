@@ -8,7 +8,6 @@ mod whoami;
 use reqwest::header::HeaderValue;
 
 use crate::error::{BzrError, Result};
-use crate::http::build_http_client;
 use crate::types::{ApiMode, AuthMethod};
 
 use self::valid_login::{detect_valid_login_auth, verify_header_auth_via_rest, ValidLoginOutcome};
@@ -39,9 +38,9 @@ pub async fn detect_server_settings(
     url: &str,
     api_key: &str,
     email: Option<&str>,
-    tls_insecure: bool,
+    tls_config: &crate::tls::TlsConfig,
 ) -> Result<DetectedServerSettings> {
-    let http = build_http_client(tls_insecure).map_err(BzrError::Http)?;
+    let http = crate::tls::build_tls_client(tls_config)?;
 
     let method = detect_auth_method(&http, url, api_key, email).await?;
     let (version, api_mode) = detect_version_and_mode(&http, url, api_key, method).await;
@@ -457,9 +456,14 @@ mod tests {
             .mount(&server)
             .await;
 
-        let detected = detect_server_settings(&server.uri(), "test-key", None, false)
-            .await
-            .unwrap();
+        let detected = detect_server_settings(
+            &server.uri(),
+            "test-key",
+            None,
+            &crate::tls::TlsConfig::default(),
+        )
+        .await
+        .unwrap();
         assert_eq!(detected.auth_method, AuthMethod::Header);
         assert_eq!(detected.api_mode, ApiMode::Rest);
         assert_eq!(detected.server_version.as_deref(), Some("5.1.2"));
@@ -500,9 +504,14 @@ mod tests {
             .mount(&server)
             .await;
 
-        let detected = detect_server_settings(&server.uri(), "test-key", None, false)
-            .await
-            .unwrap();
+        let detected = detect_server_settings(
+            &server.uri(),
+            "test-key",
+            None,
+            &crate::tls::TlsConfig::default(),
+        )
+        .await
+        .unwrap();
         assert_eq!(detected.auth_method, AuthMethod::Header);
         assert_eq!(detected.api_mode, ApiMode::Hybrid);
         assert!(detected.server_version.is_none());

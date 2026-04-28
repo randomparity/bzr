@@ -41,6 +41,19 @@ pub struct ServerConfig {
     /// Accept invalid TLS certificates (self-signed, expired, etc.).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tls_insecure: bool,
+    /// Path to a PEM-encoded CA certificate for this server.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls_ca_cert: Option<PathBuf>,
+    /// SHA-256 fingerprint of the pinned server certificate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls_pin_sha256: Option<String>,
+    /// Issuer DN stored alongside the pin for rotation detection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls_pin_issuer: Option<String>,
+    /// Base64-encoded raw DER bytes of the issuer SEQUENCE for
+    /// tamper-proof issuer comparison.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls_pin_issuer_der: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -99,10 +112,22 @@ impl CredentialSourceKind {
 }
 
 impl ServerConfig {
+    pub fn tls_config(&self, server_name: &str) -> crate::tls::TlsConfig {
+        crate::tls::TlsConfig {
+            insecure: self.tls_insecure,
+            ca_cert_path: self.tls_ca_cert.clone(),
+            pin_sha256: self.tls_pin_sha256.clone(),
+            pin_issuer: self.tls_pin_issuer.clone(),
+            pin_issuer_der: self.tls_pin_issuer_der.clone(),
+            server_name: Some(server_name.to_string()),
+        }
+    }
+
     pub fn validate(&self, server_name: &str) -> Result<()> {
         self.credential_source()
             .map(|_| ())
-            .map_err(|err| BzrError::config(format!("server '{server_name}': {err}")))
+            .map_err(|err| BzrError::config(format!("server '{server_name}': {err}")))?;
+        self.validate_tls(server_name)
     }
 
     pub fn credential_source(&self) -> Result<CredentialSource<'_>> {
@@ -171,6 +196,35 @@ impl ServerConfig {
                 crate::credentials::keyring::retrieve(service, account)
             }
         }
+    }
+
+    pub fn validate_tls(&self, server_name: &str) -> Result<()> {
+        let ctx = |msg: &str| BzrError::config(format!("server '{server_name}': {msg}"));
+
+        if self.tls_insecure && self.tls_ca_cert.is_some() {
+            return Err(ctx("tls_insecure and tls_ca_cert are mutually exclusive"));
+        }
+        if self.tls_insecure && self.tls_pin_sha256.is_some() {
+            return Err(ctx(
+                "tls_insecure and tls_pin_sha256 are mutually exclusive",
+            ));
+        }
+        if self.tls_ca_cert.is_some() && self.tls_pin_sha256.is_some() {
+            return Err(ctx("tls_ca_cert and tls_pin_sha256 are mutually exclusive"));
+        }
+        if let Some(path) = &self.tls_ca_cert {
+            if !path.exists() {
+                return Err(BzrError::config(format!(
+                    "server '{server_name}': tls_ca_cert file not found: {}",
+                    path.display()
+                )));
+            }
+        }
+        if let Some(pin) = &self.tls_pin_sha256 {
+            crate::tls::fingerprint::parse_pin(pin)
+                .map_err(|e| ctx(&format!("invalid tls_pin_sha256: {e}")))?;
+        }
+        Ok(())
     }
 }
 
@@ -353,6 +407,10 @@ mod tests {
             api_mode: None,
             server_version: None,
             tls_insecure: false,
+            tls_ca_cert: None,
+            tls_pin_sha256: None,
+            tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         }
     }
 
@@ -557,6 +615,10 @@ api_key_env = "BZR_TEST_API_KEY"
             api_mode: None,
             server_version: None,
             tls_insecure: false,
+            tls_ca_cert: None,
+            tls_pin_sha256: None,
+            tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
 
         assert_eq!(server.resolve_api_key("test").unwrap(), "secret-from-env");
@@ -578,6 +640,10 @@ api_key_env = "BZR_TEST_API_KEY"
             api_mode: None,
             server_version: None,
             tls_insecure: false,
+            tls_ca_cert: None,
+            tls_pin_sha256: None,
+            tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
 
         let err = server.credential_source().unwrap_err();
@@ -644,6 +710,10 @@ api_key_keyring = { service = "bzr", account = "dave" }
             api_mode: None,
             server_version: None,
             tls_insecure: false,
+            tls_ca_cert: None,
+            tls_pin_sha256: None,
+            tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
         match server.credential_source().unwrap() {
             CredentialSource::Keyring { service, account } => {
@@ -674,6 +744,10 @@ api_key_keyring = { service = "bzr", account = "dave" }
             api_mode: None,
             server_version: None,
             tls_insecure: false,
+            tls_ca_cert: None,
+            tls_pin_sha256: None,
+            tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
         let err = server.credential_source().unwrap_err();
         assert!(err.to_string().contains("multiple API key sources"));
@@ -694,6 +768,10 @@ api_key_keyring = { service = "bzr", account = "dave" }
             api_mode: None,
             server_version: None,
             tls_insecure: false,
+            tls_ca_cert: None,
+            tls_pin_sha256: None,
+            tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
         let err = server.credential_source().unwrap_err();
         assert!(err.to_string().contains("multiple API key sources"));
@@ -714,6 +792,10 @@ api_key_keyring = { service = "bzr", account = "dave" }
             api_mode: None,
             server_version: None,
             tls_insecure: false,
+            tls_ca_cert: None,
+            tls_pin_sha256: None,
+            tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
         let err = server.credential_source().unwrap_err();
         assert!(err.to_string().contains("multiple API key sources"));
@@ -739,6 +821,10 @@ api_key_keyring = { service = "bzr", account = "dave" }
             api_mode: None,
             server_version: None,
             tls_insecure: false,
+            tls_ca_cert: None,
+            tls_pin_sha256: None,
+            tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
 
         assert_eq!(
@@ -774,6 +860,10 @@ api_key_keyring = { service = "bzr", account = "dave" }
             api_mode: None,
             server_version: None,
             tls_insecure: false,
+            tls_ca_cert: None,
+            tls_pin_sha256: None,
+            tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
 
         assert_eq!(
@@ -807,6 +897,10 @@ api_key_keyring = { service = "bzr", account = "dave" }
             api_mode: None,
             server_version: None,
             tls_insecure: false,
+            tls_ca_cert: None,
+            tls_pin_sha256: None,
+            tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
 
         assert_eq!(
@@ -815,6 +909,98 @@ api_key_keyring = { service = "bzr", account = "dave" }
         );
 
         crate::credentials::keyring::delete("bzr", "resolve-test-srv2").unwrap();
+    }
+
+    #[test]
+    fn validate_tls_insecure_with_ca_cert_conflicts() {
+        let server = ServerConfig {
+            url: "https://example.com".into(),
+            api_key: Some("key".into()),
+            api_key_env: None,
+            api_key_keyring: None,
+            email: None,
+            auth_method: None,
+            api_mode: None,
+            server_version: None,
+            tls_insecure: true,
+            tls_ca_cert: Some(PathBuf::from("/tmp/ca.pem")),
+            tls_pin_sha256: None,
+            tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
+        };
+        let err = server.validate_tls("srv").unwrap_err();
+        assert!(
+            err.to_string().contains("mutually exclusive"),
+            "error should mention 'mutually exclusive': {err}"
+        );
+    }
+
+    #[test]
+    fn validate_tls_insecure_with_pin_conflicts() {
+        let server = ServerConfig {
+            url: "https://example.com".into(),
+            api_key: Some("key".into()),
+            api_key_env: None,
+            api_key_keyring: None,
+            email: None,
+            auth_method: None,
+            api_mode: None,
+            server_version: None,
+            tls_insecure: true,
+            tls_ca_cert: None,
+            tls_pin_sha256: Some("sha256//abc".into()),
+            tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
+        };
+        let err = server.validate_tls("srv").unwrap_err();
+        assert!(
+            err.to_string().contains("mutually exclusive"),
+            "error should mention 'mutually exclusive': {err}"
+        );
+    }
+
+    #[test]
+    fn validate_tls_ca_cert_with_pin_conflicts() {
+        let server = ServerConfig {
+            url: "https://example.com".into(),
+            api_key: Some("key".into()),
+            api_key_env: None,
+            api_key_keyring: None,
+            email: None,
+            auth_method: None,
+            api_mode: None,
+            server_version: None,
+            tls_insecure: false,
+            tls_ca_cert: Some(PathBuf::from("/tmp/ca.pem")),
+            tls_pin_sha256: Some("sha256//abc".into()),
+            tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
+        };
+        let err = server.validate_tls("srv").unwrap_err();
+        assert!(
+            err.to_string().contains("mutually exclusive"),
+            "error should mention 'mutually exclusive': {err}"
+        );
+    }
+
+    #[test]
+    fn validate_tls_no_conflicts_passes() {
+        let server = ServerConfig {
+            url: "https://example.com".into(),
+            api_key: Some("key".into()),
+            api_key_env: None,
+            api_key_keyring: None,
+            email: None,
+            auth_method: None,
+            api_mode: None,
+            server_version: None,
+            tls_insecure: false,
+            tls_ca_cert: None,
+            tls_pin_sha256: None,
+            tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
+        };
+        assert!(server.validate_tls("srv").is_ok());
     }
 
     #[cfg(unix)]

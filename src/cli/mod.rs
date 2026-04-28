@@ -827,6 +827,176 @@ mod tests {
     }
 
     #[test]
+    fn parse_set_server_tls_ca_cert() {
+        let cli = Cli::try_parse_from([
+            "bzr",
+            "config",
+            "set-server",
+            "test",
+            "--url",
+            "https://example.com",
+            "--api-key",
+            "key",
+            "--tls-ca-cert",
+            "/path/to/ca.pem",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Config {
+                action: ConfigAction::SetServer { tls_ca_cert, .. },
+            } => assert_eq!(tls_ca_cert.as_deref(), Some("/path/to/ca.pem")),
+            _ => panic!("expected Config SetServer"),
+        }
+    }
+
+    #[test]
+    fn parse_set_server_tls_insecure_conflicts_with_ca_cert() {
+        let result = Cli::try_parse_from([
+            "bzr",
+            "config",
+            "set-server",
+            "test",
+            "--url",
+            "https://example.com",
+            "--api-key",
+            "key",
+            "--tls-insecure",
+            "--tls-ca-cert",
+            "/path/to/ca.pem",
+        ]);
+        assert!(result.is_err(), "should conflict");
+    }
+
+    #[test]
+    fn parse_set_server_tls_pin_now() {
+        let cli = Cli::try_parse_from([
+            "bzr",
+            "config",
+            "set-server",
+            "test",
+            "--url",
+            "https://example.com",
+            "--api-key",
+            "key",
+            "--tls-pin-now",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Config {
+                action: ConfigAction::SetServer { tls_pin_now, .. },
+            } => assert!(tls_pin_now),
+            _ => panic!("expected Config SetServer"),
+        }
+    }
+
+    #[test]
+    fn parse_set_server_tls_pin_sha256() {
+        let cli = Cli::try_parse_from([
+            "bzr",
+            "config",
+            "set-server",
+            "test",
+            "--url",
+            "https://example.com",
+            "--api-key",
+            "key",
+            "--tls-pin-sha256",
+            "sha256//abc123",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Config {
+                action: ConfigAction::SetServer { tls_pin_sha256, .. },
+            } => assert_eq!(tls_pin_sha256.as_deref(), Some("sha256//abc123")),
+            _ => panic!("expected Config SetServer"),
+        }
+    }
+
+    #[test]
+    fn parse_set_server_tls_pin_clear() {
+        let cli = Cli::try_parse_from([
+            "bzr",
+            "config",
+            "set-server",
+            "test",
+            "--url",
+            "https://example.com",
+            "--api-key",
+            "key",
+            "--tls-pin-clear",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Config {
+                action: ConfigAction::SetServer { tls_pin_clear, .. },
+            } => assert!(tls_pin_clear),
+            _ => panic!("expected Config SetServer"),
+        }
+    }
+
+    #[test]
+    fn parse_set_server_tls_pin_sha256_conflicts_with_tls_insecure() {
+        let result = Cli::try_parse_from([
+            "bzr",
+            "config",
+            "set-server",
+            "test",
+            "--url",
+            "https://example.com",
+            "--api-key",
+            "key",
+            "--tls-insecure",
+            "--tls-pin-sha256",
+            "sha256//abc123",
+        ]);
+        assert!(
+            result.is_err(),
+            "--tls-insecure should conflict with --tls-pin-sha256"
+        );
+    }
+
+    #[test]
+    fn parse_set_server_tls_pin_now_conflicts_with_tls_pin_sha256() {
+        let result = Cli::try_parse_from([
+            "bzr",
+            "config",
+            "set-server",
+            "test",
+            "--url",
+            "https://example.com",
+            "--api-key",
+            "key",
+            "--tls-pin-now",
+            "--tls-pin-sha256",
+            "sha256//abc123",
+        ]);
+        assert!(
+            result.is_err(),
+            "--tls-pin-now should conflict with --tls-pin-sha256"
+        );
+    }
+
+    #[test]
+    fn parse_set_server_tls_pin_clear_conflicts_with_tls_pin_now() {
+        let result = Cli::try_parse_from([
+            "bzr",
+            "config",
+            "set-server",
+            "test",
+            "--url",
+            "https://example.com",
+            "--api-key",
+            "key",
+            "--tls-pin-clear",
+            "--tls-pin-now",
+        ]);
+        assert!(
+            result.is_err(),
+            "--tls-pin-clear should conflict with --tls-pin-now"
+        );
+    }
+
+    #[test]
     fn parse_whoami_without_subcommand() {
         let cli = Cli::try_parse_from(["bzr", "whoami"]).unwrap();
         match cli.command {

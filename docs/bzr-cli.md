@@ -862,6 +862,16 @@ The first server added is automatically set as the default.
 | `--auth-method <METHOD>` | No | Override auto-detected auth method (`header` or `query_param`) |
 | `--tls-insecure` | No | Disable TLS certificate verification (self-signed, expired, wrong hostname) |
 
+#### TLS Options
+
+| Flag | Description |
+|------|-------------|
+| `--tls-insecure` | Accept invalid TLS certificates |
+| `--tls-ca-cert <PATH>` | Path to PEM CA certificate file |
+| `--tls-pin-sha256 <HASH>` | Pin a certificate fingerprint |
+| `--tls-pin-now` | Connect and pin the server's current certificate |
+| `--tls-pin-clear` | Remove a stored certificate pin |
+
 Agent note: prefer `--api-key-env` in local shells, CI, and agent environments. API keys passed on the command line may end up in shell history or process listings, and inline keys are stored in `config.toml`. Verify the result with `bzr whoami` or `bzr --json config show`.
 
 ### `bzr config set-default`

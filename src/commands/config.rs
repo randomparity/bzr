@@ -5,6 +5,8 @@
 //! sibling command modules.
 
 use std::fmt::Write as _;
+use std::io::{self, Write as _};
+use std::path::PathBuf;
 
 use crate::cli::ConfigAction;
 use crate::config::{Config, ServerConfig};
@@ -12,10 +14,6 @@ use crate::error::Result;
 use crate::output::{self, ConfigResult};
 use crate::types::OutputFormat;
 
-#[expect(
-    clippy::unused_async,
-    reason = "async for signature consistency with sibling execute fns"
-)]
 pub async fn execute(
     action: &ConfigAction,
     _server: Option<&str>,
@@ -31,18 +29,29 @@ pub async fn execute(
             email,
             auth_method,
             tls_insecure,
-        } => set_server(
-            &SetServerArgs {
-                name: name.as_str(),
-                url: url.as_str(),
-                api_key: api_key.as_deref(),
-                api_key_env: api_key_env.as_deref(),
-                email: email.as_deref(),
-                auth_method: *auth_method,
-                tls_insecure: *tls_insecure,
-            },
-            format,
-        ),
+            tls_ca_cert,
+            tls_pin_sha256,
+            tls_pin_now,
+            tls_pin_clear,
+        } => {
+            set_server(
+                &SetServerArgs {
+                    name: name.as_str(),
+                    url: url.as_str(),
+                    api_key: api_key.as_deref(),
+                    api_key_env: api_key_env.as_deref(),
+                    email: email.as_deref(),
+                    auth_method: *auth_method,
+                    tls_insecure: *tls_insecure,
+                    tls_ca_cert: tls_ca_cert.as_deref(),
+                    tls_pin_sha256: tls_pin_sha256.as_deref(),
+                    tls_pin_now: *tls_pin_now,
+                    tls_pin_clear: *tls_pin_clear,
+                },
+                format,
+            )
+            .await
+        }
         ConfigAction::SetDefault { name } => {
             let mut config = Config::load()?;
             if !config.servers.contains_key(name) {
@@ -100,9 +109,13 @@ struct SetServerArgs<'a> {
     email: Option<&'a str>,
     auth_method: Option<crate::types::AuthMethod>,
     tls_insecure: bool,
+    tls_ca_cert: Option<&'a str>,
+    tls_pin_sha256: Option<&'a str>,
+    tls_pin_now: bool,
+    tls_pin_clear: bool,
 }
 
-fn set_server(args: &SetServerArgs<'_>, format: OutputFormat) -> Result<()> {
+async fn set_server(args: &SetServerArgs<'_>, format: OutputFormat) -> Result<()> {
     let SetServerArgs {
         name,
         url,
@@ -111,7 +124,28 @@ fn set_server(args: &SetServerArgs<'_>, format: OutputFormat) -> Result<()> {
         email,
         auth_method,
         tls_insecure,
+        tls_ca_cert,
+        tls_pin_sha256,
+        tls_pin_now,
+        tls_pin_clear,
     } = *args;
+
+    // Handle --tls-pin-clear: clear pinning fields on an existing server.
+    if tls_pin_clear {
+        let mut config = Config::load()?;
+        if let Some(server) = config.servers.get_mut(name) {
+            server.tls_pin_sha256 = None;
+            server.tls_pin_issuer = None;
+            server.tls_pin_issuer_der = None;
+            config.save()?;
+            let _ = writeln!(io::stderr(), "Certificate pin cleared for server '{name}'.");
+            return Ok(());
+        }
+        return Err(crate::error::BzrError::config(format!(
+            "server '{name}' not found — nothing to clear"
+        )));
+    }
+
     if api_key.is_some() == api_key_env.is_some() {
         return Err(crate::error::BzrError::InputValidation(
             "provide exactly one of --api-key or --api-key-env".into(),
@@ -119,20 +153,41 @@ fn set_server(args: &SetServerArgs<'_>, format: OutputFormat) -> Result<()> {
     }
     let mut config = Config::load()?;
     let is_update = config.servers.contains_key(name);
-    config.servers.insert(
-        name.to_owned(),
-        ServerConfig {
-            url: url.to_owned(),
-            api_key: api_key.map(str::to_owned),
-            api_key_env: api_key_env.map(str::to_owned),
-            api_key_keyring: None,
-            email: email.map(str::to_owned),
-            auth_method,
-            api_mode: None,
-            server_version: None,
-            tls_insecure,
-        },
-    );
+    let mut server_config = ServerConfig {
+        url: url.to_owned(),
+        api_key: api_key.map(str::to_owned),
+        api_key_env: api_key_env.map(str::to_owned),
+        api_key_keyring: None,
+        email: email.map(str::to_owned),
+        auth_method,
+        api_mode: None,
+        server_version: None,
+        tls_insecure,
+        tls_ca_cert: tls_ca_cert.map(PathBuf::from),
+        tls_pin_sha256: tls_pin_sha256.map(str::to_owned),
+        tls_pin_issuer: None,
+        tls_pin_issuer_der: None,
+    };
+
+    // Handle --tls-pin-now: probe the server cert and ask user to confirm.
+    if tls_pin_now {
+        let (fingerprint, issuer, issuer_der) =
+            crate::tls::tofu::probe_server_cert(&server_config.url).await?;
+        let _ = writeln!(io::stderr(), "Certificate fingerprint: {fingerprint}");
+        let _ = writeln!(io::stderr(), "Issuer:                  {issuer}");
+        let confirmed = crate::tls::tofu::confirm_pin()?;
+        if confirmed {
+            server_config.tls_pin_sha256 = Some(fingerprint);
+            server_config.tls_pin_issuer = Some(issuer);
+            server_config.tls_pin_issuer_der = issuer_der;
+        } else {
+            return Err(crate::error::BzrError::config(
+                "certificate pinning cancelled by user".to_owned(),
+            ));
+        }
+    }
+
+    config.servers.insert(name.to_owned(), server_config);
     if config.default_server.is_none() {
         config.default_server = Some(name.to_owned());
     }
@@ -407,6 +462,10 @@ mod tests {
                 email: None,
                 auth_method: None,
                 tls_insecure: false,
+                tls_ca_cert: None,
+                tls_pin_sha256: None,
+                tls_pin_now: false,
+                tls_pin_clear: false,
             },
             None,
             OutputFormat::Json,
@@ -471,6 +530,10 @@ mod tests {
                 email: None,
                 auth_method: None,
                 tls_insecure: false,
+                tls_ca_cert: None,
+                tls_pin_sha256: None,
+                tls_pin_now: false,
+                tls_pin_clear: false,
             },
             None,
             OutputFormat::Table,
@@ -496,6 +559,10 @@ mod tests {
                 email: None,
                 auth_method: None,
                 tls_insecure: false,
+                tls_ca_cert: None,
+                tls_pin_sha256: None,
+                tls_pin_now: false,
+                tls_pin_clear: false,
             },
             None,
             OutputFormat::Table,
@@ -513,6 +580,10 @@ mod tests {
                 email: None,
                 auth_method: None,
                 tls_insecure: false,
+                tls_ca_cert: None,
+                tls_pin_sha256: None,
+                tls_pin_now: false,
+                tls_pin_clear: false,
             },
             None,
             OutputFormat::Table,
@@ -548,6 +619,10 @@ mod tests {
                 email: Some("ops@example.com".into()),
                 auth_method: Some(AuthMethod::QueryParam),
                 tls_insecure: true,
+                tls_ca_cert: None,
+                tls_pin_sha256: None,
+                tls_pin_now: false,
+                tls_pin_clear: false,
             },
             None,
             OutputFormat::Json,
@@ -611,6 +686,10 @@ mod tests {
                 email: Some("admin@example.com".into()),
                 auth_method: Some(AuthMethod::Header),
                 tls_insecure: true,
+                tls_ca_cert: None,
+                tls_pin_sha256: None,
+                tls_pin_now: false,
+                tls_pin_clear: false,
             },
             None,
             OutputFormat::Json,
@@ -645,6 +724,10 @@ mod tests {
                 email: None,
                 auth_method: None,
                 tls_insecure: false,
+                tls_ca_cert: None,
+                tls_pin_sha256: None,
+                tls_pin_now: false,
+                tls_pin_clear: false,
             },
             None,
             OutputFormat::Json,
@@ -741,6 +824,10 @@ mod tests {
                 email: None,
                 auth_method: None,
                 tls_insecure: false,
+                tls_ca_cert: None,
+                tls_pin_sha256: None,
+                tls_pin_now: false,
+                tls_pin_clear: false,
             },
             None,
             OutputFormat::Json,

@@ -24,6 +24,10 @@ pub struct ServerDisplayInfo {
     auth_method: Option<AuthMethod>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     tls_insecure: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tls_ca_cert: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tls_pin: Option<String>,
 }
 
 impl ServerDisplayInfo {
@@ -52,6 +56,14 @@ impl ServerDisplayInfo {
             api_key_source: api_key_source.to_string(),
             auth_method: srv.auth_method,
             tls_insecure: srv.tls_insecure,
+            tls_ca_cert: srv.tls_ca_cert.as_ref().map(|p| p.display().to_string()),
+            tls_pin: srv.tls_pin_sha256.as_ref().map(|pin| {
+                if let Some(issuer) = &srv.tls_pin_issuer {
+                    format!("{pin} ({issuer})")
+                } else {
+                    pin.clone()
+                }
+            }),
         }
     }
 }
@@ -97,6 +109,12 @@ fn print_server(name: &str, s: &ServerDisplayInfo) {
     print_field("Auth", &auth_display(s.auth_method.as_ref()));
     if s.tls_insecure {
         print_field("TLS", "insecure (certificate verification disabled)");
+    }
+    if let Some(ca) = &s.tls_ca_cert {
+        print_field("TLS CA Cert", ca);
+    }
+    if let Some(pin) = &s.tls_pin {
+        print_field("TLS Pin", pin);
     }
 }
 
@@ -169,6 +187,10 @@ mod tests {
                 api_mode: None,
                 server_version: None,
                 tls_insecure: true,
+                tls_ca_cert: None,
+                tls_pin_sha256: None,
+                tls_pin_issuer: None,
+                tls_pin_issuer_der: None,
             },
         );
         let config = Config {
@@ -205,6 +227,10 @@ mod tests {
                 api_mode: None,
                 server_version: None,
                 tls_insecure: false,
+                tls_ca_cert: None,
+                tls_pin_sha256: None,
+                tls_pin_issuer: None,
+                tls_pin_issuer_der: None,
             },
         );
         let config = Config {
@@ -237,11 +263,51 @@ mod tests {
             api_mode: None,
             server_version: None,
             tls_insecure: false,
+            tls_ca_cert: None,
+            tls_pin_sha256: None,
+            tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
         let info = ServerDisplayInfo::from_config(&srv);
         assert_eq!(info.api_key_source, "keyring");
         assert!(info.api_key.contains("bzr"));
         assert!(info.api_key.contains("prod"));
+    }
+
+    #[test]
+    fn display_server_with_tls_pin() {
+        let mut servers = HashMap::new();
+        servers.insert(
+            "pinned".into(),
+            ServerConfig {
+                url: "https://bugzilla.example".into(),
+                email: None,
+                api_key: Some("1234567890abcdef".into()),
+                api_key_env: None,
+                api_key_keyring: None,
+                auth_method: Some(AuthMethod::Header),
+                api_mode: None,
+                server_version: None,
+                tls_insecure: false,
+                tls_ca_cert: None,
+                tls_pin_sha256: Some("sha256//abc123".into()),
+                tls_pin_issuer: Some("CN=Test CA".into()),
+                tls_pin_issuer_der: None,
+            },
+        );
+        let config = Config {
+            default_server: Some("pinned".into()),
+            servers,
+            queries: HashMap::new(),
+            templates: HashMap::new(),
+        };
+
+        let view = ConfigView::from_config(&config, Path::new("/tmp/bzr/config.toml"));
+        let server = &view.servers["pinned"];
+        let json: serde_json::Value = serde_json::to_value(server).unwrap();
+
+        assert_eq!(json["tls_pin"], "sha256//abc123 (CN=Test CA)");
+        assert!(json.get("tls_insecure").is_none());
     }
 
     fn make_display_info(
@@ -257,6 +323,8 @@ mod tests {
             api_key_source: source.into(),
             auth_method: None,
             tls_insecure,
+            tls_ca_cert: None,
+            tls_pin: None,
         }
     }
 
@@ -351,6 +419,10 @@ mod tests {
             api_mode: None,
             server_version: None,
             tls_insecure: false,
+            tls_ca_cert: None,
+            tls_pin_sha256: None,
+            tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
         };
         let info = ServerDisplayInfo::from_config(&srv);
         assert_eq!(info.api_key_source, "keyring");

@@ -1,4 +1,3 @@
-use std::fmt::Write as _;
 use std::time::Duration;
 
 /// Kept short (10s) to fail fast on unreachable servers.
@@ -52,21 +51,6 @@ pub(crate) fn apply_auth(
     }
 }
 
-/// Build a shared HTTP client with standard timeout configuration.
-///
-/// When `tls_insecure` is true, the client accepts any TLS certificate
-/// (self-signed, expired, wrong hostname). A warning is emitted at the
-/// call site to make this visible to the user.
-pub(crate) fn build_http_client(
-    tls_insecure: bool,
-) -> std::result::Result<reqwest::Client, reqwest::Error> {
-    reqwest::Client::builder()
-        .connect_timeout(CONNECT_TIMEOUT)
-        .timeout(REQUEST_TIMEOUT)
-        .danger_accept_invalid_certs(tls_insecure)
-        .build()
-}
-
 /// Check if an error message string contains TLS-related keywords.
 pub(crate) fn looks_like_tls_error(msg: &str) -> bool {
     let lower = msg.to_ascii_lowercase();
@@ -78,17 +62,19 @@ pub(crate) fn is_tls_cert_error(err: &reqwest::Error) -> bool {
     err.is_connect() && looks_like_tls_error(&crate::error::format_error_chain(err))
 }
 
+/// Hint text appended to TLS certificate errors.
+pub(crate) const TLS_HINT: &str =
+    "\n  hint: to trust this server's certificate, re-run interactively,\n    \
+     or pre-pin with:  bzr config set-server <NAME> --tls-pin-now\n    \
+     or provide a CA:  bzr config set-server <NAME> --tls-ca-cert <PATH>\n    \
+     or skip verification: bzr config set-server <NAME> --tls-insecure";
+
 /// Append a `--tls-insecure` hint to a message when a TLS certificate
 /// error is detected, returning the enriched string.
 pub(crate) fn tls_hint(base_msg: &str, err: &reqwest::Error) -> String {
     let mut msg = base_msg.to_string();
     if is_tls_cert_error(err) {
-        let _ = write!(
-            msg,
-            "\n  hint: if this server uses a self-signed certificate or sits \
-             behind a TLS-intercepting proxy, re-run:\n    \
-             bzr config set-server <NAME> ... --tls-insecure"
-        );
+        msg.push_str(TLS_HINT);
     }
     msg
 }
@@ -194,22 +180,10 @@ mod tests {
         assert!(err.to_string().contains("invalid header characters"));
     }
 
-    #[test]
-    fn build_http_client_succeeds() {
-        let client = build_http_client(false);
-        assert!(client.is_ok());
-    }
-
-    #[test]
-    fn build_http_client_insecure_succeeds() {
-        let client = build_http_client(true);
-        assert!(client.is_ok());
-    }
-
     #[tokio::test]
     async fn tls_hint_no_hint_for_non_tls_error() {
         // Connection-refused is not a TLS error — should return the message unchanged.
-        let client = build_http_client(false).unwrap();
+        let client = crate::tls::build_tls_client(&crate::tls::TlsConfig::default()).unwrap();
         let err = client
             .get("http://127.0.0.1:1/nope")
             .send()
