@@ -5,7 +5,7 @@ edition = "2021"
 resolver = "3"
 description = "A CLI for Bugzilla, inspired by gh"
 license = "MIT"
-rust-version = "1.84"
+rust-version = "1.88"
 repository = "https://github.com/randomparity/bzr"
 homepage = "https://github.com/randomparity/bzr"
 keywords = ["bugzilla", "cli", "bug-tracker"]
@@ -23,7 +23,6 @@ test-helpers = ["dep:wiremock", "dep:tempfile"]
 
 [dependencies]
 base64 = "0.22"
-# Keep clap below 4.6 to preserve Rust 1.84 / RHEL 9.6 compatibility.
 clap = { version = ">=4.5.60, <4.6", features = ["derive"] }
 reqwest = { version = "0.12", features = ["json", "rustls-tls-native-roots"], default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["std"] }
