@@ -1,12 +1,7 @@
 [advisories]
 version = 2
 yanked = "warn"
-ignore = [
-    # time 0.3.45 DoS via stack exhaustion (RUSTSEC-2026-0009).
-    # Dev-only transitive dep from rcgen -> yasna -> time.
-    # time 0.3.47 fixes it but requires Rust 1.88 (MSRV is 1.84).
-    { id = "RUSTSEC-2026-0009", reason = "dev-only dep, can't upgrade due to MSRV" },
-]
+ignore = []
 
 [bans]
 multiple-versions = "warn"
