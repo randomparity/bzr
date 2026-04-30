@@ -43,7 +43,9 @@ wait_for_ready() {
     for i in $(seq 1 "$HEALTH_TIMEOUT"); do
         if curl -sf "$url" >/dev/null 2>&1; then
             log "Bugzilla ready after ${i}s"
-            curl -s "$url" | python3 -m json.tool 2>/dev/null || curl -s "$url" || true
+            local body
+            body=$(curl -s "$url") || body=""
+            printf '%s\n' "$body" | python3 -m json.tool 2>/dev/null || printf '%s\n' "$body"
             return 0
         fi
         sleep 1
