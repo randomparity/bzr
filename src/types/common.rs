@@ -243,10 +243,14 @@ mod tests {
 
     #[test]
     fn flag_status_display_emits_status_char() {
-        assert_eq!(FlagStatus::Grant.to_string(), "+");
-        assert_eq!(FlagStatus::Deny.to_string(), "-");
-        assert_eq!(FlagStatus::Request.to_string(), "?");
-        assert_eq!(FlagStatus::Clear.to_string(), "X");
+        for (status, expected) in [
+            (FlagStatus::Grant, "+"),
+            (FlagStatus::Deny, "-"),
+            (FlagStatus::Request, "?"),
+            (FlagStatus::Clear, "X"),
+        ] {
+            assert_eq!(status.to_string(), expected);
+        }
     }
 
     #[test]
