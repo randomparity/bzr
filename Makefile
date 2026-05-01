@@ -2,7 +2,7 @@ CARGO ?= cargo
 RUST_MIN_VERSION := 1.84.0
 
 .PHONY: setup check-rust ensure-components ensure-coverage-prereqs ensure-mutants-prereq install-hooks \
-        build release test coverage fmt clippy lint clean help \
+        build release test coverage fmt clippy lint clean help man \
         mutants mutants-fast mutants-list audit-mutant-skips \
         functional-build functional-start functional-test functional-stop \
         functional-test-bz52 functional-test-bz53 functional-test-all functional-stop-all \
@@ -90,6 +90,10 @@ lint: fmt clippy ## Run all linters (fmt + clippy)
 
 clean: ## Remove build artifacts
 	$(CARGO) clean
+	rm -rf man
+
+man: ## Generate manpages into man/man1/
+	$(CARGO) run -p xtask --no-default-features --release --quiet -- man --out man/man1
 
 ## Mutation Testing
 #

@@ -10,8 +10,28 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  manpages:
+    name: Generate manpages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
+        with:
+          key: manpages
+      - name: Generate manpages
+        run: cargo run -p xtask --no-default-features --release --locked -- man --out man/man1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: bzr-manpages
+          path: man/man1/*.1
+          if-no-files-found: error
+
   build:
     name: Build ${{ matrix.target }}
+    needs: manpages
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -25,19 +45,28 @@ jobs:
             os: ubuntu-latest
             use_cross: false
             archive: tar.gz
+            pkg_deb: true
+            pkg_rpm: true
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             use_cross: true
             archive: tar.gz
+            pkg_deb: true
+            pkg_rpm: true
           - target: powerpc64le-unknown-linux-gnu
             os: ubuntu-latest
             use_cross: false
             use_qemu: true
             archive: tar.gz
+            pkg_deb: true
+            pkg_rpm: true
           - target: s390x-unknown-linux-gnu
             os: ubuntu-latest
             use_cross: true
             archive: tar.gz
+            # .deb skipped: Debian s390x audience is effectively zero.
+            pkg_deb: false
+            pkg_rpm: true
           - target: aarch64-apple-darwin
             os: macos-14
             use_cross: false
@@ -98,6 +127,12 @@ jobs:
           fi
         shell: bash
 
+      - name: Download manpages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: bzr-manpages
+          path: man/man1
+
       - name: Package (unix)
         if: matrix.archive == 'tar.gz'
         run: |
@@ -105,6 +140,8 @@ jobs:
           mkdir "$STAGING"
           cp "target/${{ matrix.target }}/release/bzr" "$STAGING/"
           cp LICENSE README.md "$STAGING/"
+          mkdir -p "$STAGING/man/man1"
+          cp man/man1/*.1 "$STAGING/man/man1/"
           tar czf "$STAGING.tar.gz" "$STAGING"
         shell: bash
 
@@ -115,18 +152,90 @@ jobs:
           New-Item -ItemType Directory -Path $STAGING
           Copy-Item "target\${{ matrix.target }}\release\bzr.exe" "$STAGING\"
           Copy-Item LICENSE, README.md "$STAGING\"
+          New-Item -ItemType Directory -Path "$STAGING\man\man1"
+          Copy-Item "man\man1\*.1" "$STAGING\man\man1\"
           Compress-Archive -Path "$STAGING\*" -DestinationPath "$STAGING.zip"
         shell: pwsh
+
+      - name: Install cargo-deb
+        if: matrix.pkg_deb
+        uses: taiki-e/install-action@49ba71bf46962339e6e5c0a7a4ec3ed4c8af28ac
+        with:
+          tool: cargo-deb
+
+      - name: Install cargo-generate-rpm
+        if: matrix.pkg_rpm
+        uses: taiki-e/install-action@49ba71bf46962339e6e5c0a7a4ec3ed4c8af28ac
+        with:
+          tool: cargo-generate-rpm
+
+      - name: Build .deb
+        if: matrix.pkg_deb
+        run: cargo deb --no-build --no-strip --target ${{ matrix.target }}
+        shell: bash
+
+      - name: Build .rpm
+        if: matrix.pkg_rpm
+        run: cargo generate-rpm --target ${{ matrix.target }}
+        shell: bash
+
+      - name: Stage packages alongside tarball
+        if: matrix.pkg_deb || matrix.pkg_rpm
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.pkg_deb }}" = "true" ]; then
+            cp target/${{ matrix.target }}/debian/*.deb .
+          fi
+          if [ "${{ matrix.pkg_rpm }}" = "true" ]; then
+            cp target/${{ matrix.target }}/generate-rpm/*.rpm .
+          fi
+        shell: bash
+
+      - name: Lint .deb (warn-only)
+        if: matrix.pkg_deb
+        continue-on-error: true
+        run: |
+          sudo apt-get update && sudo apt-get install -y lintian
+          lintian --no-tag-display-limit *.deb || true
+        shell: bash
+
+      - name: Lint .rpm (warn-only)
+        if: matrix.pkg_rpm
+        continue-on-error: true
+        run: |
+          sudo apt-get update && sudo apt-get install -y rpmlint
+          rpmlint *.rpm || true
+        shell: bash
+
+      - name: Install-test .deb (x86_64 only)
+        if: matrix.target == 'x86_64-unknown-linux-gnu' && matrix.pkg_deb
+        run: |
+          docker run --rm -v "$PWD:/pkg" -w /pkg debian:stable bash -c '
+            apt-get update && apt-get install -y ./*.deb && bzr --version'
+        shell: bash
+
+      - name: Install-test .rpm (x86_64 only)
+        if: matrix.target == 'x86_64-unknown-linux-gnu' && matrix.pkg_rpm
+        run: |
+          docker run --rm -v "$PWD:/pkg" -w /pkg fedora:latest bash -c '
+            dnf install -y ./*.rpm && bzr --version'
+        shell: bash
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32  # v4
         with:
-          subject-path: bzr-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.archive }}
+          subject-path: |
+            bzr-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.archive }}
+            *.deb
+            *.rpm
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: bzr-${{ matrix.target }}
-          path: bzr-${{ github.ref_name }}-${{ matrix.target }}.*
+          path: |
+            bzr-${{ github.ref_name }}-${{ matrix.target }}.*
+            *.deb
+            *.rpm
 
   release:
     name: Create Release

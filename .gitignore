@@ -1,6 +1,9 @@
 # Rust build artifacts
 target/
 
+# Generated manpages (produced by `make man` / xtask)
+man/
+
 # cargo-mutants run output
 mutants.out/
 mutants.out.old/

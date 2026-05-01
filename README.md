@@ -39,6 +39,40 @@ Available platforms: Linux (x86_64, aarch64, ppc64le, s390x), macOS (Apple Silic
 
 Intel Mac users can install from source with `cargo install bzr --locked`.
 
+### Homebrew (macOS, Linux)
+
+```bash
+brew tap randomparity/tap
+brew install bzr
+```
+
+The tap ships pre-built binaries for macOS arm64 and Linux x86_64/aarch64.
+Intel Mac builds from source automatically (a `rust` build dependency is
+pulled in for that path).
+
+### Linux packages (`.deb` / `.rpm`)
+
+Each release attaches `.deb` and `.rpm` packages alongside the tarballs:
+
+- `.deb` for `amd64`, `arm64`, `ppc64el`
+- `.rpm` for `x86_64`, `aarch64`, `ppc64le`, `s390x`
+
+Install on Debian/Ubuntu:
+
+```bash
+sudo apt install ./bzr_X.Y.Z-1_amd64.deb
+```
+
+Install on Fedora/RHEL:
+
+```bash
+sudo dnf install ./bzr-X.Y.Z-1.x86_64.rpm
+```
+
+Both packages install the binary, manpages under `/usr/share/man/man1/`, and
+documentation under `/usr/share/doc/bzr/`. They depend on `libdbus-1-3`
+(Debian) / `dbus-libs` (RPM) for the OS keychain backend.
+
 ### From crates.io
 
 ```bash
@@ -80,6 +114,21 @@ variable credentials; only the `config set-keyring` /
 `migrate-to-keyring` subcommands become unavailable. See
 [`docs/troubleshooting.md`](docs/troubleshooting.md) for diagnosing
 keychain errors.
+
+### Manual pages
+
+Release tarballs ship roff manpages under `man/man1/` (`bzr.1`, `bzr-bug.1`,
+`bzr-bug-list.1`, ...). Install them manually:
+
+```bash
+sudo install -Dm644 man/man1/bzr.1 /usr/local/share/man/man1/bzr.1
+sudo install -Dm644 man/man1/bzr-*.1 /usr/local/share/man/man1/
+sudo mandb   # or `sudo makewhatis` on BSD
+```
+
+The `.deb` and `.rpm` packages install them automatically. `cargo install bzr`
+does **not** install manpages — use a release tarball or distro package, or
+regenerate from a source checkout with `make man`.
 
 ## Onboarding
 

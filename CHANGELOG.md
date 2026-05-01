@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0-rc3] - 2026-05-01
+
+### Added
+
+- Manpages: `bzr` and one roff page per subcommand, auto-generated from
+  the clap-derive CLI tree by a new `xtask` workspace member. Run
+  `make man` locally; release tarballs ship them under `man/man1/`.
+- `.deb` packages for amd64, arm64, and ppc64el; `.rpm` packages for
+  x86_64, aarch64, ppc64le, and s390x. Built and attached to GitHub
+  releases by `release.yml`, with `lintian`/`rpmlint` checks (warn-only)
+  and Docker install smoke-tests for the x86_64 packages.
+- Homebrew tap support via `randomparity/homebrew-tap`: pre-built
+  binaries on macOS arm64 and Linux x86_64/aarch64; Intel Mac falls
+  back to a source build with a build-time `rust` dep. The
+  `update-homebrew.yml` workflow auto-bumps the formula on each
+  stable release.
+
 ## [0.2.0-rc2] - 2026-04-28
 
 > Same-day re-spin of rc1 to fix a defect found during smoke testing

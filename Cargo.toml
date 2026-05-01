@@ -1,8 +1,11 @@
+[workspace]
+members = [".", "xtask"]
+resolver = "3"
+
 [package]
 name = "bzr"
 version = "0.2.0"
 edition = "2021"
-resolver = "3"
 description = "A CLI for Bugzilla, inspired by gh"
 license = "MIT"
 rust-version = "1.88"
@@ -59,6 +62,67 @@ keyring = { version = "3" }
 # `exclude_re` in .cargo/mutants.toml cannot reach (e.g. cargo-mutants's
 # `delete field` operator on struct expressions).
 mutants = "0.0.3"
+
+[package.metadata.deb]
+maintainer = "David Christensen <randomparity@gmail.com>"
+copyright = "2025-2026 David Christensen <randomparity@gmail.com>"
+license-file = ["LICENSE", "0"]
+extended-description = """
+bzr is a Bugzilla CLI inspired by GitHub's gh, supporting both REST and
+XML-RPC APIs, multi-server configuration, saved queries and templates,
+and OS-keychain-backed credential storage."""
+section = "devel"
+priority = "optional"
+# Explicit dependencies. We do not use cargo-deb's `$auto` because the binary
+# is cross-compiled in CI and ldd-based introspection would scan the wrong
+# architecture.
+depends = "libc6, libdbus-1-3"
+recommends = "ca-certificates"
+assets = [
+    ["target/release/bzr",                     "usr/bin/",                          "755"],
+    ["man/man1/bzr.1",                         "usr/share/man/man1/",               "644"],
+    ["man/man1/bzr-*.1",                       "usr/share/man/man1/",               "644"],
+    ["README.md",                              "usr/share/doc/bzr/README.md",       "644"],
+    ["CHANGELOG.md",                           "usr/share/doc/bzr/CHANGELOG.md",    "644"],
+]
+
+[package.metadata.generate-rpm]
+summary = "A CLI for Bugzilla, inspired by gh"
+# Disable rpm-build's automatic Requires extraction. It runs `ldd` on the host
+# which produces wrong results for cross-compiled binaries; declare deps
+# explicitly below instead.
+auto-req = "no"
+[package.metadata.generate-rpm.requires]
+glibc = "*"
+dbus-libs = "*"
+[[package.metadata.generate-rpm.assets]]
+source = "target/release/bzr"
+dest = "/usr/bin/bzr"
+mode = "755"
+[[package.metadata.generate-rpm.assets]]
+source = "man/man1/bzr.1"
+dest = "/usr/share/man/man1/bzr.1"
+mode = "644"
+doc = true
+[[package.metadata.generate-rpm.assets]]
+source = "man/man1/bzr-*.1"
+dest = "/usr/share/man/man1/"
+mode = "644"
+doc = true
+[[package.metadata.generate-rpm.assets]]
+source = "README.md"
+dest = "/usr/share/doc/bzr/README.md"
+mode = "644"
+doc = true
+[[package.metadata.generate-rpm.assets]]
+source = "CHANGELOG.md"
+dest = "/usr/share/doc/bzr/CHANGELOG.md"
+mode = "644"
+doc = true
+[[package.metadata.generate-rpm.assets]]
+source = "LICENSE"
+dest = "/usr/share/licenses/bzr/LICENSE"
+mode = "644"
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
