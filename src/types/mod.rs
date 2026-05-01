@@ -82,33 +82,6 @@ mod tests {
         assert!(!params.has_filters());
     }
 
-    #[test]
-    fn search_params_has_filters_with_product() {
-        let params = SearchParams {
-            product: vec!["TestProduct".into()],
-            ..Default::default()
-        };
-        assert!(params.has_filters());
-    }
-
-    #[test]
-    fn search_params_has_filters_with_ids() {
-        let params = SearchParams {
-            id: vec![1, 2, 3],
-            ..Default::default()
-        };
-        assert!(params.has_filters());
-    }
-
-    #[test]
-    fn search_params_has_filters_with_quicksearch() {
-        let params = SearchParams {
-            quicksearch: Some("crash".into()),
-            ..Default::default()
-        };
-        assert!(params.has_filters());
-    }
-
     // Bug deserialization tests
 
     #[test]

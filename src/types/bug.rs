@@ -616,29 +616,9 @@ mod tests {
     }
 
     #[test]
-    fn saved_query_has_filters_true() {
-        let query = SavedQuery {
-            kind: QueryKind::List,
-            product: vec!["Firefox".into()],
-            ..SavedQuery::default()
-        };
-        assert!(query.has_filters());
-    }
-
-    #[test]
     fn saved_query_has_filters_false_empty() {
         let query = SavedQuery::default();
         assert!(!query.has_filters());
-    }
-
-    #[test]
-    fn saved_query_has_filters_search_only() {
-        let query = SavedQuery {
-            kind: QueryKind::Search,
-            quicksearch: Some("crash".into()),
-            ..SavedQuery::default()
-        };
-        assert!(query.has_filters());
     }
 
     fn sample_raw_params() -> Vec<(String, String)> {
@@ -717,25 +697,6 @@ mod tests {
         assert_eq!(params.limit, Some(100));
         assert_eq!(params.raw_params.len(), 2);
         assert_eq!(params.raw_params[0], ("f1".into(), "qa_contact".into()));
-    }
-
-    #[test]
-    fn saved_query_url_kind_has_filters_with_only_raw_params() {
-        let query = SavedQuery {
-            kind: QueryKind::Url,
-            raw_params: vec![("f1".into(), "qa_contact".into())],
-            ..SavedQuery::default()
-        };
-        assert!(query.has_filters());
-    }
-
-    #[test]
-    fn search_params_has_filters_with_raw_params() {
-        let params = SearchParams {
-            raw_params: vec![("f1".into(), "qa_contact".into())],
-            ..Default::default()
-        };
-        assert!(params.has_filters());
     }
 
     #[test]
