@@ -30,4 +30,18 @@ exclude_globs = [
 exclude_re = [
     "impl .* Display for",
     "impl .* Debug for",
+    # `skip_to_end` in xmlrpc parsing is defensive depth-tracking; in the
+    # normal flow it is only ever called when the next event is the matching
+    # end tag. The increment branch never fires, so all mutations of the
+    # depth counter and inner guards are equivalent on real Bugzilla input.
+    "skip_to_end",
+    # The empty-`<value></value>` end-arm in parse_value_content: both the
+    # `with true` and `== with !=` mutations here are equivalent because the
+    # only input that reaches this branch is `<value></value>`, and on that
+    # input the immediately-following `</param>` end matches via the next
+    # loop iteration and returns `""` regardless of the guard. The line:col
+    # in the second pattern is brittle to edits above it; if it shifts, run
+    # `cargo mutants --file src/xmlrpc/parsing.rs` and update accordingly.
+    'b"value" with true in parse_value_content',
+    'parsing\.rs:158:52: replace == with != in parse_value_content',
 ]

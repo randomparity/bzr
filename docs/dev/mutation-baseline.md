@@ -76,7 +76,7 @@ Largest-first. `–` means the wave hasn't started yet.
 | File | Mutants | Status | Caught | Missed | Unviable | Timeout | Score | Last swept |
 |------|--------:|--------|-------:|-------:|---------:|--------:|------:|-----------|
 | src/tls/verifier.rs                 | 102 | pending | – | – | – | – | – | – |
-| src/xmlrpc/parsing.rs               |  81 | pending | – | – | – | – | – | – |
+| src/xmlrpc/parsing.rs               |  81 | swept   | 56 | 0 | 11 | 0 | 100 % | 2026-05-01 |
 | src/types/bug.rs                    |  77 | pending | – | – | – | – | – | – |
 | src/commands/shared.rs              |  49 | pending | – | – | – | – | – | – |
 | src/config.rs                       |  47 | pending | – | – | – | – | – | – |
@@ -90,8 +90,8 @@ Largest-first. `–` means the wave hasn't started yet.
 | src/error.rs                        |  19 | pending | – | – | – | – | – | – |
 | src/commands/query.rs               |  19 | pending | – | – | – | – | – | – |
 | src/commands/config.rs              |  18 | pending | – | – | – | – | – | – |
-| src/commands/flags.rs               |  17 | pending | – | – | – | – | – | – |
-| src/client/version.rs               |  17 | pending | – | – | – | – | – | – |
+| src/commands/flags.rs               |  17 | swept   | 10 | 0 |  7 | 0 | 100 % | 2026-05-01 |
+| src/client/version.rs               |  17 | swept   | 13 | 0 |  4 | 0 | 100 % | 2026-05-01 |
 | src/types/common.rs                 |  16 | pending | – | – | – | – | – | – |
 | src/main.rs                         |  16 | pending | – | – | – | – | – | – |
 | src/commands/attachment.rs          |  16 | pending | – | – | – | – | – | – |
@@ -171,10 +171,20 @@ Largest-first. `–` means the wave hasn't started yet.
 
 ## Skip-list audit
 
-`mutants::skip` attributes are tracked for review. Run:
+Per-file `mutants::skip` attributes are tracked via:
 
 ```bash
 make audit-mutant-skips
 ```
 
-Current skip count: **0** (skips will be added during the sweep waves).
+Current in-source skip count: **0**.
+
+Config-level exclusions in `.cargo/mutants.toml` (review these whenever the
+related code changes — they may have rotted):
+
+| Pattern | Files affected | Reason |
+|---------|---------------|--------|
+| `impl .* Display for` / `impl .* Debug for` | all | formatting; covered by snapshot/output tests when needed |
+| `skip_to_end` | `src/xmlrpc/parsing.rs` | defensive depth-tracking; equivalent in normal XML-RPC flow (depth never exceeds 1) |
+| `b"value" with true in parse_value_content` | `src/xmlrpc/parsing.rs` | empty `<value></value>` end arm — equivalent under permissive parser |
+| `parsing\.rs:158:52: replace == with !=` | `src/xmlrpc/parsing.rs` | same equivalence as above; line:col is brittle and may need updating |

@@ -150,7 +150,11 @@ fn parse_value_content(reader: &mut Reader<&[u8]>) -> Result<Value> {
                 skip_to_end(reader, b"value")?;
                 return Ok(Value::String(text));
             }
-            // Empty <value/> → empty string
+            // Empty <value></value> → empty string. (The `with true` guard
+            // mutation here is excluded in .cargo/mutants.toml as equivalent:
+            // this arm only fires when <value> has no content, and on that
+            // input the immediately-following `</param>` end produces the
+            // same `""` via the next loop iteration regardless of guard.)
             Event::End(ref e) if e.name().as_ref() == b"value" => {
                 return Ok(Value::String(String::new()));
             }
@@ -488,6 +492,194 @@ mod tests {
         assert!(
             matches!(&result, Value::Base64(bytes) if bytes == b"Hello"),
             "expected Base64(Hello), got {result:?}"
+        );
+    }
+
+    // CDATA sections inside text content must be appended to the accumulated
+    // string, not silently dropped.
+    #[test]
+    fn parse_string_with_cdata_section() {
+        let xml = r#"<methodResponse><params><param><value>
+            <string><![CDATA[contains <special> & "characters"]]></string>
+        </value></param></params></methodResponse>"#;
+        let result = parse_response(xml).unwrap();
+        assert_eq!(
+            result.as_str().unwrap(),
+            r#"contains <special> & "characters""#
+        );
+    }
+
+    // Empty `<value></value>` is treated as an empty string. If the End-tag
+    // arm in parse_value_content fails to match, the parser loops to EOF.
+    #[test]
+    fn parse_empty_value_returns_empty_string() {
+        let xml =
+            r"<methodResponse><params><param><value></value></param></params></methodResponse>";
+        let result = parse_response(xml).unwrap();
+        assert_eq!(result.as_str().unwrap(), "");
+    }
+
+    // `<array></array>` with no `<data>` tag is an empty array. Asserts the
+    // early-return branch in parse_array's "find data" loop.
+    #[test]
+    fn parse_array_without_data_tag_is_empty() {
+        let xml = r"<methodResponse><params><param><value><array></array></value></param></params></methodResponse>";
+        let result = parse_response(xml).unwrap();
+        assert!(result.as_array().unwrap().is_empty());
+    }
+
+    // `<params></params>` with no `<param>` child must produce a specific
+    // "empty params" error, not an EOF error.
+    #[test]
+    fn parse_empty_params_errors_with_specific_message() {
+        let xml = r"<methodResponse><params></params></methodResponse>";
+        let err = parse_response(xml).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("empty params"),
+            "expected 'empty params' message, got: {msg}"
+        );
+    }
+
+    // The methodResponse-finding loop must skip elements before
+    // <methodResponse> even if they look response-shaped.
+    #[test]
+    fn parse_response_skips_decoy_root_sibling() {
+        let xml = r"<wrapper>
+            <fakeResponse><params><param><value><string>decoy</string></value></param></params></fakeResponse>
+            <methodResponse><params><param><value><string>real</string></value></param></params></methodResponse>
+        </wrapper>";
+        let result = parse_response(xml).unwrap();
+        assert_eq!(result.as_str().unwrap(), "real");
+    }
+
+    // Inside <methodResponse>, the parser must skip non-fault/non-params
+    // elements rather than treating them as <params>.
+    #[test]
+    fn parse_response_skips_decoy_inside_method_response() {
+        let xml = r"<methodResponse>
+            <decoy><param><value><string>decoy</string></value></param></decoy>
+            <params><param><value><string>real</string></value></param></params>
+        </methodResponse>";
+        let result = parse_response(xml).unwrap();
+        assert_eq!(result.as_str().unwrap(), "real");
+    }
+
+    // Inside <params>, an unrelated start/end pair before <param> must not
+    // be treated as a param or as the end of params. The wrapper contains
+    // its own value-shaped payload so a loosened param guard would parse
+    // the decoy's "decoy" string instead of the real "real" string.
+    #[test]
+    fn parse_first_param_skips_decoy_inside_params() {
+        let xml = r"<methodResponse><params>
+            <wrapper><value><string>decoy</string></value></wrapper>
+            <param><value><string>real</string></value></param>
+        </params></methodResponse>";
+        let result = parse_response(xml).unwrap();
+        assert_eq!(result.as_str().unwrap(), "real");
+    }
+
+    // Inside <param>, decoy elements before <value> must not be treated as
+    // the value.
+    #[test]
+    fn parse_value_skips_decoy_inside_param() {
+        let xml = r"<methodResponse><params><param>
+            <decoy>x</decoy>
+            <value><string>real</string></value>
+        </param></params></methodResponse>";
+        let result = parse_response(xml).unwrap();
+        assert_eq!(result.as_str().unwrap(), "real");
+    }
+
+    // Inside <array>, an unrelated start/end pair before <data> must not be
+    // treated as <data> or as the end of the array. Includes a fake <value>
+    // inside the wrapper to amplify any mismatch.
+    #[test]
+    fn parse_array_skips_decoy_before_data() {
+        let xml = r"<methodResponse><params><param><value>
+            <array>
+                <wrapper><value><string>decoy</string></value></wrapper>
+                <data><value><string>real</string></value></data>
+            </array>
+        </value></param></params></methodResponse>";
+        let result = parse_response(xml).unwrap();
+        let a = result.as_array().unwrap();
+        assert_eq!(a.len(), 1);
+        assert_eq!(a[0].as_str().unwrap(), "real");
+    }
+
+    // Inside <data>, decoy elements between values must not be treated as
+    // values, and unrelated end tags must not terminate the data loop early.
+    #[test]
+    fn parse_array_skips_decoy_inside_data() {
+        let xml = r"<methodResponse><params><param><value>
+            <array><data>
+                <wrapper></wrapper>
+                <value><string>real</string></value>
+            </data></array>
+        </value></param></params></methodResponse>";
+        let result = parse_response(xml).unwrap();
+        let a = result.as_array().unwrap();
+        assert_eq!(a.len(), 1);
+        assert_eq!(a[0].as_str().unwrap(), "real");
+    }
+
+    // A <decoy_member> looks structurally like a member but has the wrong
+    // tag name; the struct must produce no entries rather than parsing the
+    // decoy's contents as a member.
+    #[test]
+    fn parse_struct_skips_member_lookalike() {
+        let xml = r"<methodResponse><params><param><value>
+            <struct>
+                <decoy_member><name>k</name><value><string>x</string></value></decoy_member>
+            </struct>
+        </value></param></params></methodResponse>";
+        let result = parse_response(xml).unwrap();
+        let s = result.as_struct().unwrap();
+        assert!(s.is_empty(), "decoy_member should be skipped, got {s:?}");
+    }
+
+    // An unrelated end tag inside <struct> must not be treated as </struct>.
+    #[test]
+    fn parse_struct_does_not_terminate_on_unrelated_end_tag() {
+        let xml = r"<methodResponse><params><param><value>
+            <struct>
+                <wrapper></wrapper>
+                <member><name>k</name><value><string>v</string></value></member>
+            </struct>
+        </value></param></params></methodResponse>";
+        let result = parse_response(xml).unwrap();
+        let s = result.as_struct().unwrap();
+        assert_eq!(s.get("k").unwrap().as_str().unwrap(), "v");
+    }
+
+    // An unrelated end tag inside <member> must not be treated as </member>.
+    #[test]
+    fn parse_member_does_not_terminate_on_unrelated_end_tag() {
+        let xml = r"<methodResponse><params><param><value>
+            <struct><member>
+                <name>k</name>
+                <wrapper></wrapper>
+                <value><string>v</string></value>
+            </member></struct>
+        </value></param></params></methodResponse>";
+        let result = parse_response(xml).unwrap();
+        let s = result.as_struct().unwrap();
+        assert_eq!(s.get("k").unwrap().as_str().unwrap(), "v");
+    }
+
+    // Unrelated end tags inside text content must not terminate
+    // read_text_content early.
+    #[test]
+    fn parse_string_continues_past_unrelated_end_tag() {
+        let xml = r"<methodResponse><params><param><value>
+            <string>before<wrapper></wrapper>after</string>
+        </value></param></params></methodResponse>";
+        let result = parse_response(xml).unwrap();
+        let s = result.as_str().unwrap();
+        assert!(
+            s.contains("after"),
+            "should keep reading past </wrapper>; got {s:?}"
         );
     }
 }
