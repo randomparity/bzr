@@ -1,5 +1,8 @@
 [workspace]
 members = [".", "xtask"]
+# `fuzz/` is a standalone cargo-fuzz package built with nightly + sanitizers
+# via its own toolchain. It must not share the workspace's resolver/lockfile.
+exclude = ["fuzz"]
 resolver = "3"
 
 [package]

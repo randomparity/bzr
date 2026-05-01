@@ -1,3 +1,9 @@
+# Standalone (non-member) workspace: cargo-fuzz builds this crate with
+# nightly + sanitizers via its own toolchain, so it must not share the
+# parent workspace's resolver or lockfile. The empty `[workspace]` table
+# stops cargo's parent-workspace auto-discovery.
+[workspace]
+
 [package]
 name = "bzr-fuzz"
 version = "0.0.0"
