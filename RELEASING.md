@@ -33,9 +33,10 @@ If `bzr` is already taken, rename the package before publishing. The install com
 ## Release checklist
 
 1. Update the version in `Cargo.toml`.
-2. Add a matching dated entry to `CHANGELOG.md`.
-3. Verify installation docs still match the published crate name.
-4. Run the release checks locally:
+2. If `rust-version` changed, update the MSRV badge in `README.md` and the "Requires Rust X+" line in the "From source" install section.
+3. Add a matching dated entry to `CHANGELOG.md`. Entries must use `## [X.Y.Z] - YYYY-MM-DD` exactly — `release.yml` extracts release notes by matching that heading format, and a different format silently produces an empty release body.
+4. Verify installation docs still match the published crate name.
+5. Run the release checks locally:
 
 ```bash
 cargo fmt
@@ -45,8 +46,8 @@ cargo build --release
 cargo publish --dry-run
 ```
 
-5. Commit the release changes.
-6. Create and push a version tag:
+6. Commit the release changes.
+7. Create and push a version tag:
 
 ```bash
 git tag vX.Y.Z
@@ -67,6 +68,7 @@ Pushing a `v*` tag triggers `.github/workflows/release.yml`, which:
 - Builds `.rpm` packages for `x86_64`, `aarch64`, `ppc64le`, and `s390x` Linux targets
 - Runs `lintian` and `rpmlint` (warn-only) on the resulting packages
 - Smoke-tests `dpkg`/`dnf` install of the x86_64 packages in containers
+- Generates a `SHA256SUMS` file covering every artifact (tarballs, zips, `.deb`, `.rpm`) for download verification
 - Creates a GitHub Release for the tag with all artifacts attached
 
 If you change runtime dependencies (e.g., add a new linked native library), update the

@@ -436,7 +436,7 @@ Generate a report of resolved bugs in **$ARGUMENTS**.
 - **Use `--json` shorthand**: `--json` is equivalent to `--output json` but shorter. Skills can also set `BZR_OUTPUT=json` in the environment to avoid repeating the flag.
 - **Auto-detection**: When bzr's stdout is not a TTY (piped, redirected, or captured with `$(...)`), bzr outputs JSON automatically. At an interactive TTY, use `--json` or set `BZR_OUTPUT=json`.
 - **Flag positioning**: `--json` and `--server` go *before* the subcommand. `bzr --json bug list`, not `bzr bug list --json`.
-- **Exit codes**: bzr uses distinct exit codes (0=success, 2=usage, 3=config, 4=API, 5=network, 6=IO). Skills can check `$?` to handle errors without parsing stderr.
+- **Exit codes**: bzr uses distinct exit codes 0–13 (e.g. 0=success, 2=usage/not-found, 3=config, 4=API, 5=network, 6=IO, 9=auth, 12=keyring, 13=TLS pin mismatch). See `docs/bzr-cli.md` for the full table. Skills can check `$?` to handle errors without parsing stderr.
 - **JSON errors**: When `--json` is active, errors are emitted as JSON on stderr: `{"error":{"type":"api","message":"...","exit_code":4}}`.
 - **Mutation responses**: Create/update commands return structured JSON with `--json`: `{"id":123,"resource":"bug","action":"created"}`. No need for regex to extract IDs.
 - **Adding comments**: Use `--body "<text>"` in skills — it is explicit and works in all contexts. Alternatively, `echo "text" | bzr comment add 12345` works when stdin is not a TTY. Omitting both at a TTY opens `$EDITOR`, which hangs in non-interactive skill runs.
