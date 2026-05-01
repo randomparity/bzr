@@ -8,6 +8,13 @@ use bzr::cli::Cli;
 use bzr::error::{self, BzrError};
 use bzr::types::OutputFormat;
 
+// `main` is the binary entry point: defeating mutations in its body
+// requires spawning the compiled binary (e.g. via assert_cmd or
+// escargot) to observe exit codes and stderr. The pure helpers it
+// delegates to (`tracing_filter_directive`, `format_dispatch_error`,
+// `exit_code`, `resolve_format`, `suppress_stdout`) are unit-tested
+// directly; the orchestration glue is not worth a new dev-dependency.
+#[cfg_attr(test, mutants::skip)]
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
@@ -117,6 +124,8 @@ fn suppress_stdout() {
     }
 }
 
+// Dead code on the Linux test platform; cannot be observed.
+#[cfg_attr(test, mutants::skip)]
 #[cfg(windows)]
 fn suppress_stdout() {
     use std::os::windows::io::IntoRawHandle;
@@ -139,6 +148,8 @@ fn suppress_stdout() {
     }
 }
 
+// Dead code on the Linux test platform.
+#[cfg_attr(test, mutants::skip)]
 #[cfg(not(any(unix, windows)))]
 fn suppress_stdout() {
     // No platform-specific suppression available; --quiet will only
@@ -398,34 +409,63 @@ mod tests {
         assert!(out.contains("kaboom"));
     }
 
-    /// Asserts `suppress_stdout()` runs without panicking and that fd 1 is
-    /// restored afterward. The function calls `dup2(devnull_fd, 1)` under
-    /// the hood; we save+restore fd 1 around it so the rest of the test
-    /// process keeps a working stdout. The cargo test runner uses its own
-    /// per-test thread-local stdout (`println!`), so redirecting the raw
-    /// fd here doesn't break test reporting.
+    /// After `suppress_stdout()` runs, writes to fd 1 must NOT reach
+    /// whatever fd 1 pointed at before the call. We redirect fd 1 to a
+    /// temp file, invoke `suppress_stdout()`, write a marker, then
+    /// inspect the temp file: if `suppress_stdout` is a no-op the marker
+    /// lands in our file; if it works the marker goes to /dev/null.
     #[cfg(unix)]
     #[test]
     fn suppress_stdout_redirects_fd1_to_devnull() {
+        use std::io::{Read, Seek};
+        use std::os::unix::io::AsRawFd;
+
         extern "C" {
             fn dup(fd: std::ffi::c_int) -> std::ffi::c_int;
             fn dup2(oldfd: std::ffi::c_int, newfd: std::ffi::c_int) -> std::ffi::c_int;
             fn close(fd: std::ffi::c_int) -> std::ffi::c_int;
+            fn write(fd: std::ffi::c_int, buf: *const u8, count: usize) -> isize;
         }
 
         let _guard = env_lock();
-        // SAFETY: dup() on a valid fd returns a duplicate; we restore it below.
+        let tmp = tempfile::NamedTempFile::new().expect("tmpfile");
+        let tmp_fd = tmp.as_file().as_raw_fd();
+
+        // SAFETY: dup() returns a duplicate of fd 1; we restore it below.
         let saved = unsafe { dup(1) };
         assert!(saved >= 0, "dup(1) failed");
+        // SAFETY: dup2 redirects fd 1 to the temp file.
+        unsafe {
+            dup2(tmp_fd, 1);
+        }
 
         suppress_stdout();
 
-        // Restore fd 1 so subsequent tests (and cargo's harness) keep a
-        // working stdout.
-        // SAFETY: dup2() on valid fds is safe; close() releases the dup.
+        let marker = b"MARKER_AFTER_SUPPRESS";
+        // SAFETY: writing a small buffer to fd 1 (now /dev/null after a
+        // successful suppress_stdout, or our temp file if the call was
+        // mutated to no-op).
+        unsafe {
+            write(1, marker.as_ptr(), marker.len());
+        }
+
+        // Restore fd 1 BEFORE reading the temp file so cargo's harness
+        // and any later test gets a working stdout.
+        // SAFETY: dup2/close on valid fds.
         unsafe {
             dup2(saved, 1);
             close(saved);
         }
+
+        let mut captured = Vec::new();
+        let mut f = tmp.reopen().expect("reopen");
+        f.seek(std::io::SeekFrom::Start(0)).expect("seek");
+        f.read_to_end(&mut captured).expect("read");
+
+        let captured_str = String::from_utf8_lossy(&captured);
+        assert!(
+            !captured_str.contains("MARKER_AFTER_SUPPRESS"),
+            "suppress_stdout did not redirect fd 1; marker reached temp file: {captured_str:?}"
+        );
     }
 }

@@ -93,7 +93,7 @@ Largest-first. `–` means the wave hasn't started yet.
 | src/commands/flags.rs               |  17 | swept   | 10 | 0 |  7 | 0 | 100 % | 2026-05-01 |
 | src/client/version.rs               |  17 | swept   | 13 | 0 |  4 | 0 | 100 % | 2026-05-01 |
 | src/types/common.rs                 |  16 | swept   | 12 | 0 |  4 | 0 | 100 % | 2026-05-01 |
-| src/main.rs                         |  16 | pending | – | – | – | – | – | – |
+| src/main.rs                         |  16 | swept   | 12 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/attachment.rs          |  16 | swept   | 16 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/output/query.rs                 |  13 | swept   | 13 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/bug/list.rs            |  13 | swept   | 13 | 0 |  0 | 0 | 100 % | 2026-05-01 |
@@ -114,16 +114,16 @@ Largest-first. `–` means the wave hasn't started yet.
 | src/client/auth/mod.rs              |   8 | swept   |  6 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/output/template.rs              |   7 | swept   |  7 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/output/product.rs               |   7 | swept   |  7 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/credentials/keyring.rs          |   7 | pending | – | – | – | – | – | – |
+| src/credentials/keyring.rs          |   7 | swept   |  5 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/client/field.rs                 |   7 | swept   |  4 | 0 |  3 | 0 | 100 % | 2026-05-01 |
 | src/output/bug.rs                   |   6 | swept   |  5 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/client/product.rs               |   6 | swept   |  4 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/client/auth/whoami.rs           |   6 | swept   |  4 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/types/attachment.rs             |   5 | swept   |  3 | 0 |  2 | 0 | 100 % | 2026-05-01 |
-| src/tls/mod.rs                      |   5 | pending | – | – | – | – | – | – |
+| src/tls/mod.rs                      |   5 | swept   |  3 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/output/user.rs                  |   5 | swept   |  3 | 0 |  2 | 0 | 100 % | 2026-05-01 |
-| src/tls/fingerprint.rs              |   4 | pending | – | – | – | – | – | – |
-| src/credentials/keyring_stub.rs     |   4 | pending | – | – | – | – | – | – |
+| src/tls/fingerprint.rs              |   4 | swept   |  4 | 0 |  0 | 0 | 100 % | 2026-05-01 |
+| src/credentials/keyring_stub.rs     |   4 | swept   |  0 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/user.rs                |   4 | swept   |  4 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/types/product.rs                |   3 | swept   |  3 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/field.rs               |   3 | swept   |  3 | 0 |  0 | 0 | 100 % | 2026-05-01 |
@@ -138,7 +138,7 @@ Largest-first. `–` means the wave hasn't started yet.
 | src/types/user.rs                   |   1 | swept   |  0 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/output/comment.rs               |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/output/attachment.rs            |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/lib.rs                          |   1 | pending | – | – | – | – | – | – |
+| src/lib.rs                          |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/whoami.rs              |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/server.rs              |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/product.rs             |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
@@ -193,3 +193,6 @@ related code changes — they may have rotted):
 | `read_secret_from_prompt_or_env` (non-keyring) | `src/commands/config.rs` | `#[cfg(not(feature = "keyring"))]` — dead code on the default-feature Linux test platform |
 | `should_offer_tofu` / `is_pin_mismatch` / `is_issuer_changed` / `classify_and_handle_tls_failure` | `src/commands/shared.rs` | TLS-failure predicates can only return true given a real TLS handshake error from reqwest, which has no public Error constructor |
 | `handle_tofu` / `handle_pin_rotation` (whole functions, via `#[cfg_attr(test, mutants::skip)]`) | `src/commands/shared.rs` | TOFU/rotation handlers only fire after a terminal-stdin prompt accepts; cargo-mutants v27 cannot reach `delete field` mutations through `exclude_re`, so the attribute is used instead |
+| `main` (whole function, via `#[cfg_attr(test, mutants::skip)]`) | `src/main.rs` | Binary entry point; observing exit codes / stderr requires spawning the compiled binary (e.g. via `assert_cmd`/`escargot`). The pure helpers it delegates to are unit-tested directly. |
+| `suppress_stdout` non-unix variants (whole functions, via `#[cfg_attr(test, mutants::skip)]`) | `src/main.rs` | `#[cfg(windows)]` and `#[cfg(not(any(unix, windows)))]` are dead code on the Linux test platform |
+| `store` / `retrieve` / `delete` (whole functions, via `#[cfg_attr(test, mutants::skip)]`) | `src/credentials/keyring_stub.rs` | `#[cfg(not(feature = "keyring"))]` — never compiled into the test binary, since `.cargo/mutants.toml` runs with `--all-features` |

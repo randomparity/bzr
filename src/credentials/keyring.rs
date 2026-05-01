@@ -126,6 +126,12 @@ mod tests {
         let got = retrieve("bzr-test-roundtrip", "acct1").unwrap();
         assert_eq!(got, "secret-value");
         delete("bzr-test-roundtrip", "acct1").unwrap();
+        // Retrieve must now fail; otherwise delete was a no-op.
+        let err = retrieve("bzr-test-roundtrip", "acct1").unwrap_err();
+        assert!(
+            err.to_string().contains("no API key found"),
+            "expected NoEntry after delete, got: {err}"
+        );
     }
 
     #[test]
