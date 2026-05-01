@@ -71,6 +71,32 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
       - run: cargo build --release --locked
 
+  manpages:
+    name: Manpages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
+        with:
+          key: manpages
+      - name: Generate manpages
+        run: cargo run -p xtask --no-default-features --release --locked -- man --out man/man1
+      - name: Verify expected pages exist
+        run: |
+          set -euo pipefail
+          test -s man/man1/bzr.1
+          test -s man/man1/bzr-bug.1
+          test -s man/man1/bzr-bug-list.1
+          test -s man/man1/bzr-config-set-server.1
+      - name: Render with groff (catches malformed roff)
+        run: |
+          set -euo pipefail
+          sudo apt-get update && sudo apt-get install -y groff
+          for page in man/man1/*.1; do
+            groff -man -Tutf8 "$page" > /dev/null
+          done
+
   cross-check:
     name: Cross-check ${{ matrix.target }}
     runs-on: ubuntu-latest

@@ -60,9 +60,46 @@ git push origin vX.Y.Z
 
 Pushing a `v*` tag triggers `.github/workflows/release.yml`, which:
 
+- Generates manpages once via `cargo run -p xtask -- man` and shares them across all targets
 - Builds release binaries for supported platforms
-- Packages them with `LICENSE` and `README.md`
-- Creates a GitHub Release for the tag
+- Packages each binary with `LICENSE`, `README.md`, and `man/man1/*.1` into a tarball or zip
+- Builds `.deb` packages for `x86_64`, `aarch64`, and `ppc64el` Linux targets
+- Builds `.rpm` packages for `x86_64`, `aarch64`, `ppc64le`, and `s390x` Linux targets
+- Runs `lintian` and `rpmlint` (warn-only) on the resulting packages
+- Smoke-tests `dpkg`/`dnf` install of the x86_64 packages in containers
+- Creates a GitHub Release for the tag with all artifacts attached
+
+If you change runtime dependencies (e.g., add a new linked native library), update the
+`depends`/`requires` fields in `[package.metadata.deb]` and
+`[package.metadata.generate-rpm]` in `Cargo.toml`. The defaults declare `libc6`,
+`libdbus-1-3` (Debian) and `glibc`, `dbus-libs` (RPM) for the keyring backend.
+
+To regenerate manpages locally:
+
+```bash
+make man    # writes to man/man1/
+```
+
+### Homebrew tap
+
+Each stable (non-prerelease) `v*` release also triggers
+`.github/workflows/update-homebrew.yml`, which:
+
+- Downloads the release tarballs for macOS arm64 and Linux x86_64/aarch64
+- Computes their SHA256 sums
+- Renders `homebrew/bzr.rb.template` into `Formula/bzr.rb` in
+  [`randomparity/homebrew-tap`](https://github.com/randomparity/homebrew-tap)
+- Commits and pushes the bumped formula
+
+Pre-release tags (e.g. `v0.2.0-rc3`) are skipped: brew users always pull the latest
+stable release, so RC builds shouldn't override the formula.
+
+The workflow needs a `HOMEBREW_TAP_TOKEN` repo secret — a fine-grained PAT with
+`Contents: Write` on `randomparity/homebrew-tap`. See
+[`homebrew/README.md`](homebrew/README.md) for one-time tap setup.
+
+**Future goal:** publish to `homebrew-core` so users don't need a custom tap. Defer
+until `bzr` has a stable track record across multiple releases.
 
 ### crates.io publish
 
