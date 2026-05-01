@@ -21,7 +21,7 @@ jobs:
       - name: Install libdbus-1-dev
         run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
       - uses: dtolnay/rust-toolchain@98e1b82157cd469e843cb7f524c1313b4ad9492c  # 1.88.0
-      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae  # v2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
         with:
           key: msrv-1.88.0
       - run: cargo test --locked
@@ -46,7 +46,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # stable
         with:
           components: clippy
-      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae  # v2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
       - run: cargo clippy --locked -- -D warnings
 
   test:
@@ -57,7 +57,7 @@ jobs:
       - name: Install libdbus-1-dev
         run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # stable
-      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae  # v2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
       - run: cargo test --locked
 
   build:
@@ -68,7 +68,7 @@ jobs:
       - name: Install libdbus-1-dev
         run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # stable
-      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae  # v2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
       - run: cargo build --release --locked
 
   cross-check:
@@ -86,7 +86,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # stable
         with:
           targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae  # v2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
         with:
           key: ${{ matrix.target }}
       - name: Install cross
@@ -104,7 +104,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # stable
         with:
           targets: aarch64-pc-windows-msvc
-      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae  # v2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
         with:
           key: aarch64-pc-windows-msvc
       - name: Check
@@ -127,7 +127,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # stable
         with:
           components: llvm-tools-preview
-      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae  # v2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
         with:
           key: sonarqube
       - uses: taiki-e/install-action@49ba71bf46962339e6e5c0a7a4ec3ed4c8af28ac  # cargo-llvm-cov
