@@ -75,19 +75,19 @@ Largest-first. `–` means the wave hasn't started yet.
 
 | File | Mutants | Status | Caught | Missed | Unviable | Timeout | Score | Last swept |
 |------|--------:|--------|-------:|-------:|---------:|--------:|------:|-----------|
-| src/tls/verifier.rs                 | 102 | pending | – | – | – | – | – | – |
+| src/tls/verifier.rs                 | 102 | swept   | 96 | 0 |  6 | 0 | 100 % | 2026-05-01 |
 | src/xmlrpc/parsing.rs               |  81 | swept   | 57 | 0 | 11 | 0 | 100 % | 2026-05-01 |
 | src/types/bug.rs                    |  77 | pending | – | – | – | – | – | – |
 | src/commands/shared.rs              |  49 | pending | – | – | – | – | – | – |
-| src/config.rs                       |  47 | pending | – | – | – | – | – | – |
+| src/config.rs                       |  47 | swept   | 33 | 0 |  5 | 0 | 100 % | 2026-05-01 |
 | src/xmlrpc/client.rs                |  42 | pending | – | – | – | – | – | – |
 | src/client/mod.rs                   |  41 | pending | – | – | – | – | – | – |
 | src/client/bug.rs                   |  38 | pending | – | – | – | – | – | – |
-| src/tls/tofu.rs                     |  36 | pending | – | – | – | – | – | – |
+| src/tls/tofu.rs                     |  36 | swept   | 28 | 0 |  4 | 0 | 100 % | 2026-05-01 |
 | src/output/formatting.rs            |  34 | pending | – | – | – | – | – | – |
 | src/xmlrpc/mod.rs                   |  28 | pending | – | – | – | – | – | – |
 | src/url_parser.rs                   |  25 | swept   | 23 | 0 | 2 | 0 | 100 % | 2026-05-01 |
-| src/error.rs                        |  19 | pending | – | – | – | – | – | – |
+| src/error.rs                        |  19 | swept   | 17 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/commands/query.rs               |  19 | pending | – | – | – | – | – | – |
 | src/commands/config.rs              |  18 | pending | – | – | – | – | – | – |
 | src/commands/flags.rs               |  17 | swept   | 10 | 0 |  7 | 0 | 100 % | 2026-05-01 |
@@ -100,7 +100,7 @@ Largest-first. `–` means the wave hasn't started yet.
 | src/client/group.rs                 |  13 | pending | – | – | – | – | – | – |
 | src/commands/comment.rs             |  12 | pending | – | – | – | – | – | – |
 | src/client/attachment.rs            |  12 | pending | – | – | – | – | – | – |
-| src/http.rs                         |  11 | pending | – | – | – | – | – | – |
+| src/http.rs                         |  11 | swept   | 10 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/commands/bug/my.rs              |  11 | pending | – | – | – | – | – | – |
 | src/client/auth/valid_login.rs      |  11 | pending | – | – | – | – | – | – |
 | src/output/result_types.rs          |  10 | pending | – | – | – | – | – | – |
@@ -182,3 +182,8 @@ related code changes — they may have rotted):
 | `skip_to_end` | `src/xmlrpc/parsing.rs` | defensive depth-tracking; equivalent in normal XML-RPC flow (depth never exceeds 1) |
 | `is_value_end -> bool with true` | `src/xmlrpc/parsing.rs` | empty `<value></value>` end arm — equivalent under permissive parser |
 | `replace == with != in is_value_end` | `src/xmlrpc/parsing.rs` | same equivalence as above |
+| `match guard is_value_end(...) with true` | `src/xmlrpc/parsing.rs` | guard call site of the equivalent helper |
+| `is_tls_cert_error -> bool with false` | `src/http.rs` | `reqwest::Error` has no public constructor; cannot construct one with both `is_connect()` true and a TLS-keyword chain in unit tests |
+| `read_interactive_line` / `confirm_pin` / `prompt_tofu` / `prompt_rotation` returning Ok(None)/Ok(false) | `src/tls/tofu.rs` | Each detects non-terminal stdin and short-circuits to None/false; cargo test stdin is never a terminal, so the mutation matches the test-mode path |
+| `warn_security` / `warn_if_path_permissions_too_open` / `Config::warn_on_insecure_permissions` no-ops, plus the bitwise-mode-mask check | `src/config.rs` | Stderr-only side effects; the project has no `capture_stderr` helper, so these can't be observed in unit tests |
+| `write_private_file` / `set_private_file_permissions -> Ok(())` | `src/config.rs` | The non-Unix `write_private_file` is dead code on the Linux test platform (`#[cfg(not(unix))]`); the Unix `set_private_file_permissions` is redundant since `write_private_file` already creates with `OpenOptions::mode(0o600)` |

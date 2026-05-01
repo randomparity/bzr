@@ -57,9 +57,16 @@ pub(crate) fn looks_like_tls_error(msg: &str) -> bool {
     lower.contains("cert") || lower.contains("ssl") || lower.contains("tls")
 }
 
+/// Pure predicate underlying [`is_tls_cert_error`], split out so the
+/// connect-and-TLS-keyword logic can be unit tested without a live
+/// `reqwest::Error` (which has no public constructor).
+fn is_connect_tls_error(is_connect: bool, error_chain: &str) -> bool {
+    is_connect && looks_like_tls_error(error_chain)
+}
+
 /// Check if a reqwest error looks like a TLS certificate verification failure.
 pub(crate) fn is_tls_cert_error(err: &reqwest::Error) -> bool {
-    err.is_connect() && looks_like_tls_error(&crate::error::format_error_chain(err))
+    is_connect_tls_error(err.is_connect(), &crate::error::format_error_chain(err))
 }
 
 /// Hint text appended to TLS certificate errors.
@@ -178,6 +185,41 @@ mod tests {
         .unwrap_err();
 
         assert!(err.to_string().contains("invalid header characters"));
+    }
+
+    #[test]
+    fn looks_like_tls_error_matches_cert_keyword() {
+        assert!(looks_like_tls_error("certificate verify failed"));
+    }
+
+    #[test]
+    fn looks_like_tls_error_matches_ssl_keyword() {
+        assert!(looks_like_tls_error("SSL handshake failure"));
+    }
+
+    #[test]
+    fn looks_like_tls_error_matches_tls_keyword() {
+        assert!(looks_like_tls_error("TLS protocol error"));
+    }
+
+    #[test]
+    fn looks_like_tls_error_rejects_unrelated_message() {
+        assert!(!looks_like_tls_error("connection refused"));
+    }
+
+    #[test]
+    fn is_connect_tls_error_true_when_connect_and_tls_keyword() {
+        assert!(is_connect_tls_error(true, "tls handshake failed"));
+    }
+
+    #[test]
+    fn is_connect_tls_error_false_when_not_connect() {
+        assert!(!is_connect_tls_error(false, "tls handshake failed"));
+    }
+
+    #[test]
+    fn is_connect_tls_error_false_without_tls_keyword() {
+        assert!(!is_connect_tls_error(true, "connection refused"));
     }
 
     #[tokio::test]

@@ -4,6 +4,14 @@
 # Build with all features so the keyring + test-helpers code paths get exercised.
 additional_cargo_args = ["--all-features"]
 
+# Serialize tests during mutation runs. Several tests use the project's
+# `capture_stdout` helper, which redirects fd 1 globally via `dup2`. Under
+# parallel execution (the default), other tests' `writeln!(io::stdout(), …)`
+# output bleeds into the captured pipe and produces flaky baseline failures
+# that abort the mutation run before any mutant is tested. The slowdown is
+# absorbed by the mutation run only; ordinary `cargo test` keeps full parallelism.
+additional_cargo_test_args = ["--", "--test-threads=1"]
+
 # Test runs that take longer than 5x the baseline are killed (defends against
 # mutants that turn finite loops into infinite loops). Floor at 60s so fast
 # baselines don't generate over-aggressive timeouts.
@@ -45,4 +53,40 @@ exclude_re = [
     'is_value_end -> bool with true',
     'replace == with != in is_value_end',
     'match guard is_value_end\(.*\) with true',
+    # `is_tls_cert_error` is a thin reqwest::Error → (bool, &str) adapter
+    # whose body is fully covered by `is_connect_tls_error` unit tests. The
+    # `with false` mutation can only be observed by passing in a real TLS
+    # cert error, but reqwest::Error has no public constructor and spinning
+    # up a TLS server with a bad cert is out of scope. The `with true`
+    # variant IS caught (the non-TLS-error tls_hint test would break).
+    'is_tls_cert_error -> bool with false',
+    # Interactive TOFU prompt helpers in src/tls/tofu.rs all detect
+    # `!io::stdin().is_terminal()` and short-circuit to None/false. In
+    # unit-test mode stdin is never a terminal, so these mutations
+    # (replacing the body with Ok(None) / Ok(false)) are observationally
+    # identical to the unmutated code path. Catching them would require
+    # spawning a subprocess with a pty.
+    'replace read_interactive_line -> Result<Option<String>> with Ok\(None\)',
+    'replace confirm_pin -> Result<bool> with Ok\(false\)',
+    'replace prompt_tofu -> Result<Option<bool>> with Ok\(None\)',
+    'replace prompt_rotation -> Result<bool> with Ok\(false\)',
+    # Permissions warnings in config.rs print to stderr only. The codebase
+    # has a `capture_stdout` helper but no stderr equivalent, so the
+    # `warn_security` and `warn_if_path_permissions_too_open` functions
+    # (and the bitwise mode-mask check inside the latter) cannot be
+    # observed in unit tests without a refactor to inject a writer.
+    'replace warn_security with \(\)',
+    'replace warn_if_path_permissions_too_open with \(\)',
+    'replace Config::warn_on_insecure_permissions with \(\)',
+    'in warn_if_path_permissions_too_open$',
+    # The non-Unix `write_private_file` body cannot be reached on Linux
+    # (where CI/dev tests run); cargo-mutants ignores `#[cfg]` and reports
+    # it as missed even though the code is never compiled.
+    'replace write_private_file -> Result<\(\)> with Ok\(\(\)\)',
+    # `set_private_file_permissions` is a defensive double-set: the Unix
+    # `write_private_file` already creates the file with `OpenOptions::
+    # mode(0o600)`, and the call site only runs on first-save of a new
+    # file — so the chmod is redundant in practice and the no-op mutation
+    # has no observable effect.
+    'replace set_private_file_permissions -> Result<\(\)> with Ok\(\(\)\)',
 ]

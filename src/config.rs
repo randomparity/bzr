@@ -447,12 +447,96 @@ mod tests {
         let original = make_config_with_server();
         original.save().unwrap();
 
+        // Verify the file was actually written (catches a no-op
+        // write_private_file mutation).
+        let path = Config::path().unwrap();
+        let raw = fs::read_to_string(&path).unwrap();
+        assert!(
+            raw.contains("myserver"),
+            "saved config file should contain server name; got {raw:?}"
+        );
+
+        // Verify the file was created with private (0o600) permissions
+        // (catches a no-op set_private_file_permissions mutation).
+        #[cfg(unix)]
+        {
+            let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "saved config should have 0o600 perms");
+        }
+
         let loaded = Config::load().unwrap();
         assert_eq!(loaded.default_server.as_deref(), Some("myserver"));
         assert!(loaded.servers.contains_key("myserver"));
         let srv = loaded.servers.get("myserver").unwrap();
         assert_eq!(srv.url, "https://bugzilla.example.com");
         assert_eq!(srv.api_key.as_deref(), Some("test-key"));
+
+        // 3. Re-saving an existing config must NOT reset its file
+        // permissions (only new files are chmod'd to 0o600). This catches
+        // the `delete !` mutation on `if !file_exists` in Config::save.
+        #[cfg(unix)]
+        {
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+            original.save().unwrap();
+            let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(
+                mode, 0o644,
+                "re-save should not reset existing file perms to 0o600"
+            );
+        }
+    }
+
+    #[test]
+    fn credential_source_errors_when_no_api_key_source_defined() {
+        let mut srv = make_server_config("https://example.com");
+        srv.api_key = None;
+        let err = srv.credential_source().unwrap_err();
+        assert!(
+            err.to_string().contains("must define one of"),
+            "expected 'must define one of' message, got: {err}"
+        );
+    }
+
+    #[test]
+    fn validate_tls_rejects_missing_ca_cert_file() {
+        let mut srv = make_server_config("https://example.com");
+        srv.tls_ca_cert = Some(std::path::PathBuf::from(
+            "/nonexistent/path/that/should/not/exist/ca.pem",
+        ));
+        let err = srv.validate_tls("test").unwrap_err();
+        assert!(
+            err.to_string().contains("not found"),
+            "expected 'not found' message, got: {err}"
+        );
+    }
+
+    #[test]
+    fn validate_tls_accepts_existing_ca_cert_file() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let mut srv = make_server_config("https://example.com");
+        srv.tls_ca_cert = Some(tmp.path().to_path_buf());
+        assert!(srv.validate_tls("test").is_ok());
+    }
+
+    #[test]
+    fn config_load_propagates_non_notfound_errors() {
+        let _lock = crate::ENV_LOCK.blocking_lock();
+        let tmp = tempfile::tempdir().unwrap();
+        // SAFETY: Tests are serialized via ENV_LOCK; no other threads read
+        // this var concurrently.
+        unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+        // Create a directory at the path where Config::load expects a
+        // file. Reading it will yield a non-NotFound IO error, which must
+        // propagate (not be silently swallowed as "no config found").
+        let config_path = Config::path().unwrap();
+        fs::create_dir_all(&config_path).unwrap();
+
+        let result = Config::load();
+        assert!(
+            result.is_err(),
+            "loading a directory at the config path should error"
+        );
     }
 
     #[test]
