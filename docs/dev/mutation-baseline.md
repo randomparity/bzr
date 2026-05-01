@@ -81,8 +81,8 @@ Largest-first. `–` means the wave hasn't started yet.
 | src/commands/shared.rs              |  49 | pending | – | – | – | – | – | – |
 | src/config.rs                       |  47 | swept   | 33 | 0 |  5 | 0 | 100 % | 2026-05-01 |
 | src/xmlrpc/client.rs                |  42 | pending | – | – | – | – | – | – |
-| src/client/mod.rs                   |  41 | pending | – | – | – | – | – | – |
-| src/client/bug.rs                   |  38 | pending | – | – | – | – | – | – |
+| src/client/mod.rs                   |  41 | swept   | 30 | 0 | 10 | 0 | 100 % | 2026-05-01 |
+| src/client/bug.rs                   |  38 | swept   | 28 | 0 | 10 | 0 | 100 % | 2026-05-01 |
 | src/tls/tofu.rs                     |  36 | swept   | 28 | 0 |  4 | 0 | 100 % | 2026-05-01 |
 | src/output/formatting.rs            |  34 | pending | – | – | – | – | – | – |
 | src/xmlrpc/mod.rs                   |  28 | pending | – | – | – | – | – | – |
@@ -97,28 +97,28 @@ Largest-first. `–` means the wave hasn't started yet.
 | src/commands/attachment.rs          |  16 | pending | – | – | – | – | – | – |
 | src/output/query.rs                 |  13 | pending | – | – | – | – | – | – |
 | src/commands/bug/list.rs            |  13 | pending | – | – | – | – | – | – |
-| src/client/group.rs                 |  13 | pending | – | – | – | – | – | – |
+| src/client/group.rs                 |  13 | swept   | 12 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/commands/comment.rs             |  12 | pending | – | – | – | – | – | – |
-| src/client/attachment.rs            |  12 | pending | – | – | – | – | – | – |
+| src/client/attachment.rs            |  12 | swept   | 10 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/http.rs                         |  11 | swept   | 10 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/commands/bug/my.rs              |  11 | pending | – | – | – | – | – | – |
-| src/client/auth/valid_login.rs      |  11 | pending | – | – | – | – | – | – |
+| src/client/auth/valid_login.rs      |  11 | swept   |  8 | 0 |  3 | 0 | 100 % | 2026-05-01 |
 | src/output/result_types.rs          |  10 | pending | – | – | – | – | – | – |
 | src/commands/bug/update.rs          |  10 | pending | – | – | – | – | – | – |
 | src/commands/bug/search.rs          |  10 | pending | – | – | – | – | – | – |
-| src/client/comment.rs               |  10 | pending | – | – | – | – | – | – |
+| src/client/comment.rs               |  10 | swept   |  9 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/output/config.rs                |   9 | pending | – | – | – | – | – | – |
 | src/commands/template.rs            |   9 | pending | – | – | – | – | – | – |
-| src/client/user.rs                  |   9 | pending | – | – | – | – | – | – |
+| src/client/user.rs                  |   9 | swept   |  6 | 0 |  3 | 0 | 100 % | 2026-05-01 |
 | src/xmlrpc/call.rs                  |   8 | pending | – | – | – | – | – | – |
-| src/client/auth/mod.rs              |   8 | pending | – | – | – | – | – | – |
+| src/client/auth/mod.rs              |   8 | swept   |  6 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/output/template.rs              |   7 | pending | – | – | – | – | – | – |
 | src/output/product.rs               |   7 | pending | – | – | – | – | – | – |
 | src/credentials/keyring.rs          |   7 | pending | – | – | – | – | – | – |
-| src/client/field.rs                 |   7 | pending | – | – | – | – | – | – |
+| src/client/field.rs                 |   7 | swept   |  4 | 0 |  3 | 0 | 100 % | 2026-05-01 |
 | src/output/bug.rs                   |   6 | pending | – | – | – | – | – | – |
-| src/client/product.rs               |   6 | pending | – | – | – | – | – | – |
-| src/client/auth/whoami.rs           |   6 | pending | – | – | – | – | – | – |
+| src/client/product.rs               |   6 | swept   |  4 | 0 |  2 | 0 | 100 % | 2026-05-01 |
+| src/client/auth/whoami.rs           |   6 | swept   |  4 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/types/attachment.rs             |   5 | pending | – | – | – | – | – | – |
 | src/tls/mod.rs                      |   5 | pending | – | – | – | – | – | – |
 | src/output/user.rs                  |   5 | pending | – | – | – | – | – | – |
@@ -128,8 +128,8 @@ Largest-first. `–` means the wave hasn't started yet.
 | src/types/product.rs                |   3 | pending | – | – | – | – | – | – |
 | src/commands/field.rs               |   3 | pending | – | – | – | – | – | – |
 | src/commands/bug/clone.rs           |   3 | pending | – | – | – | – | – | – |
-| src/client/server.rs                |   3 | pending | – | – | – | – | – | – |
-| src/client/component.rs             |   3 | pending | – | – | – | – | – | – |
+| src/client/server.rs                |   3 | swept   |  2 | 0 |  1 | 0 | 100 % | 2026-05-01 |
+| src/client/component.rs             |   3 | swept   |  2 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/xmlrpc/fault.rs                 |   2 | pending | – | – | – | – | – | – |
 | src/output/server.rs                |   2 | pending | – | – | – | – | – | – |
 | src/output/group.rs                 |   2 | pending | – | – | – | – | – | – |
@@ -149,7 +149,7 @@ Largest-first. `–` means the wave hasn't started yet.
 | src/commands/bug/mod.rs             |   1 | pending | – | – | – | – | – | – |
 | src/commands/bug/history.rs         |   1 | pending | – | – | – | – | – | – |
 | src/commands/bug/create.rs          |   1 | pending | – | – | – | – | – | – |
-| src/client/classification.rs        |   1 | pending | – | – | – | – | – | – |
+| src/client/classification.rs        |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 
 ## Sub-tree totals (informational)
 
@@ -187,3 +187,6 @@ related code changes — they may have rotted):
 | `read_interactive_line` / `confirm_pin` / `prompt_tofu` / `prompt_rotation` returning Ok(None)/Ok(false) | `src/tls/tofu.rs` | Each detects non-terminal stdin and short-circuits to None/false; cargo test stdin is never a terminal, so the mutation matches the test-mode path |
 | `warn_security` / `warn_if_path_permissions_too_open` / `Config::warn_on_insecure_permissions` no-ops, plus the bitwise-mode-mask check | `src/config.rs` | Stderr-only side effects; the project has no `capture_stderr` helper, so these can't be observed in unit tests |
 | `write_private_file` / `set_private_file_permissions -> Ok(())` | `src/config.rs` | The non-Unix `write_private_file` is dead code on the Linux test platform (`#[cfg(not(unix))]`); the Unix `set_private_file_permissions` is redundant since `write_private_file` already creates with `OpenOptions::mode(0o600)` |
+| `delete ! in detect_auth_method` | `src/client/auth/mod.rs` | Tracing-only side effect for non-HTTPS URLs |
+| `matches!(e, BzrError::Auth(_))` (Hybrid create_user) | `src/client/user.rs` | Defensive arm; `BzrError::Auth` is only constructed by detect_auth_method, so post_json_id never returns it |
+| `CodeVisitor>::expecting -> std::fmt::Result` | `src/client/mod.rs` | The visitor's "expected" message is only surfaced on serde failure, which `check_response_status` swallows in favor of `BzrError::HttpStatus` |

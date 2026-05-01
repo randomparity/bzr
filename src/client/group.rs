@@ -412,6 +412,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn hybrid_get_group_transport_failure_falls_back_to_xmlrpc() {
+        // A 5xx response from REST is a transport failure under
+        // `is_transport_failure()`. In Hybrid mode it must trigger the
+        // XML-RPC retry, not propagate as the final error.
+        let mock = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/group"))
+            .and(query_param("names", "admin"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(xmlrpc_group_response(
+                    1,
+                    "admin",
+                    "Administrators",
+                )),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client_hybrid(&mock.uri());
+        let info = client.get_group("admin").await.unwrap();
+        assert_eq!(info.name, "admin");
+    }
+
+    #[tokio::test]
     async fn rest_get_group_32610_falls_back_to_xmlrpc() {
         let mock = MockServer::start().await;
 

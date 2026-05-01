@@ -739,6 +739,43 @@ mod tests {
         );
     }
 
+    #[test]
+    fn error_response_parses_unsigned_integer_code() {
+        let json = r#"{"error":true,"code":32610,"message":"x"}"#;
+        let err: super::ErrorResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(err.code, 32610);
+    }
+
+    #[test]
+    fn error_response_parses_negative_integer_code() {
+        let json = r#"{"error":true,"code":-7,"message":"x"}"#;
+        let err: super::ErrorResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(err.code, -7);
+    }
+
+    #[tokio::test]
+    async fn api_200_error_without_code_field_uses_minus_one() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/group"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "message": "no code"
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client
+            .get_json_query::<serde_json::Value>("group", &[])
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(&err, crate::error::BzrError::Api { code: -1, .. }),
+            "expected Api error with code -1, got: {err}"
+        );
+    }
+
     #[tokio::test]
     async fn api_200_error_with_string_code_parsed_correctly() {
         let mock = MockServer::start().await;

@@ -864,6 +864,140 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn search_bugs_negations_in_two_fields_use_distinct_indices() {
+        // Two negated values across different fields must produce
+        // f1/o1/v1 and f2/o2/v2 — not collide on the same index.
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("f1", "bug_status"))
+            .and(query_param("o1", "notequals"))
+            .and(query_param("v1", "CLOSED"))
+            .and(query_param("f2", "bug_severity"))
+            .and(query_param("o2", "notequals"))
+            .and(query_param("v2", "enhancement"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let params = SearchParams {
+            status: vec!["!CLOSED".into()],
+            severity: vec!["!enhancement".into()],
+            ..Default::default()
+        };
+        client.search_bugs(&params).await.unwrap();
+    }
+
+    #[test]
+    fn has_raw_boolean_chart_params_false_for_non_chart_letter_with_digit() {
+        // "a1" matches the "letter+digit" shape but the prefix is not
+        // f/o/v — must not be treated as a boolean chart parameter.
+        let params = SearchParams {
+            raw_params: vec![("a1".into(), "value".into())],
+            ..Default::default()
+        };
+        assert!(!super::has_raw_boolean_chart_params(&params));
+    }
+
+    #[tokio::test]
+    async fn hybrid_search_bugs_with_raw_params_does_not_xmlrpc_fallback() {
+        // Raw boolean chart params require REST and bypass the Hybrid
+        // mode's empty-results XML-RPC retry: an empty REST result must
+        // be returned as-is, not masked by a successful XML-RPC retry.
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+            .mount(&mock)
+            .await;
+        // If the Hybrid arm were entered (mutation regression), it would
+        // see an empty result with active filters and retry via XML-RPC,
+        // returning this non-empty list and breaking the assertion below.
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(
+                r#"<?xml version="1.0"?><methodResponse><params><param>
+                    <value><struct><member><name>bugs</name>
+                    <value><array><data>
+                      <value><struct>
+                        <member><name>id</name><value><int>99</int></value></member>
+                        <member><name>summary</name><value><string>xmlrpc-only</string></value></member>
+                      </struct></value>
+                    </data></array></value>
+                    </member></struct></value>
+                </param></params></methodResponse>"#,
+            ))
+            .mount(&mock)
+            .await;
+
+        let client = test_client_hybrid(&mock.uri());
+        let params = SearchParams {
+            raw_params: vec![
+                ("f1".into(), "qa_contact".into()),
+                ("o1".into(), "equals".into()),
+                ("v1".into(), "user@example.com".into()),
+            ],
+            ..Default::default()
+        };
+        let bugs = client.search_bugs(&params).await.unwrap();
+        assert!(
+            bugs.is_empty(),
+            "expected empty REST result, not XML-RPC fallback; got {bugs:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn hybrid_get_bug_falls_back_on_residual_100500_error() {
+        // The Hybrid arm catches a residual 100500 from get_bug_rest's
+        // own retry chain (direct → search) and retries on XML-RPC.
+        let mock = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 100_500,
+                "message": "Extension crash"
+            })))
+            .mount(&mock)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("id", "42"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 100_500,
+                "message": "Extension crash"
+            })))
+            .mount(&mock)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(
+                r#"<?xml version="1.0"?><methodResponse><params><param><value><struct>
+                    <member><name>bugs</name><value><array><data>
+                      <value><struct>
+                        <member><name>id</name><value><int>42</int></value></member>
+                        <member><name>summary</name><value><string>recovered via xmlrpc</string></value></member>
+                      </struct></value>
+                    </data></array></value></member>
+                </struct></value></param></params></methodResponse>"#,
+            ))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client_hybrid(&mock.uri());
+        let bug = client.get_bug("42", None, None).await.unwrap();
+        assert_eq!(bug.id, 42);
+        assert_eq!(bug.summary, "recovered via xmlrpc");
+    }
+
+    #[tokio::test]
     async fn search_bugs_rejects_negated_plus_raw_boolean_chart() {
         let mock = MockServer::start().await;
         let client = test_client(&mock.uri());
