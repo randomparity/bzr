@@ -1,0 +1,33 @@
+# cargo-mutants configuration
+# See https://mutants.rs/configuration.html
+
+# Build with all features so the keyring + test-helpers code paths get exercised.
+additional_cargo_args = ["--all-features"]
+
+# Test runs that take longer than 5x the baseline are killed (defends against
+# mutants that turn finite loops into infinite loops). Floor at 60s so fast
+# baselines don't generate over-aggressive timeouts.
+timeout_multiplier = 5.0
+minimum_test_timeout = 60
+
+# Exclude code that has no business being mutated:
+#   - test helpers and shared test fixtures
+#   - in-file `mod tests` modules already get filtered by cargo-mutants, but
+#     dedicated *_tests.rs files do not — exclude them explicitly
+#   - the fuzz crate (separate package, not part of the lib coverage target)
+#   - integration / functional test trees
+exclude_globs = [
+    "src/test_helpers.rs",
+    "src/**/*_tests.rs",
+    "src/**/tests.rs",
+    "fuzz/**",
+    "tests/**",
+]
+
+# Skip mutations inside Display/Debug impls — formatting bugs are caught (or
+# not) by snapshot/output tests, and most mutants here are equivalent.
+# Start narrow; expand only when a sweep produces demonstrable noise.
+exclude_re = [
+    "impl .* Display for",
+    "impl .* Debug for",
+]
