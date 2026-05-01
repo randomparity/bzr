@@ -55,6 +55,10 @@ tempfile = "3"
 wiremock = ">=0.6, <0.6.5"
 bzr = { path = ".", features = ["test-helpers"], default-features = false }
 keyring = { version = "3" }
+# No-op proc-macro for `#[mutants::skip]`. Used in a few places where
+# `exclude_re` in .cargo/mutants.toml cannot reach (e.g. cargo-mutants's
+# `delete field` operator on struct expressions).
+mutants = "0.0.3"
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }

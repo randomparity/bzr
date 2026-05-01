@@ -177,6 +177,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn template_save_with_single_field_succeeds() {
+        // A single non-None field is enough to satisfy the
+        // "at least one field required" validator.
+        let (_lock, _mock, _tmp) = setup_test_env().await;
+
+        let action = TemplateAction::Save {
+            name: "version-only".into(),
+            product: None,
+            component: None,
+            version: Some("1.2.3".into()),
+            priority: None,
+            severity: None,
+            assignee: None,
+            op_sys: None,
+            rep_platform: None,
+            description: None,
+        };
+        let (result, _) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(
+            result.is_ok(),
+            "single-field template should save: {result:?}"
+        );
+    }
+
+    #[tokio::test]
     async fn template_delete_unknown_errors() {
         let (_lock, _mock, _tmp) = setup_test_env().await;
 

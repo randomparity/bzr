@@ -440,6 +440,23 @@ mod tests {
     }
 
     #[test]
+    fn pinned_verifier_advertises_default_signature_schemes() {
+        // The verifier delegates `supported_verify_schemes` to the inner
+        // signature verifier, which must return rustls's default scheme set
+        // (an empty vec would silently break TLS handshakes by claiming we
+        // support no signatures).
+        use rustls::client::danger::ServerCertVerifier;
+        let der = gen_self_signed_cert();
+        let fp = compute_fingerprint(&der);
+        let verifier = PinnedCertVerifier::new(&fp, None, None, "localhost").unwrap();
+        let schemes = verifier.supported_verify_schemes();
+        assert!(
+            !schemes.is_empty(),
+            "verifier should advertise at least one signature scheme"
+        );
+    }
+
+    #[test]
     fn pinned_verifier_accepts_matching_cert() {
         let der = gen_self_signed_cert();
         let fp = compute_fingerprint(&der);
@@ -758,6 +775,16 @@ mod tests {
         // 0x80 indicates indefinite length (num_bytes == 0): not allowed
         let data = [0x80_u8];
         assert!(parse_der_length(&data).is_none());
+    }
+
+    #[test]
+    fn parse_der_length_long_form_four_bytes_with_exact_fit() {
+        // 4 length bytes is the upper bound; data length exactly equals
+        // `1 + num_bytes` (no content bytes after the length encoding).
+        let data = [0x84_u8, 0x00, 0x00, 0x01, 0x00];
+        let (rest, len) = parse_der_length(&data).unwrap();
+        assert_eq!(len, 256);
+        assert!(rest.is_empty());
     }
 
     #[test]

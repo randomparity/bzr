@@ -429,10 +429,31 @@ mod tests {
         .await;
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
+        // When email IS provided but valid_login still fails, the hint
+        // must point at the credentials, NOT suggest --email.
         assert!(
-            err.contains("auth detection failed"),
-            "unexpected error: {err}"
+            err.contains("valid_login did not confirm"),
+            "expected 'valid_login did not confirm' message; got: {err}"
         );
+        assert!(
+            !err.contains("--email"),
+            "should not suggest --email when email was already provided; got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn whoami_id_zero_is_auth_rejected() {
+        // Bugzilla returns `id: 0` for an anonymous (unauthenticated)
+        // whoami response. It must not be treated as a successful
+        // authentication.
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/whoami"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 0})))
+            .mount(&server)
+            .await;
+        let result = detect_auth_method(&test_http_client(), &server.uri(), "test-key", None).await;
+        assert!(result.is_err(), "id=0 must not authenticate");
     }
 
     /// Exercises `detect_server_settings`: probes auth and version without Config.

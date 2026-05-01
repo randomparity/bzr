@@ -423,7 +423,11 @@ fn read_secret_from_prompt_or_env(service: &str, account: &str) -> crate::error:
     })
 }
 
+// Mutation testing: cfg-gated dead code on the default-feature Linux
+// test platform. Skipped here rather than via mutants.toml so the live
+// keyring version above stays in the test set.
 #[cfg(not(feature = "keyring"))]
+#[cfg_attr(test, mutants::skip)]
 fn read_secret_from_prompt_or_env(_service: &str, _account: &str) -> crate::error::Result<String> {
     Err(crate::error::BzrError::Keyring(
         "this bzr build was compiled without keyring support; \
@@ -521,7 +525,7 @@ mod tests {
     #[tokio::test]
     async fn first_set_server_auto_sets_default() {
         let (_lock, _tmp) = setup_config_env().await;
-        execute(
+        let (result, output) = capture_stdout(execute(
             &ConfigAction::SetServer {
                 name: "first".into(),
                 url: "https://first.example.com".into(),
@@ -536,14 +540,19 @@ mod tests {
                 tls_pin_clear: false,
             },
             None,
-            OutputFormat::Table,
+            OutputFormat::Json,
             None,
-        )
-        .await
-        .unwrap();
+        ))
+        .await;
+        result.unwrap();
         let config = Config::load().unwrap();
         assert_eq!(config.default_server.as_deref(), Some("first"));
         assert!(config.servers.contains_key("first"));
+
+        // The first server set must report `is_default: true` in JSON
+        // output, since there was no prior default to take precedence.
+        let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+        assert_eq!(parsed["is_default"], true);
     }
 
     #[tokio::test]

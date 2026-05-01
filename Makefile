@@ -1,8 +1,9 @@
 CARGO ?= cargo
 RUST_MIN_VERSION := 1.84.0
 
-.PHONY: setup check-rust ensure-components ensure-coverage-prereqs install-hooks \
+.PHONY: setup check-rust ensure-components ensure-coverage-prereqs ensure-mutants-prereq install-hooks \
         build release test coverage fmt clippy lint clean help \
+        mutants mutants-fast mutants-list audit-mutant-skips \
         functional-build functional-start functional-test functional-stop \
         functional-test-bz52 functional-test-bz53 functional-test-all functional-stop-all \
         functional-test-keyring
@@ -89,6 +90,34 @@ lint: fmt clippy ## Run all linters (fmt + clippy)
 
 clean: ## Remove build artifacts
 	$(CARGO) clean
+
+## Mutation Testing
+#
+# MUTANTS_JOBS caps how many cargo build+test pipelines run in parallel.
+# Each one can spawn many compile threads, so values >8 risk overwhelming the
+# host (cargo-mutants warns above 8). Default 4 leaves headroom for other work
+# on the same machine. Override with: MUTANTS_JOBS=N make mutants
+MUTANTS_JOBS ?= 4
+
+ensure-mutants-prereq:
+	@command -v cargo-mutants >/dev/null 2>&1 || { echo "cargo-mutants not installed"; echo "  Run: cargo install cargo-mutants --locked"; exit 1; }
+
+mutants: ensure-mutants-prereq ## Run cargo-mutants across the whole crate (slow; hours). MUTANTS_JOBS=N to override parallelism (default 4)
+	cargo mutants --jobs $(MUTANTS_JOBS)
+
+mutants-fast: ensure-mutants-prereq ## Run cargo-mutants only on lines changed vs. origin/main
+	git diff origin/main...HEAD > /tmp/bzr-mutants.diff
+	cargo mutants --in-diff /tmp/bzr-mutants.diff --jobs $(MUTANTS_JOBS)
+
+mutants-list: ensure-mutants-prereq ## List all mutants without running tests
+	cargo mutants --list
+
+audit-mutant-skips: ## Print every `mutants::skip` site with surrounding context
+	@if command -v rg >/dev/null 2>&1; then \
+		rg --line-number --context 2 'mutants::skip' src/ || echo "No mutants::skip annotations found."; \
+	else \
+		grep -rn --include='*.rs' --context=2 'mutants::skip' src/ || echo "No mutants::skip annotations found."; \
+	fi
 
 ## Functional Tests
 

@@ -162,6 +162,76 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn handle_search_from_url_preserves_url_limit_when_cli_unset() {
+        // URL specifies limit=10 and CLI passes nothing — the URL limit
+        // must reach the server unchanged, not be overwritten by the
+        // 50-default.
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("product", "TestProduct"))
+            .and(query_param("limit", "10"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let url = format!("{}/buglist.cgi?product=TestProduct&limit=10", mock.uri());
+        let action = from_url_action(url, None);
+
+        let (result, _) = capture_stdout(crate::commands::bug::execute(
+            &action,
+            None,
+            OutputFormat::Json,
+            None,
+        ))
+        .await;
+        assert!(
+            result.is_ok(),
+            "from-url with explicit limit failed: {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn handle_search_quicksearch_passes_limit_and_field_filters() {
+        // Non-from-url path: limit / fields / exclude_fields from the
+        // CLI must reach the server.
+        let (_lock, mock, _tmp) = setup_test_env().await;
+
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("quicksearch", "crash"))
+            .and(query_param("limit", "5"))
+            .and(query_param("include_fields", "id,summary"))
+            .and(query_param("exclude_fields", "comments"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let action = BugAction::Search {
+            query: Some("crash".into()),
+            from_url: None,
+            save_as: None,
+            limit: Some(5),
+            fields: Some("id,summary".into()),
+            exclude_fields: Some("comments".into()),
+        };
+        let (result, _) = capture_stdout(crate::commands::bug::execute(
+            &action,
+            None,
+            OutputFormat::Json,
+            None,
+        ))
+        .await;
+        assert!(
+            result.is_ok(),
+            "quicksearch with filters failed: {result:?}"
+        );
+    }
+
+    #[tokio::test]
     async fn handle_search_from_url_passes_raw_params() {
         let (_lock, mock, _tmp) = setup_test_env().await;
 

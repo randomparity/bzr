@@ -105,6 +105,18 @@ mod tests {
     }
 
     #[test]
+    fn parse_flag_unclosed_paren_fails() {
+        let err = parse_flags(&["review?(alice".into()]).unwrap_err();
+        assert!(err.to_string().contains("parentheses"));
+    }
+
+    #[test]
+    fn parse_flag_unopened_paren_fails() {
+        let err = parse_flags(&["review?alice)".into()]).unwrap_err();
+        assert!(err.to_string().contains("parentheses"));
+    }
+
+    #[test]
     fn parse_flag_clear() {
         let flags = parse_flags(&["reviewX".into()]).unwrap();
         assert_eq!(flags[0].name, "review");

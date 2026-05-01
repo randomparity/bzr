@@ -126,7 +126,7 @@ pub(crate) fn format_error_chain(err: &dyn std::error::Error) -> String {
 fn format_http_error(err: &reqwest::Error) -> String {
     let chain = format_error_chain(err);
     let mut msg = redact_api_key(&chain);
-    if err.is_connect() && crate::http::looks_like_tls_error(&chain) {
+    if crate::http::is_connect_tls_error(err.is_connect(), &chain) {
         msg.push_str(crate::http::TLS_HINT);
     }
     msg
@@ -353,6 +353,15 @@ mod tests {
         let input = "connection refused";
         let result = redact_api_key(input);
         assert_eq!(result, "connection refused");
+    }
+
+    #[test]
+    fn sanitize_http_error_redacts_marker_at_string_start() {
+        // The marker at index 0 is the boundary case for the post-marker
+        // slicing arithmetic — must not underflow.
+        let input = "Bugzilla_api_key=secret";
+        let result = redact_api_key(input);
+        assert_eq!(result, "Bugzilla_api_key=[REDACTED]");
     }
 
     #[test]

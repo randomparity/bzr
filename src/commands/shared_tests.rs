@@ -447,6 +447,58 @@ async fn connect_client_with_tls_insecure_warns_and_succeeds() {
     assert!(result.is_ok(), "tls_insecure should still build a client");
 }
 
+/// The partial-cache branch must preserve the cached `auth_method` even
+/// when re-detection would have picked a different method. Re-detection
+/// runs to fill in the missing `api_mode` only.
+#[tokio::test]
+async fn connect_client_partial_cache_preserves_cached_auth_method() {
+    let _lock = ENV_LOCK.lock().await;
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    // Cache says "header"; live detection will reject header (401) and
+    // accept query_param (200). The cached "header" must survive.
+    write_config(&tmp, &mock.uri(), "auth_method = \"header\"");
+
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .and(wiremock::matchers::header("X-BUGZILLA-API-KEY", "test-key"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .and(wiremock::matchers::query_param(
+            "Bugzilla_api_key",
+            "test-key",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/version"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.1.2"})),
+        )
+        .mount(&mock)
+        .await;
+
+    let result = super::connect_and_configure(None, None).await;
+    assert!(
+        result.is_ok(),
+        "partial-cache with disagreeing detection should succeed: {:?}",
+        result.err()
+    );
+
+    let reloaded = crate::config::Config::load().unwrap();
+    let srv = &reloaded.servers["test"];
+    assert_eq!(
+        srv.auth_method,
+        Some(crate::types::AuthMethod::Header),
+        "cached auth_method must not be overwritten by re-detection"
+    );
+    assert_eq!(srv.api_mode, Some(crate::types::ApiMode::Rest));
+}
+
 /// `auth_method` cached but `api_mode` missing -> takes the partial-cache
 /// branch in `connect_and_configure` (re-detects `api_mode`, persists
 /// without overwriting `auth_method`).

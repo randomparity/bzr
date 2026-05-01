@@ -315,6 +315,12 @@ mod tests {
     }
 
     #[test]
+    fn guess_content_type_structured_documents() {
+        assert_eq!(guess_content_type("config.xml"), "application/xml");
+        assert_eq!(guess_content_type("report.pdf"), "application/pdf");
+    }
+
+    #[test]
     fn guess_content_type_images() {
         assert_eq!(guess_content_type("photo.png"), "image/png");
         assert_eq!(guess_content_type("photo.jpg"), "image/jpeg");

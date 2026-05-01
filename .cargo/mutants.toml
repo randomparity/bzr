@@ -1,0 +1,130 @@
+# cargo-mutants configuration
+# See https://mutants.rs/configuration.html
+
+# Build with all features so the keyring + test-helpers code paths get exercised.
+additional_cargo_args = ["--all-features"]
+
+# Serialize tests during mutation runs. Several tests use the project's
+# `capture_stdout` helper, which redirects fd 1 globally via `dup2`. Under
+# parallel execution (the default), other tests' `writeln!(io::stdout(), …)`
+# output bleeds into the captured pipe and produces flaky baseline failures
+# that abort the mutation run before any mutant is tested. The slowdown is
+# absorbed by the mutation run only; ordinary `cargo test` keeps full parallelism.
+additional_cargo_test_args = ["--", "--test-threads=1"]
+
+# Test runs that take longer than 5x the baseline are killed (defends against
+# mutants that turn finite loops into infinite loops). Floor at 60s so fast
+# baselines don't generate over-aggressive timeouts.
+timeout_multiplier = 5.0
+minimum_test_timeout = 60
+
+# Exclude code that has no business being mutated:
+#   - test helpers and shared test fixtures
+#   - in-file `mod tests` modules already get filtered by cargo-mutants, but
+#     dedicated *_tests.rs files do not — exclude them explicitly
+#   - the fuzz crate (separate package, not part of the lib coverage target)
+#   - integration / functional test trees
+exclude_globs = [
+    "src/test_helpers.rs",
+    "src/**/*_tests.rs",
+    "src/**/tests.rs",
+    "fuzz/**",
+    "tests/**",
+]
+
+# Skip mutations inside Display/Debug impls — formatting bugs are caught (or
+# not) by snapshot/output tests, and most mutants here are equivalent.
+# Start narrow; expand only when a sweep produces demonstrable noise.
+exclude_re = [
+    "impl .* Display for",
+    "impl .* Debug for",
+    # `skip_to_end` in xmlrpc parsing is defensive depth-tracking; in the
+    # normal flow it is only ever called when the next event is the matching
+    # end tag. The increment branch never fires, so all mutations of the
+    # depth counter and inner guards are equivalent on real Bugzilla input.
+    "skip_to_end",
+    # `is_value_end` guards the empty-`<value></value>` arm in
+    # parse_value_content. Both the `with true` and `== with !=` mutations
+    # here are equivalent: the only input reaching this branch is
+    # `<value></value>`, where the immediately-following `</param>` end
+    # produces the same `""` via the next loop iteration regardless of
+    # which `End` event the guard accepts. `with false` IS catchable and
+    # remains in the test set.
+    'is_value_end -> bool with true',
+    'replace == with != in is_value_end',
+    'match guard is_value_end\(.*\) with true',
+    # `is_tls_cert_error` is a thin reqwest::Error → (bool, &str) adapter
+    # whose body is fully covered by `is_connect_tls_error` unit tests. The
+    # `with false` mutation can only be observed by passing in a real TLS
+    # cert error, but reqwest::Error has no public constructor and spinning
+    # up a TLS server with a bad cert is out of scope. The `with true`
+    # variant IS caught (the non-TLS-error tls_hint test would break).
+    'is_tls_cert_error -> bool with false',
+    # Interactive TOFU prompt helpers in src/tls/tofu.rs all detect
+    # `!io::stdin().is_terminal()` and short-circuit to None/false. In
+    # unit-test mode stdin is never a terminal, so a body replaced with
+    # the same Ok(None) / Ok(false) is observationally identical to the
+    # unmutated code path. Catching them would require spawning a
+    # subprocess with a pty.
+    'replace (read_interactive_line|confirm_pin|prompt_tofu|prompt_rotation) -> Result<.*> with Ok\((None|false)\)',
+    # Permissions warnings in config.rs print to stderr only. The codebase
+    # has a `capture_stdout` helper but no stderr equivalent, so these
+    # functions and the bitwise mode-mask check inside the second one
+    # cannot be observed in unit tests without a refactor to inject a
+    # writer.
+    'replace warn_security with \(\)',
+    'replace warn_if_path_permissions_too_open with \(\)',
+    'replace Config::warn_on_insecure_permissions with \(\)',
+    'replace & with [|^] in warn_if_path_permissions_too_open',
+    'replace == with != in warn_if_path_permissions_too_open',
+    # `detect_auth_method`'s non-HTTPS check at the top of the function
+    # only emits a `tracing::warn!` — same untestable-stderr-side-effect
+    # category as the warn_security family above. The function currently
+    # contains only one `!` operator; if more are added, narrow this
+    # pattern.
+    'delete ! in detect_auth_method',
+    # The CodeVisitor::expecting body is only surfaced when serde fails to
+    # match any visit_* method (e.g. JSON code is null/array). The caller
+    # `check_response_status` swallows that deserialization error and falls
+    # back to `BzrError::HttpStatus`, so the visitor's "expected" message
+    # never reaches user-visible output. Replacing it with a no-op is
+    # observably equivalent.
+    'CodeVisitor>::expecting -> std::fmt::Result',
+    # The non-Unix `write_private_file` body cannot be reached on Linux
+    # (where CI/dev tests run); cargo-mutants ignores `#[cfg]` and reports
+    # it as missed even though the code is never compiled.
+    'replace write_private_file -> Result<\(\)> with Ok\(\(\)\)',
+    # The Unix `write_private_file` already creates the file with
+    # `OpenOptions::mode(0o600)`, so the subsequent
+    # `set_private_file_permissions` chmod has no observable effect — the
+    # mode is already correct when this function runs. Kept as a defensive
+    # double-set, but the no-op mutation passes any test that checks final
+    # perms.
+    'replace set_private_file_permissions -> Result<\(\)> with Ok\(\(\)\)',
+    # Comment composition helpers in src/commands/comment.rs detect
+    # `!stdin.is_terminal()` and pipe stdin or spawn $EDITOR. In unit
+    # tests stdin is never a terminal, so the editor branch
+    # (`compose_comment_in_editor` and the `TempFile::drop` it owns) is
+    # unreachable; mutations there are observably equivalent. The stdin
+    # branch in `read_comment_body` reads whatever the harness pipes in;
+    # tests can't easily inject specific stdin content without a
+    # subprocess.
+    'replace (read_comment_body|compose_comment_in_editor) -> Result<String> with Ok\(',
+    'delete ! in (read_comment_body|compose_comment_in_editor)',
+    'replace <impl Drop for TempFile>::drop with \(\)',
+    # TLS-failure classifiers and TOFU/rotation handlers in
+    # src/commands/shared.rs require a real TLS handshake error from
+    # reqwest (which has no public Error constructor) AND a terminal
+    # stdin to drive the prompts. Both are out of reach for unit tests:
+    # `should_offer_tofu`, `is_pin_mismatch`, and `is_issuer_changed` can
+    # only return true given a real TLS error chain; the field
+    # assignments inside `handle_tofu` and `handle_pin_rotation` only
+    # run after a prompt accepts; `classify_and_handle_tls_failure` only
+    # does meaningful work in those same paths.
+    'replace (should_offer_tofu|is_pin_mismatch|is_issuer_changed) -> bool with false',
+    'delete ! in should_offer_tofu',
+    'replace classify_and_handle_tls_failure -> Result<Option<BugzillaClient>> with Ok\(None\)',
+    'delete match arm BzrError::Http\(re\) in classify_and_handle_tls_failure',
+    # `handle_tofu` and `handle_pin_rotation` are skipped via
+    # `#[cfg_attr(test, mutants::skip)]` in src/commands/shared.rs.
+]

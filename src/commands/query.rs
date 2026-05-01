@@ -285,6 +285,78 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn query_save_persists_every_field() {
+        // Every Save-action field must round-trip into the persisted
+        // SavedQuery and be visible in `query show`.
+        let (_lock, _mock, _tmp) = setup_test_env().await;
+
+        let action = QueryAction::Save {
+            name: "comprehensive".into(),
+            from_url: None,
+            search: None,
+            product: vec!["Firefox".into()],
+            component: vec!["General".into()],
+            status: vec!["NEW".into()],
+            assignee: vec!["dev@test.com".into()],
+            creator: vec!["reporter@test.com".into()],
+            priority: vec!["P1".into()],
+            severity: vec!["major".into()],
+            limit: Some(7),
+            fields: Some("id,summary".into()),
+            exclude_fields: Some("comments".into()),
+        };
+        let (result, _) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        result.unwrap();
+
+        let action = QueryAction::Show {
+            name: "comprehensive".into(),
+        };
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        result.unwrap();
+        let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+        assert_eq!(parsed["product"][0], "Firefox");
+        assert_eq!(parsed["component"][0], "General");
+        assert_eq!(parsed["status"][0], "NEW");
+        assert_eq!(parsed["assignee"][0], "dev@test.com");
+        assert_eq!(parsed["creator"][0], "reporter@test.com");
+        assert_eq!(parsed["priority"][0], "P1");
+        assert_eq!(parsed["severity"][0], "major");
+        assert_eq!(parsed["limit"], 7);
+        assert_eq!(parsed["fields"], "id,summary");
+        assert_eq!(parsed["exclude_fields"], "comments");
+    }
+
+    #[tokio::test]
+    async fn query_list_emits_saved_query_names() {
+        // Saved queries must appear in `query list` output.
+        let (_lock, _mock, _tmp) = setup_test_env().await;
+
+        let (result, _) = capture_stdout(super::execute(
+            &save_action("listed-query"),
+            None,
+            OutputFormat::Json,
+            None,
+        ))
+        .await;
+        result.unwrap();
+
+        let (result, output) = capture_stdout(super::execute(
+            &QueryAction::List,
+            None,
+            OutputFormat::Json,
+            None,
+        ))
+        .await;
+        result.unwrap();
+        assert!(
+            output.contains("listed-query"),
+            "expected query name in list output; got: {output:?}"
+        );
+    }
+
+    #[tokio::test]
     async fn query_save_search_kind() {
         let (_lock, _mock, _tmp) = setup_test_env().await;
 

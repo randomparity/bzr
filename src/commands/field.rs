@@ -1,3 +1,5 @@
+use std::io::{self, Write};
+
 use crate::cli::FieldAction;
 use crate::error::Result;
 use crate::output;
@@ -19,10 +21,7 @@ pub async fn execute(
             let client = super::shared::connect_and_configure(server, api).await?;
             let values = client.get_field_values(name).await?;
             if values.is_empty() && format == OutputFormat::Table {
-                #[expect(clippy::print_stdout)]
-                {
-                    println!("No values for field '{name}'.");
-                }
+                let _ = writeln!(io::stdout(), "No values for field '{name}'.");
             } else {
                 output::print_field_values(&values, format);
             }
@@ -32,73 +31,5 @@ pub async fn execute(
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used)]
-mod tests {
-    use wiremock::matchers::{method, path};
-    use wiremock::{Mock, ResponseTemplate};
-
-    use crate::cli::FieldAction;
-    use crate::test_helpers::{capture_stdout, extract_json, setup_test_env};
-    use crate::types::OutputFormat;
-
-    #[tokio::test]
-    async fn field_list_returns_values() {
-        let (_lock, mock, _tmp) = setup_test_env().await;
-
-        Mock::given(method("GET"))
-            .and(path("/rest/field/bug/bug_status"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "fields": [{
-                    "name": "bug_status",
-                    "values": [
-                        {"name": "NEW"},
-                        {"name": "ASSIGNED"},
-                        {"name": "RESOLVED"}
-                    ]
-                }]
-            })))
-            .mount(&mock)
-            .await;
-
-        let action = FieldAction::List {
-            name: "status".to_string(),
-        };
-        let (result, output) =
-            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
-        assert!(result.is_ok());
-        let parsed = extract_json(&output);
-        assert!(parsed.as_array().unwrap().len() >= 3);
-        assert_eq!(parsed[0]["name"], "NEW");
-    }
-
-    #[tokio::test]
-    async fn field_aliases_succeeds_without_server() {
-        let _lock = crate::ENV_LOCK.lock().await;
-        let action = FieldAction::Aliases;
-        let (result, output) =
-            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
-        assert!(result.is_ok());
-        let parsed = extract_json(&output);
-        let arr = parsed.as_array().unwrap();
-        assert!(!arr.is_empty());
-        assert_eq!(arr[0]["alias"], "file_loc");
-        assert_eq!(arr[0]["api_name"], "bug_file_loc");
-    }
-
-    #[tokio::test]
-    async fn field_list_http_500_returns_error() {
-        let (_lock, mock, _tmp) = setup_test_env().await;
-
-        Mock::given(method("GET"))
-            .and(path("/rest/field/bug/bug_status"))
-            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
-            .mount(&mock)
-            .await;
-
-        let action = FieldAction::List {
-            name: "status".to_string(),
-        };
-        let result = super::execute(&action, None, OutputFormat::Json, None).await;
-        assert!(result.is_err());
-    }
-}
+#[path = "field_tests.rs"]
+mod tests;

@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used)]
 
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::BugAction;
@@ -62,6 +62,52 @@ async fn bug_list_returns_bugs() {
     assert_eq!(parsed[0]["summary"], "Test bug");
     assert_eq!(parsed[0]["status"], "NEW");
     assert_eq!(parsed[0]["product"], "TestProduct");
+}
+
+#[tokio::test]
+async fn bug_list_passes_every_field_through_to_search_params() {
+    // Every CLI field on `bug list` must round-trip into the search
+    // query string.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("product", "Firefox"))
+        .and(query_param("component", "General"))
+        .and(query_param("status", "NEW"))
+        .and(query_param("assigned_to", "dev@test.com"))
+        .and(query_param("creator", "reporter@test.com"))
+        .and(query_param("priority", "P1"))
+        .and(query_param("severity", "major"))
+        .and(query_param("id", "42"))
+        .and(query_param("alias", "my-alias"))
+        .and(query_param("limit", "5"))
+        .and(query_param("include_fields", "id,summary"))
+        .and(query_param("exclude_fields", "comments"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::List {
+        product: vec!["Firefox".into()],
+        component: vec!["General".into()],
+        status: vec!["NEW".into()],
+        assignee: vec!["dev@test.com".into()],
+        creator: vec!["reporter@test.com".into()],
+        priority: vec!["P1".into()],
+        severity: vec!["major".into()],
+        id: vec![42],
+        alias: Some("my-alias".into()),
+        limit: 5,
+        fields: Some("id,summary".into()),
+        exclude_fields: Some("comments".into()),
+    };
+    let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
+    assert!(
+        result.is_ok(),
+        "bug list with all fields failed: {result:?}"
+    );
 }
 
 #[tokio::test]

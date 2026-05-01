@@ -453,6 +453,56 @@ mod tests {
         let srv = loaded.servers.get("myserver").unwrap();
         assert_eq!(srv.url, "https://bugzilla.example.com");
         assert_eq!(srv.api_key.as_deref(), Some("test-key"));
+
+        // 3. Re-saving an existing config preserves the file's current
+        // permissions; perms are only set on first save.
+        #[cfg(unix)]
+        {
+            let path = Config::path().unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+            original.save().unwrap();
+            let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o644);
+        }
+
+        // 4. Loading a non-NotFound IO error (e.g. the path is a
+        // directory) propagates rather than being swallowed as "no
+        // config".
+        let _ = fs::remove_file(Config::path().unwrap());
+        fs::create_dir_all(Config::path().unwrap()).unwrap();
+        assert!(Config::load().is_err());
+    }
+
+    #[test]
+    fn credential_source_errors_when_no_api_key_source_defined() {
+        let mut srv = make_server_config("https://example.com");
+        srv.api_key = None;
+        let err = srv.credential_source().unwrap_err();
+        assert!(
+            err.to_string().contains("must define one of"),
+            "expected 'must define one of' message, got: {err}"
+        );
+    }
+
+    #[test]
+    fn validate_tls_rejects_missing_ca_cert_file() {
+        let mut srv = make_server_config("https://example.com");
+        srv.tls_ca_cert = Some(std::path::PathBuf::from(
+            "/nonexistent/path/that/should/not/exist/ca.pem",
+        ));
+        let err = srv.validate_tls("test").unwrap_err();
+        assert!(
+            err.to_string().contains("not found"),
+            "expected 'not found' message, got: {err}"
+        );
+    }
+
+    #[test]
+    fn validate_tls_accepts_existing_ca_cert_file() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let mut srv = make_server_config("https://example.com");
+        srv.tls_ca_cert = Some(tmp.path().to_path_buf());
+        assert!(srv.validate_tls("test").is_ok());
     }
 
     #[test]
