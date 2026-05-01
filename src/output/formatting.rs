@@ -183,10 +183,9 @@ mod tests {
 
     #[test]
     fn colorize_status_known_statuses_emit_ansi_escapes() {
-        // Force color output so the test assertion is reliable regardless
-        // of TTY detection in cargo test. The catch-all match arm returns
-        // the input unchanged, so a deleted known-status arm would fall
-        // through and produce no escape codes.
+        // Force color output: cargo test pipes stdout, so colored auto-disables
+        // and the catch-all arm produces output identical to the colored arms,
+        // hiding `delete match arm` mutations.
         struct ColorOverride;
         impl Drop for ColorOverride {
             fn drop(&mut self) {
@@ -211,7 +210,6 @@ mod tests {
                 "expected ANSI escape in colorize_status({status:?}), got {result:?}"
             );
         }
-        // Unknown statuses must NOT receive coloring.
         assert_eq!(colorize_status("CUSTOM"), "CUSTOM");
     }
 

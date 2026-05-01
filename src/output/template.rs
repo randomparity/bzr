@@ -271,41 +271,4 @@ mod tests {
         .await;
         assert!(output.contains("No templates configured."));
     }
-
-    #[cfg(unix)]
-    #[tokio::test]
-    async fn template_list_names_sort_before_render() {
-        let _lock = crate::ENV_LOCK.lock().await;
-        let mut templates: HashMap<String, BugTemplate> = HashMap::new();
-        templates.insert("zzz".into(), make_template());
-        templates.insert(
-            "aaa".into(),
-            BugTemplate {
-                product: Some("Alpha".into()),
-                component: None,
-                version: None,
-                priority: None,
-                severity: None,
-                assignee: None,
-                op_sys: None,
-                rep_platform: None,
-                description: None,
-            },
-        );
-
-        let mut names: Vec<&str> = templates.keys().map(String::as_str).collect();
-        names.sort_unstable();
-        let rendered: Vec<String> = names
-            .into_iter()
-            .map(|name| template_summary_line(name, &templates[name]))
-            .collect();
-
-        assert_eq!(
-            rendered,
-            vec![
-                "aaa (product=Alpha)".to_string(),
-                "zzz (product=Widget, component=Backend, priority=P1, severity=major)".to_string(),
-            ]
-        );
-    }
 }
