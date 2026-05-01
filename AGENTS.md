@@ -45,6 +45,7 @@ Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches `Com
 - Tests use `wiremock` for HTTP mocking. Unit tests are in `#[cfg(test)] mod tests` within each source file. Integration tests live in `tests/integration.rs` and functional tests in `tests/functional/`. All API tests require `#[tokio::test]` (the runtime is tokio). Test modules use `#[expect(clippy::unwrap_used)]` to allow `.unwrap()` in tests.
 - Clippy pedantic is enabled with strict rules (see `[lints.clippy]` in Cargo.toml). `unwrap_used` is denied, `expect_used` and `allow_attributes` are warned.
 - CLI reference documentation lives in `docs/bzr-cli.md`. When adding a new command, update that file.
+- `CHANGELOG.md` entries are written **as the work lands**, not deferred to a release-prep commit. When a feature PR ships user-visible behavior, add (or extend) the relevant `## [X.Y.Z]` section in the same PR. The release-prep commit then only needs to confirm the date and version. `release.yml` reads this file via awk to source the GitHub release notes; it does not generate or modify entries. (Earlier releases used dedicated `release: add CHANGELOG entry` commits — that convention is superseded.)
 - System package dependencies (e.g. `libdbus-1-dev` for the `keyring` default feature) must be installed in **every** place the crate is built, not just one workflow. When adding or changing a native dependency, audit all of:
   - `.github/workflows/ci.yml` (native host jobs)
   - `.github/workflows/release.yml` (native host jobs **and** the QEMU container for `powerpc64le`)
