@@ -80,12 +80,12 @@ Largest-first. `–` means the wave hasn't started yet.
 | src/types/bug.rs                    |  77 | pending | – | – | – | – | – | – |
 | src/commands/shared.rs              |  49 | swept   | 24 | 0 |  4 | 0 | 100 % | 2026-05-01 |
 | src/config.rs                       |  47 | swept   | 33 | 0 |  5 | 0 | 100 % | 2026-05-01 |
-| src/xmlrpc/client.rs                |  42 | pending | – | – | – | – | – | – |
+| src/xmlrpc/client.rs                |  42 | swept   | 35 | 0 |  7 | 0 | 100 % | 2026-05-01 |
 | src/client/mod.rs                   |  41 | swept   | 30 | 0 | 10 | 0 | 100 % | 2026-05-01 |
 | src/client/bug.rs                   |  38 | swept   | 28 | 0 | 10 | 0 | 100 % | 2026-05-01 |
 | src/tls/tofu.rs                     |  36 | swept   | 28 | 0 |  4 | 0 | 100 % | 2026-05-01 |
 | src/output/formatting.rs            |  34 | pending | – | – | – | – | – | – |
-| src/xmlrpc/mod.rs                   |  28 | pending | – | – | – | – | – | – |
+| src/xmlrpc/mod.rs                   |  28 | swept   | 21 | 0 |  7 | 0 | 100 % | 2026-05-01 |
 | src/url_parser.rs                   |  25 | swept   | 23 | 0 | 2 | 0 | 100 % | 2026-05-01 |
 | src/error.rs                        |  19 | swept   | 17 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/commands/query.rs               |  19 | swept   | 18 | 0 |  1 | 0 | 100 % | 2026-05-01 |
@@ -110,7 +110,7 @@ Largest-first. `–` means the wave hasn't started yet.
 | src/output/config.rs                |   9 | pending | – | – | – | – | – | – |
 | src/commands/template.rs            |   9 | swept   |  9 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/client/user.rs                  |   9 | swept   |  4 | 0 |  3 | 0 | 100 % | 2026-05-01 |
-| src/xmlrpc/call.rs                  |   8 | pending | – | – | – | – | – | – |
+| src/xmlrpc/call.rs                  |   8 | swept   |  6 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/client/auth/mod.rs              |   8 | swept   |  6 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/output/template.rs              |   7 | pending | – | – | – | – | – | – |
 | src/output/product.rs               |   7 | pending | – | – | – | – | – | – |
@@ -130,7 +130,7 @@ Largest-first. `–` means the wave hasn't started yet.
 | src/commands/bug/clone.rs           |   3 | swept   |  3 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/client/server.rs                |   3 | swept   |  2 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/client/component.rs             |   3 | swept   |  2 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/xmlrpc/fault.rs                 |   2 | pending | – | – | – | – | – | – |
+| src/xmlrpc/fault.rs                 |   2 | swept   |  1 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/output/server.rs                |   2 | pending | – | – | – | – | – | – |
 | src/output/group.rs                 |   2 | pending | – | – | – | – | – | – |
 | src/output/field.rs                 |   2 | pending | – | – | – | – | – | – |
