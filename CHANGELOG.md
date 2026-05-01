@@ -21,6 +21,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   back to a source build with a build-time `rust` dep. The
   `update-homebrew.yml` workflow auto-bumps the formula on each
   stable release.
+- `SHA256SUMS` file attached to each GitHub release, covering every
+  tarball, zip, `.deb`, and `.rpm` artifact. Verify a download with
+  `sha256sum --check --ignore-missing SHA256SUMS`.
+
+### Changed
+
+- MSRV raised to 1.88 (was 1.84). Existing crates.io installs continue
+  to work with `cargo install bzr --locked`; users building without
+  `--locked` may need to upgrade their toolchain.
+
+### Documentation
+
+- README `Installation` section restructured around the package
+  manager that fits each platform (Homebrew, `.deb`, `.rpm`, tarball,
+  `cargo install`). Manual page setup promoted from a sub-bullet of the
+  keychain section to a top-level subsection.
+- `docs/bzr-cli.md` exit-code table now lists exit code 13 (TLS pin
+  mismatch / issuer changed). Command tree for `config set-server`
+  includes `--tls-ca-cert`, `--tls-pin-sha256`, `--tls-pin-now`, and
+  `--tls-pin-clear`. Configuration file format example now shows
+  `tls_insecure`, `tls_ca_cert`, and `tls_pin_sha256` per-server fields.
+- `docs/skills.md` exit-code list expanded to mention 0–13 with a
+  pointer to the full table.
+- `CLAUDE.md` updated to reflect 18 `BzrError` variants (was 14),
+  rename of `connect_client` to `connect_and_configure`, and addition
+  of `template.rs` / `query.rs` to the `cli/` module list.
 
 ## [0.2.0-rc2] - 2026-04-28
 

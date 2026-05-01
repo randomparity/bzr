@@ -3,7 +3,7 @@
 [![CI](https://github.com/randomparity/bzr/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/randomparity/bzr/actions/workflows/ci.yml)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=randomparity_bzr&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=randomparity_bzr)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.84](https://img.shields.io/badge/MSRV-1.84-blue.svg)](https://blog.rust-lang.org/2025/01/09/Rust-1.84.0.html)
+[![MSRV: 1.88](https://img.shields.io/badge/MSRV-1.88-blue.svg)](https://blog.rust-lang.org/2025/06/26/Rust-1.88.0/)
 [![crates.io](https://img.shields.io/crates/v/bzr.svg)](https://crates.io/crates/bzr)
 
 A command-line interface for Bugzilla servers, written in Rust. Inspired by the GitHub CLI (`gh`), `bzr` lets you search, view, create, and update bugs, manage comments and attachments, and switch between multiple Bugzilla instances — all from your terminal.
@@ -30,14 +30,20 @@ A command-line interface for Bugzilla servers, written in Rust. Inspired by the 
 
 ## Installation
 
-### Pre-built binaries
+### Choosing an install method
 
-Download the latest release for your platform from
-[GitHub Releases](https://github.com/randomparity/bzr/releases/latest).
+If you have a package manager that fits, use it. The shorter the path,
+the more you get for free (manpages, uninstall, dependency tracking):
 
-Available platforms: Linux (x86_64, aarch64, ppc64le, s390x), macOS (Apple Silicon), Windows (x86_64, aarch64).
+- **macOS or Linux with Homebrew** — use the [Homebrew tap](#homebrew-macos-linux).
+- **Debian / Ubuntu** — install the [`.deb` package](#linux-packages-deb--rpm) attached to the latest release.
+- **Fedora / RHEL / CentOS Stream / Rocky** — install the [`.rpm` package](#linux-packages-deb--rpm).
+- **Windows, or any Linux distro without `apt`/`dnf`** — download a [pre-built tarball or zip](#pre-built-binaries).
+- **Have Rust installed and want to build it yourself** — `cargo install bzr --locked` ([from crates.io](#from-cratesio)) or `cargo install --path . --locked` ([from source](#from-source)).
 
-Intel Mac users can install from source with `cargo install bzr --locked`.
+The first three install manpages and license/doc files automatically.
+The other paths need a [manual manpage install](#manual-pages) if you
+want `man bzr` to work.
 
 ### Homebrew (macOS, Linux)
 
@@ -46,32 +52,79 @@ brew tap randomparity/tap
 brew install bzr
 ```
 
-The tap ships pre-built binaries for macOS arm64 and Linux x86_64/aarch64.
-Intel Mac builds from source automatically (a `rust` build dependency is
-pulled in for that path).
+Tap repository: <https://github.com/randomparity/homebrew-tap>.
+
+Pre-built binaries are published for macOS arm64 (Apple Silicon) and
+Linux x86_64 / aarch64. Intel Mac builds from source automatically
+(brew pulls in a build-time `rust` dep for that path; no extra
+configuration needed).
+
+The tap is auto-bumped on each stable release. Pre-release tags
+(`vX.Y.Z-rcN`) do not update the formula — use the [tarball](#pre-built-binaries)
+or `cargo install` if you want to test a release candidate.
+
+Uninstall with `brew uninstall bzr` and `brew untap randomparity/tap`.
 
 ### Linux packages (`.deb` / `.rpm`)
 
-Each release attaches `.deb` and `.rpm` packages alongside the tarballs:
+Each release attaches Linux packages alongside the tarballs:
 
-- `.deb` for `amd64`, `arm64`, `ppc64el`
-- `.rpm` for `x86_64`, `aarch64`, `ppc64le`, `s390x`
+- `.deb` for `amd64`, `arm64`, `ppc64el` (Debian arch names)
+- `.rpm` for `x86_64`, `aarch64`, `ppc64le`, `s390x` (RPM arch names)
 
-Install on Debian/Ubuntu:
+There is no apt or dnf repository today — download the package for your
+architecture from [GitHub Releases](https://github.com/randomparity/bzr/releases/latest)
+and install it locally.
+
+Debian / Ubuntu:
 
 ```bash
 sudo apt install ./bzr_X.Y.Z-1_amd64.deb
+sudo apt remove bzr            # uninstall
 ```
 
-Install on Fedora/RHEL:
+Fedora / RHEL / CentOS Stream / Rocky:
 
 ```bash
 sudo dnf install ./bzr-X.Y.Z-1.x86_64.rpm
+sudo dnf remove bzr            # uninstall
 ```
 
-Both packages install the binary, manpages under `/usr/share/man/man1/`, and
-documentation under `/usr/share/doc/bzr/`. They depend on `libdbus-1-3`
-(Debian) / `dbus-libs` (RPM) for the OS keychain backend.
+Files installed:
+
+- `/usr/bin/bzr`
+- `/usr/share/man/man1/bzr.1`, `/usr/share/man/man1/bzr-*.1`
+- `/usr/share/doc/bzr/README.md`, `/usr/share/doc/bzr/CHANGELOG.md`
+- `/usr/share/doc/bzr/copyright` (`.deb`) or `/usr/share/licenses/bzr/LICENSE` (`.rpm`)
+
+Both packages declare a runtime dependency on the system D-Bus library
+(`libdbus-1-3` on Debian, `dbus-libs` on RPM) for the OS keychain
+backend; `apt`/`dnf` resolves it automatically.
+
+### Pre-built binaries
+
+Download the tarball or zip for your platform from
+[GitHub Releases](https://github.com/randomparity/bzr/releases/latest).
+
+Available builds: Linux (x86_64, aarch64, ppc64le, s390x), macOS arm64
+(Apple Silicon), Windows (x86_64, aarch64).
+
+```bash
+tar xzf bzr-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz
+cd bzr-vX.Y.Z-x86_64-unknown-linux-gnu
+sudo install -Dm755 bzr /usr/local/bin/bzr
+```
+
+Each archive bundles the binary, `LICENSE`, `README.md`, and a
+`man/man1/` directory of manpages — see [Manual pages](#manual-pages)
+to install those.
+
+Each release also publishes a `SHA256SUMS` file. Verify a download
+before installing:
+
+```bash
+sha256sum --check --ignore-missing SHA256SUMS
+```
 
 ### From crates.io
 
@@ -84,13 +137,17 @@ published in `Cargo.lock`, which are tested against the MSRV. Without it,
 cargo re-resolves to newer transitive dependencies that may exceed the MSRV
 and fail to build.
 
+`cargo install bzr` does **not** install manpages. See
+[Manual pages](#manual-pages) for how to add them.
+
 ### From source
 
 ```bash
 cargo install --path . --locked
 ```
 
-Requires Rust 1.84+.
+Requires Rust 1.88+. Same manpage caveat as `cargo install bzr` — see
+[Manual pages](#manual-pages).
 
 ### OS keychain support (`keyring` feature)
 
@@ -117,18 +174,30 @@ keychain errors.
 
 ### Manual pages
 
-Release tarballs ship roff manpages under `man/man1/` (`bzr.1`, `bzr-bug.1`,
-`bzr-bug-list.1`, ...). Install them manually:
+The `.deb`, `.rpm`, and Homebrew install methods install manpages
+automatically. The other install paths do not — `cargo install bzr`,
+`cargo install --path .`, and the pre-built tarballs leave manpages
+on disk (the tarballs ship them under `man/man1/`) but do not put them
+on your `MANPATH`.
+
+To install them by hand from a release tarball:
 
 ```bash
 sudo install -Dm644 man/man1/bzr.1 /usr/local/share/man/man1/bzr.1
 sudo install -Dm644 man/man1/bzr-*.1 /usr/local/share/man/man1/
-sudo mandb   # or `sudo makewhatis` on BSD
+sudo mandb        # or `sudo makewhatis` on BSD
 ```
 
-The `.deb` and `.rpm` packages install them automatically. `cargo install bzr`
-does **not** install manpages — use a release tarball or distro package, or
-regenerate from a source checkout with `make man`.
+To regenerate them from a source checkout:
+
+```bash
+make man          # writes to man/man1/
+```
+
+### See also
+
+- [`RELEASING.md`](RELEASING.md) — what each release artifact is, how it gets built, and how to verify SHA256 sums and SLSA attestations.
+- [`homebrew/README.md`](homebrew/README.md) — Homebrew tap layout and bootstrap.
 
 ## Onboarding
 
@@ -136,15 +205,23 @@ If you are new to `bzr`, this is the fastest path from install to a working Bugz
 
 ### 1. Install `bzr`
 
-Use a release binary from [GitHub Releases](https://github.com/randomparity/bzr/releases/latest), install from crates.io, or install from source:
+Pick the one that fits your platform (see [Installation](#installation)
+for the full menu and tradeoffs):
 
 ```bash
+# macOS or Linux with Homebrew
+brew tap randomparity/tap && brew install bzr
+
+# Debian / Ubuntu
+sudo apt install ./bzr_X.Y.Z-1_amd64.deb
+
+# Fedora / RHEL
+sudo dnf install ./bzr-X.Y.Z-1.x86_64.rpm
+
+# Anywhere with Rust installed (no manpages — see Installation > Manual pages)
 cargo install bzr --locked
-```
 
-For a local source checkout:
-
-```bash
+# Local source checkout
 cargo install --path . --locked
 ```
 
@@ -304,7 +381,7 @@ Configuration is stored in `~/.config/bzr/config.toml` with support for multiple
 
 1. **Plaintext in `config.toml`** (`--api-key`) — simplest, but the key lives on disk in your config file.
 2. **Environment variable** (`--api-key-env BZR_API_KEY`) — keeps the secret out of the config file; resolved at runtime.
-3. **OS keychain** (`--api-key-keyring`) — stores the key in the system secret store (macOS Keychain, GNOME Keyring / KWallet via Secret Service on Linux, Windows Credential Manager). Requires the `keyring` Cargo feature, which is on by default.
+3. **OS keychain** (via `bzr config set-keyring`) — stores the key in the system secret store (macOS Keychain, GNOME Keyring / KWallet via Secret Service on Linux, Windows Credential Manager). Requires the `keyring` Cargo feature, which is on by default.
 
 Commands for managing keychain-backed credentials:
 

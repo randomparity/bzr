@@ -251,6 +251,20 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      - name: Generate SHA256SUMS
+        working-directory: artifacts
+        run: |
+          set -euo pipefail
+          # Hash every release artifact (tarballs, zips, .deb, .rpm).
+          # Sorted, LF-only output so reproducible across re-runs of the
+          # same set of inputs.
+          find . -maxdepth 1 -type f ! -name 'SHA256SUMS' -printf '%f\n' \
+            | sort \
+            | xargs -d '\n' sha256sum \
+            > SHA256SUMS
+          echo "Generated SHA256SUMS:"
+          cat SHA256SUMS
+
       - name: Extract release notes from CHANGELOG.md
         id: notes
         shell: bash

@@ -72,6 +72,7 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 | 10 | Data integrity error (e.g. missing attachment data) |
 | 11 | Batch partial failure (some operations succeeded, some failed) |
 | 12 | Keyring error (OS keychain access failed, e.g. locked keyring or missing daemon) |
+| 13 | TLS error (certificate pin mismatch or issuer changed; use `--tls-pin-now` to re-pin or `--tls-pin-clear` to remove the pin) |
 
 *Exit code 2 is produced by clap for argument errors before bzr's error handling runs, in addition to resource-not-found errors from bzr itself.
 
@@ -142,7 +143,11 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   ├── create --product <P> --name <N> --description <D> --default-assignee <E>
 │   └── update <ID> [--name <N>] [--description <D>] [--default-assignee <E>]
 ├── config
-│   ├── set-server <NAME> --url <URL> (--api-key <KEY> | --api-key-env <ENV_VAR>) [--email <EMAIL>] [--auth-method <METHOD>] [--tls-insecure]
+│   ├── set-server <NAME> --url <URL> (--api-key <KEY> | --api-key-env <ENV_VAR>) [--email <EMAIL>] [--auth-method <METHOD>]
+│   │                     [--tls-insecure] [--tls-ca-cert <PATH>] [--tls-pin-sha256 <HEX>] [--tls-pin-now] [--tls-pin-clear]
+│   ├── set-keyring <NAME>
+│   ├── unset-keyring <NAME>
+│   ├── migrate-to-keyring <NAME> [--yes]
 │   ├── set-default <NAME>
 │   └── show
 ├── template
@@ -1259,6 +1264,29 @@ api_key = "old-server-key"
 email = "you@example.com"
 api_mode = "hybrid"        # auto-detected: rest, xmlrpc, or hybrid
 server_version = "5.0.4"   # auto-detected (absent if version endpoint unavailable)
+
+# Self-hosted with a private CA — pin the CA file so a compromised public
+# CA cannot mint a cert for this hostname. tls_insecure is mutually
+# exclusive with tls_ca_cert and tls_pin_sha256.
+[servers.internal]
+url = "https://bugzilla.internal"
+api_key_env = "INTERNAL_BZ_API_KEY"
+tls_ca_cert = "/etc/pki/internal-ca.pem"
+
+# TOFU pin: leaf SPKI fingerprint captured by `--tls-pin-now`. Triggers
+# exit code 13 (PinMismatch / IssuerChanged) on rotation; re-pin with
+# `--tls-pin-now` or remove with `--tls-pin-clear`.
+[servers.pinned]
+url = "https://bugzilla.example.com"
+api_key_env = "PINNED_BZ_API_KEY"
+tls_pin_sha256 = "sha256//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+tls_pin_issuer = "/CN=example-internal-ca"
+
+# Disable TLS verification entirely (last resort; prefer tls_ca_cert).
+[servers.scratch]
+url = "https://bugzilla.lab"
+api_key_env = "LAB_BZ_API_KEY"
+tls_insecure = true
 
 [templates.security-bug]
 product = "Security"
