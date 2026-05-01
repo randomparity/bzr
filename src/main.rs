@@ -8,12 +8,12 @@ use bzr::cli::Cli;
 use bzr::error::{self, BzrError};
 use bzr::types::OutputFormat;
 
-// `main` is the binary entry point: defeating mutations in its body
-// requires spawning the compiled binary (e.g. via assert_cmd or
-// escargot) to observe exit codes and stderr. The pure helpers it
-// delegates to (`tracing_filter_directive`, `format_dispatch_error`,
-// `exit_code`, `resolve_format`, `suppress_stdout`) are unit-tested
-// directly; the orchestration glue is not worth a new dev-dependency.
+// Mutation testing: `main` is the binary entry point. Defeating body-level
+// mutations requires spawning the compiled binary (e.g. via assert_cmd or
+// escargot) to observe exit codes and stderr. The pure helpers it delegates
+// to (`tracing_filter_directive`, `format_dispatch_error`, `exit_code`,
+// `resolve_format`, `suppress_stdout`) are unit-tested directly; the
+// orchestration glue is not worth a new dev-dependency.
 #[cfg_attr(test, mutants::skip)]
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
@@ -124,7 +124,7 @@ fn suppress_stdout() {
     }
 }
 
-// Dead code on the Linux test platform; cannot be observed.
+// Mutation testing: dead code on the Linux test platform; cannot be observed.
 #[cfg_attr(test, mutants::skip)]
 #[cfg(windows)]
 fn suppress_stdout() {
@@ -148,7 +148,7 @@ fn suppress_stdout() {
     }
 }
 
-// Dead code on the Linux test platform.
+// Mutation testing: dead code on the Linux test platform.
 #[cfg_attr(test, mutants::skip)]
 #[cfg(not(any(unix, windows)))]
 fn suppress_stdout() {
