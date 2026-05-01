@@ -242,6 +242,14 @@ mod tests {
     }
 
     #[test]
+    fn flag_status_display_emits_status_char() {
+        assert_eq!(FlagStatus::Grant.to_string(), "+");
+        assert_eq!(FlagStatus::Deny.to_string(), "-");
+        assert_eq!(FlagStatus::Request.to_string(), "?");
+        assert_eq!(FlagStatus::Clear.to_string(), "X");
+    }
+
+    #[test]
     fn flag_status_invalid_deserialize() {
         let json = serde_json::json!("Z");
         let err = serde_json::from_value::<FlagStatus>(json).unwrap_err();

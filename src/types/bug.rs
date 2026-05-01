@@ -810,6 +810,89 @@ mod tests {
     }
 
     #[test]
+    fn search_params_has_filters_for_each_individual_field() {
+        type Setter = fn(&mut SearchParams);
+        let cases: &[(&str, Setter)] = &[
+            ("product", |p| p.product.push("X".into())),
+            ("component", |p| p.component.push("X".into())),
+            ("status", |p| p.status.push("X".into())),
+            ("assigned_to", |p| p.assigned_to.push("X".into())),
+            ("creator", |p| p.creator.push("X".into())),
+            ("priority", |p| p.priority.push("X".into())),
+            ("severity", |p| p.severity.push("X".into())),
+            ("cc", |p| p.cc = Some("X".into())),
+            ("alias", |p| p.alias = Some("X".into())),
+            ("id", |p| p.id = vec![1]),
+            ("summary", |p| p.summary = Some("X".into())),
+            ("quicksearch", |p| p.quicksearch = Some("X".into())),
+            ("raw_params", |p| {
+                p.raw_params = vec![("f1".into(), "X".into())];
+            }),
+        ];
+        for (name, setter) in cases {
+            let mut p = SearchParams::default();
+            setter(&mut p);
+            assert!(
+                p.has_filters(),
+                "field `{name}` alone should make has_filters() return true"
+            );
+        }
+    }
+
+    #[test]
+    fn saved_query_has_filters_for_each_individual_field() {
+        type Setter = fn(&mut SavedQuery);
+        let cases: &[(&str, Setter)] = &[
+            ("product", |q| q.product.push("X".into())),
+            ("component", |q| q.component.push("X".into())),
+            ("status", |q| q.status.push("X".into())),
+            ("assignee", |q| q.assignee.push("X".into())),
+            ("creator", |q| q.creator.push("X".into())),
+            ("priority", |q| q.priority.push("X".into())),
+            ("severity", |q| q.severity.push("X".into())),
+            ("quicksearch", |q| q.quicksearch = Some("X".into())),
+            ("raw_params", |q| {
+                q.raw_params = vec![("f1".into(), "X".into())];
+            }),
+        ];
+        for (name, setter) in cases {
+            let mut q = SavedQuery::default();
+            setter(&mut q);
+            assert!(
+                q.has_filters(),
+                "field `{name}` alone should make has_filters() return true"
+            );
+        }
+    }
+
+    #[test]
+    fn id_list_update_is_empty_when_both_empty() {
+        let upd = IdListUpdate {
+            add: vec![],
+            remove: vec![],
+        };
+        assert!(upd.is_empty());
+    }
+
+    #[test]
+    fn id_list_update_not_empty_when_only_add() {
+        let upd = IdListUpdate {
+            add: vec![1],
+            remove: vec![],
+        };
+        assert!(!upd.is_empty());
+    }
+
+    #[test]
+    fn id_list_update_not_empty_when_only_remove() {
+        let upd = IdListUpdate {
+            add: vec![],
+            remove: vec![2],
+        };
+        assert!(!upd.is_empty());
+    }
+
+    #[test]
     fn into_search_params_moves_fields() {
         let query = SavedQuery {
             kind: QueryKind::List,
