@@ -94,6 +94,16 @@ fn parse_value(reader: &mut Reader<&[u8]>) -> Result<Value> {
     parse_value_content(reader)
 }
 
+/// True iff `name` is the `</value>` end-tag.
+///
+/// Extracted so the always-true / inverted-`==` mutations on the empty-value
+/// detection arm in `parse_value_content` are referenced by a stable name in
+/// `.cargo/mutants.toml`. The `with false` mutation IS catchable (and remains
+/// in the test set); only the equivalent ones are skipped.
+fn is_value_end(name: &[u8]) -> bool {
+    name == b"value"
+}
+
 /// Parse the content inside a `<value>` element (after the opening tag).
 fn parse_value_content(reader: &mut Reader<&[u8]>) -> Result<Value> {
     loop {
@@ -150,12 +160,8 @@ fn parse_value_content(reader: &mut Reader<&[u8]>) -> Result<Value> {
                 skip_to_end(reader, b"value")?;
                 return Ok(Value::String(text));
             }
-            // Empty <value></value> → empty string. (The `with true` guard
-            // mutation here is excluded in .cargo/mutants.toml as equivalent:
-            // this arm only fires when <value> has no content, and on that
-            // input the immediately-following `</param>` end produces the
-            // same `""` via the next loop iteration regardless of guard.)
-            Event::End(ref e) if e.name().as_ref() == b"value" => {
+            // Empty `<value></value>` → empty string.
+            Event::End(ref e) if is_value_end(e.name().as_ref()) => {
                 return Ok(Value::String(String::new()));
             }
             _ => {}
@@ -509,8 +515,7 @@ mod tests {
         );
     }
 
-    // Empty `<value></value>` is treated as an empty string. If the End-tag
-    // arm in parse_value_content fails to match, the parser loops to EOF.
+    // Empty `<value></value>` is treated as an empty string.
     #[test]
     fn parse_empty_value_returns_empty_string() {
         let xml =
@@ -519,8 +524,7 @@ mod tests {
         assert_eq!(result.as_str().unwrap(), "");
     }
 
-    // `<array></array>` with no `<data>` tag is an empty array. Asserts the
-    // early-return branch in parse_array's "find data" loop.
+    // `<array></array>` with no `<data>` tag is an empty array.
     #[test]
     fn parse_array_without_data_tag_is_empty() {
         let xml = r"<methodResponse><params><param><value><array></array></value></param></params></methodResponse>";
@@ -566,9 +570,9 @@ mod tests {
     }
 
     // Inside <params>, an unrelated start/end pair before <param> must not
-    // be treated as a param or as the end of params. The wrapper contains
-    // its own value-shaped payload so a loosened param guard would parse
-    // the decoy's "decoy" string instead of the real "real" string.
+    // be treated as a param or as the end of params. The decoy carries its
+    // own value-shaped payload so the test fails closed if the param guard
+    // ever stops discriminating tag names.
     #[test]
     fn parse_first_param_skips_decoy_inside_params() {
         let xml = r"<methodResponse><params>
@@ -591,9 +595,8 @@ mod tests {
         assert_eq!(result.as_str().unwrap(), "real");
     }
 
-    // Inside <array>, an unrelated start/end pair before <data> must not be
-    // treated as <data> or as the end of the array. Includes a fake <value>
-    // inside the wrapper to amplify any mismatch.
+    // Inside <array>, an unrelated start/end pair before <data> must not
+    // be treated as <data> or as the end of the array.
     #[test]
     fn parse_array_skips_decoy_before_data() {
         let xml = r"<methodResponse><params><param><value>

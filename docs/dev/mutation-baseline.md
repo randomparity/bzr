@@ -1,9 +1,9 @@
 # Mutation Testing Baseline
 
 This file tracks mutation-testing coverage per source file. It is the ratchet
-target for the rollout described in [the implementation plan](#) — every PR
-should leave the per-file score ≥ the value listed here. New sweeps update the
-numbers; never drop them silently.
+target for the multi-wave rollout — every PR should leave the per-file score
+≥ the value listed here. New sweeps update the numbers; never drop them
+silently.
 
 - **Tool:** `cargo-mutants` (currently `27.0.0`)
 - **Config:** [`.cargo/mutants.toml`](../../.cargo/mutants.toml)
@@ -76,7 +76,7 @@ Largest-first. `–` means the wave hasn't started yet.
 | File | Mutants | Status | Caught | Missed | Unviable | Timeout | Score | Last swept |
 |------|--------:|--------|-------:|-------:|---------:|--------:|------:|-----------|
 | src/tls/verifier.rs                 | 102 | pending | – | – | – | – | – | – |
-| src/xmlrpc/parsing.rs               |  81 | swept   | 56 | 0 | 11 | 0 | 100 % | 2026-05-01 |
+| src/xmlrpc/parsing.rs               |  81 | swept   | 57 | 0 | 11 | 0 | 100 % | 2026-05-01 |
 | src/types/bug.rs                    |  77 | pending | – | – | – | – | – | – |
 | src/commands/shared.rs              |  49 | pending | – | – | – | – | – | – |
 | src/config.rs                       |  47 | pending | – | – | – | – | – | – |
@@ -171,13 +171,7 @@ Largest-first. `–` means the wave hasn't started yet.
 
 ## Skip-list audit
 
-Per-file `mutants::skip` attributes are tracked via:
-
-```bash
-make audit-mutant-skips
-```
-
-Current in-source skip count: **0**.
+Per-file `mutants::skip` attributes are tracked via `make audit-mutant-skips`.
 
 Config-level exclusions in `.cargo/mutants.toml` (review these whenever the
 related code changes — they may have rotted):
@@ -186,5 +180,5 @@ related code changes — they may have rotted):
 |---------|---------------|--------|
 | `impl .* Display for` / `impl .* Debug for` | all | formatting; covered by snapshot/output tests when needed |
 | `skip_to_end` | `src/xmlrpc/parsing.rs` | defensive depth-tracking; equivalent in normal XML-RPC flow (depth never exceeds 1) |
-| `b"value" with true in parse_value_content` | `src/xmlrpc/parsing.rs` | empty `<value></value>` end arm — equivalent under permissive parser |
-| `parsing\.rs:158:52: replace == with !=` | `src/xmlrpc/parsing.rs` | same equivalence as above; line:col is brittle and may need updating |
+| `is_value_end -> bool with true` | `src/xmlrpc/parsing.rs` | empty `<value></value>` end arm — equivalent under permissive parser |
+| `replace == with != in is_value_end` | `src/xmlrpc/parsing.rs` | same equivalence as above |

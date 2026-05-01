@@ -35,13 +35,14 @@ exclude_re = [
     # end tag. The increment branch never fires, so all mutations of the
     # depth counter and inner guards are equivalent on real Bugzilla input.
     "skip_to_end",
-    # The empty-`<value></value>` end-arm in parse_value_content: both the
-    # `with true` and `== with !=` mutations here are equivalent because the
-    # only input that reaches this branch is `<value></value>`, and on that
-    # input the immediately-following `</param>` end matches via the next
-    # loop iteration and returns `""` regardless of the guard. The line:col
-    # in the second pattern is brittle to edits above it; if it shifts, run
-    # `cargo mutants --file src/xmlrpc/parsing.rs` and update accordingly.
-    'b"value" with true in parse_value_content',
-    'parsing\.rs:158:52: replace == with != in parse_value_content',
+    # `is_value_end` guards the empty-`<value></value>` arm in
+    # parse_value_content. Both the `with true` and `== with !=` mutations
+    # here are equivalent: the only input reaching this branch is
+    # `<value></value>`, where the immediately-following `</param>` end
+    # produces the same `""` via the next loop iteration regardless of
+    # which `End` event the guard accepts. `with false` IS catchable and
+    # remains in the test set.
+    'is_value_end -> bool with true',
+    'replace == with != in is_value_end',
+    'match guard is_value_end\(.*\) with true',
 ]
