@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::{self, Write as _};
 
 use crate::types::{BugTemplate, OutputFormat};
 
@@ -35,7 +36,7 @@ pub fn print_template_saved(name: &str, verb: &str, format: OutputFormat) {
             print_json(&serde_json::json!({"name": name, "action": verb.to_lowercase()}));
         }
         OutputFormat::Table => {
-            println!("{}", template_saved_message(name, verb));
+            let _ = writeln!(io::stdout(), "{}", template_saved_message(name, verb));
         }
     }
 }
@@ -43,13 +44,17 @@ pub fn print_template_saved(name: &str, verb: &str, format: OutputFormat) {
 pub fn print_template_list(templates: &HashMap<String, BugTemplate>, format: OutputFormat) {
     print_formatted(templates, format, |templates| {
         if templates.is_empty() {
-            println!("No templates configured.");
+            let _ = writeln!(io::stdout(), "No templates configured.");
             return;
         }
         let mut names: Vec<&str> = templates.keys().map(String::as_str).collect();
         names.sort_unstable();
         for name in names {
-            println!("{}", template_summary_line(name, &templates[name]));
+            let _ = writeln!(
+                io::stdout(),
+                "{}",
+                template_summary_line(name, &templates[name])
+            );
         }
     });
 }
@@ -224,7 +229,7 @@ mod tests {
 
     #[cfg(unix)]
     #[tokio::test]
-    async fn template_list_names_sort_before_render() {
+    async fn print_template_list_table_renders_sorted_summaries() {
         let _lock = crate::ENV_LOCK.lock().await;
         let mut templates: HashMap<String, BugTemplate> = HashMap::new();
         templates.insert("zzz".into(), make_template());
@@ -243,19 +248,27 @@ mod tests {
             },
         );
 
-        let mut names: Vec<&str> = templates.keys().map(String::as_str).collect();
-        names.sort_unstable();
-        let rendered: Vec<String> = names
-            .into_iter()
-            .map(|name| template_summary_line(name, &templates[name]))
-            .collect();
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_template_list(&templates, OutputFormat::Table);
+        })
+        .await;
 
-        assert_eq!(
-            rendered,
-            vec![
-                "aaa (product=Alpha)".to_string(),
-                "zzz (product=Widget, component=Backend, priority=P1, severity=major)".to_string(),
-            ]
-        );
+        let aaa_pos = output.find("aaa").expect("aaa should appear in output");
+        let zzz_pos = output.find("zzz").expect("zzz should appear in output");
+        assert!(aaa_pos < zzz_pos, "templates should be sorted by name");
+        assert!(output.contains("product=Alpha"));
+        assert!(output.contains("product=Widget"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_template_list_table_announces_empty() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let templates: HashMap<String, BugTemplate> = HashMap::new();
+        let ((), output) = crate::test_helpers::capture_stdout(async {
+            print_template_list(&templates, OutputFormat::Table);
+        })
+        .await;
+        assert!(output.contains("No templates configured."));
     }
 }

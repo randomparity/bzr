@@ -181,6 +181,38 @@ mod tests {
         assert!(result.contains("new"));
     }
 
+    #[test]
+    fn colorize_status_known_statuses_emit_ansi_escapes() {
+        // Force color output: cargo test pipes stdout, so colored auto-disables
+        // and the catch-all arm produces output identical to the colored arms,
+        // hiding `delete match arm` mutations.
+        struct ColorOverride;
+        impl Drop for ColorOverride {
+            fn drop(&mut self) {
+                colored::control::unset_override();
+            }
+        }
+        colored::control::set_override(true);
+        let _guard = ColorOverride;
+
+        for status in [
+            "NEW",
+            "UNCONFIRMED",
+            "ASSIGNED",
+            "IN_PROGRESS",
+            "RESOLVED",
+            "VERIFIED",
+            "CLOSED",
+        ] {
+            let result = colorize_status(status);
+            assert!(
+                result.contains("\x1b["),
+                "expected ANSI escape in colorize_status({status:?}), got {result:?}"
+            );
+        }
+        assert_eq!(colorize_status("CUSTOM"), "CUSTOM");
+    }
+
     // ── shorten_email ────────────────────────────────────────────────
 
     #[test]

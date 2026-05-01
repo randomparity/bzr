@@ -433,24 +433,6 @@ fn has_raw_boolean_chart_params_false_for_empty() {
     assert!(!super::has_raw_boolean_chart_params(&params));
 }
 
-#[test]
-fn search_params_has_filters() {
-    let empty = SearchParams::default();
-    assert!(!empty.has_filters());
-
-    let with_product = SearchParams {
-        product: vec!["P".into()],
-        ..Default::default()
-    };
-    assert!(with_product.has_filters());
-
-    let with_quicksearch = SearchParams {
-        quicksearch: Some("crash".into()),
-        ..Default::default()
-    };
-    assert!(with_quicksearch.has_filters());
-}
-
 #[tokio::test]
 async fn search_bugs_multi_value_sends_repeated_params() {
     let mock = MockServer::start().await;

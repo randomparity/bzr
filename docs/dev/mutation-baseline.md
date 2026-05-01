@@ -77,25 +77,25 @@ Largest-first. `–` means the wave hasn't started yet.
 |------|--------:|--------|-------:|-------:|---------:|--------:|------:|-----------|
 | src/tls/verifier.rs                 | 102 | swept   | 96 | 0 |  6 | 0 | 100 % | 2026-05-01 |
 | src/xmlrpc/parsing.rs               |  81 | swept   | 57 | 0 | 11 | 0 | 100 % | 2026-05-01 |
-| src/types/bug.rs                    |  77 | pending | – | – | – | – | – | – |
+| src/types/bug.rs                    |  77 | swept   | 77 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/shared.rs              |  49 | swept   | 24 | 0 |  4 | 0 | 100 % | 2026-05-01 |
 | src/config.rs                       |  47 | swept   | 33 | 0 |  5 | 0 | 100 % | 2026-05-01 |
-| src/xmlrpc/client.rs                |  42 | pending | – | – | – | – | – | – |
+| src/xmlrpc/client.rs                |  42 | swept   | 35 | 0 |  7 | 0 | 100 % | 2026-05-01 |
 | src/client/mod.rs                   |  41 | swept   | 30 | 0 | 10 | 0 | 100 % | 2026-05-01 |
 | src/client/bug.rs                   |  38 | swept   | 28 | 0 | 10 | 0 | 100 % | 2026-05-01 |
 | src/tls/tofu.rs                     |  36 | swept   | 28 | 0 |  4 | 0 | 100 % | 2026-05-01 |
-| src/output/formatting.rs            |  34 | pending | – | – | – | – | – | – |
-| src/xmlrpc/mod.rs                   |  28 | pending | – | – | – | – | – | – |
+| src/output/formatting.rs            |  34 | swept   | 34 | 0 |  0 | 0 | 100 % | 2026-05-01 |
+| src/xmlrpc/mod.rs                   |  28 | swept   | 21 | 0 |  7 | 0 | 100 % | 2026-05-01 |
 | src/url_parser.rs                   |  25 | swept   | 23 | 0 | 2 | 0 | 100 % | 2026-05-01 |
 | src/error.rs                        |  19 | swept   | 17 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/commands/query.rs               |  19 | swept   | 18 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/commands/config.rs              |  18 | swept   | 18 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/flags.rs               |  17 | swept   | 10 | 0 |  7 | 0 | 100 % | 2026-05-01 |
 | src/client/version.rs               |  17 | swept   | 13 | 0 |  4 | 0 | 100 % | 2026-05-01 |
-| src/types/common.rs                 |  16 | pending | – | – | – | – | – | – |
-| src/main.rs                         |  16 | pending | – | – | – | – | – | – |
+| src/types/common.rs                 |  16 | swept   | 12 | 0 |  4 | 0 | 100 % | 2026-05-01 |
+| src/main.rs                         |  16 | swept   | 12 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/attachment.rs          |  16 | swept   | 16 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/output/query.rs                 |  13 | pending | – | – | – | – | – | – |
+| src/output/query.rs                 |  13 | swept   | 13 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/bug/list.rs            |  13 | swept   | 13 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/client/group.rs                 |  13 | swept   | 12 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/commands/comment.rs             |  12 | swept   |  7 | 0 |  0 | 0 | 100 % | 2026-05-01 |
@@ -103,42 +103,42 @@ Largest-first. `–` means the wave hasn't started yet.
 | src/http.rs                         |  11 | swept   | 10 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/commands/bug/my.rs              |  11 | swept   | 11 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/client/auth/valid_login.rs      |  11 | swept   |  8 | 0 |  3 | 0 | 100 % | 2026-05-01 |
-| src/output/result_types.rs          |  10 | pending | – | – | – | – | – | – |
+| src/output/result_types.rs          |  10 | swept   |  1 | 0 |  9 | 0 | 100 % | 2026-05-01 |
 | src/commands/bug/update.rs          |  10 | swept   | 10 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/bug/search.rs          |  10 | swept   | 10 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/client/comment.rs               |  10 | swept   |  9 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/output/config.rs                |   9 | pending | – | – | – | – | – | – |
+| src/output/config.rs                |   9 | swept   |  7 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/commands/template.rs            |   9 | swept   |  9 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/client/user.rs                  |   9 | swept   |  4 | 0 |  3 | 0 | 100 % | 2026-05-01 |
-| src/xmlrpc/call.rs                  |   8 | pending | – | – | – | – | – | – |
+| src/xmlrpc/call.rs                  |   8 | swept   |  6 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/client/auth/mod.rs              |   8 | swept   |  6 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/output/template.rs              |   7 | pending | – | – | – | – | – | – |
-| src/output/product.rs               |   7 | pending | – | – | – | – | – | – |
-| src/credentials/keyring.rs          |   7 | pending | – | – | – | – | – | – |
+| src/output/template.rs              |   7 | swept   |  7 | 0 |  0 | 0 | 100 % | 2026-05-01 |
+| src/output/product.rs               |   7 | swept   |  7 | 0 |  0 | 0 | 100 % | 2026-05-01 |
+| src/credentials/keyring.rs          |   7 | swept   |  5 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/client/field.rs                 |   7 | swept   |  4 | 0 |  3 | 0 | 100 % | 2026-05-01 |
-| src/output/bug.rs                   |   6 | pending | – | – | – | – | – | – |
+| src/output/bug.rs                   |   6 | swept   |  5 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/client/product.rs               |   6 | swept   |  4 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/client/auth/whoami.rs           |   6 | swept   |  4 | 0 |  2 | 0 | 100 % | 2026-05-01 |
-| src/types/attachment.rs             |   5 | pending | – | – | – | – | – | – |
-| src/tls/mod.rs                      |   5 | pending | – | – | – | – | – | – |
-| src/output/user.rs                  |   5 | pending | – | – | – | – | – | – |
-| src/tls/fingerprint.rs              |   4 | pending | – | – | – | – | – | – |
-| src/credentials/keyring_stub.rs     |   4 | pending | – | – | – | – | – | – |
+| src/types/attachment.rs             |   5 | swept   |  3 | 0 |  2 | 0 | 100 % | 2026-05-01 |
+| src/tls/mod.rs                      |   5 | swept   |  3 | 0 |  2 | 0 | 100 % | 2026-05-01 |
+| src/output/user.rs                  |   5 | swept   |  3 | 0 |  2 | 0 | 100 % | 2026-05-01 |
+| src/tls/fingerprint.rs              |   4 | swept   |  4 | 0 |  0 | 0 | 100 % | 2026-05-01 |
+| src/credentials/keyring_stub.rs     |   4 | swept   |  0 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/user.rs                |   4 | swept   |  4 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/types/product.rs                |   3 | pending | – | – | – | – | – | – |
+| src/types/product.rs                |   3 | swept   |  3 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/field.rs               |   3 | swept   |  3 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/bug/clone.rs           |   3 | swept   |  3 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/client/server.rs                |   3 | swept   |  2 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/client/component.rs             |   3 | swept   |  2 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/xmlrpc/fault.rs                 |   2 | pending | – | – | – | – | – | – |
-| src/output/server.rs                |   2 | pending | – | – | – | – | – | – |
-| src/output/group.rs                 |   2 | pending | – | – | – | – | – | – |
-| src/output/field.rs                 |   2 | pending | – | – | – | – | – | – |
-| src/output/classification.rs        |   2 | pending | – | – | – | – | – | – |
-| src/types/user.rs                   |   1 | pending | – | – | – | – | – | – |
-| src/output/comment.rs               |   1 | pending | – | – | – | – | – | – |
-| src/output/attachment.rs            |   1 | pending | – | – | – | – | – | – |
-| src/lib.rs                          |   1 | pending | – | – | – | – | – | – |
+| src/xmlrpc/fault.rs                 |   2 | swept   |  1 | 0 |  1 | 0 | 100 % | 2026-05-01 |
+| src/output/server.rs                |   2 | swept   |  1 | 0 |  1 | 0 | 100 % | 2026-05-01 |
+| src/output/group.rs                 |   2 | swept   |  2 | 0 |  0 | 0 | 100 % | 2026-05-01 |
+| src/output/field.rs                 |   2 | swept   |  2 | 0 |  0 | 0 | 100 % | 2026-05-01 |
+| src/output/classification.rs        |   2 | swept   |  2 | 0 |  0 | 0 | 100 % | 2026-05-01 |
+| src/types/user.rs                   |   1 | swept   |  0 | 0 |  1 | 0 | 100 % | 2026-05-01 |
+| src/output/comment.rs               |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
+| src/output/attachment.rs            |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
+| src/lib.rs                          |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/whoami.rs              |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/server.rs              |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/product.rs             |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
@@ -193,3 +193,6 @@ related code changes — they may have rotted):
 | `read_secret_from_prompt_or_env` (non-keyring) | `src/commands/config.rs` | `#[cfg(not(feature = "keyring"))]` — dead code on the default-feature Linux test platform |
 | `should_offer_tofu` / `is_pin_mismatch` / `is_issuer_changed` / `classify_and_handle_tls_failure` | `src/commands/shared.rs` | TLS-failure predicates can only return true given a real TLS handshake error from reqwest, which has no public Error constructor |
 | `handle_tofu` / `handle_pin_rotation` (whole functions, via `#[cfg_attr(test, mutants::skip)]`) | `src/commands/shared.rs` | TOFU/rotation handlers only fire after a terminal-stdin prompt accepts; cargo-mutants v27 cannot reach `delete field` mutations through `exclude_re`, so the attribute is used instead |
+| `main` (whole function, via `#[cfg_attr(test, mutants::skip)]`) | `src/main.rs` | Binary entry point; observing exit codes / stderr requires spawning the compiled binary (e.g. via `assert_cmd`/`escargot`). The pure helpers it delegates to are unit-tested directly. |
+| `suppress_stdout` non-unix variants (whole functions, via `#[cfg_attr(test, mutants::skip)]`) | `src/main.rs` | `#[cfg(windows)]` and `#[cfg(not(any(unix, windows)))]` are dead code on the Linux test platform |
+| `store` / `retrieve` / `delete` (whole functions, via `#[cfg_attr(test, mutants::skip)]`) | `src/credentials/keyring_stub.rs` | `#[cfg(not(feature = "keyring"))]` — never compiled into the test binary, since `.cargo/mutants.toml` runs with `--all-features` |
