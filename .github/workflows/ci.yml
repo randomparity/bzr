@@ -134,6 +134,6 @@ jobs:
       - name: Generate coverage report
         run: cargo llvm-cov --locked --workspace --all-features --lcov --output-path lcov.info
       - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@59db25f34e16620e48ab4bb9e4a5dce155cb5432  # v7
+        uses: SonarSource/sonarqube-scan-action@59db25f34e16620e48ab4bb9e4a5dce155cb5432  # v8.0.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
