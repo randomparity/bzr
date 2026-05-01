@@ -124,6 +124,11 @@ jobs:
               -v "${{ github.workspace }}:/workspace" -w /workspace \
               rust:bookworm \
               bash -c "apt-get update && apt-get install -y libdbus-1-dev pkg-config && cargo build --release --locked --target ${{ matrix.target }}"
+            # The container ran as root and left target/ owned by root.
+            # Subsequent host-side steps (cargo deb / cargo generate-rpm /
+            # tarball staging / lintian) run as the runner user and would
+            # otherwise hit "Permission denied" on target/.
+            sudo chown -R "$(id -u):$(id -g)" target
           elif [ "${{ matrix.use_cross }}" = "true" ]; then
             cross build --release --locked --target ${{ matrix.target }}
           else
