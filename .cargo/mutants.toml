@@ -79,14 +79,10 @@ exclude_re = [
     'replace == with != in warn_if_path_permissions_too_open',
     # `detect_auth_method`'s non-HTTPS check at the top of the function
     # only emits a `tracing::warn!` — same untestable-stderr-side-effect
-    # category as the warn_security family above.
+    # category as the warn_security family above. The function currently
+    # contains only one `!` operator; if more are added, narrow this
+    # pattern.
     'delete ! in detect_auth_method',
-    # The Hybrid-mode `matches!(e, BzrError::Auth(_))` arm in create_user
-    # is defensive: BzrError::Auth is only constructed by detect_auth_method,
-    # and post_json_id never returns it. Both `with true` and `with false`
-    # mutations are observably equivalent until a future refactor produces
-    # an Auth-typed error from the REST path.
-    'matches!\(e, crate::error::BzrError::Auth\(_\)\) with (true|false) in BugzillaClient::create_user',
     # The CodeVisitor::expecting body is only surfaced when serde fails to
     # match any visit_* method (e.g. JSON code is null/array). The caller
     # `check_response_status` swallows that deserialization error and falls

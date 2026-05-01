@@ -498,7 +498,7 @@ mod tests {
             .and(path("/rest/bug/99"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "error": true,
-                "code": 100_500,
+                "code": BUGZILLA_INTERNAL_ERROR,
                 "message": "Extension crash"
             })))
             .mount(&mock)
@@ -912,23 +912,14 @@ mod tests {
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
             .mount(&mock)
             .await;
-        // If the Hybrid arm were entered (mutation regression), it would
-        // see an empty result with active filters and retry via XML-RPC,
-        // returning this non-empty list and breaking the assertion below.
+        // If the Hybrid arm were entered, it would see an empty result
+        // with active filters and retry via XML-RPC, returning this
+        // non-empty list and breaking the assertion below.
         Mock::given(method("POST"))
             .and(path("/xmlrpc.cgi"))
-            .respond_with(ResponseTemplate::new(200).set_body_string(
-                r#"<?xml version="1.0"?><methodResponse><params><param>
-                    <value><struct><member><name>bugs</name>
-                    <value><array><data>
-                      <value><struct>
-                        <member><name>id</name><value><int>99</int></value></member>
-                        <member><name>summary</name><value><string>xmlrpc-only</string></value></member>
-                      </struct></value>
-                    </data></array></value>
-                    </member></struct></value>
-                </param></params></methodResponse>"#,
-            ))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(99, "xmlrpc-only")),
+            )
             .mount(&mock)
             .await;
 
@@ -958,7 +949,7 @@ mod tests {
             .and(path("/rest/bug/42"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "error": true,
-                "code": 100_500,
+                "code": BUGZILLA_INTERNAL_ERROR,
                 "message": "Extension crash"
             })))
             .mount(&mock)
@@ -969,7 +960,7 @@ mod tests {
             .and(query_param("id", "42"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "error": true,
-                "code": 100_500,
+                "code": BUGZILLA_INTERNAL_ERROR,
                 "message": "Extension crash"
             })))
             .mount(&mock)
@@ -977,16 +968,10 @@ mod tests {
 
         Mock::given(method("POST"))
             .and(path("/xmlrpc.cgi"))
-            .respond_with(ResponseTemplate::new(200).set_body_string(
-                r#"<?xml version="1.0"?><methodResponse><params><param><value><struct>
-                    <member><name>bugs</name><value><array><data>
-                      <value><struct>
-                        <member><name>id</name><value><int>42</int></value></member>
-                        <member><name>summary</name><value><string>recovered via xmlrpc</string></value></member>
-                      </struct></value>
-                    </data></array></value></member>
-                </struct></value></param></params></methodResponse>"#,
-            ))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string(xmlrpc_bug_response(42, "recovered via xmlrpc")),
+            )
             .expect(1)
             .mount(&mock)
             .await;

@@ -109,7 +109,7 @@ Largest-first. `–` means the wave hasn't started yet.
 | src/client/comment.rs               |  10 | swept   |  9 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/output/config.rs                |   9 | pending | – | – | – | – | – | – |
 | src/commands/template.rs            |   9 | pending | – | – | – | – | – | – |
-| src/client/user.rs                  |   9 | swept   |  6 | 0 |  3 | 0 | 100 % | 2026-05-01 |
+| src/client/user.rs                  |   9 | swept   |  4 | 0 |  3 | 0 | 100 % | 2026-05-01 |
 | src/xmlrpc/call.rs                  |   8 | pending | – | – | – | – | – | – |
 | src/client/auth/mod.rs              |   8 | swept   |  6 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/output/template.rs              |   7 | pending | – | – | – | – | – | – |
@@ -188,5 +188,4 @@ related code changes — they may have rotted):
 | `warn_security` / `warn_if_path_permissions_too_open` / `Config::warn_on_insecure_permissions` no-ops, plus the bitwise-mode-mask check | `src/config.rs` | Stderr-only side effects; the project has no `capture_stderr` helper, so these can't be observed in unit tests |
 | `write_private_file` / `set_private_file_permissions -> Ok(())` | `src/config.rs` | The non-Unix `write_private_file` is dead code on the Linux test platform (`#[cfg(not(unix))]`); the Unix `set_private_file_permissions` is redundant since `write_private_file` already creates with `OpenOptions::mode(0o600)` |
 | `delete ! in detect_auth_method` | `src/client/auth/mod.rs` | Tracing-only side effect for non-HTTPS URLs |
-| `matches!(e, BzrError::Auth(_))` (Hybrid create_user) | `src/client/user.rs` | Defensive arm; `BzrError::Auth` is only constructed by detect_auth_method, so post_json_id never returns it |
 | `CodeVisitor>::expecting -> std::fmt::Result` | `src/client/mod.rs` | The visitor's "expected" message is only surfaced on serde failure, which `check_response_status` swallows in favor of `BzrError::HttpStatus` |
