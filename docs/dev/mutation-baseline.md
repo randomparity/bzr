@@ -84,7 +84,7 @@ Largest-first. `–` means the wave hasn't started yet.
 | src/client/mod.rs                   |  41 | swept   | 30 | 0 | 10 | 0 | 100 % | 2026-05-01 |
 | src/client/bug.rs                   |  38 | swept   | 28 | 0 | 10 | 0 | 100 % | 2026-05-01 |
 | src/tls/tofu.rs                     |  36 | swept   | 28 | 0 |  4 | 0 | 100 % | 2026-05-01 |
-| src/output/formatting.rs            |  34 | pending | – | – | – | – | – | – |
+| src/output/formatting.rs            |  34 | swept   | 34 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/xmlrpc/mod.rs                   |  28 | swept   | 21 | 0 |  7 | 0 | 100 % | 2026-05-01 |
 | src/url_parser.rs                   |  25 | swept   | 23 | 0 | 2 | 0 | 100 % | 2026-05-01 |
 | src/error.rs                        |  19 | swept   | 17 | 0 |  1 | 0 | 100 % | 2026-05-01 |
@@ -95,7 +95,7 @@ Largest-first. `–` means the wave hasn't started yet.
 | src/types/common.rs                 |  16 | swept   | 12 | 0 |  4 | 0 | 100 % | 2026-05-01 |
 | src/main.rs                         |  16 | pending | – | – | – | – | – | – |
 | src/commands/attachment.rs          |  16 | swept   | 16 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/output/query.rs                 |  13 | pending | – | – | – | – | – | – |
+| src/output/query.rs                 |  13 | swept   | 13 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/bug/list.rs            |  13 | swept   | 13 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/client/group.rs                 |  13 | swept   | 12 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/commands/comment.rs             |  12 | swept   |  7 | 0 |  0 | 0 | 100 % | 2026-05-01 |
@@ -103,25 +103,25 @@ Largest-first. `–` means the wave hasn't started yet.
 | src/http.rs                         |  11 | swept   | 10 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/commands/bug/my.rs              |  11 | swept   | 11 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/client/auth/valid_login.rs      |  11 | swept   |  8 | 0 |  3 | 0 | 100 % | 2026-05-01 |
-| src/output/result_types.rs          |  10 | pending | – | – | – | – | – | – |
+| src/output/result_types.rs          |  10 | swept   |  1 | 0 |  9 | 0 | 100 % | 2026-05-01 |
 | src/commands/bug/update.rs          |  10 | swept   | 10 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/bug/search.rs          |  10 | swept   | 10 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/client/comment.rs               |  10 | swept   |  9 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/output/config.rs                |   9 | pending | – | – | – | – | – | – |
+| src/output/config.rs                |   9 | swept   |  7 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/commands/template.rs            |   9 | swept   |  9 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/client/user.rs                  |   9 | swept   |  4 | 0 |  3 | 0 | 100 % | 2026-05-01 |
 | src/xmlrpc/call.rs                  |   8 | swept   |  6 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/client/auth/mod.rs              |   8 | swept   |  6 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/output/template.rs              |   7 | pending | – | – | – | – | – | – |
-| src/output/product.rs               |   7 | pending | – | – | – | – | – | – |
+| src/output/template.rs              |   7 | swept   |  7 | 0 |  0 | 0 | 100 % | 2026-05-01 |
+| src/output/product.rs               |   7 | swept   |  7 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/credentials/keyring.rs          |   7 | pending | – | – | – | – | – | – |
 | src/client/field.rs                 |   7 | swept   |  4 | 0 |  3 | 0 | 100 % | 2026-05-01 |
-| src/output/bug.rs                   |   6 | pending | – | – | – | – | – | – |
+| src/output/bug.rs                   |   6 | swept   |  5 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/client/product.rs               |   6 | swept   |  4 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/client/auth/whoami.rs           |   6 | swept   |  4 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/types/attachment.rs             |   5 | swept   |  3 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/tls/mod.rs                      |   5 | pending | – | – | – | – | – | – |
-| src/output/user.rs                  |   5 | pending | – | – | – | – | – | – |
+| src/output/user.rs                  |   5 | swept   |  3 | 0 |  2 | 0 | 100 % | 2026-05-01 |
 | src/tls/fingerprint.rs              |   4 | pending | – | – | – | – | – | – |
 | src/credentials/keyring_stub.rs     |   4 | pending | – | – | – | – | – | – |
 | src/commands/user.rs                |   4 | swept   |  4 | 0 |  0 | 0 | 100 % | 2026-05-01 |
@@ -131,13 +131,13 @@ Largest-first. `–` means the wave hasn't started yet.
 | src/client/server.rs                |   3 | swept   |  2 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/client/component.rs             |   3 | swept   |  2 | 0 |  1 | 0 | 100 % | 2026-05-01 |
 | src/xmlrpc/fault.rs                 |   2 | swept   |  1 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/output/server.rs                |   2 | pending | – | – | – | – | – | – |
-| src/output/group.rs                 |   2 | pending | – | – | – | – | – | – |
-| src/output/field.rs                 |   2 | pending | – | – | – | – | – | – |
-| src/output/classification.rs        |   2 | pending | – | – | – | – | – | – |
+| src/output/server.rs                |   2 | swept   |  1 | 0 |  1 | 0 | 100 % | 2026-05-01 |
+| src/output/group.rs                 |   2 | swept   |  2 | 0 |  0 | 0 | 100 % | 2026-05-01 |
+| src/output/field.rs                 |   2 | swept   |  2 | 0 |  0 | 0 | 100 % | 2026-05-01 |
+| src/output/classification.rs        |   2 | swept   |  2 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/types/user.rs                   |   1 | swept   |  0 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/output/comment.rs               |   1 | pending | – | – | – | – | – | – |
-| src/output/attachment.rs            |   1 | pending | – | – | – | – | – | – |
+| src/output/comment.rs               |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
+| src/output/attachment.rs            |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/lib.rs                          |   1 | pending | – | – | – | – | – | – |
 | src/commands/whoami.rs              |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
 | src/commands/server.rs              |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |

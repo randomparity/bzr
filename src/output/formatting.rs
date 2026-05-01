@@ -181,6 +181,40 @@ mod tests {
         assert!(result.contains("new"));
     }
 
+    #[test]
+    fn colorize_status_known_statuses_emit_ansi_escapes() {
+        // Force color output so the test assertion is reliable regardless
+        // of TTY detection in cargo test. The catch-all match arm returns
+        // the input unchanged, so a deleted known-status arm would fall
+        // through and produce no escape codes.
+        struct ColorOverride;
+        impl Drop for ColorOverride {
+            fn drop(&mut self) {
+                colored::control::unset_override();
+            }
+        }
+        colored::control::set_override(true);
+        let _guard = ColorOverride;
+
+        for status in [
+            "NEW",
+            "UNCONFIRMED",
+            "ASSIGNED",
+            "IN_PROGRESS",
+            "RESOLVED",
+            "VERIFIED",
+            "CLOSED",
+        ] {
+            let result = colorize_status(status);
+            assert!(
+                result.contains("\x1b["),
+                "expected ANSI escape in colorize_status({status:?}), got {result:?}"
+            );
+        }
+        // Unknown statuses must NOT receive coloring.
+        assert_eq!(colorize_status("CUSTOM"), "CUSTOM");
+    }
+
     // ── shorten_email ────────────────────────────────────────────────
 
     #[test]

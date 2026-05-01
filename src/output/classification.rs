@@ -1,21 +1,28 @@
+use std::io::{self, Write as _};
+
 use colored::Colorize;
 
 use super::formatting::{print_formatted, truncate};
 use crate::types::{Classification, OutputFormat};
 
-#[expect(clippy::print_stdout)]
 pub fn print_classification(classification: &Classification, format: OutputFormat) {
     print_formatted(classification, format, |classification| {
-        println!(
+        let _ = writeln!(
+            io::stdout(),
             "{} {}\n{}\n",
             "Classification".bold(),
             classification.name.bold(),
             classification.description,
         );
         if !classification.products.is_empty() {
-            println!("{}:", "Products".bold());
+            let _ = writeln!(io::stdout(), "{}:", "Products".bold());
             for p in &classification.products {
-                println!("  {} - {}", p.name, truncate(&p.description, 60));
+                let _ = writeln!(
+                    io::stdout(),
+                    "  {} - {}",
+                    p.name,
+                    truncate(&p.description, 60)
+                );
             }
         }
     });
@@ -82,5 +89,42 @@ mod tests {
         let json = serde_json::to_string(&classification).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed["products"].as_array().unwrap().len(), 0);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn print_classification_table_omits_products_header_when_empty() {
+        let _lock = crate::ENV_LOCK.lock().await;
+        let with_products = Classification {
+            id: 1,
+            name: "Software".into(),
+            description: "Software products".into(),
+            sort_key: 0,
+            products: vec![ClassificationProduct {
+                id: 10,
+                name: "Widget".into(),
+                description: "A widget".into(),
+            }],
+        };
+        let empty = Classification {
+            id: 2,
+            name: "Empty".into(),
+            description: "Nothing here".into(),
+            sort_key: 0,
+            products: vec![],
+        };
+
+        let ((), populated) = crate::test_helpers::capture_stdout(async {
+            super::print_classification(&with_products, crate::types::OutputFormat::Table);
+        })
+        .await;
+        let ((), bare) = crate::test_helpers::capture_stdout(async {
+            super::print_classification(&empty, crate::types::OutputFormat::Table);
+        })
+        .await;
+
+        assert!(populated.contains("Products"));
+        assert!(populated.contains("Widget"));
+        assert!(!bare.contains("Products"));
     }
 }
