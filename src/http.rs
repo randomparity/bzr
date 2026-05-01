@@ -59,8 +59,9 @@ pub(crate) fn looks_like_tls_error(msg: &str) -> bool {
 
 /// Pure predicate underlying [`is_tls_cert_error`], split out so the
 /// connect-and-TLS-keyword logic can be unit tested without a live
-/// `reqwest::Error` (which has no public constructor).
-fn is_connect_tls_error(is_connect: bool, error_chain: &str) -> bool {
+/// `reqwest::Error` (which has no public constructor). Also called
+/// directly by `format_http_error` to avoid recomputing the error chain.
+pub(crate) fn is_connect_tls_error(is_connect: bool, error_chain: &str) -> bool {
     is_connect && looks_like_tls_error(error_chain)
 }
 

@@ -62,31 +62,30 @@ exclude_re = [
     'is_tls_cert_error -> bool with false',
     # Interactive TOFU prompt helpers in src/tls/tofu.rs all detect
     # `!io::stdin().is_terminal()` and short-circuit to None/false. In
-    # unit-test mode stdin is never a terminal, so these mutations
-    # (replacing the body with Ok(None) / Ok(false)) are observationally
-    # identical to the unmutated code path. Catching them would require
-    # spawning a subprocess with a pty.
-    'replace read_interactive_line -> Result<Option<String>> with Ok\(None\)',
-    'replace confirm_pin -> Result<bool> with Ok\(false\)',
-    'replace prompt_tofu -> Result<Option<bool>> with Ok\(None\)',
-    'replace prompt_rotation -> Result<bool> with Ok\(false\)',
+    # unit-test mode stdin is never a terminal, so a body replaced with
+    # the same Ok(None) / Ok(false) is observationally identical to the
+    # unmutated code path. Catching them would require spawning a
+    # subprocess with a pty.
+    'replace (read_interactive_line|confirm_pin|prompt_tofu|prompt_rotation) -> Result<.*> with Ok\((None|false)\)',
     # Permissions warnings in config.rs print to stderr only. The codebase
-    # has a `capture_stdout` helper but no stderr equivalent, so the
-    # `warn_security` and `warn_if_path_permissions_too_open` functions
-    # (and the bitwise mode-mask check inside the latter) cannot be
-    # observed in unit tests without a refactor to inject a writer.
+    # has a `capture_stdout` helper but no stderr equivalent, so these
+    # functions and the bitwise mode-mask check inside the second one
+    # cannot be observed in unit tests without a refactor to inject a
+    # writer.
     'replace warn_security with \(\)',
     'replace warn_if_path_permissions_too_open with \(\)',
     'replace Config::warn_on_insecure_permissions with \(\)',
-    'in warn_if_path_permissions_too_open$',
+    'replace & with [|^] in warn_if_path_permissions_too_open',
+    'replace == with != in warn_if_path_permissions_too_open',
     # The non-Unix `write_private_file` body cannot be reached on Linux
     # (where CI/dev tests run); cargo-mutants ignores `#[cfg]` and reports
     # it as missed even though the code is never compiled.
     'replace write_private_file -> Result<\(\)> with Ok\(\(\)\)',
-    # `set_private_file_permissions` is a defensive double-set: the Unix
-    # `write_private_file` already creates the file with `OpenOptions::
-    # mode(0o600)`, and the call site only runs on first-save of a new
-    # file — so the chmod is redundant in practice and the no-op mutation
-    # has no observable effect.
+    # The Unix `write_private_file` already creates the file with
+    # `OpenOptions::mode(0o600)`, so the subsequent
+    # `set_private_file_permissions` chmod has no observable effect — the
+    # mode is already correct when this function runs. Kept as a defensive
+    # double-set, but the no-op mutation passes any test that checks final
+    # perms.
     'replace set_private_file_permissions -> Result<\(\)> with Ok\(\(\)\)',
 ]

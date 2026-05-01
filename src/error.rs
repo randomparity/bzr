@@ -125,8 +125,11 @@ pub(crate) fn format_error_chain(err: &dyn std::error::Error) -> String {
 /// Format a reqwest error for display: redact API keys and add TLS hints.
 fn format_http_error(err: &reqwest::Error) -> String {
     let chain = format_error_chain(err);
-    let redacted = redact_api_key(&chain);
-    crate::http::tls_hint(&redacted, err)
+    let mut msg = redact_api_key(&chain);
+    if crate::http::is_connect_tls_error(err.is_connect(), &chain) {
+        msg.push_str(crate::http::TLS_HINT);
+    }
+    msg
 }
 
 fn redact_api_key(msg: &str) -> String {
@@ -354,9 +357,8 @@ mod tests {
 
     #[test]
     fn sanitize_http_error_redacts_marker_at_string_start() {
-        // Input where `Bugzilla_api_key=` is at index 0. Catches arithmetic
-        // mutations on the post-marker slicing index — `idx - MARKER.len()`
-        // would underflow and panic.
+        // The marker at index 0 is the boundary case for the post-marker
+        // slicing arithmetic — must not underflow.
         let input = "Bugzilla_api_key=secret";
         let result = redact_api_key(input);
         assert_eq!(result, "Bugzilla_api_key=[REDACTED]");

@@ -779,10 +779,8 @@ mod tests {
 
     #[test]
     fn parse_der_length_long_form_four_bytes_with_exact_fit() {
-        // num_bytes = 4 (the upper bound) with `data.len() == 1 + num_bytes`
-        // (no content bytes). Exercises both boundary conditions on
-        // line 335: `num_bytes > 4` (false at 4) and `data.len() < 1 +
-        // num_bytes` (false when equal).
+        // 4 length bytes is the upper bound; data length exactly equals
+        // `1 + num_bytes` (no content bytes after the length encoding).
         let data = [0x84_u8, 0x00, 0x00, 0x01, 0x00];
         let (rest, len) = parse_der_length(&data).unwrap();
         assert_eq!(len, 256);
