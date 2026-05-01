@@ -101,4 +101,37 @@ exclude_re = [
     # double-set, but the no-op mutation passes any test that checks final
     # perms.
     'replace set_private_file_permissions -> Result<\(\)> with Ok\(\(\)\)',
+    # Comment composition helpers in src/commands/comment.rs detect
+    # `!stdin.is_terminal()` and pipe stdin or spawn $EDITOR. In unit
+    # tests stdin is never a terminal, so the editor branch
+    # (`compose_comment_in_editor` and the `TempFile::drop` it owns) is
+    # unreachable; mutations there are observably equivalent. The stdin
+    # branch in `read_comment_body` reads whatever the harness pipes in;
+    # tests can't easily inject specific stdin content without a
+    # subprocess.
+    'replace (read_comment_body|compose_comment_in_editor) -> Result<String> with Ok\(',
+    'delete ! in (read_comment_body|compose_comment_in_editor)',
+    'replace <impl Drop for TempFile>::drop with \(\)',
+    # The non-keyring `read_secret_from_prompt_or_env` (cfg-gated) is
+    # dead code on the default-feature Linux test platform. Same
+    # rationale as the non-Unix `write_private_file` skip above.
+    'replace read_secret_from_prompt_or_env -> crate::error::Result<String> with Ok\(',
+    # TLS-failure classifiers and TOFU/rotation handlers in
+    # src/commands/shared.rs require a real TLS handshake error from
+    # reqwest (which has no public Error constructor) AND a terminal
+    # stdin to drive the prompts. Both are out of reach for unit tests:
+    # `should_offer_tofu`, `is_pin_mismatch`, and `is_issuer_changed` can
+    # only return true given a real TLS error chain; the field
+    # assignments inside `handle_tofu` and `handle_pin_rotation` only
+    # run after a prompt accepts; `classify_and_handle_tls_failure` only
+    # does meaningful work in those same paths.
+    'replace (should_offer_tofu|is_pin_mismatch|is_issuer_changed) -> bool with false',
+    'delete ! in should_offer_tofu',
+    'replace classify_and_handle_tls_failure -> Result<Option<BugzillaClient>> with Ok\(None\)',
+    'delete match arm BzrError::Http\(re\) in classify_and_handle_tls_failure',
+    # `handle_tofu` and `handle_pin_rotation` use `#[cfg_attr(test,
+    # mutants::skip)]` for the same untestable-without-pty reason
+    # (see attribute comments in src/commands/shared.rs). They're skipped
+    # via the attribute because cargo-mutants v27's `exclude_re` does not
+    # match `delete field` mutations on struct expressions reliably.
 ]

@@ -100,7 +100,7 @@ pub(super) async fn handle(
 
 #[cfg(test)]
 mod tests {
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{body_partial_json, method, path};
     use wiremock::{Mock, ResponseTemplate};
 
     use crate::cli::BugAction;
@@ -134,28 +134,43 @@ mod tests {
             .mount(&mock)
             .await;
 
-        // Mock get_comments (for description)
+        // Mock get_comments (for description). Returns count=1 BEFORE
+        // count=0 so that picking the wrong one produces the wrong
+        // description text.
         Mock::given(method("GET"))
             .and(path("/rest/bug/100/comment"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "bugs": {
                     "100": {
-                        "comments": [{
-                            "id": 1,
-                            "count": 0,
-                            "text": "Original description",
-                            "creator": "dev@test.com",
-                            "creation_time": "2025-01-01T00:00:00Z"
-                        }]
+                        "comments": [
+                            {
+                                "id": 2,
+                                "count": 1,
+                                "text": "Follow-up reply",
+                                "creator": "dev@test.com",
+                                "creation_time": "2025-01-02T00:00:00Z"
+                            },
+                            {
+                                "id": 1,
+                                "count": 0,
+                                "text": "Original description",
+                                "creator": "dev@test.com",
+                                "creation_time": "2025-01-01T00:00:00Z"
+                            }
+                        ]
                     }
                 }
             })))
             .mount(&mock)
             .await;
 
-        // Mock create_bug
+        // Mock create_bug — assert the cloned description is comment #0,
+        // not the follow-up.
         Mock::given(method("POST"))
             .and(path("/rest/bug"))
+            .and(body_partial_json(serde_json::json!({
+                "description": "Original description"
+            })))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 200})))
             .expect(1)
             .mount(&mock)

@@ -1,3 +1,5 @@
+use std::io::{self, Write};
+
 use crate::cli::FieldAction;
 use crate::error::Result;
 use crate::output;
@@ -19,10 +21,7 @@ pub async fn execute(
             let client = super::shared::connect_and_configure(server, api).await?;
             let values = client.get_field_values(name).await?;
             if values.is_empty() && format == OutputFormat::Table {
-                #[expect(clippy::print_stdout)]
-                {
-                    println!("No values for field '{name}'.");
-                }
+                let _ = writeln!(io::stdout(), "No values for field '{name}'.");
             } else {
                 output::print_field_values(&values, format);
             }
@@ -83,6 +82,52 @@ mod tests {
         assert!(!arr.is_empty());
         assert_eq!(arr[0]["alias"], "file_loc");
         assert_eq!(arr[0]["api_name"], "bug_file_loc");
+    }
+
+    #[tokio::test]
+    async fn field_list_table_format_with_empty_values_prints_no_values_message() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/field/bug/bug_status"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "fields": [{"name": "bug_status", "values": []}]
+            })))
+            .mount(&mock)
+            .await;
+        let action = FieldAction::List {
+            name: "status".to_string(),
+        };
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Table, None)).await;
+        assert!(result.is_ok());
+        assert!(
+            output.contains("No values for field"),
+            "expected 'No values' message, got: {output:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn field_list_json_format_with_empty_values_emits_empty_array() {
+        let (_lock, mock, _tmp) = setup_test_env().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/field/bug/bug_status"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "fields": [{"name": "bug_status", "values": []}]
+            })))
+            .mount(&mock)
+            .await;
+        let action = FieldAction::List {
+            name: "status".to_string(),
+        };
+        let (result, output) =
+            capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+        assert!(result.is_ok());
+        assert!(
+            !output.contains("No values for field"),
+            "JSON format must not emit the table-style 'No values' message; got: {output:?}"
+        );
+        let parsed = extract_json(&output);
+        assert!(parsed.as_array().unwrap().is_empty());
     }
 
     #[tokio::test]
