@@ -721,7 +721,7 @@ mod tests {
             password: Some("hunter2".into()),
         };
         let id = client.create_user(&params).await.unwrap();
-        assert_eq!(id, 4242, "expected id 4242 from server response");
+        assert_eq!(id, 4242);
     }
 
     #[test]
@@ -733,7 +733,6 @@ mod tests {
         let mut rpc = BTreeMap::new();
         add_vec_filters(&mut rpc, &params);
 
-        // Two distinct chart indices must be emitted, one per negation.
         assert_eq!(rpc.get("f1").and_then(Value::as_str), Some("product"));
         assert_eq!(rpc.get("o1").and_then(Value::as_str), Some("notequals"));
         assert_eq!(rpc.get("v1").and_then(Value::as_str), Some("Bad"));
