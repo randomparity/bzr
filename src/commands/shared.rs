@@ -114,10 +114,10 @@ fn extract_hostname(url: &str) -> String {
 
 /// Handle the TOFU flow: probe the server certificate, prompt the user,
 /// and if accepted, retry detection and build the client.
-///
-/// `#[cfg_attr(test, mutants::skip)]`: this function only fires after a
-/// terminal-stdin TOFU prompt accepts; in unit-test mode stdin is never
-/// a terminal so the body's mutations are observably equivalent.
+// Mutation testing: this function only fires after a terminal-stdin
+// TOFU prompt accepts; unit tests never hit it. cargo-mutants v27's
+// exclude_re does not reliably match `delete field` mutations on struct
+// expressions, so the function-level attribute is required.
 #[cfg_attr(test, mutants::skip)]
 async fn handle_tofu(
     server_name: &str,
@@ -183,9 +183,7 @@ async fn handle_tofu(
 /// Handle pin mismatch (certificate rotated but issuer unchanged):
 /// use the fingerprint and issuer parsed from the `PIN_MISMATCH` error,
 /// prompt the user, and if accepted, update the pin and retry.
-///
-/// `#[cfg_attr(test, mutants::skip)]`: only fires after a terminal-stdin
-/// rotation prompt accepts; unreachable in unit tests.
+// Mutation testing: same rationale as handle_tofu above.
 #[expect(clippy::too_many_arguments, reason = "private orchestration fn")]
 #[cfg_attr(test, mutants::skip)]
 async fn handle_pin_rotation(

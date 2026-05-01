@@ -1,17 +1,13 @@
 #![expect(clippy::expect_used)]
 
 use wiremock::matchers::{method, path, query_param};
-use wiremock::{Mock, ResponseTemplate};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::cli::BugAction;
 use crate::test_helpers::{capture_stdout, setup_test_env};
 use crate::types::OutputFormat;
 
-#[tokio::test]
-async fn bug_my_returns_assigned_by_default() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
-
-    // Mock whoami
+async fn mount_whoami(mock: &MockServer) {
     Mock::given(method("GET"))
         .and(path("/rest/whoami"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -19,8 +15,15 @@ async fn bug_my_returns_assigned_by_default() {
             "real_name": "Dev User",
             "id": 1
         })))
-        .mount(&mock)
+        .mount(mock)
         .await;
+}
+
+#[tokio::test]
+async fn bug_my_returns_assigned_by_default() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    mount_whoami(&mock).await;
 
     // Mock assigned-to search
     Mock::given(method("GET"))
@@ -62,16 +65,9 @@ async fn bug_my_returns_assigned_by_default() {
 
 #[tokio::test]
 async fn bug_my_passes_status_limit_and_field_filters() {
-    // Pin status, limit, fields, exclude_fields through to the search.
+    // status / limit / fields / exclude_fields must reach the search.
     let (_lock, mock, _tmp) = setup_test_env().await;
-
-    Mock::given(method("GET"))
-        .and(path("/rest/whoami"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "name": "dev@test.com", "real_name": "Dev User", "id": 1
-        })))
-        .mount(&mock)
-        .await;
+    mount_whoami(&mock).await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -107,17 +103,9 @@ async fn bug_my_passes_status_limit_and_field_filters() {
 #[tokio::test]
 async fn bug_my_created_only_runs_creator_search_not_assigned() {
     // `--created` (without `--all`) must search by `creator=`, NOT by
-    // `assigned_to=` and NOT by `cc=`. Each search has a strict matcher
-    // and an `expect(...)` count.
+    // `assigned_to=` and NOT by `cc=`.
     let (_lock, mock, _tmp) = setup_test_env().await;
-
-    Mock::given(method("GET"))
-        .and(path("/rest/whoami"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "name": "dev@test.com", "real_name": "Dev User", "id": 1
-        })))
-        .mount(&mock)
-        .await;
+    mount_whoami(&mock).await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -150,13 +138,7 @@ async fn bug_my_created_only_runs_creator_search_not_assigned() {
 async fn bug_my_cc_only_runs_cc_search_not_assigned_or_creator() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
-    Mock::given(method("GET"))
-        .and(path("/rest/whoami"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "name": "dev@test.com", "real_name": "Dev User", "id": 1
-        })))
-        .mount(&mock)
-        .await;
+    mount_whoami(&mock).await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -188,16 +170,7 @@ async fn bug_my_cc_only_runs_cc_search_not_assigned_or_creator() {
 #[tokio::test]
 async fn bug_my_all_deduplicates() {
     let (_lock, mock, _tmp) = setup_test_env().await;
-
-    Mock::given(method("GET"))
-        .and(path("/rest/whoami"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "name": "dev@test.com",
-            "real_name": "Dev User",
-            "id": 1
-        })))
-        .mount(&mock)
-        .await;
+    mount_whoami(&mock).await;
 
     // All three searches return the same bug — should appear only once
     Mock::given(method("GET"))

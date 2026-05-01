@@ -66,10 +66,8 @@ async fn bug_list_returns_bugs() {
 
 #[tokio::test]
 async fn bug_list_passes_every_field_through_to_search_params() {
-    // Pass a non-default value for every field in BugAction::List and
-    // pin the resulting query params with strict matchers — if any field
-    // is dropped from the SearchParams expression, the corresponding
-    // matcher fails and wiremock returns the catch-all 404.
+    // Every CLI field on `bug list` must round-trip into the search
+    // query string.
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))

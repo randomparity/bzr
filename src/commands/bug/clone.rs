@@ -134,9 +134,8 @@ mod tests {
             .mount(&mock)
             .await;
 
-        // Mock get_comments (for description). Returns count=1 BEFORE
-        // count=0 so that picking the wrong one produces the wrong
-        // description text.
+        // The cloned description must come from comment count=0, not a
+        // follow-up comment.
         Mock::given(method("GET"))
             .and(path("/rest/bug/100/comment"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -164,8 +163,6 @@ mod tests {
             .mount(&mock)
             .await;
 
-        // Mock create_bug — assert the cloned description is comment #0,
-        // not the follow-up.
         Mock::given(method("POST"))
             .and(path("/rest/bug"))
             .and(body_partial_json(serde_json::json!({

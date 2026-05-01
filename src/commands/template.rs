@@ -178,10 +178,8 @@ mod tests {
 
     #[tokio::test]
     async fn template_save_with_single_field_succeeds() {
-        // A single field in the middle of the all-fields-None check chain
-        // is enough to satisfy the validator. Pins down the precedence of
-        // the `&&` chain — switching any `&&` to `||` would let through
-        // arbitrary all-None templates (or reject this single-field one).
+        // A single non-None field is enough to satisfy the
+        // "at least one field required" validator.
         let (_lock, _mock, _tmp) = setup_test_env().await;
 
         let action = TemplateAction::Save {

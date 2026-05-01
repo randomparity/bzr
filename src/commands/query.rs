@@ -286,10 +286,8 @@ mod tests {
 
     #[tokio::test]
     async fn query_save_persists_every_field() {
-        // Pass a non-default value for every field on the Save action and
-        // verify each round-trips through to the saved query — pins down
-        // every field-assignment in the SavedQuery construction
-        // expression.
+        // Every Save-action field must round-trip into the persisted
+        // SavedQuery and be visible in `query show`.
         let (_lock, _mock, _tmp) = setup_test_env().await;
 
         let action = QueryAction::Save {
@@ -332,8 +330,7 @@ mod tests {
 
     #[tokio::test]
     async fn query_list_emits_saved_query_names() {
-        // Saved queries must appear in `query list` output. Catches a
-        // no-op replacement of `handle_list`.
+        // Saved queries must appear in `query list` output.
         let (_lock, _mock, _tmp) = setup_test_env().await;
 
         let (result, _) = capture_stdout(super::execute(

@@ -423,7 +423,11 @@ fn read_secret_from_prompt_or_env(service: &str, account: &str) -> crate::error:
     })
 }
 
+// Mutation testing: cfg-gated dead code on the default-feature Linux
+// test platform. Skipped here rather than via mutants.toml so the live
+// keyring version above stays in the test set.
 #[cfg(not(feature = "keyring"))]
+#[cfg_attr(test, mutants::skip)]
 fn read_secret_from_prompt_or_env(_service: &str, _account: &str) -> crate::error::Result<String> {
     Err(crate::error::BzrError::Keyring(
         "this bzr build was compiled without keyring support; \
