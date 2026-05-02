@@ -51,7 +51,12 @@ pub enum CommentAction {
     Add {
         /// Bug ID
         bug_id: u64,
-        /// Comment text (opens $EDITOR if not provided)
+        /// Comment text.
+        ///
+        /// When omitted, bzr reads the body from stdin if it's
+        /// piped, otherwise it opens `$EDITOR` (or `vi` if
+        /// `$EDITOR` is unset) for interactive composition.
+        /// Empty bodies are rejected with exit code 7.
         #[arg(long)]
         body: Option<String>,
     },

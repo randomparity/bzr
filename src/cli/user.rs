@@ -94,10 +94,19 @@ pub enum UserAction {
         /// New email
         #[arg(long)]
         email: Option<String>,
-        /// Disable login
+        /// Disable (`true`) or re-enable (`false`) the user's login.
+        ///
+        /// Only applied when explicitly supplied. Disabled users
+        /// retain their account and history but cannot
+        /// authenticate. Pair with `--login-denied-text` to set
+        /// the message they see on login attempts.
         #[arg(long)]
         disable_login: Option<bool>,
-        /// Custom login denied message (used with --disable-login)
+        /// Custom message shown on a denied login.
+        ///
+        /// Only meaningful in combination with
+        /// `--disable-login true`. Useful for steering disabled
+        /// users to a recovery/contact channel.
         #[arg(long)]
         login_denied_text: Option<String>,
     },

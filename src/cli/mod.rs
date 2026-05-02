@@ -72,27 +72,50 @@ use crate::types::{ApiMode, OutputFormat};
     reason = "doc examples are literal shell commands; wrapping URLs in <> or identifiers in backticks would degrade copy-paste UX"
 )]
 pub struct Cli {
-    /// Server name from config (uses default if not set)
+    /// Server name from config (uses default if not set).
     #[arg(long, global = true)]
     pub server: Option<String>,
 
-    /// Output format: table or json
+    /// Output format: `table` (default at a TTY) or `json`.
+    ///
+    /// When stdout is piped, the default flips to `json` unless this
+    /// flag or `BZR_OUTPUT` overrides it. Precedence:
+    /// `--json` > `--output` > `BZR_OUTPUT` > auto-detect.
     #[arg(long, global = true)]
     pub output: Option<OutputFormat>,
 
-    /// Shorthand for --output json
+    /// Shorthand for `--output json`.
+    ///
+    /// Equivalent to `--output json` and takes precedence over both
+    /// `--output` and the `BZR_OUTPUT` environment variable.
     #[arg(long, global = true)]
     pub json: bool,
 
-    /// Disable colored output
+    /// Disable colored output.
+    ///
+    /// bzr also honors the `NO_COLOR` and `CLICOLOR=0` environment
+    /// variables, plus `CLICOLOR_FORCE=1` to re-enable. This flag
+    /// takes precedence over all of them.
     #[arg(long, global = true)]
     pub no_color: bool,
 
-    /// Suppress all stdout output
+    /// Suppress all stdout output.
+    ///
+    /// Redirects stdout to /dev/null. Stderr (errors, warnings,
+    /// `tracing` logs) is unaffected. Useful for scripts that only
+    /// care about exit codes.
     #[arg(long, global = true)]
     pub quiet: bool,
 
-    /// Override API transport: rest, xmlrpc, or hybrid
+    /// Override API transport: `rest` (default), `xmlrpc`, or `hybrid`.
+    ///
+    /// `rest` uses Bugzilla's REST API exclusively. `xmlrpc` uses
+    /// XML-RPC for every call. `hybrid` uses REST where possible
+    /// and falls back to XML-RPC for endpoints REST can't express
+    /// reliably (e.g. `bzr user create` on Bugzilla 5.3+ when
+    /// `use_email_as_login` is disabled). Most users won't need
+    /// this -- bzr probes on first use and caches the working
+    /// transport.
     #[arg(long, global = true)]
     pub api: Option<ApiMode>,
 

@@ -34,10 +34,20 @@ pub enum QueryAction {
     Save {
         /// Query name
         name: String,
-        /// Import query from a Bugzilla buglist.cgi URL (mutually exclusive with filter flags)
+        /// Import query from a Bugzilla `buglist.cgi` URL.
+        ///
+        /// Parses the URL's query parameters into known filters
+        /// where possible; unrecognized parameters are stored
+        /// verbatim and passed through at run time. Mutually
+        /// exclusive with `--search` and every filter flag.
         #[arg(long, conflicts_with_all = ["search", "product", "component", "status", "assignee", "creator", "priority", "severity"])]
         from_url: Option<String>,
-        /// Free-text search (creates a "search" kind query)
+        /// Free-text search query (creates a `search`-kind saved query).
+        ///
+        /// Mutually exclusive with `--from-url` and the structured
+        /// filter flags. Stores the query as a free-text search;
+        /// `bzr query run <name>` then issues the same search
+        /// against the configured server.
         #[arg(long)]
         search: Option<String>,
         /// Filter by product (repeatable for OR; prefix with ! to exclude)

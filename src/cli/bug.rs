@@ -118,14 +118,31 @@ pub enum BugAction {
     /// bzr-query(1) for managing saved queries directly.
     #[command(verbatim_doc_comment)]
     Search {
-        /// Search query (mutually exclusive with --from-url)
+        /// Free-text search query (mutually exclusive with `--from-url`).
+        ///
+        /// Searches across summary, description, and comments using
+        /// the Bugzilla server's quicksearch syntax. Use
+        /// `--from-url` to instead replay a search composed in the
+        /// Bugzilla web UI.
         #[arg(conflicts_with = "from_url")]
         query: Option<String>,
-        /// Execute a search from a Bugzilla buglist.cgi URL
+        /// Execute a search from a Bugzilla `buglist.cgi` URL.
+        ///
+        /// Parses the URL's query parameters into known filters
+        /// where possible; unrecognized parameters are passed
+        /// through to the API verbatim. Pair with `--save-as` to
+        /// persist the parsed query as a named entry usable by
+        /// `bzr query run`.
         #[arg(long)]
         from_url: Option<String>,
-        /// Save this URL query for future reuse. Optionally provide a name;
-        /// if omitted, uses the URL's `known_name` parameter.
+        /// Save the parsed `--from-url` query for future reuse.
+        ///
+        /// Only valid with `--from-url`. If a name is provided,
+        /// the query is stored under that name. If `--save-as` is
+        /// given without a value, the URL's `known_name` query
+        /// parameter is used as the name; if neither is present,
+        /// the command fails with input-validation (exit code 7).
+        /// Saved queries are managed via `bzr query`.
         #[arg(long, requires = "from_url", num_args = 0..=1, default_missing_value = "")]
         save_as: Option<String>,
         /// Max number of results (default: 50)
@@ -191,13 +208,28 @@ pub enum BugAction {
     /// values.
     #[command(verbatim_doc_comment)]
     Create {
-        /// Use a saved template for default field values
+        /// Use a saved template for default field values.
+        ///
+        /// References a named template from `bzr template list`.
+        /// When set, fields stored in the template (product,
+        /// component, version, priority, severity, assignee,
+        /// op-sys, rep-platform, description) are used as defaults
+        /// for this `create` invocation; CLI flags override
+        /// template values.
         #[arg(long)]
         template: Option<String>,
-        /// Product name (required unless provided by template)
+        /// Product name (required unless supplied by `--template`).
+        ///
+        /// Required unless the chosen template provides a product.
+        /// When both are set, this CLI value wins.
         #[arg(long)]
         product: Option<String>,
-        /// Component name (required unless provided by template)
+        /// Component name (required unless supplied by `--template`).
+        ///
+        /// Required unless the chosen template provides a
+        /// component. When both are set, this CLI value wins. The
+        /// component must exist on the chosen product -- discover
+        /// valid names via `bzr product view <product>`.
         #[arg(long)]
         component: Option<String>,
         /// Bug summary
@@ -255,19 +287,32 @@ pub enum BugAction {
     /// account `my` resolves to.
     #[command(verbatim_doc_comment)]
     My {
-        /// Show bugs I created (instead of assigned to me)
+        /// Show bugs I created (instead of assigned to me).
+        ///
+        /// Mutually exclusive with `--all`.
         #[arg(long)]
         created: bool,
-        /// Show bugs I'm CC'd on (instead of assigned to me)
+        /// Show bugs I'm CC'd on (instead of assigned to me).
+        ///
+        /// Mutually exclusive with `--all`.
         #[arg(long)]
         cc: bool,
-        /// Show all bugs related to me (assigned + created + CC'd)
+        /// Show all bugs related to me (assigned + created + CC'd).
+        ///
+        /// Mutually exclusive with `--created` and `--cc`. Output
+        /// is grouped into the three categories; `--limit` applies
+        /// per category, so the total can be up to 3x the limit.
         #[arg(long, conflicts_with_all = ["created", "cc"])]
         all: bool,
         /// Filter by status (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
         status: Vec<String>,
-        /// Max results per category (assigned/created/cc)
+        /// Max results per category (assigned/created/cc).
+        ///
+        /// With `--all`, the limit applies independently to each of
+        /// the three categories, so up to 3x this value may be
+        /// returned. With `--created`, `--cc`, or no view flag,
+        /// the limit applies to the single active category.
         #[arg(long, default_value = "50")]
         limit: u32,
         /// Only return these fields (comma-separated)
@@ -382,13 +427,26 @@ pub enum BugAction {
     /// of a status change.
     #[command(verbatim_doc_comment)]
     Update {
-        /// Bug ID(s)
+        /// Bug ID(s).
+        ///
+        /// One or more IDs. When more than one is supplied, the
+        /// same field changes are applied to every bug; partial
+        /// failures (some bugs updated, others rejected) exit with
+        /// code 11 and the JSON output enumerates per-bug results.
         #[arg(required = true, num_args = 1..)]
         ids: Vec<u64>,
-        /// New status
+        /// New status (e.g. `NEW`, `ASSIGNED`, `RESOLVED`, `CLOSED`).
+        ///
+        /// When closing a bug, `--resolution` must usually be set
+        /// in the same call. Discover valid values via
+        /// `bzr field list status`.
         #[arg(long)]
         status: Option<String>,
-        /// Resolution (when closing)
+        /// Resolution to set when closing a bug.
+        ///
+        /// Required by most workflows when `--status` transitions
+        /// to a closed state (e.g. `RESOLVED`, `VERIFIED`).
+        /// Discover valid values via `bzr field list resolution`.
         #[arg(long)]
         resolution: Option<String>,
         /// Reassign
@@ -406,19 +464,31 @@ pub enum BugAction {
         /// Whiteboard
         #[arg(long)]
         whiteboard: Option<String>,
-        /// Set flags (e.g. "review?(user@example.com)")
+        /// Set, request, or clear a flag using Bugzilla flag syntax.
+        ///
+        /// Repeatable. Accepted forms:
+        /// `name+` (granted), `name-` (denied), `name?` (request),
+        /// `name?(user@example.com)` (request a specific user), or
+        /// `name?,!` to clear an existing flag.
         #[arg(long)]
         flag: Vec<String>,
-        /// Add bug IDs to blocks list (comma-separated)
+        /// Add bug IDs to the blocks list (comma-separated).
+        ///
+        /// Combine with `--blocks-remove` for incremental edits.
+        /// To replace the list entirely, the bug must be edited
+        /// through the Bugzilla web UI.
         #[arg(long, value_delimiter = ',')]
         blocks_add: Vec<u64>,
-        /// Remove bug IDs from blocks list (comma-separated)
+        /// Remove bug IDs from the blocks list (comma-separated).
         #[arg(long, value_delimiter = ',')]
         blocks_remove: Vec<u64>,
-        /// Add bug IDs to depends-on list (comma-separated)
+        /// Add bug IDs to the depends-on list (comma-separated).
+        ///
+        /// Combine with `--depends-on-remove` for incremental
+        /// edits.
         #[arg(long, value_delimiter = ',')]
         depends_on_add: Vec<u64>,
-        /// Remove bug IDs from depends-on list (comma-separated)
+        /// Remove bug IDs from the depends-on list (comma-separated).
         #[arg(long, value_delimiter = ',')]
         depends_on_remove: Vec<u64>,
     },

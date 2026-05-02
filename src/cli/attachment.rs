@@ -80,7 +80,12 @@ pub enum AttachmentAction {
         /// MIME type (auto-detected if not provided)
         #[arg(long)]
         content_type: Option<String>,
-        /// Set flags (e.g. "review?(user@example.com)")
+        /// Set, request, or clear a flag using Bugzilla flag syntax.
+        ///
+        /// Repeatable. Accepted forms:
+        /// `name+` (granted), `name-` (denied), `name?` (request),
+        /// `name?(user@example.com)` (request a specific user), or
+        /// `name?,!` to clear an existing flag.
         #[arg(long)]
         flag: Vec<String>,
     },
@@ -118,16 +123,34 @@ pub enum AttachmentAction {
         /// New content type
         #[arg(long)]
         content_type: Option<String>,
-        /// Mark as obsolete
+        /// Mark as obsolete (`true`) or un-obsolete (`false`).
+        ///
+        /// Only applied when explicitly supplied; an unset value
+        /// leaves the flag unchanged. Mark a patch obsolete when
+        /// uploading a replacement to keep the bug's attachment
+        /// list tidy.
         #[arg(long)]
         obsolete: Option<bool>,
-        /// Mark as patch
+        /// Mark as a patch (`true`) or non-patch (`false`).
+        ///
+        /// Only applied when explicitly supplied. The patch flag
+        /// affects diff rendering in the Bugzilla web UI but is
+        /// otherwise informational.
         #[arg(long)]
         is_patch: Option<bool>,
-        /// Mark as private
+        /// Mark as private (`true`) or public (`false`).
+        ///
+        /// Only applied when explicitly supplied. Private
+        /// attachments are visible only to users in the bug's
+        /// `insider` group (server-configured); use carefully.
         #[arg(long)]
         is_private: Option<bool>,
-        /// Set flags (e.g. "review?(user@example.com)")
+        /// Set, request, or clear a flag using Bugzilla flag syntax.
+        ///
+        /// Repeatable. Accepted forms:
+        /// `name+` (granted), `name-` (denied), `name?` (request),
+        /// `name?(user@example.com)` (request a specific user), or
+        /// `name?,!` to clear an existing flag.
         #[arg(long)]
         flag: Vec<String>,
     },

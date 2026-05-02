@@ -11,12 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Every man page and every `--help` long-form output across `bzr`
   and its subcommands now carries full descriptive prose instead
-  of one-line summaries. Each page describes auth/permission
-  expectations, required vs. optional inputs, output shape,
-  representative examples, exit-code semantics where non-trivial,
-  and cross-references to related pages. Per-flag detail will
-  follow in a subsequent pass; see
-  `docs/plans/2026-05-02-cli-doc-expansion.md`.
+  of one-line summaries: command-level pages describe
+  auth/permission expectations, required vs. optional inputs,
+  output shape, representative examples, exit-code semantics where
+  non-trivial, and cross-references to related pages; per-flag
+  detail covers every option that conflicts with another flag,
+  gates behavior elsewhere, accepts a structured value, has a
+  non-obvious default, or supports env-var/stdin fallback.
 - Added `docs/dev/cli-doc-style.md` documenting the conventions for
   clap doc comments (2-space example indent, ASCII-only,
   `verbatim_doc_comment` on items with examples).

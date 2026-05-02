@@ -46,47 +46,111 @@ pub enum ConfigAction {
         /// Server URL
         #[arg(long)]
         url: String,
-        /// API key (less secure: may leak via shell history or process args)
+        /// API key, stored inline in the config file.
+        ///
+        /// Mutually exclusive with `--api-key-env`; one of the two
+        /// is required (or use `bzr config set-keyring` to keep
+        /// the secret in the OS keychain instead). Inline keys can
+        /// leak via shell history, process args, or backup copies
+        /// of `config.toml` -- prefer `--api-key-env` or the
+        /// keyring for anything beyond a throwaway test setup.
         #[arg(
             long,
             conflicts_with = "api_key_env",
             required_unless_present = "api_key_env"
         )]
         api_key: Option<String>,
-        /// Name of an environment variable that contains the API key
+        /// Name of an environment variable that holds the API key.
+        ///
+        /// Mutually exclusive with `--api-key`. The variable is
+        /// resolved at command time, not at `set-server` time, so
+        /// rotating the key only requires updating the env var
+        /// (or the secret store backing it). Variable names are
+        /// stored verbatim in the config file; the secret itself
+        /// is not.
         #[arg(long, conflicts_with = "api_key", required_unless_present = "api_key")]
         api_key_env: Option<String>,
-        /// Login email (required for older Bugzilla servers)
+        /// Login email used for fallback auth on older Bugzilla servers.
+        ///
+        /// Required only when bzr's auto-detected auth method
+        /// (header API-key) is unavailable and the server falls
+        /// back to query-parameter auth, which uses
+        /// `email`+`api_key` as a credential pair. Most modern
+        /// Bugzilla servers don't need this.
         #[arg(long)]
         email: Option<String>,
-        /// Override auto-detected auth method (`header` or `query_param`)
+        /// Override bzr's auto-detected API-key transport.
+        ///
+        /// Accepted values: `header` (use the
+        /// `X-BUGZILLA-API-KEY` HTTP header) or `query-param` (use
+        /// the `?api_key=...` query parameter). bzr probes both on
+        /// first use and caches the working method per server;
+        /// override only when the cached value is wrong (e.g. the
+        /// server changed configuration).
         #[arg(long)]
         auth_method: Option<AuthMethod>,
-        /// Accept invalid TLS certificates (self-signed, expired, wrong host)
+        /// Accept invalid TLS certificates -- self-signed, expired, wrong host.
+        ///
+        /// Disables every TLS validation check for this server.
+        /// Use only against a server you control or in a trusted
+        /// development environment; the server's responses cannot
+        /// be authenticated. Mutually exclusive with
+        /// `--tls-ca-cert`, `--tls-pin-sha256`, and
+        /// `--tls-pin-now`. Prefer one of those for self-signed or
+        /// pinned-cert deployments.
         #[arg(
             long,
             conflicts_with_all = ["tls_ca_cert", "tls_pin_sha256", "tls_pin_now"],
         )]
         tls_insecure: bool,
-        /// Path to a PEM CA certificate file for this server
+        /// Path to a PEM-encoded CA certificate file for this server.
+        ///
+        /// Adds the given CA to the trust store for this server
+        /// without affecting other servers or the system trust
+        /// store. Useful for self-hosted Bugzilla instances behind
+        /// a private CA. Mutually exclusive with `--tls-insecure`,
+        /// `--tls-pin-sha256`, and `--tls-pin-now`.
         #[arg(
             long,
             conflicts_with_all = ["tls_insecure", "tls_pin_sha256", "tls_pin_now"],
         )]
         tls_ca_cert: Option<String>,
-        /// Pin a certificate fingerprint (sha256//<base64> format)
+        /// Pin a certificate fingerprint in `sha256//<base64>` format.
+        ///
+        /// The exact format used by curl's `--pinnedpubkey`. Once
+        /// pinned, every subsequent connection to this server
+        /// must present a leaf certificate whose SHA-256 hash
+        /// matches; mismatches exit with code 13. Mutually
+        /// exclusive with `--tls-insecure`, `--tls-ca-cert`,
+        /// `--tls-pin-now`, and `--tls-pin-clear`. Use
+        /// `--tls-pin-now` to capture the current cert
+        /// automatically instead of computing the fingerprint by
+        /// hand.
         #[arg(
             long,
             conflicts_with_all = ["tls_insecure", "tls_ca_cert", "tls_pin_now", "tls_pin_clear"],
         )]
         tls_pin_sha256: Option<String>,
-        /// Connect to server and pin its current certificate
+        /// Connect to the server and pin its current certificate.
+        ///
+        /// Issues a one-shot TLS connection, captures the leaf
+        /// certificate's SHA-256 fingerprint, and stores it as the
+        /// pin (TOFU -- trust on first use). Subsequent connections
+        /// require the same fingerprint. Mutually exclusive with
+        /// `--tls-insecure`, `--tls-ca-cert`, `--tls-pin-sha256`,
+        /// and `--tls-pin-clear`.
         #[arg(
             long,
             conflicts_with_all = ["tls_insecure", "tls_ca_cert", "tls_pin_sha256", "tls_pin_clear"],
         )]
         tls_pin_now: bool,
-        /// Remove a stored certificate pin
+        /// Remove a stored certificate pin from this server.
+        ///
+        /// Reverts the server to default TLS validation against
+        /// the OS trust store. Mutually exclusive with
+        /// `--tls-pin-sha256` and `--tls-pin-now` -- use one of
+        /// those to install a new pin in the same call as clearing
+        /// the old one is not supported.
         #[arg(
             long,
             conflicts_with_all = ["tls_pin_sha256", "tls_pin_now"],
@@ -162,12 +226,21 @@ pub enum ConfigAction {
     /// "Credential storage" section for platform setup notes.
     #[command(verbatim_doc_comment)]
     SetKeyring {
-        /// Server alias name (must already exist)
+        /// Server alias name (must already exist).
         name: String,
-        /// Override keyring service name (defaults to "bzr")
+        /// Override the keyring service name (defaults to `bzr`).
+        ///
+        /// The service name groups related credentials in the OS
+        /// keychain. Override when sharing credentials across
+        /// multiple bzr installs or when the default `bzr`
+        /// collides with another tool's entries.
         #[arg(long)]
         service: Option<String>,
-        /// Override keyring account name (defaults to the server name)
+        /// Override the keyring account name (defaults to the server name).
+        ///
+        /// The account name identifies an individual credential
+        /// within the service. Override when storing multiple
+        /// keys for the same server (e.g. personal vs. CI).
         #[arg(long)]
         account: Option<String>,
     },
@@ -216,15 +289,20 @@ pub enum ConfigAction {
     /// bzr-config-unset-keyring(1) for the inverse direction.
     #[command(verbatim_doc_comment)]
     MigrateToKeyring {
-        /// Server alias name
+        /// Server alias name.
         name: String,
-        /// Override keyring service name (defaults to "bzr")
+        /// Override the keyring service name (defaults to `bzr`).
         #[arg(long)]
         service: Option<String>,
-        /// Override keyring account name (defaults to the server name)
+        /// Override the keyring account name (defaults to the server name).
         #[arg(long)]
         account: Option<String>,
-        /// Skip confirmation prompt
+        /// Skip the confirmation prompt before migrating.
+        ///
+        /// Without this flag, the command prints the source of
+        /// the existing key (inline vs. env var) and waits for a
+        /// `y` on stdin before writing to the keychain. Useful
+        /// for scripted migrations across many servers.
         #[arg(long)]
         yes: bool,
     },
