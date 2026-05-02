@@ -2,7 +2,23 @@ use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub enum UserAction {
-    /// Search users by name or email
+    /// Search users by login, real name, or email substring.
+    ///
+    /// Returns matching user accounts. Default output shows login
+    /// and real name; `--details` adds group memberships and login
+    /// status (enabled, disabled, last-login). Most Bugzilla
+    /// installations expose user search to all authenticated
+    /// callers; some restrict it to admins.
+    ///
+    /// Examples:
+    ///
+    ///   bzr user search alice
+    ///   bzr user search example.com --details
+    ///   bzr user search alice --json | jq '.users[].login'
+    ///
+    /// See bzr-user-create(1) to add a user (admin only) and
+    /// bzr-group(1) for group-membership management.
+    #[command(verbatim_doc_comment)]
     Search {
         /// Search query
         query: String,
@@ -10,7 +26,30 @@ pub enum UserAction {
         #[arg(long)]
         details: bool,
     },
-    /// Create a new user
+
+    /// Create a new Bugzilla user account (admin only).
+    ///
+    /// Requires Bugzilla admin permissions on the target server.
+    /// `--email` is always required. `--login` is required on
+    /// Bugzilla 5.3+ when the server's `use_email_as_login` is
+    /// disabled; if set and the active API mode is REST, the
+    /// request may collide with REST's login-as-email assumption --
+    /// override the global `--api hybrid` (or per-server config)
+    /// to fall back to XML-RPC for the create call.
+    ///
+    /// `--password` is optional; if omitted, the server generates a
+    /// password and (on most installations) emails the new user a
+    /// reset link. `--full-name` populates the user's display name.
+    ///
+    /// Examples:
+    ///
+    ///   bzr user create --email alice@example.com --full-name "Alice"
+    ///   bzr --api hybrid user create --email bob@example.com \
+    ///     --login bob --full-name "Bob"
+    ///
+    /// See bzr-user-update(1) to modify a user and
+    /// bzr-group-add-user(1) to grant group membership.
+    #[command(verbatim_doc_comment)]
     Create {
         /// User email
         #[arg(long)]
@@ -26,7 +65,26 @@ pub enum UserAction {
         #[arg(long)]
         password: Option<String>,
     },
-    /// Update a user
+
+    /// Update an existing user (admin only).
+    ///
+    /// Requires Bugzilla admin permissions. Pass any of the flags
+    /// to change that property: `--real-name`, `--email`,
+    /// `--disable-login`, `--login-denied-text`. Only the supplied
+    /// fields are modified; unspecified fields are left unchanged.
+    ///
+    /// `--login-denied-text` sets the message shown to the user on
+    /// login attempts when login is disabled; only meaningful with
+    /// `--disable-login true`.
+    ///
+    /// Examples:
+    ///
+    ///   bzr user update alice@example.com --real-name "Alice Smith"
+    ///   bzr user update alice@example.com --disable-login true \
+    ///     --login-denied-text "Account closed; contact support."
+    ///
+    /// See bzr-user-create(1) for new accounts.
+    #[command(verbatim_doc_comment)]
     Update {
         /// User ID or login name
         user: String,

@@ -500,6 +500,40 @@ mod tests {
         &["query", "show"],
         &["query", "delete"],
         &["query", "run"],
+        // Phase 2b: attachment.rs actions
+        &["attachment", "list"],
+        &["attachment", "download"],
+        &["attachment", "upload"],
+        &["attachment", "update"],
+        // Phase 2b: comment.rs actions
+        &["comment", "list"],
+        &["comment", "add"],
+        &["comment", "tag"],
+        &["comment", "search-tags"],
+        // Phase 2b: user.rs actions
+        &["user", "search"],
+        &["user", "create"],
+        &["user", "update"],
+        // Phase 2b: group.rs actions
+        &["group", "add-user"],
+        &["group", "remove-user"],
+        &["group", "list-users"],
+        &["group", "view"],
+        &["group", "create"],
+        &["group", "update"],
+        // Phase 2b: product.rs actions
+        &["product", "list"],
+        &["product", "view"],
+        &["product", "create"],
+        &["product", "update"],
+        // Phase 2b: template.rs actions
+        &["template", "save"],
+        &["template", "list"],
+        &["template", "show"],
+        &["template", "delete"],
+        // Phase 2b: component.rs actions
+        &["component", "create"],
+        &["component", "update"],
     ];
 
     #[test]

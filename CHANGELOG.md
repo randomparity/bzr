@@ -10,15 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Documentation
 
 - Top-level (`bzr.1`), per-resource (`bzr-bug.1`, `bzr-config.1`,
-  ...), and per-action pages for `bug`, `config`, and `query`
-  (`bzr-bug-create.1`, `bzr-config-set-server.1`,
-  `bzr-query-save.1`, ...) now carry full descriptive prose instead
-  of one-line summaries. Each page describes
+  ...), and per-action pages for every non-trivial resource
+  (`attachment`, `bug`, `comment`, `component`, `config`, `group`,
+  `product`, `query`, `template`, `user`) now carry full descriptive
+  prose instead of one-line summaries. Each page describes
   auth/permission expectations, required vs. optional inputs, output
   shape, representative examples, exit-code semantics where
   non-trivial, and cross-references to related pages. Per-action
-  detail for the remaining resources and per-flag detail will follow
-  in subsequent passes; see
+  detail for the trivial resources (`whoami`, `server`,
+  `classification`, `field`) and per-flag detail will follow in
+  subsequent passes; see
   `docs/plans/2026-05-02-cli-doc-expansion.md`.
 - Added `docs/dev/cli-doc-style.md` documenting the conventions for
   clap doc comments (2-space example indent, ASCII-only,
