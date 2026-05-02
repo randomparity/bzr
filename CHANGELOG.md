@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Release page no longer attaches stray manpage `.1` files. The
+  `release` job's artifact download now filters with `pattern: bzr-*-*`
+  so the internal `bzr-manpages` artifact (used by the build matrix to
+  bundle pages into tarballs and packages) is not pulled into the
+  release upload set. `SHA256SUMS` correspondingly lists only the
+  published archives and packages.
+
 ### Documentation
 
 - Every man page and every `--help` long-form output across `bzr`
