@@ -258,6 +258,10 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
         with:
           path: artifacts
+          # Match per-target artifacts (e.g. bzr-x86_64-pc-windows-msvc) but
+          # exclude bzr-manpages, which is an internal artifact consumed by
+          # the build matrix and must not appear on the release page.
+          pattern: bzr-*-*
           merge-multiple: true
 
       - name: Generate SHA256SUMS
