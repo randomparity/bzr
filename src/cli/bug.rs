@@ -1,8 +1,34 @@
 use clap::Subcommand;
 
 #[derive(Subcommand)]
+#[expect(
+    clippy::doc_markdown,
+    reason = "doc examples are literal shell commands; wrapping URLs in <> or identifiers in backticks would degrade copy-paste UX"
+)]
 pub enum BugAction {
-    /// List bugs with filters
+    /// List bugs that match the given filters.
+    ///
+    /// Filter flags (`--product`, `--component`, `--status`,
+    /// `--assignee`, `--creator`, `--priority`, `--severity`) are
+    /// repeatable for OR semantics within a category and AND across
+    /// categories. Prefix any filter value with `!` to invert it
+    /// (e.g. `--status '!CLOSED'`).
+    ///
+    /// `--limit` defaults to 50; raise it for broader scans, but very
+    /// large values may exceed the server's max-results setting and
+    /// return a truncated list. Use `--fields` / `--exclude-fields` to
+    /// trim the response payload.
+    ///
+    /// Examples:
+    ///
+    ///   bzr bug list --product Firefox --status NEW --limit 25
+    ///   bzr bug list --assignee me@example.com --status '!CLOSED'
+    ///   bzr bug list --id 100,101,102
+    ///
+    /// See bzr-bug-search(1) for free-text search, bzr-bug-my(1) for
+    /// caller-relative views, and bzr-query(1) for saving a filter
+    /// combination by name.
+    #[command(verbatim_doc_comment)]
     List {
         /// Filter by product (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
@@ -41,7 +67,23 @@ pub enum BugAction {
         #[arg(long)]
         exclude_fields: Option<String>,
     },
-    /// View a bug by ID
+    /// View a single bug by ID or alias.
+    ///
+    /// Prints the bug's full record (summary, status, assignee,
+    /// priority, CC list, depends-on, blocks, and the most recent
+    /// comments) as a formatted table or JSON. Use `--fields` to
+    /// fetch only specific fields (faster on large bugs);
+    /// `--exclude-fields` is the inverse.
+    ///
+    /// Examples:
+    ///
+    ///   bzr bug view 12345
+    ///   bzr bug view 12345 --json | jq .summary
+    ///   bzr bug view my-alias --fields id,summary,status
+    ///
+    /// See bzr-bug-history(1) for the change log and
+    /// bzr-comment-list(1) for the full comment thread.
+    #[command(verbatim_doc_comment)]
     View {
         /// Bug ID or alias
         id: String,
@@ -52,7 +94,29 @@ pub enum BugAction {
         #[arg(long)]
         exclude_fields: Option<String>,
     },
-    /// Search bugs by text query or Bugzilla URL
+    /// Search bugs by free-text query or by parsing a Bugzilla URL.
+    ///
+    /// The positional `query` argument is a free-text search across
+    /// summary, description, and comments. Mutually exclusive with
+    /// `--from-url`, which parses a Bugzilla `buglist.cgi` URL and
+    /// reproduces the same filter set against the configured server.
+    /// Unrecognized URL parameters are passed through verbatim.
+    ///
+    /// `--save-as` (only valid with `--from-url`) saves the parsed
+    /// query for reuse; if no name is given it defaults to the URL's
+    /// `known_name` parameter when present, otherwise an
+    /// auto-generated name. Saved queries are managed with
+    /// `bzr query`.
+    ///
+    /// Examples:
+    ///
+    ///   bzr bug search "kernel panic" --limit 10
+    ///   bzr bug search --from-url 'https://bz/buglist.cgi?product=Firefox'
+    ///   bzr bug search --from-url '...' --save-as firefox-bugs
+    ///
+    /// See bzr-bug-list(1) for filter-flag based listing and
+    /// bzr-query(1) for managing saved queries directly.
+    #[command(verbatim_doc_comment)]
     Search {
         /// Search query (mutually exclusive with --from-url)
         #[arg(conflicts_with = "from_url")]
@@ -74,7 +138,22 @@ pub enum BugAction {
         #[arg(long)]
         exclude_fields: Option<String>,
     },
-    /// Show change history of a bug
+    /// Show the change history for a single bug.
+    ///
+    /// Prints every recorded change to the bug's fields (status,
+    /// assignee, comments added, attachments, etc.) in chronological
+    /// order, including the user who made each change. Use `--since`
+    /// (ISO 8601 date or datetime) to limit the output to changes
+    /// after a given point.
+    ///
+    /// Examples:
+    ///
+    ///   bzr bug history 12345
+    ///   bzr bug history 12345 --since 2026-01-01
+    ///   bzr bug history 12345 --since 2026-04-15T00:00:00Z --json
+    ///
+    /// See bzr-bug-view(1) for the current state of a bug.
+    #[command(verbatim_doc_comment)]
     History {
         /// Bug ID
         id: u64,
@@ -82,7 +161,35 @@ pub enum BugAction {
         #[arg(long)]
         since: Option<String>,
     },
-    /// Create a new bug
+    /// Create a new bug under a product and component.
+    ///
+    /// `--summary` is always required. `--product` and `--component`
+    /// are required unless a saved template (`--template`) supplies
+    /// them; CLI flags override template values. Some Bugzilla
+    /// installations also require `--op-sys` and `--rep-platform` --
+    /// the API call fails with exit code 4 (Api) when the server
+    /// demands a field that wasn't provided.
+    ///
+    /// On success, prints the new bug ID, alias (if assigned), and
+    /// URL to stdout. With `--json`, the same fields are emitted as
+    /// a JSON object suitable for piping into scripts.
+    ///
+    /// Examples:
+    ///
+    ///   bzr bug create --product Fedora --component kernel \
+    ///     --summary "Boot failure on 6.x" \
+    ///     --description "System hangs at initramfs"
+    ///   bzr bug create --template security-bug \
+    ///     --summary "XSS in login form"
+    ///
+    /// Exit codes: 0 on success, 4 on Bugzilla API error, 7 on
+    /// input validation (e.g. empty summary), 9 on auth failure.
+    ///
+    /// See bzr-bug-clone(1) for cloning an existing bug,
+    /// bzr-template(1) for managing templates, and bzr-field(1) for
+    /// discovering valid `--priority`, `--severity`, and `--status`
+    /// values.
+    #[command(verbatim_doc_comment)]
     Create {
         /// Use a saved template for default field values
         #[arg(long)]
@@ -124,7 +231,29 @@ pub enum BugAction {
         #[arg(long, value_delimiter = ',')]
         depends_on: Vec<u64>,
     },
-    /// Show bugs related to the authenticated user
+    /// Show bugs related to the authenticated user.
+    ///
+    /// Default view: bugs assigned to the caller. `--created`
+    /// switches to bugs the caller filed; `--cc` switches to bugs
+    /// the caller is CC'd on; `--all` shows all three categories
+    /// at once (assigned, created, CC'd) and conflicts with the
+    /// other two flags.
+    ///
+    /// `--limit` is per category, not total -- with `--all` and
+    /// `--limit 50`, up to 150 rows may be returned. `--status`
+    /// filters across whichever category is active, with the same
+    /// repeatability and `!`-prefix semantics as `bzr bug list`.
+    ///
+    /// Examples:
+    ///
+    ///   bzr bug my
+    ///   bzr bug my --created --status NEW
+    ///   bzr bug my --all --limit 25
+    ///
+    /// See bzr-bug-list(1) for filter-driven listing without the
+    /// caller-relative shortcuts and bzr-whoami(1) to confirm which
+    /// account `my` resolves to.
+    #[command(verbatim_doc_comment)]
     My {
         /// Show bugs I created (instead of assigned to me)
         #[arg(long)]
@@ -148,7 +277,29 @@ pub enum BugAction {
         #[arg(long)]
         exclude_fields: Option<String>,
     },
-    /// Clone an existing bug, optionally overriding fields
+    /// Clone an existing bug, optionally overriding fields.
+    ///
+    /// Copies the source bug's product, component, version, summary,
+    /// description, priority, severity, assignee, op-sys,
+    /// rep-platform, CC list, and keywords into a new bug. Pass any
+    /// of the override flags (`--summary`, `--product`, ...) to
+    /// change values for the clone; unspecified fields inherit from
+    /// the source.
+    ///
+    /// By default the new bug gets a "Cloned from bug #N" comment;
+    /// disable with `--no-comment`. Use `--add-depends-on` to link
+    /// the new bug as a dependency of the source, or `--add-blocks`
+    /// to make it block the source. `--no-cc` and `--no-keywords`
+    /// skip copying those lists.
+    ///
+    /// Examples:
+    ///
+    ///   bzr bug clone 12345
+    ///   bzr bug clone 12345 --summary "Backport to RHEL 9" \
+    ///     --version "RHEL 9.4" --add-depends-on
+    ///
+    /// See bzr-bug-create(1) for filing a brand-new bug.
+    #[command(verbatim_doc_comment)]
     Clone {
         /// Source bug ID or alias
         id: String,
@@ -198,7 +349,38 @@ pub enum BugAction {
         #[arg(long)]
         no_keywords: bool,
     },
-    /// Update an existing bug (supports multiple IDs for batch updates)
+    /// Update one or more bugs with the same set of changes.
+    ///
+    /// Accepts one or more bug IDs as positional args. All field
+    /// changes (`--status`, `--resolution`, `--assignee`,
+    /// `--priority`, `--severity`, `--summary`, `--whiteboard`) are
+    /// applied to every bug in the list. When closing a bug, both
+    /// `--status` and `--resolution` typically need to be set
+    /// together (e.g. `--status RESOLVED --resolution FIXED`).
+    ///
+    /// `--flag` accepts Bugzilla flag syntax: `name?`, `name+`,
+    /// `name-`, `name?(user@example.com)`, or `name?,!` to clear.
+    /// Repeatable.
+    ///
+    /// `--blocks-add` / `--blocks-remove` and `--depends-on-add` /
+    /// `--depends-on-remove` are list-typed (comma-separated) and
+    /// modify dependency relationships incrementally.
+    ///
+    /// On batch updates, partial failures (some bugs updated,
+    /// others rejected) exit with code 11 (BatchPartialFailure) and
+    /// the JSON output enumerates per-bug results.
+    ///
+    /// Examples:
+    ///
+    ///   bzr bug update 100 --status RESOLVED --resolution FIXED
+    ///   bzr bug update 100 200 300 --priority high --flag review+
+    ///   bzr bug update 100 --blocks-add 200,201 \
+    ///     --depends-on-remove 99
+    ///
+    /// See bzr-bug-create(1) for new bugs, bzr-bug-clone(1) for
+    /// cloning, and bzr-comment-add(1) for adding a comment as part
+    /// of a status change.
+    #[command(verbatim_doc_comment)]
     Update {
         /// Bug ID(s)
         #[arg(required = true, num_args = 1..)]

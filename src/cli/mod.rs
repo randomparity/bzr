@@ -454,7 +454,76 @@ pub enum Commands {
 mod tests {
     use super::*;
     use crate::types::ProductListType;
-    use clap::Parser;
+    use clap::{CommandFactory, Parser};
+
+    /// Doc-comment coverage for items already converted to multi-paragraph
+    /// `long_about` per docs/dev/cli-doc-style.md. Phase 1 + 2a of the
+    /// CLI doc-expansion plan; extend as phases 2b/2c land. When this list
+    /// covers every leaf subcommand, drop the explicit list and walk the
+    /// command tree instead.
+    const COVERED_PATHS: &[&[&str]] = &[
+        // Phase 1: top-level + 14 group variants
+        &[],
+        &["bug"],
+        &["comment"],
+        &["attachment"],
+        &["config"],
+        &["product"],
+        &["field"],
+        &["user"],
+        &["group"],
+        &["whoami"],
+        &["server"],
+        &["classification"],
+        &["component"],
+        &["template"],
+        &["query"],
+        // Phase 2a: bug.rs actions
+        &["bug", "list"],
+        &["bug", "view"],
+        &["bug", "search"],
+        &["bug", "history"],
+        &["bug", "create"],
+        &["bug", "my"],
+        &["bug", "clone"],
+        &["bug", "update"],
+        // Phase 2a: config.rs actions
+        &["config", "set-server"],
+        &["config", "set-default"],
+        &["config", "show"],
+        &["config", "set-keyring"],
+        &["config", "unset-keyring"],
+        &["config", "migrate-to-keyring"],
+        // Phase 2a: query.rs actions
+        &["query", "save"],
+        &["query", "list"],
+        &["query", "show"],
+        &["query", "delete"],
+        &["query", "run"],
+    ];
+
+    #[test]
+    fn cli_doc_long_about_coverage() {
+        let cmd = Cli::command();
+        for path in COVERED_PATHS {
+            let mut current = &cmd;
+            for &name in *path {
+                let next = current.get_subcommands().find(|c| c.get_name() == name);
+                current = next
+                    .unwrap_or_else(|| panic!("subcommand path {path:?} not found in clap tree"));
+            }
+            let about = current.get_about().map(ToString::to_string);
+            let long_about = current.get_long_about().map(ToString::to_string);
+            assert!(
+                long_about.is_some(),
+                "subcommand path {path:?} is missing long_about (multi-paragraph doc comment required)"
+            );
+            assert_ne!(
+                about, long_about,
+                "subcommand path {path:?} has long_about identical to about (single-paragraph doc -- expand to multi-paragraph per docs/dev/cli-doc-style.md)"
+            );
+        }
+    }
 
     #[test]
     fn parse_bug_list_minimal() {

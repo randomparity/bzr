@@ -1,7 +1,8 @@
 # Plan: expand clap doc comments for v0.2.0 manpages
 
-**Status:** phase 1 complete (top-level `Cli` + 14 `Commands` variants);
-phases 2–4 pending. Operational style guide:
+**Status:** phases 1 and 2a complete (top-level `Cli`, 14 `Commands`
+variants, and 19 action variants in `bug.rs` / `config.rs` /
+`query.rs`); phases 2b–4 pending. Operational style guide:
 [`docs/dev/cli-doc-style.md`](../dev/cli-doc-style.md).
 
 ## Phase 1 results (2026-05-02)

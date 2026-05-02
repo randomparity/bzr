@@ -9,16 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 
-- Top-level (`bzr.1`) and per-resource (`bzr-bug.1`, `bzr-config.1`,
-  ...) man pages and `--help` long-form output now carry full
-  descriptive prose instead of one-line summaries. Each resource page
-  describes auth/permission expectations, cross-cutting flag
-  conventions, representative examples, and cross-references to the
-  per-action pages. Per-action and per-flag detail will follow in
-  subsequent passes; see `docs/plans/2026-05-02-cli-doc-expansion.md`.
+- Top-level (`bzr.1`), per-resource (`bzr-bug.1`, `bzr-config.1`,
+  ...), and per-action pages for `bug`, `config`, and `query`
+  (`bzr-bug-create.1`, `bzr-config-set-server.1`,
+  `bzr-query-save.1`, ...) now carry full descriptive prose instead
+  of one-line summaries. Each page describes
+  auth/permission expectations, required vs. optional inputs, output
+  shape, representative examples, exit-code semantics where
+  non-trivial, and cross-references to related pages. Per-action
+  detail for the remaining resources and per-flag detail will follow
+  in subsequent passes; see
+  `docs/plans/2026-05-02-cli-doc-expansion.md`.
 - Added `docs/dev/cli-doc-style.md` documenting the conventions for
   clap doc comments (2-space example indent, ASCII-only,
   `verbatim_doc_comment` on items with examples).
+- Added a `cli_doc_long_about_coverage` test that asserts every
+  doc-expanded subcommand has a multi-paragraph `long_about` distinct
+  from its short `about`. Catches regressions where a future edit
+  collapses a long doc back to a single line.
 
 ## [0.2.0-rc3] - 2026-05-01
 
