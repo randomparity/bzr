@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/randomparity/bzr/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/randomparity/bzr/actions/workflows/ci.yml)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=randomparity_bzr&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=randomparity_bzr)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/randomparity/bzr/badge)](https://scorecard.dev/viewer/?uri=github.com/randomparity/bzr)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![MSRV: 1.88](https://img.shields.io/badge/MSRV-1.88-blue.svg)](https://blog.rust-lang.org/2025/06/26/Rust-1.88.0/)
 [![crates.io](https://img.shields.io/crates/v/bzr.svg)](https://crates.io/crates/bzr)
