@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Documentation
+
+- Top-level (`bzr.1`) and per-resource (`bzr-bug.1`, `bzr-config.1`,
+  ...) man pages and `--help` long-form output now carry full
+  descriptive prose instead of one-line summaries. Each resource page
+  describes auth/permission expectations, cross-cutting flag
+  conventions, representative examples, and cross-references to the
+  per-action pages. Per-action and per-flag detail will follow in
+  subsequent passes; see `docs/plans/2026-05-02-cli-doc-expansion.md`.
+- Added `docs/dev/cli-doc-style.md` documenting the conventions for
+  clap doc comments (2-space example indent, ASCII-only,
+  `verbatim_doc_comment` on items with examples).
+
 ## [0.2.0-rc3] - 2026-05-01
 
 ### Added
