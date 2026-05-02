@@ -534,6 +534,12 @@ mod tests {
         // Phase 2b: component.rs actions
         &["component", "create"],
         &["component", "update"],
+        // Phase 2c: trivial files
+        &["whoami", "show"],
+        &["server", "info"],
+        &["classification", "view"],
+        &["field", "aliases"],
+        &["field", "list"],
     ];
 
     #[test]
