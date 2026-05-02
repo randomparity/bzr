@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Documentation
+
+- Every man page and every `--help` long-form output across `bzr`
+  and its subcommands now carries full descriptive prose instead
+  of one-line summaries: command-level pages describe
+  auth/permission expectations, required vs. optional inputs,
+  output shape, representative examples, exit-code semantics where
+  non-trivial, and cross-references to related pages; per-flag
+  detail covers every option that conflicts with another flag,
+  gates behavior elsewhere, accepts a structured value, has a
+  non-obvious default, or supports env-var/stdin fallback.
+- Added `docs/dev/cli-doc-style.md` documenting the conventions for
+  clap doc comments (2-space example indent, ASCII-only,
+  `verbatim_doc_comment` on items with examples).
+- Added a `cli_doc_long_about_coverage` test that asserts every
+  doc-expanded subcommand has a multi-paragraph `long_about` distinct
+  from its short `about`. Catches regressions where a future edit
+  collapses a long doc back to a single line.
+
 ## [0.2.0-rc3] - 2026-05-01
 
 ### Added

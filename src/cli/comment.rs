@@ -2,7 +2,23 @@ use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub enum CommentAction {
-    /// List comments on a bug
+    /// List all comments on a bug.
+    ///
+    /// Prints each comment's number, author, creation time, tags,
+    /// and body in chronological order. Comment 0 is the bug's
+    /// initial description. Use `--since` (ISO 8601 date or
+    /// datetime) to limit output to comments newer than the given
+    /// point.
+    ///
+    /// Examples:
+    ///
+    ///   bzr comment list 12345
+    ///   bzr comment list 12345 --since 2026-01-01
+    ///   bzr comment list 12345 --json | jq '.comments | length'
+    ///
+    /// See bzr-bug-history(1) for the full bug change log including
+    /// non-comment events and bzr-comment-add(1) to post a comment.
+    #[command(verbatim_doc_comment)]
     List {
         /// Bug ID
         bug_id: u64,
@@ -10,15 +26,61 @@ pub enum CommentAction {
         #[arg(long)]
         since: Option<String>,
     },
-    /// Add a comment to a bug
+
+    /// Add a comment to a bug.
+    ///
+    /// The comment body is read from one of three sources, in order
+    /// of precedence: `--body "..."` if provided, stdin when piped,
+    /// or `$EDITOR` when stdin is a terminal and `--body` is not
+    /// set. Empty bodies are rejected with exit code 7 (input
+    /// validation).
+    ///
+    /// Comments are immutable once posted -- subsequent edits or
+    /// retractions are not possible via the REST API. To flag a
+    /// comment for review, use `bzr comment tag`.
+    ///
+    /// Examples:
+    ///
+    ///   bzr comment add 12345 --body "Reproduced on RHEL 9.4"
+    ///   echo "see also #6789" | bzr comment add 12345
+    ///   bzr comment add 12345     # opens $EDITOR
+    ///
+    /// See bzr-comment-list(1) for the existing thread and
+    /// bzr-comment-tag(1) for tagging comments after they're posted.
+    #[command(verbatim_doc_comment)]
     Add {
         /// Bug ID
         bug_id: u64,
-        /// Comment text (opens $EDITOR if not provided)
+        /// Comment text.
+        ///
+        /// When omitted, bzr reads the body from stdin if it's
+        /// piped, otherwise it opens `$EDITOR` (or `vi` if
+        /// `$EDITOR` is unset) for interactive composition.
+        /// Empty bodies are rejected with exit code 7.
         #[arg(long)]
         body: Option<String>,
     },
-    /// Add or remove tags on a comment
+
+    /// Add or remove tags on a comment.
+    ///
+    /// Tags are server-side labels attached to a specific comment
+    /// (not to the bug as a whole). They are most often used to
+    /// flag spam, useful explanations, or comments that need
+    /// follow-up. `--add` and `--remove` are repeatable; both can
+    /// be combined in one invocation.
+    ///
+    /// Tag visibility and edit permissions depend on server
+    /// configuration -- some installations restrict tag editing to
+    /// users in a specific group.
+    ///
+    /// Examples:
+    ///
+    ///   bzr comment tag 200 --add spam
+    ///   bzr comment tag 200 --add useful --remove spam
+    ///   bzr comment tag 200 --add tag1 --add tag2
+    ///
+    /// See bzr-comment-search-tags(1) to find comments by tag.
+    #[command(verbatim_doc_comment)]
     Tag {
         /// Comment ID
         comment_id: u64,
@@ -29,7 +91,20 @@ pub enum CommentAction {
         #[arg(long)]
         remove: Vec<String>,
     },
-    /// Search comments by tag
+
+    /// Search comments by tag.
+    ///
+    /// Returns a list of comments whose tag set matches the query.
+    /// The exact match semantics depend on the Bugzilla server --
+    /// most installations do substring matching on the tag name.
+    ///
+    /// Examples:
+    ///
+    ///   bzr comment search-tags spam
+    ///   bzr comment search-tags useful --json
+    ///
+    /// See bzr-comment-tag(1) to add or remove tags.
+    #[command(verbatim_doc_comment)]
     SearchTags {
         /// Tag query
         query: String,
