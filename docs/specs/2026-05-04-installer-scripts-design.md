@@ -251,8 +251,31 @@ and run directly — covered in the troubleshooting doc.
 
 ## Release workflow changes (`release.yml`)
 
-Three additions to the `release` job (which already runs after the
-per-target builds and has access to the downloaded artifacts).
+One precursor fix to the per-target build matrix, plus three
+additions to the `release` job.
+
+### 0. Make archive layouts symmetric (precursor fix)
+
+Today the two packaging steps produce asymmetric layouts:
+
+- Unix: `tar czf "$STAGING.tar.gz" "$STAGING"` — tarball wraps
+  contents in a `bzr-<tag>-<target>/` directory.
+- Windows: `Compress-Archive -Path "$STAGING\*"` — zip contains
+  `bzr.exe`, `LICENSE`, `README.md` at the root, with no wrapper
+  directory.
+
+Change the Windows step to drop the `\*`:
+
+```yaml
+Compress-Archive -Path $STAGING -DestinationPath "$STAGING.zip"
+```
+
+Both archive types now extract to `bzr-<tag>-<target>/{bzr[.exe],
+LICENSE, README.md}`. This lets `install.sh` and `install.ps1`
+share the same "look in the wrapper directory" extraction logic
+described in their respective flow sections. Pre-existing
+prerelease zips (`v0.2.0-rc[12]`) keep their old layout but are
+not used by the installer.
 
 ### 1. Generate `bzr-<tag>-SHA256SUMS`
 
@@ -436,13 +459,15 @@ script from a clean host on a real prerelease tag.
 
 ## Implementation order
 
-1. Add `install.sh` and `install.ps1` with full target-detection,
+1. Fix `release.yml` Windows packaging to produce a symmetric
+   zip layout (precursor; can ship on its own).
+2. Add `install.sh` and `install.ps1` with full target-detection,
    download, verify, install, and PATH-hint logic. Local
    smoke-test scaffolding (`tests/installer/`).
-2. Wire CI lint + smoke jobs in `ci.yml`.
-3. Update `release.yml`: SHA256SUMS, version pin, asset upload,
-   pin-verification, post-release smoke job.
-4. Add `docs/installation.md`. Update `README.md`, `CHANGELOG.md`,
+3. Wire CI lint + smoke jobs in `ci.yml`.
+4. Update `release.yml` (release job): SHA256SUMS, version pin,
+   asset upload, pin-verification, post-release smoke job.
+5. Add `docs/installation.md`. Update `README.md`, `CHANGELOG.md`,
    `RELEASING.md`.
-5. Cut a prerelease tag (`v0.2.1-rc1` or similar), run the one-time
+6. Cut a prerelease tag (`v0.2.1-rc1` or similar), run the one-time
    manual validation, then merge.
