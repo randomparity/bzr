@@ -71,5 +71,38 @@ function Test-SuccessPath {
     }
 }
 
+function Test-ChecksumMismatch {
+    $work = New-Item -ItemType Directory -Path (Join-Path $env:TEMP ("bzr-smoke-" + [Guid]::NewGuid())) -Force
+    try {
+        $fixtures = New-Item -ItemType Directory -Path (Join-Path $work 'releases\v0.0.0-test') -Force
+        $installDir = Join-Path $work 'bin'
+        $target = Get-NativeTarget
+        if (-not $target) { Write-Host "smoke: skipping checksum_mismatch (unsupported host)"; return }
+        New-Fixtures -Dir $fixtures.FullName -Tag 'v0.0.0-test' -Target $target
+        # Corrupt the archive after sums were generated.
+        Add-Content -Path (Join-Path $fixtures.FullName "bzr-v0.0.0-test-$target.zip") -Value 'tampered'
+
+        $env:BZR_BASE_URL = Convert-PathToFileUri (Join-Path $work 'releases')
+        $env:BZR_VERSION = 'v0.0.0-test'
+        $env:BZR_INSTALL_DIR = $installDir
+        $env:BZR_SKIP_SMOKE = '1'
+        try {
+            & powershell -NoProfile -ExecutionPolicy Bypass -File $InstallPs1 *>$null
+            $rc = $LASTEXITCODE
+        } finally {
+            Remove-Item Env:BZR_BASE_URL, Env:BZR_VERSION, Env:BZR_INSTALL_DIR, Env:BZR_SKIP_SMOKE -ErrorAction SilentlyContinue
+        }
+
+        if ($rc -ne 5) { throw "smoke: expected exit 5 (checksum mismatch), got $rc" }
+        if (Test-Path (Join-Path $installDir 'bzr.exe')) {
+            throw "smoke: bzr.exe should NOT be installed when checksum fails"
+        }
+        Write-Host "smoke: checksum_mismatch OK"
+    } finally {
+        Remove-Item -Recurse -Force $work
+    }
+}
+
 Test-SuccessPath
+Test-ChecksumMismatch
 Write-Host "smoke: all sub-tests passed"
