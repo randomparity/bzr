@@ -10,12 +10,12 @@ if (-not (Test-Path $InstallPs1)) {
     exit 1
 }
 
-function New-Fixtures {
+function Build-Fixture {
     param([string]$Dir, [string]$Tag, [string]$Target)
     $staging = "bzr-$Tag-$Target"
     $stagingDir = Join-Path $Dir $staging
     New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
-    # Stub bzr.exe — content doesn't have to be runnable when BZR_SKIP_SMOKE=1
+    # Stub bzr.exe -- content doesn't have to be runnable when BZR_SKIP_SMOKE=1
     Set-Content -Path (Join-Path $stagingDir 'bzr.exe') -Value 'fake bzr binary' -NoNewline
     Set-Content -Path (Join-Path $stagingDir 'LICENSE') -Value 'fake LICENSE' -NoNewline
     Set-Content -Path (Join-Path $stagingDir 'README.md') -Value 'fake README' -NoNewline
@@ -48,8 +48,8 @@ function Test-SuccessPath {
         $fixtures = New-Item -ItemType Directory -Path (Join-Path $work 'releases\v0.0.0-test') -Force
         $installDir = Join-Path $work 'bin'
         $target = Get-NativeTarget
-        if (-not $target) { Write-Host "smoke: skipping success_path (unsupported host)"; return }
-        New-Fixtures -Dir $fixtures.FullName -Tag 'v0.0.0-test' -Target $target
+        if (-not $target) { [Console]::Error.WriteLine("smoke: skipping success_path (unsupported host)"); return }
+        Build-Fixture -Dir $fixtures.FullName -Tag 'v0.0.0-test' -Target $target
 
         $env:BZR_BASE_URL = Convert-PathToFileUri (Join-Path $work 'releases')
         $env:BZR_VERSION = 'v0.0.0-test'
@@ -65,7 +65,7 @@ function Test-SuccessPath {
         if (-not (Test-Path (Join-Path $installDir 'bzr.exe'))) {
             throw "smoke: bzr.exe not installed at $installDir\bzr.exe"
         }
-        Write-Host "smoke: success_path OK"
+        [Console]::Error.WriteLine("smoke: success_path OK")
     } finally {
         Remove-Item -Recurse -Force $work
     }
@@ -77,8 +77,8 @@ function Test-ChecksumMismatch {
         $fixtures = New-Item -ItemType Directory -Path (Join-Path $work 'releases\v0.0.0-test') -Force
         $installDir = Join-Path $work 'bin'
         $target = Get-NativeTarget
-        if (-not $target) { Write-Host "smoke: skipping checksum_mismatch (unsupported host)"; return }
-        New-Fixtures -Dir $fixtures.FullName -Tag 'v0.0.0-test' -Target $target
+        if (-not $target) { [Console]::Error.WriteLine("smoke: skipping checksum_mismatch (unsupported host)"); return }
+        Build-Fixture -Dir $fixtures.FullName -Tag 'v0.0.0-test' -Target $target
         # Corrupt the archive after sums were generated.
         Add-Content -Path (Join-Path $fixtures.FullName "bzr-v0.0.0-test-$target.zip") -Value 'tampered'
 
@@ -97,7 +97,7 @@ function Test-ChecksumMismatch {
         if (Test-Path (Join-Path $installDir 'bzr.exe')) {
             throw "smoke: bzr.exe should NOT be installed when checksum fails"
         }
-        Write-Host "smoke: checksum_mismatch OK"
+        [Console]::Error.WriteLine("smoke: checksum_mismatch OK")
     } finally {
         Remove-Item -Recurse -Force $work
     }
@@ -121,7 +121,7 @@ function Test-UnsupportedTarget {
         }
 
         if ($rc -ne 2) { throw "smoke: expected exit 2 (unsupported), got $rc" }
-        Write-Host "smoke: unsupported_target OK"
+        [Console]::Error.WriteLine("smoke: unsupported_target OK")
     } finally {
         Remove-Item -Recurse -Force $work
     }
@@ -130,4 +130,4 @@ function Test-UnsupportedTarget {
 Test-SuccessPath
 Test-ChecksumMismatch
 Test-UnsupportedTarget
-Write-Host "smoke: all sub-tests passed"
+[Console]::Error.WriteLine("smoke: all sub-tests passed")

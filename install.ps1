@@ -13,7 +13,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Force TLS 1.2 — PS 5.1 defaults to SSL3/TLS1.0 which fails against GitHub.
+# Force TLS 1.2 -- PS 5.1 defaults to SSL3/TLS1.0 which fails against GitHub.
 [Net.ServicePointManager]::SecurityProtocol =
     [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
@@ -81,7 +81,7 @@ $sumsUrl = "$BaseUrl/$tag/SHA256SUMS"
 
 $work = New-Item -ItemType Directory -Path (Join-Path $env:TEMP ("bzr-install-" + [Guid]::NewGuid())) -Force
 try {
-    Write-Host "install.ps1: downloading $archiveUrl"
+    [Console]::Error.WriteLine("install.ps1: downloading $archiveUrl")
     try {
         Invoke-WebRequest -UseBasicParsing -Uri $archiveUrl -OutFile (Join-Path $work $archive)
         Invoke-WebRequest -UseBasicParsing -Uri $sumsUrl    -OutFile (Join-Path $work 'SHA256SUMS')
@@ -117,17 +117,17 @@ try {
         }
     }
 
-    Write-Host "install.ps1: installed bzr to $BzrInstallDir\bzr.exe"
+    [Console]::Error.WriteLine("install.ps1: installed bzr to $BzrInstallDir\bzr.exe")
 
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     $procPath = $env:Path
     if (($userPath -notlike "*$BzrInstallDir*") -and ($procPath -notlike "*$BzrInstallDir*")) {
-        Write-Host @"
+        [Console]::Error.WriteLine(@"
 install.ps1: $BzrInstallDir is not on your PATH. Add it (current user, persistent):
   [Environment]::SetEnvironmentVariable('Path',
     [Environment]::GetEnvironmentVariable('Path','User') + ';$BzrInstallDir',
     'User')
-"@
+"@)
     }
 } finally {
     Remove-Item -Recurse -Force $work
