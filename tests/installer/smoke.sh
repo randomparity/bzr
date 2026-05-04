@@ -75,5 +75,41 @@ test_success_path() {
   echo "smoke: success_path OK"
 }
 
+test_checksum_mismatch() {
+  td="$WORKDIR/checksum"
+  mkdir -p "$td"
+  fixtures="$td/releases/v0.0.0-test"
+  install_dir="$td/bin"
+  mkdir -p "$fixtures"
+  target="$(detect_native_target)"
+  if [ -z "$target" ]; then
+    echo "smoke: skipping checksum_mismatch on unsupported host" >&2
+    return 0
+  fi
+  mkfixtures "$fixtures" "v0.0.0-test" "$target"
+  # Corrupt the archive after sums were generated.
+  echo "tampered" >>"$fixtures/bzr-v0.0.0-test-$target.tar.gz"
+
+  set +e
+  BZR_BASE_URL="file://$td/releases" \
+    BZR_VERSION="v0.0.0-test" \
+    BZR_INSTALL_DIR="$install_dir" \
+    BZR_SKIP_SMOKE=1 \
+    sh "$INSTALL_SH" >/dev/null 2>&1
+  rc=$?
+  set -e
+
+  if [ "$rc" != "5" ]; then
+    echo "smoke: expected exit 5 (checksum mismatch), got $rc" >&2
+    return 1
+  fi
+  if [ -e "$install_dir/bzr" ]; then
+    echo "smoke: bzr should NOT be installed when checksum fails" >&2
+    return 1
+  fi
+  echo "smoke: checksum_mismatch OK"
+}
+
 test_success_path
+test_checksum_mismatch
 echo "smoke: all sub-tests passed"
