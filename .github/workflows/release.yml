@@ -163,7 +163,7 @@ jobs:
           Copy-Item LICENSE, README.md "$STAGING\"
           New-Item -ItemType Directory -Path "$STAGING\man\man1"
           Copy-Item "man\man1\*.1" "$STAGING\man\man1\"
-          Compress-Archive -Path "$STAGING\*" -DestinationPath "$STAGING.zip"
+          Compress-Archive -Path $STAGING -DestinationPath "$STAGING.zip"
         shell: pwsh
 
       - name: Install cargo-deb
