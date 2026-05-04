@@ -189,7 +189,9 @@ jobs:
         shell: pwsh
         run: |
           Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
-          $diagnostics = Invoke-ScriptAnalyzer -Path install.ps1, tests/installer/smoke.ps1 -Severity Warning
+          $diagnostics = @()
+          $diagnostics += Invoke-ScriptAnalyzer -Path install.ps1 -Severity Warning
+          $diagnostics += Invoke-ScriptAnalyzer -Path tests/installer/smoke.ps1 -Severity Warning
           if ($diagnostics) {
             $diagnostics | Format-Table
             exit 1

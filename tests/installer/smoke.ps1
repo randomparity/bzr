@@ -133,3 +133,7 @@ Test-SuccessPath
 Test-ChecksumMismatch
 Test-UnsupportedTarget
 [Console]::Error.WriteLine("smoke: all sub-tests passed")
+# Explicit clean exit: each Test-* invokes install.ps1 as a subprocess
+# whose non-zero exit codes (intentionally tested) leave $LASTEXITCODE
+# set. Without this, pwsh inherits the residual code at script end.
+exit 0
