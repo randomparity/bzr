@@ -21,18 +21,22 @@ GITHUB_API="https://api.github.com/repos/randomparity/bzr/releases/latest"
 err() { printf 'install.sh: %s\n' "$*" >&2; }
 
 require_cmd() {
-  command -v "$1" >/dev/null 2>&1 || { err "missing required command: $1"; exit 3; }
+  command -v "$1" >/dev/null 2>&1 || {
+    err "missing required command: $1"
+    exit 3
+  }
 }
 
 detect_target() {
-  os="$(uname -s)"; arch="$(uname -m)"
+  os="$(uname -s)"
+  arch="$(uname -m)"
   case "$os/$arch" in
-    Linux/x86_64)              echo x86_64-unknown-linux-gnu ;;
-    Linux/aarch64|Linux/arm64) echo aarch64-unknown-linux-gnu ;;
-    Linux/ppc64le)             echo powerpc64le-unknown-linux-gnu ;;
-    Linux/s390x)               echo s390x-unknown-linux-gnu ;;
-    Darwin/arm64)              echo aarch64-apple-darwin ;;
-    *) return 1 ;;
+  Linux/x86_64) echo x86_64-unknown-linux-gnu ;;
+  Linux/aarch64 | Linux/arm64) echo aarch64-unknown-linux-gnu ;;
+  Linux/ppc64le) echo powerpc64le-unknown-linux-gnu ;;
+  Linux/s390x) echo s390x-unknown-linux-gnu ;;
+  Darwin/arm64) echo aarch64-apple-darwin ;;
+  *) return 1 ;;
   esac
 }
 
@@ -50,7 +54,8 @@ http_get() {
 
 resolve_version() {
   if [ -n "$BZR_VERSION" ]; then
-    echo "$BZR_VERSION"; return
+    echo "$BZR_VERSION"
+    return
   fi
   tmpfile="$(mktemp)"
   if ! http_get "$GITHUB_API" "$tmpfile" 2>/dev/null; then
@@ -70,7 +75,9 @@ resolve_version() {
 
 verify_sha256() {
   # $1 = sums file (relative paths), $2 = filename to verify, $3 = working dir
-  sums="$1"; fname="$2"; dir="$3"
+  sums="$1"
+  fname="$2"
+  dir="$3"
   # Match the filename at end-of-line; strip any leading './' so sha256sum -c
   # finds the file by bare name (sha256sum ./*.tar.gz produces './foo' entries).
   line="$(grep "$fname\$" "$sums" | sed 's|  \./|  |' || true)"
@@ -90,10 +97,12 @@ main() {
   require_cmd mktemp
   require_cmd tar
   command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1 || {
-    err "neither curl nor wget is installed"; exit 3;
+    err "neither curl nor wget is installed"
+    exit 3
   }
   command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 || {
-    err "neither sha256sum nor shasum is installed"; exit 3;
+    err "neither sha256sum nor shasum is installed"
+    exit 3
   }
 
   target="$(detect_target)" || {
@@ -114,12 +123,24 @@ main() {
   trap 'rm -rf "$workdir"' EXIT INT TERM
 
   printf 'install.sh: downloading %s\n' "$archive_url" >&2
-  http_get "$archive_url" "$workdir/$archive" || { err "download failed: $archive_url"; exit 4; }
-  http_get "$sums_url"    "$workdir/SHA256SUMS" || { err "download failed: $sums_url"; exit 4; }
+  http_get "$archive_url" "$workdir/$archive" || {
+    err "download failed: $archive_url"
+    exit 4
+  }
+  http_get "$sums_url" "$workdir/SHA256SUMS" || {
+    err "download failed: $sums_url"
+    exit 4
+  }
 
-  verify_sha256 "$workdir/SHA256SUMS" "$archive" "$workdir" || { err "SHA-256 verification failed"; exit 5; }
+  verify_sha256 "$workdir/SHA256SUMS" "$archive" "$workdir" || {
+    err "SHA-256 verification failed"
+    exit 5
+  }
 
-  (cd "$workdir" && tar xzf "$archive") || { err "tar extraction failed"; exit 6; }
+  (cd "$workdir" && tar xzf "$archive") || {
+    err "tar extraction failed"
+    exit 6
+  }
 
   mkdir -p "$BZR_INSTALL_DIR"
   cp "$workdir/bzr-$tag-$target/bzr" "$BZR_INSTALL_DIR/bzr"

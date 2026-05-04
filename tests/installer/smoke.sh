@@ -17,32 +17,35 @@ trap cleanup EXIT
 
 mkfixtures() {
   # $1 = fixtures dir, $2 = tag, $3 = target
-  fix="$1"; tag="$2"; target="$3"
+  fix="$1"
+  tag="$2"
+  target="$3"
   staging="bzr-$tag-$target"
   mkdir -p "$fix/$staging"
-  cat > "$fix/$staging/bzr" <<'STUB'
+  cat >"$fix/$staging/bzr" <<'STUB'
 #!/bin/sh
 echo "bzr v0.0.0-test"
 STUB
   chmod 0755 "$fix/$staging/bzr"
-  echo "fake LICENSE" > "$fix/$staging/LICENSE"
-  echo "fake README" > "$fix/$staging/README.md"
+  echo "fake LICENSE" >"$fix/$staging/LICENSE"
+  echo "fake README" >"$fix/$staging/README.md"
   (cd "$fix" && tar czf "$staging.tar.gz" "$staging" && rm -rf "$staging")
   # Generate SHA256SUMS over the tarball.
   if command -v sha256sum >/dev/null 2>&1; then
-    (cd "$fix" && sha256sum ./*.tar.gz > SHA256SUMS)
+    (cd "$fix" && sha256sum ./*.tar.gz >SHA256SUMS)
   else
-    (cd "$fix" && shasum -a 256 ./*.tar.gz > SHA256SUMS)
+    (cd "$fix" && shasum -a 256 ./*.tar.gz >SHA256SUMS)
   fi
 }
 
 detect_native_target() {
-  os="$(uname -s)"; arch="$(uname -m)"
+  os="$(uname -s)"
+  arch="$(uname -m)"
   case "$os/$arch" in
-    Linux/x86_64)  echo x86_64-unknown-linux-gnu ;;
-    Linux/aarch64|Linux/arm64) echo aarch64-unknown-linux-gnu ;;
-    Darwin/arm64)  echo aarch64-apple-darwin ;;
-    *) echo "" ;;
+  Linux/x86_64) echo x86_64-unknown-linux-gnu ;;
+  Linux/aarch64 | Linux/arm64) echo aarch64-unknown-linux-gnu ;;
+  Darwin/arm64) echo aarch64-apple-darwin ;;
+  *) echo "" ;;
   esac
 }
 
@@ -60,12 +63,15 @@ test_success_path() {
   mkfixtures "$fixtures" "v0.0.0-test" "$target"
 
   BZR_BASE_URL="file://$td/releases" \
-  BZR_VERSION="v0.0.0-test" \
-  BZR_INSTALL_DIR="$install_dir" \
-  BZR_SKIP_SMOKE=1 \
+    BZR_VERSION="v0.0.0-test" \
+    BZR_INSTALL_DIR="$install_dir" \
+    BZR_SKIP_SMOKE=1 \
     sh "$INSTALL_SH"
 
-  [ -x "$install_dir/bzr" ] || { echo "smoke: bzr not installed at $install_dir/bzr" >&2; return 1; }
+  [ -x "$install_dir/bzr" ] || {
+    echo "smoke: bzr not installed at $install_dir/bzr" >&2
+    return 1
+  }
   echo "smoke: success_path OK"
 }
 
