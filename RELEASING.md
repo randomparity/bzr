@@ -32,9 +32,17 @@ If `bzr` is already taken, rename the package before publishing. The install com
 
 ## Release checklist
 
-1. Update the version in `Cargo.toml`.
+1. Update the version in `Cargo.toml` to match the tag exactly, including any prerelease suffix:
+   - Stable: `version = "0.2.0"` for tag `v0.2.0`
+   - Release candidate: `version = "0.2.0-rc5"` for tag `v0.2.0-rc5`
+   - Beta / alpha: same pattern (`0.3.0-beta.1`, etc.)
+
+   Cargo's semver supports prerelease identifiers, and `bzr --version` reads from `Cargo.toml`, so keeping the two aligned means the binary always reports the same string as the tag the user installed. The `installer-smoke` job in `release.yml` validates this on every tag push by comparing the running binary's `--version` output against the Cargo.toml field. Prerelease tags are not published to crates.io — `publish-crates.yml`'s `if: !contains(github.ref_name, '-')` gates them out.
+
+   Run `cargo build` (or `cargo check`) after the bump so `Cargo.lock` regenerates with the new version.
+
 2. If `rust-version` changed, update the MSRV badge in `README.md` and the "Requires Rust X+" line in the "From source" install section.
-3. Add a matching dated entry to `CHANGELOG.md`. Entries must use `## [X.Y.Z] - YYYY-MM-DD` exactly — `release.yml` extracts release notes by matching that heading format, and a different format silently produces an empty release body.
+3. Add a matching dated entry to `CHANGELOG.md`. Entries must use `## [X.Y.Z] - YYYY-MM-DD` exactly — `release.yml` extracts release notes by matching that heading format, and a different format silently produces an empty release body. For prereleases, use the full prerelease version (`## [0.2.0-rc5] - 2026-05-04`).
 4. Verify installation docs still match the published crate name.
 5. Run the release checks locally:
 

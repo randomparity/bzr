@@ -10,8 +10,37 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Preflight runs before any side-effecting work (build, package, attest,
+  # release upload, crates.io publish, Homebrew tap bump). It enforces the
+  # RELEASING.md policy that Cargo.toml's version exactly matches the tag,
+  # including any prerelease suffix. If this fails the rest of the workflow
+  # is skipped and no GitHub Release is created -- the operator can delete
+  # the bad tag, fix Cargo.toml, and re-tag.
+  preflight:
+    name: Verify tag matches Cargo.toml
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - name: Compare tag with Cargo.toml version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          cargo_version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          tag_version="${TAG#v}"
+          echo "tag (no v): $tag_version"
+          echo "Cargo.toml: $cargo_version"
+          if [ "$cargo_version" != "$tag_version" ]; then
+            echo "::error::tag/Cargo.toml mismatch -- bump Cargo.toml to match the tag (RELEASING.md step 1)"
+            exit 1
+          fi
+          echo "version alignment: OK"
+
   manpages:
     name: Generate manpages
+    needs: preflight
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -351,6 +380,17 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     steps:
+      # Check out so we can read Cargo.toml's version field. Cargo.toml is the
+      # source of truth for what `bzr --version` prints, so the smoke check
+      # validates the installed binary's output against it. This is robust
+      # whether or not the project carries an rc suffix in Cargo.toml across
+      # the rc cycle.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
+      # The tag-vs-Cargo.toml check is enforced by the `preflight` job before
+      # any build runs, so we don't repeat it here. This step verifies the
+      # downloaded binary's --version output matches Cargo.toml at the tagged
+      # commit -- catches a stale build artifact (Cargo.toml bumped post-build).
       - name: Smoke install.sh
         if: matrix.os == 'ubuntu-latest'
         env:
@@ -360,12 +400,12 @@ jobs:
           export BZR_INSTALL_DIR="$HOME/.local/bin"
           curl -fsSL "https://github.com/randomparity/bzr/releases/download/${TAG}/install.sh" | sh
           installed_version="$("$BZR_INSTALL_DIR/bzr" --version 2>&1)"
+          expected="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
           echo "installed: $installed_version"
-          # bzr --version prints "bzr X.Y.Z[-rcN]"; tag is "vX.Y.Z[-rcN]".
-          version_no_v="${TAG#v}"
+          echo "expected:  $expected"
           case "$installed_version" in
-            *"$version_no_v"*) echo "version match: OK" ;;
-            *) echo "version mismatch: tag=$TAG output=$installed_version" >&2; exit 1 ;;
+            *"$expected"*) echo "binary version: OK" ;;
+            *) echo "binary mismatch: expected=$expected output=$installed_version" >&2; exit 1 ;;
           esac
         shell: bash
 
@@ -378,10 +418,12 @@ jobs:
           $env:BZR_INSTALL_DIR = Join-Path $env:LOCALAPPDATA 'Programs\bzr'
           irm "https://github.com/randomparity/bzr/releases/download/$env:TAG/install.ps1" | iex
           $installed = & (Join-Path $env:BZR_INSTALL_DIR 'bzr.exe') --version
+          $expected = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"' |
+                       Select-Object -First 1).Matches[0].Groups[1].Value
           Write-Host "installed: $installed"
-          $versionNoV = $env:TAG.TrimStart('v')
-          if ($installed -notlike "*$versionNoV*") {
-              Write-Error "version mismatch: tag=$env:TAG output=$installed"
+          Write-Host "expected:  $expected"
+          if ($installed -notlike "*$expected*") {
+              Write-Error "binary mismatch: expected=$expected output=$installed"
               exit 1
           }
-          Write-Host "version match: OK"
+          Write-Host "binary version: OK"
