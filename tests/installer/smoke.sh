@@ -142,7 +142,38 @@ STUB
   echo "smoke: unsupported_target OK"
 }
 
+test_missing_dep() {
+  td="$WORKDIR/missingdep"
+  mkdir -p "$td"
+  install_dir="$td/bin"
+  # Build a minimal PATH that excludes tar but keeps everything else.
+  # We do this by pointing PATH at a curated list of dirs known to contain
+  # required tools but never tar (we'll skip if tar is the only path that
+  # contains it on this host).
+  mkdir -p "$td/sandbox"
+  for tool in sh uname mktemp curl wget sha256sum shasum sed grep cp mkdir chmod head rm; do
+    src="$(command -v "$tool" 2>/dev/null || true)"
+    [ -n "$src" ] && ln -s "$src" "$td/sandbox/$tool"
+  done
+
+  set +e
+  PATH="$td/sandbox" \
+    BZR_VERSION="v0.0.0-test" \
+    BZR_INSTALL_DIR="$install_dir" \
+    BZR_SKIP_SMOKE=1 \
+    sh "$INSTALL_SH" >/dev/null 2>&1
+  rc=$?
+  set -e
+
+  if [ "$rc" != "3" ]; then
+    echo "smoke: expected exit 3 (missing dep), got $rc" >&2
+    return 1
+  fi
+  echo "smoke: missing_dep OK"
+}
+
 test_success_path
 test_checksum_mismatch
 test_unsupported_target
+test_missing_dep
 echo "smoke: all sub-tests passed"
