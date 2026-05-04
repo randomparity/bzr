@@ -176,8 +176,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y shellcheck
-          curl -fsSL https://github.com/mvdan/sh/releases/download/v3.7.0/shfmt_v3.7.0_linux_amd64 -o /usr/local/bin/shfmt
-          sudo chmod +x /usr/local/bin/shfmt
+          curl -fsSL https://github.com/mvdan/sh/releases/download/v3.7.0/shfmt_v3.7.0_linux_amd64 -o /tmp/shfmt
+          sudo install -m 0755 /tmp/shfmt /usr/local/bin/shfmt
 
       - name: Run shellcheck
         run: shellcheck -s sh install.sh tests/installer/smoke.sh

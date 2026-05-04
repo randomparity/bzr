@@ -30,10 +30,14 @@ $GithubApi = 'https://api.github.com/repos/randomparity/bzr/releases/latest'
 
 function Write-Err($msg) { [Console]::Error.WriteLine("install.ps1: $msg") }
 
-function Get-Target {
+function Get-ResolvedArch {
     $arch = $env:PROCESSOR_ARCHITEW6432
     if (-not $arch) { $arch = $env:PROCESSOR_ARCHITECTURE }
-    switch ($arch) {
+    return $arch
+}
+
+function Get-Target {
+    switch (Get-ResolvedArch) {
         'AMD64' { return 'x86_64-pc-windows-msvc' }
         'ARM64' { return 'aarch64-pc-windows-msvc' }
         default { return $null }
@@ -67,7 +71,7 @@ function Get-ExpectedHash {
 # --- main ---
 $target = Get-Target
 if (-not $target) {
-    Write-Err "unsupported platform: $($env:PROCESSOR_ARCHITECTURE)"
+    Write-Err "unsupported platform: $(Get-ResolvedArch)"
     Write-Err "Try one of:"
     Write-Err "  - cargo install bzr --locked"
     Write-Err "  - Homebrew (on macOS/Linux): brew tap randomparity/tap && brew install bzr"

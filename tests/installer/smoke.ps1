@@ -30,8 +30,10 @@ function Build-Fixture {
 }
 
 function Get-NativeTarget {
-    if ($env:PROCESSOR_ARCHITECTURE -eq 'AMD64') { return 'x86_64-pc-windows-msvc' }
-    if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { return 'aarch64-pc-windows-msvc' }
+    $arch = $env:PROCESSOR_ARCHITEW6432
+    if (-not $arch) { $arch = $env:PROCESSOR_ARCHITECTURE }
+    if ($arch -eq 'AMD64') { return 'x86_64-pc-windows-msvc' }
+    if ($arch -eq 'ARM64') { return 'aarch64-pc-windows-msvc' }
     return ''
 }
 
