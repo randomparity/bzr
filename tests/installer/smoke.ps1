@@ -103,6 +103,31 @@ function Test-ChecksumMismatch {
     }
 }
 
+function Test-UnsupportedTarget {
+    $work = New-Item -ItemType Directory -Path (Join-Path $env:TEMP ("bzr-smoke-" + [Guid]::NewGuid())) -Force
+    try {
+        $installDir = Join-Path $work 'bin'
+
+        $env:BZR_VERSION = 'v0.0.0-test'
+        $env:BZR_INSTALL_DIR = $installDir
+        $env:BZR_SKIP_SMOKE = '1'
+        # Force install.ps1 to read this fake arch via PROCESSOR_ARCHITEW6432.
+        $env:PROCESSOR_ARCHITEW6432 = 'IA64'
+        try {
+            & powershell -NoProfile -ExecutionPolicy Bypass -File $InstallPs1 *>$null
+            $rc = $LASTEXITCODE
+        } finally {
+            Remove-Item Env:BZR_VERSION, Env:BZR_INSTALL_DIR, Env:BZR_SKIP_SMOKE, Env:PROCESSOR_ARCHITEW6432 -ErrorAction SilentlyContinue
+        }
+
+        if ($rc -ne 2) { throw "smoke: expected exit 2 (unsupported), got $rc" }
+        Write-Host "smoke: unsupported_target OK"
+    } finally {
+        Remove-Item -Recurse -Force $work
+    }
+}
+
 Test-SuccessPath
 Test-ChecksumMismatch
+Test-UnsupportedTarget
 Write-Host "smoke: all sub-tests passed"
