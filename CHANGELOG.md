@@ -5,14 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.2.0-rc5] - 2026-05-04
+## [0.2.0-rc6] - 2026-05-04
+
+> Same-day re-spin of rc5. rc5's `installer-smoke` job failed
+> against the published release because `Cargo.toml` carried the
+> base version (`0.2.0`) while the tag was `v0.2.0-rc5`, so the
+> smoke check could not verify alignment. rc6 adopts the policy
+> that `Cargo.toml` mirrors the tag exactly (including any
+> prerelease suffix) and adds a release-workflow `preflight` gate
+> that enforces it before any build runs. The installer scripts
+> themselves were verified working in the rc5 logs; rc6 carries
+> the same artifact set with the version-string and CI-gate
+> changes layered on top. Both rc5 and rc6 are dated 2026-05-04
+> because both were cut on the same calendar day.
 
 ### Added
 
-- Installer scripts (`install.sh`, `install.ps1`) for one-line installation
-  from GitHub Releases, with SHA-256 verification against the published
-  `SHA256SUMS` file. Hosted at the `main` branch URL for always-current
-  installs and as release assets pinned to each tag for reproducibility.
+- Installer scripts (`install.sh`, `install.ps1`) for one-line
+  installation from GitHub Releases, with SHA-256 verification
+  against the published `SHA256SUMS` file. Hosted at the `main`
+  branch URL for always-current installs and as release assets
+  pinned to each tag for reproducibility.
+
+### Changed
+
+- `Cargo.toml` and `bzr --version` now carry the prerelease
+  suffix on rc builds (`bzr 0.2.0-rc6` for tag `v0.2.0-rc6`).
+  Earlier rcs shipped with `Cargo.toml` pinned to the base
+  `0.2.0`, so users on rc binaries had no way to tell which rc
+  they had installed from `bzr --version` alone. The new policy
+  is documented in `RELEASING.md` and enforced on every tag push.
 
 ### Fixed
 
@@ -23,6 +45,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### CI
 
+- Add release-workflow `preflight` job that asserts the tag and
+  `Cargo.toml`'s version match exactly before any build, package,
+  attestation, or release upload runs. A misaligned release-prep
+  PR now aborts the workflow up-front instead of being detected
+  after the GitHub Release has already been created and
+  downstream workflows (Homebrew tap auto-bump, etc.) have fired.
+- `installer-smoke` job now compares the installed binary's
+  `--version` output against `Cargo.toml`'s version field rather
+  than the tag string, so it remains correct under any policy
+  variant.
 - Pin nightly to `nightly-2026-05-02` in the Fuzz workflow as a
   workaround for `rustix v0.36.5` (transitively pulled by
   `cargo-fuzz 0.13.1`) failing to compile against newer rustc
