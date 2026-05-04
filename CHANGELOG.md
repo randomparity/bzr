@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.2.0-rc5] - 2026-05-04
 
 ### Added
 
@@ -13,6 +13,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   from GitHub Releases, with SHA-256 verification against the published
   `SHA256SUMS` file. Hosted at the `main` branch URL for always-current
   installs and as release assets pinned to each tag for reproducibility.
+
+### Fixed
+
+- Windows release zip layout now wraps contents in a top-level
+  `bzr-<tag>-<target>/` directory, matching the Unix tarball.
+  Previously the zip stored `bzr.exe`, `LICENSE`, `README.md`,
+  and `man/man1/` at the archive root.
+
+### CI
+
+- Pin nightly to `nightly-2026-05-02` in the Fuzz workflow as a
+  workaround for `rustix v0.36.5` (transitively pulled by
+  `cargo-fuzz 0.13.1`) failing to compile against newer rustc
+  nightlies. Pin will be lifted once `cargo-fuzz` ships a release
+  that drops the affected `rustix` version.
 
 ## [0.2.0-rc4] - 2026-05-02
 
