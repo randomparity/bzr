@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Installer scripts (`install.sh`, `install.ps1`) for one-line installation
+  from GitHub Releases, with SHA-256 verification against the published
+  `SHA256SUMS` file. Hosted at the `main` branch URL for always-current
+  installs and as release assets pinned to each tag for reproducibility.
+
 ## [0.2.0-rc4] - 2026-05-02
 
 ### Fixed
