@@ -29,18 +29,21 @@ jobs:
         with:
           persist-credentials: false
 
+      # Pinned to the last nightly that compiled cargo-fuzz 0.13.1's
+      # transitive `rustix v0.36.5` dep. Newer nightlies dropped the
+      # unstable `rustc_layout_scalar_valid_range_{start,end}` attribute
+      # form rustix 0.36.5 uses. Bump this once cargo-fuzz pulls a
+      # rustix release that compiles on current nightly.
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # nightly
         with:
-          toolchain: nightly
+          toolchain: nightly-2026-05-02
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
         with:
           key: fuzz-${{ matrix.target }}
 
       - name: Install cargo-fuzz
-        uses: taiki-e/install-action@49ba71bf46962339e6e5c0a7a4ec3ed4c8af28ac
-        with:
-          tool: cargo-fuzz
+        run: cargo install cargo-fuzz --locked
 
       - name: Run fuzzer
         run: |
