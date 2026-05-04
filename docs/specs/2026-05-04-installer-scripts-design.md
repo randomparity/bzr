@@ -348,8 +348,8 @@ BZR_VERSION="${BZR_VERSION:-}"
 $BzrVersion = $env:BZR_VERSION
 ```
 
-Add a step in the `release` job (after `Generate SHA256SUMS`,
-before `Create GitHub Release`):
+Add a step in the `release` job **before `Generate SHA256SUMS`**
+(ordering matters — see section 3 below):
 
 ```yaml
 - name: Stage installer scripts (with version baked in)
@@ -375,12 +375,28 @@ files up automatically.
 The `installer-smoke` job (below) also validates the templating
 end-to-end against the real release assets.
 
-### 3. SHA256SUMS
+### 3. SHA256SUMS — reorder, no logic change
 
-**No change.** The existing `Generate SHA256SUMS` step already
-includes every uploaded artifact. The installer scripts read the
-existing `SHA256SUMS` file by name; they do not depend on a
-tag-prefixed filename.
+The existing `Generate SHA256SUMS` step hashes every file in
+`artifacts/` matching the find filter. Today that's the tarballs,
+zips, `.deb`, and `.rpm`. We need it to also cover the new
+`install.sh` and `install.ps1` so:
+
+- A paranoid user can `curl … install.sh | sha256sum` and verify
+  against the published sums before piping to `sh`.
+- The script — which is itself the trust anchor for archive
+  verification — is hashed by the same publish-time pipeline that
+  hashes everything it later validates.
+
+**Required change:** move the existing `Generate SHA256SUMS` step
+**after** the new "Stage installer scripts" step from section 2.
+The step itself does not need editing — its `find . -maxdepth 1
+-type f ! -name 'SHA256SUMS' -printf '%f\n'` glob will pick up
+`install.sh` and `install.ps1` automatically once they're in
+`artifacts/`.
+
+The installer scripts read the existing `SHA256SUMS` file by name;
+they do not depend on a tag-prefixed filename.
 
 ### 4. `installer-smoke` job (post-release)
 
