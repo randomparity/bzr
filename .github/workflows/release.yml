@@ -351,6 +351,13 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     steps:
+      # Check out so we can read Cargo.toml's version field. Cargo.toml is the
+      # source of truth for what `bzr --version` prints, so the smoke check
+      # validates the installed binary's output against it. This is robust
+      # whether or not the project carries an rc suffix in Cargo.toml across
+      # the rc cycle.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
       - name: Smoke install.sh
         if: matrix.os == 'ubuntu-latest'
         env:
@@ -360,12 +367,12 @@ jobs:
           export BZR_INSTALL_DIR="$HOME/.local/bin"
           curl -fsSL "https://github.com/randomparity/bzr/releases/download/${TAG}/install.sh" | sh
           installed_version="$("$BZR_INSTALL_DIR/bzr" --version 2>&1)"
+          expected="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
           echo "installed: $installed_version"
-          # bzr --version prints "bzr X.Y.Z[-rcN]"; tag is "vX.Y.Z[-rcN]".
-          version_no_v="${TAG#v}"
+          echo "expected (from Cargo.toml): $expected"
           case "$installed_version" in
-            *"$version_no_v"*) echo "version match: OK" ;;
-            *) echo "version mismatch: tag=$TAG output=$installed_version" >&2; exit 1 ;;
+            *"$expected"*) echo "version match: OK" ;;
+            *) echo "version mismatch: expected=$expected output=$installed_version" >&2; exit 1 ;;
           esac
         shell: bash
 
@@ -378,10 +385,12 @@ jobs:
           $env:BZR_INSTALL_DIR = Join-Path $env:LOCALAPPDATA 'Programs\bzr'
           irm "https://github.com/randomparity/bzr/releases/download/$env:TAG/install.ps1" | iex
           $installed = & (Join-Path $env:BZR_INSTALL_DIR 'bzr.exe') --version
+          $expected = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"' |
+                       Select-Object -First 1).Matches[0].Groups[1].Value
           Write-Host "installed: $installed"
-          $versionNoV = $env:TAG.TrimStart('v')
-          if ($installed -notlike "*$versionNoV*") {
-              Write-Error "version mismatch: tag=$env:TAG output=$installed"
+          Write-Host "expected (from Cargo.toml): $expected"
+          if ($installed -notlike "*$expected*") {
+              Write-Error "version mismatch: expected=$expected output=$installed"
               exit 1
           }
           Write-Host "version match: OK"
