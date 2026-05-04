@@ -33,7 +33,9 @@ that the pipe-to-shell pattern is defensible.
   surfaces the gap; the matrix change is a separate ticket.
 - PATH mutation by default. No `--add-to-path` flag in v1.
 - Signing (cosign / minisign / GPG). SHA-256 sums are the bar.
-- Homebrew formula, Scoop manifest, AUR, `.deb`/`.rpm` packaging.
+- New downstream packaging channels: Scoop, AUR, `.deb`, `.rpm`.
+  (Homebrew tap automation is in scope — see "Homebrew tap
+  automation" below — because the tap already exists.)
 - A `bzr self update` subcommand.
 - Statically-linked Linux binaries (musl) to remove the `libdbus-1`
   runtime dependency.
@@ -335,6 +337,74 @@ suffix.
 Final asset count per release: 7 archives + 1 sums file + 2 scripts
 = 10 assets.
 
+## Homebrew tap automation
+
+`randomparity/homebrew-tap` already publishes `Formula/bzr.rb` and
+is updated by hand. After every `v*` tag, four target archives need
+new SHA-256s and the `version` field needs to bump. That's a
+mechanical edit that should be automated.
+
+### Approach
+
+Add a job to `release.yml` that runs after `installer-smoke`
+succeeds and uses
+[`mislav/bump-homebrew-formula-action`](https://github.com/mislav/bump-homebrew-formula-action)
+(pinned to a SHA per repo convention) to:
+
+1. Read the new tag from `${GITHUB_REF_NAME}`.
+2. Compute the URL for each of the four formula targets (macOS
+   aarch64 binary, macOS Intel source tarball, Linux aarch64 binary,
+   Linux x86_64 binary).
+3. Pull each archive's SHA-256 from the just-published
+   `bzr-<tag>-SHA256SUMS` asset (already produced by section 1 of
+   the release-workflow changes), so we never recompute them.
+4. Edit `homebrew-tap/Formula/bzr.rb` and open a PR (not a direct
+   push) against the tap repo's `main`. The PR is the audit trail.
+
+Cross-repo writes need a fine-grained PAT on the user account with
+`contents: write` and `pull-requests: write` scoped only to
+`randomparity/homebrew-tap`. Stored in `bzr` repo secrets as
+`HOMEBREW_TAP_TOKEN`. The token is exposed only to the tap-bump
+job, not to build/test jobs. (Operator action: create the PAT and
+add it to repo secrets before the first run.)
+
+### Trigger gate
+
+The bump job runs only on **stable** tags (no `-rcN`/`-pre`
+suffix). Prereleases are validated by the installer smoke test but
+do not advance the tap — Homebrew users get one bump per stable
+release.
+
+### Skip switch
+
+The job is gated by an env var (`HOMEBREW_BUMP=true`, default in
+`release.yml`). Operators can disable it for one release by setting
+it to `false` in a workflow file edit, useful if the tap formula
+needs manual surgery.
+
+### Pre-existing formula bugs (must fix before automation lands)
+
+The current `Formula/bzr.rb` has issues that automation will not
+catch — they need a one-time manual cleanup before the bump action
+is wired up:
+
+- `man1.install Dir["man/man1/*.1"]` exists in the binary install
+  branches, but no man pages ship in any release archive. Remove
+  the line.
+- The Intel macOS source-build branch calls `cargo run -p xtask
+  ... man ...`, but this workspace has no `xtask` crate. Replace
+  the whole branch with a plain `cargo install --locked --root
+  prefix --path .` and drop the man-page step.
+
+### Out of scope (still)
+
+- Generating man pages and shipping them in release archives.
+  That's a separate piece of work; if/when it lands, the formula
+  can re-add `man1.install` and the bump action will keep working.
+- Homebrew core submission. The tap is a personal tap; submitting
+  to homebrew-core has its own process and is not part of this
+  feature.
+
 ## Documentation changes
 
 ### `docs/installation.md` (new)
@@ -456,6 +526,12 @@ script from a clean host on a real prerelease tag.
 - **Windows ARM64 untested in CI:** GitHub does not yet offer ARM64
   Windows runners. We trust the build artifact and rely on user
   reports.
+- **`HOMEBREW_TAP_TOKEN` lifecycle:** fine-grained PATs expire (max
+  one year). When the token expires, the tap-bump job will fail
+  silently from the user's perspective (CI red, but bzr release
+  still succeeds). Mitigation: documented rotation step in
+  `RELEASING.md`; the bump job is non-blocking for the rest of the
+  release.
 
 ## Implementation order
 
@@ -469,5 +545,12 @@ script from a clean host on a real prerelease tag.
    asset upload, pin-verification, post-release smoke job.
 5. Add `docs/installation.md`. Update `README.md`, `CHANGELOG.md`,
    `RELEASING.md`.
-6. Cut a prerelease tag (`v0.2.1-rc1` or similar), run the one-time
-   manual validation, then merge.
+6. (Out-of-band, before merging) Manually clean up
+   `randomparity/homebrew-tap`'s `Formula/bzr.rb`: drop the dead
+   man/xtask references and bump to a working `v0.2.0` formula.
+7. Wire the `bump-homebrew-formula-action` job in `release.yml`
+   (gated on stable tags, behind `HOMEBREW_BUMP=true`). Requires
+   `HOMEBREW_TAP_TOKEN` to be set in repo secrets.
+8. Cut a prerelease tag (`v0.2.1-rc1` or similar), run the one-time
+   manual validation, then merge. Cut the next stable tag to
+   exercise the tap-bump job end-to-end.
