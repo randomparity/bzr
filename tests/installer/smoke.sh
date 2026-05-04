@@ -11,8 +11,8 @@ if [ ! -f "$INSTALL_SH" ]; then
   exit 1
 fi
 
-WORKDIR=""
-cleanup() { [ -n "$WORKDIR" ] && rm -rf "$WORKDIR"; }
+WORKDIR="$(mktemp -d)"
+cleanup() { rm -rf "$WORKDIR"; }
 trap cleanup EXIT
 
 mkfixtures() {
@@ -47,9 +47,10 @@ detect_native_target() {
 }
 
 test_success_path() {
-  WORKDIR="$(mktemp -d)"
-  fixtures="$WORKDIR/releases/v0.0.0-test"
-  install_dir="$WORKDIR/bin"
+  td="$WORKDIR/success"
+  mkdir -p "$td"
+  fixtures="$td/releases/v0.0.0-test"
+  install_dir="$td/bin"
   mkdir -p "$fixtures"
   target="$(detect_native_target)"
   if [ -z "$target" ]; then
@@ -58,7 +59,7 @@ test_success_path() {
   fi
   mkfixtures "$fixtures" "v0.0.0-test" "$target"
 
-  BZR_BASE_URL="file://$WORKDIR/releases" \
+  BZR_BASE_URL="file://$td/releases" \
   BZR_VERSION="v0.0.0-test" \
   BZR_INSTALL_DIR="$install_dir" \
   BZR_SKIP_SMOKE=1 \

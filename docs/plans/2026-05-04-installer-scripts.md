@@ -91,8 +91,8 @@ if [ ! -f "$INSTALL_SH" ]; then
   exit 1
 fi
 
-WORKDIR=""
-cleanup() { [ -n "$WORKDIR" ] && rm -rf "$WORKDIR"; }
+WORKDIR="$(mktemp -d)"
+cleanup() { rm -rf "$WORKDIR"; }
 trap cleanup EXIT
 
 mkfixtures() {
@@ -110,9 +110,9 @@ STUB
   (cd "$fix" && tar czf "$staging.tar.gz" "$staging" && rm -rf "$staging")
   # Generate SHA256SUMS over the tarball.
   if command -v sha256sum >/dev/null 2>&1; then
-    (cd "$fix" && sha256sum *.tar.gz > SHA256SUMS)
+    (cd "$fix" && sha256sum ./*.tar.gz > SHA256SUMS)
   else
-    (cd "$fix" && shasum -a 256 *.tar.gz > SHA256SUMS)
+    (cd "$fix" && shasum -a 256 ./*.tar.gz > SHA256SUMS)
   fi
 }
 
@@ -127,9 +127,10 @@ detect_native_target() {
 }
 
 test_success_path() {
-  WORKDIR="$(mktemp -d)"
-  fixtures="$WORKDIR/releases/v0.0.0-test"
-  install_dir="$WORKDIR/bin"
+  td="$WORKDIR/success"
+  mkdir -p "$td"
+  fixtures="$td/releases/v0.0.0-test"
+  install_dir="$td/bin"
   mkdir -p "$fixtures"
   target="$(detect_native_target)"
   if [ -z "$target" ]; then
@@ -138,7 +139,7 @@ test_success_path() {
   fi
   mkfixtures "$fixtures" "v0.0.0-test" "$target"
 
-  BZR_BASE_URL="file://$WORKDIR/releases" \
+  BZR_BASE_URL="file://$td/releases" \
   BZR_VERSION="v0.0.0-test" \
   BZR_INSTALL_DIR="$install_dir" \
   BZR_SKIP_SMOKE=1 \
@@ -378,9 +379,10 @@ Add the following before the final `test_success_path` invocation block at the b
 
 ```sh
 test_checksum_mismatch() {
-  WORKDIR="$(mktemp -d)"
-  fixtures="$WORKDIR/releases/v0.0.0-test"
-  install_dir="$WORKDIR/bin"
+  td="$WORKDIR/checksum"
+  mkdir -p "$td"
+  fixtures="$td/releases/v0.0.0-test"
+  install_dir="$td/bin"
   mkdir -p "$fixtures"
   target="$(detect_native_target)"
   if [ -z "$target" ]; then
@@ -392,7 +394,7 @@ test_checksum_mismatch() {
   echo "tampered" >> "$fixtures/bzr-v0.0.0-test-$target.tar.gz"
 
   set +e
-  BZR_BASE_URL="file://$WORKDIR/releases" \
+  BZR_BASE_URL="file://$td/releases" \
   BZR_VERSION="v0.0.0-test" \
   BZR_INSTALL_DIR="$install_dir" \
   BZR_SKIP_SMOKE=1 \
@@ -447,11 +449,12 @@ Add to `tests/installer/smoke.sh` (above the runner block):
 
 ```sh
 test_unsupported_target() {
-  WORKDIR="$(mktemp -d)"
-  install_dir="$WORKDIR/bin"
-  mkdir -p "$WORKDIR/stub"
+  td="$WORKDIR/unsupported"
+  mkdir -p "$td"
+  install_dir="$td/bin"
+  mkdir -p "$td/stub"
   # Stub `uname` that reports an unsupported arch.
-  cat > "$WORKDIR/stub/uname" <<'STUB'
+  cat > "$td/stub/uname" <<'STUB'
 #!/bin/sh
 case "$1" in
   -s) echo Linux ;;
@@ -459,10 +462,10 @@ case "$1" in
   *)  echo Linux ;;
 esac
 STUB
-  chmod +x "$WORKDIR/stub/uname"
+  chmod +x "$td/stub/uname"
 
   set +e
-  PATH="$WORKDIR/stub:$PATH" \
+  PATH="$td/stub:$PATH" \
   BZR_VERSION="v0.0.0-test" \
   BZR_INSTALL_DIR="$install_dir" \
   BZR_SKIP_SMOKE=1 \
@@ -514,20 +517,21 @@ Add to `tests/installer/smoke.sh` (above the runner block):
 
 ```sh
 test_missing_dep() {
-  WORKDIR="$(mktemp -d)"
-  install_dir="$WORKDIR/bin"
+  td="$WORKDIR/missingdep"
+  mkdir -p "$td"
+  install_dir="$td/bin"
   # Build a minimal PATH that excludes tar but keeps everything else.
   # We do this by pointing PATH at a curated list of dirs known to contain
   # required tools but never tar (we'll skip if tar is the only path that
   # contains it on this host).
-  mkdir -p "$WORKDIR/sandbox"
+  mkdir -p "$td/sandbox"
   for tool in sh uname mktemp curl wget sha256sum shasum sed grep cp mkdir chmod head rm; do
     src="$(command -v "$tool" 2>/dev/null || true)"
-    [ -n "$src" ] && ln -s "$src" "$WORKDIR/sandbox/$tool"
+    [ -n "$src" ] && ln -s "$src" "$td/sandbox/$tool"
   done
 
   set +e
-  PATH="$WORKDIR/sandbox" \
+  PATH="$td/sandbox" \
   BZR_VERSION="v0.0.0-test" \
   BZR_INSTALL_DIR="$install_dir" \
   BZR_SKIP_SMOKE=1 \
