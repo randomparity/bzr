@@ -110,6 +110,39 @@ test_checksum_mismatch() {
   echo "smoke: checksum_mismatch OK"
 }
 
+test_unsupported_target() {
+  td="$WORKDIR/unsupported"
+  mkdir -p "$td"
+  install_dir="$td/bin"
+  mkdir -p "$td/stub"
+  # Stub `uname` that reports an unsupported arch.
+  cat >"$td/stub/uname" <<'STUB'
+#!/bin/sh
+case "$1" in
+  -s) echo Linux ;;
+  -m) echo riscv64 ;;
+  *)  echo Linux ;;
+esac
+STUB
+  chmod +x "$td/stub/uname"
+
+  set +e
+  PATH="$td/stub:$PATH" \
+    BZR_VERSION="v0.0.0-test" \
+    BZR_INSTALL_DIR="$install_dir" \
+    BZR_SKIP_SMOKE=1 \
+    sh "$INSTALL_SH" >/dev/null 2>&1
+  rc=$?
+  set -e
+
+  if [ "$rc" != "2" ]; then
+    echo "smoke: expected exit 2 (unsupported), got $rc" >&2
+    return 1
+  fi
+  echo "smoke: unsupported_target OK"
+}
+
 test_success_path
 test_checksum_mismatch
+test_unsupported_target
 echo "smoke: all sub-tests passed"
