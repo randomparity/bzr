@@ -69,6 +69,11 @@ Pushing a `v*` tag triggers `.github/workflows/release.yml`, which:
 - Runs `lintian` and `rpmlint` (warn-only) on the resulting packages
 - Smoke-tests `dpkg`/`dnf` install of the x86_64 packages in containers
 - Generates a `SHA256SUMS` file covering every artifact (tarballs, zips, `.deb`, `.rpm`) for download verification
+- Stages `install.sh` and `install.ps1` as release assets, with the release
+  tag baked into the `BZR_VERSION` default
+- Runs an `installer-smoke` job after the release that re-runs each script
+  against the real GitHub Releases CDN (Ubuntu and Windows runners) and
+  verifies `bzr --version` matches the released tag
 - Creates a GitHub Release for the tag with all artifacts attached
 
 If you change runtime dependencies (e.g., add a new linked native library), update the
