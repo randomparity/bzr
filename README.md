@@ -39,7 +39,7 @@ the more you get for free (manpages, uninstall, dependency tracking):
 - **macOS or Linux with Homebrew** — use the [Homebrew tap](#homebrew-macos-linux).
 - **Debian / Ubuntu** — install the [`.deb` package](#linux-packages-deb--rpm) attached to the latest release.
 - **Fedora / RHEL / CentOS Stream / Rocky** — install the [`.rpm` package](#linux-packages-deb--rpm).
-- **Windows, or any Linux distro without `apt`/`dnf`** — download a [pre-built tarball or zip](#pre-built-binaries).
+- **Windows, or any Linux distro without `apt`/`dnf`** — use the [one-line installer](#pre-built-binaries) or download a pre-built tarball or zip.
 - **Have Rust installed and want to build it yourself** — `cargo install bzr --locked` ([from crates.io](#from-cratesio)) or `cargo install --path . --locked` ([from source](#from-source)).
 
 The first three install manpages and license/doc files automatically.
@@ -104,7 +104,43 @@ backend; `apt`/`dnf` resolves it automatically.
 
 ### Pre-built binaries
 
-Download the tarball or zip for your platform from
+For a one-line install on Linux, macOS arm64, or Windows:
+
+**Linux / macOS (Apple Silicon):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/randomparity/bzr/main/install.sh | sh
+```
+
+**Windows (x86_64 / ARM64):**
+
+```powershell
+irm https://raw.githubusercontent.com/randomparity/bzr/main/install.ps1 | iex
+```
+
+The installer detects your platform, verifies the SHA-256 checksum
+against the published `SHA256SUMS`, and drops the binary in
+`~/.local/bin` (Unix) or `%LOCALAPPDATA%\Programs\bzr` (Windows).
+It never modifies PATH or system files.
+
+Env var overrides:
+
+- `BZR_VERSION=vX.Y.Z` — pin to a specific release tag (default:
+  latest stable).
+- `BZR_INSTALL_DIR=/some/path` — change the install directory.
+
+To pin both the script and the binary to a specific release (e.g.
+for reproducible builds):
+
+```bash
+curl -fsSL https://github.com/randomparity/bzr/releases/download/vX.Y.Z/install.sh | sh
+```
+
+Manpages are not installed by the script; see [Manual pages](#manual-pages).
+
+#### Manual download
+
+Or download the tarball or zip directly from
 [GitHub Releases](https://github.com/randomparity/bzr/releases/latest).
 
 Available builds: Linux (x86_64, aarch64, ppc64le, s390x), macOS arm64

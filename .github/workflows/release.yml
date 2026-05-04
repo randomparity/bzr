@@ -163,7 +163,7 @@ jobs:
           Copy-Item LICENSE, README.md "$STAGING\"
           New-Item -ItemType Directory -Path "$STAGING\man\man1"
           Copy-Item "man\man1\*.1" "$STAGING\man\man1\"
-          Compress-Archive -Path "$STAGING\*" -DestinationPath "$STAGING.zip"
+          Compress-Archive -Path $STAGING -DestinationPath "$STAGING.zip"
         shell: pwsh
 
       - name: Install cargo-deb
@@ -264,6 +264,35 @@ jobs:
           pattern: bzr-*-*
           merge-multiple: true
 
+      - name: Stage installer scripts (with version baked in)
+        working-directory: artifacts
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PYEOF'
+          import os, pathlib
+          tag = os.environ["TAG"]
+
+          sh_marker = 'BZR_VERSION="${BZR_VERSION:-}"'
+          sh_replace = 'BZR_VERSION="${BZR_VERSION:-' + tag + '}"'
+          sh_in = pathlib.Path("../install.sh").read_text()
+          sh_out = sh_in.replace(sh_marker, sh_replace, 1)
+          assert sh_out != sh_in, f"install.sh marker line not found: {sh_marker!r}"
+          pathlib.Path("install.sh").write_text(sh_out)
+
+          ps_marker = "$BzrVersion = $env:BZR_VERSION"
+          ps_replace = (
+              "$BzrVersion = if ($env:BZR_VERSION) "
+              "{ $env:BZR_VERSION } else { '" + tag + "' }"
+          )
+          ps_in = pathlib.Path("../install.ps1").read_text()
+          ps_out = ps_in.replace(ps_marker, ps_replace, 1)
+          assert ps_out != ps_in, f"install.ps1 marker line not found: {ps_marker!r}"
+          pathlib.Path("install.ps1").write_text(ps_out)
+          PYEOF
+          chmod +x install.sh
+
       - name: Generate SHA256SUMS
         working-directory: artifacts
         run: |
@@ -310,3 +339,49 @@ jobs:
             --notes-file "${{ steps.notes.outputs.notes_file }}" \
             $PRERELEASE \
             artifacts/*
+
+  installer-smoke:
+    name: Installer smoke ${{ matrix.os }}
+    needs: release
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Smoke install.sh
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          export BZR_INSTALL_DIR="$HOME/.local/bin"
+          curl -fsSL "https://github.com/randomparity/bzr/releases/download/${TAG}/install.sh" | sh
+          installed_version="$("$BZR_INSTALL_DIR/bzr" --version 2>&1)"
+          echo "installed: $installed_version"
+          # bzr --version prints "bzr X.Y.Z[-rcN]"; tag is "vX.Y.Z[-rcN]".
+          version_no_v="${TAG#v}"
+          case "$installed_version" in
+            *"$version_no_v"*) echo "version match: OK" ;;
+            *) echo "version mismatch: tag=$TAG output=$installed_version" >&2; exit 1 ;;
+          esac
+        shell: bash
+
+      - name: Smoke install.ps1
+        if: matrix.os == 'windows-latest'
+        env:
+          TAG: ${{ github.ref_name }}
+        shell: pwsh
+        run: |
+          $env:BZR_INSTALL_DIR = Join-Path $env:LOCALAPPDATA 'Programs\bzr'
+          irm "https://github.com/randomparity/bzr/releases/download/$env:TAG/install.ps1" | iex
+          $installed = & (Join-Path $env:BZR_INSTALL_DIR 'bzr.exe') --version
+          Write-Host "installed: $installed"
+          $versionNoV = $env:TAG.TrimStart('v')
+          if ($installed -notlike "*$versionNoV*") {
+              Write-Error "version mismatch: tag=$env:TAG output=$installed"
+              exit 1
+          }
+          Write-Host "version match: OK"
