@@ -339,3 +339,49 @@ jobs:
             --notes-file "${{ steps.notes.outputs.notes_file }}" \
             $PRERELEASE \
             artifacts/*
+
+  installer-smoke:
+    name: Installer smoke ${{ matrix.os }}
+    needs: release
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Smoke install.sh
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          export BZR_INSTALL_DIR="$HOME/.local/bin"
+          curl -fsSL "https://github.com/randomparity/bzr/releases/download/${TAG}/install.sh" | sh
+          installed_version="$("$BZR_INSTALL_DIR/bzr" --version 2>&1)"
+          echo "installed: $installed_version"
+          # bzr --version prints "bzr X.Y.Z[-rcN]"; tag is "vX.Y.Z[-rcN]".
+          version_no_v="${TAG#v}"
+          case "$installed_version" in
+            *"$version_no_v"*) echo "version match: OK" ;;
+            *) echo "version mismatch: tag=$TAG output=$installed_version" >&2; exit 1 ;;
+          esac
+        shell: bash
+
+      - name: Smoke install.ps1
+        if: matrix.os == 'windows-latest'
+        env:
+          TAG: ${{ github.ref_name }}
+        shell: pwsh
+        run: |
+          $env:BZR_INSTALL_DIR = Join-Path $env:LOCALAPPDATA 'Programs\bzr'
+          irm "https://github.com/randomparity/bzr/releases/download/$env:TAG/install.ps1" | iex
+          $installed = & (Join-Path $env:BZR_INSTALL_DIR 'bzr.exe') --version
+          Write-Host "installed: $installed"
+          $versionNoV = $env:TAG.TrimStart('v')
+          if ($installed -notlike "*$versionNoV*") {
+              Write-Error "version mismatch: tag=$env:TAG output=$installed"
+              exit 1
+          }
+          Write-Host "version match: OK"
