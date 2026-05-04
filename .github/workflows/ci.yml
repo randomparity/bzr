@@ -163,3 +163,34 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@59db25f34e16620e48ab4bb9e4a5dce155cb5432  # v8.0.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  installer-lint:
+    name: Lint installer scripts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
+      - name: Install shellcheck and shfmt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          curl -fsSL https://github.com/mvdan/sh/releases/download/v3.7.0/shfmt_v3.7.0_linux_amd64 -o /usr/local/bin/shfmt
+          sudo chmod +x /usr/local/bin/shfmt
+
+      - name: Run shellcheck
+        run: shellcheck -s sh install.sh tests/installer/smoke.sh
+
+      - name: Run shfmt (check only)
+        run: shfmt -d -ln posix -i 2 install.sh tests/installer/smoke.sh
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+          $diagnostics = Invoke-ScriptAnalyzer -Path install.ps1, tests/installer/smoke.ps1 -Severity Warning
+          if ($diagnostics) {
+            $diagnostics | Format-Table
+            exit 1
+          }
