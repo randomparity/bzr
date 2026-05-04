@@ -367,12 +367,22 @@ jobs:
           export BZR_INSTALL_DIR="$HOME/.local/bin"
           curl -fsSL "https://github.com/randomparity/bzr/releases/download/${TAG}/install.sh" | sh
           installed_version="$("$BZR_INSTALL_DIR/bzr" --version 2>&1)"
-          expected="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
-          echo "installed: $installed_version"
-          echo "expected (from Cargo.toml): $expected"
+          cargo_version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          tag_version="${TAG#v}"
+          echo "tag (no v):   $tag_version"
+          echo "Cargo.toml:   $cargo_version"
+          echo "installed:    $installed_version"
+          # Policy gate: tag and Cargo.toml must match exactly. publish-crates.yml
+          # already checks this for stable tags; mirror it here so prereleases are
+          # held to the same standard.
+          if [ "$cargo_version" != "$tag_version" ]; then
+            echo "tag/Cargo.toml mismatch: tag=$tag_version Cargo.toml=$cargo_version" >&2
+            exit 1
+          fi
+          # Binary check: bzr --version reads from Cargo.toml at build time.
           case "$installed_version" in
-            *"$expected"*) echo "version match: OK" ;;
-            *) echo "version mismatch: expected=$expected output=$installed_version" >&2; exit 1 ;;
+            *"$cargo_version"*) echo "version alignment: OK" ;;
+            *) echo "binary mismatch: expected=$cargo_version output=$installed_version" >&2; exit 1 ;;
           esac
         shell: bash
 
@@ -385,12 +395,20 @@ jobs:
           $env:BZR_INSTALL_DIR = Join-Path $env:LOCALAPPDATA 'Programs\bzr'
           irm "https://github.com/randomparity/bzr/releases/download/$env:TAG/install.ps1" | iex
           $installed = & (Join-Path $env:BZR_INSTALL_DIR 'bzr.exe') --version
-          $expected = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"' |
-                       Select-Object -First 1).Matches[0].Groups[1].Value
-          Write-Host "installed: $installed"
-          Write-Host "expected (from Cargo.toml): $expected"
-          if ($installed -notlike "*$expected*") {
-              Write-Error "version mismatch: expected=$expected output=$installed"
+          $cargoVersion = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"' |
+                           Select-Object -First 1).Matches[0].Groups[1].Value
+          $tagVersion = $env:TAG.TrimStart('v')
+          Write-Host "tag (no v):   $tagVersion"
+          Write-Host "Cargo.toml:   $cargoVersion"
+          Write-Host "installed:    $installed"
+          # Policy gate: tag and Cargo.toml must match exactly.
+          if ($cargoVersion -ne $tagVersion) {
+              Write-Error "tag/Cargo.toml mismatch: tag=$tagVersion Cargo.toml=$cargoVersion"
               exit 1
           }
-          Write-Host "version match: OK"
+          # Binary check: bzr --version reads from Cargo.toml at build time.
+          if ($installed -notlike "*$cargoVersion*") {
+              Write-Error "binary mismatch: expected=$cargoVersion output=$installed"
+              exit 1
+          }
+          Write-Host "version alignment: OK"
