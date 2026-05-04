@@ -38,7 +38,9 @@ jobs:
           key: fuzz-${{ matrix.target }}
 
       - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz --locked
+        uses: taiki-e/install-action@49ba71bf46962339e6e5c0a7a4ec3ed4c8af28ac
+        with:
+          tool: cargo-fuzz
 
       - name: Run fuzzer
         run: |
