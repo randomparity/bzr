@@ -38,6 +38,7 @@ pub async fn execute(
             file,
             summary,
             content_type,
+            private,
             flag,
         } => {
             let path = Path::new(file);
@@ -56,6 +57,7 @@ pub async fn execute(
                 content_type: ct.to_string(),
                 data,
                 flags,
+                is_private: *private,
             };
             let att_id = client.upload_attachment(&upload_params).await?;
             output::print_result(
@@ -205,6 +207,7 @@ mod tests {
             file: upload_file.to_string_lossy().into_owned(),
             summary: Some("Test".into()),
             content_type: None,
+            private: false,
             flag: vec![],
         };
         let result = super::execute(&action, None, OutputFormat::Json, None).await;
@@ -255,6 +258,7 @@ mod tests {
             file: upload_file.to_string_lossy().into_owned(),
             summary: Some("Test upload".into()),
             content_type: Some("text/plain".into()),
+            private: false,
             flag: vec![],
         };
         let (result, output) =

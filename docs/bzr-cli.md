@@ -110,7 +110,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 ├── attachment
 │   ├── list <BUG_ID>
 │   ├── download <ATTACHMENT_ID> [-o <FILE>]
-│   ├── upload <BUG_ID> <FILE> [--summary <S>] [--content-type <MIME>] [--flag <F>...]
+│   ├── upload <BUG_ID> <FILE> [--summary <S>] [--content-type <MIME>] [--private] [--flag <F>...]
 │   └── update <ATTACHMENT_ID> [--summary <S>] [--file-name <N>] [--content-type <MIME>]
 │                               [--obsolete <BOOL>] [--is-patch <BOOL>]
 │                               [--is-private <BOOL>] [--flag <F>...]
@@ -479,12 +479,13 @@ Agent note: omit `-o` only when the current working directory and original filen
 
 ### `bzr attachment upload`
 
-Upload a file as an attachment to a bug. MIME type is auto-detected from the file extension if not specified.
+Upload a file as an attachment to a bug. MIME type is auto-detected from the file extension if not specified. Add `--private` to mark the attachment as visible only to users with elevated permissions on the server.
 
 ```bash
 bzr attachment upload 12345 screenshot.png
 bzr attachment upload 12345 data.csv --summary "Performance data" --content-type text/csv
 bzr attachment upload 12345 patch.diff --flag "review?(alice@example.com)"
+bzr attachment upload 12345 secret.bin --summary "internal trace" --private
 ```
 
 | Option | Required | Description |
@@ -493,6 +494,7 @@ bzr attachment upload 12345 patch.diff --flag "review?(alice@example.com)"
 | `<FILE>` | Yes | File to upload |
 | `--summary <S>` | No | Description of the attachment (default: filename) |
 | `--content-type <MIME>` | No | MIME type (auto-detected if omitted) |
+| `--private` | No | Mark the attachment as private (visible only to users with elevated permissions) |
 | `--flag <F>` | No | Set flags (repeatable; see [Flag Syntax](#flag-syntax)) |
 
 Agent note: for clearer audit trails, agents should usually pass `--summary` explicitly instead of relying on the filename-derived default.

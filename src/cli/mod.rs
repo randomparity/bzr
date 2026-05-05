@@ -1511,6 +1511,42 @@ mod tests {
     }
 
     #[test]
+    fn parse_attachment_upload_with_private_flag() {
+        let cli = Cli::try_parse_from([
+            "bzr",
+            "attachment",
+            "upload",
+            "42",
+            "secret.bin",
+            "--private",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Attachment {
+                action:
+                    AttachmentAction::Upload {
+                        bug_id, private, ..
+                    },
+            } => {
+                assert_eq!(bug_id, 42);
+                assert!(private, "--private should set the flag to true");
+            }
+            _ => panic!("expected Attachment Upload"),
+        }
+    }
+
+    #[test]
+    fn parse_attachment_upload_without_private_defaults_to_false() {
+        let cli = Cli::try_parse_from(["bzr", "attachment", "upload", "42", "f.txt"]).unwrap();
+        match cli.command {
+            Commands::Attachment {
+                action: AttachmentAction::Upload { private, .. },
+            } => assert!(!private, "--private absent should default to false"),
+            _ => panic!("expected Attachment Upload"),
+        }
+    }
+
+    #[test]
     fn parse_template_delete() {
         let cli = Cli::try_parse_from(["bzr", "template", "delete", "security-bug"]).unwrap();
         match cli.command {

@@ -179,6 +179,37 @@ impl XmlRpcClient {
         let result = self.call("Bug.comments", rpc_params).await?;
         extract_comments(&result, bug_id)
     }
+
+    pub async fn get_attachments(&self, bug_id: u64) -> Result<Vec<crate::types::Attachment>> {
+        let mut rpc_params = BTreeMap::new();
+        #[expect(clippy::cast_possible_wrap, reason = "bug IDs fit in i64")]
+        let bug_id_value = Value::Int(bug_id as i64);
+        rpc_params.insert("ids".into(), Value::Array(vec![bug_id_value]));
+        // Match stock Bugzilla 5.0 REST `attachment list` behavior, which
+        // omits the base64 `data` field. Without this, `bzr attachment list`
+        // would inline multi-MB payloads in JSON output. The download path
+        // (get_attachment_by_id) does not exclude data.
+        rpc_params.insert(
+            "exclude_fields".into(),
+            Value::Array(vec![Value::from("data")]),
+        );
+
+        let result = self.call("Bug.attachments", rpc_params).await?;
+        extract_attachments(&result, bug_id)
+    }
+
+    pub async fn get_attachment_by_id(
+        &self,
+        attachment_id: u64,
+    ) -> Result<crate::types::Attachment> {
+        let mut rpc_params = BTreeMap::new();
+        #[expect(clippy::cast_possible_wrap, reason = "attachment IDs fit in i64")]
+        let id_value = Value::Int(attachment_id as i64);
+        rpc_params.insert("attachment_ids".into(), Value::Array(vec![id_value]));
+
+        let result = self.call("Bug.attachments", rpc_params).await?;
+        extract_attachment_by_id(&result, attachment_id)
+    }
 }
 
 fn extract_id(response: &Value) -> Result<u64> {
@@ -281,13 +312,18 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
     })
 }
 
-fn extract_comments(response: &Value, bug_id: u64) -> Result<Vec<crate::types::Comment>> {
+/// Navigate a `Bug.*` XML-RPC response from `top -> bugs -> {bug_id_str}`.
+///
+/// Returns `Ok(None)` when the server acknowledged the call but didn't
+/// return data for this bug (caller should treat as empty result, not
+/// error). Returns `Err` when the response shape is malformed.
+fn lookup_bug_entry(response: &Value, bug_id: u64) -> Result<Option<&Value>> {
     let top = response
         .as_struct()
         .ok_or_else(|| BzrError::XmlRpc("expected struct response".into()))?;
 
     let Some(bugs_val) = top.get("bugs") else {
-        return Ok(Vec::new());
+        return Ok(None);
     };
 
     let bugs_struct = bugs_val
@@ -296,8 +332,11 @@ fn extract_comments(response: &Value, bug_id: u64) -> Result<Vec<crate::types::C
 
     // Bugzilla returns the inner key as a string even though the input is
     // an integer. Look up by string form.
-    let key = bug_id.to_string();
-    let Some(bug_entry) = bugs_struct.get(&key) else {
+    Ok(bugs_struct.get(&bug_id.to_string()))
+}
+
+fn extract_comments(response: &Value, bug_id: u64) -> Result<Vec<crate::types::Comment>> {
+    let Some(bug_entry) = lookup_bug_entry(response, bug_id)? else {
         return Ok(Vec::new());
     };
 
@@ -350,6 +389,103 @@ fn value_to_comment(val: &Value) -> Result<crate::types::Comment> {
             .and_then(Value::as_bool)
             .unwrap_or(false),
     })
+}
+
+fn extract_attachments(response: &Value, bug_id: u64) -> Result<Vec<crate::types::Attachment>> {
+    let Some(bug_entry) = lookup_bug_entry(response, bug_id)? else {
+        return Ok(Vec::new());
+    };
+
+    let attachments_arr = bug_entry
+        .as_array()
+        .ok_or_else(|| BzrError::XmlRpc("expected attachments array".into()))?;
+
+    let mut attachments = Vec::with_capacity(attachments_arr.len());
+    for a in attachments_arr {
+        attachments.push(value_to_attachment(a)?);
+    }
+    Ok(attachments)
+}
+
+fn extract_attachment_by_id(
+    response: &Value,
+    attachment_id: u64,
+) -> Result<crate::types::Attachment> {
+    let top = response
+        .as_struct()
+        .ok_or_else(|| BzrError::XmlRpc("expected struct response".into()))?;
+
+    let attachments_struct = top
+        .get("attachments")
+        .and_then(Value::as_struct)
+        .ok_or_else(|| {
+            BzrError::XmlRpc("expected attachments to be a struct keyed by attachment ID".into())
+        })?;
+
+    let key = attachment_id.to_string();
+    let entry = attachments_struct
+        .get(&key)
+        .ok_or_else(|| BzrError::NotFound {
+            resource: "attachment",
+            id: attachment_id.to_string(),
+        })?;
+
+    value_to_attachment(entry)
+}
+
+fn value_to_attachment(val: &Value) -> Result<crate::types::Attachment> {
+    let m = val
+        .as_struct()
+        .ok_or_else(|| BzrError::XmlRpc("expected struct for attachment".into()))?;
+
+    let id = m
+        .get("id")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| BzrError::XmlRpc("attachment missing id field".into()))?;
+    let bug_id = m.get("bug_id").and_then(Value::as_i64).unwrap_or(0);
+    let size = m.get("size").and_then(Value::as_i64).unwrap_or(0);
+
+    #[expect(clippy::cast_sign_loss, reason = "attachment IDs are non-negative")]
+    let id = id as u64;
+    #[expect(clippy::cast_sign_loss, reason = "bug IDs are non-negative")]
+    let bug_id = bug_id as u64;
+    #[expect(clippy::cast_sign_loss, reason = "attachment sizes are non-negative")]
+    let size = size as u64;
+
+    let data = match m.get("data") {
+        Some(Value::Base64(bytes)) => Some(base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD,
+            bytes,
+        )),
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        _ => None,
+    };
+
+    Ok(crate::types::Attachment {
+        id,
+        bug_id,
+        file_name: get_str(m, "file_name").unwrap_or_default(),
+        summary: get_str(m, "summary").unwrap_or_default(),
+        content_type: get_str(m, "content_type").unwrap_or_default(),
+        creator: get_nonempty_str(m, "creator"),
+        creation_time: get_datetime_str(m, "creation_time"),
+        last_change_time: get_datetime_str(m, "last_change_time"),
+        size,
+        is_obsolete: get_bool_flag(m, "is_obsolete"),
+        is_private: get_bool_flag(m, "is_private"),
+        data,
+    })
+}
+
+/// Returns a struct member as a bool, accepting either `<boolean>1</boolean>`
+/// or `<int>1</int>` on the wire. Bugzilla 5.0.x XML-RPC responses use both
+/// shapes interchangeably for the same flag depending on the field.
+fn get_bool_flag(m: &BTreeMap<String, Value>, key: &str) -> bool {
+    match m.get(key) {
+        Some(Value::Bool(b)) => *b,
+        Some(Value::Int(n)) => *n != 0,
+        _ => false,
+    }
 }
 
 fn get_str(m: &BTreeMap<String, Value>, key: &str) -> Option<String> {
@@ -478,6 +614,29 @@ mod tests {
                 </value>
               </fault>
             </methodResponse>"#
+        )
+    }
+
+    /// Wrap an inner array of `<value><struct>...</struct></value>` items in
+    /// the standard `bugs -> {bug_id} -> array` XML-RPC response envelope.
+    fn xmlrpc_bugs_envelope(bug_id: u64, inner: &str) -> String {
+        format!(
+            "<?xml version=\"1.0\"?><methodResponse><params><param><value><struct>\
+                <member><name>bugs</name><value><struct>\
+                    <member><name>{bug_id}</name><value><array><data>{inner}</data></array></value></member>\
+                </struct></value></member>\
+            </struct></value></param></params></methodResponse>"
+        )
+    }
+
+    /// Wrap inner `<member>...</member>` entries in the
+    /// `attachments -> {attachment_id}` XML-RPC response envelope used by
+    /// `Bug.attachments` when called with `attachment_ids`.
+    fn xmlrpc_attachments_keyed_envelope(inner: &str) -> String {
+        format!(
+            "<?xml version=\"1.0\"?><methodResponse><params><param><value><struct>\
+                <member><name>attachments</name><value><struct>{inner}</struct></value></member>\
+            </struct></value></param></params></methodResponse>"
         )
     }
 
@@ -977,5 +1136,200 @@ mod tests {
             .await
             .unwrap();
         assert!(comments.is_empty());
+    }
+
+    #[tokio::test]
+    async fn xmlrpc_get_attachments_parses_full_response() {
+        let mock = MockServer::start().await;
+        let inner = "\
+            <value><struct>\
+                <member><name>id</name><value><int>2001</int></value></member>\
+                <member><name>bug_id</name><value><int>42</int></value></member>\
+                <member><name>file_name</name><value><string>public.txt</string></value></member>\
+                <member><name>summary</name><value><string>public file</string></value></member>\
+                <member><name>content_type</name><value><string>text/plain</string></value></member>\
+                <member><name>creator</name><value><string>alice@test</string></value></member>\
+                <member><name>creation_time</name><value><dateTime.iso8601>20260101T00:00:00</dateTime.iso8601></value></member>\
+                <member><name>last_change_time</name><value><dateTime.iso8601>20260101T00:00:00</dateTime.iso8601></value></member>\
+                <member><name>size</name><value><int>11</int></value></member>\
+                <member><name>is_obsolete</name><value><int>0</int></value></member>\
+                <member><name>is_private</name><value><int>0</int></value></member>\
+                <member><name>data</name><value><base64>aGVsbG8gd29ybGQK</base64></value></member>\
+            </struct></value>\
+            <value><struct>\
+                <member><name>id</name><value><int>2002</int></value></member>\
+                <member><name>bug_id</name><value><int>42</int></value></member>\
+                <member><name>file_name</name><value><string>private.bin</string></value></member>\
+                <member><name>summary</name><value><string>private file</string></value></member>\
+                <member><name>content_type</name><value><string>application/octet-stream</string></value></member>\
+                <member><name>creator</name><value><string>bob@test</string></value></member>\
+                <member><name>creation_time</name><value><dateTime.iso8601>20260102T00:00:00</dateTime.iso8601></value></member>\
+                <member><name>last_change_time</name><value><dateTime.iso8601>20260102T00:00:00</dateTime.iso8601></value></member>\
+                <member><name>size</name><value><int>4</int></value></member>\
+                <member><name>is_obsolete</name><value><int>0</int></value></member>\
+                <member><name>is_private</name><value><int>1</int></value></member>\
+                <member><name>data</name><value><base64>YmVlZg==</base64></value></member>\
+            </struct></value>";
+        let response_xml = xmlrpc_bugs_envelope(42, inner);
+
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .and(body_string_contains("Bug.attachments"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(response_xml))
+            .mount(&mock)
+            .await;
+
+        let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+        let attachments = client.get_attachments(42).await.unwrap();
+
+        assert_eq!(attachments.len(), 2);
+        assert_eq!(attachments[0].id, 2001);
+        assert_eq!(attachments[0].file_name, "public.txt");
+        assert!(!attachments[0].is_private);
+        assert_eq!(attachments[0].size, 11);
+        assert_eq!(attachments[0].data.as_deref(), Some("aGVsbG8gd29ybGQK"));
+        assert_eq!(attachments[1].id, 2002);
+        assert_eq!(attachments[1].file_name, "private.bin");
+        assert!(attachments[1].is_private);
+        assert_eq!(attachments[1].data.as_deref(), Some("YmVlZg=="));
+    }
+
+    #[tokio::test]
+    async fn xmlrpc_get_attachments_excludes_data_field_from_request() {
+        // Stock Bugzilla 5.0 REST `attachment list` omits the base64 `data`
+        // field; the XML-RPC list path must match by passing
+        // `exclude_fields: ["data"]` so we don't inline multi-MB payloads
+        // in `bzr attachment list` output. Download paths get data via
+        // get_attachment_by_id, which does not exclude it.
+        let mock = MockServer::start().await;
+        let response_xml = xmlrpc_bugs_envelope(42, "");
+
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .and(body_string_contains("Bug.attachments"))
+            .and(body_string_contains("exclude_fields"))
+            .and(body_string_contains("data"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(response_xml))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+        let _ = client.get_attachments(42).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn xmlrpc_get_attachment_by_id_request_body_omits_exclude_fields() {
+        use wiremock::matchers::body_string_contains;
+        let mock = MockServer::start().await;
+
+        // If the request carried exclude_fields, the download path would
+        // get data:None and fail. Mock will only match a request that
+        // does NOT contain "exclude_fields" via a custom matcher.
+        let response_xml = xmlrpc_attachments_keyed_envelope(
+            "<member><name>9</name><value><struct>\
+                <member><name>id</name><value><int>9</int></value></member>\
+                <member><name>bug_id</name><value><int>42</int></value></member>\
+                <member><name>file_name</name><value><string>y.bin</string></value></member>\
+                <member><name>summary</name><value><string>y</string></value></member>\
+                <member><name>content_type</name><value><string>application/octet-stream</string></value></member>\
+                <member><name>size</name><value><int>2</int></value></member>\
+                <member><name>is_obsolete</name><value><int>0</int></value></member>\
+                <member><name>is_private</name><value><int>0</int></value></member>\
+                <member><name>data</name><value><base64>YmU=</base64></value></member>\
+            </struct></value></member>",
+        );
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .and(body_string_contains("attachment_ids"))
+            .and(NotBodyContains("exclude_fields"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(response_xml))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+        let attachment = client.get_attachment_by_id(9).await.unwrap();
+        assert_eq!(attachment.data.as_deref(), Some("YmU="));
+    }
+
+    /// Custom wiremock matcher: body must NOT contain the given substring.
+    struct NotBodyContains(&'static str);
+
+    impl wiremock::Match for NotBodyContains {
+        fn matches(&self, request: &wiremock::Request) -> bool {
+            !std::str::from_utf8(&request.body)
+                .map(|s| s.contains(self.0))
+                .unwrap_or(false)
+        }
+    }
+
+    #[tokio::test]
+    async fn xmlrpc_get_attachment_by_id_parses_response() {
+        let mock = MockServer::start().await;
+        let response_xml = xmlrpc_attachments_keyed_envelope(
+            "<member><name>2002</name><value><struct>\
+                <member><name>id</name><value><int>2002</int></value></member>\
+                <member><name>bug_id</name><value><int>42</int></value></member>\
+                <member><name>file_name</name><value><string>private.bin</string></value></member>\
+                <member><name>summary</name><value><string>private file</string></value></member>\
+                <member><name>content_type</name><value><string>application/octet-stream</string></value></member>\
+                <member><name>size</name><value><int>4</int></value></member>\
+                <member><name>is_obsolete</name><value><int>0</int></value></member>\
+                <member><name>is_private</name><value><int>1</int></value></member>\
+                <member><name>data</name><value><base64>YmVlZg==</base64></value></member>\
+            </struct></value></member>",
+        );
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .and(body_string_contains("Bug.attachments"))
+            .and(body_string_contains("attachment_ids"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(response_xml))
+            .mount(&mock)
+            .await;
+
+        let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+        let attachment = client.get_attachment_by_id(2002).await.unwrap();
+        assert_eq!(attachment.id, 2002);
+        assert!(attachment.is_private);
+        assert_eq!(attachment.data.as_deref(), Some("YmVlZg=="));
+    }
+
+    #[tokio::test]
+    async fn xmlrpc_get_attachment_by_id_not_found_returns_error() {
+        let mock = MockServer::start().await;
+        let response_xml = xmlrpc_attachments_keyed_envelope("");
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .and(body_string_contains("Bug.attachments"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(response_xml))
+            .mount(&mock)
+            .await;
+
+        let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+        let err = client.get_attachment_by_id(9999).await.unwrap_err();
+        assert!(matches!(
+            err,
+            BzrError::NotFound {
+                resource: "attachment",
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn xmlrpc_get_attachments_returns_empty_when_bug_has_none() {
+        let mock = MockServer::start().await;
+        let response_xml = xmlrpc_bugs_envelope(42, "");
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .and(body_string_contains("Bug.attachments"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(response_xml))
+            .mount(&mock)
+            .await;
+
+        let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+        let attachments = client.get_attachments(42).await.unwrap();
+        assert!(attachments.is_empty());
     }
 }
