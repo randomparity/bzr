@@ -1,0 +1,193 @@
+use wiremock::matchers::{body_partial_json, method, path};
+use wiremock::{Mock, ResponseTemplate};
+
+use crate::cli::BugAction;
+use crate::test_helpers::{capture_stdout, setup_test_env};
+use crate::types::OutputFormat;
+
+#[tokio::test]
+async fn bug_clone_copies_fields() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    // Mock get_bug
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/100"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{
+                "id": 100,
+                "summary": "Original bug",
+                "status": "NEW",
+                "product": "TestProduct",
+                "component": "General",
+                "version": "2.0",
+                "priority": "P1",
+                "severity": "major",
+                "assigned_to": "dev@test.com",
+                "op_sys": "Linux",
+                "rep_platform": "x86_64",
+                "cc": ["watcher@test.com"],
+                "keywords": ["regression"]
+            }]
+        })))
+        .mount(&mock)
+        .await;
+
+    // The cloned description must come from comment count=0, not a
+    // follow-up comment.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/100/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": {
+                "100": {
+                    "comments": [
+                        {
+                            "id": 2,
+                            "count": 1,
+                            "text": "Follow-up reply",
+                            "creator": "dev@test.com",
+                            "creation_time": "2025-01-02T00:00:00Z"
+                        },
+                        {
+                            "id": 1,
+                            "count": 0,
+                            "text": "Original description",
+                            "creator": "dev@test.com",
+                            "creation_time": "2025-01-01T00:00:00Z"
+                        }
+                    ]
+                }
+            }
+        })))
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .and(body_partial_json(serde_json::json!({
+            "description": "Original description"
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 200})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    // Mock add_comment (for "Cloned from" comment)
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/200/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 300})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::Clone {
+        id: "100".to_string(),
+        summary: None,
+        product: None,
+        component: None,
+        version: None,
+        description: None,
+        priority: None,
+        severity: None,
+        assignee: None,
+        op_sys: None,
+        rep_platform: None,
+        no_comment: false,
+        add_depends_on: false,
+        add_blocks: false,
+        no_cc: false,
+        no_keywords: false,
+    };
+    let (result, output) = capture_stdout(crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+    ))
+    .await;
+    assert!(result.is_ok(), "bug clone failed: {result:?}");
+    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    assert_eq!(parsed["id"], 200);
+    assert_eq!(parsed["action"], "created");
+}
+
+#[tokio::test]
+async fn bug_clone_no_comment_skips_comment() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/100"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{
+                "id": 100,
+                "summary": "Original bug",
+                "status": "NEW",
+                "product": "TestProduct",
+                "component": "General",
+                "version": "1.0",
+                "cc": [],
+                "keywords": []
+            }]
+        })))
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/100/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": {
+                "100": {
+                    "comments": [{
+                        "id": 1,
+                        "count": 0,
+                        "text": "Description",
+                        "creator": "dev@test.com",
+                        "creation_time": "2025-01-01T00:00:00Z"
+                    }]
+                }
+            }
+        })))
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 201})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    // No comment mock — if comment is posted, the test will fail because there's no mock
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/201/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 301})))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::Clone {
+        id: "100".to_string(),
+        summary: None,
+        product: None,
+        component: None,
+        version: None,
+        description: None,
+        priority: None,
+        severity: None,
+        assignee: None,
+        op_sys: None,
+        rep_platform: None,
+        no_comment: true,
+        add_depends_on: false,
+        add_blocks: false,
+        no_cc: false,
+        no_keywords: false,
+    };
+    let (result, _output) = capture_stdout(crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+    ))
+    .await;
+    assert!(result.is_ok(), "bug clone --no-comment failed: {result:?}");
+}
