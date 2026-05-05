@@ -312,13 +312,18 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
     })
 }
 
-fn extract_comments(response: &Value, bug_id: u64) -> Result<Vec<crate::types::Comment>> {
+/// Navigate a `Bug.*` XML-RPC response from `top -> bugs -> {bug_id_str}`.
+///
+/// Returns `Ok(None)` when the server acknowledged the call but didn't
+/// return data for this bug (caller should treat as empty result, not
+/// error). Returns `Err` when the response shape is malformed.
+fn lookup_bug_entry(response: &Value, bug_id: u64) -> Result<Option<&Value>> {
     let top = response
         .as_struct()
         .ok_or_else(|| BzrError::XmlRpc("expected struct response".into()))?;
 
     let Some(bugs_val) = top.get("bugs") else {
-        return Ok(Vec::new());
+        return Ok(None);
     };
 
     let bugs_struct = bugs_val
@@ -327,8 +332,11 @@ fn extract_comments(response: &Value, bug_id: u64) -> Result<Vec<crate::types::C
 
     // Bugzilla returns the inner key as a string even though the input is
     // an integer. Look up by string form.
-    let key = bug_id.to_string();
-    let Some(bug_entry) = bugs_struct.get(&key) else {
+    Ok(bugs_struct.get(&bug_id.to_string()))
+}
+
+fn extract_comments(response: &Value, bug_id: u64) -> Result<Vec<crate::types::Comment>> {
+    let Some(bug_entry) = lookup_bug_entry(response, bug_id)? else {
         return Ok(Vec::new());
     };
 
@@ -384,20 +392,7 @@ fn value_to_comment(val: &Value) -> Result<crate::types::Comment> {
 }
 
 fn extract_attachments(response: &Value, bug_id: u64) -> Result<Vec<crate::types::Attachment>> {
-    let top = response
-        .as_struct()
-        .ok_or_else(|| BzrError::XmlRpc("expected struct response".into()))?;
-
-    let Some(bugs_val) = top.get("bugs") else {
-        return Ok(Vec::new());
-    };
-
-    let bugs_struct = bugs_val
-        .as_struct()
-        .ok_or_else(|| BzrError::XmlRpc("expected bugs to be a struct keyed by bug ID".into()))?;
-
-    let key = bug_id.to_string();
-    let Some(bug_entry) = bugs_struct.get(&key) else {
+    let Some(bug_entry) = lookup_bug_entry(response, bug_id)? else {
         return Ok(Vec::new());
     };
 
@@ -619,6 +614,29 @@ mod tests {
                 </value>
               </fault>
             </methodResponse>"#
+        )
+    }
+
+    /// Wrap an inner array of `<value><struct>...</struct></value>` items in
+    /// the standard `bugs -> {bug_id} -> array` XML-RPC response envelope.
+    fn xmlrpc_bugs_envelope(bug_id: u64, inner: &str) -> String {
+        format!(
+            "<?xml version=\"1.0\"?><methodResponse><params><param><value><struct>\
+                <member><name>bugs</name><value><struct>\
+                    <member><name>{bug_id}</name><value><array><data>{inner}</data></array></value></member>\
+                </struct></value></member>\
+            </struct></value></param></params></methodResponse>"
+        )
+    }
+
+    /// Wrap inner `<member>...</member>` entries in the
+    /// `attachments -> {attachment_id}` XML-RPC response envelope used by
+    /// `Bug.attachments` when called with `attachment_ids`.
+    fn xmlrpc_attachments_keyed_envelope(inner: &str) -> String {
+        format!(
+            "<?xml version=\"1.0\"?><methodResponse><params><param><value><struct>\
+                <member><name>attachments</name><value><struct>{inner}</struct></value></member>\
+            </struct></value></param></params></methodResponse>"
         )
     }
 
@@ -1123,41 +1141,36 @@ mod tests {
     #[tokio::test]
     async fn xmlrpc_get_attachments_parses_full_response() {
         let mock = MockServer::start().await;
-        let response_xml = r#"<?xml version="1.0"?>
-<methodResponse><params><param><value><struct>
-  <member><name>bugs</name><value><struct>
-    <member><name>42</name><value><array><data>
-      <value><struct>
-        <member><name>id</name><value><int>2001</int></value></member>
-        <member><name>bug_id</name><value><int>42</int></value></member>
-        <member><name>file_name</name><value><string>public.txt</string></value></member>
-        <member><name>summary</name><value><string>public file</string></value></member>
-        <member><name>content_type</name><value><string>text/plain</string></value></member>
-        <member><name>creator</name><value><string>alice@test</string></value></member>
-        <member><name>creation_time</name><value><dateTime.iso8601>20260101T00:00:00</dateTime.iso8601></value></member>
-        <member><name>last_change_time</name><value><dateTime.iso8601>20260101T00:00:00</dateTime.iso8601></value></member>
-        <member><name>size</name><value><int>11</int></value></member>
-        <member><name>is_obsolete</name><value><int>0</int></value></member>
-        <member><name>is_private</name><value><int>0</int></value></member>
-        <member><name>data</name><value><base64>aGVsbG8gd29ybGQK</base64></value></member>
-      </struct></value>
-      <value><struct>
-        <member><name>id</name><value><int>2002</int></value></member>
-        <member><name>bug_id</name><value><int>42</int></value></member>
-        <member><name>file_name</name><value><string>private.bin</string></value></member>
-        <member><name>summary</name><value><string>private file</string></value></member>
-        <member><name>content_type</name><value><string>application/octet-stream</string></value></member>
-        <member><name>creator</name><value><string>bob@test</string></value></member>
-        <member><name>creation_time</name><value><dateTime.iso8601>20260102T00:00:00</dateTime.iso8601></value></member>
-        <member><name>last_change_time</name><value><dateTime.iso8601>20260102T00:00:00</dateTime.iso8601></value></member>
-        <member><name>size</name><value><int>4</int></value></member>
-        <member><name>is_obsolete</name><value><int>0</int></value></member>
-        <member><name>is_private</name><value><int>1</int></value></member>
-        <member><name>data</name><value><base64>YmVlZg==</base64></value></member>
-      </struct></value>
-    </data></array></value></member>
-  </struct></value></member>
-</struct></value></param></params></methodResponse>"#;
+        let inner = "\
+            <value><struct>\
+                <member><name>id</name><value><int>2001</int></value></member>\
+                <member><name>bug_id</name><value><int>42</int></value></member>\
+                <member><name>file_name</name><value><string>public.txt</string></value></member>\
+                <member><name>summary</name><value><string>public file</string></value></member>\
+                <member><name>content_type</name><value><string>text/plain</string></value></member>\
+                <member><name>creator</name><value><string>alice@test</string></value></member>\
+                <member><name>creation_time</name><value><dateTime.iso8601>20260101T00:00:00</dateTime.iso8601></value></member>\
+                <member><name>last_change_time</name><value><dateTime.iso8601>20260101T00:00:00</dateTime.iso8601></value></member>\
+                <member><name>size</name><value><int>11</int></value></member>\
+                <member><name>is_obsolete</name><value><int>0</int></value></member>\
+                <member><name>is_private</name><value><int>0</int></value></member>\
+                <member><name>data</name><value><base64>aGVsbG8gd29ybGQK</base64></value></member>\
+            </struct></value>\
+            <value><struct>\
+                <member><name>id</name><value><int>2002</int></value></member>\
+                <member><name>bug_id</name><value><int>42</int></value></member>\
+                <member><name>file_name</name><value><string>private.bin</string></value></member>\
+                <member><name>summary</name><value><string>private file</string></value></member>\
+                <member><name>content_type</name><value><string>application/octet-stream</string></value></member>\
+                <member><name>creator</name><value><string>bob@test</string></value></member>\
+                <member><name>creation_time</name><value><dateTime.iso8601>20260102T00:00:00</dateTime.iso8601></value></member>\
+                <member><name>last_change_time</name><value><dateTime.iso8601>20260102T00:00:00</dateTime.iso8601></value></member>\
+                <member><name>size</name><value><int>4</int></value></member>\
+                <member><name>is_obsolete</name><value><int>0</int></value></member>\
+                <member><name>is_private</name><value><int>1</int></value></member>\
+                <member><name>data</name><value><base64>YmVlZg==</base64></value></member>\
+            </struct></value>";
+        let response_xml = xmlrpc_bugs_envelope(42, inner);
 
         Mock::given(method("POST"))
             .and(path("/xmlrpc.cgi"))
@@ -1189,12 +1202,7 @@ mod tests {
         // in `bzr attachment list` output. Download paths get data via
         // get_attachment_by_id, which does not exclude it.
         let mock = MockServer::start().await;
-        let response_xml = r#"<?xml version="1.0"?>
-<methodResponse><params><param><value><struct>
-  <member><name>bugs</name><value><struct>
-    <member><name>42</name><value><array><data></data></array></value></member>
-  </struct></value></member>
-</struct></value></param></params></methodResponse>"#;
+        let response_xml = xmlrpc_bugs_envelope(42, "");
 
         Mock::given(method("POST"))
             .and(path("/xmlrpc.cgi"))
@@ -1218,28 +1226,24 @@ mod tests {
         // If the request carried exclude_fields, the download path would
         // get data:None and fail. Mock will only match a request that
         // does NOT contain "exclude_fields" via a custom matcher.
+        let response_xml = xmlrpc_attachments_keyed_envelope(
+            "<member><name>9</name><value><struct>\
+                <member><name>id</name><value><int>9</int></value></member>\
+                <member><name>bug_id</name><value><int>42</int></value></member>\
+                <member><name>file_name</name><value><string>y.bin</string></value></member>\
+                <member><name>summary</name><value><string>y</string></value></member>\
+                <member><name>content_type</name><value><string>application/octet-stream</string></value></member>\
+                <member><name>size</name><value><int>2</int></value></member>\
+                <member><name>is_obsolete</name><value><int>0</int></value></member>\
+                <member><name>is_private</name><value><int>0</int></value></member>\
+                <member><name>data</name><value><base64>YmU=</base64></value></member>\
+            </struct></value></member>",
+        );
         Mock::given(method("POST"))
             .and(path("/xmlrpc.cgi"))
             .and(body_string_contains("attachment_ids"))
             .and(NotBodyContains("exclude_fields"))
-            .respond_with(ResponseTemplate::new(200).set_body_string(
-                r#"<?xml version="1.0"?>
-<methodResponse><params><param><value><struct>
-  <member><name>attachments</name><value><struct>
-    <member><name>9</name><value><struct>
-      <member><name>id</name><value><int>9</int></value></member>
-      <member><name>bug_id</name><value><int>42</int></value></member>
-      <member><name>file_name</name><value><string>y.bin</string></value></member>
-      <member><name>summary</name><value><string>y</string></value></member>
-      <member><name>content_type</name><value><string>application/octet-stream</string></value></member>
-      <member><name>size</name><value><int>2</int></value></member>
-      <member><name>is_obsolete</name><value><int>0</int></value></member>
-      <member><name>is_private</name><value><int>0</int></value></member>
-      <member><name>data</name><value><base64>YmU=</base64></value></member>
-    </struct></value></member>
-  </struct></value></member>
-</struct></value></param></params></methodResponse>"#,
-            ))
+            .respond_with(ResponseTemplate::new(200).set_body_string(response_xml))
             .expect(1)
             .mount(&mock)
             .await;
@@ -1263,23 +1267,19 @@ mod tests {
     #[tokio::test]
     async fn xmlrpc_get_attachment_by_id_parses_response() {
         let mock = MockServer::start().await;
-        let response_xml = r#"<?xml version="1.0"?>
-<methodResponse><params><param><value><struct>
-  <member><name>attachments</name><value><struct>
-    <member><name>2002</name><value><struct>
-      <member><name>id</name><value><int>2002</int></value></member>
-      <member><name>bug_id</name><value><int>42</int></value></member>
-      <member><name>file_name</name><value><string>private.bin</string></value></member>
-      <member><name>summary</name><value><string>private file</string></value></member>
-      <member><name>content_type</name><value><string>application/octet-stream</string></value></member>
-      <member><name>size</name><value><int>4</int></value></member>
-      <member><name>is_obsolete</name><value><int>0</int></value></member>
-      <member><name>is_private</name><value><int>1</int></value></member>
-      <member><name>data</name><value><base64>YmVlZg==</base64></value></member>
-    </struct></value></member>
-  </struct></value></member>
-</struct></value></param></params></methodResponse>"#;
-
+        let response_xml = xmlrpc_attachments_keyed_envelope(
+            "<member><name>2002</name><value><struct>\
+                <member><name>id</name><value><int>2002</int></value></member>\
+                <member><name>bug_id</name><value><int>42</int></value></member>\
+                <member><name>file_name</name><value><string>private.bin</string></value></member>\
+                <member><name>summary</name><value><string>private file</string></value></member>\
+                <member><name>content_type</name><value><string>application/octet-stream</string></value></member>\
+                <member><name>size</name><value><int>4</int></value></member>\
+                <member><name>is_obsolete</name><value><int>0</int></value></member>\
+                <member><name>is_private</name><value><int>1</int></value></member>\
+                <member><name>data</name><value><base64>YmVlZg==</base64></value></member>\
+            </struct></value></member>",
+        );
         Mock::given(method("POST"))
             .and(path("/xmlrpc.cgi"))
             .and(body_string_contains("Bug.attachments"))
@@ -1298,11 +1298,7 @@ mod tests {
     #[tokio::test]
     async fn xmlrpc_get_attachment_by_id_not_found_returns_error() {
         let mock = MockServer::start().await;
-        let response_xml = r#"<?xml version="1.0"?>
-<methodResponse><params><param><value><struct>
-  <member><name>attachments</name><value><struct></struct></value></member>
-</struct></value></param></params></methodResponse>"#;
-
+        let response_xml = xmlrpc_attachments_keyed_envelope("");
         Mock::given(method("POST"))
             .and(path("/xmlrpc.cgi"))
             .and(body_string_contains("Bug.attachments"))
@@ -1324,13 +1320,7 @@ mod tests {
     #[tokio::test]
     async fn xmlrpc_get_attachments_returns_empty_when_bug_has_none() {
         let mock = MockServer::start().await;
-        let response_xml = r#"<?xml version="1.0"?>
-<methodResponse><params><param><value><struct>
-  <member><name>bugs</name><value><struct>
-    <member><name>42</name><value><array><data></data></array></value></member>
-  </struct></value></member>
-</struct></value></param></params></methodResponse>"#;
-
+        let response_xml = xmlrpc_bugs_envelope(42, "");
         Mock::given(method("POST"))
             .and(path("/xmlrpc.cgi"))
             .and(body_string_contains("Bug.attachments"))
