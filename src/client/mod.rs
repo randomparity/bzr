@@ -325,14 +325,20 @@ impl BugzillaClient {
                 body_preview = &body[..body.len().min(512)],
                 "JSON deserialization failed"
             );
-            BzrError::Deserialize(format!("failed to parse response from {safe_url}: {e}"))
+            BzrError::Deserialize(format!(
+                "failed to parse response from {safe_url}: {e}\nbody preview ({} chars): {}",
+                body.chars().count().min(BODY_PREVIEW_MAX_BYTES),
+                format_body_preview(&body),
+            ))
         })?;
 
         Self::check_bugzilla_200_error(&value, &safe_url)?;
 
         serde_json::from_value(value).map_err(|e| {
             BzrError::Deserialize(format!(
-                "failed to deserialize response from {safe_url}: {e}"
+                "failed to deserialize response from {safe_url}: {e}\nbody preview ({} chars): {}",
+                body.chars().count().min(BODY_PREVIEW_MAX_BYTES),
+                format_body_preview(&body),
             ))
         })
     }
@@ -430,11 +436,7 @@ const BODY_PREVIEW_MAX_BYTES: usize = 512;
 /// collapses internal newlines and tabs to single spaces so the preview
 /// stays on one line beneath the main error.
 ///
-/// Called by `parse_json` when deserializing JSON fails (Task #3).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by parse_json in Task 3 (Plan step)")
-)]
+/// Called by `parse_json` when deserializing JSON fails.
 fn format_body_preview(body: &str) -> String {
     let truncated_end = body
         .char_indices()
@@ -952,6 +954,77 @@ mod tests {
             !preview.ends_with('…'),
             "exact-512 body should have no ellipsis: ...{}",
             &preview[preview.len().saturating_sub(20)..]
+        );
+    }
+
+    #[tokio::test]
+    async fn parse_json_includes_body_preview_on_typed_failure() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42/attachment"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                // Wrong shape — has neither `bugs` nor matches AttachmentBugResponse.
+                "wrong_key": [1, 2, 3]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client.get_attachments(42).await.unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("body preview"),
+            "error should include body preview: {msg}"
+        );
+        assert!(
+            msg.contains("wrong_key"),
+            "preview should contain offending JSON keys: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn parse_json_includes_body_preview_on_invalid_json() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42/attachment"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("{not valid json"))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client.get_attachments(42).await.unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("body preview"),
+            "error should include body preview: {msg}"
+        );
+        assert!(
+            msg.contains("not valid json"),
+            "preview should contain raw body: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn parse_json_redacts_api_key_in_body_preview() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42/attachment"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(
+                r#"{"echo":"http://h/rest?Bugzilla_api_key=LeakedKey9","wrong":true}"#,
+            ))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client.get_attachments(42).await.unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            !msg.contains("LeakedKey9"),
+            "API key must not appear in error: {msg}"
+        );
+        assert!(
+            msg.contains("[REDACTED]"),
+            "redaction marker should be present: {msg}"
         );
     }
 }
