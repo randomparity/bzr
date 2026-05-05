@@ -12,9 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `bzr comment list` now returns private comments on Bugzilla
   deployments where the REST endpoint silently truncates them
   (observed on Bugzilla 5.0.x). In Hybrid API mode (the default
-  for newly-detected servers), `bzr` detects gaps in the comment
-  count sequence returned by REST and transparently retries the
-  request via XML-RPC `Bug.comments`. No configuration change
+  for newly-detected servers), `bzr` now uses XML-RPC
+  `Bug.comments` for comment listing, which returns the full set
+  including private entries; it falls back to REST only when the
+  server doesn't expose `xmlrpc.cgi`. No configuration change
   required. Affects #125.
 
 ### Added
