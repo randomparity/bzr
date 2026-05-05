@@ -1,5 +1,5 @@
 CARGO ?= cargo
-RUST_MIN_VERSION := 1.84.0
+RUST_MIN_VERSION := 1.88.0
 
 .PHONY: setup check-rust ensure-components ensure-coverage-prereqs ensure-mutants-prereq install-hooks \
         build release test coverage fmt clippy lint clean help man \
@@ -22,7 +22,9 @@ check-rust:
 	printf "%s " "$$RUST_VER"; \
 	LOWEST=$$(printf '%s\n%s\n' "$(RUST_MIN_VERSION)" "$$RUST_VER" | sort -V | head -n1); \
 	if [ "$$LOWEST" != "$(RUST_MIN_VERSION)" ]; then \
-		echo "(need >= $(RUST_MIN_VERSION))"; exit 1; \
+		echo "(need >= $(RUST_MIN_VERSION))"; \
+		echo "  Upgrade with: rustup update stable && rustup default stable"; \
+		exit 1; \
 	fi
 	@echo "ok"
 
