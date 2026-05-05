@@ -32,11 +32,19 @@ fn extract_bugs_comment_envelope(value: serde_json::Value) -> Result<Vec<Comment
     let resp: CommentResponse = serde_json::from_value(value).map_err(|e| {
         crate::error::BzrError::Deserialize(format!("comments `bugs` envelope: {e}"))
     })?;
-    Ok(resp
-        .bugs
+    // Treat a structurally empty `bugs` map as a non-match so try_envelopes
+    // falls through to the flat extractor. `bugs: {"42": {"comments": []}}`
+    // (bug acknowledged, no comments) is a legitimate empty result and still
+    // returns Ok(vec![]).
+    resp.bugs
         .into_values()
         .next()
-        .map_or_else(Vec::new, |e| e.comments))
+        .map(|e| e.comments)
+        .ok_or_else(|| {
+            crate::error::BzrError::Deserialize(
+                "comments `bugs` envelope: empty top-level map".into(),
+            )
+        })
 }
 
 fn extract_flat_comment_envelope(value: serde_json::Value) -> Result<Vec<Comment>> {

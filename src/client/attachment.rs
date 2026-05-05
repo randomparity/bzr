@@ -30,7 +30,12 @@ struct AttachmentCreateResponse {
 fn extract_bugs_envelope(value: serde_json::Value) -> Result<Vec<Attachment>> {
     let resp: AttachmentBugResponse = serde_json::from_value(value)
         .map_err(|e| BzrError::Deserialize(format!("attachments `bugs` envelope: {e}")))?;
-    Ok(resp.bugs.into_values().next().unwrap_or_default())
+    // Treat a structurally empty `bugs` map as a non-match so try_envelopes
+    // falls through to the flat extractor. `bugs: {"42": []}` (bug acknowledged,
+    // no attachments) is a legitimate empty result and still returns Ok(vec![]).
+    resp.bugs.into_values().next().ok_or_else(|| {
+        BzrError::Deserialize("attachments `bugs` envelope: empty top-level map".into())
+    })
 }
 
 fn extract_flat_envelope(value: serde_json::Value) -> Result<Vec<Attachment>> {
@@ -280,6 +285,71 @@ mod tests {
         assert_eq!(
             attachments[0].file_name, "from_bugs.diff",
             "should prefer bugs-keyed envelope when both present"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_attachments_falls_through_when_bugs_map_empty_and_flat_populated() {
+        // Regression: an empty top-level `bugs` map (no bug ID acknowledged)
+        // alongside a populated flat `attachments` array used to silently
+        // return [] because the bugs extractor swallowed the empty case.
+        // The bugs extractor now returns Err on an empty top-level map so
+        // try_envelopes falls through to the flat extractor.
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42/attachment"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": {},
+                "attachments": [
+                    {
+                        "id": 300,
+                        "bug_id": 42,
+                        "file_name": "from_flat.diff",
+                        "summary": "from flat envelope",
+                        "content_type": "text/plain",
+                        "creator": "alice@example.com",
+                        "creation_time": "2026-01-01T00:00:00Z",
+                        "last_change_time": "2026-01-01T00:00:00Z",
+                        "size": 1,
+                        "is_obsolete": false,
+                        "is_patch": true,
+                        "is_private": false
+                    }
+                ]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let attachments = client.get_attachments(42).await.unwrap();
+        assert_eq!(
+            attachments.len(),
+            1,
+            "should fall through to flat envelope, not return empty"
+        );
+        assert_eq!(attachments[0].file_name, "from_flat.diff");
+    }
+
+    #[tokio::test]
+    async fn get_attachments_returns_empty_when_bug_acknowledged_with_no_attachments() {
+        // Legitimate empty case: server acknowledges bug 42 but reports no
+        // attachments. Must return Ok([]) — NOT fall through to flat (where
+        // the empty {} would fail to deserialize as Vec) and NOT error.
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42/attachment"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": {"42": []},
+                "attachments": {}
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let attachments = client.get_attachments(42).await.unwrap();
+        assert!(
+            attachments.is_empty(),
+            "no attachments expected: {attachments:?}"
         );
     }
 }
