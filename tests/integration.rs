@@ -854,6 +854,7 @@ async fn attachment_upload_integration() {
         file: upload_file.to_string_lossy().into_owned(),
         summary: Some("Test upload".to_string()),
         content_type: Some("text/plain".to_string()),
+        private: false,
         flag: vec![],
     };
     let result = bzr::commands::attachment::execute(

@@ -80,6 +80,12 @@ pub enum AttachmentAction {
         /// MIME type (auto-detected if not provided)
         #[arg(long)]
         content_type: Option<String>,
+        /// Mark the new attachment as private.
+        ///
+        /// Private attachments are visible only to users in the bug's
+        /// `insider` group (server-configured). Use carefully.
+        #[arg(long)]
+        private: bool,
         /// Set, request, or clear a flag using Bugzilla flag syntax.
         ///
         /// Repeatable. Accepted forms:

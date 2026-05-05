@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   is configured with `api_mode = "xmlrpc"`.
 - `bzr comment add --private` flag, sets `is_private: true` on the
   posted comment.
+- `bzr attachment upload --private` flag, sets `is_private: true`
+  on the uploaded attachment.
 
 ## [0.2.0] - 2026-05-04
 

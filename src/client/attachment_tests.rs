@@ -28,6 +28,64 @@ async fn update_attachment_sends_put() {
 }
 
 #[tokio::test]
+async fn upload_attachment_private_sets_is_private_in_body() {
+    use wiremock::matchers::body_string_contains;
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/1/attachment"))
+        .and(body_string_contains("\"is_private\":true"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [301]})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let id = client
+        .upload_attachment(&UploadAttachmentParams {
+            bug_id: 1,
+            file_name: "secret.bin".into(),
+            summary: "secret".into(),
+            content_type: "application/octet-stream".into(),
+            data: b"shh".to_vec(),
+            flags: Vec::new(),
+            is_private: true,
+        })
+        .await
+        .unwrap();
+    assert_eq!(id, 301);
+}
+
+#[tokio::test]
+async fn upload_attachment_public_omits_is_private_or_sets_false() {
+    use wiremock::matchers::body_string_contains;
+    let mock = MockServer::start().await;
+    // Public uploads must not send is_private:true. They may either omit
+    // the field or send is_private:false.
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/1/attachment"))
+        .and(body_string_contains("\"is_private\":false"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [302]})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let id = client
+        .upload_attachment(&UploadAttachmentParams {
+            bug_id: 1,
+            file_name: "public.txt".into(),
+            summary: "public".into(),
+            content_type: "text/plain".into(),
+            data: b"hello".to_vec(),
+            flags: Vec::new(),
+            is_private: false,
+        })
+        .await
+        .unwrap();
+    assert_eq!(id, 302);
+}
+
+#[tokio::test]
 async fn upload_attachment_with_flags_sends_flags() {
     let mock = MockServer::start().await;
     Mock::given(method("POST"))
@@ -51,6 +109,7 @@ async fn upload_attachment_with_flags_sends_flags() {
             content_type: "text/plain".into(),
             data: b"hello".to_vec(),
             flags,
+            is_private: false,
         })
         .await
         .unwrap();
