@@ -87,6 +87,24 @@ pub(crate) fn tls_hint(base_msg: &str, err: &reqwest::Error) -> String {
     msg
 }
 
+/// Redact a Bugzilla API key value out of a string for safe display.
+///
+/// Looks for the literal `Bugzilla_api_key=` marker (the query-param
+/// form Bugzilla uses) and replaces the value up to the next `&`,
+/// `)`, or space with `[REDACTED]`. If the marker is absent the input
+/// is returned unchanged.
+pub(crate) fn redact_api_key(msg: &str) -> String {
+    let marker = format!("{AUTH_QUERY_PARAM}=");
+    if let Some(idx) = msg.find(&marker) {
+        let prefix = &msg[..idx + marker.len()];
+        let rest = &msg[idx + marker.len()..];
+        let end = rest.find(['&', ')', ' ']).unwrap_or(rest.len());
+        format!("{prefix}[REDACTED]{}", &rest[end..])
+    } else {
+        msg.to_string()
+    }
+}
+
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 mod tests {
@@ -234,5 +252,50 @@ mod tests {
             .unwrap_err();
         let result = tls_hint("connection failed", &err);
         assert_eq!(result, "connection failed");
+    }
+
+    #[test]
+    fn redact_api_key_redacts_simple_query_param() {
+        let input = "error sending request for url (http://localhost:8090/rest/extensions?Bugzilla_api_key=SecretKey123)";
+        let result = redact_api_key(input);
+        assert!(
+            !result.contains("SecretKey123"),
+            "API key should be redacted: {result}"
+        );
+        assert!(
+            result.contains("Bugzilla_api_key=[REDACTED]"),
+            "should contain redacted placeholder: {result}"
+        );
+        assert!(
+            result.contains("rest/extensions"),
+            "path should be preserved: {result}"
+        );
+    }
+
+    #[test]
+    fn redact_api_key_preserves_message_without_key() {
+        let input = "connection refused";
+        assert_eq!(redact_api_key(input), "connection refused");
+    }
+
+    #[test]
+    fn redact_api_key_handles_marker_at_string_start() {
+        let input = "Bugzilla_api_key=secret";
+        assert_eq!(redact_api_key(input), "Bugzilla_api_key=[REDACTED]");
+    }
+
+    #[test]
+    fn redact_api_key_preserves_subsequent_query_params() {
+        let input =
+            "error for url (http://host/rest/bug?Bugzilla_api_key=secret&include_fields=id)";
+        let result = redact_api_key(input);
+        assert!(
+            !result.contains("secret"),
+            "API key should be redacted: {result}"
+        );
+        assert!(
+            result.contains("&include_fields=id"),
+            "other params should be preserved: {result}"
+        );
     }
 }
