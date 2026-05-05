@@ -97,21 +97,28 @@ make man    # writes to man/man1/
 
 ### Homebrew tap
 
-Each stable (non-prerelease) `v*` release also triggers
-`.github/workflows/update-homebrew.yml`, which:
+The `homebrew` job in `release.yml` runs after the `release` job on stable
+(non-prerelease) `v*` tags only (`if: !contains(github.ref_name, '-')`). It:
 
-- Downloads the release tarballs for macOS arm64 and Linux x86_64/aarch64
-- Computes their SHA256 sums
+- Downloads the just-published release tarballs for macOS arm64 and Linux
+  x86_64/aarch64
+- Computes their SHA256 sums (and the GitHub source-tarball sum for the
+  Intel-Mac source-build branch of the formula)
 - Renders `homebrew/bzr.rb.template` into `Formula/bzr.rb` in
   [`randomparity/homebrew-tap`](https://github.com/randomparity/homebrew-tap)
 - Commits and pushes the bumped formula
 
-Pre-release tags (e.g. `v0.2.0-rc3`) are skipped: brew users always pull the latest
-stable release, so RC builds shouldn't override the formula.
-
-The workflow needs a `HOMEBREW_TAP_TOKEN` repo secret — a fine-grained PAT with
+This job needs a `HOMEBREW_TAP_TOKEN` repo secret — a fine-grained PAT with
 `Contents: Write` on `randomparity/homebrew-tap`. See
 [`homebrew/README.md`](homebrew/README.md) for one-time tap setup.
+
+The bump used to live in a separate `update-homebrew.yml` workflow that
+triggered on `release: published`, but events emitted by the default
+`GITHUB_TOKEN` do not fire downstream workflows (a GitHub Actions
+safeguard against workflow recursion). v0.2.0's tap bump never ran as a
+result, and the workflow was folded into `release.yml` here so the bump
+runs directly in the release pipeline rather than waiting on a release
+event that never arrives.
 
 **Future goal:** publish to `homebrew-core` so users don't need a custom tap. Defer
 until `bzr` has a stable track record across multiple releases.
