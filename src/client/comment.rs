@@ -20,6 +20,25 @@ struct CommentBugEntry {
     comments: Vec<Comment>,
 }
 
+// Production caller is added in Task 4 (Hybrid-mode XML-RPC fallback orchestrator).
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "wired up by the Hybrid-mode orchestrator in a follow-up task"
+    )
+)]
+fn has_count_gaps(comments: &[crate::types::Comment], since_provided: bool) -> bool {
+    if comments.is_empty() {
+        return false;
+    }
+    let first = comments[0].count;
+    if !since_provided && first != 0 {
+        return true;
+    }
+    comments.windows(2).any(|w| w[1].count != w[0].count + 1)
+}
+
 impl BugzillaClient {
     pub async fn get_comments_since(
         &self,
@@ -69,6 +88,7 @@ mod tests {
     use wiremock::matchers::{method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
+    use super::has_count_gaps;
     use crate::client::test_helpers::test_client;
 
     #[tokio::test]
@@ -135,5 +155,53 @@ mod tests {
             .unwrap();
         assert_eq!(comments.len(), 1);
         assert_eq!(comments[0].text, "new comment");
+    }
+
+    #[test]
+    fn has_count_gaps_empty_is_not_gap() {
+        assert!(!has_count_gaps(&[], false));
+        assert!(!has_count_gaps(&[], true));
+    }
+
+    #[test]
+    fn has_count_gaps_full_sequence_starting_at_zero() {
+        let comments = vec![comment(0), comment(1), comment(2), comment(3), comment(4)];
+        assert!(!has_count_gaps(&comments, false));
+    }
+
+    #[test]
+    fn has_count_gaps_missing_zero_without_since() {
+        let comments = vec![comment(4)];
+        assert!(has_count_gaps(&comments, false));
+    }
+
+    #[test]
+    fn has_count_gaps_internal_gap_without_since() {
+        let comments = vec![comment(0), comment(4)];
+        assert!(has_count_gaps(&comments, false));
+    }
+
+    #[test]
+    fn has_count_gaps_with_since_contiguous_subset() {
+        let comments = vec![comment(5), comment(6), comment(7)];
+        assert!(!has_count_gaps(&comments, true));
+    }
+
+    #[test]
+    fn has_count_gaps_with_since_internal_gap() {
+        let comments = vec![comment(5), comment(7)];
+        assert!(has_count_gaps(&comments, true));
+    }
+
+    fn comment(count: u64) -> crate::types::Comment {
+        crate::types::Comment {
+            id: count,
+            bug_id: 1,
+            text: String::new(),
+            creator: None,
+            creation_time: None,
+            count,
+            is_private: false,
+        }
     }
 }
