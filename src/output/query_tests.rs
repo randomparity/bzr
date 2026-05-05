@@ -1,0 +1,210 @@
+#![expect(clippy::unwrap_used)]
+
+use std::collections::HashMap;
+
+use super::*;
+use crate::types::{OutputFormat, QueryKind, SavedQuery};
+
+/// Shared test helper — mirrors the `QueryView` in `print_query_detail` for JSON assertions.
+#[derive(serde::Serialize)]
+struct QueryView<'a> {
+    name: &'a str,
+    #[serde(flatten)]
+    query: &'a SavedQuery,
+}
+
+fn make_url_query() -> SavedQuery {
+    SavedQuery {
+        kind: QueryKind::Url,
+        source_url: Some(
+            "https://bugzilla.example.com/buglist.cgi?product=Firefox&f1=qa_contact".into(),
+        ),
+        server: Some("example".into()),
+        product: vec!["Firefox".into()],
+        raw_params: vec![
+            ("f1".into(), "qa_contact".into()),
+            ("o1".into(), "changedfrom".into()),
+        ],
+        limit: Some(100),
+        ..SavedQuery::default()
+    }
+}
+
+fn make_list_query() -> SavedQuery {
+    SavedQuery {
+        kind: QueryKind::List,
+        product: vec!["Firefox".into()],
+        status: vec!["NEW".into(), "ASSIGNED".into()],
+        priority: vec!["P1".into()],
+        limit: Some(25),
+        ..Default::default()
+    }
+}
+
+fn make_search_query() -> SavedQuery {
+    SavedQuery {
+        kind: QueryKind::Search,
+        quicksearch: Some("crash in tab".into()),
+        limit: Some(10),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn query_saved_json_serializes() {
+    let json = serde_json::json!({"name": "test-q", "action": "saved"});
+    let parsed: serde_json::Value =
+        serde_json::from_str(&serde_json::to_string(&json).unwrap()).unwrap();
+    assert_eq!(parsed["name"], "test-q");
+    assert_eq!(parsed["action"], "saved");
+}
+
+#[test]
+fn query_list_json_serializes() {
+    let mut queries: HashMap<String, SavedQuery> = HashMap::new();
+    queries.insert("firefox-new".into(), make_list_query());
+    queries.insert("crashes".into(), make_search_query());
+    let json = serde_json::to_string_pretty(&queries).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert!(parsed["firefox-new"].is_object());
+    assert_eq!(parsed["firefox-new"]["kind"], "list");
+    assert_eq!(parsed["crashes"]["kind"], "search");
+}
+
+#[test]
+fn query_detail_json_with_flatten() {
+    let query = make_list_query();
+    let view = QueryView {
+        name: "test-q",
+        query: &query,
+    };
+    let json = serde_json::to_string_pretty(&view).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed["name"], "test-q");
+    assert_eq!(parsed["kind"], "list");
+    assert_eq!(parsed["product"][0], "Firefox");
+    assert_eq!(parsed["limit"], 25);
+}
+
+#[test]
+fn query_saved_message_renders_table_text() {
+    assert_eq!(
+        query_saved_message("firefox-new", "Saved"),
+        "Saved query 'firefox-new'"
+    );
+}
+
+#[test]
+fn query_summary_line_renders_list_query() {
+    let line = query_summary_line("aaa", &make_list_query());
+    assert!(line.starts_with("aaa (kind=list"));
+    assert!(line.contains("product=Firefox"));
+    assert!(line.contains("status=NEW,ASSIGNED"));
+    assert!(line.contains("limit=25"));
+}
+
+#[test]
+fn query_summary_line_renders_search_query() {
+    let line = query_summary_line("zzz", &make_search_query());
+    assert!(line.starts_with("zzz (kind=search"));
+    assert!(line.contains("search=\"crash in tab\""));
+    assert!(line.contains("limit=10"));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn print_query_detail_table_renders_fields() {
+    let _lock = crate::ENV_LOCK.lock().await;
+    let mut query = make_list_query();
+    query.component = vec!["General".into()];
+    query.assignee = vec!["dev@example.com".into()];
+    query.fields = Some("id,summary".into());
+    query.exclude_fields = Some("comments".into());
+
+    let ((), output) = crate::test_helpers::capture_stdout(async {
+        print_query_detail("firefox-new", &query, OutputFormat::Table);
+    })
+    .await;
+
+    assert!(output.contains("Name"));
+    assert!(output.contains("firefox-new"));
+    assert!(output.contains("Kind"));
+    assert!(output.contains("list"));
+    assert!(output.contains("Product"));
+    assert!(output.contains("Firefox"));
+    assert!(output.contains("Component"));
+    assert!(output.contains("General"));
+    assert!(output.contains("Fields"));
+    assert!(output.contains("id,summary"));
+    assert!(output.contains("Exclude"));
+    assert!(output.contains("comments"));
+}
+
+#[test]
+fn query_detail_json_includes_url_fields() {
+    let query = make_url_query();
+    let view = QueryView {
+        name: "url-q",
+        query: &query,
+    };
+    let json = serde_json::to_string_pretty(&view).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed["kind"], "url");
+    assert_eq!(
+        parsed["source_url"],
+        "https://bugzilla.example.com/buglist.cgi?product=Firefox&f1=qa_contact"
+    );
+    assert_eq!(parsed["server"], "example");
+    assert_eq!(parsed["raw_params"].as_array().unwrap().len(), 2);
+}
+
+#[test]
+fn query_summary_line_renders_url_query() {
+    let line = query_summary_line("url-q", &make_url_query());
+    assert!(line.starts_with("url-q (kind=url"));
+    assert!(line.contains("product=Firefox"));
+    assert!(line.contains("2 raw params"));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn print_query_detail_table_renders_url_fields() {
+    let _lock = crate::ENV_LOCK.lock().await;
+    let query = make_url_query();
+
+    let ((), output) = crate::test_helpers::capture_stdout(async {
+        print_query_detail("url-q", &query, OutputFormat::Table);
+    })
+    .await;
+
+    assert!(output.contains("Source URL"));
+    assert!(output.contains("bugzilla.example.com"));
+    assert!(output.contains("Server"));
+    assert!(output.contains("example"));
+    assert!(output.contains("Raw params"));
+    assert!(output.contains('2'));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn query_list_names_sort_before_render() {
+    let _lock = crate::ENV_LOCK.lock().await;
+    let mut queries: HashMap<String, SavedQuery> = HashMap::new();
+    queries.insert("zzz".into(), make_list_query());
+    queries.insert("aaa".into(), make_search_query());
+
+    let mut names: Vec<&str> = queries.keys().map(String::as_str).collect();
+    names.sort_unstable();
+    let rendered: Vec<String> = names
+        .into_iter()
+        .map(|name| query_summary_line(name, &queries[name]))
+        .collect();
+
+    assert_eq!(
+        rendered,
+        vec![
+            "aaa (kind=search, search=\"crash in tab\", limit=10)".to_string(),
+            "zzz (kind=list, product=Firefox, status=NEW,ASSIGNED, limit=25)".to_string(),
+        ]
+    );
+}
