@@ -27,8 +27,8 @@ struct AttachmentCreateResponse {
     ids: Vec<u64>,
 }
 
-fn extract_bugs_envelope(value: serde_json::Value) -> Result<Vec<Attachment>> {
-    let resp: AttachmentBugResponse = serde_json::from_value(value)
+fn extract_bugs_envelope(value: &serde_json::Value) -> Result<Vec<Attachment>> {
+    let resp = AttachmentBugResponse::deserialize(value)
         .map_err(|e| BzrError::Deserialize(format!("attachments `bugs` envelope: {e}")))?;
     // Treat a structurally empty `bugs` map as a non-match so try_envelopes
     // falls through to the flat extractor. `bugs: {"42": []}` (bug acknowledged,
@@ -38,8 +38,8 @@ fn extract_bugs_envelope(value: serde_json::Value) -> Result<Vec<Attachment>> {
     })
 }
 
-fn extract_flat_envelope(value: serde_json::Value) -> Result<Vec<Attachment>> {
-    let resp: FlatAttachmentsResponse = serde_json::from_value(value)
+fn extract_flat_envelope(value: &serde_json::Value) -> Result<Vec<Attachment>> {
+    let resp = FlatAttachmentsResponse::deserialize(value)
         .map_err(|e| BzrError::Deserialize(format!("attachments flat envelope: {e}")))?;
     Ok(resp.attachments)
 }

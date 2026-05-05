@@ -28,8 +28,8 @@ struct FlatCommentsResponse {
     comments: Vec<Comment>,
 }
 
-fn extract_bugs_comment_envelope(value: serde_json::Value) -> Result<Vec<Comment>> {
-    let resp: CommentResponse = serde_json::from_value(value).map_err(|e| {
+fn extract_bugs_comment_envelope(value: &serde_json::Value) -> Result<Vec<Comment>> {
+    let resp = CommentResponse::deserialize(value).map_err(|e| {
         crate::error::BzrError::Deserialize(format!("comments `bugs` envelope: {e}"))
     })?;
     // Treat a structurally empty `bugs` map as a non-match so try_envelopes
@@ -47,8 +47,8 @@ fn extract_bugs_comment_envelope(value: serde_json::Value) -> Result<Vec<Comment
         })
 }
 
-fn extract_flat_comment_envelope(value: serde_json::Value) -> Result<Vec<Comment>> {
-    let resp: FlatCommentsResponse = serde_json::from_value(value)
+fn extract_flat_comment_envelope(value: &serde_json::Value) -> Result<Vec<Comment>> {
+    let resp = FlatCommentsResponse::deserialize(value)
         .map_err(|e| crate::error::BzrError::Deserialize(format!("comments flat envelope: {e}")))?;
     Ok(resp.comments)
 }

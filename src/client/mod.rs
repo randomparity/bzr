@@ -126,9 +126,9 @@ const DATA_KEYS: &[&str] = &[
 ];
 
 /// A candidate envelope extractor: the key to look for in the top-level
-/// JSON object and a function that receives the full `Value` and returns
+/// JSON object and a function that receives a borrowed `Value` and returns
 /// the typed result. Used by [`BugzillaClient::try_envelopes`].
-type EnvelopeCandidate<T> = (&'static str, fn(serde_json::Value) -> Result<T>);
+type EnvelopeCandidate<T> = (&'static str, fn(&serde_json::Value) -> Result<T>);
 
 impl BugzillaClient {
     /// Check if a JSON object contains known Bugzilla data keys,
@@ -316,29 +316,7 @@ impl BugzillaClient {
     ) -> Result<T> {
         let safe_url = Self::safe_url(resp.url());
         let body = resp.text().await?;
-
-        tracing::trace!(
-            url = safe_url,
-            body = &body[..body.len().min(2048)],
-            "response body"
-        );
-
-        let value: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
-            tracing::debug!(
-                url = safe_url,
-                error = %e,
-                body_preview = &body[..body.len().min(512)],
-                "JSON deserialization failed"
-            );
-            BzrError::Deserialize(format!(
-                "failed to parse response from {safe_url}: {e}\nbody preview ({} chars): {}",
-                body.chars().count().min(BODY_PREVIEW_MAX_BYTES),
-                format_body_preview(&body),
-            ))
-        })?;
-
-        Self::check_bugzilla_200_error(&value, &safe_url)?;
-
+        let value = Self::parse_body_to_value(&body, &safe_url)?;
         serde_json::from_value(value).map_err(|e| {
             BzrError::Deserialize(format!(
                 "failed to deserialize response from {safe_url}: {e}\nbody preview ({} chars): {}",
@@ -360,14 +338,17 @@ impl BugzillaClient {
     ) -> Result<serde_json::Value> {
         let safe_url = Self::safe_url(resp.url());
         let body = resp.text().await?;
+        Self::parse_body_to_value(&body, &safe_url)
+    }
 
+    fn parse_body_to_value(body: &str, safe_url: &str) -> Result<serde_json::Value> {
         tracing::trace!(
             url = safe_url,
             body = &body[..body.len().min(2048)],
             "response body"
         );
 
-        let value: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
+        let value: serde_json::Value = serde_json::from_str(body).map_err(|e| {
             tracing::debug!(
                 url = safe_url,
                 error = %e,
@@ -377,11 +358,11 @@ impl BugzillaClient {
             BzrError::Deserialize(format!(
                 "failed to parse response from {safe_url}: {e}\nbody preview ({} chars): {}",
                 body.chars().count().min(BODY_PREVIEW_MAX_BYTES),
-                format_body_preview(&body),
+                format_body_preview(body),
             ))
         })?;
 
-        Self::check_bugzilla_200_error(&value, &safe_url)?;
+        Self::check_bugzilla_200_error(&value, safe_url)?;
         Ok(value)
     }
 
@@ -467,7 +448,7 @@ impl BugzillaClient {
         // First pass: try candidates whose envelope key is present.
         for (key, extractor) in candidates {
             if present_keys.contains(*key) {
-                match extractor(value.clone()) {
+                match extractor(value) {
                     Ok(v) => return Ok(v),
                     Err(e) if first_error.is_none() => first_error = Some(e),
                     Err(_) => {}
@@ -478,7 +459,7 @@ impl BugzillaClient {
         // Second pass: try remaining candidates as fallbacks.
         for (key, extractor) in candidates {
             if !present_keys.contains(*key) {
-                match extractor(value.clone()) {
+                match extractor(value) {
                     Ok(v) => return Ok(v),
                     Err(e) if first_error.is_none() => first_error = Some(e),
                     Err(_) => {}
@@ -493,9 +474,9 @@ impl BugzillaClient {
             .join(", ");
         let underlying =
             first_error.map_or_else(|| "no candidates provided".to_string(), |e| e.to_string());
-        // Re-serialize the parsed Value so the user can see what shape the
-        // server actually sent. This is the most important diagnostic case
-        // for issue #135 — a previously-unseen envelope shape.
+        // Re-serialize the parsed Value so the user sees what envelope shape
+        // the server actually sent — the only diagnostic available once
+        // typed deserialization has failed against every known shape.
         let body_str =
             serde_json::to_string(value).unwrap_or_else(|_| "<value not serializable>".to_string());
         let preview = format_body_preview(&body_str);
@@ -1056,8 +1037,8 @@ mod tests {
     #[test]
     fn try_envelopes_returns_first_candidate_match() {
         let value = serde_json::json!({"bugs": {"42": [{"id": 1}]}});
-        let extract_bugs: fn(serde_json::Value) -> Result<i32> = |_v| Ok(1);
-        let extract_attachments: fn(serde_json::Value) -> Result<i32> = |_v| Ok(2);
+        let extract_bugs: fn(&serde_json::Value) -> Result<i32> = |_v| Ok(1);
+        let extract_attachments: fn(&serde_json::Value) -> Result<i32> = |_v| Ok(2);
         let result = super::BugzillaClient::try_envelopes(
             &value,
             &[("bugs", extract_bugs), ("attachments", extract_attachments)],
@@ -1072,8 +1053,8 @@ mod tests {
     #[test]
     fn try_envelopes_falls_back_to_alt_envelope() {
         let value = serde_json::json!({"attachments": [{"id": 1}]});
-        let extract_bugs: fn(serde_json::Value) -> Result<i32> = |_v| Ok(1);
-        let extract_attachments: fn(serde_json::Value) -> Result<i32> = |_v| Ok(2);
+        let extract_bugs: fn(&serde_json::Value) -> Result<i32> = |_v| Ok(1);
+        let extract_attachments: fn(&serde_json::Value) -> Result<i32> = |_v| Ok(2);
         let result = super::BugzillaClient::try_envelopes(
             &value,
             &[("bugs", extract_bugs), ("attachments", extract_attachments)],
@@ -1088,12 +1069,12 @@ mod tests {
     #[test]
     fn try_envelopes_returns_first_error_when_no_candidate_matches() {
         let value = serde_json::json!({"unknown_key": "unknown_value"});
-        let extract_bugs: fn(serde_json::Value) -> Result<i32> = |_v| {
+        let extract_bugs: fn(&serde_json::Value) -> Result<i32> = |_v| {
             Err(crate::error::BzrError::Deserialize(
                 "bugs extractor failed".into(),
             ))
         };
-        let extract_attachments: fn(serde_json::Value) -> Result<i32> = |_v| {
+        let extract_attachments: fn(&serde_json::Value) -> Result<i32> = |_v| {
             Err(crate::error::BzrError::Deserialize(
                 "attachments extractor failed".into(),
             ))
@@ -1132,9 +1113,9 @@ mod tests {
         // The `bugs` key is present but its value can't be extracted (wrong shape).
         // The fallback `attachments` extractor (no key required) should still run.
         let value = serde_json::json!({"bugs": "not_an_object", "attachments": [{"id": 1}]});
-        let extract_bugs: fn(serde_json::Value) -> Result<i32> =
+        let extract_bugs: fn(&serde_json::Value) -> Result<i32> =
             |_v| Err(crate::error::BzrError::Deserialize("bad bugs shape".into()));
-        let extract_attachments: fn(serde_json::Value) -> Result<i32> = |_v| Ok(2);
+        let extract_attachments: fn(&serde_json::Value) -> Result<i32> = |_v| Ok(2);
         let result = super::BugzillaClient::try_envelopes(
             &value,
             &[("bugs", extract_bugs), ("attachments", extract_attachments)],
