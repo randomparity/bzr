@@ -785,6 +785,44 @@ if assert_success; then test_pass; fi
 echo ""
 
 # ══════════════════════════════════════════════════════════════════════
+# Phase 14b: Private comment visibility (#125 hybrid fallback)
+# ══════════════════════════════════════════════════════════════════════
+echo "── Phase 14b: Private comments (Hybrid mode) ─────────────────"
+
+test_begin "94a. comment add --private"
+if [[ -n "$BUG1" ]]; then
+    run_bzr comment add "$BUG1" --body "Private test comment" --private
+    if assert_success && assert_json_exists '.id'; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "94b. comment list returns private comment in Hybrid mode"
+if [[ -n "$BUG1" ]]; then
+    # Hybrid is the default for newly-detected 5.0.x servers; explicit
+    # for clarity and to make this assertion mode-stable across all
+    # three Bugzilla versions in the matrix.
+    run_bzr --api hybrid comment list "$BUG1"
+    # We added: 1 description (count 0) + 2 public + 1 private = >= 4
+    # AND the private one must be visible (is_private: true present).
+    if assert_success \
+        && assert_json_array_min_length '.' 4 \
+        && [[ "$(jq '[.[] | select(.is_private == true)] | length' "$BZR_STDOUT")" -ge 1 ]]; then
+        test_pass
+    fi
+else test_skip "no BUG1"; fi
+
+test_begin "94c. comment list returns private comment in XML-RPC mode"
+if [[ -n "$BUG1" ]]; then
+    run_bzr --api xmlrpc comment list "$BUG1"
+    if assert_success \
+        && assert_json_array_min_length '.' 4 \
+        && [[ "$(jq '[.[] | select(.is_private == true)] | length' "$BZR_STDOUT")" -ge 1 ]]; then
+        test_pass
+    fi
+else test_skip "no BUG1"; fi
+
+echo ""
+
+# ══════════════════════════════════════════════════════════════════════
 # Phase 15: Attachments
 # ══════════════════════════════════════════════════════════════════════
 echo "── Phase 15: Attachments ───────────────────────────────────"
