@@ -384,10 +384,7 @@ fn value_to_comment(val: &Value) -> Result<crate::types::Comment> {
         creator: get_nonempty_str(m, "creator"),
         creation_time: get_datetime_str(m, "creation_time"),
         count,
-        is_private: m
-            .get("is_private")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
+        is_private: get_bool_flag(m, "is_private"),
     })
 }
 
@@ -576,7 +573,7 @@ fn value_to_group_info(val: &Value) -> Result<GroupInfo> {
         id,
         name: get_str(m, "name").unwrap_or_default(),
         description: get_str(m, "description").unwrap_or_default(),
-        is_active: m.get("is_active").and_then(Value::as_bool).unwrap_or(false),
+        is_active: get_bool_flag(m, "is_active"),
         membership,
     })
 }
@@ -931,6 +928,33 @@ mod tests {
         assert_eq!(info.membership.len(), 1);
         assert_eq!(info.membership[0].id, 7);
         assert_eq!(info.membership[0].real_name.as_deref(), Some("Alice"));
+    }
+
+    #[test]
+    fn value_to_group_info_parses_int_is_active() {
+        let mut group = BTreeMap::new();
+        group.insert("id".into(), Value::Int(1));
+        group.insert("name".into(), Value::String("admin".into()));
+        group.insert("description".into(), Value::String("Administrators".into()));
+        group.insert("is_active".into(), Value::Int(1));
+        group.insert("membership".into(), Value::Array(Vec::new()));
+
+        let info = value_to_group_info(&Value::Struct(group)).unwrap();
+        assert!(info.is_active);
+    }
+
+    #[test]
+    fn value_to_comment_parses_int_is_private() {
+        let mut comment = BTreeMap::new();
+        comment.insert("id".into(), Value::Int(1001));
+        comment.insert("bug_id".into(), Value::Int(42));
+        comment.insert("count".into(), Value::Int(1));
+        comment.insert("text".into(), Value::String("private".into()));
+        comment.insert("creator".into(), Value::String("alice@test".into()));
+        comment.insert("is_private".into(), Value::Int(1));
+
+        let parsed = value_to_comment(&Value::Struct(comment)).unwrap();
+        assert!(parsed.is_private);
     }
 
     #[tokio::test]

@@ -40,6 +40,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Previously the threshold was 1.84.0, so `make setup` would pass
   the version check on rustc 1.85-1.87 and then fail later when
   `cargo install cargo-llvm-cov` rejected the toolchain. Fixes #138.
+- The XML-RPC parser now accepts both `<boolean>1</boolean>` and
+  `<int>1</int>` wire shapes for the `is_private` field on
+  `Bug.comments` responses and the `is_active` field on `Group.get`
+  responses. Bugzilla 5.0.x deployments encode the same flag using
+  either shape depending on the field; previously the parser only
+  recognized `<boolean>`, so int-shaped values were silently
+  classified as `false`. Attachment fields already accepted both
+  shapes via the same helper. Fixes #140.
 
 ### Added
 
