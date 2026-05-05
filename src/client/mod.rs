@@ -125,6 +125,11 @@ const DATA_KEYS: &[&str] = &[
     "ids",
 ];
 
+/// A candidate envelope extractor: the key to look for in the top-level
+/// JSON object and a function that receives a borrowed `Value` and returns
+/// the typed result. Used by [`BugzillaClient::try_envelopes`].
+type EnvelopeCandidate<T> = (&'static str, fn(&serde_json::Value) -> Result<T>);
+
 impl BugzillaClient {
     /// Check if a JSON object contains known Bugzilla data keys,
     /// indicating the response has real data alongside any error fields.
@@ -311,30 +316,61 @@ impl BugzillaClient {
     ) -> Result<T> {
         let safe_url = Self::safe_url(resp.url());
         let body = resp.text().await?;
+        let value = Self::parse_body_to_value(&body, &safe_url)?;
+        serde_json::from_value(value).map_err(|e| {
+            BzrError::Deserialize(format!(
+                "failed to deserialize response from {safe_url}: {e}\nbody preview ({} chars): {}",
+                body.chars().count().min(BODY_PREVIEW_MAX_BYTES),
+                format_body_preview(&body),
+            ))
+        })
+    }
 
+    /// Parse a response body to a generic [`serde_json::Value`].
+    ///
+    /// Performs the same body-read, JSON-parse, and 200-error check as
+    /// [`Self::parse_json`], but stops short of typed deserialization.
+    /// Used by callers that need to inspect the response envelope before
+    /// committing to a concrete type (see [`Self::try_envelopes`]).
+    pub(super) async fn parse_json_value(
+        &self,
+        resp: reqwest::Response,
+    ) -> Result<serde_json::Value> {
+        let safe_url = Self::safe_url(resp.url());
+        let body = resp.text().await?;
+        Self::parse_body_to_value(&body, &safe_url)
+    }
+
+    fn parse_body_to_value(body: &str, safe_url: &str) -> Result<serde_json::Value> {
         tracing::trace!(
             url = safe_url,
             body = &body[..body.len().min(2048)],
             "response body"
         );
 
-        let value: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
+        let value: serde_json::Value = serde_json::from_str(body).map_err(|e| {
             tracing::debug!(
                 url = safe_url,
                 error = %e,
                 body_preview = &body[..body.len().min(512)],
                 "JSON deserialization failed"
             );
-            BzrError::Deserialize(format!("failed to parse response from {safe_url}: {e}"))
+            BzrError::Deserialize(format!(
+                "failed to parse response from {safe_url}: {e}\nbody preview ({} chars): {}",
+                body.chars().count().min(BODY_PREVIEW_MAX_BYTES),
+                format_body_preview(body),
+            ))
         })?;
 
-        Self::check_bugzilla_200_error(&value, &safe_url)?;
+        Self::check_bugzilla_200_error(&value, safe_url)?;
+        Ok(value)
+    }
 
-        serde_json::from_value(value).map_err(|e| {
-            BzrError::Deserialize(format!(
-                "failed to deserialize response from {safe_url}: {e}"
-            ))
-        })
+    /// Send a GET request and return the parsed JSON body as a `Value`.
+    pub(super) async fn get_json_value(&self, path: &str) -> Result<serde_json::Value> {
+        let req = self.apply_auth(self.http.get(self.url(path)));
+        let resp = self.send(req).await?;
+        self.parse_json_value(resp).await
     }
 
     /// Detect Bugzilla error payloads that arrive with HTTP 200 status.
@@ -385,6 +421,71 @@ impl BugzillaClient {
         Ok(())
     }
 
+    /// Try each envelope shape in order, returning the first that succeeds.
+    ///
+    /// `candidates` is a slice of `(envelope_key, extractor)` pairs. The
+    /// helper inspects the parsed JSON's top-level keys: it tries the
+    /// extractors whose `envelope_key` is present first, then any
+    /// remaining as fallbacks. On total failure, returns the first
+    /// candidate's error annotated with the list of envelopes tried and
+    /// a redacted body preview built from the re-serialized `Value`
+    /// (so the user sees what shape the server actually sent).
+    ///
+    /// Used to tolerate response-shape variants between Bugzilla
+    /// deployments — e.g. `bug/<id>/attachment` returns `bugs`-keyed on
+    /// stock 5.0.x but `attachments`-keyed on some IBM-style deployments.
+    pub(super) fn try_envelopes<T>(
+        value: &serde_json::Value,
+        candidates: &[EnvelopeCandidate<T>],
+    ) -> Result<T> {
+        let present_keys: std::collections::HashSet<&str> = value
+            .as_object()
+            .map(|m| m.keys().map(String::as_str).collect())
+            .unwrap_or_default();
+
+        let mut first_error: Option<BzrError> = None;
+
+        // First pass: try candidates whose envelope key is present.
+        for (key, extractor) in candidates {
+            if present_keys.contains(*key) {
+                match extractor(value) {
+                    Ok(v) => return Ok(v),
+                    Err(e) if first_error.is_none() => first_error = Some(e),
+                    Err(_) => {}
+                }
+            }
+        }
+
+        // Second pass: try remaining candidates as fallbacks.
+        for (key, extractor) in candidates {
+            if !present_keys.contains(*key) {
+                match extractor(value) {
+                    Ok(v) => return Ok(v),
+                    Err(e) if first_error.is_none() => first_error = Some(e),
+                    Err(_) => {}
+                }
+            }
+        }
+
+        let envelope_list = candidates
+            .iter()
+            .map(|(k, _)| *k)
+            .collect::<Vec<_>>()
+            .join(", ");
+        let underlying =
+            first_error.map_or_else(|| "no candidates provided".to_string(), |e| e.to_string());
+        // Re-serialize the parsed Value so the user sees what envelope shape
+        // the server actually sent — the only diagnostic available once
+        // typed deserialization has failed against every known shape.
+        let body_str =
+            serde_json::to_string(value).unwrap_or_else(|_| "<value not serializable>".to_string());
+        let preview = format_body_preview(&body_str);
+        let preview_chars = body_str.chars().count().min(BODY_PREVIEW_MAX_BYTES);
+        Err(BzrError::Deserialize(format!(
+            "no matching envelope (tried envelopes: {envelope_list}): {underlying}\nbody preview ({preview_chars} chars): {preview}"
+        )))
+    }
+
     async fn check_response_status(
         &self,
         response: reqwest::Response,
@@ -415,6 +516,48 @@ impl BugzillaClient {
         }
         Ok(response)
     }
+}
+
+/// Maximum length of the body excerpt embedded in deserialization errors.
+/// 512 bytes is enough to capture the top-level keys of any realistic
+/// Bugzilla envelope while keeping the error message human-scaled.
+const BODY_PREVIEW_MAX_BYTES: usize = 512;
+
+/// Format a response body for inclusion in a `BzrError::Deserialize` message.
+///
+/// Truncates to [`BODY_PREVIEW_MAX_BYTES`] on a UTF-8 char boundary,
+/// appends `…` when truncated, runs the result through
+/// [`crate::http::redact_api_key`] to strip echoed-back API keys, and
+/// collapses internal newlines and tabs to single spaces so the preview
+/// stays on one line beneath the main error.
+///
+/// Called by `parse_json` when deserializing JSON fails.
+fn format_body_preview(body: &str) -> String {
+    let truncated_end = body
+        .char_indices()
+        .take_while(|(i, _)| *i < BODY_PREVIEW_MAX_BYTES)
+        .last()
+        .map_or(0, |(i, c)| i + c.len_utf8());
+
+    let mut preview = String::with_capacity(truncated_end + 4);
+    preview.push_str(&body[..truncated_end]);
+    if truncated_end < body.len() {
+        preview.push('…');
+    }
+
+    // Collapse whitespace so the preview stays on one line in error output.
+    let collapsed: String = preview
+        .chars()
+        .map(|c| {
+            if c == '\n' || c == '\t' || c == '\r' {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect();
+
+    crate::http::redact_api_key(&collapsed)
 }
 
 #[cfg(test)]
@@ -476,339 +619,5 @@ pub(super) mod test_helpers {
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used)]
-mod tests {
-    use wiremock::matchers::{method, path, query_param};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
-
-    use super::*;
-    use test_helpers::{test_client, test_client_query_param};
-
-    #[test]
-    fn safe_url_strips_query_params() {
-        let url = reqwest::Url::parse(&format!(
-            "https://bugzilla.example.com/rest/bug/1?{}=secret",
-            crate::http::AUTH_QUERY_PARAM
-        ))
-        .unwrap();
-        let safe = BugzillaClient::safe_url(&url);
-        assert!(
-            !safe.contains("secret"),
-            "API key should be stripped: {safe}"
-        );
-        assert!(
-            safe.contains("/rest/bug/1"),
-            "path should be preserved: {safe}"
-        );
-    }
-
-    #[test]
-    fn safe_url_preserves_path() {
-        let url = reqwest::Url::parse("https://bugzilla.example.com/rest/bug/42").unwrap();
-        let safe = BugzillaClient::safe_url(&url);
-        assert_eq!(safe, "https://bugzilla.example.com/rest/bug/42");
-    }
-
-    #[test]
-    fn new_trims_trailing_slash_and_keeps_email_hint() {
-        let client = BugzillaClient::new(
-            "https://bugzilla.example.com/",
-            "test-key",
-            AuthMethod::Header,
-            ApiMode::Rest,
-            Some("user@example.com"),
-            &crate::tls::TlsConfig::default(),
-        )
-        .unwrap();
-
-        assert_eq!(client.base_url, "https://bugzilla.example.com");
-        assert_eq!(client.email_hint.as_deref(), Some("user@example.com"));
-    }
-
-    #[test]
-    fn apply_auth_adds_query_param_credentials() {
-        let client = test_client_query_param("https://bugzilla.example.com");
-        let request = client
-            .apply_auth(client.http.get(client.url("bug")))
-            .build()
-            .unwrap();
-        let expected_query = format!("{AUTH_QUERY_PARAM}=test-key");
-        assert_eq!(request.url().query(), Some(expected_query.as_str()));
-    }
-
-    #[test]
-    fn alternate_auth_rejects_invalid_header_characters() {
-        let client = BugzillaClient::new(
-            "https://bugzilla.example.com",
-            "bad\nkey",
-            AuthMethod::QueryParam,
-            ApiMode::Rest,
-            None,
-            &crate::tls::TlsConfig::default(),
-        )
-        .unwrap();
-
-        let builder = client.http.get(client.url("bug"));
-        let err = client.apply_alternate_auth(builder).unwrap_err();
-        assert!(err.to_string().contains("invalid header characters"));
-    }
-
-    #[tokio::test]
-    async fn api_error_with_200_status() {
-        let mock = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/rest/product"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "error": true,
-                "code": 301,
-                "message": "You are not authorized to access that product."
-            })))
-            .mount(&mock)
-            .await;
-
-        let client = test_client(&mock.uri());
-        let err = client.get_product("Secret").await.unwrap_err();
-        let msg = err.to_string();
-        assert!(msg.contains("301"), "expected error code 301: {msg}");
-        assert!(
-            msg.contains("not authorized"),
-            "expected auth error message: {msg}"
-        );
-    }
-
-    #[tokio::test]
-    async fn api_error_with_200_and_data_returns_data() {
-        // Some servers (e.g. IBM LTC) return error fields alongside real
-        // data. The data should be used and the error logged as a warning.
-        let mock = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/rest/bug/42"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "error": true,
-                "code": 100_500,
-                "message": "MirrorTool internal error",
-                "bugs": [{"id": 42, "summary": "test bug", "status": "NEW"}]
-            })))
-            .mount(&mock)
-            .await;
-
-        let client = test_client(&mock.uri());
-        let bug = client.get_bug("42", None, None).await.unwrap();
-        assert_eq!(bug.id, 42);
-        assert_eq!(bug.summary, "test bug");
-    }
-
-    #[tokio::test]
-    async fn http_500_returns_error() {
-        let mock = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/rest/user"))
-            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
-            .mount(&mock)
-            .await;
-
-        let client = test_client(&mock.uri());
-        let err = client.search_users("anyone", false).await.unwrap_err();
-        let msg = err.to_string();
-        assert!(
-            msg.contains("500") || msg.contains("Internal Server Error"),
-            "expected 500 error: {msg}"
-        );
-    }
-
-    #[tokio::test]
-    async fn auth_fallback_header_to_query_param_on_401() {
-        let mock = MockServer::start().await;
-        // Success response requires query param auth (registered first)
-        Mock::given(method("GET"))
-            .and(path("/rest/user"))
-            .and(query_param(crate::http::AUTH_QUERY_PARAM, "test-key"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "users": [{"id": 1, "name": "alice@example.com"}]
-            })))
-            .expect(1)
-            .mount(&mock)
-            .await;
-        // First request returns 401 (registered second, checked first by LIFO)
-        Mock::given(method("GET"))
-            .and(path("/rest/user"))
-            .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
-                "error": true,
-                "code": 410,
-                "message": "You must log in."
-            })))
-            .up_to_n_times(1)
-            .expect(1)
-            .mount(&mock)
-            .await;
-
-        let client = test_client(&mock.uri());
-        let users = client.search_users("alice", false).await.unwrap();
-        assert_eq!(users.len(), 1);
-        assert_eq!(users[0].name, "alice@example.com");
-    }
-
-    #[tokio::test]
-    async fn auth_fallback_query_param_to_header_on_401() {
-        let mock = MockServer::start().await;
-        // Success response requires header auth (registered first)
-        Mock::given(method("GET"))
-            .and(path("/rest/user"))
-            .and(wiremock::matchers::header(
-                crate::http::AUTH_HEADER_NAME,
-                "test-key",
-            ))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "users": [{"id": 2, "name": "bob@example.com"}]
-            })))
-            .expect(1)
-            .mount(&mock)
-            .await;
-        // First request returns 401 (registered second, checked first by LIFO)
-        Mock::given(method("GET"))
-            .and(path("/rest/user"))
-            .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
-                "error": true,
-                "code": 410,
-                "message": "You must log in."
-            })))
-            .up_to_n_times(1)
-            .expect(1)
-            .mount(&mock)
-            .await;
-
-        let client = test_client_query_param(&mock.uri());
-        let users = client.search_users("bob", false).await.unwrap();
-        assert_eq!(users.len(), 1);
-        assert_eq!(users[0].name, "bob@example.com");
-    }
-
-    #[tokio::test]
-    async fn auth_fallback_both_fail_returns_original_error() {
-        let mock = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/rest/user"))
-            .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
-                "error": true,
-                "code": 410,
-                "message": "You must log in."
-            })))
-            .mount(&mock)
-            .await;
-
-        let client = test_client(&mock.uri());
-        let err = client.search_users("anyone", false).await.unwrap_err();
-        let msg = err.to_string();
-        assert!(
-            msg.contains("410") || msg.contains("log in"),
-            "expected auth error: {msg}"
-        );
-    }
-
-    #[tokio::test]
-    async fn non_401_errors_do_not_trigger_fallback() {
-        let mock = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/rest/user"))
-            .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
-                "error": true,
-                "code": 51,
-                "message": "You are not authorized."
-            })))
-            .expect(1)
-            .mount(&mock)
-            .await;
-
-        let client = test_client(&mock.uri());
-        let err = client.search_users("anyone", false).await.unwrap_err();
-        assert!(err.to_string().contains("not authorized"));
-    }
-
-    #[tokio::test]
-    async fn api_error_with_string_code_parsed_correctly() {
-        let mock = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/rest/group"))
-            .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
-                "error": true,
-                "code": "32610",
-                "message": "For security reasons, you must use HTTP POST."
-            })))
-            .mount(&mock)
-            .await;
-
-        let client = test_client(&mock.uri());
-        let resp = client
-            .http
-            .get(format!("{}/rest/group", mock.uri()))
-            .send()
-            .await
-            .unwrap();
-        let err = client.check_response_status(resp).await.unwrap_err();
-        assert!(
-            matches!(&err, crate::error::BzrError::Api { code: 32610, .. }),
-            "expected Api error with code 32610, got: {err}"
-        );
-    }
-
-    #[test]
-    fn error_response_parses_unsigned_integer_code() {
-        let json = r#"{"error":true,"code":32610,"message":"x"}"#;
-        let err: super::ErrorResponse = serde_json::from_str(json).unwrap();
-        assert_eq!(err.code, 32610);
-    }
-
-    #[test]
-    fn error_response_parses_negative_integer_code() {
-        let json = r#"{"error":true,"code":-7,"message":"x"}"#;
-        let err: super::ErrorResponse = serde_json::from_str(json).unwrap();
-        assert_eq!(err.code, -7);
-    }
-
-    #[tokio::test]
-    async fn api_200_error_without_code_field_uses_minus_one() {
-        let mock = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/rest/group"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "error": true,
-                "message": "no code"
-            })))
-            .mount(&mock)
-            .await;
-
-        let client = test_client(&mock.uri());
-        let err = client
-            .get_json_query::<serde_json::Value>("group", &[])
-            .await
-            .unwrap_err();
-        assert!(
-            matches!(&err, crate::error::BzrError::Api { code: -1, .. }),
-            "expected Api error with code -1, got: {err}"
-        );
-    }
-
-    #[tokio::test]
-    async fn api_200_error_with_string_code_parsed_correctly() {
-        let mock = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/rest/group"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "error": true,
-                "code": "32610",
-                "message": "For security reasons, you must use HTTP POST."
-            })))
-            .mount(&mock)
-            .await;
-
-        let client = test_client(&mock.uri());
-        let err: crate::error::BzrError = client
-            .get_json_query::<serde_json::Value>("group", &[])
-            .await
-            .unwrap_err();
-        assert!(
-            matches!(&err, crate::error::BzrError::Api { code: 32610, .. }),
-            "expected Api error with code 32610, got: {err}"
-        );
-    }
-}
+#[path = "mod_tests.rs"]
+mod tests;

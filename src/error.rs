@@ -125,24 +125,11 @@ pub(crate) fn format_error_chain(err: &dyn std::error::Error) -> String {
 /// Format a reqwest error for display: redact API keys and add TLS hints.
 fn format_http_error(err: &reqwest::Error) -> String {
     let chain = format_error_chain(err);
-    let mut msg = redact_api_key(&chain);
+    let mut msg = crate::http::redact_api_key(&chain);
     if crate::http::is_connect_tls_error(err.is_connect(), &chain) {
         msg.push_str(crate::http::TLS_HINT);
     }
     msg
-}
-
-fn redact_api_key(msg: &str) -> String {
-    const MARKER: &str = "Bugzilla_api_key=";
-    if let Some(idx) = msg.find(MARKER) {
-        let prefix = &msg[..idx + MARKER.len()];
-        // Find the end of the key value (next & or ) or end of string)
-        let rest = &msg[idx + MARKER.len()..];
-        let end = rest.find(['&', ')', ' ']).unwrap_or(rest.len());
-        format!("{prefix}[REDACTED]{}", &rest[end..])
-    } else {
-        msg.to_string()
-    }
 }
 
 impl BzrError {
@@ -328,55 +315,6 @@ mod tests {
         let err = BzrError::DataIntegrity("attachment has no data".into());
         assert_eq!(err.exit_code(), 10);
         assert_eq!(err.error_type(), "data_integrity");
-    }
-
-    #[test]
-    fn sanitize_http_error_redacts_api_key() {
-        let input = "error sending request for url (http://localhost:8090/rest/extensions?Bugzilla_api_key=SecretKey123)";
-        let result = redact_api_key(input);
-        assert!(
-            !result.contains("SecretKey123"),
-            "API key should be redacted: {result}"
-        );
-        assert!(
-            result.contains("Bugzilla_api_key=[REDACTED]"),
-            "should contain redacted placeholder: {result}"
-        );
-        assert!(
-            result.contains("rest/extensions"),
-            "path should be preserved: {result}"
-        );
-    }
-
-    #[test]
-    fn sanitize_http_error_preserves_message_without_key() {
-        let input = "connection refused";
-        let result = redact_api_key(input);
-        assert_eq!(result, "connection refused");
-    }
-
-    #[test]
-    fn sanitize_http_error_redacts_marker_at_string_start() {
-        // The marker at index 0 is the boundary case for the post-marker
-        // slicing arithmetic — must not underflow.
-        let input = "Bugzilla_api_key=secret";
-        let result = redact_api_key(input);
-        assert_eq!(result, "Bugzilla_api_key=[REDACTED]");
-    }
-
-    #[test]
-    fn sanitize_http_error_handles_key_with_other_params() {
-        let input =
-            "error for url (http://host/rest/bug?Bugzilla_api_key=secret&include_fields=id)";
-        let result = redact_api_key(input);
-        assert!(
-            !result.contains("secret"),
-            "API key should be redacted: {result}"
-        );
-        assert!(
-            result.contains("&include_fields=id"),
-            "other params should be preserved: {result}"
-        );
     }
 
     #[test]

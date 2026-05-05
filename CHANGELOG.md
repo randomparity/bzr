@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `bzr attachment list` and `bzr comment list` now accept
+  alternate response envelopes returned by some Bugzilla 5.0.x
+  deployments (e.g. IBM LTC) that omit the `bugs` key and return
+  `attachments` / `comments` at the root. Previously these
+  commands hard-failed with `missing field 'bugs'`. Affects #135.
+- `BzrError::Deserialize` errors now include a redacted ~512-char
+  preview of the response body, so envelope mismatches and
+  unexpected response shapes can be diagnosed without re-running
+  with `-vv`. Any `Bugzilla_api_key=` value echoed back by the
+  server is redacted in the preview.
 - `bzr comment list` now returns private comments on Bugzilla
   deployments where the REST endpoint silently truncates them
   (observed on Bugzilla 5.0.x). In Hybrid API mode (the default

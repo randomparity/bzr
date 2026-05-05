@@ -10,6 +10,13 @@ struct AttachmentBugResponse {
     bugs: std::collections::HashMap<String, Vec<Attachment>>,
 }
 
+/// Flat envelope variant: `{"attachments": [...]}` at the root of the
+/// response. Observed on some Bugzilla 5.0.x deployments (issue #135).
+#[derive(Deserialize)]
+struct FlatAttachmentsResponse {
+    attachments: Vec<Attachment>,
+}
+
 #[derive(Deserialize)]
 struct AttachmentByIdResponse {
     attachments: std::collections::HashMap<String, Attachment>,
@@ -20,12 +27,35 @@ struct AttachmentCreateResponse {
     ids: Vec<u64>,
 }
 
+fn extract_bugs_envelope(value: &serde_json::Value) -> Result<Vec<Attachment>> {
+    let resp = AttachmentBugResponse::deserialize(value)
+        .map_err(|e| BzrError::Deserialize(format!("attachments `bugs` envelope: {e}")))?;
+    // Treat a structurally empty `bugs` map as a non-match so try_envelopes
+    // falls through to the flat extractor. `bugs: {"42": []}` (bug acknowledged,
+    // no attachments) is a legitimate empty result and still returns Ok(vec![]).
+    resp.bugs.into_values().next().ok_or_else(|| {
+        BzrError::Deserialize("attachments `bugs` envelope: empty top-level map".into())
+    })
+}
+
+fn extract_flat_envelope(value: &serde_json::Value) -> Result<Vec<Attachment>> {
+    let resp = FlatAttachmentsResponse::deserialize(value)
+        .map_err(|e| BzrError::Deserialize(format!("attachments flat envelope: {e}")))?;
+    Ok(resp.attachments)
+}
+
 impl BugzillaClient {
     pub async fn get_attachments(&self, bug_id: u64) -> Result<Vec<Attachment>> {
-        let data: AttachmentBugResponse =
-            self.get_json(&format!("bug/{bug_id}/attachment")).await?;
-        let attachments = data.bugs.into_values().next().unwrap_or_default();
-        Ok(attachments)
+        let value = self
+            .get_json_value(&format!("bug/{bug_id}/attachment"))
+            .await?;
+        Self::try_envelopes(
+            &value,
+            &[
+                ("bugs", extract_bugs_envelope),
+                ("attachments", extract_flat_envelope),
+            ],
+        )
     }
 
     pub async fn get_attachment(&self, attachment_id: u64) -> Result<Attachment> {
@@ -73,64 +103,5 @@ impl BugzillaClient {
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used)]
-mod tests {
-    use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
-
-    use crate::client::test_helpers::test_client;
-    use crate::types::{FlagStatus, FlagUpdate, UpdateAttachmentParams, UploadAttachmentParams};
-
-    #[tokio::test]
-    async fn update_attachment_sends_put() {
-        let mock = MockServer::start().await;
-        Mock::given(method("PUT"))
-            .and(path("/rest/bug/attachment/100"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "attachments": [{"id": 100, "changes": {}}]
-            })))
-            .expect(1)
-            .mount(&mock)
-            .await;
-
-        let client = test_client(&mock.uri());
-        let params = UpdateAttachmentParams {
-            is_obsolete: Some(true),
-            summary: Some("Updated patch".into()),
-            ..Default::default()
-        };
-        client.update_attachment(100, &params).await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn upload_attachment_with_flags_sends_flags() {
-        let mock = MockServer::start().await;
-        Mock::given(method("POST"))
-            .and(path("/rest/bug/1/attachment"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [200]})),
-            )
-            .expect(1)
-            .mount(&mock)
-            .await;
-
-        let client = test_client(&mock.uri());
-        let flags = vec![FlagUpdate {
-            name: "review".into(),
-            status: FlagStatus::Request,
-            requestee: Some("alice@example.com".into()),
-        }];
-        let id = client
-            .upload_attachment(&UploadAttachmentParams {
-                bug_id: 1,
-                file_name: "test.txt".into(),
-                summary: "test".into(),
-                content_type: "text/plain".into(),
-                data: b"hello".to_vec(),
-                flags,
-            })
-            .await
-            .unwrap();
-        assert_eq!(id, 200);
-    }
-}
+#[path = "attachment_tests.rs"]
+mod tests;
