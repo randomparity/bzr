@@ -162,6 +162,23 @@ impl XmlRpcClient {
         })?;
         value_to_group_info(group_val)
     }
+
+    pub async fn get_comments_since(
+        &self,
+        bug_id: u64,
+        since: Option<&str>,
+    ) -> Result<Vec<crate::types::Comment>> {
+        let mut rpc_params = BTreeMap::new();
+        #[expect(clippy::cast_possible_wrap, reason = "bug IDs fit in i64")]
+        let bug_id_value = Value::Int(bug_id as i64);
+        rpc_params.insert("ids".into(), Value::Array(vec![bug_id_value]));
+        if let Some(s) = since {
+            rpc_params.insert("new_since".into(), Value::from(s));
+        }
+
+        let result = self.call("Bug.comments", rpc_params).await?;
+        extract_comments(&result, bug_id)
+    }
 }
 
 fn extract_id(response: &Value) -> Result<u64> {
@@ -261,6 +278,77 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         cc: get_str_array(m, "cc"),
         op_sys: get_nonempty_str(m, "op_sys"),
         rep_platform: get_nonempty_str(m, "rep_platform"),
+    })
+}
+
+fn extract_comments(response: &Value, bug_id: u64) -> Result<Vec<crate::types::Comment>> {
+    let top = response
+        .as_struct()
+        .ok_or_else(|| BzrError::XmlRpc("expected struct response".into()))?;
+
+    let Some(bugs_val) = top.get("bugs") else {
+        return Ok(Vec::new());
+    };
+
+    let bugs_struct = bugs_val
+        .as_struct()
+        .ok_or_else(|| BzrError::XmlRpc("expected bugs to be a struct keyed by bug ID".into()))?;
+
+    // Bugzilla returns the inner key as a string even though the input is
+    // an integer. Look up by string form.
+    let key = bug_id.to_string();
+    let Some(bug_entry) = bugs_struct.get(&key) else {
+        return Ok(Vec::new());
+    };
+
+    let entry_struct = bug_entry
+        .as_struct()
+        .ok_or_else(|| BzrError::XmlRpc("expected bug entry struct".into()))?;
+
+    let Some(comments_val) = entry_struct.get("comments") else {
+        return Ok(Vec::new());
+    };
+
+    let comments_arr = comments_val
+        .as_array()
+        .ok_or_else(|| BzrError::XmlRpc("expected comments array".into()))?;
+
+    let mut comments = Vec::with_capacity(comments_arr.len());
+    for c in comments_arr {
+        comments.push(value_to_comment(c)?);
+    }
+    Ok(comments)
+}
+
+fn value_to_comment(val: &Value) -> Result<crate::types::Comment> {
+    let m = val
+        .as_struct()
+        .ok_or_else(|| BzrError::XmlRpc("expected struct for comment".into()))?;
+
+    let id = m
+        .get("id")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| BzrError::XmlRpc("comment missing id field".into()))?;
+    let bug_id = m.get("bug_id").and_then(Value::as_i64).unwrap_or(0);
+    let count = m.get("count").and_then(Value::as_i64).unwrap_or(0);
+
+    #[expect(clippy::cast_sign_loss, reason = "comment IDs are non-negative")]
+    let id = id as u64;
+    #[expect(clippy::cast_sign_loss, reason = "bug IDs are non-negative")]
+    let bug_id = bug_id as u64;
+    #[expect(clippy::cast_sign_loss, reason = "comment counts are non-negative")]
+    let count = count as u64;
+    Ok(crate::types::Comment {
+        id,
+        bug_id,
+        text: get_str(m, "text").unwrap_or_default(),
+        creator: get_nonempty_str(m, "creator"),
+        creation_time: get_datetime_str(m, "creation_time"),
+        count,
+        is_private: m
+            .get("is_private")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
     })
 }
 
@@ -808,5 +896,86 @@ mod tests {
         assert_eq!(get_int_array(&m, "blocks"), vec![42_u64, 100]);
         assert!(get_int_array(&m, "not_array").is_empty());
         assert!(get_int_array(&m, "missing").is_empty());
+    }
+
+    #[tokio::test]
+    async fn xmlrpc_get_comments_since_parses_full_response() {
+        use wiremock::matchers::{body_string_contains, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock = MockServer::start().await;
+        let response_xml = r#"<?xml version="1.0"?>
+<methodResponse><params><param><value><struct>
+  <member><name>bugs</name><value><struct>
+    <member><name>42</name><value><struct>
+      <member><name>comments</name><value><array><data>
+        <value><struct>
+          <member><name>id</name><value><int>1001</int></value></member>
+          <member><name>bug_id</name><value><int>42</int></value></member>
+          <member><name>count</name><value><int>0</int></value></member>
+          <member><name>text</name><value><string>public 0</string></value></member>
+          <member><name>creator</name><value><string>alice@test</string></value></member>
+          <member><name>creation_time</name><value><dateTime.iso8601>20260101T00:00:00</dateTime.iso8601></value></member>
+          <member><name>is_private</name><value><boolean>0</boolean></value></member>
+        </struct></value>
+        <value><struct>
+          <member><name>id</name><value><int>1002</int></value></member>
+          <member><name>bug_id</name><value><int>42</int></value></member>
+          <member><name>count</name><value><int>1</int></value></member>
+          <member><name>text</name><value><string>private 1</string></value></member>
+          <member><name>creator</name><value><string>bob@test</string></value></member>
+          <member><name>creation_time</name><value><dateTime.iso8601>20260102T00:00:00</dateTime.iso8601></value></member>
+          <member><name>is_private</name><value><boolean>1</boolean></value></member>
+        </struct></value>
+      </data></array></value></member>
+    </struct></value></member>
+  </struct></value></member>
+</struct></value></param></params></methodResponse>"#;
+
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .and(body_string_contains("Bug.comments"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(response_xml))
+            .mount(&mock)
+            .await;
+
+        let client = XmlRpcClient::new(reqwest::Client::new(), &mock.uri(), "test-key");
+        let comments = client.get_comments_since(42, None).await.unwrap();
+
+        assert_eq!(comments.len(), 2);
+        assert_eq!(comments[0].count, 0);
+        assert!(!comments[0].is_private);
+        assert_eq!(comments[1].count, 1);
+        assert!(comments[1].is_private);
+        assert_eq!(comments[1].text, "private 1");
+    }
+
+    #[tokio::test]
+    async fn xmlrpc_get_comments_since_serializes_new_since() {
+        use wiremock::matchers::{body_string_contains, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock = MockServer::start().await;
+        let empty_response = r#"<?xml version="1.0"?>
+<methodResponse><params><param><value><struct>
+  <member><name>bugs</name><value><struct></struct></value></member>
+</struct></value></param></params></methodResponse>"#;
+
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .and(body_string_contains("Bug.comments"))
+            .and(body_string_contains("new_since"))
+            .and(body_string_contains("2026-01-01T00:00:00Z"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(empty_response))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = XmlRpcClient::new(reqwest::Client::new(), &mock.uri(), "test-key");
+        let comments = client
+            .get_comments_since(42, Some("2026-01-01T00:00:00Z"))
+            .await
+            .unwrap();
+        assert!(comments.is_empty());
     }
 }

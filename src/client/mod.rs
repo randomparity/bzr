@@ -461,6 +461,18 @@ pub(super) mod test_helpers {
         )
         .unwrap()
     }
+
+    pub fn test_client_xmlrpc(base_url: &str) -> BugzillaClient {
+        BugzillaClient::new(
+            base_url,
+            "test-key",
+            AuthMethod::Header,
+            ApiMode::XmlRpc,
+            None,
+            &crate::tls::TlsConfig::default(),
+        )
+        .unwrap()
+    }
 }
 
 #[cfg(test)]

@@ -59,6 +59,10 @@ pub enum CommentAction {
         /// Empty bodies are rejected with exit code 7.
         #[arg(long)]
         body: Option<String>,
+        /// Mark the comment as private (visible only to users with
+        /// elevated permissions on the server).
+        #[arg(long = "private")]
+        private: bool,
     },
 
     /// Add or remove tags on a comment.

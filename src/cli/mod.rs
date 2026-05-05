@@ -788,10 +788,45 @@ mod tests {
                 .unwrap();
         match cli.command {
             Commands::Comment {
-                action: CommentAction::Add { bug_id, body },
+                action:
+                    CommentAction::Add {
+                        bug_id,
+                        body,
+                        private,
+                    },
             } => {
                 assert_eq!(bug_id, 42);
                 assert_eq!(body.as_deref(), Some("This is a comment"));
+                assert!(!private);
+            }
+            _ => panic!("expected Comment Add"),
+        }
+    }
+
+    #[test]
+    fn parse_comment_add_with_private() {
+        let cli = Cli::try_parse_from([
+            "bzr",
+            "comment",
+            "add",
+            "42",
+            "--body",
+            "secret note",
+            "--private",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Comment {
+                action:
+                    CommentAction::Add {
+                        bug_id,
+                        body,
+                        private,
+                    },
+            } => {
+                assert_eq!(bug_id, 42);
+                assert_eq!(body.as_deref(), Some("secret note"));
+                assert!(private);
             }
             _ => panic!("expected Comment Add"),
         }

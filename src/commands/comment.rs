@@ -19,7 +19,11 @@ pub async fn execute(
             let comments = client.get_comments_since(*bug_id, since.as_deref()).await?;
             output::print_comments(&comments, format);
         }
-        CommentAction::Add { bug_id, body } => {
+        CommentAction::Add {
+            bug_id,
+            body,
+            private,
+        } => {
             let text = match body {
                 Some(t) => t.clone(),
                 None => read_comment_body()?,
@@ -27,7 +31,7 @@ pub async fn execute(
             if text.trim().is_empty() {
                 return Err(BzrError::InputValidation("empty comment, aborting".into()));
             }
-            let id = client.add_comment(*bug_id, &text).await?;
+            let id = client.add_comment(*bug_id, &text, *private).await?;
             output::print_result(
                 &ActionResult::created(id, ResourceKind::Comment),
                 &format!("Added comment #{id} to bug #{bug_id}"),
@@ -195,6 +199,7 @@ mod tests {
         let action = CommentAction::Add {
             bug_id: 42,
             body: Some("Test comment".to_string()),
+            private: false,
         };
         let result = super::execute(&action, None, OutputFormat::Json, None).await;
         assert!(result.is_ok());
@@ -208,6 +213,7 @@ mod tests {
         let action = CommentAction::Add {
             bug_id: 42,
             body: Some("   ".to_string()),
+            private: false,
         };
         let result = super::execute(&action, None, OutputFormat::Json, None).await;
         assert!(result.is_err(), "empty body should be rejected");
@@ -275,6 +281,7 @@ mod tests {
         let action = CommentAction::Add {
             bug_id: 42,
             body: Some("Test comment".to_string()),
+            private: false,
         };
         let result = super::execute(&action, None, OutputFormat::Json, None).await;
         assert!(result.is_err());

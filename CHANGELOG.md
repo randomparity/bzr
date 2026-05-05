@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] - YYYY-MM-DD
+
+### Fixed
+
+- `bzr comment list` now returns private comments on Bugzilla
+  deployments where the REST endpoint silently truncates them
+  (observed on Bugzilla 5.0.x). In Hybrid API mode (the default
+  for newly-detected servers), `bzr` now uses XML-RPC
+  `Bug.comments` for comment listing, which returns the full set
+  including private entries; it falls back to REST only when the
+  server doesn't expose `xmlrpc.cgi`. No configuration change
+  required. Affects #125.
+
+### Added
+
+- XML-RPC `Bug.comments` support in the embedded XML-RPC client,
+  used by Hybrid-mode comment fallback and directly when a server
+  is configured with `api_mode = "xmlrpc"`.
+- `bzr comment add --private` flag, sets `is_private: true` on the
+  posted comment.
+
 ## [0.2.0] - 2026-05-04
 
 ### Added

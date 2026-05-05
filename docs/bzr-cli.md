@@ -402,18 +402,20 @@ bzr --json comment list 12345
 
 ### `bzr comment add`
 
-Add a comment to a bug. If `--body` is omitted: reads from stdin when piped (`echo "text" | bzr comment add 12345`), or opens `$EDITOR` (falls back to `vi`) at a TTY.
+Add a comment to a bug. If `--body` is omitted: reads from stdin when piped (`echo "text" | bzr comment add 12345`), or opens `$EDITOR` (falls back to `vi`) at a TTY. Add `--private` to mark the comment as visible only to users with elevated permissions on the server.
 
 ```bash
 bzr comment add 12345 --body "Confirmed on Fedora 42"
-bzr comment add 12345                          # opens editor
-echo "Automated comment" | bzr comment add 12345  # reads stdin
+bzr comment add 12345                                 # opens editor
+echo "Automated comment" | bzr comment add 12345      # reads stdin
+bzr comment add 12345 --body "internal note" --private  # private
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
 | `<BUG_ID>` | Yes | Bug ID |
 | `--body <TEXT>` | No | Comment text (reads stdin or opens `$EDITOR` if omitted) |
+| `--private` | No | Mark the comment as private (visible only to users with elevated permissions) |
 
 Agent note: `bzr comment add <BUG_ID>` without `--body` is not agent-friendly at a TTY because it opens `$EDITOR`. Prefer `bzr comment add <BUG_ID> --body "text"`. If you already have generated text on stdin, `echo "text" | bzr comment add <BUG_ID>` is also safe.
 

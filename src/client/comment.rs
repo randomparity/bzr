@@ -3,11 +3,12 @@ use serde::{Deserialize, Serialize};
 use super::encode_path;
 use super::BugzillaClient;
 use crate::error::Result;
-use crate::types::{Comment, UpdateCommentTagsParams};
+use crate::types::{ApiMode, Comment, UpdateCommentTagsParams};
 
 #[derive(Serialize)]
 struct AddCommentBody<'a> {
     comment: &'a str,
+    is_private: bool,
 }
 
 #[derive(Deserialize)]
@@ -21,7 +22,46 @@ struct CommentBugEntry {
 }
 
 impl BugzillaClient {
+    /// In Hybrid mode, comments are fetched via XML-RPC `Bug.comments`
+    /// rather than REST. Bugzilla 5.0.x REST silently filters private
+    /// comments under API-key auth (issue #125), and the truncation is
+    /// not reliably detectable from the REST response — XML-RPC is the
+    /// only path that returns the full thread. REST is the fallback
+    /// when the server doesn't expose `xmlrpc.cgi`.
     pub async fn get_comments_since(
+        &self,
+        bug_id: u64,
+        since: Option<&str>,
+    ) -> Result<Vec<Comment>> {
+        match self.api_mode {
+            ApiMode::Rest => self.get_comments_since_rest(bug_id, since).await,
+            ApiMode::XmlRpc => {
+                self.xmlrpc_client()?
+                    .get_comments_since(bug_id, since)
+                    .await
+            }
+            ApiMode::Hybrid => {
+                match self
+                    .xmlrpc_client()?
+                    .get_comments_since(bug_id, since)
+                    .await
+                {
+                    Ok(comments) => Ok(comments),
+                    Err(e) if e.is_transport_failure() => {
+                        tracing::info!(
+                            bug_id,
+                            error = %e,
+                            "XML-RPC comment list failed, retrying via REST"
+                        );
+                        self.get_comments_since_rest(bug_id, since).await
+                    }
+                    Err(e) => Err(e),
+                }
+            }
+        }
+    }
+
+    async fn get_comments_since_rest(
         &self,
         bug_id: u64,
         since: Option<&str>,
@@ -54,86 +94,18 @@ impl BugzillaClient {
             .await
     }
 
-    pub async fn add_comment(&self, bug_id: u64, text: &str) -> Result<u64> {
+    pub async fn add_comment(&self, bug_id: u64, text: &str, is_private: bool) -> Result<u64> {
         self.post_json_id(
             &format!("bug/{bug_id}/comment"),
-            &AddCommentBody { comment: text },
+            &AddCommentBody {
+                comment: text,
+                is_private,
+            },
         )
         .await
     }
 }
 
 #[cfg(test)]
-#[expect(clippy::unwrap_used)]
-mod tests {
-    use wiremock::matchers::{method, path, query_param};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
-
-    use crate::client::test_helpers::test_client;
-
-    #[tokio::test]
-    async fn update_comment_tags_sends_put() {
-        let mock = MockServer::start().await;
-        Mock::given(method("PUT"))
-            .and(path("/rest/bug/comment/42/tags"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!(["needinfo", "reviewed"])),
-            )
-            .expect(1)
-            .mount(&mock)
-            .await;
-
-        let client = test_client(&mock.uri());
-        let params = crate::types::UpdateCommentTagsParams {
-            add: vec!["needinfo".into()],
-            ..Default::default()
-        };
-        let tags = client.update_comment_tags(42, &params).await.unwrap();
-        assert_eq!(tags, vec!["needinfo", "reviewed"]);
-    }
-
-    #[tokio::test]
-    async fn search_comment_tags_returns_matches() {
-        let mock = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/rest/bug/comment/tags/need"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!(["needinfo", "needreview"])),
-            )
-            .mount(&mock)
-            .await;
-
-        let client = test_client(&mock.uri());
-        let tags = client.search_comment_tags("need").await.unwrap();
-        assert_eq!(tags, vec!["needinfo", "needreview"]);
-    }
-
-    #[tokio::test]
-    async fn get_comments_since_filters_by_date() {
-        let mock = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/rest/bug/1/comment"))
-            .and(query_param("new_since", "2025-01-01T00:00:00Z"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "bugs": {
-                    "1": {
-                        "comments": [
-                            {"id": 5, "bug_id": 1, "text": "new comment", "count": 3}
-                        ]
-                    }
-                }
-            })))
-            .mount(&mock)
-            .await;
-
-        let client = test_client(&mock.uri());
-        let comments = client
-            .get_comments_since(1, Some("2025-01-01T00:00:00Z"))
-            .await
-            .unwrap();
-        assert_eq!(comments.len(), 1);
-        assert_eq!(comments[0].text, "new comment");
-    }
-}
+#[path = "comment_tests.rs"]
+mod tests;
