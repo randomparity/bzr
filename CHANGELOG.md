@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   including private entries; it falls back to REST only when the
   server doesn't expose `xmlrpc.cgi`. No configuration change
   required. Affects #125.
+- `make setup` now requires Rust 1.88.0 (matching `Cargo.toml`'s
+  `rust-version`) and prints a `rustup update stable && rustup
+  default stable` upgrade hint when the local toolchain is older.
+  Previously the threshold was 1.84.0, so `make setup` would pass
+  the version check on rustc 1.85-1.87 and then fail later when
+  `cargo install cargo-llvm-cov` rejected the toolchain. Fixes #138.
 
 ### Added
 
