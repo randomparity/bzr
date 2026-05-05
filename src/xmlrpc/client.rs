@@ -1211,45 +1211,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn xmlrpc_get_attachment_by_id_does_not_exclude_data() {
-        // The single-attachment fetch is the download path — data must
-        // be returned, so the request must NOT carry exclude_fields=data.
-        let mock = MockServer::start().await;
-        let response_xml = r#"<?xml version="1.0"?>
-<methodResponse><params><param><value><struct>
-  <member><name>attachments</name><value><struct>
-    <member><name>5</name><value><struct>
-      <member><name>id</name><value><int>5</int></value></member>
-      <member><name>bug_id</name><value><int>42</int></value></member>
-      <member><name>file_name</name><value><string>x.bin</string></value></member>
-      <member><name>summary</name><value><string>x</string></value></member>
-      <member><name>content_type</name><value><string>application/octet-stream</string></value></member>
-      <member><name>size</name><value><int>3</int></value></member>
-      <member><name>is_obsolete</name><value><int>0</int></value></member>
-      <member><name>is_private</name><value><int>0</int></value></member>
-      <member><name>data</name><value><base64>aGk=</base64></value></member>
-    </struct></value></member>
-  </struct></value></member>
-</struct></value></param></params></methodResponse>"#;
-
-        Mock::given(method("POST"))
-            .and(path("/xmlrpc.cgi"))
-            .and(body_string_contains("Bug.attachments"))
-            .and(body_string_contains("attachment_ids"))
-            .respond_with(ResponseTemplate::new(200).set_body_string(response_xml))
-            .expect(1)
-            .mount(&mock)
-            .await;
-
-        // Negative-match assertion lives in the next test
-        // (xmlrpc_get_attachment_by_id_request_body_omits_exclude_fields)
-        // via a custom NotBodyContains matcher.
-        let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
-        let attachment = client.get_attachment_by_id(5).await.unwrap();
-        assert_eq!(attachment.data.as_deref(), Some("aGk="));
-    }
-
-    #[tokio::test]
     async fn xmlrpc_get_attachment_by_id_request_body_omits_exclude_fields() {
         use wiremock::matchers::body_string_contains;
         let mock = MockServer::start().await;
