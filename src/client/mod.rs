@@ -417,6 +417,52 @@ impl BugzillaClient {
     }
 }
 
+/// Maximum length of the body excerpt embedded in deserialization errors.
+/// 512 bytes is enough to capture the top-level keys of any realistic
+/// Bugzilla envelope while keeping the error message human-scaled.
+const BODY_PREVIEW_MAX_BYTES: usize = 512;
+
+/// Format a response body for inclusion in a `BzrError::Deserialize` message.
+///
+/// Truncates to [`BODY_PREVIEW_MAX_BYTES`] on a UTF-8 char boundary,
+/// appends `…` when truncated, runs the result through
+/// [`crate::http::redact_api_key`] to strip echoed-back API keys, and
+/// collapses internal newlines and tabs to single spaces so the preview
+/// stays on one line beneath the main error.
+///
+/// Called by `parse_json` when deserializing JSON fails (Task #3).
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by parse_json in Task 3 (Plan step)")
+)]
+fn format_body_preview(body: &str) -> String {
+    let truncated_end = body
+        .char_indices()
+        .take_while(|(i, _)| *i < BODY_PREVIEW_MAX_BYTES)
+        .last()
+        .map_or(0, |(i, c)| i + c.len_utf8());
+
+    let mut preview = String::with_capacity(truncated_end + 4);
+    preview.push_str(&body[..truncated_end]);
+    if truncated_end < body.len() {
+        preview.push('…');
+    }
+
+    // Collapse whitespace so the preview stays on one line in error output.
+    let collapsed: String = preview
+        .chars()
+        .map(|c| {
+            if c == '\n' || c == '\t' || c == '\r' {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect();
+
+    crate::http::redact_api_key(&collapsed)
+}
+
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 pub(super) mod test_helpers {
@@ -809,6 +855,103 @@ mod tests {
         assert!(
             matches!(&err, crate::error::BzrError::Api { code: 32610, .. }),
             "expected Api error with code 32610, got: {err}"
+        );
+    }
+
+    #[test]
+    fn format_body_preview_returns_short_body_unchanged_in_content() {
+        let body = r#"{"error":false,"attachments":[]}"#;
+        let preview = super::format_body_preview(body);
+        assert!(
+            preview.contains(r#""attachments":[]"#),
+            "should contain original JSON: {preview}"
+        );
+        assert!(
+            !preview.ends_with('…'),
+            "short body should not be truncated: {preview}"
+        );
+    }
+
+    #[test]
+    fn format_body_preview_truncates_long_body_with_ellipsis() {
+        let body = "x".repeat(2048);
+        let preview = super::format_body_preview(&body);
+        assert!(
+            preview.ends_with('…'),
+            "long body should end with ellipsis: ...{}",
+            &preview[preview.len().saturating_sub(20)..]
+        );
+        // Length check: 512 'x' chars + 1 ellipsis char (3 bytes UTF-8) = 515 bytes max for the content.
+        assert!(
+            preview.chars().count() <= 513,
+            "preview should be <=513 chars (512 + ellipsis), got {}",
+            preview.chars().count()
+        );
+    }
+
+    #[test]
+    fn format_body_preview_redacts_api_key_in_body() {
+        let body = r#"{"echo":"http://h/rest/bug?Bugzilla_api_key=Sup3rSecret&x=1"}"#;
+        let preview = super::format_body_preview(body);
+        assert!(
+            !preview.contains("Sup3rSecret"),
+            "API key must be redacted: {preview}"
+        );
+        assert!(
+            preview.contains("Bugzilla_api_key=[REDACTED]"),
+            "redaction marker missing: {preview}"
+        );
+    }
+
+    #[test]
+    fn format_body_preview_collapses_internal_whitespace() {
+        let body = "{\n  \"a\": 1,\n\t\"b\": 2\n}";
+        let preview = super::format_body_preview(body);
+        assert!(
+            !preview.contains('\n'),
+            "newlines should be collapsed: {preview:?}"
+        );
+        assert!(
+            !preview.contains('\t'),
+            "tabs should be collapsed: {preview:?}"
+        );
+    }
+
+    #[test]
+    fn format_body_preview_truncates_on_utf8_boundary() {
+        // 200 ASCII chars + 200 multi-byte chars (3 bytes each, ☃ = U+2603) = 800 bytes total.
+        // Truncation at 512 *bytes* must not split a multi-byte character.
+        let mut body = "a".repeat(200);
+        for _ in 0..200 {
+            body.push('☃');
+        }
+        let preview = super::format_body_preview(&body);
+        // If we sliced mid-codepoint, this would panic before reaching the assert.
+        // Confirm the trailing ellipsis is intact (proves no panic and proves truncation occurred).
+        assert!(preview.ends_with('…'), "expected truncation: {preview}");
+    }
+
+    #[test]
+    fn format_body_preview_handles_empty_body() {
+        let preview = super::format_body_preview("");
+        assert_eq!(preview, "", "empty body should produce empty preview");
+    }
+
+    #[test]
+    fn format_body_preview_handles_exactly_512_byte_body() {
+        // A body whose length exactly equals the truncation threshold should
+        // be returned in full with no ellipsis (off-by-one boundary check).
+        let body = "a".repeat(512);
+        let preview = super::format_body_preview(&body);
+        assert_eq!(
+            preview.chars().count(),
+            512,
+            "exact-512 body should not be truncated"
+        );
+        assert!(
+            !preview.ends_with('…'),
+            "exact-512 body should have no ellipsis: ...{}",
+            &preview[preview.len().saturating_sub(20)..]
         );
     }
 }
