@@ -386,10 +386,6 @@ impl BugzillaClient {
     }
 
     /// Send a GET request and return the parsed JSON body as a `Value`.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "consumed by try_envelopes in Plan Task 5")
-    )]
     pub(super) async fn get_json_value(&self, path: &str) -> Result<serde_json::Value> {
         let req = self.apply_auth(self.http.get(self.url(path)));
         let resp = self.send(req).await?;
@@ -457,13 +453,6 @@ impl BugzillaClient {
     /// Used to tolerate response-shape variants between Bugzilla
     /// deployments — e.g. `bug/<id>/attachment` returns `bugs`-keyed on
     /// stock 5.0.x but `attachments`-keyed on some IBM-style deployments.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "consumed by get_attachments in Plan Task 6 / get_comments_since_rest in Plan Task 7"
-        )
-    )]
     pub(super) fn try_envelopes<T>(
         value: &serde_json::Value,
         candidates: &[EnvelopeCandidate<T>],

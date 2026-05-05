@@ -10,6 +10,13 @@ struct AttachmentBugResponse {
     bugs: std::collections::HashMap<String, Vec<Attachment>>,
 }
 
+/// Flat envelope variant: `{"attachments": [...]}` at the root of the
+/// response. Observed on some Bugzilla 5.0.x deployments (issue #135).
+#[derive(Deserialize)]
+struct FlatAttachmentsResponse {
+    attachments: Vec<Attachment>,
+}
+
 #[derive(Deserialize)]
 struct AttachmentByIdResponse {
     attachments: std::collections::HashMap<String, Attachment>,
@@ -20,12 +27,30 @@ struct AttachmentCreateResponse {
     ids: Vec<u64>,
 }
 
+fn extract_bugs_envelope(value: serde_json::Value) -> Result<Vec<Attachment>> {
+    let resp: AttachmentBugResponse = serde_json::from_value(value)
+        .map_err(|e| BzrError::Deserialize(format!("attachments `bugs` envelope: {e}")))?;
+    Ok(resp.bugs.into_values().next().unwrap_or_default())
+}
+
+fn extract_flat_envelope(value: serde_json::Value) -> Result<Vec<Attachment>> {
+    let resp: FlatAttachmentsResponse = serde_json::from_value(value)
+        .map_err(|e| BzrError::Deserialize(format!("attachments flat envelope: {e}")))?;
+    Ok(resp.attachments)
+}
+
 impl BugzillaClient {
     pub async fn get_attachments(&self, bug_id: u64) -> Result<Vec<Attachment>> {
-        let data: AttachmentBugResponse =
-            self.get_json(&format!("bug/{bug_id}/attachment")).await?;
-        let attachments = data.bugs.into_values().next().unwrap_or_default();
-        Ok(attachments)
+        let value = self
+            .get_json_value(&format!("bug/{bug_id}/attachment"))
+            .await?;
+        Self::try_envelopes(
+            &value,
+            &[
+                ("bugs", extract_bugs_envelope),
+                ("attachments", extract_flat_envelope),
+            ],
+        )
     }
 
     pub async fn get_attachment(&self, attachment_id: u64) -> Result<Attachment> {
@@ -132,5 +157,129 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(id, 200);
+    }
+
+    #[tokio::test]
+    async fn get_attachments_accepts_bugs_envelope() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42/attachment"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": {
+                    "42": [
+                        {
+                            "id": 100,
+                            "bug_id": 42,
+                            "file_name": "patch.diff",
+                            "summary": "test patch",
+                            "content_type": "text/plain",
+                            "creator": "alice@example.com",
+                            "creation_time": "2026-01-01T00:00:00Z",
+                            "last_change_time": "2026-01-01T00:00:00Z",
+                            "size": 100,
+                            "is_obsolete": false,
+                            "is_patch": true,
+                            "is_private": false
+                        }
+                    ]
+                },
+                "attachments": {}
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let attachments = client.get_attachments(42).await.unwrap();
+        assert_eq!(attachments.len(), 1);
+        assert_eq!(attachments[0].id, 100);
+        assert_eq!(attachments[0].file_name, "patch.diff");
+    }
+
+    #[tokio::test]
+    async fn get_attachments_accepts_flat_attachments_envelope() {
+        // Some Bugzilla 5.0.x deployments (e.g. IBM LTC) return only an
+        // `attachments` array, no `bugs` key. Issue #135.
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42/attachment"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "attachments": [
+                    {
+                        "id": 200,
+                        "bug_id": 42,
+                        "file_name": "alt.diff",
+                        "summary": "alt-envelope patch",
+                        "content_type": "text/plain",
+                        "creator": "bob@example.com",
+                        "creation_time": "2026-01-01T00:00:00Z",
+                        "last_change_time": "2026-01-01T00:00:00Z",
+                        "size": 50,
+                        "is_obsolete": false,
+                        "is_patch": true,
+                        "is_private": false
+                    }
+                ]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let attachments = client.get_attachments(42).await.unwrap();
+        assert_eq!(attachments.len(), 1);
+        assert_eq!(attachments[0].id, 200);
+        assert_eq!(attachments[0].file_name, "alt.diff");
+    }
+
+    #[tokio::test]
+    async fn get_attachments_prefers_bugs_when_both_envelopes_populated() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42/attachment"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": {
+                    "42": [
+                        {
+                            "id": 100,
+                            "bug_id": 42,
+                            "file_name": "from_bugs.diff",
+                            "summary": "from bugs",
+                            "content_type": "text/plain",
+                            "creator": "alice@example.com",
+                            "creation_time": "2026-01-01T00:00:00Z",
+                            "last_change_time": "2026-01-01T00:00:00Z",
+                            "size": 1,
+                            "is_obsolete": false,
+                            "is_patch": true,
+                            "is_private": false
+                        }
+                    ]
+                },
+                "attachments": [
+                    {
+                        "id": 200,
+                        "bug_id": 42,
+                        "file_name": "from_attachments.diff",
+                        "summary": "from attachments",
+                        "content_type": "text/plain",
+                        "creator": "bob@example.com",
+                        "creation_time": "2026-01-01T00:00:00Z",
+                        "last_change_time": "2026-01-01T00:00:00Z",
+                        "size": 1,
+                        "is_obsolete": false,
+                        "is_patch": true,
+                        "is_private": false
+                    }
+                ]
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let attachments = client.get_attachments(42).await.unwrap();
+        assert_eq!(attachments.len(), 1);
+        assert_eq!(
+            attachments[0].file_name, "from_bugs.diff",
+            "should prefer bugs-keyed envelope when both present"
+        );
     }
 }
