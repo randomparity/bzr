@@ -169,13 +169,9 @@ impl XmlRpcClient {
         since: Option<&str>,
     ) -> Result<Vec<crate::types::Comment>> {
         let mut rpc_params = BTreeMap::new();
-        #[expect(
-            clippy::cast_possible_wrap,
-            reason = "Bugzilla bug IDs fit in i64 in practice"
-        )]
-        {
-            rpc_params.insert("ids".into(), Value::Array(vec![Value::Int(bug_id as i64)]));
-        }
+        #[expect(clippy::cast_possible_wrap, reason = "bug IDs fit in i64")]
+        let bug_id_value = Value::Int(bug_id as i64);
+        rpc_params.insert("ids".into(), Value::Array(vec![bug_id_value]));
         if let Some(s) = since {
             rpc_params.insert("new_since".into(), Value::from(s));
         }
@@ -336,17 +332,19 @@ fn value_to_comment(val: &Value) -> Result<crate::types::Comment> {
     let bug_id = m.get("bug_id").and_then(Value::as_i64).unwrap_or(0);
     let count = m.get("count").and_then(Value::as_i64).unwrap_or(0);
 
-    #[expect(
-        clippy::cast_sign_loss,
-        reason = "ids and counts are non-negative in Bugzilla"
-    )]
+    #[expect(clippy::cast_sign_loss, reason = "comment IDs are non-negative")]
+    let id = id as u64;
+    #[expect(clippy::cast_sign_loss, reason = "bug IDs are non-negative")]
+    let bug_id = bug_id as u64;
+    #[expect(clippy::cast_sign_loss, reason = "comment counts are non-negative")]
+    let count = count as u64;
     Ok(crate::types::Comment {
-        id: id as u64,
-        bug_id: bug_id as u64,
+        id,
+        bug_id,
         text: get_str(m, "text").unwrap_or_default(),
         creator: get_nonempty_str(m, "creator"),
         creation_time: get_datetime_str(m, "creation_time"),
-        count: count as u64,
+        count,
         is_private: m
             .get("is_private")
             .and_then(Value::as_bool)

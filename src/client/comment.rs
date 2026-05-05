@@ -22,6 +22,12 @@ struct CommentBugEntry {
 }
 
 impl BugzillaClient {
+    /// In Hybrid mode, comments are fetched via XML-RPC `Bug.comments`
+    /// rather than REST. Bugzilla 5.0.x REST silently filters private
+    /// comments under API-key auth (issue #125), and the truncation is
+    /// not reliably detectable from the REST response — XML-RPC is the
+    /// only path that returns the full thread. REST is the fallback
+    /// when the server doesn't expose `xmlrpc.cgi`.
     pub async fn get_comments_since(
         &self,
         bug_id: u64,
@@ -34,14 +40,6 @@ impl BugzillaClient {
                     .get_comments_since(bug_id, since)
                     .await
             }
-            // Bugzilla REST silently filters private comments on some
-            // 5.0.x deployments — visible truncation isn't reliably
-            // detectable from the response alone (private comments at
-            // the end of the thread leave a clean-looking sequence).
-            // XML-RPC `Bug.comments` returns the full set, so Hybrid
-            // prefers it for visibility correctness, falling back to
-            // REST only when the server doesn't expose xmlrpc.cgi
-            // (transport failure). Issue #125.
             ApiMode::Hybrid => {
                 match self
                     .xmlrpc_client()?
@@ -111,7 +109,7 @@ impl BugzillaClient {
 #[cfg(test)]
 #[expect(clippy::unwrap_used)]
 mod tests {
-    use wiremock::matchers::{method, path, query_param};
+    use wiremock::matchers::{body_json, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use crate::client::test_helpers::{test_client, test_client_hybrid, test_client_xmlrpc};
@@ -274,7 +272,6 @@ mod tests {
         let client = test_client_hybrid(&mock.uri());
         let comments = client.get_comments_since(42, None).await.unwrap();
         assert_eq!(comments.len(), 3);
-        // Prove REST fallback fired by checking REST helper's text format:
         assert_eq!(comments[0].text, "comment 0");
     }
 
@@ -293,7 +290,7 @@ mod tests {
             .mount(&mock)
             .await;
 
-        let client = test_client(&mock.uri()); // Rest mode
+        let client = test_client(&mock.uri());
         let comments = client.get_comments_since(42, None).await.unwrap();
         assert_eq!(comments.len(), 1);
         assert_eq!(comments[0].count, 4);
@@ -324,8 +321,6 @@ mod tests {
 
     #[tokio::test]
     async fn add_comment_private_sets_is_private_in_body() {
-        use wiremock::matchers::body_json;
-
         let mock = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/rest/bug/42/comment"))
@@ -344,8 +339,6 @@ mod tests {
 
     #[tokio::test]
     async fn add_comment_public_sets_is_private_false() {
-        use wiremock::matchers::body_json;
-
         let mock = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/rest/bug/42/comment"))
