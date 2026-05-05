@@ -241,3 +241,136 @@ async fn add_comment_public_sets_is_private_false() {
     let id = client.add_comment(42, "public", false).await.unwrap();
     assert_eq!(id, 1000);
 }
+
+#[tokio::test]
+async fn get_comments_since_rest_accepts_flat_comments_envelope() {
+    // Some Bugzilla 5.0.x deployments return {"comments": [...]} at the
+    // root instead of the stock {"bugs": {<id>: {"comments": [...]}}}.
+    // Issue #135.
+    use crate::client::test_helpers::test_client;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "comments": [
+                {
+                    "id": 1,
+                    "bug_id": 42,
+                    "creator": "alice@example.com",
+                    "time": "2026-01-01T00:00:00Z",
+                    "creation_time": "2026-01-01T00:00:00Z",
+                    "text": "hello from alt envelope",
+                    "is_private": false,
+                    "count": 0
+                }
+            ]
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let comments = client
+        .get_comments_since_rest_for_test(42, None)
+        .await
+        .unwrap();
+    assert_eq!(comments.len(), 1);
+    assert_eq!(comments[0].id, 1);
+    assert_eq!(comments[0].text, "hello from alt envelope");
+}
+
+#[tokio::test]
+async fn get_comments_since_rest_accepts_bugs_envelope() {
+    use crate::client::test_helpers::test_client;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": {
+                "42": {
+                    "comments": [
+                        {
+                            "id": 1,
+                            "bug_id": 42,
+                            "creator": "alice@example.com",
+                            "time": "2026-01-01T00:00:00Z",
+                            "creation_time": "2026-01-01T00:00:00Z",
+                            "text": "from bugs envelope",
+                            "is_private": false,
+                            "count": 0
+                        }
+                    ]
+                }
+            }
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let comments = client
+        .get_comments_since_rest_for_test(42, None)
+        .await
+        .unwrap();
+    assert_eq!(comments.len(), 1);
+    assert_eq!(comments[0].id, 1);
+    assert_eq!(comments[0].text, "from bugs envelope");
+}
+
+#[tokio::test]
+async fn get_comments_since_rest_prefers_bugs_when_both_envelopes_populated() {
+    use crate::client::test_helpers::test_client;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": {
+                "42": {
+                    "comments": [
+                        {
+                            "id": 1,
+                            "bug_id": 42,
+                            "creator": "alice@example.com",
+                            "time": "2026-01-01T00:00:00Z",
+                            "creation_time": "2026-01-01T00:00:00Z",
+                            "text": "from bugs envelope",
+                            "is_private": false,
+                            "count": 0
+                        }
+                    ]
+                }
+            },
+            "comments": [
+                {
+                    "id": 2,
+                    "bug_id": 42,
+                    "creator": "bob@example.com",
+                    "time": "2026-01-01T00:00:00Z",
+                    "creation_time": "2026-01-01T00:00:00Z",
+                    "text": "from flat envelope",
+                    "is_private": false,
+                    "count": 0
+                }
+            ]
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let comments = client
+        .get_comments_since_rest_for_test(42, None)
+        .await
+        .unwrap();
+    assert_eq!(comments.len(), 1);
+    assert_eq!(
+        comments[0].text, "from bugs envelope",
+        "should prefer bugs-keyed envelope when both present"
+    );
+}

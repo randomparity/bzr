@@ -21,6 +21,30 @@ struct CommentBugEntry {
     comments: Vec<Comment>,
 }
 
+/// Flat envelope variant: `{"comments": [...]}` at the root. Observed
+/// on some Bugzilla 5.0.x deployments (issue #135).
+#[derive(Deserialize)]
+struct FlatCommentsResponse {
+    comments: Vec<Comment>,
+}
+
+fn extract_bugs_comment_envelope(value: serde_json::Value) -> Result<Vec<Comment>> {
+    let resp: CommentResponse = serde_json::from_value(value).map_err(|e| {
+        crate::error::BzrError::Deserialize(format!("comments `bugs` envelope: {e}"))
+    })?;
+    Ok(resp
+        .bugs
+        .into_values()
+        .next()
+        .map_or_else(Vec::new, |e| e.comments))
+}
+
+fn extract_flat_comment_envelope(value: serde_json::Value) -> Result<Vec<Comment>> {
+    let resp: FlatCommentsResponse = serde_json::from_value(value)
+        .map_err(|e| crate::error::BzrError::Deserialize(format!("comments flat envelope: {e}")))?;
+    Ok(resp.comments)
+}
+
 impl BugzillaClient {
     /// In Hybrid mode, comments are fetched via XML-RPC `Bug.comments`
     /// rather than REST. Bugzilla 5.0.x REST silently filters private
@@ -66,18 +90,27 @@ impl BugzillaClient {
         bug_id: u64,
         since: Option<&str>,
     ) -> Result<Vec<Comment>> {
-        let data: CommentResponse = if let Some(since) = since {
-            self.get_json_query(&format!("bug/{bug_id}/comment"), &[("new_since", since)])
-                .await?
+        let path_str = format!("bug/{bug_id}/comment");
+        let value = if let Some(since) = since {
+            // get_json_query returns typed T; we need the raw Value for try_envelopes.
+            // Build the request manually.
+            let req = self.apply_auth(
+                self.http
+                    .get(self.url(&path_str))
+                    .query(&[("new_since", since)]),
+            );
+            let resp = self.send(req).await?;
+            self.parse_json_value(resp).await?
         } else {
-            self.get_json(&format!("bug/{bug_id}/comment")).await?
+            self.get_json_value(&path_str).await?
         };
-        let comments = data
-            .bugs
-            .into_values()
-            .next()
-            .map_or_else(Vec::new, |e| e.comments);
-        Ok(comments)
+        Self::try_envelopes(
+            &value,
+            &[
+                ("bugs", extract_bugs_comment_envelope),
+                ("comments", extract_flat_comment_envelope),
+            ],
+        )
     }
 
     pub async fn update_comment_tags(
@@ -103,6 +136,19 @@ impl BugzillaClient {
             },
         )
         .await
+    }
+}
+
+#[cfg(test)]
+impl BugzillaClient {
+    /// Test-only thin wrapper around the private REST path so tests can
+    /// exercise envelope tolerance without going through API-mode dispatch.
+    pub(crate) async fn get_comments_since_rest_for_test(
+        &self,
+        bug_id: u64,
+        since: Option<&str>,
+    ) -> Result<Vec<crate::types::Comment>> {
+        self.get_comments_since_rest(bug_id, since).await
     }
 }
 
