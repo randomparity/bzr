@@ -48,6 +48,21 @@ WHERE login_name = 'admin@test.bzr'
 LIMIT 1;
 SQL
 
+# ── Configure insidergroup ──────────────────────────────────────────
+# Bugzilla's default `insidergroup` is empty, which forbids anyone
+# (including admins) from marking comments private. Real deployments
+# that exercise issue #125 have this configured (otherwise private
+# comments wouldn't exist there to be hidden). Set it to `admin` so
+# the test admin user can post and read private comments.
+echo "==> Configuring insidergroup..."
+cd "$BZ_DIR"
+if [[ -f data/params.json ]]; then
+    perl -pi -e 's/"insidergroup"\s*:\s*""/"insidergroup":"admin"/g' data/params.json 2>/dev/null || true
+fi
+if [[ -f data/params ]]; then
+    perl -pi -e "s/'insidergroup' => ''/'insidergroup' => 'admin'/g" data/params 2>/dev/null || true
+fi
+
 # ── Fix permissions ──────────────────────────────────────────────────
 chown -R apache:apache "$BZ_DIR/data" "$BZ_DIR/lib" 2>/dev/null || true
 
