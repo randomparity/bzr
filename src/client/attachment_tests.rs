@@ -4,7 +4,17 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::client::test_helpers::{test_client, test_client_hybrid, test_client_xmlrpc};
+use crate::error::BzrError;
 use crate::types::{FlagStatus, FlagUpdate, UpdateAttachmentParams, UploadAttachmentParams};
+
+fn xmlrpc_fault_response(code: i64, message: &str) -> String {
+    format!(
+        "<?xml version=\"1.0\"?><methodResponse><fault><value><struct>\
+            <member><name>faultCode</name><value><int>{code}</int></value></member>\
+            <member><name>faultString</name><value><string>{message}</string></value></member>\
+        </struct></value></fault></methodResponse>"
+    )
+}
 
 fn rest_attachments_response_json(ids: &[u64]) -> serde_json::Value {
     let attachments: Vec<serde_json::Value> = ids
@@ -102,6 +112,40 @@ async fn hybrid_xmlrpc_transport_error_falls_back_to_rest_for_attachment_list() 
     let attachments = client.get_attachments(42).await.unwrap();
     assert_eq!(attachments.len(), 2);
     assert_eq!(attachments[0].file_name, "rest-10.txt");
+}
+
+#[tokio::test]
+async fn hybrid_xmlrpc_fault_does_not_fall_back_to_rest_for_attachment_list() {
+    // An XML-RPC `<fault>` (e.g. permission denied) is a domain error, not a
+    // transport failure: `is_transport_failure()` is false for `BzrError::Api`,
+    // so Hybrid mode must propagate it instead of silently retrying via REST,
+    // where the same call would return a permission-filtered (and therefore
+    // wrong) result. Regression guard for issue #136.
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(xmlrpc_fault_response(410, "You are not authorized")),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/attachment"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(rest_attachments_response_json(&[99])),
+        )
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_hybrid(&mock.uri());
+    let err = client.get_attachments(42).await.unwrap_err();
+    assert!(
+        matches!(&err, BzrError::Api { code, .. } if *code == 410),
+        "expected Api error with code 410, got {err:?}"
+    );
 }
 
 #[tokio::test]
@@ -215,6 +259,38 @@ async fn hybrid_xmlrpc_transport_error_falls_back_to_rest_for_get_attachment() {
     let attachment = client.get_attachment(2002).await.unwrap();
     assert_eq!(attachment.id, 2002);
     assert_eq!(attachment.file_name, "rest-2002.txt");
+}
+
+#[tokio::test]
+async fn hybrid_xmlrpc_fault_does_not_fall_back_to_rest_for_get_attachment() {
+    // Mirror of the list-path regression: a server-side fault for `Bug.attachments`
+    // by attachment id must propagate as `BzrError::Api`, not silently fall through
+    // to REST where private content is filtered (issue #133/#136).
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(xmlrpc_fault_response(410, "You are not authorized")),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/2002"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(rest_attachment_by_id_response_json(2002)),
+        )
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_hybrid(&mock.uri());
+    let err = client.get_attachment(2002).await.unwrap_err();
+    assert!(
+        matches!(&err, BzrError::Api { code, .. } if *code == 410),
+        "expected Api error with code 410, got {err:?}"
+    );
 }
 
 #[tokio::test]
