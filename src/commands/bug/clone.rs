@@ -86,7 +86,7 @@ pub(super) async fn handle(
 
     if !*no_comment {
         client
-            .add_comment(new_id, &format!("Cloned from bug #{}", source.id))
+            .add_comment(new_id, &format!("Cloned from bug #{}", source.id), false)
             .await?;
     }
 

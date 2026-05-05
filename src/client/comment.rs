@@ -8,6 +8,7 @@ use crate::types::{ApiMode, Comment, UpdateCommentTagsParams};
 #[derive(Serialize)]
 struct AddCommentBody<'a> {
     comment: &'a str,
+    is_private: bool,
 }
 
 #[derive(Deserialize)]
@@ -109,10 +110,13 @@ impl BugzillaClient {
             .await
     }
 
-    pub async fn add_comment(&self, bug_id: u64, text: &str) -> Result<u64> {
+    pub async fn add_comment(&self, bug_id: u64, text: &str, is_private: bool) -> Result<u64> {
         self.post_json_id(
             &format!("bug/{bug_id}/comment"),
-            &AddCommentBody { comment: text },
+            &AddCommentBody {
+                comment: text,
+                is_private,
+            },
         )
         .await
     }
@@ -422,5 +426,47 @@ mod tests {
         let client = test_client_xmlrpc(&mock.uri());
         let comments = client.get_comments_since(42, None).await.unwrap();
         assert_eq!(comments.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn add_comment_private_sets_is_private_in_body() {
+        use wiremock::matchers::{body_json, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/rest/bug/42/comment"))
+            .and(body_json(
+                serde_json::json!({"comment": "secret", "is_private": true}),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 999})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let id = client.add_comment(42, "secret", true).await.unwrap();
+        assert_eq!(id, 999);
+    }
+
+    #[tokio::test]
+    async fn add_comment_public_sets_is_private_false() {
+        use wiremock::matchers::{body_json, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/rest/bug/42/comment"))
+            .and(body_json(
+                serde_json::json!({"comment": "public", "is_private": false}),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1000})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let id = client.add_comment(42, "public", false).await.unwrap();
+        assert_eq!(id, 1000);
     }
 }

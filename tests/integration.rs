@@ -715,6 +715,7 @@ async fn comment_add_integration() {
     let action = bzr::cli::CommentAction::Add {
         bug_id: 42,
         body: Some("This is a test comment".to_string()),
+        private: false,
     };
     let (result, output) = capture_stdout(bzr::commands::comment::execute(
         &action,
