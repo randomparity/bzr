@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   including private entries; it falls back to REST only when the
   server doesn't expose `xmlrpc.cgi`. No configuration change
   required. Affects #125.
+- `bzr attachment list` and `bzr attachment download` now return
+  private attachments on the same Bugzilla 5.0.x deployments —
+  REST silently filters them under non-admin API-key auth, while
+  XML-RPC `Bug.attachments` returns the full set. Hybrid mode now
+  routes both `attachment list` and `attachment download` through
+  XML-RPC with REST fallback only on transport failure, mirroring
+  the comment-list fix from #125. Affects #133.
 - `make setup` now requires Rust 1.88.0 (matching `Cargo.toml`'s
   `rust-version`) and prints a `rustup update stable && rustup
   default stable` upgrade hint when the local toolchain is older.
@@ -39,6 +46,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - XML-RPC `Bug.comments` support in the embedded XML-RPC client,
   used by Hybrid-mode comment fallback and directly when a server
   is configured with `api_mode = "xmlrpc"`.
+- XML-RPC `Bug.attachments` support in the embedded XML-RPC
+  client, covering both bug-scoped (`ids: [bug_id]`) and
+  attachment-by-ID (`attachment_ids: [id]`) lookups. Used by
+  Hybrid-mode `attachment list` and `attachment download`
+  fallback (#133) and directly when `api_mode = "xmlrpc"`.
 - `bzr comment add --private` flag, sets `is_private: true` on the
   posted comment.
 - `bzr attachment upload --private` flag, sets `is_private: true`

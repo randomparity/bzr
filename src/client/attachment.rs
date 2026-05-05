@@ -3,7 +3,7 @@ use serde::Deserialize;
 
 use super::BugzillaClient;
 use crate::error::{BzrError, Result};
-use crate::types::{Attachment, UpdateAttachmentParams, UploadAttachmentParams};
+use crate::types::{ApiMode, Attachment, UpdateAttachmentParams, UploadAttachmentParams};
 
 #[derive(Deserialize)]
 struct AttachmentBugResponse {
@@ -45,7 +45,32 @@ fn extract_flat_envelope(value: &serde_json::Value) -> Result<Vec<Attachment>> {
 }
 
 impl BugzillaClient {
+    /// In Hybrid mode, attachments are fetched via XML-RPC `Bug.attachments`
+    /// rather than REST. Bugzilla 5.0.x REST silently filters private
+    /// attachments under API-key auth (issue #133), and the truncation is
+    /// not reliably detectable from the REST response — XML-RPC is the
+    /// only path that returns the full set. REST is the fallback when the
+    /// server doesn't expose `xmlrpc.cgi`.
     pub async fn get_attachments(&self, bug_id: u64) -> Result<Vec<Attachment>> {
+        match self.api_mode {
+            ApiMode::Rest => self.get_attachments_rest(bug_id).await,
+            ApiMode::XmlRpc => self.xmlrpc_client()?.get_attachments(bug_id).await,
+            ApiMode::Hybrid => match self.xmlrpc_client()?.get_attachments(bug_id).await {
+                Ok(attachments) => Ok(attachments),
+                Err(e) if e.is_transport_failure() => {
+                    tracing::info!(
+                        bug_id,
+                        error = %e,
+                        "XML-RPC attachment list failed, retrying via REST"
+                    );
+                    self.get_attachments_rest(bug_id).await
+                }
+                Err(e) => Err(e),
+            },
+        }
+    }
+
+    async fn get_attachments_rest(&self, bug_id: u64) -> Result<Vec<Attachment>> {
         let value = self
             .get_json_value(&format!("bug/{bug_id}/attachment"))
             .await?;
@@ -58,7 +83,38 @@ impl BugzillaClient {
         )
     }
 
+    /// Like `get_attachments`, dispatches on `api_mode` so that
+    /// `bzr attachment download` of a private attachment works on
+    /// Bugzilla 5.0.x deployments where REST silently filters
+    /// private content under non-admin scope (issue #133).
     pub async fn get_attachment(&self, attachment_id: u64) -> Result<Attachment> {
+        match self.api_mode {
+            ApiMode::Rest => self.get_attachment_rest(attachment_id).await,
+            ApiMode::XmlRpc => {
+                self.xmlrpc_client()?
+                    .get_attachment_by_id(attachment_id)
+                    .await
+            }
+            ApiMode::Hybrid => match self
+                .xmlrpc_client()?
+                .get_attachment_by_id(attachment_id)
+                .await
+            {
+                Ok(attachment) => Ok(attachment),
+                Err(e) if e.is_transport_failure() => {
+                    tracing::info!(
+                        attachment_id,
+                        error = %e,
+                        "XML-RPC attachment fetch failed, retrying via REST"
+                    );
+                    self.get_attachment_rest(attachment_id).await
+                }
+                Err(e) => Err(e),
+            },
+        }
+    }
+
+    async fn get_attachment_rest(&self, attachment_id: u64) -> Result<Attachment> {
         let data: AttachmentByIdResponse = self
             .get_json(&format!("bug/attachment/{attachment_id}"))
             .await?;

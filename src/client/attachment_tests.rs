@@ -3,8 +3,288 @@
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use crate::client::test_helpers::test_client;
+use crate::client::test_helpers::{test_client, test_client_hybrid, test_client_xmlrpc};
 use crate::types::{FlagStatus, FlagUpdate, UpdateAttachmentParams, UploadAttachmentParams};
+
+fn rest_attachments_response_json(ids: &[u64]) -> serde_json::Value {
+    let attachments: Vec<serde_json::Value> = ids
+        .iter()
+        .map(|&id| {
+            serde_json::json!({
+                "id": id,
+                "bug_id": 42,
+                "file_name": format!("rest-{id}.txt"),
+                "summary": format!("rest {id}"),
+                "content_type": "text/plain",
+                "creator": "alice@test",
+                "creation_time": "2026-01-01T00:00:00Z",
+                "last_change_time": "2026-01-01T00:00:00Z",
+                "size": 1,
+                "is_obsolete": false,
+                "is_private": false
+            })
+        })
+        .collect();
+    serde_json::json!({"bugs": {"42": attachments}})
+}
+
+fn xmlrpc_attachments_response(ids: &[u64]) -> String {
+    use std::fmt::Write;
+    let mut entries = String::new();
+    for &id in ids {
+        write!(
+            entries,
+            "<value><struct>\
+                <member><name>id</name><value><int>{id}</int></value></member>\
+                <member><name>bug_id</name><value><int>42</int></value></member>\
+                <member><name>file_name</name><value><string>xmlrpc-{id}.txt</string></value></member>\
+                <member><name>summary</name><value><string>xmlrpc {id}</string></value></member>\
+                <member><name>content_type</name><value><string>text/plain</string></value></member>\
+                <member><name>size</name><value><int>1</int></value></member>\
+                <member><name>is_obsolete</name><value><int>0</int></value></member>\
+                <member><name>is_private</name><value><int>0</int></value></member>\
+            </struct></value>",
+        )
+        .unwrap();
+    }
+    format!(
+        "<?xml version=\"1.0\"?><methodResponse><params><param><value><struct>\
+            <member><name>bugs</name><value><struct>\
+                <member><name>42</name><value><array>\
+<data>{entries}</data></array></value></member>\
+            </struct></value></member>\
+        </struct></value></param></params></methodResponse>"
+    )
+}
+
+#[tokio::test]
+async fn hybrid_uses_xmlrpc_directly_for_attachment_list() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/attachment"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(xmlrpc_attachments_response(&[1, 2, 3])),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_hybrid(&mock.uri());
+    let attachments = client.get_attachments(42).await.unwrap();
+    assert_eq!(attachments.len(), 3);
+    assert_eq!(attachments[0].file_name, "xmlrpc-1.txt");
+}
+
+#[tokio::test]
+async fn hybrid_xmlrpc_transport_error_falls_back_to_rest_for_attachment_list() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(502))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/attachment"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(rest_attachments_response_json(&[10, 11])),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_hybrid(&mock.uri());
+    let attachments = client.get_attachments(42).await.unwrap();
+    assert_eq!(attachments.len(), 2);
+    assert_eq!(attachments[0].file_name, "rest-10.txt");
+}
+
+#[tokio::test]
+async fn rest_mode_uses_rest_only_for_attachment_list() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/attachment"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(rest_attachments_response_json(&[5])),
+        )
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let attachments = client.get_attachments(42).await.unwrap();
+    assert_eq!(attachments.len(), 1);
+    assert_eq!(attachments[0].id, 5);
+}
+
+fn xmlrpc_attachment_by_id_response(id: u64, is_private: bool) -> String {
+    format!(
+        "<?xml version=\"1.0\"?><methodResponse><params><param><value><struct>\
+            <member><name>attachments</name><value><struct>\
+                <member><name>{id}</name><value><struct>\
+                    <member><name>id</name><value><int>{id}</int></value></member>\
+                    <member><name>bug_id</name><value><int>42</int></value></member>\
+                    <member><name>file_name</name><value><string>x-{id}.txt</string></value></member>\
+                    <member><name>summary</name><value><string>x</string></value></member>\
+                    <member><name>content_type</name><value><string>text/plain</string></value></member>\
+                    <member><name>size</name><value><int>1</int></value></member>\
+                    <member><name>is_obsolete</name><value><int>0</int></value></member>\
+                    <member><name>is_private</name><value><int>{p}</int></value></member>\
+                </struct></value></member>\
+            </struct></value></member>\
+        </struct></value></param></params></methodResponse>",
+        p = u8::from(is_private),
+    )
+}
+
+fn rest_attachment_by_id_response_json(id: u64) -> serde_json::Value {
+    serde_json::json!({
+        "attachments": {
+            id.to_string(): {
+                "id": id,
+                "bug_id": 42,
+                "file_name": format!("rest-{id}.txt"),
+                "summary": "rest",
+                "content_type": "text/plain",
+                "creator": "alice@test",
+                "creation_time": "2026-01-01T00:00:00Z",
+                "last_change_time": "2026-01-01T00:00:00Z",
+                "size": 1,
+                "is_obsolete": false,
+                "is_private": false,
+                "data": "aGVsbG8="
+            }
+        }
+    })
+}
+
+#[tokio::test]
+async fn hybrid_uses_xmlrpc_directly_for_get_attachment() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/2001"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(xmlrpc_attachment_by_id_response(2001, true)),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_hybrid(&mock.uri());
+    let attachment = client.get_attachment(2001).await.unwrap();
+    assert_eq!(attachment.id, 2001);
+    assert!(attachment.is_private);
+    assert_eq!(attachment.file_name, "x-2001.txt");
+}
+
+#[tokio::test]
+async fn hybrid_xmlrpc_transport_error_falls_back_to_rest_for_get_attachment() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(502))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/2002"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(rest_attachment_by_id_response_json(2002)),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_hybrid(&mock.uri());
+    let attachment = client.get_attachment(2002).await.unwrap();
+    assert_eq!(attachment.id, 2002);
+    assert_eq!(attachment.file_name, "rest-2002.txt");
+}
+
+#[tokio::test]
+async fn rest_mode_uses_rest_only_for_get_attachment() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/2003"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(rest_attachment_by_id_response_json(2003)),
+        )
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let attachment = client.get_attachment(2003).await.unwrap();
+    assert_eq!(attachment.id, 2003);
+}
+
+#[tokio::test]
+async fn xmlrpc_mode_skips_rest_for_get_attachment() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/2004"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(xmlrpc_attachment_by_id_response(2004, false)),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_xmlrpc(&mock.uri());
+    let attachment = client.get_attachment(2004).await.unwrap();
+    assert_eq!(attachment.id, 2004);
+}
+
+#[tokio::test]
+async fn xmlrpc_mode_skips_rest_for_attachment_list() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/attachment"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(xmlrpc_attachments_response(&[7, 8, 9])),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_xmlrpc(&mock.uri());
+    let attachments = client.get_attachments(42).await.unwrap();
+    assert_eq!(attachments.len(), 3);
+}
 
 #[tokio::test]
 async fn update_attachment_sends_put() {
