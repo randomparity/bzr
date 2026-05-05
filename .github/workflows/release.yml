@@ -214,8 +214,17 @@ jobs:
 
       - name: Build .rpm
         if: matrix.pkg_rpm
-        run: cargo generate-rpm --target ${{ matrix.target }}
         shell: bash
+        run: |
+          # RPM's Version field disallows '-' (it separates the package's
+          # Version from its Release in NVR notation), so 0.2.0-rc6 is a
+          # hard error from cargo-generate-rpm. Translate the prerelease
+          # suffix to '~', which RPM accepts and which sorts correctly:
+          # 0.2.0~rc6 < 0.2.0 < 0.2.0~rc7. cargo-deb (run earlier in this
+          # job) accepts the hyphen form and is unaffected; this rewrite
+          # only persists for the rest of the cross-compile job in CI.
+          sed -i 's/^version = "\([^-"]*\)-\(.*\)"/version = "\1~\2"/' Cargo.toml
+          cargo generate-rpm --target ${{ matrix.target }}
 
       - name: Stage packages alongside tarball
         if: matrix.pkg_deb || matrix.pkg_rpm
