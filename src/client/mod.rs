@@ -125,6 +125,11 @@ const DATA_KEYS: &[&str] = &[
     "ids",
 ];
 
+/// A candidate envelope extractor: the key to look for in the top-level
+/// JSON object and a function that receives the full `Value` and returns
+/// the typed result. Used by [`BugzillaClient::try_envelopes`].
+type EnvelopeCandidate<T> = (&'static str, fn(serde_json::Value) -> Result<T>);
+
 impl BugzillaClient {
     /// Check if a JSON object contains known Bugzilla data keys,
     /// indicating the response has real data alongside any error fields.
@@ -437,6 +442,78 @@ impl BugzillaClient {
         }
         tracing::warn!(url, "server returned error alongside data; using data");
         Ok(())
+    }
+
+    /// Try each envelope shape in order, returning the first that succeeds.
+    ///
+    /// `candidates` is a slice of `(envelope_key, extractor)` pairs. The
+    /// helper inspects the parsed JSON's top-level keys: it tries the
+    /// extractors whose `envelope_key` is present first, then any
+    /// remaining as fallbacks. On total failure, returns the first
+    /// candidate's error annotated with the list of envelopes tried and
+    /// a redacted body preview built from the re-serialized `Value`
+    /// (so the user sees what shape the server actually sent).
+    ///
+    /// Used to tolerate response-shape variants between Bugzilla
+    /// deployments — e.g. `bug/<id>/attachment` returns `bugs`-keyed on
+    /// stock 5.0.x but `attachments`-keyed on some IBM-style deployments.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "consumed by get_attachments in Plan Task 6 / get_comments_since_rest in Plan Task 7"
+        )
+    )]
+    pub(super) fn try_envelopes<T>(
+        value: &serde_json::Value,
+        candidates: &[EnvelopeCandidate<T>],
+    ) -> Result<T> {
+        let present_keys: std::collections::HashSet<&str> = value
+            .as_object()
+            .map(|m| m.keys().map(String::as_str).collect())
+            .unwrap_or_default();
+
+        let mut first_error: Option<BzrError> = None;
+
+        // First pass: try candidates whose envelope key is present.
+        for (key, extractor) in candidates {
+            if present_keys.contains(*key) {
+                match extractor(value.clone()) {
+                    Ok(v) => return Ok(v),
+                    Err(e) if first_error.is_none() => first_error = Some(e),
+                    Err(_) => {}
+                }
+            }
+        }
+
+        // Second pass: try remaining candidates as fallbacks.
+        for (key, extractor) in candidates {
+            if !present_keys.contains(*key) {
+                match extractor(value.clone()) {
+                    Ok(v) => return Ok(v),
+                    Err(e) if first_error.is_none() => first_error = Some(e),
+                    Err(_) => {}
+                }
+            }
+        }
+
+        let envelope_list = candidates
+            .iter()
+            .map(|(k, _)| *k)
+            .collect::<Vec<_>>()
+            .join(", ");
+        let underlying =
+            first_error.map_or_else(|| "no candidates provided".to_string(), |e| e.to_string());
+        // Re-serialize the parsed Value so the user can see what shape the
+        // server actually sent. This is the most important diagnostic case
+        // for issue #135 — a previously-unseen envelope shape.
+        let body_str =
+            serde_json::to_string(value).unwrap_or_else(|_| "<value not serializable>".to_string());
+        let preview = format_body_preview(&body_str);
+        let preview_chars = body_str.chars().count().min(BODY_PREVIEW_MAX_BYTES);
+        Err(BzrError::Deserialize(format!(
+            "no matching envelope (tried envelopes: {envelope_list}): {underlying}\nbody preview ({preview_chars} chars): {preview}"
+        )))
     }
 
     async fn check_response_status(
@@ -985,6 +1062,96 @@ mod tests {
     fn format_body_preview_handles_empty_body() {
         let preview = super::format_body_preview("");
         assert_eq!(preview, "", "empty body should produce empty preview");
+    }
+
+    #[test]
+    fn try_envelopes_returns_first_candidate_match() {
+        let value = serde_json::json!({"bugs": {"42": [{"id": 1}]}});
+        let extract_bugs: fn(serde_json::Value) -> Result<i32> = |_v| Ok(1);
+        let extract_attachments: fn(serde_json::Value) -> Result<i32> = |_v| Ok(2);
+        let result = super::BugzillaClient::try_envelopes(
+            &value,
+            &[("bugs", extract_bugs), ("attachments", extract_attachments)],
+        )
+        .unwrap();
+        assert_eq!(
+            result, 1,
+            "should pick `bugs` extractor when `bugs` key is present"
+        );
+    }
+
+    #[test]
+    fn try_envelopes_falls_back_to_alt_envelope() {
+        let value = serde_json::json!({"attachments": [{"id": 1}]});
+        let extract_bugs: fn(serde_json::Value) -> Result<i32> = |_v| Ok(1);
+        let extract_attachments: fn(serde_json::Value) -> Result<i32> = |_v| Ok(2);
+        let result = super::BugzillaClient::try_envelopes(
+            &value,
+            &[("bugs", extract_bugs), ("attachments", extract_attachments)],
+        )
+        .unwrap();
+        assert_eq!(
+            result, 2,
+            "should pick `attachments` extractor when only `attachments` key is present"
+        );
+    }
+
+    #[test]
+    fn try_envelopes_returns_first_error_when_no_candidate_matches() {
+        let value = serde_json::json!({"unknown_key": "unknown_value"});
+        let extract_bugs: fn(serde_json::Value) -> Result<i32> = |_v| {
+            Err(crate::error::BzrError::Deserialize(
+                "bugs extractor failed".into(),
+            ))
+        };
+        let extract_attachments: fn(serde_json::Value) -> Result<i32> = |_v| {
+            Err(crate::error::BzrError::Deserialize(
+                "attachments extractor failed".into(),
+            ))
+        };
+        let err = super::BugzillaClient::try_envelopes(
+            &value,
+            &[("bugs", extract_bugs), ("attachments", extract_attachments)],
+        )
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("tried envelopes"),
+            "should mention attempted envelopes: {msg}"
+        );
+        assert!(msg.contains("bugs"), "should list 'bugs': {msg}");
+        assert!(
+            msg.contains("attachments"),
+            "should list 'attachments': {msg}"
+        );
+        assert!(
+            msg.contains("bugs extractor failed"),
+            "should preserve first extractor's error: {msg}"
+        );
+        assert!(
+            msg.contains("body preview"),
+            "should include body preview: {msg}"
+        );
+        assert!(
+            msg.contains("unknown_key"),
+            "preview should contain Value contents: {msg}"
+        );
+    }
+
+    #[test]
+    fn try_envelopes_falls_through_when_keyed_extractor_errors() {
+        // The `bugs` key is present but its value can't be extracted (wrong shape).
+        // The fallback `attachments` extractor (no key required) should still run.
+        let value = serde_json::json!({"bugs": "not_an_object", "attachments": [{"id": 1}]});
+        let extract_bugs: fn(serde_json::Value) -> Result<i32> =
+            |_v| Err(crate::error::BzrError::Deserialize("bad bugs shape".into()));
+        let extract_attachments: fn(serde_json::Value) -> Result<i32> = |_v| Ok(2);
+        let result = super::BugzillaClient::try_envelopes(
+            &value,
+            &[("bugs", extract_bugs), ("attachments", extract_attachments)],
+        )
+        .unwrap();
+        assert_eq!(result, 2);
     }
 
     #[test]
