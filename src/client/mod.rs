@@ -343,6 +343,54 @@ impl BugzillaClient {
         })
     }
 
+    /// Parse a response body to a generic [`serde_json::Value`].
+    ///
+    /// Performs the same body-read, JSON-parse, and 200-error check as
+    /// [`Self::parse_json`], but stops short of typed deserialization.
+    /// Used by callers that need to inspect the response envelope before
+    /// committing to a concrete type (see [`Self::try_envelopes`]).
+    pub(super) async fn parse_json_value(
+        &self,
+        resp: reqwest::Response,
+    ) -> Result<serde_json::Value> {
+        let safe_url = Self::safe_url(resp.url());
+        let body = resp.text().await?;
+
+        tracing::trace!(
+            url = safe_url,
+            body = &body[..body.len().min(2048)],
+            "response body"
+        );
+
+        let value: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
+            tracing::debug!(
+                url = safe_url,
+                error = %e,
+                body_preview = &body[..body.len().min(512)],
+                "JSON deserialization failed"
+            );
+            BzrError::Deserialize(format!(
+                "failed to parse response from {safe_url}: {e}\nbody preview ({} chars): {}",
+                body.chars().count().min(BODY_PREVIEW_MAX_BYTES),
+                format_body_preview(&body),
+            ))
+        })?;
+
+        Self::check_bugzilla_200_error(&value, &safe_url)?;
+        Ok(value)
+    }
+
+    /// Send a GET request and return the parsed JSON body as a `Value`.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "consumed by try_envelopes in Plan Task 5")
+    )]
+    pub(super) async fn get_json_value(&self, path: &str) -> Result<serde_json::Value> {
+        let req = self.apply_auth(self.http.get(self.url(path)));
+        let resp = self.send(req).await?;
+        self.parse_json_value(resp).await
+    }
+
     /// Detect Bugzilla error payloads that arrive with HTTP 200 status.
     ///
     /// Some servers (e.g. IBM LTC Bugzilla) include error fields alongside
@@ -1001,6 +1049,48 @@ mod tests {
         assert!(
             msg.contains("not valid json"),
             "preview should contain raw body: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_json_value_returns_parsed_value_without_typed_check() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/anything"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "arbitrary_key": "arbitrary_value",
+                "nested": {"inner": 42}
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let value = client.get_json_value("anything").await.unwrap();
+        assert_eq!(value["arbitrary_key"], "arbitrary_value");
+        assert_eq!(value["nested"]["inner"], 42);
+    }
+
+    #[tokio::test]
+    async fn get_json_value_runs_check_bugzilla_200_error() {
+        // A 200 response with `error: true` and no data fields must still
+        // produce a BzrError::Api — get_json_value should run the same
+        // 200-error check that get_json does.
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/anything"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 301,
+                "message": "denied"
+            })))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client.get_json_value("anything").await.unwrap_err();
+        assert!(
+            matches!(err, crate::error::BzrError::Api { code: 301, .. }),
+            "expected Api error, got: {err}"
         );
     }
 
