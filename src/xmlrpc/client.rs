@@ -163,13 +163,6 @@ impl XmlRpcClient {
         value_to_group_info(group_val)
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "wired up by the Hybrid-mode orchestrator in a follow-up task"
-        )
-    )]
     pub async fn get_comments_since(
         &self,
         bug_id: u64,
