@@ -5,181 +5,99 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.2.0-rc6] - 2026-05-04
-
-> Same-day re-spin of rc5. rc5's `installer-smoke` job failed
-> against the published release because `Cargo.toml` carried the
-> base version (`0.2.0`) while the tag was `v0.2.0-rc5`, so the
-> smoke check could not verify alignment. rc6 adopts the policy
-> that `Cargo.toml` mirrors the tag exactly (including any
-> prerelease suffix) and adds a release-workflow `preflight` gate
-> that enforces it before any build runs. The installer scripts
-> themselves were verified working in the rc5 logs; rc6 carries
-> the same artifact set with the version-string and CI-gate
-> changes layered on top. Both rc5 and rc6 are dated 2026-05-04
-> because both were cut on the same calendar day.
-
-### Added
-
-- Installer scripts (`install.sh`, `install.ps1`) for one-line
-  installation from GitHub Releases, with SHA-256 verification
-  against the published `SHA256SUMS` file. Hosted at the `main`
-  branch URL for always-current installs and as release assets
-  pinned to each tag for reproducibility.
-
-### Changed
-
-- `Cargo.toml` and `bzr --version` now carry the prerelease
-  suffix on rc builds (`bzr 0.2.0-rc6` for tag `v0.2.0-rc6`).
-  Earlier rcs shipped with `Cargo.toml` pinned to the base
-  `0.2.0`, so users on rc binaries had no way to tell which rc
-  they had installed from `bzr --version` alone. The new policy
-  is documented in `RELEASING.md` and enforced on every tag push.
-
-### Fixed
-
-- Windows release zip layout now wraps contents in a top-level
-  `bzr-<tag>-<target>/` directory, matching the Unix tarball.
-  Previously the zip stored `bzr.exe`, `LICENSE`, `README.md`,
-  and `man/man1/` at the archive root.
-
-### CI
-
-- Add release-workflow `preflight` job that asserts the tag and
-  `Cargo.toml`'s version match exactly before any build, package,
-  attestation, or release upload runs. A misaligned release-prep
-  PR now aborts the workflow up-front instead of being detected
-  after the GitHub Release has already been created and
-  downstream workflows (Homebrew tap auto-bump, etc.) have fired.
-- `installer-smoke` job now compares the installed binary's
-  `--version` output against `Cargo.toml`'s version field rather
-  than the tag string, so it remains correct under any policy
-  variant.
-- Pin nightly to `nightly-2026-05-02` in the Fuzz workflow as a
-  workaround for `rustix v0.36.5` (transitively pulled by
-  `cargo-fuzz 0.13.1`) failing to compile against newer rustc
-  nightlies. Pin will be lifted once `cargo-fuzz` ships a release
-  that drops the affected `rustix` version.
-
-## [0.2.0-rc4] - 2026-05-02
-
-### Fixed
-
-- Release page no longer attaches stray manpage `.1` files. The
-  `release` job's artifact download now filters with `pattern: bzr-*-*`
-  so the internal `bzr-manpages` artifact (used by the build matrix to
-  bundle pages into tarballs and packages) is not pulled into the
-  release upload set. `SHA256SUMS` correspondingly lists only the
-  published archives and packages.
-
-### Documentation
-
-- Every man page and every `--help` long-form output across `bzr`
-  and its subcommands now carries full descriptive prose instead
-  of one-line summaries: command-level pages describe
-  auth/permission expectations, required vs. optional inputs,
-  output shape, representative examples, exit-code semantics where
-  non-trivial, and cross-references to related pages; per-flag
-  detail covers every option that conflicts with another flag,
-  gates behavior elsewhere, accepts a structured value, has a
-  non-obvious default, or supports env-var/stdin fallback.
-- Added `docs/dev/cli-doc-style.md` documenting the conventions for
-  clap doc comments (2-space example indent, ASCII-only,
-  `verbatim_doc_comment` on items with examples).
-- Added a `cli_doc_long_about_coverage` test that asserts every
-  doc-expanded subcommand has a multi-paragraph `long_about` distinct
-  from its short `about`. Catches regressions where a future edit
-  collapses a long doc back to a single line.
-
-## [0.2.0-rc3] - 2026-05-01
-
-### Added
-
-- Manpages: `bzr` and one roff page per subcommand, auto-generated from
-  the clap-derive CLI tree by a new `xtask` workspace member. Run
-  `make man` locally; release tarballs ship them under `man/man1/`.
-- `.deb` packages for amd64, arm64, and ppc64el; `.rpm` packages for
-  x86_64, aarch64, ppc64le, and s390x. Built and attached to GitHub
-  releases by `release.yml`, with `lintian`/`rpmlint` checks (warn-only)
-  and Docker install smoke-tests for the x86_64 packages.
-- Homebrew tap support via `randomparity/homebrew-tap`: pre-built
-  binaries on macOS arm64 and Linux x86_64/aarch64; Intel Mac falls
-  back to a source build with a build-time `rust` dep. The
-  `update-homebrew.yml` workflow auto-bumps the formula on each
-  stable release.
-- `SHA256SUMS` file attached to each GitHub release, covering every
-  tarball, zip, `.deb`, and `.rpm` artifact. Verify a download with
-  `sha256sum --check --ignore-missing SHA256SUMS`.
-
-### Changed
-
-- MSRV raised to 1.88 (was 1.84). Existing crates.io installs continue
-  to work with `cargo install bzr --locked`; users building without
-  `--locked` may need to upgrade their toolchain.
-
-### Documentation
-
-- README `Installation` section restructured around the package
-  manager that fits each platform (Homebrew, `.deb`, `.rpm`, tarball,
-  `cargo install`). Manual page setup promoted from a sub-bullet of the
-  keychain section to a top-level subsection.
-- `docs/bzr-cli.md` exit-code table now lists exit code 13 (TLS pin
-  mismatch / issuer changed). Command tree for `config set-server`
-  includes `--tls-ca-cert`, `--tls-pin-sha256`, `--tls-pin-now`, and
-  `--tls-pin-clear`. Configuration file format example now shows
-  `tls_insecure`, `tls_ca_cert`, and `tls_pin_sha256` per-server fields.
-- `docs/skills.md` exit-code list expanded to mention 0–13 with a
-  pointer to the full table.
-- `CLAUDE.md` updated to reflect 18 `BzrError` variants (was 14),
-  rename of `connect_client` to `connect_and_configure`, and addition
-  of `template.rs` / `query.rs` to the `cli/` module list.
-
-## [0.2.0-rc2] - 2026-04-28
-
-> Same-day re-spin of rc1 to fix a defect found during smoke testing
-> (PR #102: eager TLS probe on the cached connection path). Both rc1
-> and rc2 carry the 2026-04-28 date because both were cut on the same
-> calendar day.
+## [0.2.0] - 2026-05-04
 
 ### Added
 
 - TLS certificate pinning with trust-on-first-use (TOFU) prompt flow.
-  New CLI flags on `bzr config set-server`: `--tls-ca-cert <path>` to pin
-  a CA certificate, `--tls-pin-sha256 <hex>` to pin a leaf SPKI
+  New CLI flags on `bzr config set-server`: `--tls-ca-cert <path>` to
+  pin a CA certificate, `--tls-pin-sha256 <hex>` to pin a leaf SPKI
   fingerprint, `--tls-pin-now` to probe the server and prompt before
   storing the observed pin, and `--tls-pin-clear` to remove an existing
   pin.
-- Per-server config fields `tls_ca_cert`, `tls_pin_sha256`,
+- Per-server config fields `tls_ca_cert`, `tls_pin_sha256`, and
   `tls_pin_issuer` persisted in `~/.config/bzr/config.toml`.
 - New error variants `PinMismatch` and `IssuerChanged` with distinct
   exit codes and actionable hints (`--tls-pin-now`, `--tls-ca-cert`).
-- `bzr config show` displays configured CA cert path and pin fingerprint
-  for each server.
+- `bzr config show` displays configured CA cert path and pin
+  fingerprint for each server.
+- Manpages: `bzr` and one roff page per subcommand, auto-generated
+  from the clap-derive CLI tree by a new `xtask` workspace member.
+  Run `make man` locally; release tarballs ship them under
+  `man/man1/`. The `.deb`, `.rpm`, and Homebrew install paths place
+  manpages on `MANPATH` automatically.
+- `.deb` packages for `amd64`, `arm64`, and `ppc64el`; `.rpm`
+  packages for `x86_64`, `aarch64`, `ppc64le`, and `s390x`. Built
+  and attached to GitHub releases by `release.yml`, with
+  `lintian`/`rpmlint` checks (warn-only) and Docker install
+  smoke-tests on the `x86_64` packages.
+- Homebrew tap support via
+  [`randomparity/homebrew-tap`](https://github.com/randomparity/homebrew-tap):
+  pre-built binaries on macOS arm64 and Linux x86_64/aarch64; Intel
+  Mac falls back to a source build with a build-time `rust` dep. The
+  tap is auto-bumped on each stable release.
+- `SHA256SUMS` file attached to each GitHub release, covering every
+  tarball, zip, `.deb`, and `.rpm` artifact. Verify a download with
+  `sha256sum --check --ignore-missing SHA256SUMS`.
+- Installer scripts (`install.sh`, `install.ps1`) for one-line
+  installation from GitHub Releases, with SHA-256 verification
+  against the published `SHA256SUMS` file. Hosted at the `main`
+  branch URL for always-current installs, and as release assets
+  pinned to each tag for reproducibility.
 
 ### Changed
 
-- Internal: migrated PEM parsing from `rustls-pemfile` to
-  `rustls-pki-types` `PemObject` API. No user-visible change.
-- Internal: `commands/bug.rs` split into per-action submodules;
-  `xmlrpc/mod.rs` split into `call`, `fault`, `parsing`. No public API
-  change.
-- Internal: test modules moved to sibling `_tests.rs` files for
-  SonarCloud copy-paste-detection exclusion.
+- MSRV raised to 1.88 (was 1.84). Existing crates.io installs
+  continue to work with `cargo install bzr --locked`; users
+  building without `--locked` may need to upgrade their toolchain.
 
 ### Fixed
 
-- HTTP error messages now walk the reqwest error source chain, so TLS
-  diagnostics surface even when wrapped in transport errors.
-- `bzr bug search --from-url` strips shell-escaped backslashes from URL
-  arguments pasted from terminals that quote them.
+- HTTP error messages now walk the reqwest error source chain, so
+  TLS diagnostics surface even when wrapped in transport errors.
+- `bzr bug search --from-url` strips shell-escaped backslashes from
+  URL arguments pasted from terminals that quote them.
 - TLS verification is now eager at connect time on the fully-cached
-  path. Previously, when both `auth_method` and `api_mode` were cached
-  for a server, `connect_and_configure` returned a client without
-  probing TLS, so untrusted-CA errors and pin rotations only surfaced
-  from the first real API call — bypassing the TOFU and rotation
-  prompts entirely. Cert-detection probes also no longer follow HTTP
-  redirects, so prompts always describe the configured URL itself
-  rather than a redirect target.
+  path. Previously, when both `auth_method` and `api_mode` were
+  cached for a server, `connect_and_configure` returned a client
+  without probing TLS, so untrusted-CA errors and pin rotations only
+  surfaced from the first real API call -- bypassing the TOFU and
+  rotation prompts entirely. Cert-detection probes also no longer
+  follow HTTP redirects, so prompts always describe the configured
+  URL itself rather than a redirect target.
+- Release page no longer attaches stray manpage `.1` files. The
+  `release` job's artifact download filters with `pattern: bzr-*-*`
+  so the internal `bzr-manpages` artifact (used by the build matrix
+  to bundle pages into tarballs and packages) is not pulled into the
+  release upload set. `SHA256SUMS` correspondingly lists only the
+  published archives and packages.
+- Windows release zip layout now wraps contents in a top-level
+  `bzr-<tag>-<target>/` directory, matching the Unix tarball.
+
+### Documentation
+
+- Every man page and every `--help` long-form output across `bzr`
+  and its subcommands carries full descriptive prose: command-level
+  pages describe auth/permission expectations, required vs. optional
+  inputs, output shape, representative examples, exit-code semantics
+  where non-trivial, and cross-references to related pages; per-flag
+  detail covers every option that conflicts with another flag, gates
+  behavior elsewhere, accepts a structured value, has a non-obvious
+  default, or supports env-var/stdin fallback.
+- README `Installation` section restructured around the package
+  manager that fits each platform (Homebrew, `.deb`, `.rpm`, the
+  one-line installer, manual tarball, `cargo install`).
+- `docs/bzr-cli.md` exit-code table lists exit code 13 (TLS pin
+  mismatch / issuer changed). Command tree for `config set-server`
+  includes the new `--tls-*` flags. Configuration file example shows
+  `tls_insecure`, `tls_ca_cert`, and `tls_pin_sha256` per-server
+  fields.
+- New `docs/dev/cli-doc-style.md` documenting clap doc-comment
+  conventions (2-space example indent, ASCII-only,
+  `verbatim_doc_comment` on items with examples).
+- New `cli_doc_long_about_coverage` test that asserts every
+  doc-expanded subcommand has a multi-paragraph `long_about`
+  distinct from its short `about`.
 
 ## [0.1.2] - 2026-04-27
 
