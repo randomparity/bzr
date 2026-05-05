@@ -19,7 +19,7 @@ mutants.out.old/
 .desloppify/
 
 # Superpowers
-docs/superpowers/
+docs/superpowers/plans/
 
 # Git worktrees
 .worktrees/
