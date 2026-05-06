@@ -65,6 +65,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   scope: summary + description + comments); for a Summary-
   field-only match across all states, use the new
   `bzr bug list --summary <text>` instead.
+- `bzr bug create --template <NAME>` no longer auto-applies the
+  template's `description` field as a fallback when no explicit
+  description source is supplied outside the editor flow. The
+  template description is now used as the editor buffer's pre-fill
+  only. Pass `--description`, `--description-file`, or pipe a
+  description via stdin to use a non-template body. Refs: #159, #160.
 
 ## [0.3.0] - 2026-05-05
 

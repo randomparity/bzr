@@ -647,3 +647,63 @@ async fn bug_create_editor_branch_unreachable_when_stdin_piped() {
         "expected InputValidation about empty piped stdin, got {err:?}"
     );
 }
+
+#[tokio::test]
+async fn bug_create_template_description_does_not_fall_back_outside_editor_flow() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    // Pre-populate a template that has a description body.
+    let save = TemplateAction::Save {
+        name: "tpl-with-desc".into(),
+        product: Some("TestProduct".into()),
+        component: Some("General".into()),
+        version: None,
+        priority: None,
+        severity: None,
+        assignee: None,
+        op_sys: None,
+        rep_platform: None,
+        description: Some("template body".into()),
+    };
+    let (result, _) = capture_stdout(crate::commands::template::execute(
+        &save,
+        None,
+        OutputFormat::Json,
+        None,
+    ))
+    .await;
+    assert!(result.is_ok(), "template save failed: {result:?}");
+
+    // Invoke bug create with the template, no other description source,
+    // under cargo's non-TTY stdin: the template description must NOT
+    // be used as a fallback. The empty-stdin branch fires first and
+    // returns InputValidation.
+    let action = BugAction::Create {
+        template: Some("tpl-with-desc".into()),
+        product: None,
+        component: None,
+        summary: Some("Bug from template".into()),
+        version: None,
+        description: None,
+        description_file: None,
+        priority: None,
+        severity: None,
+        assignee: None,
+        op_sys: None,
+        rep_platform: None,
+        blocks: vec![],
+        depends_on: vec![],
+    };
+    let (result, _output) = capture_stdout(crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+    ))
+    .await;
+    let err = result.unwrap_err();
+    assert!(
+        matches!(&err, BzrError::InputValidation(_)),
+        "expected InputValidation (template body should not auto-fill outside the editor flow), got {err:?}"
+    );
+}
