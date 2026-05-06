@@ -15,7 +15,7 @@ fn read_description_file(path: &std::path::Path) -> Result<String> {
     }
     std::fs::read_to_string(path).map_err(|e| {
         crate::error::BzrError::InputValidation(format!(
-            "--description-file could not be read as UTF-8 ({}): {e}",
+            "--description-file could not be read ({}): {e}",
             path.display()
         ))
     })
@@ -81,18 +81,12 @@ pub(super) async fn handle(
     // --summary must be supplied.
     let editor_flow_active = resolved_description.is_none() && std::io::stdin().is_terminal();
 
-    if !editor_flow_active && summary.is_none() {
-        return Err(crate::error::BzrError::InputValidation(
-            "--summary is required unless the editor flow is active".into(),
-        ));
-    }
-
     // Until the editor flow lands, treat editor-flow-active as
     // an unsupported state: the resolution chain falls through with
     // no description source.
     if editor_flow_active {
         return Err(crate::error::BzrError::InputValidation(
-            "no description source available (editor flow not yet implemented)".into(),
+            "a description is required: pass --description, --description-file, or pipe via stdin (interactive editor not yet supported)".into(),
         ));
     }
 
@@ -128,7 +122,11 @@ pub(super) async fn handle(
     let params = CreateBugParams {
         product: resolved_product,
         component: resolved_component,
-        summary: summary.clone().unwrap_or_default(),
+        summary: summary.clone().ok_or_else(|| {
+            crate::error::BzrError::InputValidation(
+                "--summary is required unless the editor flow is active".into(),
+            )
+        })?,
         version: version
             .clone()
             .or_else(|| tmpl.as_ref().and_then(|t| t.version.clone()))
