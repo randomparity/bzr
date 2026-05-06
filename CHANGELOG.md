@@ -40,11 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - The `<query>` argument on `bzr bug search` and the help text
   for `--api` have been clarified to call out quicksearch's
-  "open bugs only" default. Bugzilla's bare token `ALL` is the
-  canonical escape hatch for searching all statuses, but the
-  status-keyword set is deployment-specific and tokenization is
-  fuzzy; users wanting a reliable cross-state search are
-  pointed at the new `bzr bug list --summary` instead.
+  "open bugs only" default. Prepend the bare token `ALL` to a
+  quicksearch query to include closed/resolved bugs (broader
+  scope: summary + description + comments); for a Summary-
+  field-only match across all states, use the new
+  `bzr bug list --summary <text>` instead.
 
 ## [0.3.0] - 2026-05-05
 
