@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
@@ -70,7 +72,6 @@ async fn view_batch_strict(
             for id in ids {
                 let bug = client.get_bug(id, include_fields, exclude_fields).await?;
                 if rendered_any {
-                    use std::io::Write;
                     let _ = writeln!(std::io::stdout(), "{}", "─".repeat(60));
                 }
                 output::print_bug_detail(&bug, OutputFormat::Table);
@@ -88,7 +89,7 @@ async fn view_batch_strict(
                 bugs,
                 failed: Vec::new(),
             };
-            output::print_result(&result, "", OutputFormat::Json);
+            output::print_result(&result, "", format);
             Ok(())
         }
     }
@@ -141,7 +142,7 @@ async fn view_batch_permissive(
                 }
             }
             let result = MultiBugViewResult { bugs, failed };
-            output::print_result(&result, "", OutputFormat::Json);
+            output::print_result(&result, "", format);
         }
     }
     Ok(())

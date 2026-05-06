@@ -481,3 +481,37 @@ async fn view_multi_permissive_api_102_suppressed() {
     assert_eq!(parsed["failed"].as_array().unwrap().len(), 1);
     assert_eq!(parsed["failed"][0]["id"], "2");
 }
+
+#[tokio::test]
+async fn view_multi_permissive_api_410_bails() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(ok_bug_body(1, "first")))
+        .mount(&mock)
+        .await;
+    // Code 410 is NOT in the Bug.get per-bug whitelist (100/101/102) —
+    // it's a session-adjacent auth/permission failure. Must bail under
+    // `--permissive` just like a transport error or session-wide code.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/2"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(api_error_body(
+            410,
+            "You must log in to access this resource.",
+        )))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/3"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(ok_bug_body(3, "third")))
+        .mount(&mock)
+        .await;
+
+    let action = make_view_action(&["1", "2", "3"], true);
+    let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
+    assert!(
+        result.is_err(),
+        "auth-flavored Api code must bail despite --permissive"
+    );
+    assert!(!result.unwrap_err().is_bug_get_per_resource());
+}
