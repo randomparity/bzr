@@ -503,3 +503,160 @@ jobs:
           fi
           git commit -m "bzr ${TAG#v}"
           git push
+
+  # Open a post-release version-bump PR on main. Stable releases only
+  # (`-` filters out pre-release tags). Folded into release.yml for the
+  # same GITHUB_TOKEN-doesn't-fire-downstream-events reason as the
+  # homebrew job above.
+  #
+  # The default bump is `patch` (e.g. v0.4.0 -> 0.4.1-dev), which is
+  # the smallest forward step. If the next planned release is a minor
+  # or major bump instead, the maintainer edits Cargo.toml/Cargo.lock
+  # on the auto-opened PR before merging — that's the human-in-the-
+  # loop angle. The PR is opened against `main`, so it can be amended
+  # exactly like a hand-crafted release-prep PR.
+  #
+  # CI does not run on PRs opened by GITHUB_TOKEN; see the PR body
+  # the job emits for the empty-commit kick-off recipe.
+  post-release-bump:
+    name: Open post-release version-bump PR
+    needs: [release, installer-smoke]
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # stable
+
+      - name: Compute next dev version
+        id: ver
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          # Default bump policy: patch. Maintainer can override the
+          # version on the auto-opened PR before merging.
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          NEXT_PATCH=$((PATCH + 1))
+          NEXT="${MAJOR}.${MINOR}.${NEXT_PATCH}-dev"
+          BRANCH="chore/bump-to-v${MAJOR}.${MINOR}.${NEXT_PATCH}-dev"
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "Computed next dev version: $NEXT (branch: $BRANCH)"
+
+      - name: Abort if branch already exists on remote
+        env:
+          BRANCH: ${{ steps.ver.outputs.branch }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; then
+            echo "::error::Branch $BRANCH already exists on origin; resolve manually." >&2
+            exit 1
+          fi
+
+      - name: Update Cargo.toml
+        env:
+          NEXT: ${{ steps.ver.outputs.next }}
+        run: |
+          set -euo pipefail
+          # Replace the version line inside [package] only. Dependency
+          # lines have `version = "..."` mid-line, so anchoring on `^`
+          # is necessary; section tracking ensures we ignore version
+          # entries in other tables (e.g. [workspace.package] if added).
+          awk -v v="$NEXT" '
+            /^\[/ { in_pkg = ($0 == "[package]") }
+            in_pkg && /^version = "[^"]*"$/ {
+              sub(/"[^"]*"/, "\"" v "\"")
+            }
+            { print }
+          ' Cargo.toml > Cargo.toml.new
+          mv Cargo.toml.new Cargo.toml
+          grep -n "^version = " Cargo.toml | head -n 1
+
+      - name: Refresh Cargo.lock
+        run: cargo update -p bzr
+
+      - name: Prepend [Unreleased] to CHANGELOG.md
+        run: |
+          set -euo pipefail
+          if grep -q '^## \[Unreleased\]' CHANGELOG.md; then
+            echo "[Unreleased] section already present; skipping prepend."
+            exit 0
+          fi
+          awk '
+            BEGIN { inserted = 0 }
+            !inserted && /^## \[/ {
+              print "## [Unreleased]"
+              print ""
+              inserted = 1
+            }
+            { print }
+          ' CHANGELOG.md > CHANGELOG.md.new
+          mv CHANGELOG.md.new CHANGELOG.md
+
+      - name: Commit and push branch
+        env:
+          BRANCH: ${{ steps.ver.outputs.branch }}
+          NEXT: ${{ steps.ver.outputs.next }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add Cargo.toml Cargo.lock CHANGELOG.md
+          if git diff --staged --quiet; then
+            echo "::error::No changes staged after bump steps; investigate." >&2
+            exit 1
+          fi
+          git commit -m "chore: bump version to $NEXT after $TAG release"
+          git push -u origin "$BRANCH"
+
+      - name: Render PR body
+        env:
+          BRANCH: ${{ steps.ver.outputs.branch }}
+          NEXT: ${{ steps.ver.outputs.next }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/pr-body.md <<EOF
+          Automated post-release version bump opened by \`release.yml\` after \`$TAG\` shipped successfully (\`release\` + \`installer-smoke\` green).
+
+          The default bump policy is \`patch\` (\`$TAG\` -> \`$NEXT\`) -- the smallest forward step. If the next planned release is a minor or major bump, edit \`Cargo.toml\`, run \`cargo update -p bzr\` to refresh \`Cargo.lock\`, and amend the version line in this commit before merging.
+
+          Per the dev-version convention in [\`RELEASING.md\`](../blob/main/RELEASING.md), \`Cargo.toml\` on \`main\` between releases carries a \`-dev\` SemVer pre-release suffix so dev builds are visually distinct from the most recent release. \`build.rs\` additionally embeds the git short SHA, so \`bzr --version\` prints e.g. \`bzr $NEXT (abcdef12)\`.
+
+          ### CI on this PR
+
+          Pull requests opened by \`GITHUB_TOKEN\` do not trigger downstream \`pull_request\` workflows. To run CI before merging, push an empty commit:
+
+          \`\`\`bash
+          gh pr checkout $BRANCH
+          git commit --allow-empty -m "trigger ci"
+          git push
+          \`\`\`
+
+          Or run the test suite locally (\`cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test\`).
+
+          🤖 Generated with [Claude Code](https://claude.com/claude-code)
+          EOF
+
+      - name: Open PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ steps.ver.outputs.branch }}
+          NEXT: ${{ steps.ver.outputs.next }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore: bump version to $NEXT (post-$TAG)" \
+            --body-file /tmp/pr-body.md

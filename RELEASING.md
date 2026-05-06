@@ -187,13 +187,34 @@ cargo install bzr --version X.Y.Z --locked
 bzr --version
 ```
 
-7. Open a follow-up `chore/bump-version-to-X.Y'.Z'-dev` PR that bumps
-   `Cargo.toml` from the just-released `X.Y.Z` to the next planned
-   release with a `-dev` suffix (e.g. `0.4.0` → `0.5.0-dev`, or
-   `0.4.0` → `0.4.1-dev` if the next release is a patch). Run
-   `cargo build` so `Cargo.lock` regenerates, and add an empty
-   `## [Unreleased]` section at the top of `CHANGELOG.md` that
-   subsequent feature/fix PRs can extend as the work lands.
+7. The `post-release-bump` job in `release.yml` will automatically
+   open a `chore/bump-to-vX.Y.Z'-dev` PR after the `release` and
+   `installer-smoke` jobs succeed (stable releases only — pre-release
+   tags skip this step). The auto-PR:
+   - Bumps `Cargo.toml` from the just-released `X.Y.Z` to the next
+     **patch** version with a `-dev` suffix (e.g. `0.4.0` →
+     `0.4.1-dev`). Patch is the safest default; if the next planned
+     release is a minor or major bump (e.g. `0.4.0` → `0.5.0-dev`),
+     edit the version on the PR before merging.
+   - Refreshes `Cargo.lock` via `cargo update -p bzr`.
+   - Prepends an empty `## [Unreleased]` section to `CHANGELOG.md`,
+     ready for subsequent feature/fix PRs to extend.
+
+   **CI on the auto-PR.** Pull requests opened by `GITHUB_TOKEN` do
+   not trigger downstream `pull_request` workflows (the same
+   safeguard that pushed the homebrew bump back into `release.yml`).
+   The auto-PR's body contains a kick-off recipe — push an empty
+   commit, or run the suite locally — so CI signal is available
+   before merge. The bump itself is a 3-line diff, so the local-run
+   path is usually fastest.
+
+   If for any reason the job fails or the auto-PR is closed without
+   merging, open a hand-crafted bump PR following the same shape
+   (`chore: bump version to X.Y.Z'-dev after vX.Y.Z release`).
+   `main` carrying the released version (no `-dev`) past a release
+   is not catastrophic — the next release-prep PR will still land
+   cleanly — but it does mean dev builds reuse the released version
+   in `bzr --version`.
 
 ## If publish fails
 
