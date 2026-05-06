@@ -515,18 +515,20 @@ if assert_exit_code 2; then test_pass; fi
 rm -f "$DESC_FILE"
 
 test_begin "48c. bug create stdin description (piped)"
-echo "description from stdin" | run_bzr bug create \
+run_bzr bug create \
     --product FuncTestProd --component Backend \
-    --summary "From stdin" --op-sys All --rep-platform All
+    --summary "From stdin" --op-sys All --rep-platform All \
+    <<<"description from stdin"
 if assert_success; then test_pass; fi
 
 test_begin "48d. bug create --description-file wins over piped stdin"
 DESC_FILE=$(mktemp /tmp/bzr-func-desc.XXXXXX)
 echo "from file" > "$DESC_FILE"
-echo "from stdin" | run_bzr bug create \
+run_bzr bug create \
     --product FuncTestProd --component Backend \
     --summary "Precedence file>stdin" --description-file "$DESC_FILE" \
-    --op-sys All --rep-platform All
+    --op-sys All --rep-platform All \
+    <<<"from stdin"
 if assert_success; then
     BUG_ID=$(jq -r '.id' "$BZR_STDOUT")
     # Verify the description that landed is from the file, not stdin
@@ -542,9 +544,10 @@ run_bzr_raw bug create --product FuncTestProd --component Backend \
 if assert_exit_code 7; then test_pass; fi
 
 test_begin "48f. bug create empty piped stdin without explicit description → exit 7"
-echo -n "" | run_bzr_raw bug create \
+run_bzr_raw bug create \
     --product FuncTestProd --component Backend \
-    --summary "Empty stdin" --op-sys All --rep-platform All
+    --summary "Empty stdin" --op-sys All --rep-platform All \
+    </dev/null
 if assert_exit_code 7; then test_pass; fi
 
 test_begin "48g. bug create empty fake-editor → exit 7 (TTY-conditional)"
