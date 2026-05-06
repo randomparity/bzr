@@ -74,7 +74,8 @@ async fn bug_view_integration() {
         .await;
 
     let action = bzr::cli::BugAction::View {
-        id: "42".to_string(),
+        ids: vec!["42".to_string()],
+        permissive: false,
         fields: None,
         exclude_fields: None,
     };
@@ -605,7 +606,8 @@ async fn api_error_propagates() {
         .await;
 
     let action = bzr::cli::BugAction::View {
-        id: "99999".to_string(),
+        ids: vec!["99999".to_string()],
+        permissive: false,
         fields: None,
         exclude_fields: None,
     };

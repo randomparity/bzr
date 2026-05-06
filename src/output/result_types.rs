@@ -246,13 +246,6 @@ impl BatchResult {
 /// continues to emit a bare `Bug` object — unrelated to this type.
 #[derive(Debug, Serialize)]
 #[non_exhaustive]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by `bzr bug view` multi-ID handler in a follow-up task on this branch"
-    )
-)]
 pub struct MultiBugViewResult {
     pub bugs: Vec<crate::types::Bug>,
     pub failed: Vec<BugViewFailure>,

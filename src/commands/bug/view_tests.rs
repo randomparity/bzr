@@ -32,7 +32,8 @@ async fn bug_view_returns_detail() {
         .await;
 
     let action = BugAction::View {
-        id: "42".to_string(),
+        ids: vec!["42".to_string()],
+        permissive: false,
         fields: None,
         exclude_fields: None,
     };
@@ -65,7 +66,8 @@ async fn bug_view_not_found_returns_error() {
         .await;
 
     let action = BugAction::View {
-        id: "999999".to_string(),
+        ids: vec!["999999".to_string()],
+        permissive: false,
         fields: None,
         exclude_fields: None,
     };

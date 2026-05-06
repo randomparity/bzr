@@ -76,17 +76,34 @@ pub enum BugAction {
         #[arg(long)]
         exclude_fields: Option<String>,
     },
-    /// View a single bug by ID or alias.
+    /// View one or more bugs by ID or alias.
     ///
-    /// Prints the bug's full record (summary, status, assignee,
-    /// priority, CC list, depends-on, blocks, and the most recent
-    /// comments) as a formatted table or JSON. Use `--fields` to
-    /// fetch only specific fields (faster on large bugs);
-    /// `--exclude-fields` is the inverse.
+    /// Single-ID: prints the bug's full record (summary, status,
+    /// assignee, priority, CC list, depends-on, blocks, and the most
+    /// recent comments) as a formatted detail block or JSON object.
+    ///
+    /// Multi-ID: emits one detail block per bug separated by a
+    /// horizontal divider, in argument order. Aliases and numeric IDs
+    /// may be mixed. JSON output for multi-ID becomes a wrapped
+    /// `{"bugs": [...], "failed": [...]}` object — `failed` is always
+    /// present (empty array when no failures) so `jq` consumers can
+    /// rely on `.bugs[]`. Single-ID JSON output is unchanged
+    /// (a bare `Bug` object).
+    ///
+    /// `--permissive` (multi-ID only) suppresses per-bug access
+    /// failures: inaccessible bugs are surfaced as inline
+    /// `Bug #N — UNAVAILABLE` placeholder blocks instead of bailing
+    /// the whole call. Exit code is 0 even when some bugs fail.
+    /// Session-wide failures (transport, auth, security) still bail.
+    ///
+    /// Use `--fields` to fetch only specific fields (faster on large
+    /// bugs); `--exclude-fields` is the inverse.
     ///
     /// Examples:
     ///
     ///   bzr bug view 12345
+    ///   bzr bug view 12345 12346 12347
+    ///   bzr bug view 12345 my-alias 12347 --permissive
     ///   bzr bug view 12345 --json | jq .summary
     ///   bzr bug view my-alias --fields id,summary,status
     ///
@@ -94,8 +111,19 @@ pub enum BugAction {
     /// bzr-comment-list(1) for the full comment thread.
     #[command(verbatim_doc_comment)]
     View {
-        /// Bug ID or alias
-        id: String,
+        /// Bug ID(s) or alias(es). Aliases and numeric IDs may be mixed.
+        #[arg(required = true, num_args = 1..)]
+        ids: Vec<String>,
+        /// Continue past per-bug failures (multi-ID only).
+        ///
+        /// When set, inaccessible bugs (NotFound or Bug.get fault
+        /// codes 100/101/102) are reported as inline placeholder
+        /// rows and the command exits 0. Without `--permissive`,
+        /// the first per-bug failure aborts the whole call. Has
+        /// no effect on session-wide errors (transport, auth,
+        /// security) — those always bail.
+        #[arg(long)]
+        permissive: bool,
         /// Only return these fields (comma-separated)
         #[arg(long)]
         fields: Option<String>,

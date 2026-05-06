@@ -135,13 +135,6 @@ pub fn print_history(history: &[HistoryEntry], format: OutputFormat) {
 ///
 /// Used by [`print_multi_bug_view`] to interleave successful detail
 /// blocks with `UNAVAILABLE` placeholder blocks for inaccessible bugs.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by `bzr bug view` multi-ID handler in a follow-up task on this branch"
-    )
-)]
 #[non_exhaustive]
 #[derive(Debug)]
 pub enum MultiBugRow {
@@ -156,10 +149,6 @@ pub enum MultiBugRow {
 /// covers table mode: argument-order detail blocks for `Ok`, visually
 /// distinct `UNAVAILABLE` placeholder blocks for `Failed`, with a
 /// `─`-divider line between every pair of blocks (no trailing divider).
-#[expect(
-    dead_code,
-    reason = "consumed by `bzr bug view` multi-ID handler in a follow-up task on this branch"
-)]
 pub fn print_multi_bug_view(rows: &[MultiBugRow]) {
     write_multi_bug_view(rows, &mut io::stdout());
 }
