@@ -109,12 +109,13 @@ Three private helpers, each one job:
     `Err` with an empty stdout. Eager-print would emit
     concatenated bare JSON objects, which is invalid.
 - **`view_batch_permissive`** — sequential loop that records
-  `(Vec<Bug>, Vec<BugViewFailure>)` in argument order. Calls
-  `print_multi_bug_view(...)` once at the end; returns `Ok(())` even if
-  every row failed. **Exception**: if a non-per-resource error
-  (transport, auth, security — see [Error semantics](#error-semantics-and-exit-codes))
-  occurs mid-loop, bail immediately with that error's code; do not
-  continue.
+  `(Vec<Bug>, Vec<BugViewFailure>)` in argument order. For each `Err`,
+  consult `BzrError::is_bug_get_per_resource()` (see [Error
+  semantics](#error-semantics-and-exit-codes)): if true, push to
+  `failed` and continue; if false, return `Err` immediately with that
+  error's code. Calls `print_multi_bug_view(...)` once at the end on
+  the success path; returns `Ok(())` even if every row was a
+  per-resource failure.
 
 ## Output (table mode)
 
@@ -228,21 +229,45 @@ Per Q4 (option B): `--permissive` truly suppresses per-bug failures.
 failures still bail because they affect every subsequent call:
 continuing produces only noise.
 
+`BzrError::Api` is **not** uniformly per-resource — it carries any
+Bugzilla fault code, including session-wide ones (32000 login required,
+32610 method-blocked, 100500 server internal, etc.). Suppressing them
+all would mask infrastructure problems. The whitelist below is restricted
+to the codes Bugzilla's `Bug.get` is documented to return for per-bug
+access decisions.
+
 ```rust
+/// Bugzilla `Bug.get` per-bug fault codes.
+/// 100: Invalid Bug Alias  ·  101: Invalid Bug ID  ·  102: Access Denied
+/// Reference: https://bugzilla.readthedocs.io/en/latest/api/core/v1/bug.html
+const BUG_GET_PER_RESOURCE_CODES: &[i64] = &[100, 101, 102];
+
 impl BzrError {
     /// Returns true for per-resource errors that may be suppressed
-    /// under `--permissive` (e.g. one inaccessible bug among many).
-    /// Session-level failures (transport, auth, security) always bail.
-    pub fn is_per_resource(&self) -> bool {
-        matches!(self, BzrError::NotFound { .. } | BzrError::Api { .. })
+    /// under `bzr bug view --permissive` (one inaccessible bug among
+    /// many). Session-level failures (transport, auth, security,
+    /// uncategorized server faults) always bail.
+    pub fn is_bug_get_per_resource(&self) -> bool {
+        match self {
+            BzrError::NotFound { .. } => true,
+            BzrError::Api { code, .. } => BUG_GET_PER_RESOURCE_CODES.contains(code),
+            _ => false,
+        }
     }
 }
 ```
 
+The helper is named for its specific call site (`bug view --permissive`)
+rather than a generic `is_per_resource`. Other commands that gain a
+`--permissive` flag in future may target different per-bug code sets
+(e.g. `Bug.update`, `Bug.history`) and should each get their own helper
+or an extended whitelist with the new method's documented codes added.
+
 | Variant | `--permissive` behavior |
 |---|---|
-| `NotFound` | suppress (per-resource) |
-| `Api { code, .. }` | suppress (Bugzilla per-bug fault, e.g. 101 invalid, 102 access) |
+| `NotFound` | suppress (per-resource by construction) |
+| `Api { code, .. }`, code ∈ {100, 101, 102} | suppress (Bug.get per-bug fault) |
+| `Api { code, .. }`, code ∉ {100, 101, 102} | bail (session-wide: 32000 login required, 32610 method-blocked, 100500 server internal, 50000+ extension faults, …) |
 | `Http`, `HttpStatus`, `XmlRpc` | bail (transport — every subsequent call would fail) |
 | `Auth` | bail (session lost) |
 | `PinMismatch`, `IssuerChanged` | bail (security — never silently swallow) |
@@ -267,6 +292,9 @@ impl BzrError {
 - `view_permissive_single_id_rejected` — `--permissive` + 1 ID → `InputValidation`, exit 7, no HTTP call.
 - `view_multi_permissive_transport_error_bails` — middle bug returns 500: bails despite `--permissive`, no inline placeholder.
 - `view_multi_permissive_auth_error_bails` — middle bug returns Auth: bails despite `--permissive`.
+- `view_multi_permissive_api_102_suppressed` — middle bug returns Bugzilla Api code 102 (Access Denied): captured as inline `UNAVAILABLE` block, exit 0.
+- `view_multi_permissive_api_101_suppressed` — middle bug returns code 101 (Invalid Bug ID): captured as inline block, exit 0.
+- `view_multi_permissive_api_session_wide_bails` — middle bug returns code 32000 (Login Required) or 100500 (server internal): bails despite `--permissive`, no inline placeholder. Confirms `is_bug_get_per_resource` does not suppress session-wide Api codes.
 
 Tests use the existing `wiremock` setup and `capture_stdout` helper. Each error scenario gets a mock returning the exact JSON Bugzilla emits for that case (404 with `{"error": true, "code": 101, …}`, etc.), exercising parsing→error mapping end-to-end.
 
