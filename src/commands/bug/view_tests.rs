@@ -168,7 +168,6 @@ async fn view_multi_strict_first_failure_bails() {
     ))
     .await;
     assert!(result.is_err());
-    // Bug #1 was eager-printed before the failure.
     assert!(output.contains("Bug #1"));
     // Bug #3 must NOT have been fetched.
     assert!(!output.contains("Bug #3"));

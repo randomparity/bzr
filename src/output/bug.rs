@@ -3,7 +3,10 @@ use std::io::{self, Write};
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
-use super::formatting::{colorize_status, print_formatted, shorten_email, truncate};
+use super::formatting::{
+    colorize_status, print_formatted, shorten_email, truncate, write_divider, write_field,
+    write_list_field, write_optional_field,
+};
 use crate::types::{Bug, HistoryEntry, OutputFormat};
 
 #[derive(Tabled)]
@@ -74,20 +77,6 @@ fn write_bug_detail(bug: &Bug, out: &mut impl Write) {
     write_id_list_field(out, "Depends on", &bug.depends_on);
 }
 
-fn write_field(out: &mut impl Write, label: &str, value: &str) {
-    let _ = writeln!(out, "  {label:<12}  {value}");
-}
-
-fn write_optional_field(out: &mut impl Write, label: &str, value: Option<&str>) {
-    let _ = writeln!(out, "  {label:<12}  {}", value.unwrap_or("-"));
-}
-
-fn write_list_field(out: &mut impl Write, label: &str, items: &[String]) {
-    if !items.is_empty() {
-        let _ = writeln!(out, "  {label:<12}  {}", items.join(", "));
-    }
-}
-
 fn write_id_list_field(out: &mut impl Write, label: &str, ids: &[u64]) {
     if !ids.is_empty() {
         let id_str = ids
@@ -126,7 +115,7 @@ pub fn print_history(history: &[HistoryEntry], format: OutputFormat) {
                     let _ = writeln!(io::stdout(), "    + {}", change.added.green());
                 }
             }
-            let _ = writeln!(io::stdout(), "{}", "─".repeat(60));
+            write_divider(&mut io::stdout());
         }
     });
 }
@@ -154,10 +143,9 @@ pub fn print_multi_bug_view(rows: &[MultiBugRow]) {
 }
 
 fn write_multi_bug_view(rows: &[MultiBugRow], out: &mut impl Write) {
-    let divider = "─".repeat(60);
     for (i, row) in rows.iter().enumerate() {
         if i > 0 {
-            let _ = writeln!(out, "{divider}");
+            write_divider(out);
         }
         match row {
             MultiBugRow::Ok(bug) => write_bug_detail(bug, out),
