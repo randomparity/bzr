@@ -106,6 +106,11 @@ async fn view_single_failure_propagates() {
     let action = make_view_action(&["999999"], false);
     let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
     assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("does not exist") || err.contains("101"),
+        "expected not-found error message, got: {err}"
+    );
 }
 
 #[tokio::test]
