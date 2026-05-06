@@ -54,14 +54,31 @@ cargo build --release
 cargo publish --dry-run
 ```
 
-6. Commit the release changes.
-7. Create and push a version tag:
+6. Commit the release changes on a `release/vX.Y.Z-prep` branch:
 
 ```bash
-git tag vX.Y.Z
-git push origin main
+git checkout -b release/vX.Y.Z-prep
+git add Cargo.toml Cargo.lock CHANGELOG.md
+git commit -m "chore: bump version to X.Y.Z"
+# If the CHANGELOG date is a separate commit, that's fine:
+git commit -m "chore: date CHANGELOG entry for vX.Y.Z"
+git push -u origin release/vX.Y.Z-prep
+```
+
+The project blocks direct pushes to `main` (a pre-commit-style guardrail mirrored by the `Never push directly to main` rule). Release prep follows the same PR-based flow as feature work — see the v0.2.0 lineage (`git log --first-parent v0.2.0` shows the tag landed on `Merge pull request #131 from randomparity/release/v0.2.0-prep`).
+
+7. Open a `release: prep vX.Y.Z` PR against `main`. Wait for CI to go green, then merge it. The resulting merge commit on `main` is what you tag.
+
+8. Tag the merge commit and push the tag:
+
+```bash
+git checkout main
+git pull --ff-only origin main
+git tag -a vX.Y.Z -m "bzr vX.Y.Z"
 git push origin vX.Y.Z
 ```
+
+Pushing the tag triggers `release.yml` (multi-arch build, GitHub Release, installer smoke, Homebrew tap bump on stable tags) and `publish-crates.yml` (crates.io publish on stable tags). Both workflows verify the tag version matches `Cargo.toml`.
 
 ## What automation does
 
@@ -139,14 +156,15 @@ Create the token from crates.io and store it in GitHub Actions secrets as:
 
 ## Recommended release order
 
-1. Merge the release commit to `main`
-2. Push the `vX.Y.Z` tag
-3. Confirm the crates.io publish workflow succeeds
-4. Confirm the GitHub release workflow succeeds
-5. Verify installation from crates.io:
+1. Open and merge the `release/vX.Y.Z-prep` PR to `main`
+2. Pull `main` locally and tag the merge commit (`git tag -a vX.Y.Z -m "bzr vX.Y.Z"`)
+3. Push the tag (`git push origin vX.Y.Z`)
+4. Confirm `release.yml` succeeds (preflight → manpages → build → release → installer-smoke → homebrew)
+5. Confirm `publish-crates.yml` succeeds (stable tags only)
+6. Verify installation from crates.io:
 
 ```bash
-cargo install bzr --version X.Y.Z
+cargo install bzr --version X.Y.Z --locked
 bzr --version
 ```
 
