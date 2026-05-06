@@ -142,6 +142,7 @@ pub fn print_history(history: &[HistoryEntry], format: OutputFormat) {
         reason = "consumed by `bzr bug view` multi-ID handler in a follow-up task on this branch"
     )
 )]
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum MultiBugRow {
     Ok(Box<Bug>),

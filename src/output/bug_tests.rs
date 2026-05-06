@@ -412,6 +412,10 @@ async fn print_history_json_via_print() {
 
 // ── multi_bug_view ───────────────────────────────────────────────
 
+fn no_color() {
+    colored::control::set_override(false);
+}
+
 fn sample_bug(id: u64, summary: &str) -> Bug {
     Bug {
         id,
@@ -440,6 +444,7 @@ fn sample_bug(id: u64, summary: &str) -> Bug {
 
 #[test]
 fn multi_bug_view_renders_success_blocks_with_dividers() {
+    no_color();
     let rows = vec![
         MultiBugRow::Ok(Box::new(sample_bug(1, "first"))),
         MultiBugRow::Ok(Box::new(sample_bug(2, "second"))),
@@ -458,6 +463,7 @@ fn multi_bug_view_renders_success_blocks_with_dividers() {
 
 #[test]
 fn multi_bug_view_renders_failure_block_with_unavailable_marker() {
+    no_color();
     let rows = vec![MultiBugRow::Failed {
         id: "999".into(),
         error: "bug not found: 999".into(),
@@ -474,6 +480,7 @@ fn multi_bug_view_renders_failure_block_with_unavailable_marker() {
 
 #[test]
 fn multi_bug_view_single_row_emits_no_divider() {
+    no_color();
     let rows = vec![MultiBugRow::Ok(Box::new(sample_bug(7, "only")))];
     let mut buf = Vec::new();
     write_multi_bug_view(&rows, &mut buf);
@@ -484,6 +491,7 @@ fn multi_bug_view_single_row_emits_no_divider() {
 
 #[test]
 fn multi_bug_view_interleaves_success_and_failure_in_order() {
+    no_color();
     let rows = vec![
         MultiBugRow::Ok(Box::new(sample_bug(10, "alpha"))),
         MultiBugRow::Failed {
