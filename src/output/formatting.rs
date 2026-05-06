@@ -45,21 +45,8 @@ pub(super) fn print_list_field(label: &str, items: &[String]) {
     }
 }
 
-pub(super) fn print_id_list_field(label: &str, ids: &[u64]) {
-    if !ids.is_empty() {
-        writeln!(io::stdout(), "  {label:<12}  {}", format_id_list(ids)).expect("write to output");
-    }
-}
-
 pub(super) fn print_bool_field(label: &str, value: bool) {
     writeln!(io::stdout(), "  {label:<12}  {}", yes_no(value)).expect("write to output");
-}
-
-pub(super) fn format_id_list(ids: &[u64]) -> String {
-    ids.iter()
-        .map(std::string::ToString::to_string)
-        .collect::<Vec<_>>()
-        .join(", ")
 }
 
 pub(super) fn yes_no(value: bool) -> &'static str {

@@ -409,3 +409,94 @@ async fn print_history_json_via_print() {
     let parsed = crate::test_helpers::extract_json(&output);
     assert_eq!(parsed[0]["who"], "editor@example.com");
 }
+
+// ── multi_bug_view ───────────────────────────────────────────────
+
+fn sample_bug(id: u64, summary: &str) -> Bug {
+    Bug {
+        id,
+        summary: summary.into(),
+        status: "NEW".into(),
+        resolution: None,
+        product: None,
+        component: None,
+        version: None,
+        assigned_to: None,
+        priority: None,
+        severity: None,
+        creation_time: None,
+        last_change_time: None,
+        creator: None,
+        url: None,
+        whiteboard: None,
+        keywords: vec![],
+        blocks: vec![],
+        depends_on: vec![],
+        cc: vec![],
+        op_sys: None,
+        rep_platform: None,
+    }
+}
+
+#[test]
+fn multi_bug_view_renders_success_blocks_with_dividers() {
+    let rows = vec![
+        MultiBugRow::Ok(Box::new(sample_bug(1, "first"))),
+        MultiBugRow::Ok(Box::new(sample_bug(2, "second"))),
+        MultiBugRow::Ok(Box::new(sample_bug(3, "third"))),
+    ];
+    let mut buf = Vec::new();
+    write_multi_bug_view(&rows, &mut buf);
+    let out = String::from_utf8(buf).unwrap();
+    assert!(out.contains("Bug #1"));
+    assert!(out.contains("Bug #2"));
+    assert!(out.contains("Bug #3"));
+    // Three rows ⇒ exactly two dividers between them, no trailing divider.
+    let divider = "─".repeat(60);
+    assert_eq!(out.matches(&divider).count(), 2);
+}
+
+#[test]
+fn multi_bug_view_renders_failure_block_with_unavailable_marker() {
+    let rows = vec![MultiBugRow::Failed {
+        id: "999".into(),
+        error: "bug not found: 999".into(),
+    }];
+    let mut buf = Vec::new();
+    write_multi_bug_view(&rows, &mut buf);
+    let out = String::from_utf8(buf).unwrap();
+    // The colored crate writes ANSI escapes around terms when a TTY is
+    // detected; tests compare on the plain substrings.
+    assert!(out.contains("Bug #999"));
+    assert!(out.contains("UNAVAILABLE"));
+    assert!(out.contains("Error: bug not found: 999"));
+}
+
+#[test]
+fn multi_bug_view_single_row_emits_no_divider() {
+    let rows = vec![MultiBugRow::Ok(Box::new(sample_bug(7, "only")))];
+    let mut buf = Vec::new();
+    write_multi_bug_view(&rows, &mut buf);
+    let out = String::from_utf8(buf).unwrap();
+    let divider = "─".repeat(60);
+    assert_eq!(out.matches(&divider).count(), 0);
+}
+
+#[test]
+fn multi_bug_view_interleaves_success_and_failure_in_order() {
+    let rows = vec![
+        MultiBugRow::Ok(Box::new(sample_bug(10, "alpha"))),
+        MultiBugRow::Failed {
+            id: "11".into(),
+            error: "denied".into(),
+        },
+        MultiBugRow::Ok(Box::new(sample_bug(12, "gamma"))),
+    ];
+    let mut buf = Vec::new();
+    write_multi_bug_view(&rows, &mut buf);
+    let out = String::from_utf8(buf).unwrap();
+    let pos_alpha = out.find("Bug #10").unwrap();
+    let pos_unavail = out.find("Bug #11").unwrap();
+    let pos_gamma = out.find("Bug #12").unwrap();
+    assert!(pos_alpha < pos_unavail && pos_unavail < pos_gamma);
+}

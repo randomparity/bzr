@@ -31,7 +31,11 @@ pub use result_types::{
 
 // Re-export all public items from submodules.
 pub use attachment::print_attachments;
-pub use bug::{print_bug_detail, print_bugs, print_history};
+#[expect(
+    unused_imports,
+    reason = "MultiBugRow / print_multi_bug_view consumed by `bzr bug view` multi-ID handler in a follow-up task on this branch"
+)]
+pub use bug::{print_bug_detail, print_bugs, print_history, print_multi_bug_view, MultiBugRow};
 pub use classification::print_classification;
 pub use comment::print_comments;
 #[expect(
