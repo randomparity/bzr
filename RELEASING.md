@@ -30,14 +30,33 @@ Things to verify:
 
 If `bzr` is already taken, rename the package before publishing. The install command in the README must match the published crate name.
 
+## Version-number convention
+
+Between releases, `Cargo.toml` carries a `-dev` SemVer pre-release suffix
+for the next planned release — e.g. directly after `v0.3.0` ships the
+project lives at `version = "0.4.0-dev"`. This makes development
+builds clearly distinguishable from the most recent release in
+`bzr --version` output, and SemVer correctly orders `0.4.0-dev <
+0.4.0`. `publish-crates.yml` gates anything containing `-` out of
+crates.io publishes, so dev builds cannot accidentally publish.
+
+Each binary additionally embeds the current git short SHA via
+`build.rs`, so `bzr --version` prints `bzr 0.4.0-dev (97e0d35)` —
+two dev builds at different commits show different versions.
+Release builds also carry the SHA (`bzr 0.4.0 (a1b2c3d)`); this is
+purely additional traceability and breaks no automation, since
+`installer-smoke` does substring matching and `preflight` reads
+`Cargo.toml` directly.
+
 ## Release checklist
 
-1. Update the version in `Cargo.toml` to match the tag exactly, including any prerelease suffix:
-   - Stable: `version = "0.2.0"` for tag `v0.2.0`
+1. Update the version in `Cargo.toml` to match the tag exactly,
+   stripping the `-dev` suffix that lives on `main` between releases:
+   - Stable: `version = "0.2.0"` for tag `v0.2.0` (was `0.2.0-dev`)
    - Release candidate: `version = "0.2.0-rc5"` for tag `v0.2.0-rc5`
    - Beta / alpha: same pattern (`0.3.0-beta.1`, etc.)
 
-   Cargo's semver supports prerelease identifiers, and `bzr --version` reads from `Cargo.toml`, so keeping the two aligned means the binary always reports the same string as the tag the user installed. The `installer-smoke` job in `release.yml` validates this on every tag push by comparing the running binary's `--version` output against the Cargo.toml field. Prerelease tags are not published to crates.io — `publish-crates.yml`'s `if: !contains(github.ref_name, '-')` gates them out.
+   Cargo's semver supports prerelease identifiers, and `bzr --version` reads from `Cargo.toml`, so keeping the two aligned means the binary always reports the same string as the tag the user installed. The `installer-smoke` job in `release.yml` validates this on every tag push by comparing the running binary's `--version` output against the Cargo.toml field (substring match — the git-SHA suffix from `build.rs` does not affect it). Prerelease tags are not published to crates.io — `publish-crates.yml`'s `if: !contains(github.ref_name, '-')` gates them out.
 
    Run `cargo build` (or `cargo check`) after the bump so `Cargo.lock` regenerates with the new version.
 
@@ -167,6 +186,14 @@ Create the token from crates.io and store it in GitHub Actions secrets as:
 cargo install bzr --version X.Y.Z --locked
 bzr --version
 ```
+
+7. Open a follow-up `chore/bump-version-to-X.Y'.Z'-dev` PR that bumps
+   `Cargo.toml` from the just-released `X.Y.Z` to the next planned
+   release with a `-dev` suffix (e.g. `0.4.0` → `0.5.0-dev`, or
+   `0.4.0` → `0.4.1-dev` if the next release is a patch). Run
+   `cargo build` so `Cargo.lock` regenerates, and add an empty
+   `## [Unreleased]` section at the top of `CHANGELOG.md` that
+   subsequent feature/fix PRs can extend as the work lands.
 
 ## If publish fails
 
