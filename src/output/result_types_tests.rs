@@ -167,3 +167,31 @@ fn print_result_uses_pretty_json() {
     let json = serde_json::to_string_pretty(&result).unwrap();
     assert!(json.contains('\n'), "expected pretty-printed JSON");
 }
+
+#[test]
+fn multi_bug_view_result_serializes_with_empty_failed() {
+    let result = MultiBugViewResult {
+        bugs: vec![],
+        failed: vec![],
+    };
+    let v = serde_json::to_value(&result).unwrap();
+    assert!(v.get("bugs").unwrap().is_array());
+    assert!(v.get("failed").unwrap().is_array());
+    assert_eq!(v["bugs"].as_array().unwrap().len(), 0);
+    assert_eq!(v["failed"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn multi_bug_view_result_serializes_with_failure_id_as_string() {
+    let result = MultiBugViewResult {
+        bugs: vec![],
+        failed: vec![BugViewFailure {
+            id: "my-alias".into(),
+            error: "bug not found: my-alias".into(),
+        }],
+    };
+    let v = serde_json::to_value(&result).unwrap();
+    let failed = &v["failed"][0];
+    assert_eq!(failed["id"], "my-alias");
+    assert_eq!(failed["error"], "bug not found: my-alias");
+}

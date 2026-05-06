@@ -117,23 +117,6 @@ fn shorten_email_uses_first_at_symbol() {
     assert_eq!(shorten_email("alice@dev@example.com"), "alice");
 }
 
-// ── format_id_list ───────────────────────────────────────────────
-
-#[test]
-fn format_id_list_empty() {
-    assert_eq!(format_id_list(&[]), "");
-}
-
-#[test]
-fn format_id_list_single() {
-    assert_eq!(format_id_list(&[42]), "42");
-}
-
-#[test]
-fn format_id_list_multiple() {
-    assert_eq!(format_id_list(&[1, 2, 3]), "1, 2, 3");
-}
-
 #[test]
 fn yes_no_formats_boolean_values() {
     assert_eq!(yes_no(true), "Yes");

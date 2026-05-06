@@ -19,14 +19,16 @@ mod template;
 mod user;
 
 // Re-export shared types and helpers used by commands.
+pub(crate) use formatting::write_divider;
 pub use result_types::{
-    print_result, ActionResult, BatchFailure, BatchResult, ConfigResult, DownloadResult,
-    MembershipResult, ResourceKind, SearchResult, TagResult, UploadResult,
+    print_result, ActionResult, BatchFailure, BatchResult, BugViewFailure, ConfigResult,
+    DownloadResult, MembershipResult, MultiBugViewResult, ResourceKind, SearchResult, TagResult,
+    UploadResult,
 };
 
 // Re-export all public items from submodules.
 pub use attachment::print_attachments;
-pub use bug::{print_bug_detail, print_bugs, print_history};
+pub use bug::{print_bug_detail, print_bugs, print_history, print_multi_bug_view, MultiBugRow};
 pub use classification::print_classification;
 pub use comment::print_comments;
 #[expect(

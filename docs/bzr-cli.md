@@ -208,19 +208,30 @@ Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`,
 
 ### `bzr bug view`
 
-Display detailed information about a single bug.
+Display detailed information about one or more bugs.
 
 ```bash
 bzr bug view 12345
+bzr bug view 12345 12346 12347
+bzr bug view 12345 my-alias 12347 --permissive
 bzr --json bug view 12345
+bzr --json bug view 12345 12346 | jq '.bugs[].summary'
 bzr bug view my-alias --fields id,summary,assigned_to
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `<ID>` | Yes | Bug ID or alias |
+| `<IDS>...` | Yes | One or more bug IDs or aliases. Aliases and numeric IDs may be mixed. |
+| `--permissive` | No | Multi-ID only. Continue past per-bug failures, surfacing them as `Bug #N — UNAVAILABLE` placeholder rows (table) or entries in `failed` (JSON). Exit 0 even if some bugs fail. Has no effect on session-wide failures (transport, auth, security) — those still bail. Setting `--permissive` with a single ID returns input-validation error (exit 7). |
 | `--fields <F>` | No | Only return these fields (comma-separated) |
 | `--exclude-fields <F>` | No | Exclude these fields (comma-separated) |
+
+**Output shapes:**
+
+- **Single-ID, table:** detail block (status, priority, assignee, etc.).
+- **Single-ID, `--json`:** bare `Bug` object — *unchanged from prior versions*.
+- **Multi-ID, table:** one detail block per bug in argument order, separated by a `─` divider line. Inaccessible bugs (under `--permissive`) appear as `Bug #N — UNAVAILABLE` blocks.
+- **Multi-ID, `--json`:** wrapped object `{"bugs": [...], "failed": [...]}`. The `failed` array is always present (empty when there are no failures) so `jq` consumers can rely on `.bugs[]` regardless of whether `--permissive` was passed.
 
 ### `bzr bug search`
 

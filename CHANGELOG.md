@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Bugzilla's quicksearch syntax and defaults to OPEN bugs only.
   Useful when the matching bug may be CLOSED or RESOLVED — a
   scenario where quicksearch silently returns no results.
+- `bzr bug view` now accepts multiple IDs and a `--permissive` flag
+  for partial results when some bugs are inaccessible. Single-ID
+  invocation behavior — table and JSON output — is unchanged. With
+  `--permissive`, per-bug failures (NotFound, Bug.get fault codes
+  100/101/102) are surfaced as inline `Bug #N — UNAVAILABLE` blocks
+  in table output or entries in the `failed` array in JSON output;
+  session-wide failures (transport, auth, security, server internal,
+  unrecognized API codes) still bail. JSON output for multi-ID is a
+  wrapped `{"bugs": [...], "failed": [...]}` object regardless of
+  `--permissive`. Closes #156.
 
 ### Fixed
 

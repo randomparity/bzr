@@ -237,6 +237,32 @@ impl BatchResult {
     }
 }
 
+/// Typed result payload for multi-ID `bzr bug view` JSON output.
+///
+/// The wrapped shape is used for **every** multi-ID invocation, with or
+/// without `--permissive`. `failed` is always present (empty array when
+/// no failures) so `jq` consumers can rely on `.bugs[]` and
+/// `.failed[]` regardless of arguments. Single-ID `bzr bug view --json`
+/// continues to emit a bare `Bug` object — unrelated to this type.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct MultiBugViewResult {
+    pub bugs: Vec<crate::types::Bug>,
+    pub failed: Vec<BugViewFailure>,
+}
+
+/// Per-row failure entry for [`MultiBugViewResult`].
+///
+/// `id` is `String`, not `u64`, because the caller may have passed an
+/// alias (`bzr bug view 12345 my-alias 999`); preserving the original
+/// argument lets users correlate failures with the IDs they typed.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct BugViewFailure {
+    pub id: String,
+    pub error: String,
+}
+
 /// Typed result payload for JSON output of mutation operations.
 ///
 /// Covers standard CRUD results with an `id` and optional `name`.

@@ -129,8 +129,8 @@ fn parse_bug_view_by_id() {
     let cli = Cli::try_parse_from(["bzr", "bug", "view", "12345"]).unwrap();
     match cli.command {
         Commands::Bug {
-            action: BugAction::View { id, .. },
-        } => assert_eq!(id, "12345"),
+            action: BugAction::View { ids, .. },
+        } => assert_eq!(ids, vec!["12345".to_string()]),
         _ => panic!("expected Bug View"),
     }
 }

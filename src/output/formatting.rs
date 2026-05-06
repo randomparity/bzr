@@ -31,35 +31,47 @@ pub(super) fn print_formatted<T: Serialize + ?Sized>(
 // Shared formatting for bug/resource detail views. All use consistent
 // 12-char label alignment and render absent values as "-".
 
+pub(super) fn write_field(out: &mut impl Write, label: &str, value: &str) {
+    let _ = writeln!(out, "  {label:<12}  {value}");
+}
+
+pub(super) fn write_optional_field(out: &mut impl Write, label: &str, value: Option<&str>) {
+    let _ = writeln!(out, "  {label:<12}  {}", value.unwrap_or("-"));
+}
+
+pub(super) fn write_list_field(out: &mut impl Write, label: &str, items: &[String]) {
+    if !items.is_empty() {
+        let _ = writeln!(out, "  {label:<12}  {}", items.join(", "));
+    }
+}
+
 pub(super) fn print_field(label: &str, value: &str) {
-    writeln!(io::stdout(), "  {label:<12}  {value}").expect("write to output");
+    write_field(&mut io::stdout(), label, value);
 }
 
 pub(super) fn print_optional_field(label: &str, value: Option<&str>) {
-    writeln!(io::stdout(), "  {label:<12}  {}", value.unwrap_or("-")).expect("write to output");
+    write_optional_field(&mut io::stdout(), label, value);
 }
 
 pub(super) fn print_list_field(label: &str, items: &[String]) {
-    if !items.is_empty() {
-        writeln!(io::stdout(), "  {label:<12}  {}", items.join(", ")).expect("write to output");
-    }
-}
-
-pub(super) fn print_id_list_field(label: &str, ids: &[u64]) {
-    if !ids.is_empty() {
-        writeln!(io::stdout(), "  {label:<12}  {}", format_id_list(ids)).expect("write to output");
-    }
+    write_list_field(&mut io::stdout(), label, items);
 }
 
 pub(super) fn print_bool_field(label: &str, value: bool) {
     writeln!(io::stdout(), "  {label:<12}  {}", yes_no(value)).expect("write to output");
 }
 
-pub(super) fn format_id_list(ids: &[u64]) -> String {
-    ids.iter()
-        .map(std::string::ToString::to_string)
-        .collect::<Vec<_>>()
-        .join(", ")
+// ── Section divider ─────────────────────────────────────────────────
+
+/// Width of the horizontal divider used between detail blocks in
+/// `bug history`, `bug view` (multi-ID), and similar resource-detail
+/// outputs. Box-drawing horizontal bar (`─`, U+2500) repeated this
+/// many times.
+pub(super) const DIVIDER_WIDTH: usize = 60;
+
+/// Write a horizontal section divider followed by a newline.
+pub(crate) fn write_divider(out: &mut impl Write) {
+    let _ = writeln!(out, "{}", "─".repeat(DIVIDER_WIDTH));
 }
 
 pub(super) fn yes_no(value: bool) -> &'static str {

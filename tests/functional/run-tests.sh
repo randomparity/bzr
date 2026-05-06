@@ -452,6 +452,33 @@ test_begin "46. bug view 999999 (negative test)"
 run_bzr bug view 999999
 if assert_failure; then test_pass; fi
 
+test_begin "46a. bug view multi-ID (all succeed, JSON wrapped shape)"
+if [[ -n "$BUG1" ]] && [[ -n "$BUG2" ]]; then
+    run_bzr bug view "$BUG1" "$BUG2"
+    if assert_success \
+        && assert_json_array_length '.bugs' 2 \
+        && assert_json_array_length '.failed' 0; then
+        test_pass
+    fi
+else test_skip "no BUG1/BUG2"; fi
+
+test_begin "46b. bug view multi-ID strict bails on inaccessible bug"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug view 999999 "$BUG1"
+    if assert_failure; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "46c. bug view multi-ID --permissive surfaces per-bug error"
+if [[ -n "$BUG1" ]] && [[ -n "$BUG2" ]]; then
+    run_bzr bug view "$BUG1" "$BUG2" 999999 --permissive
+    if assert_success \
+        && assert_json_array_length '.bugs' 2 \
+        && assert_json_array_length '.failed' 1 \
+        && assert_json '.failed[0].id' "999999"; then
+        test_pass
+    fi
+else test_skip "no BUG1/BUG2"; fi
+
 test_begin "47. bug create (bug three — clone source)"
 run_bzr bug create --product FuncTestProd --component Backend --summary "Clone source bug" --description "Description for cloning" --priority Highest --severity critical --op-sys Linux --rep-platform PC
 if assert_success && assert_json_exists '.id'; then
