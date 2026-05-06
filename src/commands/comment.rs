@@ -1,4 +1,4 @@
-use std::io::{IsTerminal, Read, Write};
+use std::io::{IsTerminal, Read};
 
 use crate::cli::CommentAction;
 use crate::error::{BzrError, Result};
@@ -86,28 +86,8 @@ fn read_comment_body() -> Result<String> {
         stdin.lock().read_to_string(&mut buf)?;
         return Ok(buf);
     }
-    compose_comment_in_editor()
-}
-
-fn compose_comment_in_editor() -> Result<String> {
-    let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".into());
-    let tmpfile = create_comment_tempfile("<!-- Enter your comment above this line -->\n")?;
-
-    let status = std::process::Command::new(&editor)
-        .arg(&tmpfile.path)
-        .status()?;
-
-    if !status.success() {
-        // TempFile::drop cleans up the file
-        return Err(BzrError::InputValidation(format!(
-            "{editor} exited with error"
-        )));
-    }
-
-    let content = std::fs::read_to_string(&tmpfile.path)?;
-    // TempFile::drop cleans up the file
-
-    Ok(filter_comment_body(&content))
+    let raw = super::editor::launch("<!-- Enter your comment above this line -->\n", "comment")?;
+    Ok(filter_comment_body(&raw))
 }
 
 /// Strip HTML comment lines (editor instructions) from raw comment text.
@@ -116,27 +96,6 @@ fn filter_comment_body(raw: &str) -> String {
         .filter(|l| !l.starts_with("<!--"))
         .collect::<Vec<_>>()
         .join("\n")
-}
-
-struct TempFile {
-    path: std::path::PathBuf,
-}
-
-impl Drop for TempFile {
-    fn drop(&mut self) {
-        if let Err(e) = std::fs::remove_file(&self.path) {
-            tracing::debug!(path = %self.path.display(), "failed to remove temp file: {e}");
-        }
-    }
-}
-
-fn create_comment_tempfile(initial_content: &str) -> Result<TempFile> {
-    let dir = std::env::temp_dir();
-    let path = dir.join(format!("bzr-comment-{}.txt", std::process::id()));
-    let mut file = std::fs::File::create(&path)?;
-    file.write_all(initial_content.as_bytes())?;
-    drop(file);
-    Ok(TempFile { path })
 }
 
 #[cfg(test)]

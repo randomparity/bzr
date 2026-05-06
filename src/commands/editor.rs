@@ -43,18 +43,6 @@ pub(super) fn create_tempfile(prefix: &str, initial_content: &str) -> Result<Tem
 /// Errors:
 /// - `BzrError::Io` if the tempfile cannot be created or read.
 /// - `BzrError::InputValidation` if `$EDITOR` exits non-zero.
-// Skeleton landed standalone in Task 1; Task 2 wires
-// `commands/comment.rs` onto these helpers, at which point this
-// attribute (and the transitive dead_code on TempFile +
-// create_tempfile reachable only from this fn) goes away.
-// Remove this attribute in Task 2 when commands/comment.rs starts calling launch().
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "Skeleton: callers (comment, bug create) land in follow-up tasks."
-    )
-)]
 pub(super) fn launch(initial: &str, prefix: &str) -> Result<String> {
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".into());
     let tmpfile = create_tempfile(prefix, initial)?;
