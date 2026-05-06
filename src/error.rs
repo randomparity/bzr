@@ -105,6 +105,11 @@ const EXIT_CODE_TLS: i32 = 13;
 /// Used for retry logic in hybrid mode when extensions crash.
 pub const BUGZILLA_INTERNAL_ERROR: i64 = 100_500;
 
+/// Bugzilla `Bug.get` per-bug fault codes.
+/// 100: Invalid Bug Alias  ·  101: Invalid Bug ID  ·  102: Access Denied
+/// Reference: <https://bugzilla.readthedocs.io/en/latest/api/core/v1/bug.html>
+const BUG_GET_PER_RESOURCE_CODES: &[i64] = &[100, 101, 102];
+
 /// Walk a `std::error::Error` source chain into a single string.
 ///
 /// reqwest's `Display` only shows the error kind and URL, omitting the
@@ -145,6 +150,18 @@ impl BzrError {
             self,
             BzrError::Http(_) | BzrError::HttpStatus { .. } | BzrError::XmlRpc(_)
         )
+    }
+
+    /// Returns true for per-resource errors that may be suppressed
+    /// under `bzr bug view --permissive` (one inaccessible bug among
+    /// many). Session-level failures (transport, auth, security,
+    /// uncategorized server faults) always bail.
+    pub fn is_bug_get_per_resource(&self) -> bool {
+        match self {
+            BzrError::NotFound { .. } => true,
+            BzrError::Api { code, .. } => BUG_GET_PER_RESOURCE_CODES.contains(code),
+            _ => false,
+        }
     }
 
     pub fn exit_code(&self) -> i32 {
