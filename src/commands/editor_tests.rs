@@ -1,7 +1,16 @@
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used, clippy::expect_used)]
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
+
+fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    ENV_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .expect("env lock poisoned")
+}
 
 #[test]
 fn tempfile_writes_initial_content_and_cleans_up_on_drop() {
@@ -17,20 +26,20 @@ fn tempfile_writes_initial_content_and_cleans_up_on_drop() {
 
 #[test]
 fn launch_returns_post_edit_content_via_fake_editor() {
+    let _guard = env_lock();
     let script_dir = std::env::temp_dir();
     let script = script_dir.join(format!("bzr-fake-editor-{}.sh", std::process::id()));
     std::fs::write(&script, "#!/bin/sh\nprintf 'edited content\\n' > \"$1\"\n").unwrap();
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
 
     let prev = std::env::var("EDITOR").ok();
-    // SAFETY: cargo test runs unit tests on a single process; the
-    // env var is restored at the end of this test.
+    // SAFETY: env_lock guarantees no other thread is reading or writing the environment for the lifetime of `_guard`.
     unsafe { std::env::set_var("EDITOR", &script) };
 
     let result = super::launch("initial body\n", "test-launch").unwrap();
     assert_eq!(result, "edited content\n");
 
-    // SAFETY: see set_var above.
+    // SAFETY: env_lock guarantees no other thread is reading or writing the environment for the lifetime of `_guard`.
     unsafe {
         if let Some(p) = prev {
             std::env::set_var("EDITOR", p);
@@ -43,13 +52,14 @@ fn launch_returns_post_edit_content_via_fake_editor() {
 
 #[test]
 fn launch_propagates_editor_failure_as_input_validation() {
+    let _guard = env_lock();
     let script_dir = std::env::temp_dir();
     let script = script_dir.join(format!("bzr-fail-editor-{}.sh", std::process::id()));
     std::fs::write(&script, "#!/bin/sh\nexit 1\n").unwrap();
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
 
     let prev = std::env::var("EDITOR").ok();
-    // SAFETY: see other set_var sites in this file.
+    // SAFETY: env_lock guarantees no other thread is reading or writing the environment for the lifetime of `_guard`.
     unsafe { std::env::set_var("EDITOR", &script) };
 
     let err = super::launch("initial\n", "test-fail").unwrap_err();
@@ -58,7 +68,7 @@ fn launch_propagates_editor_failure_as_input_validation() {
         "got {err:?}"
     );
 
-    // SAFETY: see other set_var sites.
+    // SAFETY: env_lock guarantees no other thread is reading or writing the environment for the lifetime of `_guard`.
     unsafe {
         if let Some(p) = prev {
             std::env::set_var("EDITOR", p);

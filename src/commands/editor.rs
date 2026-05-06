@@ -47,6 +47,7 @@ pub(super) fn create_tempfile(prefix: &str, initial_content: &str) -> Result<Tem
 // `commands/comment.rs` onto these helpers, at which point this
 // attribute (and the transitive dead_code on TempFile +
 // create_tempfile reachable only from this fn) goes away.
+// Remove this attribute in Task 2 when commands/comment.rs starts calling launch().
 #[cfg_attr(
     not(test),
     expect(
