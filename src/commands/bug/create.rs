@@ -16,6 +16,7 @@ pub(super) async fn handle(
         summary,
         version,
         description,
+        description_file,
         priority,
         severity,
         assignee,
@@ -27,6 +28,9 @@ pub(super) async fn handle(
     else {
         unreachable!()
     };
+
+    // description_file resolution lands in the next task
+    let _ = description_file;
 
     // Load template defaults if specified
     let tmpl = if let Some(name) = template_name {

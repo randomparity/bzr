@@ -288,8 +288,15 @@ pub enum BugAction {
         #[arg(long)]
         version: Option<String>,
         /// Bug description
-        #[arg(long)]
+        #[arg(long, conflicts_with = "description_file")]
         description: Option<String>,
+        /// Read the bug description from a UTF-8 file.
+        ///
+        /// Mutually exclusive with `--description`. The file path
+        /// must exist and be readable; non-existent paths or
+        /// non-UTF-8 contents fail with exit code 7.
+        #[arg(long, value_name = "PATH", conflicts_with = "description")]
+        description_file: Option<std::path::PathBuf>,
         /// Priority
         #[arg(long)]
         priority: Option<String>,

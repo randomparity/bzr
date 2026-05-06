@@ -145,6 +145,7 @@ async fn bug_create_integration() {
         summary: "New bug".to_string(),
         version: Some("unspecified".to_string()),
         description: None,
+        description_file: None,
         priority: None,
         severity: None,
         assignee: None,

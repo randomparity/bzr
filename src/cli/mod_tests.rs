@@ -275,6 +275,64 @@ fn parse_bug_create() {
 }
 
 #[test]
+fn parse_bug_create_with_description_file() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "create",
+        "--product",
+        "TestProduct",
+        "--component",
+        "General",
+        "--summary",
+        "Test bug",
+        "--description-file",
+        "/tmp/desc.txt",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Bug {
+            action: BugAction::Create {
+                description_file, ..
+            },
+        } => {
+            assert_eq!(
+                description_file.as_deref(),
+                Some(std::path::Path::new("/tmp/desc.txt"))
+            );
+        }
+        _ => panic!("expected Bug Create"),
+    }
+}
+
+#[test]
+fn parse_bug_create_description_and_description_file_conflict() {
+    let result = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "create",
+        "--product",
+        "P",
+        "--component",
+        "C",
+        "--summary",
+        "S",
+        "--description",
+        "literal",
+        "--description-file",
+        "/tmp/desc.txt",
+    ]);
+    match result {
+        Ok(_) => panic!("expected ArgumentConflict, got Ok"),
+        Err(err) => assert!(
+            err.kind() == clap::error::ErrorKind::ArgumentConflict,
+            "expected ArgumentConflict, got {:?}",
+            err.kind()
+        ),
+    }
+}
+
+#[test]
 fn parse_bug_update_with_flags() {
     let cli = Cli::try_parse_from([
         "bzr", "bug", "update", "42", "--status", "RESOLVED", "--flag", "review+",
