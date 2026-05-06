@@ -228,7 +228,7 @@ Search bugs using Bugzilla's quicksearch syntax, or execute a search from a Bugz
 
 ```bash
 bzr bug search "kernel panic"
-bzr bug search "kernel panic +ALL"                     # include closed/resolved bugs
+bzr bug search "ALL kernel panic"                      # all statuses (deployment-dependent)
 bzr bug search "component:NetworkManager priority:high" --limit 10
 bzr bug search "memory leak" --fields id,summary
 bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?product=Firefox&bug_status=NEW"
@@ -236,7 +236,7 @@ bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?product=Fire
 bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?known_name=my%20search&product=Firefox" --save-as
 ```
 
-> **Note:** Bugzilla's quicksearch defaults to OPEN bugs only. To match closed/resolved bugs, append `+ALL`, `+CLOSED`, or `status:<value>` to the query. For a plain substring match against the Summary field across all bug states, use [`bzr bug list --summary <text>`](#bzr-bug-list) instead.
+> **Note:** Bugzilla's quicksearch defaults to OPEN bugs only. The bare token `ALL` (e.g. `bzr bug search "ALL kernel panic"`) is the canonical escape hatch for searching across all statuses, but the exact status-keyword set is deployment-specific and tokenization is fuzzy. For a reliable substring match against the Summary field across all bug states, prefer [`bzr bug list --summary <text>`](#bzr-bug-list).
 
 `--from-url` and the positional `<QUERY>` argument are mutually exclusive.
 
