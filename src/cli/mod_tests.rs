@@ -267,7 +267,7 @@ fn parse_bug_create() {
         } => {
             assert_eq!(product.as_deref(), Some("TestProduct"));
             assert_eq!(component.as_deref(), Some("General"));
-            assert_eq!(summary, "Test bug");
+            assert_eq!(summary.as_deref(), Some("Test bug"));
             assert_eq!(version, None);
         }
         _ => panic!("expected Bug Create"),
