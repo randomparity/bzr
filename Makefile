@@ -2,7 +2,7 @@ CARGO ?= cargo
 RUST_MIN_VERSION := 1.88.0
 
 .PHONY: setup check-rust ensure-components ensure-coverage-prereqs ensure-mutants-prereq install-hooks \
-        build release test coverage fmt clippy lint clean help man \
+        build release test coverage fmt clippy lint check-test-layout clean help man \
         mutants mutants-fast mutants-list audit-mutant-skips \
         functional-build functional-start functional-test functional-stop \
         functional-test-bz52 functional-test-bz53 functional-test-all functional-stop-all \
@@ -60,11 +60,11 @@ install-hooks: ## Install git pre-commit and pre-push hooks
 	@echo "Installing git hooks..."
 	@HOOKS_DIR=$$(git rev-parse --git-path hooks) && \
 	mkdir -p "$$HOOKS_DIR" && \
-	printf '#!/bin/sh\nset -eu\ncargo fmt -- --check || { echo "Run cargo fmt before committing."; exit 1; }\ncargo clippy -- -D warnings\n' > "$$HOOKS_DIR/pre-commit" && \
+	printf '#!/bin/sh\nset -eu\ncargo fmt -- --check || { echo "Run cargo fmt before committing."; exit 1; }\ncargo clippy -- -D warnings\nmake check-test-layout\n' > "$$HOOKS_DIR/pre-commit" && \
 	chmod +x "$$HOOKS_DIR/pre-commit" && \
 	printf '#!/bin/sh\nset -eu\ncargo test\n' > "$$HOOKS_DIR/pre-push" && \
 	chmod +x "$$HOOKS_DIR/pre-push" && \
-	echo "Installed pre-commit (fmt + clippy) and pre-push (test) hooks."
+	echo "Installed pre-commit (fmt + clippy + test-layout) and pre-push (test) hooks."
 
 ## Development
 
@@ -88,7 +88,16 @@ fmt: ## Format source code
 clippy: ## Run clippy lints
 	$(CARGO) clippy -- -D warnings
 
-lint: fmt clippy ## Run all linters (fmt + clippy)
+lint: fmt clippy check-test-layout ## Run all linters (fmt + clippy + test-layout)
+
+check-test-layout: ## Verify all test code lives in sibling *_tests.rs files
+	@if rg -l '^mod tests \{' src/ 2>/dev/null; then \
+	  echo "ERROR: inline 'mod tests { ... }' blocks found in src/."; \
+	  echo "Move tests to a sibling <name>_tests.rs file linked via"; \
+	  echo "  #[cfg(test)] #[path = \"<name>_tests.rs\"] mod tests;"; \
+	  echo "See docs/superpowers/specs/2026-05-05-test-sibling-migration-design.md"; \
+	  exit 1; \
+	fi
 
 clean: ## Remove build artifacts
 	$(CARGO) clean
