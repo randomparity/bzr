@@ -1,5 +1,7 @@
 #![expect(clippy::unwrap_used)]
 
+use std::io::Write;
+
 use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
@@ -501,13 +503,11 @@ fn build_editor_template_includes_template_description_body() {
     assert!(buf.contains("## Expected"));
 }
 
-#[tokio::test]
-async fn bug_create_editor_flow_uses_editor_buffer_for_summary_and_description() {
-    use std::io::IsTerminal;
+/// Write a fake `$EDITOR` script that emits a deterministic
+/// summary+description payload. Returns the script path so the
+/// caller can clean it up after the test.
+fn install_fake_editor() -> std::path::PathBuf {
     use std::os::unix::fs::PermissionsExt;
-
-    let (_lock, mock, _tmp) = setup_test_env().await;
-
     let dir = std::env::temp_dir();
     let script = dir.join(format!("bzr-bc-editor-{}.sh", std::process::id()));
     std::fs::write(
@@ -516,26 +516,11 @@ async fn bug_create_editor_flow_uses_editor_buffer_for_summary_and_description()
     )
     .unwrap();
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    script
+}
 
-    let prev = std::env::var("EDITOR").ok();
-    // SAFETY: setup_test_env holds bzr::ENV_LOCK for the duration of
-    // this test, serializing env access across all tests using it.
-    unsafe { std::env::set_var("EDITOR", &script) };
-
-    // The expect range covers both branches: when stdin is a TTY,
-    // the editor flow runs and POST is made (1 hit); when cargo
-    // test pipes stdin, the stdin branch hits InputValidation
-    // before any HTTP call (0 hits).
-    Mock::given(method("POST"))
-        .and(path("/rest/bug"))
-        .and(body_string_contains("Editor summary"))
-        .and(body_string_contains("Editor description"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 33})))
-        .expect(0..=1)
-        .mount(&mock)
-        .await;
-
-    let action = BugAction::Create {
+fn editor_action_no_summary_no_description() -> BugAction {
+    BugAction::Create {
         template: None,
         product: Some("TestProduct".into()),
         component: Some("General".into()),
@@ -550,9 +535,40 @@ async fn bug_create_editor_flow_uses_editor_buffer_for_summary_and_description()
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
-    };
+    }
+}
+
+#[tokio::test]
+async fn bug_create_editor_flow_resolves_via_editor_when_stdin_is_tty() {
+    use std::io::IsTerminal;
+
+    if !std::io::stdin().is_terminal() {
+        let _ = writeln!(
+            std::io::stderr(),
+            "Skipping: editor flow requires TTY stdin (cargo test runs non-TTY)."
+        );
+        return;
+    }
+
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    let script = install_fake_editor();
+    let prev = std::env::var("EDITOR").ok();
+    // SAFETY: setup_test_env holds bzr::ENV_LOCK for the duration of
+    // this test, serializing env access across all tests using it.
+    unsafe { std::env::set_var("EDITOR", &script) };
+
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .and(body_string_contains("Editor summary"))
+        .and(body_string_contains("Editor description"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 33})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
     let (result, _output) = capture_stdout(crate::commands::bug::execute(
-        &action,
+        &editor_action_no_summary_no_description(),
         None,
         OutputFormat::Json,
         None,
@@ -570,12 +586,64 @@ async fn bug_create_editor_flow_uses_editor_buffer_for_summary_and_description()
     }
     let _ = std::fs::remove_file(&script);
 
+    assert!(result.is_ok(), "editor flow should succeed: {result:?}");
+}
+
+/// Deterministic CI counterpart: under cargo test, stdin is piped
+/// (not a TTY), so the editor branch must NOT fire even with an
+/// `$EDITOR` set. The empty piped stdin should hit `InputValidation`
+/// before any HTTP call.
+#[tokio::test]
+async fn bug_create_editor_branch_unreachable_when_stdin_piped() {
+    use std::io::IsTerminal;
+
     if std::io::stdin().is_terminal() {
-        assert!(result.is_ok(), "editor flow should succeed: {result:?}");
-    } else {
-        // Stdin branch: empty piped stdin + summary=None
-        // → InputValidation about empty stdin.
-        let err = result.unwrap_err();
-        assert!(matches!(&err, BzrError::InputValidation(_)), "got {err:?}");
+        let _ = writeln!(
+            std::io::stderr(),
+            "Skipping: this test asserts the non-editor path under piped stdin."
+        );
+        return;
     }
+
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    let script = install_fake_editor();
+    let prev = std::env::var("EDITOR").ok();
+    // SAFETY: setup_test_env holds bzr::ENV_LOCK for the duration of
+    // this test, serializing env access across all tests using it.
+    unsafe { std::env::set_var("EDITOR", &script) };
+
+    // No HTTP call expected — empty piped stdin must short-circuit
+    // before the editor branch and before any client request.
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 0})))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let (result, _output) = capture_stdout(crate::commands::bug::execute(
+        &editor_action_no_summary_no_description(),
+        None,
+        OutputFormat::Json,
+        None,
+    ))
+    .await;
+
+    // SAFETY: setup_test_env holds bzr::ENV_LOCK for the duration of
+    // this test, serializing env access across all tests using it.
+    unsafe {
+        if let Some(p) = prev {
+            std::env::set_var("EDITOR", p);
+        } else {
+            std::env::remove_var("EDITOR");
+        }
+    }
+    let _ = std::fs::remove_file(&script);
+
+    let err = result.unwrap_err();
+    assert!(
+        matches!(&err, BzrError::InputValidation(m) if m.contains("piped stdin")),
+        "expected InputValidation about empty piped stdin, got {err:?}"
+    );
 }

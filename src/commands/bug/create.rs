@@ -1,5 +1,6 @@
 use std::io::{IsTerminal, Read};
 
+use super::super::editor;
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
@@ -23,35 +24,42 @@ fn read_description_file(path: &std::path::Path) -> Result<String> {
 
 const SENTINEL: &str = "# ------------------------ >8 ------------------------";
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "field-by-field preview struct, ≤8 args is fine here"
-)]
-fn build_preview_params(
-    product: &str,
-    component: &str,
+/// Resolved CLI-over-template field values used by both the editor
+/// preview and the final `CreateBugParams` build. Computing this
+/// once keeps the two consumers in lockstep when precedence changes.
+struct MergedFields {
+    product: String,
+    component: String,
     version: Option<String>,
     priority: Option<String>,
     severity: Option<String>,
     assigned_to: Option<String>,
     op_sys: Option<String>,
     rep_platform: Option<String>,
-) -> CreateBugParams {
-    CreateBugParams {
-        product: product.to_string(),
-        component: component.to_string(),
-        summary: String::new(),
-        version: version.unwrap_or_else(|| "unspecified".to_string()),
-        description: None,
-        priority,
-        severity,
-        assigned_to,
-        op_sys,
-        rep_platform,
-        blocks: vec![],
-        depends_on: vec![],
-        cc: vec![],
-        keywords: vec![],
+    template_description: Option<String>,
+}
+
+impl MergedFields {
+    fn preview_params(&self) -> CreateBugParams {
+        CreateBugParams {
+            product: self.product.clone(),
+            component: self.component.clone(),
+            summary: String::new(),
+            version: self
+                .version
+                .clone()
+                .unwrap_or_else(|| "unspecified".to_string()),
+            description: None,
+            priority: self.priority.clone(),
+            severity: self.severity.clone(),
+            assigned_to: self.assigned_to.clone(),
+            op_sys: self.op_sys.clone(),
+            rep_platform: self.rep_platform.clone(),
+            blocks: vec![],
+            depends_on: vec![],
+            cc: vec![],
+            keywords: vec![],
+        }
     }
 }
 
@@ -185,28 +193,31 @@ fn load_template(name: Option<&str>) -> Result<Option<crate::types::BugTemplate>
 }
 
 /// Drive the `$EDITOR` flow: build the pre-filled buffer from the
-/// resolved field defaults, launch the editor, and parse the result.
+/// merged field set, launch the editor, and parse the result.
 fn run_editor_flow(
     summary_pre_fill: Option<&str>,
-    template_description: Option<&str>,
-    preview: &CreateBugParams,
+    merged: &MergedFields,
 ) -> Result<(String, String)> {
-    let template_buf = build_editor_template(summary_pre_fill, template_description, preview);
-    let raw = super::super::editor::launch(&template_buf, "bug-create")?;
+    let preview = merged.preview_params();
+    let template_buf = build_editor_template(
+        summary_pre_fill,
+        merged.template_description.as_deref(),
+        &preview,
+    );
+    let raw = editor::launch(&template_buf, "bug-create")?;
     parse_editor_buffer(&raw)
 }
 
-/// Build the editor preview params from the merged CLI/template
-/// field set, then run the editor flow and return the user-edited
-/// `(summary, description)`.
-fn dispatch_editor_flow(
+/// Compute the resolved CLI-over-template field merge once. Used by
+/// both the editor preview and the final `CreateBugParams` build, so
+/// any future precedence change happens in a single place.
+fn merge_fields(
     action: &BugAction,
-    resolved_product: &str,
-    resolved_component: &str,
     tmpl: Option<&crate::types::BugTemplate>,
-) -> Result<(String, String)> {
+) -> Result<MergedFields> {
     let BugAction::Create {
-        summary,
+        product,
+        component,
         version,
         priority,
         severity,
@@ -218,34 +229,45 @@ fn dispatch_editor_flow(
     else {
         unreachable!()
     };
-    let template_description_default = tmpl.and_then(|t| t.description.clone());
-    let preview = build_preview_params(
-        resolved_product,
-        resolved_component,
-        version
+    let resolved_product = product
+        .clone()
+        .or_else(|| tmpl.and_then(|t| t.product.clone()))
+        .ok_or_else(|| {
+            crate::error::BzrError::InputValidation(
+                "--product is required (provide it directly or via a template)".into(),
+            )
+        })?;
+    let resolved_component = component
+        .clone()
+        .or_else(|| tmpl.and_then(|t| t.component.clone()))
+        .ok_or_else(|| {
+            crate::error::BzrError::InputValidation(
+                "--component is required (provide it directly or via a template)".into(),
+            )
+        })?;
+    Ok(MergedFields {
+        product: resolved_product,
+        component: resolved_component,
+        version: version
             .clone()
             .or_else(|| tmpl.and_then(|t| t.version.clone())),
-        priority
+        priority: priority
             .clone()
             .or_else(|| tmpl.and_then(|t| t.priority.clone())),
-        severity
+        severity: severity
             .clone()
             .or_else(|| tmpl.and_then(|t| t.severity.clone())),
-        assignee
+        assigned_to: assignee
             .clone()
             .or_else(|| tmpl.and_then(|t| t.assignee.clone())),
-        op_sys
+        op_sys: op_sys
             .clone()
             .or_else(|| tmpl.and_then(|t| t.op_sys.clone())),
-        rep_platform
+        rep_platform: rep_platform
             .clone()
             .or_else(|| tmpl.and_then(|t| t.rep_platform.clone())),
-    );
-    run_editor_flow(
-        summary.as_deref(),
-        template_description_default.as_deref(),
-        &preview,
-    )
+        template_description: tmpl.and_then(|t| t.description.clone()),
+    })
 }
 
 pub(super) async fn handle(
@@ -255,19 +277,12 @@ pub(super) async fn handle(
 ) -> Result<()> {
     let BugAction::Create {
         template: template_name,
-        product,
-        component,
         summary,
-        version,
         description,
         description_file,
-        priority,
-        severity,
-        assignee,
-        op_sys,
-        rep_platform,
         blocks,
         depends_on,
+        ..
     } = action
     else {
         unreachable!()
@@ -278,37 +293,17 @@ pub(super) async fn handle(
 
     // The editor flow (when stdin is a TTY and no explicit source)
     // produces both summary and description. Outside that flow,
-    // --summary must be supplied.
-    let editor_flow_active = resolved_description.is_none() && std::io::stdin().is_terminal();
+    // --summary must be supplied. resolve_description's contract
+    // guarantees None implies a TTY stdin, so no re-check needed.
+    let editor_flow_active = resolved_description.is_none();
 
     let tmpl = load_template(template_name.as_deref())?;
-
-    // Merge: CLI flags win over template defaults
-    let resolved_product = product
-        .clone()
-        .or_else(|| tmpl.as_ref().and_then(|t| t.product.clone()))
-        .ok_or_else(|| {
-            crate::error::BzrError::InputValidation(
-                "--product is required (provide it directly or via a template)".into(),
-            )
-        })?;
-    let resolved_component = component
-        .clone()
-        .or_else(|| tmpl.as_ref().and_then(|t| t.component.clone()))
-        .ok_or_else(|| {
-            crate::error::BzrError::InputValidation(
-                "--component is required (provide it directly or via a template)".into(),
-            )
-        })?;
+    let merged = merge_fields(action, tmpl.as_ref())?;
 
     let (resolved_summary, final_description): (Option<String>, Option<String>) =
         if editor_flow_active {
-            let (parsed_summary, parsed_description) = dispatch_editor_flow(
-                action,
-                &resolved_product,
-                &resolved_component,
-                tmpl.as_ref(),
-            )?;
+            let (parsed_summary, parsed_description) =
+                run_editor_flow(summary.as_deref(), &merged)?;
             // The user's edit is authoritative: an empty description
             // means the user explicitly cleared the body, so we keep
             // Some("") rather than falling back to the template.
@@ -318,33 +313,20 @@ pub(super) async fn handle(
         };
 
     let params = CreateBugParams {
-        product: resolved_product,
-        component: resolved_component,
+        product: merged.product,
+        component: merged.component,
         summary: resolved_summary.ok_or_else(|| {
             crate::error::BzrError::InputValidation(
                 "--summary is required unless the editor flow is active".into(),
             )
         })?,
-        version: version
-            .clone()
-            .or_else(|| tmpl.as_ref().and_then(|t| t.version.clone()))
-            .unwrap_or_else(|| "unspecified".to_string()),
+        version: merged.version.unwrap_or_else(|| "unspecified".to_string()),
         description: final_description,
-        priority: priority
-            .clone()
-            .or_else(|| tmpl.as_ref().and_then(|t| t.priority.clone())),
-        severity: severity
-            .clone()
-            .or_else(|| tmpl.as_ref().and_then(|t| t.severity.clone())),
-        assigned_to: assignee
-            .clone()
-            .or_else(|| tmpl.as_ref().and_then(|t| t.assignee.clone())),
-        op_sys: op_sys
-            .clone()
-            .or_else(|| tmpl.as_ref().and_then(|t| t.op_sys.clone())),
-        rep_platform: rep_platform
-            .clone()
-            .or_else(|| tmpl.as_ref().and_then(|t| t.rep_platform.clone())),
+        priority: merged.priority,
+        severity: merged.severity,
+        assigned_to: merged.assigned_to,
+        op_sys: merged.op_sys,
+        rep_platform: merged.rep_platform,
         blocks: blocks.clone(),
         depends_on: depends_on.clone(),
         cc: vec![],
