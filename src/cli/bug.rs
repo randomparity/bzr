@@ -267,9 +267,9 @@ pub enum BugAction {
     ///   bzr bug create --template security-bug --summary "XSS in login"
     ///
     /// Exit codes: 0 on success, 4 on Bugzilla API error, 7 on
-    /// input validation (missing --summary, missing or unreadable
-    /// --description-file, empty stdin without an explicit
-    /// description), 9 on auth failure.
+    /// input validation (missing --summary outside the editor flow,
+    /// empty editor buffer, missing or non-UTF-8 --description-file,
+    /// $EDITOR exited non-zero), 9 on auth failure.
     ///
     /// See bzr-bug-clone(1) for cloning an existing bug,
     /// bzr-template(1) for managing templates, and bzr-field(1) for

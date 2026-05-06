@@ -373,3 +373,209 @@ async fn bug_create_missing_summary_without_editor_flow_is_rejected() {
         "got {err:?}"
     );
 }
+
+#[test]
+fn parse_editor_buffer_strips_sentinel_and_extracts_summary() {
+    let buf = "\
+My bug summary
+
+This is the description.
+
+# ------------------------ >8 ------------------------
+# Do not modify or remove the line above.
+# Product: Foo
+";
+    let (summary, description) = super::parse_editor_buffer(buf).unwrap();
+    assert_eq!(summary, "My bug summary");
+    assert_eq!(description, "This is the description.");
+}
+
+#[test]
+fn parse_editor_buffer_handles_multi_line_summary_block() {
+    let buf = "\
+Summary line
+overflow line
+
+Description here
+
+# ------------------------ >8 ------------------------
+# trailer
+";
+    let (summary, description) = super::parse_editor_buffer(buf).unwrap();
+    assert_eq!(summary, "Summary line");
+    assert_eq!(description, "overflow line\n\nDescription here");
+}
+
+#[test]
+fn parse_editor_buffer_skips_leading_blank_lines() {
+    let buf =
+        "\n\nReal summary\n\nReal body\n\n# ------------------------ >8 ------------------------\n";
+    let (summary, description) = super::parse_editor_buffer(buf).unwrap();
+    assert_eq!(summary, "Real summary");
+    assert_eq!(description, "Real body");
+}
+
+#[test]
+fn parse_editor_buffer_empty_above_sentinel_errors() {
+    let buf = "\
+# ------------------------ >8 ------------------------
+# Product: Foo
+# Component: Bar
+";
+    let err = super::parse_editor_buffer(buf).unwrap_err();
+    assert!(
+        matches!(&err, BzrError::InputValidation(m) if m.contains("empty buffer")),
+        "got {err:?}"
+    );
+}
+
+#[test]
+fn parse_editor_buffer_no_sentinel_uses_full_buffer() {
+    let buf = "Summary\n\nDescription\n";
+    let (summary, description) = super::parse_editor_buffer(buf).unwrap();
+    assert_eq!(summary, "Summary");
+    assert_eq!(description, "Description");
+}
+
+#[test]
+fn parse_editor_buffer_only_summary_no_description() {
+    let buf = "\
+Just a summary
+
+# ------------------------ >8 ------------------------
+";
+    let (summary, description) = super::parse_editor_buffer(buf).unwrap();
+    assert_eq!(summary, "Just a summary");
+    assert_eq!(description, "");
+}
+
+#[test]
+fn build_editor_template_includes_summary_and_field_reminder() {
+    use crate::types::CreateBugParams;
+    let params = CreateBugParams {
+        product: "Foo".into(),
+        component: "Bar".into(),
+        summary: String::new(),
+        version: "1.0".into(),
+        description: None,
+        priority: None,
+        severity: Some("High".into()),
+        assigned_to: None,
+        op_sys: None,
+        rep_platform: None,
+        blocks: vec![],
+        depends_on: vec![],
+        cc: vec![],
+        keywords: vec![],
+    };
+    let buf = super::build_editor_template(Some("Pre-filled summary"), None, &params);
+    assert!(buf.starts_with("Pre-filled summary\n"));
+    assert!(buf.contains("# ------------------------ >8 ------------------------"));
+    assert!(buf.contains("# Product:    Foo"));
+    assert!(buf.contains("# Component:  Bar"));
+    assert!(buf.contains("# Severity:   High"));
+    assert!(buf.contains("# Priority:   <unset>"));
+}
+
+#[test]
+fn build_editor_template_includes_template_description_body() {
+    use crate::types::CreateBugParams;
+    let params = CreateBugParams {
+        product: "Foo".into(),
+        component: "Bar".into(),
+        summary: String::new(),
+        version: "1.0".into(),
+        description: None,
+        priority: None,
+        severity: None,
+        assigned_to: None,
+        op_sys: None,
+        rep_platform: None,
+        blocks: vec![],
+        depends_on: vec![],
+        cc: vec![],
+        keywords: vec![],
+    };
+    let buf = super::build_editor_template(None, Some("## Steps\n\n## Expected"), &params);
+    assert!(buf.contains("## Steps"));
+    assert!(buf.contains("## Expected"));
+}
+
+#[tokio::test]
+async fn bug_create_editor_flow_uses_editor_buffer_for_summary_and_description() {
+    use std::io::IsTerminal;
+    use std::os::unix::fs::PermissionsExt;
+
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    let dir = std::env::temp_dir();
+    let script = dir.join(format!("bzr-bc-editor-{}.sh", std::process::id()));
+    std::fs::write(
+        &script,
+        "#!/bin/sh\nprintf 'Editor summary\\n\\nEditor description\\n' > \"$1\"\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let prev = std::env::var("EDITOR").ok();
+    // SAFETY: setup_test_env holds bzr::ENV_LOCK for the duration of
+    // this test, serializing env access across all tests using it.
+    unsafe { std::env::set_var("EDITOR", &script) };
+
+    // The expect range covers both branches: when stdin is a TTY,
+    // the editor flow runs and POST is made (1 hit); when cargo
+    // test pipes stdin, the stdin branch hits InputValidation
+    // before any HTTP call (0 hits).
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .and(body_string_contains("Editor summary"))
+        .and(body_string_contains("Editor description"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 33})))
+        .expect(0..=1)
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::Create {
+        template: None,
+        product: Some("TestProduct".into()),
+        component: Some("General".into()),
+        summary: None,
+        version: None,
+        description: None,
+        description_file: None,
+        priority: None,
+        severity: None,
+        assignee: None,
+        op_sys: None,
+        rep_platform: None,
+        blocks: vec![],
+        depends_on: vec![],
+    };
+    let (result, _output) = capture_stdout(crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+    ))
+    .await;
+
+    // SAFETY: setup_test_env holds bzr::ENV_LOCK for the duration of
+    // this test, serializing env access across all tests using it.
+    unsafe {
+        if let Some(p) = prev {
+            std::env::set_var("EDITOR", p);
+        } else {
+            std::env::remove_var("EDITOR");
+        }
+    }
+    let _ = std::fs::remove_file(&script);
+
+    if std::io::stdin().is_terminal() {
+        assert!(result.is_ok(), "editor flow should succeed: {result:?}");
+    } else {
+        // Stdin branch: empty piped stdin + summary=None
+        // → InputValidation about empty stdin.
+        let err = result.unwrap_err();
+        assert!(matches!(&err, BzrError::InputValidation(_)), "got {err:?}");
+    }
+}
