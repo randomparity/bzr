@@ -4,6 +4,13 @@ use std::time::Duration;
 pub(crate) const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Per-request ceiling (30s) — covers large attachment downloads.
 pub(crate) const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+/// Cap applied to opportunistic XML-RPC retries triggered when a primary
+/// REST request succeeded with no rows. The full `REQUEST_TIMEOUT` is too
+/// generous here: REST already returned an answer, and a slow XML-RPC
+/// fallback shouldn't make the user pay 30s for a retry that may not
+/// improve the result. 8s is enough for a healthy `Bug.search` against a
+/// large database while still failing fast on truly unresponsive servers.
+pub(crate) const XMLRPC_FALLBACK_TIMEOUT: Duration = Duration::from_secs(8);
 
 /// Bugzilla's non-standard auth header (not `Authorization`).
 pub(crate) const AUTH_HEADER_NAME: &str = "X-BUGZILLA-API-KEY";

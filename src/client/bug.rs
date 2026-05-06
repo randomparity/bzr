@@ -1,7 +1,10 @@
+use std::time::Duration;
+
 use serde::Deserialize;
 
 use super::BugzillaClient;
 use crate::error::{BzrError, Result, BUGZILLA_INTERNAL_ERROR};
+use crate::http::XMLRPC_FALLBACK_TIMEOUT;
 use crate::types::{
     partition_filters, ApiMode, Bug, CreateBugParams, HistoryEntry, SearchParams, UpdateBugParams,
     FIELD_MAPPINGS,
@@ -165,23 +168,50 @@ impl BugzillaClient {
             ApiMode::Rest => self.search_bugs_rest(params).await,
             ApiMode::XmlRpc => self.xmlrpc_client()?.search_bugs(params).await,
             ApiMode::Hybrid => {
-                // Hybrid search only retries on empty results with active filters,
-                // not on REST errors. Unlike get_bug (which retries on HTTP/parse
-                // errors), search results are less critical and REST errors likely
-                // indicate a server issue that XML-RPC won't solve either.
-                let rest_result = self.search_bugs_rest(params).await;
-                match rest_result {
-                    Ok(ref bugs) if !bugs.is_empty() => rest_result,
-                    Ok(_) if params.has_filters() => {
-                        tracing::info!(
-                            "REST search returned empty with active filters, \
-                             retrying via XML-RPC"
-                        );
-                        self.xmlrpc_client()?.search_bugs(params).await
-                    }
-                    other => other,
-                }
+                self.search_bugs_hybrid(params, XMLRPC_FALLBACK_TIMEOUT)
+                    .await
             }
+        }
+    }
+
+    /// Hybrid-mode search: try REST, fall back to XML-RPC only when the REST
+    /// result is empty AND structured filters are present.
+    ///
+    /// The retry exists to paper over Bugzilla extensions whose REST handlers
+    /// misbehave for structured filters but whose XML-RPC handlers do not.
+    /// Free-text predicates (quicksearch, summary) are evaluated by the same
+    /// server-side parser regardless of transport, so empty results for those
+    /// are authoritative and skip the retry (issue #152).
+    ///
+    /// The XML-RPC retry is capped at `fallback_timeout`; on cap-out the empty
+    /// REST result is returned and a warning is logged. The cap is
+    /// parameterized so tests can supply a short value without slowing the
+    /// suite. Production callers pass [`XMLRPC_FALLBACK_TIMEOUT`].
+    pub(crate) async fn search_bugs_hybrid(
+        &self,
+        params: &SearchParams,
+        fallback_timeout: Duration,
+    ) -> Result<Vec<Bug>> {
+        let rest_bugs = self.search_bugs_rest(params).await?;
+        if !rest_bugs.is_empty() || !params.has_structured_filters() {
+            return Ok(rest_bugs);
+        }
+        tracing::info!(
+            "REST search returned empty with active structured filters, \
+             retrying via XML-RPC"
+        );
+        let xmlrpc = self.xmlrpc_client()?;
+        if let Ok(result) = tokio::time::timeout(fallback_timeout, xmlrpc.search_bugs(params)).await
+        {
+            result
+        } else {
+            tracing::warn!(
+                "XML-RPC search fallback timed out after {}s — returning the \
+                 empty REST result. To skip future fallbacks for this server, \
+                 pass --api rest or set api_mode = \"rest\" in config.",
+                fallback_timeout.as_secs()
+            );
+            Ok(rest_bugs)
         }
     }
 

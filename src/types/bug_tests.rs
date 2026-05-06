@@ -328,6 +328,64 @@ fn search_params_has_filters_for_each_individual_field() {
 }
 
 #[test]
+fn search_params_has_structured_filters_excludes_freetext() {
+    // Free-text fields (quicksearch, summary) must NOT count as structured
+    // filters: an empty REST result for these is authoritative across
+    // transports, so the hybrid-mode XML-RPC fallback must not fire.
+    let p = SearchParams {
+        quicksearch: Some("anything".into()),
+        ..Default::default()
+    };
+    assert!(!p.has_structured_filters());
+
+    let p = SearchParams {
+        summary: Some("anything".into()),
+        ..Default::default()
+    };
+    assert!(!p.has_structured_filters());
+
+    let p = SearchParams {
+        quicksearch: Some("a".into()),
+        summary: Some("b".into()),
+        ..Default::default()
+    };
+    assert!(!p.has_structured_filters());
+}
+
+#[test]
+fn search_params_has_structured_filters_for_each_individual_field() {
+    type Setter = fn(&mut SearchParams);
+    let cases: &[(&str, Setter)] = &[
+        ("product", |p| p.product.push("X".into())),
+        ("component", |p| p.component.push("X".into())),
+        ("status", |p| p.status.push("X".into())),
+        ("assigned_to", |p| p.assigned_to.push("X".into())),
+        ("creator", |p| p.creator.push("X".into())),
+        ("priority", |p| p.priority.push("X".into())),
+        ("severity", |p| p.severity.push("X".into())),
+        ("cc", |p| p.cc = Some("X".into())),
+        ("alias", |p| p.alias = Some("X".into())),
+        ("id", |p| p.id = vec![1]),
+        ("raw_params", |p| {
+            p.raw_params = vec![("f1".into(), "X".into())];
+        }),
+    ];
+    for (name, setter) in cases {
+        let mut p = SearchParams::default();
+        setter(&mut p);
+        assert!(
+            p.has_structured_filters(),
+            "field `{name}` alone should make has_structured_filters() return true"
+        );
+    }
+}
+
+#[test]
+fn search_params_has_structured_filters_empty() {
+    assert!(!SearchParams::default().has_structured_filters());
+}
+
+#[test]
 fn saved_query_has_filters_for_each_individual_field() {
     type Setter = fn(&mut SavedQuery);
     let cases: &[(&str, Setter)] = &[

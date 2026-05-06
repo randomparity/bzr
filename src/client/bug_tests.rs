@@ -310,6 +310,111 @@ async fn hybrid_search_rest_empty_with_filters_falls_back_to_xmlrpc() {
 }
 
 #[tokio::test]
+async fn hybrid_search_rest_empty_with_quicksearch_only_no_fallback() {
+    // Regression: issue #152. quicksearch is a free-text predicate evaluated
+    // by the same server-side parser for both REST and XML-RPC, so an empty
+    // REST result is authoritative. The fallback used to fire here and could
+    // hang for the full request timeout on servers with slow XML-RPC.
+    let mock = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("quicksearch", "anything"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_hybrid(&mock.uri());
+    let params = SearchParams {
+        quicksearch: Some("anything".into()),
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert!(bugs.is_empty());
+}
+
+#[tokio::test]
+async fn hybrid_search_rest_empty_with_summary_only_no_fallback() {
+    let mock = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("summary", "kernel panic"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_hybrid(&mock.uri());
+    let params = SearchParams {
+        summary: Some("kernel panic".into()),
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert!(bugs.is_empty());
+}
+
+#[tokio::test]
+async fn hybrid_search_xmlrpc_fallback_timeout_returns_empty_rest_result() {
+    // Regression: issue #152. When the structured-filter empty-fallback fires
+    // but XML-RPC takes too long, we cap the wait and fall back to the empty
+    // REST result rather than hanging the user.
+    let mock = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    // XML-RPC mock that doesn't respond before the test cap fires.
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(xmlrpc_bug_response(42, "would-be-result"))
+                .set_delay(std::time::Duration::from_secs(10)),
+        )
+        .mount(&mock)
+        .await;
+
+    let client = test_client_hybrid(&mock.uri());
+    let params = SearchParams {
+        product: vec!["P".into()],
+        ..Default::default()
+    };
+
+    let start = std::time::Instant::now();
+    let bugs = client
+        .search_bugs_hybrid(&params, std::time::Duration::from_millis(200))
+        .await
+        .unwrap();
+    let elapsed = start.elapsed();
+
+    assert!(bugs.is_empty(), "expected empty REST fallback");
+    assert!(
+        elapsed < std::time::Duration::from_secs(2),
+        "fallback cap did not fire in time: elapsed={elapsed:?}"
+    );
+}
+
+#[tokio::test]
 async fn hybrid_search_rest_empty_without_filters_no_fallback() {
     let mock = MockServer::start().await;
 

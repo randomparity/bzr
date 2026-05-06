@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `bzr bug list --summary <substring>` filters bugs by a substring
+  match against the Summary field across all bug states. This is
+  the structured counterpart to `bzr bug search`, which uses
+  Bugzilla's quicksearch syntax and defaults to OPEN bugs only.
+  Useful when the matching bug may be CLOSED or RESOLVED — a
+  scenario where quicksearch silently returns no results.
+
+### Fixed
+
+- `bzr bug search` no longer falls back to XML-RPC when the REST
+  search returns an empty result for a free-text query
+  (quicksearch or summary). Previously, an empty REST result with
+  any "filter" set — including a quicksearch term — would trigger
+  an opportunistic XML-RPC retry, which on servers with slow or
+  unresponsive XML-RPC could hang for the full 30s request
+  timeout before erroring. Free-text predicates are evaluated by
+  the same server-side parser regardless of transport, so empty
+  results are authoritative; the retry now fires only when
+  structured filters (product, component, status, etc.) are
+  present, which is the original asymmetry-papering use case.
+  Fixes #152.
+- The opportunistic XML-RPC fallback for empty REST results is
+  now capped at 8s independently of the per-request timeout.
+  When the cap fires, the empty REST result is returned with a
+  warning suggesting `--api rest` or `api_mode = "rest"` for
+  servers where XML-RPC is consistently slow.
+
+### Changed
+
+- The `<query>` argument on `bzr bug search` and the help text
+  for `--api` have been clarified to call out quicksearch's
+  "open bugs only" default and how to broaden it (`+ALL`,
+  `+CLOSED`, `status:<value>`).
+
 ## [0.3.0] - 2026-05-05
 
 ### Fixed

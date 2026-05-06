@@ -14,6 +14,11 @@ pub enum BugAction {
     /// categories. Prefix any filter value with `!` to invert it
     /// (e.g. `--status '!CLOSED'`).
     ///
+    /// `--summary` matches a substring against the bug's Summary field
+    /// across all bug states (open and closed). It is the structured
+    /// counterpart to `bzr bug search`, which uses Bugzilla's
+    /// quicksearch syntax and defaults to open bugs only.
+    ///
     /// `--limit` defaults to 50; raise it for broader scans, but very
     /// large values may exceed the server's max-results setting and
     /// return a truncated list. Use `--fields` / `--exclude-fields` to
@@ -23,6 +28,7 @@ pub enum BugAction {
     ///
     ///   bzr bug list --product Firefox --status NEW --limit 25
     ///   bzr bug list --assignee me@example.com --status '!CLOSED'
+    ///   bzr bug list --summary "kernel panic" --product Kernel
     ///   bzr bug list --id 100,101,102
     ///
     /// See bzr-bug-search(1) for free-text search, bzr-bug-my(1) for
@@ -57,6 +63,9 @@ pub enum BugAction {
         /// Filter by alias
         #[arg(long)]
         alias: Option<String>,
+        /// Substring match on the Summary field (matches across all bug states)
+        #[arg(long)]
+        summary: Option<String>,
         /// Max number of results
         #[arg(long, default_value = "50")]
         limit: u32,
@@ -94,13 +103,21 @@ pub enum BugAction {
         #[arg(long)]
         exclude_fields: Option<String>,
     },
-    /// Search bugs by free-text query or by parsing a Bugzilla URL.
+    /// Search bugs using Bugzilla quicksearch or by parsing a Bugzilla URL.
     ///
-    /// The positional `query` argument is a free-text search across
-    /// summary, description, and comments. Mutually exclusive with
+    /// The positional `query` is passed verbatim to the server's
+    /// quicksearch engine, which searches summary, description, and
+    /// comments and understands operators (`@user` for assignee,
+    /// `:product` for product, etc.). Mutually exclusive with
     /// `--from-url`, which parses a Bugzilla `buglist.cgi` URL and
     /// reproduces the same filter set against the configured server.
     /// Unrecognized URL parameters are passed through verbatim.
+    ///
+    /// Important: quicksearch defaults to OPEN bugs only. To include
+    /// closed/resolved bugs, append `+ALL` (all states), `+CLOSED`,
+    /// or an explicit token like `status:RESOLVED`. For a plain
+    /// substring match against the Summary field across all bug
+    /// states, use `bzr bug list --summary <text>` instead.
     ///
     /// `--save-as` (only valid with `--from-url`) saves the parsed
     /// query for reuse; if no name is given it defaults to the URL's
@@ -111,6 +128,8 @@ pub enum BugAction {
     /// Examples:
     ///
     ///   bzr bug search "kernel panic" --limit 10
+    ///   bzr bug search "kernel panic +ALL" --limit 10
+    ///   bzr bug list --summary "kernel panic" --limit 10  # substring, all states
     ///   bzr bug search --from-url 'https://bz/buglist.cgi?product=Firefox'
     ///   bzr bug search --from-url '...' --save-as firefox-bugs
     ///
@@ -118,12 +137,13 @@ pub enum BugAction {
     /// bzr-query(1) for managing saved queries directly.
     #[command(verbatim_doc_comment)]
     Search {
-        /// Free-text search query (mutually exclusive with `--from-url`).
+        /// Quicksearch query (mutually exclusive with `--from-url`).
         ///
-        /// Searches across summary, description, and comments using
-        /// the Bugzilla server's quicksearch syntax. Use
-        /// `--from-url` to instead replay a search composed in the
-        /// Bugzilla web UI.
+        /// Passed to the server's quicksearch engine, which searches
+        /// summary, description, and comments and DEFAULTS TO OPEN
+        /// BUGS ONLY. Append `+ALL`, `+CLOSED`, or `status:<value>`
+        /// to broaden the scope. For substring match across all bug
+        /// states, use `bzr bug list --summary <text>` instead.
         #[arg(conflicts_with = "from_url")]
         query: Option<String>,
         /// Execute a search from a Bugzilla `buglist.cgi` URL.
