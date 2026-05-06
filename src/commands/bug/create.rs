@@ -1,19 +1,13 @@
 use std::io::{IsTerminal, Read};
 
-use super::super::editor;
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
+use crate::commands::editor;
 use crate::error::Result;
 use crate::output::{self, ActionResult, ResourceKind};
 use crate::types::{CreateBugParams, OutputFormat};
 
 fn read_description_file(path: &std::path::Path) -> Result<String> {
-    if !path.exists() {
-        return Err(crate::error::BzrError::InputValidation(format!(
-            "--description-file path does not exist: {}",
-            path.display()
-        )));
-    }
     std::fs::read_to_string(path).map_err(|e| {
         crate::error::BzrError::InputValidation(format!(
             "--description-file could not be read ({}): {e}",
@@ -24,9 +18,8 @@ fn read_description_file(path: &std::path::Path) -> Result<String> {
 
 const SENTINEL: &str = "# ------------------------ >8 ------------------------";
 
-/// Resolved CLI-over-template field values used by both the editor
-/// preview and the final `CreateBugParams` build. Computing this
-/// once keeps the two consumers in lockstep when precedence changes.
+/// CLI-over-template field merge, computed once and shared between
+/// the editor preview and the final `CreateBugParams` build.
 struct MergedFields {
     product: String,
     component: String,
@@ -65,39 +58,32 @@ impl MergedFields {
 
 /// Parse the post-editor buffer into `(summary, description)`.
 ///
-/// Truncates at the sentinel divider, takes the first non-empty
-/// line as the summary, and joins the remaining lines (after
-/// stripping leading and trailing blank lines) as the description.
-/// Returns `InputValidation` when no non-empty line is found above
-/// the sentinel.
+/// Truncates at the sentinel divider, takes the first non-empty line
+/// as the summary, and joins the remaining lines (after stripping
+/// leading and trailing blank lines) as the description. Returns
+/// `InputValidation` when no non-empty line is found above the
+/// sentinel.
 fn parse_editor_buffer(raw: &str) -> Result<(String, String)> {
-    let truncated: String = raw
+    let mut iter = raw
         .lines()
         .take_while(|l| l.trim_end() != SENTINEL)
-        .collect::<Vec<_>>()
-        .join("\n");
+        .skip_while(|l| l.trim().is_empty());
 
-    let mut lines = truncated.lines();
-    let summary = loop {
-        match lines.next() {
-            Some(line) if line.trim().is_empty() => {}
-            Some(line) => break line.trim().to_string(),
-            None => {
-                return Err(crate::error::BzrError::InputValidation(
-                    "empty buffer, aborting".into(),
-                ));
-            }
-        }
-    };
+    let summary = iter
+        .next()
+        .map(|l| l.trim().to_string())
+        .ok_or_else(|| crate::error::BzrError::InputValidation("empty buffer, aborting".into()))?;
 
-    let mut rest: Vec<&str> = lines.collect();
-    while rest.first().is_some_and(|l| l.trim().is_empty()) {
-        rest.remove(0);
-    }
-    while rest.last().is_some_and(|l| l.trim().is_empty()) {
-        rest.pop();
-    }
-    let description = rest.join("\n");
+    let body: Vec<&str> = iter.collect();
+    let start = body.iter().position(|l| !l.trim().is_empty()).unwrap_or(0);
+    let end = body
+        .iter()
+        .rposition(|l| !l.trim().is_empty())
+        .map_or(0, |i| i + 1);
+    let description = body
+        .get(start..end)
+        .map(|s| s.join("\n"))
+        .unwrap_or_default();
 
     Ok((summary, description))
 }
@@ -208,9 +194,6 @@ fn run_editor_flow(
     parse_editor_buffer(&raw)
 }
 
-/// Compute the resolved CLI-over-template field merge once. Used by
-/// both the editor preview and the final `CreateBugParams` build, so
-/// any future precedence change happens in a single place.
 fn merge_fields(
     action: &BugAction,
     tmpl: Option<&crate::types::BugTemplate>,
@@ -290,11 +273,6 @@ pub(super) async fn handle(
 
     let resolved_description =
         resolve_description(description.as_deref(), description_file.as_deref())?;
-
-    // The editor flow (when stdin is a TTY and no explicit source)
-    // produces both summary and description. Outside that flow,
-    // --summary must be supplied. resolve_description's contract
-    // guarantees None implies a TTY stdin, so no re-check needed.
     let editor_flow_active = resolved_description.is_none();
 
     let tmpl = load_template(template_name.as_deref())?;
@@ -304,9 +282,6 @@ pub(super) async fn handle(
         if editor_flow_active {
             let (parsed_summary, parsed_description) =
                 run_editor_flow(summary.as_deref(), &merged)?;
-            // The user's edit is authoritative: an empty description
-            // means the user explicitly cleared the body, so we keep
-            // Some("") rather than falling back to the template.
             (Some(parsed_summary), Some(parsed_description))
         } else {
             (summary.clone(), resolved_description)
@@ -317,7 +292,8 @@ pub(super) async fn handle(
         component: merged.component,
         summary: resolved_summary.ok_or_else(|| {
             crate::error::BzrError::InputValidation(
-                "--summary is required unless the editor flow is active".into(),
+                "--summary is required (or run interactively without --description, --description-file, or piped stdin to compose in $EDITOR)"
+                    .into(),
             )
         })?,
         version: merged.version.unwrap_or_else(|| "unspecified".to_string()),

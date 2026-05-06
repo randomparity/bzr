@@ -1,6 +1,7 @@
 use std::io::{IsTerminal, Read};
 
 use crate::cli::CommentAction;
+use crate::commands::editor;
 use crate::error::{BzrError, Result};
 use crate::output::{self, ActionResult, ResourceKind, SearchResult, TagResult};
 use crate::types::ApiMode;
@@ -86,7 +87,7 @@ fn read_comment_body() -> Result<String> {
         stdin.lock().read_to_string(&mut buf)?;
         return Ok(buf);
     }
-    let raw = super::editor::launch("<!-- Enter your comment above this line -->\n", "comment")?;
+    let raw = editor::launch("<!-- Enter your comment above this line -->\n", "comment")?;
     Ok(filter_comment_body(&raw))
 }
 
