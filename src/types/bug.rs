@@ -134,10 +134,6 @@ impl SearchParams {
 
     /// Returns true if any filter fields are set (product, component, etc.).
     ///
-    /// Used by hybrid mode to decide whether an empty REST result warrants
-    /// an XML-RPC retry — only retries when filters are present, since a
-    /// filterless empty result is legitimately empty.
-    ///
     /// Note: `limit`, `include_fields`, and `exclude_fields` are intentionally
     /// excluded — they control pagination and field selection, not bug filtering.
     pub fn has_filters(&self) -> bool {
@@ -153,6 +149,32 @@ impl SearchParams {
             || !self.id.is_empty()
             || self.summary.is_some()
             || self.quicksearch.is_some()
+            || !self.raw_params.is_empty()
+    }
+
+    /// Returns true if any *structured* filter is set.
+    ///
+    /// Differs from [`Self::has_filters`] by excluding `quicksearch` and
+    /// `summary`, which are free-text predicates evaluated by the same
+    /// server-side parser regardless of transport (REST vs XML-RPC).
+    ///
+    /// Used by hybrid mode to decide whether an empty REST result warrants
+    /// an XML-RPC retry: only structured filters are retried, since they
+    /// are the cases where a buggy REST extension can disagree with the
+    /// XML-RPC implementation. An empty quicksearch or summary result is
+    /// authoritative — retrying via XML-RPC will return the same set
+    /// (and may incur a long timeout on servers with slow XML-RPC).
+    pub fn has_structured_filters(&self) -> bool {
+        !self.product.is_empty()
+            || !self.component.is_empty()
+            || !self.status.is_empty()
+            || !self.assigned_to.is_empty()
+            || !self.creator.is_empty()
+            || !self.priority.is_empty()
+            || !self.severity.is_empty()
+            || self.cc.is_some()
+            || self.alias.is_some()
+            || !self.id.is_empty()
             || !self.raw_params.is_empty()
     }
 }

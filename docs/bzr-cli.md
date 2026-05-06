@@ -83,7 +83,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 ├── bug
 │   ├── list [--product <P>...] [--component <C>...] [--status <S>...] [--assignee <A>...]
 │   │        [--creator <C>...] [--priority <P>...] [--severity <S>...] [--id <ID>...]
-│   │        [--alias <A>] [--limit <N>] [--fields <F>] [--exclude-fields <F>]
+│   │        [--alias <A>] [--summary <S>] [--limit <N>] [--fields <F>] [--exclude-fields <F>]
 │   ├── view <ID> [--fields <F>] [--exclude-fields <F>]
 │   ├── search [<QUERY>] [--from-url <URL>] [--save-as [NAME]] [--limit <N>] [--fields <F>] [--exclude-fields <F>]
 │   ├── history <ID> [--since <DATE>]
@@ -183,9 +183,12 @@ bzr bug list --id 100 --id 200 --id 300
 bzr bug list --status NEW --status ASSIGNED          # OR: match either status
 bzr bug list --status '!CLOSED'                      # NOT: exclude CLOSED
 bzr bug list --status NEW --status '!VERIFIED'       # mixed positive and negated
+bzr bug list --summary "kernel panic" --product Kernel  # substring on summary
 ```
 
 Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`, `--priority`, `--severity`) are repeatable for OR semantics and support a `!` prefix for negation (NOT).
+
+`--summary` is the structured counterpart to [`bzr bug search`](#bzr-bug-search): it does a substring match against the bug's Summary field across all states (open and closed), whereas `bzr bug search` uses Bugzilla's quicksearch and defaults to open bugs only.
 
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
@@ -198,6 +201,7 @@ Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`,
 | `--severity <S>` | No | | Filter by severity (repeatable; `!` prefix to exclude) |
 | `--id <ID>` | No | | Filter by bug ID (repeatable; `!` negation not supported) |
 | `--alias <A>` | No | | Filter by bug alias |
+| `--summary <S>` | No | | Substring match on the Summary field (matches all bug states) |
 | `--limit <N>` | No | 50 | Max results |
 | `--fields <F>` | No | | Only return these fields (comma-separated) |
 | `--exclude-fields <F>` | No | | Exclude these fields (comma-separated) |
@@ -220,16 +224,19 @@ bzr bug view my-alias --fields id,summary,assigned_to
 
 ### `bzr bug search`
 
-Full-text search using Bugzilla's quicksearch syntax, or execute a search from a Bugzilla buglist.cgi URL.
+Search bugs using Bugzilla's quicksearch syntax, or execute a search from a Bugzilla buglist.cgi URL.
 
 ```bash
 bzr bug search "kernel panic"
+bzr bug search "ALL kernel panic"                      # include closed/resolved bugs
 bzr bug search "component:NetworkManager priority:high" --limit 10
 bzr bug search "memory leak" --fields id,summary
 bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?product=Firefox&bug_status=NEW"
 bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?product=Firefox&bug_status=NEW" --save-as "my-query"
 bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?known_name=my%20search&product=Firefox" --save-as
 ```
+
+> **Note:** Bugzilla's quicksearch defaults to OPEN bugs only. Prepend the bare token `ALL` to the query to include closed/resolved bugs. For a Summary-field-only substring match across all bug states with no quicksearch tokenization or status defaults at play, use [`bzr bug list --summary <text>`](#bzr-bug-list); quicksearch additionally searches description and comments, so `ALL <term>` is broader than `--summary <term>` against the same term.
 
 `--from-url` and the positional `<QUERY>` argument are mutually exclusive.
 

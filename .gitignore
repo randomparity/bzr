@@ -10,6 +10,7 @@ mutants.out.old/
 
 # IBM Bob
 .bob/
+reference/
 
 # Claude Flow
 .claude-flow/

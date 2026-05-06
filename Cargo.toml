@@ -7,7 +7,7 @@ resolver = "3"
 
 [package]
 name = "bzr"
-version = "0.3.0"
+version = "0.4.0-dev"
 edition = "2021"
 description = "A CLI for Bugzilla, inspired by gh"
 license = "MIT"

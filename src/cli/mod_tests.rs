@@ -586,6 +586,19 @@ fn parse_bug_list_with_filters() {
 }
 
 #[test]
+fn parse_bug_list_summary_substring() {
+    let cli = Cli::try_parse_from(["bzr", "bug", "list", "--summary", "kernel panic"]).unwrap();
+    match cli.command {
+        Commands::Bug {
+            action: BugAction::List { summary, .. },
+        } => {
+            assert_eq!(summary.as_deref(), Some("kernel panic"));
+        }
+        _ => panic!("expected Bug List"),
+    }
+}
+
+#[test]
 fn parse_comment_tag() {
     let cli = Cli::try_parse_from([
         "bzr", "comment", "tag", "200", "--add", "spam", "--remove", "good",

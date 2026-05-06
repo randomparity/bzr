@@ -18,6 +18,7 @@ fn empty_list_action() -> BugAction {
         severity: vec![],
         id: vec![],
         alias: None,
+        summary: None,
         limit: 50,
         fields: None,
         exclude_fields: None,
@@ -81,6 +82,7 @@ async fn bug_list_passes_every_field_through_to_search_params() {
         .and(query_param("severity", "major"))
         .and(query_param("id", "42"))
         .and(query_param("alias", "my-alias"))
+        .and(query_param("summary", "kernel panic"))
         .and(query_param("limit", "5"))
         .and(query_param("include_fields", "id,summary"))
         .and(query_param("exclude_fields", "comments"))
@@ -99,6 +101,7 @@ async fn bug_list_passes_every_field_through_to_search_params() {
         severity: vec!["major".into()],
         id: vec![42],
         alias: Some("my-alias".into()),
+        summary: Some("kernel panic".into()),
         limit: 5,
         fields: Some("id,summary".into()),
         exclude_fields: Some("comments".into()),
@@ -108,6 +111,47 @@ async fn bug_list_passes_every_field_through_to_search_params() {
         result.is_ok(),
         "bug list with all fields failed: {result:?}"
     );
+}
+
+#[tokio::test]
+async fn bug_list_summary_only_sends_substring_filter() {
+    // `--summary` alone must be passed verbatim as the REST `summary`
+    // query parameter and must not trigger an XML-RPC fallback even
+    // when the result is empty (issue #152).
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("summary", "WARNING CPU default_machine_kexec"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::List {
+        product: vec![],
+        component: vec![],
+        status: vec![],
+        assignee: vec![],
+        creator: vec![],
+        priority: vec![],
+        severity: vec![],
+        id: vec![],
+        alias: None,
+        summary: Some("WARNING CPU default_machine_kexec".into()),
+        limit: 50,
+        fields: None,
+        exclude_fields: None,
+    };
+    let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
+    assert!(result.is_ok(), "bug list --summary failed: {result:?}");
 }
 
 #[tokio::test]
