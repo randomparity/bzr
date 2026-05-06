@@ -19,9 +19,14 @@ mod template;
 mod user;
 
 // Re-export shared types and helpers used by commands.
+#[expect(
+    unused_imports,
+    reason = "BugViewFailure/MultiBugViewResult consumed by `bzr bug view` multi-ID handler in a follow-up task on this branch"
+)]
 pub use result_types::{
-    print_result, ActionResult, BatchFailure, BatchResult, ConfigResult, DownloadResult,
-    MembershipResult, ResourceKind, SearchResult, TagResult, UploadResult,
+    print_result, ActionResult, BatchFailure, BatchResult, BugViewFailure, ConfigResult,
+    DownloadResult, MembershipResult, MultiBugViewResult, ResourceKind, SearchResult, TagResult,
+    UploadResult,
 };
 
 // Re-export all public items from submodules.
