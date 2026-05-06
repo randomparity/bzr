@@ -66,7 +66,11 @@ use crate::types::{ApiMode, OutputFormat};
 /// bzr-component(1), bzr-field(1), and bzr-whoami(1) for the
 /// per-resource reference pages.
 #[derive(Parser)]
-#[command(name = "bzr", version, verbatim_doc_comment)]
+#[command(
+    name = "bzr",
+    version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("BZR_GIT_SHA"), ")"),
+    verbatim_doc_comment
+)]
 #[expect(
     clippy::doc_markdown,
     reason = "doc examples are literal shell commands; wrapping URLs in <> or identifiers in backticks would degrade copy-paste UX"
