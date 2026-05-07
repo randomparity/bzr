@@ -165,10 +165,21 @@ async fn handle_run(
         fields,
         exclude_fields,
         server: server_override,
+        created_since,
+        changed_since,
     } = action
     else {
         unreachable!()
     };
+
+    let creation_time_override = created_since
+        .as_deref()
+        .map(|s| crate::validation::parse_iso8601_or_date(s, "--created-since"))
+        .transpose()?;
+    let last_change_time_override = changed_since
+        .as_deref()
+        .map(|s| crate::validation::parse_iso8601_or_date(s, "--changed-since"))
+        .transpose()?;
 
     let config = Config::load()?;
     let saved = config
@@ -185,8 +196,8 @@ async fn handle_run(
         *limit,
         fields.as_deref(),
         exclude_fields.as_deref(),
-        None,
-        None,
+        creation_time_override.as_deref(),
+        last_change_time_override.as_deref(),
     );
 
     let client = super::shared::connect_and_configure(effective_server, api).await?;

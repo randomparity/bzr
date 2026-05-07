@@ -95,6 +95,8 @@ fn run_action(name: &str) -> QueryAction {
         fields: None,
         exclude_fields: None,
         server: None,
+        created_since: None,
+        changed_since: None,
     }
 }
 
@@ -310,6 +312,8 @@ async fn query_run_with_limit_override() {
         fields: None,
         exclude_fields: None,
         server: None,
+        created_since: None,
+        changed_since: None,
     };
     let (result, _) =
         capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
@@ -450,6 +454,8 @@ async fn query_run_applies_field_overrides() {
         fields: Some("id,summary".into()),
         exclude_fields: Some("comments".into()),
         server: None,
+        created_since: None,
+        changed_since: None,
     };
     let (result, _) =
         capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
@@ -549,6 +555,8 @@ async fn query_run_with_server_override() {
         fields: None,
         exclude_fields: None,
         server: Some("test".into()),
+        created_since: None,
+        changed_since: None,
     };
     let (result, _) =
         capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
@@ -667,4 +675,34 @@ async fn query_save_accepts_date_only_query() {
     result.unwrap();
     let cfg = Config::load().unwrap();
     assert!(cfg.queries.contains_key("date-only"));
+}
+
+#[tokio::test]
+async fn query_run_rejects_malformed_created_since_override() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    // Pre-seed a saved query so the not-found branch doesn't fire first.
+    let mut cfg = Config::load().unwrap();
+    cfg.queries.insert(
+        "recent".into(),
+        crate::types::SavedQuery {
+            product: vec!["Firefox".into()],
+            ..crate::types::SavedQuery::default()
+        },
+    );
+    cfg.save().unwrap();
+
+    let action = QueryAction::Run {
+        name: "recent".into(),
+        limit: None,
+        fields: None,
+        exclude_fields: None,
+        server: None,
+        created_since: Some("not-a-date".into()),
+        changed_since: None,
+    };
+    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let err = result.unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+    assert!(err.to_string().contains("--created-since"));
 }

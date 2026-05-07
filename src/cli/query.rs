@@ -5,10 +5,6 @@ use clap::Subcommand;
     clippy::doc_markdown,
     reason = "doc examples are literal shell commands; wrapping URLs in <> or identifiers in backticks would degrade copy-paste UX"
 )]
-#[expect(
-    clippy::large_enum_variant,
-    reason = "only constructed once from CLI args"
-)]
 pub enum QueryAction {
     /// Save a named query (filter flags or a Bugzilla URL) for later reuse.
     ///
@@ -166,11 +162,17 @@ pub enum QueryAction {
     /// The output format matches `bzr bug list` (table by default,
     /// JSON with `--json`).
     ///
+    /// `--created-since` / `--changed-since` override the saved
+    /// query's date filters for this run; passing them clears
+    /// nothing (`None` keeps the saved value), matching the
+    /// existing `--limit` / `--fields` override convention.
+    ///
     /// Examples:
     ///
     ///   bzr query run firefox-new
     ///   bzr query run firefox-new --limit 10
     ///   bzr query run firefox-new --server staging
+    ///   bzr query run recent-firefox --changed-since 2026-05-01
     ///
     /// See bzr-query-save(1) to define a query, bzr-query-show(1)
     /// to inspect what will run, and bzr-bug-list(1) for ad-hoc
@@ -191,5 +193,15 @@ pub enum QueryAction {
         /// Override the server to run against
         #[arg(long)]
         server: Option<String>,
+        /// Override the saved `creation_time` filter for this run.
+        ///
+        /// Same accepted forms as `bzr bug list --created-since`.
+        #[arg(long, value_name = "DATE")]
+        created_since: Option<String>,
+        /// Override the saved `last_change_time` filter for this run.
+        ///
+        /// Same accepted forms as `bzr bug list --changed-since`.
+        #[arg(long, value_name = "DATE")]
+        changed_since: Option<String>,
     },
 }
