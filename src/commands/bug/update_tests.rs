@@ -373,3 +373,62 @@ fn build_update_params_rejects_whitespace_only_comment() {
         crate::error::BzrError::InputValidation(ref m) if m.contains("empty comment")
     ));
 }
+
+#[test]
+fn build_update_params_reads_comment_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("body.txt");
+    std::fs::write(&path, "from a file").unwrap();
+    let action = make_update_action_with_comment(None, Some(&path), false);
+    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let comment = params.comment.expect("comment populated");
+    assert_eq!(comment.body, "from a file");
+    assert!(!comment.is_private);
+}
+
+#[test]
+fn build_update_params_comment_file_with_private() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("body.txt");
+    std::fs::write(&path, "private body").unwrap();
+    let action = make_update_action_with_comment(None, Some(&path), true);
+    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let comment = params.comment.expect("comment populated");
+    assert!(comment.is_private);
+}
+
+#[test]
+fn build_update_params_rejects_missing_comment_file() {
+    let path = std::path::Path::new("/nonexistent/bzr-issue-161-test.txt");
+    let action = make_update_action_with_comment(None, Some(path), false);
+    let err = super::build_update_params(&action).unwrap_err();
+    let msg = err.to_string();
+    assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
+    assert!(
+        msg.contains("/nonexistent/bzr-issue-161-test.txt"),
+        "error should include path: {msg}"
+    );
+}
+
+#[test]
+fn build_update_params_rejects_non_utf8_comment_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("body.bin");
+    std::fs::write(&path, [0xff_u8, 0xfe, 0xfd]).unwrap();
+    let action = make_update_action_with_comment(None, Some(&path), false);
+    let err = super::build_update_params(&action).unwrap_err();
+    assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
+}
+
+#[test]
+fn build_update_params_rejects_whitespace_only_comment_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("body.txt");
+    std::fs::write(&path, "   \n\t  \n").unwrap();
+    let action = make_update_action_with_comment(None, Some(&path), false);
+    let err = super::build_update_params(&action).unwrap_err();
+    assert!(matches!(
+        err,
+        crate::error::BzrError::InputValidation(ref m) if m.contains("empty comment")
+    ));
+}

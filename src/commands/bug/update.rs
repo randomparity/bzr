@@ -27,6 +27,15 @@ fn clean_string_list(field: &str, values: &[String]) -> Result<Vec<String>> {
     Ok(out)
 }
 
+fn read_comment_file(path: &std::path::Path) -> Result<String> {
+    std::fs::read_to_string(path).map_err(|e| {
+        crate::error::BzrError::InputValidation(format!(
+            "cannot read --comment-file {}: {e}",
+            path.display()
+        ))
+    })
+}
+
 fn resolve_comment(
     comment: Option<&str>,
     comment_file: Option<&std::path::Path>,
@@ -35,11 +44,7 @@ fn resolve_comment(
     let body = match (comment, comment_file) {
         (Some(_), Some(_)) => unreachable!("clap conflicts_with prevents this"),
         (Some(s), None) => Some(s.to_string()),
-        (None, Some(_path)) => {
-            return Err(crate::error::BzrError::InputValidation(
-                "--comment-file not yet implemented".into(),
-            ));
-        }
+        (None, Some(path)) => Some(read_comment_file(path)?),
         (None, None) => None,
     };
     if body.is_none() && comment_private {
