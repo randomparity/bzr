@@ -126,7 +126,7 @@ pub enum AttachmentAction {
         ///
         /// Requires `--comment <BODY>`; using `--comment-private` alone
         /// is a usage error (exit 7). Marking a comment private requires
-        /// `editbugs` permission or insidergroup membership; on 403 the
+        /// `editbugs` permission or `insider` group membership; on 403 the
         /// attachment remains uploaded but the comment stays public, and
         /// the command exits non-zero with a stderr warning.
         #[arg(long)]

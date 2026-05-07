@@ -16,6 +16,7 @@ pub async fn execute(
     format: OutputFormat,
     api: Option<ApiMode>,
 ) -> Result<()> {
+    validate_action(action)?;
     let client = super::shared::connect_and_configure(server, api).await?;
 
     match action {
@@ -47,11 +48,6 @@ pub async fn execute(
             comment_private,
             flag,
         } => {
-            if *comment_private && comment.is_none() {
-                return Err(crate::error::BzrError::InputValidation(
-                    "--comment-private requires --comment".into(),
-                ));
-            }
             let path = Path::new(file);
             let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or(file);
             let data = std::fs::read(path)?;
@@ -115,6 +111,20 @@ pub async fn execute(
     Ok(())
 }
 
+fn validate_action(action: &AttachmentAction) -> Result<()> {
+    if let AttachmentAction::Upload {
+        comment_private: true,
+        comment: None,
+        ..
+    } = action
+    {
+        return Err(crate::error::BzrError::InputValidation(
+            "--comment-private requires --comment".into(),
+        ));
+    }
+    Ok(())
+}
+
 fn guess_content_type(filename: &str) -> &'static str {
     match filename
         .rsplit('.')
@@ -144,7 +154,7 @@ fn guess_content_type(filename: &str) -> &'static str {
 /// Flip the privacy of the comment that `Bug.add_attachment` just
 /// created. Identifies the comment by its `attachment_id` field —
 /// Bugzilla sets that to the new attachment ID when the comment was
-/// posted alongside the upload (#170).
+/// posted alongside the upload.
 ///
 /// On any failure between upload and the privacy flip, prints a stderr
 /// warning naming the attachment ID and the underlying error, then

@@ -432,7 +432,6 @@ async fn attachment_upload_comment_private_without_comment_is_input_error() {
 
 #[tokio::test]
 async fn attachment_upload_comment_private_partial_failure_propagates_error() {
-    use wiremock::matchers::{method, path};
     let (_lock, mock, tmp) = setup_test_env().await;
 
     let upload_file = tmp.path().join("p.diff");
@@ -481,7 +480,6 @@ async fn attachment_upload_comment_private_partial_failure_propagates_error() {
 
 #[tokio::test]
 async fn attachment_upload_comment_private_no_matching_comment_is_data_integrity_error() {
-    use wiremock::matchers::{method, path};
     let (_lock, mock, tmp) = setup_test_env().await;
 
     let upload_file = tmp.path().join("p.diff");
