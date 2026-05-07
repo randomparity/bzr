@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used, clippy::expect_used)]
 
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
@@ -292,4 +292,84 @@ fn build_update_params_rejects_whitespace_only_see_also_remove() {
         "expected InputValidation naming {}, got {err:?}",
         super::FLAG_SEE_ALSO_REMOVE
     );
+}
+
+fn make_update_action_with_comment(
+    comment: Option<&str>,
+    comment_file: Option<&std::path::Path>,
+    comment_private: bool,
+) -> BugAction {
+    BugAction::Update {
+        ids: vec![1],
+        status: None,
+        resolution: None,
+        assignee: None,
+        priority: None,
+        severity: None,
+        summary: None,
+        whiteboard: None,
+        flag: vec![],
+        blocks_add: vec![],
+        blocks_remove: vec![],
+        depends_on_add: vec![],
+        depends_on_remove: vec![],
+        keywords_add: vec![],
+        keywords_remove: vec![],
+        cc_add: vec![],
+        cc_remove: vec![],
+        groups_add: vec![],
+        groups_remove: vec![],
+        see_also_add: vec![],
+        see_also_remove: vec![],
+        comment: comment.map(String::from),
+        comment_file: comment_file.map(std::path::PathBuf::from),
+        comment_private,
+    }
+}
+
+#[test]
+fn build_update_params_carries_public_comment() {
+    let action = make_update_action_with_comment(Some("hello"), None, false);
+    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let comment = params.comment.expect("comment populated");
+    assert_eq!(comment.body, "hello");
+    assert!(!comment.is_private);
+}
+
+#[test]
+fn build_update_params_carries_private_comment() {
+    let action = make_update_action_with_comment(Some("secret"), None, true);
+    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let comment = params.comment.expect("comment populated");
+    assert_eq!(comment.body, "secret");
+    assert!(comment.is_private);
+}
+
+#[test]
+fn build_update_params_omits_comment_when_unspecified() {
+    let action = make_update_action_with_comment(None, None, false);
+    let (_ids, params) = super::build_update_params(&action).unwrap();
+    assert!(params.comment.is_none());
+}
+
+#[test]
+fn build_update_params_rejects_private_without_body() {
+    let action = make_update_action_with_comment(None, None, true);
+    let err = super::build_update_params(&action).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("--comment-private"),
+        "error should mention the flag: {msg}"
+    );
+    assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
+}
+
+#[test]
+fn build_update_params_rejects_whitespace_only_comment() {
+    let action = make_update_action_with_comment(Some("   \n\t"), None, false);
+    let err = super::build_update_params(&action).unwrap_err();
+    assert!(matches!(
+        err,
+        crate::error::BzrError::InputValidation(ref m) if m.contains("empty comment")
+    ));
 }

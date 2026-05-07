@@ -27,6 +27,40 @@ fn clean_string_list(field: &str, values: &[String]) -> Result<Vec<String>> {
     Ok(out)
 }
 
+fn resolve_comment(
+    comment: Option<&str>,
+    comment_file: Option<&std::path::Path>,
+    comment_private: bool,
+) -> Result<Option<crate::types::CommentUpdate>> {
+    let body = match (comment, comment_file) {
+        (Some(_), Some(_)) => unreachable!("clap conflicts_with prevents this"),
+        (Some(s), None) => Some(s.to_string()),
+        (None, Some(_path)) => {
+            return Err(crate::error::BzrError::InputValidation(
+                "--comment-file not yet implemented".into(),
+            ));
+        }
+        (None, None) => None,
+    };
+    if body.is_none() && comment_private {
+        return Err(crate::error::BzrError::InputValidation(
+            "--comment-private requires --comment or --comment-file".into(),
+        ));
+    }
+    let Some(text) = body else {
+        return Ok(None);
+    };
+    if text.trim().is_empty() {
+        return Err(crate::error::BzrError::InputValidation(
+            "empty comment, aborting".into(),
+        ));
+    }
+    Ok(Some(crate::types::CommentUpdate {
+        body: text,
+        is_private: comment_private,
+    }))
+}
+
 fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)> {
     let BugAction::Update {
         ids,
@@ -50,9 +84,9 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
         groups_remove,
         see_also_add,
         see_also_remove,
-        comment: _,
-        comment_file: _,
-        comment_private: _,
+        comment,
+        comment_file,
+        comment_private,
     } = action
     else {
         unreachable!()
@@ -92,7 +126,11 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
             add: clean_string_list(FLAG_SEE_ALSO_ADD, see_also_add)?,
             remove: clean_string_list(FLAG_SEE_ALSO_REMOVE, see_also_remove)?,
         },
-        comment: None,
+        comment: resolve_comment(
+            comment.as_deref(),
+            comment_file.as_deref(),
+            *comment_private,
+        )?,
     };
     Ok((ids.clone(), params))
 }
