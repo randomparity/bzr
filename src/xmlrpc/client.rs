@@ -82,6 +82,8 @@ impl XmlRpcClient {
             ("alias", &params.alias),
             ("summary", &params.summary),
             ("quicksearch", &params.quicksearch),
+            ("creation_time", &params.creation_time),
+            ("last_change_time", &params.last_change_time),
         ];
         for &(key, value) in option_fields {
             if let Some(ref v) = *value {
