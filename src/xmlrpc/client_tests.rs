@@ -374,6 +374,33 @@ fn value_to_comment_parses_int_is_private() {
     assert!(parsed.is_private);
 }
 
+#[test]
+fn comments_with_attachment_id_propagates_field() {
+    let mut comment = BTreeMap::new();
+    comment.insert("id".into(), Value::Int(1002));
+    comment.insert("bug_id".into(), Value::Int(42));
+    comment.insert("count".into(), Value::Int(2));
+    comment.insert("text".into(), Value::String("see attachment".into()));
+    comment.insert("creator".into(), Value::String("alice@test".into()));
+    comment.insert("attachment_id".into(), Value::Int(99));
+
+    let parsed = value_to_comment(&Value::Struct(comment)).unwrap();
+    assert_eq!(parsed.attachment_id, Some(99));
+}
+
+#[test]
+fn comments_without_attachment_id_yields_none() {
+    let mut comment = BTreeMap::new();
+    comment.insert("id".into(), Value::Int(1003));
+    comment.insert("bug_id".into(), Value::Int(42));
+    comment.insert("count".into(), Value::Int(3));
+    comment.insert("text".into(), Value::String("plain comment".into()));
+    comment.insert("creator".into(), Value::String("alice@test".into()));
+
+    let parsed = value_to_comment(&Value::Struct(comment)).unwrap();
+    assert_eq!(parsed.attachment_id, None);
+}
+
 #[tokio::test]
 async fn create_user_returns_id_from_response() {
     let mock = MockServer::start().await;
