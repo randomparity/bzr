@@ -99,6 +99,14 @@ pub fn print_query_detail(name: &str, query: &SavedQuery, format: OutputFormat) 
         print_optional_field("Exclude", view.query.exclude_fields.as_deref());
         print_optional_field("Created since", view.query.creation_time.as_deref());
         print_optional_field("Changed since", view.query.last_change_time.as_deref());
+        print_list_field("Whiteboard", &view.query.whiteboard);
+        print_list_field("Target Milestone", &view.query.target_milestone);
+        print_list_field("Version", &view.query.version);
+        print_list_field("OS", &view.query.op_sys);
+        print_list_field("Platform", &view.query.platform);
+        print_list_field("Resolution", &view.query.resolution);
+        print_list_field("QA Contact", &view.query.qa_contact);
+        print_list_field("URL", &view.query.url);
         if !view.query.raw_params.is_empty() {
             print_field("Raw params", &view.query.raw_params.len().to_string());
         }

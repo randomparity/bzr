@@ -262,3 +262,82 @@ async fn query_list_names_sort_before_render() {
         ]
     );
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn print_query_detail_table_shows_158_field_filters() {
+    let _lock = crate::ENV_LOCK.lock().await;
+    let mut query = make_list_query();
+    query.whiteboard = vec!["needs-review".into()];
+    query.target_milestone = vec!["5.0".into()];
+    query.version = vec!["9.4".into()];
+    query.op_sys = vec!["Linux".into()];
+    query.platform = vec!["x86_64".into()];
+    query.resolution = vec!["FIXED".into()];
+    query.qa_contact = vec!["qa@example.com".into()];
+    query.url = vec!["github.com/foo".into()];
+
+    let ((), output) = crate::test_helpers::capture_stdout(async {
+        print_query_detail("complete", &query, OutputFormat::Table);
+    })
+    .await;
+
+    assert!(output.contains("Whiteboard"), "missing label: {output}");
+    assert!(output.contains("needs-review"));
+    assert!(output.contains("Target Milestone"));
+    assert!(output.contains("5.0"));
+    assert!(output.contains("Version"));
+    assert!(output.contains("9.4"));
+    assert!(output.contains("OS"));
+    assert!(output.contains("Linux"));
+    assert!(output.contains("Platform"));
+    assert!(output.contains("x86_64"));
+    assert!(output.contains("Resolution"));
+    assert!(output.contains("FIXED"));
+    assert!(output.contains("QA Contact"));
+    assert!(output.contains("qa@example.com"));
+    assert!(output.contains("URL"));
+    assert!(output.contains("github.com/foo"));
+}
+
+#[test]
+fn query_detail_json_includes_158_field_filters() {
+    let mut query = make_list_query();
+    query.whiteboard = vec!["needs-review".into()];
+    query.url = vec!["github.com/foo".into()];
+    let view = QueryView {
+        name: "complete",
+        query: &query,
+    };
+    let json = serde_json::to_string_pretty(&view).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed["whiteboard"][0], "needs-review");
+    assert_eq!(parsed["url"][0], "github.com/foo");
+}
+
+#[test]
+fn query_summary_line_does_not_widen_for_158_fields() {
+    // Regression: the brief summary view must not widen when only
+    // the new field filters are set. The 8 fields belong in the
+    // detail view, not the one-line summary.
+    let mut query = make_list_query();
+    // Wipe the fields that DO appear in the summary so the only
+    // populated state is from #158 filters.
+    query.product = vec![];
+    query.status = vec![];
+    query.limit = None;
+    query.whiteboard = vec!["wip".into()];
+    query.resolution = vec!["FIXED".into()];
+    query.url = vec!["github.com".into()];
+
+    let line = query_summary_line("test", &query);
+    assert!(
+        !line.contains("whiteboard"),
+        "summary mentions whiteboard: {line}"
+    );
+    assert!(
+        !line.contains("resolution"),
+        "summary mentions resolution: {line}"
+    );
+    assert!(!line.contains("url"), "summary mentions url: {line}");
+}
