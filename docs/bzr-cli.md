@@ -599,6 +599,7 @@ bzr attachment upload 12345 data.csv --summary "Performance data" --content-type
 bzr attachment upload 12345 patch.diff --flag "review?(alice@example.com)"
 bzr attachment upload 12345 secret.bin --summary "internal trace" --private
 bzr attachment upload 12345 fix.patch --comment "see #6789 for context"
+bzr attachment upload 12345 patch.diff --comment "sensitive context" --comment-private
 bzr attachment upload 12345 fix.patch --is-patch
 ```
 
@@ -611,6 +612,7 @@ bzr attachment upload 12345 fix.patch --is-patch
 | `--private` | No | Mark the attachment as private (visible only to users with elevated permissions) |
 | `--is-patch` | No | Mark the attachment as a patch; defaults `--content-type` to `text/plain` |
 | `--comment <BODY>` | No | Post a comment alongside the attachment in the same API call |
+| `--comment-private` | No | Mark the comment posted via `--comment` private. Issues a follow-up `Bug.update` call (two API round-trips). Requires `--comment`. |
 | `--flag <F>` | No | Set flags (repeatable; see [Flag Syntax](#flag-syntax)) |
 
 Agent note: for clearer audit trails, agents should usually pass `--summary` explicitly instead of relying on the filename-derived default.
