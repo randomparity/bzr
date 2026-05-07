@@ -24,8 +24,21 @@ pub async fn execute(
             let attachments = client.get_attachments(*bug_id).await?;
             output::print_attachments(&attachments, format);
         }
-        AttachmentAction::Download { id, out } => {
-            download_single_legacy(&client, *id, out.as_deref(), format).await?;
+        AttachmentAction::Download {
+            ids,
+            bug_ids: _,
+            out,
+            out_dir: _,
+        } => {
+            // Bulk routing wired in Task 6. For now: legacy single-ID
+            // path only — the new validation rules in `validate_action`
+            // ensure exactly one positional ID and no `--bug` here.
+            let id = ids.first().copied().ok_or_else(|| {
+                crate::error::BzrError::InputValidation(
+                    "specify at least one attachment ID or --bug <ID>".into(),
+                )
+            })?;
+            download_single_legacy(&client, id, out.as_deref(), format).await?;
         }
         AttachmentAction::Upload {
             bug_id,
@@ -102,17 +115,26 @@ pub async fn execute(
 }
 
 fn validate_action(action: &AttachmentAction) -> Result<()> {
-    if let AttachmentAction::Upload {
-        comment_private: true,
-        comment: None,
-        ..
-    } = action
-    {
-        return Err(crate::error::BzrError::InputValidation(
+    match action {
+        AttachmentAction::Upload {
+            comment_private: true,
+            comment: None,
+            ..
+        } => Err(crate::error::BzrError::InputValidation(
             "--comment-private requires --comment".into(),
-        ));
+        )),
+        AttachmentAction::Download { ids, bug_ids, .. } if ids.is_empty() && bug_ids.is_empty() => {
+            Err(crate::error::BzrError::InputValidation(
+                "specify at least one attachment ID or --bug <ID>".into(),
+            ))
+        }
+        AttachmentAction::Download {
+            ids, out: Some(_), ..
+        } if ids.len() != 1 => Err(crate::error::BzrError::InputValidation(
+            "--out requires exactly one attachment ID".into(),
+        )),
+        _ => Ok(()),
     }
-    Ok(())
 }
 
 fn guess_content_type(filename: &str) -> &'static str {

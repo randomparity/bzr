@@ -110,7 +110,12 @@ async fn attachment_download_api_error_propagates() {
         .mount(&mock)
         .await;
 
-    let action = AttachmentAction::Download { id: 404, out: None };
+    let action = AttachmentAction::Download {
+        ids: vec![404],
+        bug_ids: vec![],
+        out: None,
+        out_dir: "./attachments".into(),
+    };
     let result = super::execute(&action, None, OutputFormat::Json, None).await;
     assert!(result.is_err());
 }
@@ -525,4 +530,38 @@ async fn attachment_upload_comment_private_no_matching_comment_is_data_integrity
         result,
         Err(crate::error::BzrError::DataIntegrity(_))
     ));
+}
+
+#[tokio::test]
+async fn attachment_download_validation_rejects_no_ids_no_bugs() {
+    let action = AttachmentAction::Download {
+        ids: vec![],
+        bug_ids: vec![],
+        out: None,
+        out_dir: "./attachments".into(),
+    };
+    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    assert!(result.is_err(), "expected InputValidation");
+    let msg = result.unwrap_err().to_string();
+    assert!(
+        msg.contains("specify at least one attachment ID"),
+        "unexpected error: {msg}",
+    );
+}
+
+#[tokio::test]
+async fn attachment_download_validation_rejects_out_with_multiple_ids() {
+    let action = AttachmentAction::Download {
+        ids: vec![100, 200],
+        bug_ids: vec![],
+        out: Some("file.bin".into()),
+        out_dir: "./attachments".into(),
+    };
+    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    assert!(result.is_err(), "expected InputValidation");
+    let msg = result.unwrap_err().to_string();
+    assert!(
+        msg.contains("--out requires exactly one attachment ID"),
+        "unexpected error: {msg}",
+    );
 }

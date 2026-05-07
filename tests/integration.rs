@@ -946,8 +946,10 @@ async fn attachment_download_integration() {
 
     let out_path = tmp.path().join("downloaded.txt");
     let action = bzr::cli::AttachmentAction::Download {
-        id: 99,
+        ids: vec![99],
+        bug_ids: vec![],
         out: Some(out_path.to_string_lossy().into_owned()),
+        out_dir: "./attachments".into(),
     };
     let result = bzr::commands::attachment::execute(
         &action,
