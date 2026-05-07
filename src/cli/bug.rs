@@ -102,28 +102,28 @@ pub enum BugAction {
         /// Same accepted forms as `--created-since`.
         #[arg(long, value_name = "DATE")]
         changed_since: Option<String>,
-        /// Filter by Status Whiteboard substring (repeatable for OR; prefix with ! to exclude).
+        /// Filter by Status Whiteboard substring (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
         whiteboard: Vec<String>,
-        /// Filter by Target Milestone (repeatable for OR; prefix with ! to exclude).
+        /// Filter by Target Milestone (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
         target_milestone: Vec<String>,
-        /// Filter by Version (repeatable for OR; prefix with ! to exclude).
+        /// Filter by Version (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
         version: Vec<String>,
-        /// Filter by Operating System (repeatable for OR; prefix with ! to exclude).
+        /// Filter by Operating System (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
         op_sys: Vec<String>,
-        /// Filter by Platform (repeatable for OR; prefix with ! to exclude).
+        /// Filter by Platform (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
         platform: Vec<String>,
-        /// Filter by Resolution (repeatable for OR; prefix with ! to exclude). Empty matches open bugs.
+        /// Filter by Resolution (repeatable for OR; prefix with ! to exclude); empty matches open bugs
         #[arg(long)]
         resolution: Vec<String>,
-        /// Filter by QA Contact login (repeatable for OR; prefix with ! to exclude).
+        /// Filter by QA Contact login (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
         qa_contact: Vec<String>,
-        /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude).
+        /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
         url: Vec<String>,
     },
