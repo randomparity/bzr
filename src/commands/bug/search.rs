@@ -40,7 +40,7 @@ fn build_params_from_url(
     if params.limit.is_none() && limit.is_none() {
         params.limit = Some(50);
     }
-    params.apply_overrides(limit, fields, exclude_fields);
+    params.apply_overrides(limit, fields, exclude_fields, None, None);
     params
 }
 

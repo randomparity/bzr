@@ -98,12 +98,16 @@ pub struct SearchParams {
 }
 
 impl SearchParams {
-    /// Apply optional runtime overrides for limit, fields, and `exclude_fields`.
+    /// Apply optional runtime overrides for limit, fields, `exclude_fields`,
+    /// and the two date filters. `Some(_)` replaces; `None` keeps the
+    /// saved value.
     pub fn apply_overrides(
         &mut self,
         limit: Option<u32>,
         fields: Option<&str>,
         exclude_fields: Option<&str>,
+        creation_time: Option<&str>,
+        last_change_time: Option<&str>,
     ) {
         if let Some(l) = limit {
             self.limit = Some(l);
@@ -113,6 +117,12 @@ impl SearchParams {
         }
         if let Some(ef) = exclude_fields {
             self.exclude_fields = Some(ef.to_string());
+        }
+        if let Some(ct) = creation_time {
+            self.creation_time = Some(ct.to_string());
+        }
+        if let Some(lct) = last_change_time {
+            self.last_change_time = Some(lct.to_string());
         }
     }
 
@@ -417,6 +427,13 @@ pub struct SavedQuery {
     /// Passed through verbatim to the Bugzilla REST API.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub raw_params: Vec<(String, String)>,
+    /// Server-canonical form (e.g. `2026-04-01T00:00:00Z`).
+    /// Validated at save time via `crate::validation::parse_iso8601_or_date`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub creation_time: Option<String>,
+    /// Server-canonical form. See `creation_time`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_change_time: Option<String>,
 }
 
 impl SavedQuery {
@@ -440,6 +457,8 @@ impl SavedQuery {
             include_fields: self.fields,
             exclude_fields: self.exclude_fields,
             raw_params: self.raw_params,
+            creation_time: self.creation_time,
+            last_change_time: self.last_change_time,
             ..Default::default()
         }
     }
@@ -474,6 +493,8 @@ impl SavedQuery {
             || !self.severity.is_empty()
             || self.quicksearch.is_some()
             || !self.raw_params.is_empty()
+            || self.creation_time.is_some()
+            || self.last_change_time.is_some()
     }
 }
 

@@ -87,6 +87,8 @@ fn saved_query_list_roundtrips_json() {
         source_url: None,
         server: None,
         raw_params: vec![],
+        creation_time: None,
+        last_change_time: None,
     };
     let json = serde_json::to_string(&query).unwrap();
     let roundtripped: SavedQuery = serde_json::from_str(&json).unwrap();
@@ -317,10 +319,10 @@ fn search_params_has_filters_for_each_individual_field() {
             p.raw_params = vec![("f1".into(), "X".into())];
         }),
         ("creation_time", |p| {
-            p.creation_time = Some("2026-04-01T00:00:00Z".into())
+            p.creation_time = Some("2026-04-01T00:00:00Z".into());
         }),
         ("last_change_time", |p| {
-            p.last_change_time = Some("2026-04-01T00:00:00Z".into())
+            p.last_change_time = Some("2026-04-01T00:00:00Z".into());
         }),
     ];
     for (name, setter) in cases {
@@ -376,10 +378,10 @@ fn search_params_has_structured_filters_for_each_individual_field() {
             p.raw_params = vec![("f1".into(), "X".into())];
         }),
         ("creation_time", |p| {
-            p.creation_time = Some("2026-04-01T00:00:00Z".into())
+            p.creation_time = Some("2026-04-01T00:00:00Z".into());
         }),
         ("last_change_time", |p| {
-            p.last_change_time = Some("2026-04-01T00:00:00Z".into())
+            p.last_change_time = Some("2026-04-01T00:00:00Z".into());
         }),
     ];
     for (name, setter) in cases {
@@ -411,6 +413,12 @@ fn saved_query_has_filters_for_each_individual_field() {
         ("quicksearch", |q| q.quicksearch = Some("X".into())),
         ("raw_params", |q| {
             q.raw_params = vec![("f1".into(), "X".into())];
+        }),
+        ("creation_time", |q: &mut SavedQuery| {
+            q.creation_time = Some("2026-04-01T00:00:00Z".into());
+        }),
+        ("last_change_time", |q: &mut SavedQuery| {
+            q.last_change_time = Some("2026-04-01T00:00:00Z".into());
         }),
     ];
     for (name, setter) in cases {
@@ -481,4 +489,71 @@ fn into_search_params_moves_fields() {
     assert_eq!(params.include_fields, Some("id,summary".into()));
     assert_eq!(params.exclude_fields, Some("comments".into()));
     assert_eq!(params.raw_params, vec![("f1".into(), "qa_contact".into())]);
+}
+
+#[test]
+fn saved_query_into_search_params_forwards_date_filters() {
+    let q = SavedQuery {
+        creation_time: Some("2026-04-01T00:00:00Z".into()),
+        last_change_time: Some("2026-04-15T00:00:00Z".into()),
+        ..SavedQuery::default()
+    };
+    let p = q.into_search_params();
+    assert_eq!(p.creation_time.as_deref(), Some("2026-04-01T00:00:00Z"));
+    assert_eq!(p.last_change_time.as_deref(), Some("2026-04-15T00:00:00Z"));
+}
+
+#[test]
+fn saved_query_toml_roundtrip_preserves_date_filters() {
+    let q = SavedQuery {
+        product: vec!["Firefox".into()],
+        creation_time: Some("2026-04-01T00:00:00Z".into()),
+        last_change_time: Some("2026-04-15T00:00:00Z".into()),
+        ..SavedQuery::default()
+    };
+    let toml_str = toml::to_string(&q).unwrap();
+    let parsed: SavedQuery = toml::from_str(&toml_str).unwrap();
+    assert_eq!(
+        parsed.creation_time.as_deref(),
+        Some("2026-04-01T00:00:00Z")
+    );
+    assert_eq!(
+        parsed.last_change_time.as_deref(),
+        Some("2026-04-15T00:00:00Z")
+    );
+}
+
+#[test]
+fn saved_query_toml_legacy_without_date_filters_deserializes() {
+    // Configs written before this change must still parse — both fields
+    // are #[serde(default)] so missing keys produce None.
+    let toml_str = r#"
+product = ["Firefox"]
+"#;
+    let parsed: SavedQuery = toml::from_str(toml_str).unwrap();
+    assert_eq!(parsed.creation_time, None);
+    assert_eq!(parsed.last_change_time, None);
+}
+
+#[test]
+fn apply_overrides_replaces_date_filters_when_some() {
+    let mut p = SearchParams {
+        creation_time: Some("2026-04-01T00:00:00Z".into()),
+        last_change_time: Some("2026-04-15T00:00:00Z".into()),
+        ..Default::default()
+    };
+    p.apply_overrides(None, None, None, Some("2026-05-01T00:00:00Z"), None);
+    assert_eq!(p.creation_time.as_deref(), Some("2026-05-01T00:00:00Z"));
+    // last_change_time unchanged because we passed None.
+    assert_eq!(p.last_change_time.as_deref(), Some("2026-04-15T00:00:00Z"));
+}
+
+#[test]
+fn apply_overrides_keeps_date_filters_when_none() {
+    let mut p = SearchParams {
+        creation_time: Some("2026-04-01T00:00:00Z".into()),
+        ..Default::default()
+    };
+    p.apply_overrides(Some(10), None, None, None, None);
+    assert_eq!(p.creation_time.as_deref(), Some("2026-04-01T00:00:00Z"));
 }

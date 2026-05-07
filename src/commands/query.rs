@@ -162,7 +162,13 @@ async fn handle_run(
         .or(saved.server.as_deref());
 
     let mut params = saved.to_search_params();
-    params.apply_overrides(*limit, fields.as_deref(), exclude_fields.as_deref());
+    params.apply_overrides(
+        *limit,
+        fields.as_deref(),
+        exclude_fields.as_deref(),
+        None,
+        None,
+    );
 
     let client = super::shared::connect_and_configure(effective_server, api).await?;
     let bugs = client.search_bugs(&params).await?;
