@@ -803,3 +803,70 @@ async fn xmlrpc_get_attachments_returns_empty_when_bug_has_none() {
     let attachments = client.get_attachments(42).await.unwrap();
     assert!(attachments.is_empty());
 }
+
+#[tokio::test]
+async fn search_bugs_xmlrpc_sends_whiteboard() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<name>whiteboard</name>"))
+        .and(body_string_contains("<string>needs-review</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(1, "WB bug")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let params = SearchParams {
+        whiteboard: vec!["needs-review".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert_eq!(bugs.len(), 1);
+}
+
+#[tokio::test]
+async fn search_bugs_xmlrpc_sends_resolution() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<name>resolution</name>"))
+        .and(body_string_contains("<string>FIXED</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(1, "Res bug")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let params = SearchParams {
+        resolution: vec!["FIXED".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert_eq!(bugs.len(), 1);
+}
+
+#[tokio::test]
+async fn search_bugs_xmlrpc_negation_whiteboard_uses_notsubstring() {
+    // Boolean chart on the XML-RPC path uses fN/oN/vN keys with
+    // string values. For substring fields the operator must be
+    // `notsubstring`, not `notequals`.
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<string>status_whiteboard</string>"))
+        .and(body_string_contains("<string>notsubstring</string>"))
+        .and(body_string_contains("<string>wip</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(1, "WB bug")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let params = SearchParams {
+        whiteboard: vec!["!wip".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert_eq!(bugs.len(), 1);
+}
