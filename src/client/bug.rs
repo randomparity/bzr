@@ -91,6 +91,8 @@ fn append_option_params(
         ("quicksearch", &params.quicksearch),
         ("include_fields", &params.include_fields),
         ("exclude_fields", &params.exclude_fields),
+        ("creation_time", &params.creation_time),
+        ("last_change_time", &params.last_change_time),
     ];
     for &(key, value) in option_fields {
         if let Some(v) = value {

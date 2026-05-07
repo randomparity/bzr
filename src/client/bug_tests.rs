@@ -801,3 +801,41 @@ async fn search_bugs_all_fields_reach_server() {
     let bugs = client.search_bugs(&params).await.unwrap();
     assert_eq!(bugs.len(), 1);
 }
+
+#[tokio::test]
+async fn search_bugs_sends_creation_time_query_param() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("creation_time", "2026-04-01T00:00:00Z"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        creation_time: Some("2026-04-01T00:00:00Z".into()),
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert!(bugs.is_empty());
+}
+
+#[tokio::test]
+async fn search_bugs_sends_last_change_time_query_param() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("last_change_time", "2026-04-15T00:00:00Z"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        last_change_time: Some("2026-04-15T00:00:00Z".into()),
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert!(bugs.is_empty());
+}
