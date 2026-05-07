@@ -446,6 +446,8 @@ Agent note: cloning without overrides copies metadata from the source bug, which
 
 Modify fields on an existing bug. Supports multiple IDs for batch updates.
 
+A comment may be posted atomically with the update via `--comment` or `--comment-file`; this avoids the need for a separate `bzr comment add` call.
+
 ```bash
 bzr bug update 12345 --status ASSIGNED --assignee dev@example.com
 bzr bug update 12345 --status RESOLVED --resolution FIXED
@@ -455,6 +457,8 @@ bzr bug update 12345 --keywords-add fix-needed,regression \
     --cc-add alice@example.com
 bzr bug update 12345 --see-also-add https://example.com/issue/42 \
     --see-also-add https://other.example/bug/7
+bzr bug update 12345 --status RESOLVED --resolution FIXED \
+    --comment "Fixed by patch in #200"
 bzr bug update 100 200 300 --status RESOLVED --resolution DUPLICATE
 ```
 
@@ -481,6 +485,9 @@ bzr bug update 100 200 300 --status RESOLVED --resolution DUPLICATE
 | `--groups-remove <G>` | No | Remove groups (comma-separated; requires permission) |
 | `--see-also-add <URL>` | No | Add a see-also URL (repeat for multiple; no comma-list) |
 | `--see-also-remove <URL>` | No | Remove a see-also URL (repeat for multiple) |
+| `--comment <BODY>` | No | Post a comment atomically with the field changes (mutually exclusive with `--comment-file`) |
+| `--comment-file <PATH>` | No | Read the comment body from a UTF-8 file (mutually exclusive with `--comment`; missing or non-UTF-8 paths exit 7) |
+| `--comment-private` | No | Mark the comment private (requires `--comment` or `--comment-file`) |
 
 When updating multiple bugs, failures on individual bugs do not abort the batch. A summary is printed showing which bugs succeeded and which failed.
 

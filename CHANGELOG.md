@@ -76,6 +76,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `--see-also-add` / `--see-also-remove`. Comma-separated values
   for the first three; `--see-also-*` accepts one URL per flag
   instance (URLs may legitimately contain commas). Closes #163.
+- `bzr bug update --comment <BODY>` (or `--comment-file <PATH>`)
+  posts a comment atomically with the field changes — a single
+  `Bug.update` REST call instead of a separate `bzr comment add`.
+  `--comment-private` marks the comment private. Mutually exclusive
+  with each other; `--comment-private` requires one of the body
+  flags. Empty / whitespace-only bodies are rejected (exit 7).
+  Closes #161.
 
 ### Fixed
 
