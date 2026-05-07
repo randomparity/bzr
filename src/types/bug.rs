@@ -124,11 +124,9 @@ pub struct SearchParams {
 /// (typically constructed from a `SavedQuery` by `bzr query run`).
 ///
 /// Each `None` keeps whatever the saved value was; each `Some(_)`
-/// replaces it. The 8 multi-value fields use `&[String]` rather than
-/// `&Vec<String>` so callers can pass slices of `Vec` arguments
-/// without an extra allocation. Construct with `Overrides {
-/// limit, ..Default::default() }` and only populate the fields you
-/// want to override.
+/// replaces it. Construct with `Overrides { limit,
+/// ..Default::default() }` and only populate the fields you want to
+/// override.
 #[derive(Clone, Copy, Debug, Default)]
 #[non_exhaustive]
 pub struct Overrides<'a> {
@@ -305,6 +303,28 @@ pub fn partition_filters(values: &[String]) -> (Vec<&str>, Vec<&str>) {
     (positive, negated)
 }
 
+/// Bugzilla boolean-chart operator used when a filter value is
+/// negated (`!`-prefix). Each `FieldMapping` row picks one based on
+/// the field's positive-side match style.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NegationOp {
+    /// For exact-match fields (the inverse of `equals`).
+    NotEquals,
+    /// For substring-match fields (the inverse of `substring`).
+    NotSubstring,
+}
+
+impl NegationOp {
+    /// Returns the wire-form operator string Bugzilla expects in
+    /// boolean-chart `oN` parameters.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NotEquals => "notequals",
+            Self::NotSubstring => "notsubstring",
+        }
+    }
+}
+
 /// Maps a filterable field across all naming contexts.
 pub struct FieldMapping {
     /// Name on `SearchParams` / `SavedQuery` (e.g. "status").
@@ -315,9 +335,7 @@ pub struct FieldMapping {
     /// Bugzilla internal name for boolean charts (e.g. `bug_status`).
     pub internal_name: &'static str,
     /// Boolean-chart operator used when a value is negated (`!`-prefix).
-    /// `"notequals"` for exact-match fields; `"notsubstring"` for
-    /// substring-match fields like `whiteboard` and `url`.
-    pub negation_operator: &'static str,
+    pub negation_operator: NegationOp,
 }
 
 /// Canonical field-mapping table for the 15 multi-value filter fields.
@@ -326,91 +344,91 @@ pub const FIELD_MAPPINGS: &[FieldMapping] = &[
         struct_field: "product",
         url_param: "product",
         internal_name: "product",
-        negation_operator: "notequals",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "component",
         url_param: "component",
         internal_name: "component",
-        negation_operator: "notequals",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "status",
         url_param: "bug_status",
         internal_name: "bug_status",
-        negation_operator: "notequals",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "assigned_to",
         url_param: "assigned_to",
         internal_name: "assigned_to",
-        negation_operator: "notequals",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "creator",
         url_param: "reporter",
         internal_name: "reporter",
-        negation_operator: "notequals",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "priority",
         url_param: "priority",
         internal_name: "priority",
-        negation_operator: "notequals",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "severity",
         url_param: "bug_severity",
         internal_name: "bug_severity",
-        negation_operator: "notequals",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "whiteboard",
         url_param: "status_whiteboard",
         internal_name: "status_whiteboard",
-        negation_operator: "notsubstring",
+        negation_operator: NegationOp::NotSubstring,
     },
     FieldMapping {
         struct_field: "target_milestone",
         url_param: "target_milestone",
         internal_name: "target_milestone",
-        negation_operator: "notequals",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "version",
         url_param: "version",
         internal_name: "version",
-        negation_operator: "notequals",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "op_sys",
         url_param: "op_sys",
         internal_name: "op_sys",
-        negation_operator: "notequals",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "platform",
         url_param: "rep_platform",
         internal_name: "rep_platform",
-        negation_operator: "notequals",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "resolution",
         url_param: "resolution",
         internal_name: "resolution",
-        negation_operator: "notequals",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "qa_contact",
         url_param: "qa_contact",
         internal_name: "qa_contact",
-        negation_operator: "notequals",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "url",
         url_param: "bug_file_loc",
         internal_name: "bug_file_loc",
-        negation_operator: "notsubstring",
+        negation_operator: NegationOp::NotSubstring,
     },
 ];
 

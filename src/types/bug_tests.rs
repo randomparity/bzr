@@ -262,10 +262,13 @@ fn field_mappings_negation_operators_match_field_kind() {
             .find(|m| m.struct_field == name)
             .unwrap_or_else(|| panic!("missing field mapping: {name}"))
     };
-    // Substring fields use notsubstring.
-    assert_eq!(by_struct("whiteboard").negation_operator, "notsubstring");
-    assert_eq!(by_struct("url").negation_operator, "notsubstring");
-    // Exact-match fields use notequals.
+    // Substring fields use NotSubstring.
+    assert_eq!(
+        by_struct("whiteboard").negation_operator,
+        NegationOp::NotSubstring
+    );
+    assert_eq!(by_struct("url").negation_operator, NegationOp::NotSubstring);
+    // Exact-match fields use NotEquals.
     for f in [
         "product",
         "component",
@@ -283,10 +286,16 @@ fn field_mappings_negation_operators_match_field_kind() {
     ] {
         assert_eq!(
             by_struct(f).negation_operator,
-            "notequals",
-            "field {f} should use notequals"
+            NegationOp::NotEquals,
+            "field {f} should use NotEquals"
         );
     }
+}
+
+#[test]
+fn negation_op_as_str_matches_bugzilla_wire_form() {
+    assert_eq!(NegationOp::NotEquals.as_str(), "notequals");
+    assert_eq!(NegationOp::NotSubstring.as_str(), "notsubstring");
 }
 
 #[test]
