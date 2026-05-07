@@ -907,3 +907,210 @@ async fn attachment_download_batch_legacy_single_id_unchanged() {
     assert!(out_path.exists());
     assert_eq!(std::fs::read(&out_path).unwrap(), b"legacy");
 }
+
+#[tokio::test]
+async fn attachment_download_batch_bug_not_found_partial_failure() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/12345/attachment"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
+                12345,
+                &serde_json::json!([one_att(9876, 12345, "patch.diff", b"ok")]),
+            )),
+        )
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/99999/attachment"))
+        .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+            "error": true,
+            "code": 101,
+            "message": "Bug 99999 does not exist."
+        })))
+        .mount(&mock)
+        .await;
+
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+    let action = AttachmentAction::Download {
+        ids: vec![],
+        bug_ids: vec![12345, 99999],
+        out: None,
+        out_dir,
+    };
+
+    let (result, output) =
+        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    assert!(result.is_err(), "expected BatchPartialFailure");
+    let err = result.unwrap_err();
+    let exit = err.exit_code();
+    assert_eq!(exit, 11, "expected exit 11, got {exit}: {err}");
+
+    let parsed = extract_json(&output);
+    assert_eq!(parsed["summary"]["succeeded"], 1);
+    assert_eq!(parsed["summary"]["failed"], 1);
+    let bugs = parsed["bug_results"].as_array().unwrap();
+    assert_eq!(bugs[0]["bug_id"], 12345);
+    assert_eq!(bugs[0]["status"], "ok");
+    assert_eq!(bugs[1]["bug_id"], 99999);
+    assert_eq!(bugs[1]["status"], "error");
+}
+
+#[tokio::test]
+async fn attachment_download_batch_all_targets_fail_still_exit_11() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/99999/attachment"))
+        .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+            "error": true,
+            "code": 101,
+            "message": "Bug 99999 does not exist."
+        })))
+        .mount(&mock)
+        .await;
+
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+    let action = AttachmentAction::Download {
+        ids: vec![],
+        bug_ids: vec![99999],
+        out: None,
+        out_dir,
+    };
+    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    assert!(result.is_err(), "expected BatchPartialFailure");
+    let err = result.unwrap_err();
+    let exit = err.exit_code();
+    assert_eq!(exit, 11, "all-fail still uses BatchPartialFailure: {err}");
+}
+
+#[tokio::test]
+async fn attachment_download_batch_obsolete_attachments_included() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    let mut obsolete = one_att(9876, 12345, "old.patch", b"obsolete content");
+    obsolete["is_obsolete"] = serde_json::json!(true);
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/12345/attachment"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
+                12345,
+                &serde_json::json!([obsolete]),
+            )),
+        )
+        .mount(&mock)
+        .await;
+
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+    let action = AttachmentAction::Download {
+        ids: vec![],
+        bug_ids: vec![12345],
+        out: None,
+        out_dir: out_dir.clone(),
+    };
+
+    let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    assert!(result.is_ok(), "expected ok, got {result:?}");
+    assert!(tmp.path().join("12345").join("9876.old.patch").exists());
+}
+
+#[tokio::test]
+async fn attachment_download_batch_data_missing_falls_back_via_get() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    // Listing returns the attachment metadata WITHOUT data.
+    let mut att = one_att(9876, 12345, "patch.diff", b"x");
+    att["data"] = serde_json::Value::Null;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/12345/attachment"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(bug_attachments_response(12345, &serde_json::json!([att]))),
+        )
+        .mount(&mock)
+        .await;
+
+    // Fallback fetch DOES return data.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/9876"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "attachments": {
+                "9876": one_att(9876, 12345, "patch.diff", b"fallback"),
+            }
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+    let action = AttachmentAction::Download {
+        ids: vec![],
+        bug_ids: vec![12345],
+        out: None,
+        out_dir,
+    };
+
+    let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    assert!(result.is_ok(), "expected ok, got {result:?}");
+    let written = std::fs::read(tmp.path().join("12345").join("9876.patch.diff")).unwrap();
+    assert_eq!(written, b"fallback");
+}
+
+#[tokio::test]
+async fn attachment_download_batch_top_level_out_dir_unwritable_fails_fast() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    // /dev/null/attachments — create_dir_all on a path under /dev/null
+    // (which is a character device, not a directory) → ENOTDIR.
+    let action = AttachmentAction::Download {
+        ids: vec![],
+        bug_ids: vec![12345],
+        out: None,
+        out_dir: "/dev/null/attachments".into(),
+    };
+    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    assert!(result.is_err(), "expected Io");
+    let err = result.unwrap_err();
+    let exit = err.exit_code();
+    assert_eq!(exit, 6, "expected Io exit 6 (fail-fast), got {exit}: {err}");
+}
+
+#[tokio::test]
+async fn write_one_attachment_invalid_base64_returns_data_integrity() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let client = super::super::shared::connect_and_configure(None, None)
+        .await
+        .unwrap();
+
+    let att = crate::types::Attachment {
+        id: 9876,
+        bug_id: 12345,
+        file_name: "patch.diff".into(),
+        summary: "broken".into(),
+        content_type: "text/plain".into(),
+        creator: None,
+        creation_time: None,
+        last_change_time: None,
+        size: 0,
+        is_obsolete: false,
+        is_private: false,
+        is_patch: false,
+        data: Some("not valid base64 !!".into()),
+    };
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+
+    let result = super::write_one_attachment(&client, &att, &out_dir).await;
+    assert!(result.is_err(), "expected DataIntegrity for invalid base64");
+    let err = result.unwrap_err();
+    assert!(
+        matches!(err, crate::error::BzrError::DataIntegrity(_)),
+        "expected DataIntegrity, got {err}",
+    );
+    let msg = err.to_string();
+    assert!(
+        msg.contains("decode attachment #9876"),
+        "expected decode error message including att-id, got: {msg}",
+    );
+}
