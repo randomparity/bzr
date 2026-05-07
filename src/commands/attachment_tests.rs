@@ -565,3 +565,131 @@ async fn attachment_download_validation_rejects_out_with_multiple_ids() {
         "unexpected error: {msg}",
     );
 }
+
+fn b64(bytes: &[u8]) -> String {
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
+#[tokio::test]
+async fn write_one_attachment_writes_inline_data_with_att_id_prefix() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let client = super::super::shared::connect_and_configure(None, None)
+        .await
+        .unwrap();
+
+    let att = crate::types::Attachment {
+        id: 9876,
+        bug_id: 12345,
+        file_name: "patch.diff".into(),
+        summary: "Fix patch".into(),
+        content_type: "text/x-diff".into(),
+        creator: None,
+        creation_time: None,
+        last_change_time: None,
+        size: 11,
+        is_obsolete: false,
+        is_private: false,
+        is_patch: true,
+        data: Some(b64(b"Hello world")),
+    };
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+
+    let file = super::write_one_attachment(&client, &att, &out_dir)
+        .await
+        .unwrap();
+
+    let expected_path = tmp.path().join("12345").join("9876.patch.diff");
+    assert!(expected_path.exists(), "{expected_path:?} not found");
+    assert_eq!(std::fs::read(&expected_path).unwrap(), b"Hello world");
+    assert_eq!(file.attachment_id, 9876);
+    assert_eq!(file.bytes, 11);
+}
+
+#[tokio::test]
+async fn write_one_attachment_falls_back_when_data_missing() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/9876"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "attachments": {
+                "9876": {
+                    "id": 9876,
+                    "bug_id": 12345,
+                    "file_name": "patch.diff",
+                    "summary": "Fix patch",
+                    "content_type": "text/plain",
+                    "size": 11,
+                    "data": b64(b"Hello world")
+                }
+            }
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = super::super::shared::connect_and_configure(None, None)
+        .await
+        .unwrap();
+
+    let att = crate::types::Attachment {
+        id: 9876,
+        bug_id: 12345,
+        file_name: "patch.diff".into(),
+        summary: "Fix patch".into(),
+        content_type: "text/plain".into(),
+        creator: None,
+        creation_time: None,
+        last_change_time: None,
+        size: 11,
+        is_obsolete: false,
+        is_private: false,
+        is_patch: false,
+        data: None,
+    };
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+
+    let file = super::write_one_attachment(&client, &att, &out_dir)
+        .await
+        .unwrap();
+
+    assert_eq!(file.bytes, 11);
+    let expected_path = tmp.path().join("12345").join("9876.patch.diff");
+    assert!(expected_path.exists());
+}
+
+#[tokio::test]
+async fn write_one_attachment_overwrites_existing_file() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let client = super::super::shared::connect_and_configure(None, None)
+        .await
+        .unwrap();
+
+    let dir = tmp.path().join("12345");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("9876.patch.diff"), b"OLD CONTENT").unwrap();
+
+    let att = crate::types::Attachment {
+        id: 9876,
+        bug_id: 12345,
+        file_name: "patch.diff".into(),
+        summary: "v2".into(),
+        content_type: "text/plain".into(),
+        creator: None,
+        creation_time: None,
+        last_change_time: None,
+        size: 11,
+        is_obsolete: false,
+        is_private: false,
+        is_patch: false,
+        data: Some(b64(b"NEW CONTENT")),
+    };
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+
+    super::write_one_attachment(&client, &att, &out_dir)
+        .await
+        .unwrap();
+
+    let written = std::fs::read(dir.join("9876.patch.diff")).unwrap();
+    assert_eq!(written, b"NEW CONTENT");
+}

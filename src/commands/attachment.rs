@@ -2,11 +2,16 @@ use std::collections::HashMap;
 use std::io::Write as _;
 use std::path::Path;
 
+use base64::Engine;
+
 use crate::cli::AttachmentAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
-use crate::output::{self, ActionResult, DownloadResult, ResourceKind, UploadResult};
+use crate::output::{
+    self, ActionResult, DownloadResult, DownloadedFile, ResourceKind, UploadResult,
+};
 use crate::types::ApiMode;
+use crate::types::Attachment;
 use crate::types::OutputFormat;
 use crate::types::{UpdateAttachmentParams, UploadAttachmentParams};
 
@@ -242,6 +247,54 @@ async fn download_single_legacy(
         format,
     );
     Ok(())
+}
+
+/// Decode (or re-fetch) one attachment's bytes and write them to
+/// `<out_dir>/<bug_id>/<att_id>.<file_name>`. Surfaces any failure
+/// back to the caller as `BzrError`; the caller decides whether to
+/// abort or record-and-continue.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by download_batch in Task 6")
+)]
+async fn write_one_attachment(
+    client: &BugzillaClient,
+    att: &Attachment,
+    out_dir: &str,
+) -> Result<DownloadedFile> {
+    let bytes = if let Some(b64) = att.data.as_deref() {
+        base64::engine::general_purpose::STANDARD
+            .decode(b64)
+            .map_err(|e| {
+                crate::error::BzrError::DataIntegrity(format!(
+                    "failed to decode attachment #{}: {e}",
+                    att.id,
+                ))
+            })?
+    } else {
+        let (_, fetched) = client.download_attachment(att.id).await?;
+        fetched
+    };
+
+    let bug_subdir = Path::new(out_dir).join(att.bug_id.to_string());
+    std::fs::create_dir_all(&bug_subdir)?;
+    let dest = bug_subdir.join(format!("{}.{}", att.id, att.file_name));
+    let dest_str = dest.to_string_lossy().into_owned();
+    std::fs::write(&dest, &bytes)?;
+
+    tracing::info!(
+        att_id = att.id,
+        bug_id = att.bug_id,
+        path = %dest_str,
+        bytes = bytes.len(),
+        "downloaded attachment",
+    );
+
+    Ok(DownloadedFile {
+        attachment_id: att.id,
+        path: dest_str,
+        bytes: bytes.len(),
+    })
 }
 
 #[cfg(test)]
