@@ -277,7 +277,7 @@ pub struct FieldMapping {
     pub negation_operator: &'static str,
 }
 
-/// Canonical field-mapping table for the 7 multi-value filter fields.
+/// Canonical field-mapping table for the 15 multi-value filter fields.
 pub const FIELD_MAPPINGS: &[FieldMapping] = &[
     FieldMapping {
         struct_field: "product",
@@ -320,6 +320,54 @@ pub const FIELD_MAPPINGS: &[FieldMapping] = &[
         url_param: "bug_severity",
         internal_name: "bug_severity",
         negation_operator: "notequals",
+    },
+    FieldMapping {
+        struct_field: "whiteboard",
+        url_param: "status_whiteboard",
+        internal_name: "status_whiteboard",
+        negation_operator: "notsubstring",
+    },
+    FieldMapping {
+        struct_field: "target_milestone",
+        url_param: "target_milestone",
+        internal_name: "target_milestone",
+        negation_operator: "notequals",
+    },
+    FieldMapping {
+        struct_field: "version",
+        url_param: "version",
+        internal_name: "version",
+        negation_operator: "notequals",
+    },
+    FieldMapping {
+        struct_field: "op_sys",
+        url_param: "op_sys",
+        internal_name: "op_sys",
+        negation_operator: "notequals",
+    },
+    FieldMapping {
+        struct_field: "platform",
+        url_param: "rep_platform",
+        internal_name: "rep_platform",
+        negation_operator: "notequals",
+    },
+    FieldMapping {
+        struct_field: "resolution",
+        url_param: "resolution",
+        internal_name: "resolution",
+        negation_operator: "notequals",
+    },
+    FieldMapping {
+        struct_field: "qa_contact",
+        url_param: "qa_contact",
+        internal_name: "qa_contact",
+        negation_operator: "notequals",
+    },
+    FieldMapping {
+        struct_field: "url",
+        url_param: "bug_file_loc",
+        internal_name: "bug_file_loc",
+        negation_operator: "notsubstring",
     },
 ];
 

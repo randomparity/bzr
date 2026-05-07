@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used, clippy::panic)]
 
 use super::*;
 
@@ -243,7 +243,42 @@ fn field_mappings_covers_all_search_params_vec_fields() {
 
 #[test]
 fn field_mappings_has_expected_count() {
-    assert_eq!(FIELD_MAPPINGS.len(), 7);
+    assert_eq!(FIELD_MAPPINGS.len(), 15);
+}
+
+#[test]
+fn field_mappings_negation_operators_match_field_kind() {
+    let by_struct = |name: &str| {
+        FIELD_MAPPINGS
+            .iter()
+            .find(|m| m.struct_field == name)
+            .unwrap_or_else(|| panic!("missing field mapping: {name}"))
+    };
+    // Substring fields use notsubstring.
+    assert_eq!(by_struct("whiteboard").negation_operator, "notsubstring");
+    assert_eq!(by_struct("url").negation_operator, "notsubstring");
+    // Exact-match fields use notequals.
+    for f in [
+        "product",
+        "component",
+        "status",
+        "assigned_to",
+        "creator",
+        "priority",
+        "severity",
+        "target_milestone",
+        "version",
+        "op_sys",
+        "platform",
+        "resolution",
+        "qa_contact",
+    ] {
+        assert_eq!(
+            by_struct(f).negation_operator,
+            "notequals",
+            "field {f} should use notequals"
+        );
+    }
 }
 
 #[test]
