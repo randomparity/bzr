@@ -39,7 +39,7 @@ pub async fn execute(
             if bug_ids.is_empty() && ids.len() == 1 {
                 // Legacy single shape — validation already ensured `--out`
                 // is not paired with `--bug` or with multiple IDs.
-                download_single_legacy(&client, ids[0], out.as_deref(), format).await?;
+                download_single(&client, ids[0], out.as_deref(), format).await?;
             } else {
                 download_batch(&client, ids, bug_ids, out_dir, format).await?;
             }
@@ -225,9 +225,9 @@ fn warn_partial(att_id: u64, err: &crate::error::BzrError) {
 
 /// Single-attachment download: writes one decoded blob to `out` (if
 /// supplied) or to the attachment's stored `file_name` in the current
-/// directory. Behavior matches the original inline arm — the function
-/// exists to keep `execute()` readable when the bulk path is added.
-async fn download_single_legacy(
+/// directory. Paired with `download_batch` for bulk shapes; both paths
+/// are first-class.
+async fn download_single(
     client: &BugzillaClient,
     id: u64,
     out: Option<&str>,
@@ -309,15 +309,13 @@ async fn download_batch(
 
     let mut bug_results: Vec<BugDownloadResult> = Vec::new();
     let mut attachment_results: Vec<AttachmentDownloadResult> = Vec::new();
-    let mut total_bytes: usize = 0;
 
     for &bug_id in bug_ids {
-        bug_results.push(download_bug_target(client, bug_id, out_dir, &mut total_bytes).await);
+        bug_results.push(download_bug_target(client, bug_id, out_dir).await);
     }
 
     for &att_id in ids {
-        attachment_results
-            .push(download_attachment_target(client, att_id, out_dir, &mut total_bytes).await);
+        attachment_results.push(download_attachment_target(client, att_id, out_dir).await);
     }
 
     let succeeded: usize = bug_results.iter().map(|b| b.files.len()).sum::<usize>()
@@ -333,6 +331,15 @@ async fn download_batch(
             .iter()
             .filter(|a| a.status == TargetStatus::Error)
             .count();
+    let total_bytes: usize = bug_results
+        .iter()
+        .flat_map(|b| &b.files)
+        .map(|f| f.bytes)
+        .sum::<usize>()
+        + attachment_results
+            .iter()
+            .filter_map(|a| a.bytes)
+            .sum::<usize>();
 
     let result = AttachmentBatchResult {
         out_dir: out_dir.to_string(),
@@ -361,7 +368,6 @@ async fn download_bug_target(
     client: &BugzillaClient,
     bug_id: u64,
     out_dir: &str,
-    total_bytes: &mut usize,
 ) -> BugDownloadResult {
     let atts = match client.get_attachments(bug_id).await {
         Ok(atts) => atts,
@@ -380,7 +386,6 @@ async fn download_bug_target(
     for att in &atts {
         match write_one_attachment(client, att, out_dir).await {
             Ok(file) => {
-                *total_bytes += file.bytes;
                 files.push(file);
             }
             Err(e) => {
@@ -410,7 +415,6 @@ async fn download_attachment_target(
     client: &BugzillaClient,
     att_id: u64,
     out_dir: &str,
-    total_bytes: &mut usize,
 ) -> AttachmentDownloadResult {
     let att = match client.get_attachment(att_id).await {
         Ok(att) => att,
@@ -426,17 +430,14 @@ async fn download_attachment_target(
         }
     };
     match write_one_attachment(client, &att, out_dir).await {
-        Ok(file) => {
-            *total_bytes += file.bytes;
-            AttachmentDownloadResult {
-                attachment_id: att_id,
-                status: TargetStatus::Ok,
-                bug_id: Some(att.bug_id),
-                path: Some(file.path),
-                bytes: Some(file.bytes),
-                error: None,
-            }
-        }
+        Ok(file) => AttachmentDownloadResult {
+            attachment_id: att_id,
+            status: TargetStatus::Ok,
+            bug_id: Some(att.bug_id),
+            path: Some(file.path),
+            bytes: Some(file.bytes),
+            error: None,
+        },
         Err(e) => AttachmentDownloadResult {
             attachment_id: att_id,
             status: TargetStatus::Error,

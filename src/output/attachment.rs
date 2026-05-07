@@ -50,8 +50,10 @@ pub struct AttachmentBatchResult {
 }
 
 /// Result of `--bug <ID>` for a single bug. Carries every file the
-/// bulk path successfully wrote to disk for this bug, and (if any
-/// attachment failed) the first error message encountered.
+/// bulk path successfully wrote to disk for this bug. If any
+/// attachment failed, `error` holds the first error message
+/// encountered; subsequent failures within the same bug are not
+/// retained — the renderer surfaces only one error per bug.
 #[derive(Debug, Serialize)]
 #[non_exhaustive]
 pub struct BugDownloadResult {
