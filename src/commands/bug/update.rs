@@ -89,6 +89,7 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
             add: clean_string_list(FLAG_SEE_ALSO_ADD, see_also_add)?,
             remove: clean_string_list(FLAG_SEE_ALSO_REMOVE, see_also_remove)?,
         },
+        comment: None,
     };
     Ok((ids.clone(), params))
 }

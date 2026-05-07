@@ -878,3 +878,44 @@ fn comment_update_serializes_private_body() {
     let json = serde_json::to_value(&upd).unwrap();
     assert_eq!(json, serde_json::json!({"body": "hi", "is_private": true}));
 }
+
+#[test]
+fn update_bug_params_omits_comment_when_none() {
+    let params = UpdateBugParams::default();
+    let json = serde_json::to_value(&params).unwrap();
+    assert!(
+        json.get("comment").is_none(),
+        "expected no comment key when None, got: {json}"
+    );
+}
+
+#[test]
+fn update_bug_params_serializes_comment_when_some() {
+    let params = UpdateBugParams {
+        summary: Some("new summary".into()),
+        comment: Some(CommentUpdate {
+            body: "see #other".into(),
+            is_private: false,
+        }),
+        ..Default::default()
+    };
+    let json = serde_json::to_value(&params).unwrap();
+    assert_eq!(json["summary"], "new summary");
+    assert_eq!(json["comment"], serde_json::json!({"body": "see #other"}));
+}
+
+#[test]
+fn update_bug_params_serializes_private_comment() {
+    let params = UpdateBugParams {
+        comment: Some(CommentUpdate {
+            body: "secret".into(),
+            is_private: true,
+        }),
+        ..Default::default()
+    };
+    let json = serde_json::to_value(&params).unwrap();
+    assert_eq!(
+        json["comment"],
+        serde_json::json!({"body": "secret", "is_private": true})
+    );
+}

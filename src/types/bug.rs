@@ -502,14 +502,6 @@ impl StringListUpdate {
 /// REST `Bug.update` accepts this as a sub-object on the request,
 /// which delivers the field changes and the comment in one
 /// round-trip.
-// Wired into `UpdateBugParams` and the CLI in subsequent tasks of issue #161.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "wired into UpdateBugParams in a follow-up task of #161"
-    )
-)]
 #[derive(Debug, Default, Serialize)]
 #[non_exhaustive]
 pub struct CommentUpdate {
@@ -549,6 +541,8 @@ pub struct UpdateBugParams {
     pub groups: StringListUpdate,
     #[serde(skip_serializing_if = "StringListUpdate::is_empty")]
     pub see_also: StringListUpdate,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comment: Option<CommentUpdate>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
