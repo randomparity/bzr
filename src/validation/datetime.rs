@@ -115,7 +115,8 @@ fn parse_datetime_offset(s: &str) -> Option<()> {
     if bytes[22] != b':' {
         return None;
     }
-    if !bytes[20..22].iter().all(u8::is_ascii_digit) || !bytes[23..25].iter().all(u8::is_ascii_digit)
+    if !bytes[20..22].iter().all(u8::is_ascii_digit)
+        || !bytes[23..25].iter().all(u8::is_ascii_digit)
     {
         return None;
     }
