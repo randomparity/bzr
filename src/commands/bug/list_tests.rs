@@ -24,6 +24,14 @@ fn empty_list_action() -> BugAction {
         exclude_fields: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     }
 }
 
@@ -90,6 +98,14 @@ async fn bug_list_passes_every_field_through_to_search_params() {
         .and(query_param("exclude_fields", "comments"))
         .and(query_param("creation_time", "2026-04-01T00:00:00Z"))
         .and(query_param("last_change_time", "2026-04-15T00:00:00Z"))
+        .and(query_param("whiteboard", "needs-review"))
+        .and(query_param("target_milestone", "5.0"))
+        .and(query_param("version", "9.4"))
+        .and(query_param("op_sys", "Linux"))
+        .and(query_param("platform", "x86_64"))
+        .and(query_param("resolution", "FIXED"))
+        .and(query_param("qa_contact", "qa@test.com"))
+        .and(query_param("url", "github.com/foo"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
         .expect(1)
         .mount(&mock)
@@ -111,6 +127,14 @@ async fn bug_list_passes_every_field_through_to_search_params() {
         exclude_fields: Some("comments".into()),
         created_since: Some("2026-04-01".into()),
         changed_since: Some("2026-04-15T00:00:00Z".into()),
+        whiteboard: vec!["needs-review".into()],
+        target_milestone: vec!["5.0".into()],
+        version: vec!["9.4".into()],
+        op_sys: vec!["Linux".into()],
+        platform: vec!["x86_64".into()],
+        resolution: vec!["FIXED".into()],
+        qa_contact: vec!["qa@test.com".into()],
+        url: vec!["github.com/foo".into()],
     };
     let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
     assert!(
@@ -157,6 +181,14 @@ async fn bug_list_summary_only_sends_substring_filter() {
         exclude_fields: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
     assert!(result.is_ok(), "bug list --summary failed: {result:?}");

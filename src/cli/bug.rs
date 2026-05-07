@@ -30,6 +30,14 @@ pub enum BugAction {
     /// as 00:00:00 UTC). Malformed input exits 7 before any network
     /// call.
     ///
+    /// Eight additional field filters from bzl-parity issue #158:
+    /// `--whiteboard`, `--target-milestone`, `--version`, `--op-sys`,
+    /// `--platform`, `--resolution`, `--qa-contact`, `--url`. All
+    /// repeatable for OR within a field; AND across fields. Prefix
+    /// with `!` to invert. `--whiteboard` and `--url` are substring
+    /// matches (negation uses `notsubstring`); the other six are
+    /// exact match (negation uses `notequals`).
+    ///
     /// Examples:
     ///
     ///   bzr bug list --product Firefox --status NEW --limit 25
@@ -94,6 +102,30 @@ pub enum BugAction {
         /// Same accepted forms as `--created-since`.
         #[arg(long, value_name = "DATE")]
         changed_since: Option<String>,
+        /// Filter by Status Whiteboard substring (repeatable for OR; prefix with ! to exclude).
+        #[arg(long)]
+        whiteboard: Vec<String>,
+        /// Filter by Target Milestone (repeatable for OR; prefix with ! to exclude).
+        #[arg(long)]
+        target_milestone: Vec<String>,
+        /// Filter by Version (repeatable for OR; prefix with ! to exclude).
+        #[arg(long)]
+        version: Vec<String>,
+        /// Filter by Operating System (repeatable for OR; prefix with ! to exclude).
+        #[arg(long)]
+        op_sys: Vec<String>,
+        /// Filter by Platform (repeatable for OR; prefix with ! to exclude).
+        #[arg(long)]
+        platform: Vec<String>,
+        /// Filter by Resolution (repeatable for OR; prefix with ! to exclude). Empty matches open bugs.
+        #[arg(long)]
+        resolution: Vec<String>,
+        /// Filter by QA Contact login (repeatable for OR; prefix with ! to exclude).
+        #[arg(long)]
+        qa_contact: Vec<String>,
+        /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude).
+        #[arg(long)]
+        url: Vec<String>,
     },
     /// View one or more bugs by ID or alias.
     ///

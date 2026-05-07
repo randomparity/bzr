@@ -47,6 +47,14 @@ async fn bug_list_integration() {
         exclude_fields: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, output) = capture_stdout(bzr::commands::bug::execute(
         &action,
@@ -95,6 +103,14 @@ async fn bug_list_changed_since_canonicalizes_bare_date_on_wire() {
         exclude_fields: None,
         created_since: None,
         changed_since: Some("2026-04-01".into()),
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, _output) = capture_stdout(bzr::commands::bug::execute(
         &action,
@@ -633,6 +649,14 @@ async fn command_with_unknown_server_returns_error() {
         exclude_fields: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let result = bzr::commands::bug::execute(
         &action,
