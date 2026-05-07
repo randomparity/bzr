@@ -753,6 +753,9 @@ async fn bug_update_integration() {
         groups_remove: vec!["secret".to_string()],
         see_also_add: vec!["https://example.com/issue/1".to_string()],
         see_also_remove: vec![],
+        comment: None,
+        comment_file: None,
+        comment_private: false,
     };
     let (result, output) = capture_stdout(bzr::commands::bug::execute(
         &action,
@@ -765,6 +768,68 @@ async fn bug_update_integration() {
     let parsed = extract_json(&output);
     assert_eq!(parsed["id"], 42);
     assert_eq!(parsed["action"], "updated");
+}
+
+#[tokio::test]
+async fn bug_update_with_comment_integration() {
+    use wiremock::matchers::body_partial_json;
+
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/42"))
+        .and(body_partial_json(serde_json::json!({
+            "status": "RESOLVED",
+            "resolution": "FIXED",
+            "comment": {
+                "body": "see #other",
+                "is_private": true,
+            },
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 42, "changes": {}}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = bzr::cli::BugAction::Update {
+        ids: vec![42],
+        status: Some("RESOLVED".to_string()),
+        resolution: Some("FIXED".to_string()),
+        assignee: None,
+        priority: None,
+        severity: None,
+        summary: None,
+        whiteboard: None,
+        flag: vec![],
+        blocks_add: vec![],
+        blocks_remove: vec![],
+        depends_on_add: vec![],
+        depends_on_remove: vec![],
+        keywords_add: vec![],
+        keywords_remove: vec![],
+        cc_add: vec![],
+        cc_remove: vec![],
+        groups_add: vec![],
+        groups_remove: vec![],
+        see_also_add: vec![],
+        see_also_remove: vec![],
+        comment: Some("see #other".to_string()),
+        comment_file: None,
+        comment_private: true,
+    };
+    let (result, _output) = capture_stdout(bzr::commands::bug::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
+    .await;
+    assert!(
+        result.is_ok(),
+        "bug update with comment should succeed: {result:?}"
+    );
 }
 
 // ── Comment add ──────────────────────────────────────────────────────

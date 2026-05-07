@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used, clippy::expect_used)]
 
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
@@ -30,6 +30,9 @@ fn make_update_action(ids: Vec<u64>) -> BugAction {
         groups_remove: vec![],
         see_also_add: vec![],
         see_also_remove: vec![],
+        comment: None,
+        comment_file: None,
+        comment_private: false,
     }
 }
 
@@ -69,6 +72,9 @@ fn make_update_action_with_lists(lists: UpdateLists<'_>) -> BugAction {
         groups_remove: to_strings(lists.groups_remove),
         see_also_add: to_strings(lists.see_also_add),
         see_also_remove: to_strings(lists.see_also_remove),
+        comment: None,
+        comment_file: None,
+        comment_private: false,
     }
 }
 
@@ -285,5 +291,228 @@ fn build_update_params_rejects_whitespace_only_see_also_remove() {
         matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::FLAG_SEE_ALSO_REMOVE)),
         "expected InputValidation naming {}, got {err:?}",
         super::FLAG_SEE_ALSO_REMOVE
+    );
+}
+
+fn make_update_action_with_comment(
+    ids: Vec<u64>,
+    comment: Option<&str>,
+    comment_file: Option<&std::path::Path>,
+    comment_private: bool,
+) -> BugAction {
+    BugAction::Update {
+        ids,
+        status: None,
+        resolution: None,
+        assignee: None,
+        priority: None,
+        severity: None,
+        summary: None,
+        whiteboard: None,
+        flag: vec![],
+        blocks_add: vec![],
+        blocks_remove: vec![],
+        depends_on_add: vec![],
+        depends_on_remove: vec![],
+        keywords_add: vec![],
+        keywords_remove: vec![],
+        cc_add: vec![],
+        cc_remove: vec![],
+        groups_add: vec![],
+        groups_remove: vec![],
+        see_also_add: vec![],
+        see_also_remove: vec![],
+        comment: comment.map(String::from),
+        comment_file: comment_file.map(std::path::PathBuf::from),
+        comment_private,
+    }
+}
+
+#[test]
+fn build_update_params_carries_public_comment() {
+    let action = make_update_action_with_comment(vec![1], Some("hello"), None, false);
+    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let comment = params.comment.expect("comment populated");
+    assert_eq!(comment.body, "hello");
+    assert!(!comment.is_private);
+}
+
+#[test]
+fn build_update_params_carries_private_comment() {
+    let action = make_update_action_with_comment(vec![1], Some("secret"), None, true);
+    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let comment = params.comment.expect("comment populated");
+    assert_eq!(comment.body, "secret");
+    assert!(comment.is_private);
+}
+
+#[test]
+fn build_update_params_omits_comment_when_unspecified() {
+    let action = make_update_action_with_comment(vec![1], None, None, false);
+    let (_ids, params) = super::build_update_params(&action).unwrap();
+    assert!(params.comment.is_none());
+}
+
+#[test]
+fn build_update_params_rejects_private_without_body() {
+    let action = make_update_action_with_comment(vec![1], None, None, true);
+    let err = super::build_update_params(&action).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("--comment-private"),
+        "error should mention the flag: {msg}"
+    );
+    assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
+}
+
+#[test]
+fn build_update_params_rejects_whitespace_only_comment() {
+    let action = make_update_action_with_comment(vec![1], Some("   \n\t"), None, false);
+    let err = super::build_update_params(&action).unwrap_err();
+    assert!(matches!(
+        err,
+        crate::error::BzrError::InputValidation(ref m) if m.contains("empty comment")
+    ));
+}
+
+#[test]
+fn build_update_params_reads_comment_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("body.txt");
+    std::fs::write(&path, "from a file").unwrap();
+    let action = make_update_action_with_comment(vec![1], None, Some(&path), false);
+    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let comment = params.comment.expect("comment populated");
+    assert_eq!(comment.body, "from a file");
+    assert!(!comment.is_private);
+}
+
+#[test]
+fn build_update_params_comment_file_with_private() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("body.txt");
+    std::fs::write(&path, "private body").unwrap();
+    let action = make_update_action_with_comment(vec![1], None, Some(&path), true);
+    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let comment = params.comment.expect("comment populated");
+    assert!(comment.is_private);
+}
+
+#[test]
+fn build_update_params_rejects_missing_comment_file() {
+    let path = std::path::Path::new("/nonexistent/bzr-issue-161-test.txt");
+    let action = make_update_action_with_comment(vec![1], None, Some(path), false);
+    let err = super::build_update_params(&action).unwrap_err();
+    let msg = err.to_string();
+    assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
+    assert!(
+        msg.contains("/nonexistent/bzr-issue-161-test.txt"),
+        "error should include path: {msg}"
+    );
+}
+
+#[test]
+fn build_update_params_rejects_non_utf8_comment_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("body.bin");
+    std::fs::write(&path, [0xff_u8, 0xfe, 0xfd]).unwrap();
+    let action = make_update_action_with_comment(vec![1], None, Some(&path), false);
+    let err = super::build_update_params(&action).unwrap_err();
+    assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
+}
+
+#[test]
+fn build_update_params_rejects_whitespace_only_comment_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("body.txt");
+    std::fs::write(&path, "   \n\t  \n").unwrap();
+    let action = make_update_action_with_comment(vec![1], None, Some(&path), false);
+    let err = super::build_update_params(&action).unwrap_err();
+    assert!(matches!(
+        err,
+        crate::error::BzrError::InputValidation(ref m) if m.contains("empty comment")
+    ));
+}
+
+#[tokio::test]
+async fn bug_update_table_output_with_comment_single() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_put_bug_ok(&mock, 42).await;
+
+    let action = make_update_action_with_comment(vec![42], Some("hi"), None, false);
+    let (result, output) = capture_stdout(crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Table,
+        None,
+    ))
+    .await;
+    assert!(result.is_ok());
+    assert!(
+        output.contains("Updated bug #42 (with comment)"),
+        "expected '(with comment)' suffix; got: {output}"
+    );
+}
+
+#[tokio::test]
+async fn bug_update_table_output_no_comment_single() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_put_bug_ok(&mock, 42).await;
+
+    let action = make_update_action(vec![42]);
+    let (result, output) = capture_stdout(crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Table,
+        None,
+    ))
+    .await;
+    assert!(result.is_ok());
+    assert!(output.contains("Updated bug #42"));
+    assert!(
+        !output.contains("(with comment)"),
+        "no comment was posted; suffix should be absent: {output}"
+    );
+}
+
+#[tokio::test]
+async fn bug_update_table_output_with_comment_batch_all_succeed() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_put_bug_ok(&mock, 1).await;
+    mock_put_bug_ok(&mock, 2).await;
+
+    let action = make_update_action_with_comment(vec![1, 2], Some("batch comment"), None, false);
+    let (result, output) = capture_stdout(crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Table,
+        None,
+    ))
+    .await;
+    assert!(result.is_ok());
+    assert!(output.contains("Updated bugs:"));
+    assert!(output.contains("(with comment)"));
+}
+
+#[tokio::test]
+async fn bug_update_json_output_unchanged_with_comment() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_put_bug_ok(&mock, 42).await;
+
+    let action = make_update_action_with_comment(vec![42], Some("hi"), None, false);
+    let (result, output) = capture_stdout(crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+    ))
+    .await;
+    assert!(result.is_ok());
+    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    assert_eq!(parsed["action"], "updated");
+    assert_eq!(parsed["id"], 42);
+    assert!(
+        parsed.get("comment").is_none() && parsed.get("with_comment").is_none(),
+        "JSON schema should not gain a comment-related key: {parsed}"
     );
 }

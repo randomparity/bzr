@@ -972,6 +972,57 @@ run_bzr comment search-tags important
 # May return empty if tag was fully removed, but should succeed
 if assert_success; then test_pass; fi
 
+# ─ Issue #161: bug update --comment / --comment-file / --comment-private ─
+
+test_begin "94d. bug update --comment posts atomically"
+if [[ -n "$BUG1" ]]; then
+    # Capture pre-update comment count.
+    run_bzr comment list "$BUG1"
+    pre_count=$(jq '. | length' "$BZR_STDOUT")
+    run_bzr bug update "$BUG1" --whiteboard "atomic-comment-test" \
+        --comment "atomic comment from #161 test"
+    if assert_success; then
+        run_bzr comment list "$BUG1"
+        post_count=$(jq '. | length' "$BZR_STDOUT")
+        if [[ "$post_count" -eq $((pre_count + 1)) ]] \
+            && jq -e '.[-1].text == "atomic comment from #161 test"' "$BZR_STDOUT" >/dev/null; then
+            test_pass
+        else
+            test_fail "comment not appended atomically (pre=$pre_count post=$post_count)"
+        fi
+    fi
+else test_skip "no BUG1"; fi
+
+test_begin "94e. bug update --comment --comment-private"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug update "$BUG1" --comment "private atomic comment" --comment-private
+    if assert_success; then
+        run_bzr --api hybrid comment list "$BUG1"
+        if jq -e '.[-1].is_private == true' "$BZR_STDOUT" >/dev/null \
+            && jq -e '.[-1].text == "private atomic comment"' "$BZR_STDOUT" >/dev/null; then
+            test_pass
+        else
+            test_fail "last comment not private or text mismatch"
+        fi
+    fi
+else test_skip "no BUG1"; fi
+
+test_begin "94f. bug update --comment-file"
+if [[ -n "$BUG1" ]]; then
+    tmpfile=$(mktemp)
+    printf 'comment from file\nsecond line\n' > "$tmpfile"
+    run_bzr bug update "$BUG1" --comment-file "$tmpfile"
+    if assert_success; then
+        run_bzr comment list "$BUG1"
+        if jq -e '.[-1].text | contains("comment from file")' "$BZR_STDOUT" >/dev/null; then
+            test_pass
+        else
+            test_fail "file comment not posted"
+        fi
+    fi
+    rm -f "$tmpfile"
+else test_skip "no BUG1"; fi
+
 echo ""
 
 # ══════════════════════════════════════════════════════════════════════

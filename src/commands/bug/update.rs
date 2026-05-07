@@ -13,6 +13,16 @@ const FLAG_GROUPS_REMOVE: &str = "--groups-remove";
 const FLAG_SEE_ALSO_ADD: &str = "--see-also-add";
 const FLAG_SEE_ALSO_REMOVE: &str = "--see-also-remove";
 
+const COMMENT_SUFFIX: &str = " (with comment)";
+
+fn comment_suffix(present: bool) -> &'static str {
+    if present {
+        COMMENT_SUFFIX
+    } else {
+        ""
+    }
+}
+
 fn clean_string_list(field: &str, values: &[String]) -> Result<Vec<String>> {
     let mut out = Vec::with_capacity(values.len());
     for raw in values {
@@ -25,6 +35,49 @@ fn clean_string_list(field: &str, values: &[String]) -> Result<Vec<String>> {
         out.push(trimmed.to_string());
     }
     Ok(out)
+}
+
+fn read_comment_file(path: &std::path::Path) -> Result<String> {
+    std::fs::read_to_string(path).map_err(|e| {
+        crate::error::BzrError::InputValidation(format!(
+            "cannot read --comment-file {}: {e}",
+            path.display()
+        ))
+    })
+}
+
+fn resolve_comment(
+    comment: Option<&str>,
+    comment_file: Option<&std::path::Path>,
+    comment_private: bool,
+) -> Result<Option<crate::types::CommentUpdate>> {
+    let body = match (comment, comment_file) {
+        (Some(_), Some(_)) => {
+            return Err(crate::error::BzrError::InputValidation(
+                "--comment and --comment-file are mutually exclusive".into(),
+            ));
+        }
+        (Some(s), None) => Some(s.to_string()),
+        (None, Some(path)) => Some(read_comment_file(path)?),
+        (None, None) => None,
+    };
+    if body.is_none() && comment_private {
+        return Err(crate::error::BzrError::InputValidation(
+            "--comment-private requires --comment or --comment-file".into(),
+        ));
+    }
+    let Some(text) = body else {
+        return Ok(None);
+    };
+    if text.trim().is_empty() {
+        return Err(crate::error::BzrError::InputValidation(
+            "empty comment, aborting".into(),
+        ));
+    }
+    Ok(Some(crate::types::CommentUpdate {
+        body: text,
+        is_private: comment_private,
+    }))
 }
 
 fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)> {
@@ -50,6 +103,9 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
         groups_remove,
         see_also_add,
         see_also_remove,
+        comment,
+        comment_file,
+        comment_private,
     } = action
     else {
         unreachable!()
@@ -89,6 +145,11 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
             add: clean_string_list(FLAG_SEE_ALSO_ADD, see_also_add)?,
             remove: clean_string_list(FLAG_SEE_ALSO_REMOVE, see_also_remove)?,
         },
+        comment: resolve_comment(
+            comment.as_deref(),
+            comment_file.as_deref(),
+            *comment_private,
+        )?,
     };
     Ok((ids.clone(), params))
 }
@@ -99,16 +160,21 @@ async fn update_single(
     params: &UpdateBugParams,
     format: OutputFormat,
 ) -> Result<()> {
+    use std::io::Write;
     client.update_bug(id, params).await?;
-    output::print_result(
-        &ActionResult::updated(id, ResourceKind::Bug),
-        &format!("Updated bug #{id}"),
-        format,
-    );
+    match format {
+        OutputFormat::Json => {
+            output::print_result(&ActionResult::updated(id, ResourceKind::Bug), "", format);
+        }
+        OutputFormat::Table => {
+            let suffix = comment_suffix(params.comment.is_some());
+            let _ = writeln!(std::io::stdout(), "Updated bug #{id}{suffix}");
+        }
+    }
     Ok(())
 }
 
-fn print_batch_result(batch: &BatchResult, format: OutputFormat) {
+fn print_batch_result(batch: &BatchResult, format: OutputFormat, with_comment: bool) {
     use std::io::Write;
     match format {
         OutputFormat::Json => {
@@ -118,7 +184,12 @@ fn print_batch_result(batch: &BatchResult, format: OutputFormat) {
             if !batch.succeeded.is_empty() {
                 let ids_str: Vec<String> =
                     batch.succeeded.iter().map(|id| format!("#{id}")).collect();
-                let _ = writeln!(std::io::stdout(), "Updated bugs: {}", ids_str.join(", "));
+                let suffix = comment_suffix(with_comment);
+                let _ = writeln!(
+                    std::io::stdout(),
+                    "Updated bugs: {}{suffix}",
+                    ids_str.join(", ")
+                );
             }
             for f in &batch.failed {
                 let _ = writeln!(
@@ -150,7 +221,7 @@ async fn update_batch(
         }
     }
     let batch = BatchResult::new(succeeded, failed);
-    print_batch_result(&batch, format);
+    print_batch_result(&batch, format, params.comment.is_some());
     if !batch.failed.is_empty() {
         return Err(crate::error::BzrError::BatchPartialFailure {
             succeeded: batch.succeeded.len(),

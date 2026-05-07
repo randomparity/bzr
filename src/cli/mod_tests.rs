@@ -353,6 +353,80 @@ fn parse_bug_update_with_flags() {
 }
 
 #[test]
+fn parse_bug_update_with_comment() {
+    let cli = Cli::try_parse_from(["bzr", "bug", "update", "42", "--comment", "see #99"]).unwrap();
+    match cli.command {
+        Commands::Bug {
+            action:
+                BugAction::Update {
+                    ids,
+                    comment,
+                    comment_file,
+                    comment_private,
+                    ..
+                },
+        } => {
+            assert_eq!(ids, vec![42]);
+            assert_eq!(comment.as_deref(), Some("see #99"));
+            assert!(comment_file.is_none());
+            assert!(!comment_private);
+        }
+        _ => panic!("expected Bug Update"),
+    }
+}
+
+#[test]
+fn parse_bug_update_with_comment_file_and_private() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "update",
+        "42",
+        "--comment-file",
+        "/tmp/body.txt",
+        "--comment-private",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Bug {
+            action:
+                BugAction::Update {
+                    comment,
+                    comment_file,
+                    comment_private,
+                    ..
+                },
+        } => {
+            assert!(comment.is_none());
+            assert_eq!(
+                comment_file.as_deref(),
+                Some(std::path::Path::new("/tmp/body.txt"))
+            );
+            assert!(comment_private);
+        }
+        _ => panic!("expected Bug Update"),
+    }
+}
+
+#[test]
+fn parse_bug_update_rejects_comment_and_comment_file_together() {
+    let result = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "update",
+        "42",
+        "--comment",
+        "x",
+        "--comment-file",
+        "/tmp/body.txt",
+    ]);
+    assert!(
+        result.is_err(),
+        "clap should reject mutually-exclusive flags"
+    );
+}
+
+#[test]
 fn parse_comment_list() {
     let cli = Cli::try_parse_from(["bzr", "comment", "list", "99"]).unwrap();
     match cli.command {
