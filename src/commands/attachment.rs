@@ -39,6 +39,7 @@ pub async fn execute(
             summary,
             content_type,
             private,
+            is_patch,
             comment,
             flag,
         } => {
@@ -46,21 +47,23 @@ pub async fn execute(
             let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or(file);
             let data = std::fs::read(path)?;
             let summary = summary.as_deref().unwrap_or(file_name);
-            let ct = content_type
-                .as_deref()
-                .unwrap_or_else(|| guess_content_type(file_name));
+            let ct = match (content_type.as_deref(), *is_patch) {
+                (Some(explicit), _) => explicit.to_string(),
+                (None, true) => "text/plain".to_string(),
+                (None, false) => guess_content_type(file_name).to_string(),
+            };
             let flags = super::flags::parse_flags(flag)?;
             let size = data.len();
             let upload_params = UploadAttachmentParams {
                 bug_id: *bug_id,
                 file_name: file_name.to_string(),
                 summary: summary.to_string(),
-                content_type: ct.to_string(),
+                content_type: ct,
                 data,
                 flags,
                 is_private: *private,
                 comment: comment.clone(),
-                is_patch: false,
+                is_patch: *is_patch,
             };
             let att_id = client.upload_attachment(&upload_params).await?;
             output::print_result(

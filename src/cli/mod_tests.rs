@@ -1180,6 +1180,41 @@ fn parse_attachment_upload_without_comment_defaults_to_none() {
 }
 
 #[test]
+fn parse_attachment_upload_with_is_patch_flag() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "attachment",
+        "upload",
+        "42",
+        "fix.patch",
+        "--is-patch",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Attachment {
+            action: AttachmentAction::Upload {
+                bug_id, is_patch, ..
+            },
+        } => {
+            assert_eq!(bug_id, 42);
+            assert!(is_patch, "--is-patch should set the flag to true");
+        }
+        _ => panic!("expected Attachment Upload"),
+    }
+}
+
+#[test]
+fn parse_attachment_upload_without_is_patch_defaults_to_false() {
+    let cli = Cli::try_parse_from(["bzr", "attachment", "upload", "42", "f.txt"]).unwrap();
+    match cli.command {
+        Commands::Attachment {
+            action: AttachmentAction::Upload { is_patch, .. },
+        } => assert!(!is_patch, "--is-patch absent should default to false"),
+        _ => panic!("expected Attachment Upload"),
+    }
+}
+
+#[test]
 fn parse_template_delete() {
     let cli = Cli::try_parse_from(["bzr", "template", "delete", "security-bug"]).unwrap();
     match cli.command {

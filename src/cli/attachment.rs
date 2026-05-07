@@ -71,6 +71,7 @@ pub enum AttachmentAction {
     ///   bzr attachment upload 12345 fix.patch \
     ///     --flag 'review?(maintainer@example.com)'
     ///   bzr attachment upload 12345 fix.patch --comment "see #4567 for context"
+    ///   bzr attachment upload 12345 fix.patch --is-patch
     ///
     /// See bzr-attachment-update(1) to modify metadata after upload.
     #[command(verbatim_doc_comment)]
@@ -91,6 +92,14 @@ pub enum AttachmentAction {
         /// `insider` group (server-configured). Use carefully.
         #[arg(long)]
         private: bool,
+        /// Mark the new attachment as a patch (boolean, presence-only).
+        ///
+        /// Patches render as side-by-side diffs in the Bugzilla web UI
+        /// and default `--content-type` to `text/plain` when no explicit
+        /// content type is supplied. Use this for `.diff` / `.patch`
+        /// files instead of a follow-up `bzr attachment update --is-patch true`.
+        #[arg(long)]
+        is_patch: bool,
         /// Post a comment alongside the attachment in the same request.
         ///
         /// Folded into the underlying `Bug.add_attachment` API call so

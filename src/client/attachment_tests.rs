@@ -509,6 +509,36 @@ async fn upload_attachment_with_comment_sends_comment() {
 }
 
 #[tokio::test]
+async fn upload_attachment_with_is_patch_sends_is_patch_true() {
+    use wiremock::matchers::body_string_contains;
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/1/attachment"))
+        .and(body_string_contains("\"is_patch\":true"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [500]})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let id = client
+        .upload_attachment(&UploadAttachmentParams {
+            bug_id: 1,
+            file_name: "fix.patch".into(),
+            summary: "fix".into(),
+            content_type: "text/plain".into(),
+            data: b"diff --git".to_vec(),
+            flags: Vec::new(),
+            is_private: false,
+            comment: None,
+            is_patch: true,
+        })
+        .await
+        .unwrap();
+    assert_eq!(id, 500);
+}
+
+#[tokio::test]
 async fn upload_attachment_without_comment_omits_comment() {
     let mock = MockServer::start().await;
     Mock::given(method("POST"))

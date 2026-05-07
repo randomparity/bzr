@@ -540,6 +540,7 @@ bzr attachment upload 12345 data.csv --summary "Performance data" --content-type
 bzr attachment upload 12345 patch.diff --flag "review?(alice@example.com)"
 bzr attachment upload 12345 secret.bin --summary "internal trace" --private
 bzr attachment upload 12345 fix.patch --comment "see #6789 for context"
+bzr attachment upload 12345 fix.patch --is-patch
 ```
 
 | Option | Required | Description |
@@ -547,8 +548,9 @@ bzr attachment upload 12345 fix.patch --comment "see #6789 for context"
 | `<BUG_ID>` | Yes | Bug ID |
 | `<FILE>` | Yes | File to upload |
 | `--summary <S>` | No | Description of the attachment (default: filename) |
-| `--content-type <MIME>` | No | MIME type (auto-detected if omitted) |
+| `--content-type <MIME>` | No | MIME type (auto-detected if omitted; defaults to `text/plain` when `--is-patch` is set without an explicit type) |
 | `--private` | No | Mark the attachment as private (visible only to users with elevated permissions) |
+| `--is-patch` | No | Mark the attachment as a patch; defaults `--content-type` to `text/plain` |
 | `--comment <BODY>` | No | Post a comment alongside the attachment in the same API call |
 | `--flag <F>` | No | Set flags (repeatable; see [Flag Syntax](#flag-syntax)) |
 

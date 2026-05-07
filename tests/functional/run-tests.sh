@@ -996,6 +996,25 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
+test_begin "100g. attachment upload --is-patch marks attachment as a patch"
+if [[ -n "$BUG1" ]]; then
+    run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
+        --summary "patch test" --is-patch
+    if assert_success; then
+        run_bzr attachment list "$BUG1"
+        if assert_success; then
+            IS_PATCH=$(jq -r '[.[] | select(.summary == "patch test")][-1].is_patch' "$BZR_STDOUT" 2>/dev/null || echo "")
+            if [[ "$IS_PATCH" == "true" ]]; then
+                test_pass
+            else
+                test_fail "newly uploaded attachment should have is_patch=true (got: $IS_PATCH)"
+            fi
+        fi
+    else
+        test_fail "upload with --is-patch failed"
+    fi
+else test_skip "no BUG1"; fi
+
 echo ""
 
 # ══════════════════════════════════════════════════════════════════════

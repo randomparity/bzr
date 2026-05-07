@@ -38,6 +38,8 @@ pub struct Attachment {
     pub is_obsolete: bool,
     #[serde(default, deserialize_with = "bool_from_int_or_bool")]
     pub is_private: bool,
+    #[serde(default, deserialize_with = "bool_from_int_or_bool")]
+    pub is_patch: bool,
     #[serde(default)]
     pub data: Option<String>,
 }

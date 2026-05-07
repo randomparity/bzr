@@ -82,6 +82,7 @@ async fn attachment_upload_api_error_propagates() {
         summary: Some("Test".into()),
         content_type: None,
         private: false,
+        is_patch: false,
         comment: None,
         flag: vec![],
     };
@@ -132,6 +133,7 @@ async fn attachment_upload_returns_id() {
         summary: Some("Test upload".into()),
         content_type: Some("text/plain".into()),
         private: false,
+        is_patch: false,
         comment: None,
         flag: vec![],
     };
@@ -164,6 +166,7 @@ async fn attachment_upload_with_comment_includes_comment_in_request() {
         summary: Some("Test".into()),
         content_type: Some("text/plain".into()),
         private: false,
+        is_patch: false,
         comment: Some("see this".into()),
         flag: vec![],
     };
@@ -171,6 +174,76 @@ async fn attachment_upload_with_comment_includes_comment_in_request() {
     assert!(
         result.is_ok(),
         "upload with --comment should succeed: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn attachment_upload_with_is_patch_defaults_content_type_to_text_plain() {
+    use wiremock::matchers::body_string_contains;
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/42/attachment"))
+        .and(body_string_contains("\"is_patch\":true"))
+        .and(body_string_contains("\"content_type\":\"text/plain\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [501]})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let upload_file = tmp.path().join("fix.patch");
+    std::fs::write(&upload_file, "diff --git a b").unwrap();
+
+    let action = AttachmentAction::Upload {
+        bug_id: 42,
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: None,
+        content_type: None,
+        private: false,
+        is_patch: true,
+        comment: None,
+        flag: vec![],
+    };
+    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    assert!(
+        result.is_ok(),
+        "upload --is-patch should succeed: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn attachment_upload_is_patch_with_explicit_content_type_keeps_content_type() {
+    use wiremock::matchers::body_string_contains;
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/42/attachment"))
+        .and(body_string_contains("\"is_patch\":true"))
+        .and(body_string_contains(
+            "\"content_type\":\"application/octet-stream\"",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [502]})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let upload_file = tmp.path().join("fix.patch");
+    std::fs::write(&upload_file, "binary").unwrap();
+
+    let action = AttachmentAction::Upload {
+        bug_id: 42,
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: None,
+        content_type: Some("application/octet-stream".to_string()),
+        private: false,
+        is_patch: true,
+        comment: None,
+        flag: vec![],
+    };
+    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    assert!(
+        result.is_ok(),
+        "upload --is-patch with explicit ct should succeed: {result:?}"
     );
 }
 
