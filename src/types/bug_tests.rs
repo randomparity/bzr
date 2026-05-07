@@ -367,6 +367,14 @@ fn search_params_has_filters_for_each_individual_field() {
         ("last_change_time", |p| {
             p.last_change_time = Some("2026-04-01T00:00:00Z".into());
         }),
+        ("whiteboard", |p| p.whiteboard.push("X".into())),
+        ("target_milestone", |p| p.target_milestone.push("X".into())),
+        ("version", |p| p.version.push("X".into())),
+        ("op_sys", |p| p.op_sys.push("X".into())),
+        ("platform", |p| p.platform.push("X".into())),
+        ("resolution", |p| p.resolution.push("X".into())),
+        ("qa_contact", |p| p.qa_contact.push("X".into())),
+        ("url", |p| p.url.push("X".into())),
     ];
     for (name, setter) in cases {
         let mut p = SearchParams::default();
@@ -426,6 +434,14 @@ fn search_params_has_structured_filters_for_each_individual_field() {
         ("last_change_time", |p| {
             p.last_change_time = Some("2026-04-01T00:00:00Z".into());
         }),
+        ("whiteboard", |p| p.whiteboard.push("X".into())),
+        ("target_milestone", |p| p.target_milestone.push("X".into())),
+        ("version", |p| p.version.push("X".into())),
+        ("op_sys", |p| p.op_sys.push("X".into())),
+        ("platform", |p| p.platform.push("X".into())),
+        ("resolution", |p| p.resolution.push("X".into())),
+        ("qa_contact", |p| p.qa_contact.push("X".into())),
+        ("url", |p| p.url.push("X".into())),
     ];
     for (name, setter) in cases {
         let mut p = SearchParams::default();
@@ -463,6 +479,22 @@ fn saved_query_has_filters_for_each_individual_field() {
         ("last_change_time", |q: &mut SavedQuery| {
             q.last_change_time = Some("2026-04-01T00:00:00Z".into());
         }),
+        ("whiteboard", |q: &mut SavedQuery| {
+            q.whiteboard.push("X".into());
+        }),
+        ("target_milestone", |q: &mut SavedQuery| {
+            q.target_milestone.push("X".into());
+        }),
+        ("version", |q: &mut SavedQuery| q.version.push("X".into())),
+        ("op_sys", |q: &mut SavedQuery| q.op_sys.push("X".into())),
+        ("platform", |q: &mut SavedQuery| q.platform.push("X".into())),
+        ("resolution", |q: &mut SavedQuery| {
+            q.resolution.push("X".into());
+        }),
+        ("qa_contact", |q: &mut SavedQuery| {
+            q.qa_contact.push("X".into());
+        }),
+        ("url", |q: &mut SavedQuery| q.url.push("X".into())),
     ];
     for (name, setter) in cases {
         let mut q = SavedQuery::default();
@@ -604,5 +636,109 @@ fn apply_overrides_keeps_date_filters_when_none() {
         limit: Some(10),
         ..Default::default()
     });
+    assert_eq!(p.creation_time.as_deref(), Some("2026-04-01T00:00:00Z"));
+}
+
+#[test]
+fn saved_query_into_search_params_forwards_158_fields() {
+    let q = SavedQuery {
+        whiteboard: vec!["needs-review".into()],
+        target_milestone: vec!["5.0".into()],
+        version: vec!["9.4".into()],
+        op_sys: vec!["Linux".into()],
+        platform: vec!["x86_64".into()],
+        resolution: vec!["FIXED".into()],
+        qa_contact: vec!["qa@example.com".into()],
+        url: vec!["github.com/foo".into()],
+        ..SavedQuery::default()
+    };
+    let p = q.into_search_params();
+    assert_eq!(p.whiteboard, vec!["needs-review"]);
+    assert_eq!(p.target_milestone, vec!["5.0"]);
+    assert_eq!(p.version, vec!["9.4"]);
+    assert_eq!(p.op_sys, vec!["Linux"]);
+    assert_eq!(p.platform, vec!["x86_64"]);
+    assert_eq!(p.resolution, vec!["FIXED"]);
+    assert_eq!(p.qa_contact, vec!["qa@example.com"]);
+    assert_eq!(p.url, vec!["github.com/foo"]);
+}
+
+#[test]
+fn saved_query_toml_roundtrip_preserves_158_fields() {
+    let q = SavedQuery {
+        whiteboard: vec!["needs-review".into()],
+        target_milestone: vec!["5.0".into()],
+        version: vec!["9.4".into()],
+        op_sys: vec!["Linux".into()],
+        platform: vec!["x86_64".into()],
+        resolution: vec!["FIXED".into()],
+        qa_contact: vec!["qa@example.com".into()],
+        url: vec!["github.com/foo".into()],
+        ..SavedQuery::default()
+    };
+    let toml_str = toml::to_string(&q).unwrap();
+    let parsed: SavedQuery = toml::from_str(&toml_str).unwrap();
+    assert_eq!(parsed.whiteboard, vec!["needs-review"]);
+    assert_eq!(parsed.target_milestone, vec!["5.0"]);
+    assert_eq!(parsed.version, vec!["9.4"]);
+    assert_eq!(parsed.op_sys, vec!["Linux"]);
+    assert_eq!(parsed.platform, vec!["x86_64"]);
+    assert_eq!(parsed.resolution, vec!["FIXED"]);
+    assert_eq!(parsed.qa_contact, vec!["qa@example.com"]);
+    assert_eq!(parsed.url, vec!["github.com/foo"]);
+}
+
+#[test]
+fn saved_query_toml_legacy_without_158_fields_deserializes() {
+    // Configs written before #158 must still parse — every new
+    // field is `#[serde(default)]` so missing keys produce empty
+    // Vecs.
+    let toml_str = r#"
+product = ["Firefox"]
+"#;
+    let parsed: SavedQuery = toml::from_str(toml_str).unwrap();
+    assert!(parsed.whiteboard.is_empty());
+    assert!(parsed.url.is_empty());
+}
+
+#[test]
+fn apply_overrides_replaces_158_fields_when_some() {
+    let mut p = SearchParams {
+        whiteboard: vec!["original".into()],
+        resolution: vec!["FIXED".into()],
+        ..Default::default()
+    };
+    let new_wb: Vec<String> = vec!["overridden".into()];
+    let new_res: Vec<String> = vec!["WONTFIX".into()];
+    p.apply_overrides(Overrides {
+        whiteboard: Some(&new_wb),
+        resolution: Some(&new_res),
+        ..Default::default()
+    });
+    assert_eq!(p.whiteboard, vec!["overridden"]);
+    assert_eq!(p.resolution, vec!["WONTFIX"]);
+}
+
+#[test]
+fn apply_overrides_keeps_158_fields_when_none() {
+    let mut p = SearchParams {
+        whiteboard: vec!["original".into()],
+        ..Default::default()
+    };
+    p.apply_overrides(Overrides::default());
+    assert_eq!(p.whiteboard, vec!["original"]);
+}
+
+#[test]
+fn apply_overrides_default_is_noop() {
+    let mut p = SearchParams {
+        product: vec!["P".into()],
+        whiteboard: vec!["wip".into()],
+        creation_time: Some("2026-04-01T00:00:00Z".into()),
+        ..Default::default()
+    };
+    p.apply_overrides(Overrides::default());
+    assert_eq!(p.product, vec!["P"]);
+    assert_eq!(p.whiteboard, vec!["wip"]);
     assert_eq!(p.creation_time.as_deref(), Some("2026-04-01T00:00:00Z"));
 }
