@@ -24,12 +24,19 @@ pub enum BugAction {
     /// return a truncated list. Use `--fields` / `--exclude-fields` to
     /// trim the response payload.
     ///
+    /// `--created-since` / `--changed-since` filter by Bugzilla's
+    /// `creation_time` / `last_change_time` fields. Both accept ISO
+    /// 8601 (`YYYY-MM-DDTHH:MM:SSZ`) or a bare `YYYY-MM-DD` (treated
+    /// as 00:00:00 UTC). Malformed input exits 7 before any network
+    /// call.
+    ///
     /// Examples:
     ///
     ///   bzr bug list --product Firefox --status NEW --limit 25
     ///   bzr bug list --assignee me@example.com --status '!CLOSED'
     ///   bzr bug list --summary "kernel panic" --product Kernel
     ///   bzr bug list --id 100,101,102
+    ///   bzr bug list --product Firefox --changed-since 2026-04-01
     ///
     /// See bzr-bug-search(1) for free-text search, bzr-bug-my(1) for
     /// caller-relative views, and bzr-query(1) for saving a filter
@@ -75,6 +82,18 @@ pub enum BugAction {
         /// Exclude these fields (comma-separated)
         #[arg(long)]
         exclude_fields: Option<String>,
+        /// Filter to bugs created at or after this date.
+        ///
+        /// Accepts `YYYY-MM-DD` (interpreted as 00:00:00 UTC),
+        /// `YYYY-MM-DDTHH:MM:SS`, `YYYY-MM-DDTHH:MM:SSZ`, or
+        /// `YYYY-MM-DDTHH:MM:SS±HH:MM`. Malformed input exits 7.
+        #[arg(long, value_name = "DATE")]
+        created_since: Option<String>,
+        /// Filter to bugs last modified at or after this date.
+        ///
+        /// Same accepted forms as `--created-since`.
+        #[arg(long, value_name = "DATE")]
+        changed_since: Option<String>,
     },
     /// View one or more bugs by ID or alias.
     ///

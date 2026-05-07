@@ -45,6 +45,8 @@ async fn bug_list_integration() {
         limit: 50,
         fields: None,
         exclude_fields: None,
+        created_since: None,
+        changed_since: None,
     };
     let (result, output) = capture_stdout(bzr::commands::bug::execute(
         &action,
@@ -578,6 +580,8 @@ async fn command_with_unknown_server_returns_error() {
         limit: 50,
         fields: None,
         exclude_fields: None,
+        created_since: None,
+        changed_since: None,
     };
     let result = bzr::commands::bug::execute(
         &action,

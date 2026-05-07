@@ -3,6 +3,7 @@ use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output;
 use crate::types::{OutputFormat, SearchParams};
+use crate::validation::parse_iso8601_or_date;
 
 pub(super) async fn handle(
     client: &BugzillaClient,
@@ -23,10 +24,21 @@ pub(super) async fn handle(
         limit,
         fields,
         exclude_fields,
+        created_since,
+        changed_since,
     } = action
     else {
         unreachable!()
     };
+
+    let creation_time = created_since
+        .as_deref()
+        .map(|s| parse_iso8601_or_date(s, "--created-since"))
+        .transpose()?;
+    let last_change_time = changed_since
+        .as_deref()
+        .map(|s| parse_iso8601_or_date(s, "--changed-since"))
+        .transpose()?;
 
     let params = SearchParams {
         product: product.clone(),
@@ -42,6 +54,8 @@ pub(super) async fn handle(
         limit: Some(*limit),
         include_fields: fields.clone(),
         exclude_fields: exclude_fields.clone(),
+        creation_time,
+        last_change_time,
         ..Default::default()
     };
     let bugs = client.search_bugs(&params).await?;
