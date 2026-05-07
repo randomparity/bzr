@@ -295,12 +295,13 @@ fn build_update_params_rejects_whitespace_only_see_also_remove() {
 }
 
 fn make_update_action_with_comment(
+    ids: Vec<u64>,
     comment: Option<&str>,
     comment_file: Option<&std::path::Path>,
     comment_private: bool,
 ) -> BugAction {
     BugAction::Update {
-        ids: vec![1],
+        ids,
         status: None,
         resolution: None,
         assignee: None,
@@ -329,7 +330,7 @@ fn make_update_action_with_comment(
 
 #[test]
 fn build_update_params_carries_public_comment() {
-    let action = make_update_action_with_comment(Some("hello"), None, false);
+    let action = make_update_action_with_comment(vec![1], Some("hello"), None, false);
     let (_ids, params) = super::build_update_params(&action).unwrap();
     let comment = params.comment.expect("comment populated");
     assert_eq!(comment.body, "hello");
@@ -338,7 +339,7 @@ fn build_update_params_carries_public_comment() {
 
 #[test]
 fn build_update_params_carries_private_comment() {
-    let action = make_update_action_with_comment(Some("secret"), None, true);
+    let action = make_update_action_with_comment(vec![1], Some("secret"), None, true);
     let (_ids, params) = super::build_update_params(&action).unwrap();
     let comment = params.comment.expect("comment populated");
     assert_eq!(comment.body, "secret");
@@ -347,14 +348,14 @@ fn build_update_params_carries_private_comment() {
 
 #[test]
 fn build_update_params_omits_comment_when_unspecified() {
-    let action = make_update_action_with_comment(None, None, false);
+    let action = make_update_action_with_comment(vec![1], None, None, false);
     let (_ids, params) = super::build_update_params(&action).unwrap();
     assert!(params.comment.is_none());
 }
 
 #[test]
 fn build_update_params_rejects_private_without_body() {
-    let action = make_update_action_with_comment(None, None, true);
+    let action = make_update_action_with_comment(vec![1], None, None, true);
     let err = super::build_update_params(&action).unwrap_err();
     let msg = err.to_string();
     assert!(
@@ -366,7 +367,7 @@ fn build_update_params_rejects_private_without_body() {
 
 #[test]
 fn build_update_params_rejects_whitespace_only_comment() {
-    let action = make_update_action_with_comment(Some("   \n\t"), None, false);
+    let action = make_update_action_with_comment(vec![1], Some("   \n\t"), None, false);
     let err = super::build_update_params(&action).unwrap_err();
     assert!(matches!(
         err,
@@ -379,7 +380,7 @@ fn build_update_params_reads_comment_file() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("body.txt");
     std::fs::write(&path, "from a file").unwrap();
-    let action = make_update_action_with_comment(None, Some(&path), false);
+    let action = make_update_action_with_comment(vec![1], None, Some(&path), false);
     let (_ids, params) = super::build_update_params(&action).unwrap();
     let comment = params.comment.expect("comment populated");
     assert_eq!(comment.body, "from a file");
@@ -391,7 +392,7 @@ fn build_update_params_comment_file_with_private() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("body.txt");
     std::fs::write(&path, "private body").unwrap();
-    let action = make_update_action_with_comment(None, Some(&path), true);
+    let action = make_update_action_with_comment(vec![1], None, Some(&path), true);
     let (_ids, params) = super::build_update_params(&action).unwrap();
     let comment = params.comment.expect("comment populated");
     assert!(comment.is_private);
@@ -400,7 +401,7 @@ fn build_update_params_comment_file_with_private() {
 #[test]
 fn build_update_params_rejects_missing_comment_file() {
     let path = std::path::Path::new("/nonexistent/bzr-issue-161-test.txt");
-    let action = make_update_action_with_comment(None, Some(path), false);
+    let action = make_update_action_with_comment(vec![1], None, Some(path), false);
     let err = super::build_update_params(&action).unwrap_err();
     let msg = err.to_string();
     assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
@@ -415,7 +416,7 @@ fn build_update_params_rejects_non_utf8_comment_file() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("body.bin");
     std::fs::write(&path, [0xff_u8, 0xfe, 0xfd]).unwrap();
-    let action = make_update_action_with_comment(None, Some(&path), false);
+    let action = make_update_action_with_comment(vec![1], None, Some(&path), false);
     let err = super::build_update_params(&action).unwrap_err();
     assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
 }
@@ -425,7 +426,7 @@ fn build_update_params_rejects_whitespace_only_comment_file() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("body.txt");
     std::fs::write(&path, "   \n\t  \n").unwrap();
-    let action = make_update_action_with_comment(None, Some(&path), false);
+    let action = make_update_action_with_comment(vec![1], None, Some(&path), false);
     let err = super::build_update_params(&action).unwrap_err();
     assert!(matches!(
         err,
@@ -438,16 +439,7 @@ async fn bug_update_table_output_with_comment_single() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     mock_put_bug_ok(&mock, 42).await;
 
-    let mut action = make_update_action(vec![42]);
-    if let BugAction::Update {
-        ref mut comment, ..
-    } = action
-    {
-        *comment = Some("hi".into());
-    } else {
-        unreachable!();
-    }
-
+    let action = make_update_action_with_comment(vec![42], Some("hi"), None, false);
     let (result, output) = capture_stdout(crate::commands::bug::execute(
         &action,
         None,
@@ -489,16 +481,7 @@ async fn bug_update_table_output_with_comment_batch_all_succeed() {
     mock_put_bug_ok(&mock, 1).await;
     mock_put_bug_ok(&mock, 2).await;
 
-    let mut action = make_update_action(vec![1, 2]);
-    if let BugAction::Update {
-        ref mut comment, ..
-    } = action
-    {
-        *comment = Some("batch comment".into());
-    } else {
-        unreachable!();
-    }
-
+    let action = make_update_action_with_comment(vec![1, 2], Some("batch comment"), None, false);
     let (result, output) = capture_stdout(crate::commands::bug::execute(
         &action,
         None,
@@ -516,16 +499,7 @@ async fn bug_update_json_output_unchanged_with_comment() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     mock_put_bug_ok(&mock, 42).await;
 
-    let mut action = make_update_action(vec![42]);
-    if let BugAction::Update {
-        ref mut comment, ..
-    } = action
-    {
-        *comment = Some("hi".into());
-    } else {
-        unreachable!();
-    }
-
+    let action = make_update_action_with_comment(vec![42], Some("hi"), None, false);
     let (result, output) = capture_stdout(crate::commands::bug::execute(
         &action,
         None,
@@ -535,7 +509,6 @@ async fn bug_update_json_output_unchanged_with_comment() {
     .await;
     assert!(result.is_ok());
     let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
-    // JSON schema must NOT change (spec section 6).
     assert_eq!(parsed["action"], "updated");
     assert_eq!(parsed["id"], 42);
     assert!(

@@ -13,6 +13,16 @@ const FLAG_GROUPS_REMOVE: &str = "--groups-remove";
 const FLAG_SEE_ALSO_ADD: &str = "--see-also-add";
 const FLAG_SEE_ALSO_REMOVE: &str = "--see-also-remove";
 
+const COMMENT_SUFFIX: &str = " (with comment)";
+
+fn comment_suffix(present: bool) -> &'static str {
+    if present {
+        COMMENT_SUFFIX
+    } else {
+        ""
+    }
+}
+
 fn clean_string_list(field: &str, values: &[String]) -> Result<Vec<String>> {
     let mut out = Vec::with_capacity(values.len());
     for raw in values {
@@ -42,7 +52,11 @@ fn resolve_comment(
     comment_private: bool,
 ) -> Result<Option<crate::types::CommentUpdate>> {
     let body = match (comment, comment_file) {
-        (Some(_), Some(_)) => unreachable!("clap conflicts_with prevents this"),
+        (Some(_), Some(_)) => {
+            return Err(crate::error::BzrError::InputValidation(
+                "--comment and --comment-file are mutually exclusive".into(),
+            ));
+        }
         (Some(s), None) => Some(s.to_string()),
         (None, Some(path)) => Some(read_comment_file(path)?),
         (None, None) => None,
@@ -148,16 +162,12 @@ async fn update_single(
 ) -> Result<()> {
     use std::io::Write;
     client.update_bug(id, params).await?;
-    let suffix = if params.comment.is_some() {
-        " (with comment)"
-    } else {
-        ""
-    };
     match format {
         OutputFormat::Json => {
             output::print_result(&ActionResult::updated(id, ResourceKind::Bug), "", format);
         }
         OutputFormat::Table => {
+            let suffix = comment_suffix(params.comment.is_some());
             let _ = writeln!(std::io::stdout(), "Updated bug #{id}{suffix}");
         }
     }
@@ -174,7 +184,7 @@ fn print_batch_result(batch: &BatchResult, format: OutputFormat, with_comment: b
             if !batch.succeeded.is_empty() {
                 let ids_str: Vec<String> =
                     batch.succeeded.iter().map(|id| format!("#{id}")).collect();
-                let suffix = if with_comment { " (with comment)" } else { "" };
+                let suffix = comment_suffix(with_comment);
                 let _ = writeln!(
                     std::io::stdout(),
                     "Updated bugs: {}{suffix}",
