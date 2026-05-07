@@ -19,6 +19,14 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
         blocks_remove,
         depends_on_add,
         depends_on_remove,
+        keywords_add: _keywords_add,
+        keywords_remove: _keywords_remove,
+        cc_add: _cc_add,
+        cc_remove: _cc_remove,
+        groups_add: _groups_add,
+        groups_remove: _groups_remove,
+        see_also_add: _see_also_add,
+        see_also_remove: _see_also_remove,
     } = action
     else {
         unreachable!()

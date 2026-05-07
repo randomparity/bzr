@@ -534,9 +534,11 @@ pub enum BugAction {
     /// `name-`, `name?(user@example.com)`, or `name?,!` to clear.
     /// Repeatable.
     ///
-    /// `--blocks-add` / `--blocks-remove` and `--depends-on-add` /
-    /// `--depends-on-remove` are list-typed (comma-separated) and
-    /// modify dependency relationships incrementally.
+    /// List-typed fields support `*-add` / `*-remove` pairs for
+    /// incremental edits: `--blocks`, `--depends-on`, `--keywords`,
+    /// `--cc`, `--groups`, and `--see-also`. The first five accept
+    /// comma-separated values. `--see-also-add` / `--see-also-remove`
+    /// do not split on commas — repeat the flag to pass multiple URLs.
     ///
     /// On batch updates, partial failures (some bugs updated,
     /// others rejected) exit with code 11 (BatchPartialFailure) and
@@ -548,6 +550,9 @@ pub enum BugAction {
     ///   bzr bug update 100 200 300 --priority high --flag review+
     ///   bzr bug update 100 --blocks-add 200,201 \
     ///     --depends-on-remove 99
+    ///   bzr bug update 100 --keywords-add fix-needed,regression \
+    ///     --cc-add alice@example.com \
+    ///     --see-also-add https://example.com/issue/42
     ///
     /// See bzr-bug-create(1) for new bugs, bzr-bug-clone(1) for
     /// cloning, and bzr-comment-add(1) for adding a comment as part
@@ -618,5 +623,42 @@ pub enum BugAction {
         /// Remove bug IDs from the depends-on list (comma-separated).
         #[arg(long, value_delimiter = ',')]
         depends_on_remove: Vec<u64>,
+        /// Add keywords (comma-separated).
+        ///
+        /// Combine with `--keywords-remove` for incremental edits.
+        #[arg(long, value_delimiter = ',')]
+        keywords_add: Vec<String>,
+        /// Remove keywords (comma-separated).
+        #[arg(long, value_delimiter = ',')]
+        keywords_remove: Vec<String>,
+        /// Add CC entries (comma-separated).
+        ///
+        /// Accepts usernames or email addresses; format is
+        /// server-defined.
+        #[arg(long, value_delimiter = ',')]
+        cc_add: Vec<String>,
+        /// Remove CC entries (comma-separated).
+        #[arg(long, value_delimiter = ',')]
+        cc_remove: Vec<String>,
+        /// Add groups (comma-separated).
+        ///
+        /// Group operations require permission; failures surface
+        /// from the server.
+        #[arg(long, value_delimiter = ',')]
+        groups_add: Vec<String>,
+        /// Remove groups (comma-separated).
+        #[arg(long, value_delimiter = ',')]
+        groups_remove: Vec<String>,
+        /// Add a see-also URL.
+        ///
+        /// Repeat the flag to add multiple URLs (URLs may contain
+        /// commas, so no comma-list parsing is performed).
+        #[arg(long)]
+        see_also_add: Vec<String>,
+        /// Remove a see-also URL.
+        ///
+        /// Repeat the flag to remove multiple URLs.
+        #[arg(long)]
+        see_also_remove: Vec<String>,
     },
 }

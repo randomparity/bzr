@@ -737,6 +737,14 @@ async fn bug_update_integration() {
         blocks_remove: vec![],
         depends_on_add: vec![],
         depends_on_remove: vec![],
+        keywords_add: vec![],
+        keywords_remove: vec![],
+        cc_add: vec![],
+        cc_remove: vec![],
+        groups_add: vec![],
+        groups_remove: vec![],
+        see_also_add: vec![],
+        see_also_remove: vec![],
     };
     let (result, output) = capture_stdout(bzr::commands::bug::execute(
         &action,
