@@ -575,19 +575,59 @@ bzr --json attachment list 12345
 
 ### `bzr attachment download`
 
-Download an attachment by its ID. Saves to the original filename by default.
+Download one or more attachments to disk.
 
-```bash
-bzr attachment download 67890
-bzr attachment download 67890 -o /tmp/patch.diff
+**Synopsis:**
+
+```
+bzr attachment download <ID>...
+bzr attachment download <ID> --out <PATH>
+bzr attachment download [<ID>...] --bug <BUG_ID>... [--out-dir <DIR>]
 ```
 
-| Option | Required | Description |
-|--------|----------|-------------|
-| `<ATTACHMENT_ID>` | Yes | Attachment ID |
-| `-o, --out <FILE>` | No | Output file path (default: original filename) |
+**Arguments and flags:**
 
-Agent note: omit `-o` only when the current working directory and original filename are acceptable. For automation, prefer an explicit path such as `-o /tmp/patch.diff`.
+| flag | description |
+|---|---|
+| `<ID>` | Attachment ID(s). Repeatable as positional arguments. |
+| `--bug <BUG_ID>` | Download every attachment for the given bug. Repeatable. |
+| `-o`, `--out <PATH>` | Output file path. Single-attachment shape only; conflicts with `--out-dir` and `--bug`. |
+| `--out-dir <DIR>` | Output directory for batch downloads. Default: `./attachments`. Files land at `<out-dir>/<bug-id>/<att-id>.<file_name>`. |
+
+**Examples:**
+
+```bash
+# Single attachment, original filename in cwd
+bzr attachment download 9876
+
+# Single attachment, custom path
+bzr attachment download 9876 --out patch.diff
+
+# Multiple attachment IDs into a directory
+bzr attachment download 9876 9877 9878 --out-dir /tmp/patches
+
+# Every attachment of one or more bugs
+bzr attachment download --bug 12345 --bug 67890 --out-dir /tmp/all
+
+# Mixed: per-bug + explicit attachment ID
+bzr attachment download --bug 12345 9876 --out-dir /tmp/mixed
+```
+
+**Output:**
+
+The single-attachment shape emits a one-line `Downloaded attachment #N to PATH (BYTES bytes)` summary or a `DownloadResult` JSON object.
+
+The bulk shapes emit an `AttachmentBatchResult` (table or JSON): per-bug success rows with each saved file, per-attachment rows for positional IDs, and a `Summary: X succeeded, Y failed, Z total bytes` trailer. Bug-level and per-attachment failures are written to stderr in table mode.
+
+**Exit codes:**
+
+- `0` — every target succeeded
+- `6` — `--out-dir` could not be created (pre-flight)
+- `7` — input validation (no IDs and no `--bug`; `--out` with `--bug` or with multiple IDs; `--out` paired with `--out-dir`)
+- `11` — at least one target failed (`BatchPartialFailure`)
+- other — see the global exit-code table
+
+**See also:** `bzr attachment list` (discover IDs).
 
 ### `bzr attachment upload`
 
