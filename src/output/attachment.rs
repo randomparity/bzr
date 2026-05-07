@@ -173,7 +173,7 @@ pub fn print_attachment_batch(result: &AttachmentBatchResult, format: OutputForm
                         bug.files.len(),
                     );
                     for file in &bug.files {
-                        let _ = writeln!(io::stdout(), "  → {} ({} bytes)", file.path, file.bytes,);
+                        let _ = writeln!(io::stdout(), "  → {} ({} bytes)", file.path, file.bytes);
                     }
                 }
                 TargetStatus::Error => {
