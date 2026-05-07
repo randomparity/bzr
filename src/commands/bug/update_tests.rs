@@ -33,12 +33,19 @@ fn make_update_action(ids: Vec<u64>) -> BugAction {
     }
 }
 
-fn make_update_action_with_lists(
-    keywords_add: Vec<&str>,
-    cc_add: Vec<&str>,
-    groups_remove: Vec<&str>,
-    see_also_add: Vec<&str>,
-) -> BugAction {
+#[derive(Default)]
+struct UpdateLists<'a> {
+    keywords_add: Vec<&'a str>,
+    keywords_remove: Vec<&'a str>,
+    cc_add: Vec<&'a str>,
+    cc_remove: Vec<&'a str>,
+    groups_add: Vec<&'a str>,
+    groups_remove: Vec<&'a str>,
+    see_also_add: Vec<&'a str>,
+    see_also_remove: Vec<&'a str>,
+}
+
+fn make_update_action_with_lists(lists: UpdateLists<'_>) -> BugAction {
     let to_strings = |v: Vec<&str>| v.into_iter().map(String::from).collect();
     BugAction::Update {
         ids: vec![1],
@@ -54,14 +61,14 @@ fn make_update_action_with_lists(
         blocks_remove: vec![],
         depends_on_add: vec![],
         depends_on_remove: vec![],
-        keywords_add: to_strings(keywords_add),
-        keywords_remove: vec![],
-        cc_add: to_strings(cc_add),
-        cc_remove: vec![],
-        groups_add: vec![],
-        groups_remove: to_strings(groups_remove),
-        see_also_add: to_strings(see_also_add),
-        see_also_remove: vec![],
+        keywords_add: to_strings(lists.keywords_add),
+        keywords_remove: to_strings(lists.keywords_remove),
+        cc_add: to_strings(lists.cc_add),
+        cc_remove: to_strings(lists.cc_remove),
+        groups_add: to_strings(lists.groups_add),
+        groups_remove: to_strings(lists.groups_remove),
+        see_also_add: to_strings(lists.see_also_add),
+        see_also_remove: to_strings(lists.see_also_remove),
     }
 }
 
@@ -154,12 +161,13 @@ async fn bug_update_batch_table_format_all_succeed() {
 
 #[test]
 fn build_update_params_populates_string_lists() {
-    let action = make_update_action_with_lists(
-        vec!["fix-needed"],
-        vec!["alice@example.com"],
-        vec!["secret"],
-        vec!["https://example.com/issue/1"],
-    );
+    let action = make_update_action_with_lists(UpdateLists {
+        keywords_add: vec!["fix-needed"],
+        cc_add: vec!["alice@example.com"],
+        groups_remove: vec!["secret"],
+        see_also_add: vec!["https://example.com/issue/1"],
+        ..UpdateLists::default()
+    });
     let (ids, params) = super::build_update_params(&action).unwrap();
     assert_eq!(ids, vec![1]);
     assert_eq!(params.keywords.add, vec!["fix-needed"]);
@@ -170,27 +178,112 @@ fn build_update_params_populates_string_lists() {
 
 #[test]
 fn build_update_params_trims_string_list_values() {
-    let action = make_update_action_with_lists(
-        vec!["  fix-needed  "],
-        vec![],
-        vec![],
-        vec!["  https://example.com/issue/1  "],
-    );
+    let action = make_update_action_with_lists(UpdateLists {
+        keywords_add: vec!["  fix-needed  "],
+        see_also_add: vec!["  https://example.com/issue/1  "],
+        ..UpdateLists::default()
+    });
     let (_ids, params) = super::build_update_params(&action).unwrap();
     assert_eq!(params.keywords.add, vec!["fix-needed"]);
     assert_eq!(params.see_also.add, vec!["https://example.com/issue/1"]);
 }
 
 #[test]
+fn build_update_params_populates_keywords_remove() {
+    let action = make_update_action_with_lists(UpdateLists {
+        keywords_remove: vec!["stale"],
+        ..UpdateLists::default()
+    });
+    let (_ids, params) = super::build_update_params(&action).unwrap();
+    assert_eq!(params.keywords.remove, vec!["stale"]);
+    assert!(params.keywords.add.is_empty());
+}
+
+#[test]
+fn build_update_params_populates_cc_remove() {
+    let action = make_update_action_with_lists(UpdateLists {
+        cc_remove: vec!["bob@example.com"],
+        ..UpdateLists::default()
+    });
+    let (_ids, params) = super::build_update_params(&action).unwrap();
+    assert_eq!(params.cc.remove, vec!["bob@example.com"]);
+    assert!(params.cc.add.is_empty());
+}
+
+#[test]
+fn build_update_params_populates_groups_add() {
+    let action = make_update_action_with_lists(UpdateLists {
+        groups_add: vec!["secret"],
+        ..UpdateLists::default()
+    });
+    let (_ids, params) = super::build_update_params(&action).unwrap();
+    assert_eq!(params.groups.add, vec!["secret"]);
+    assert!(params.groups.remove.is_empty());
+}
+
+#[test]
+fn build_update_params_populates_see_also_remove() {
+    let action = make_update_action_with_lists(UpdateLists {
+        see_also_remove: vec!["https://example.com/issue/2"],
+        ..UpdateLists::default()
+    });
+    let (_ids, params) = super::build_update_params(&action).unwrap();
+    assert_eq!(params.see_also.remove, vec!["https://example.com/issue/2"]);
+    assert!(params.see_also.add.is_empty());
+}
+
+#[test]
 fn build_update_params_rejects_empty_keyword() {
-    let action = make_update_action_with_lists(vec!["", "fix-needed"], vec![], vec![], vec![]);
+    let action = make_update_action_with_lists(UpdateLists {
+        keywords_add: vec!["", "fix-needed"],
+        ..UpdateLists::default()
+    });
     let err = super::build_update_params(&action).unwrap_err();
-    assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
+    assert!(
+        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::FLAG_KEYWORDS_ADD)),
+        "expected InputValidation naming {}, got {err:?}",
+        super::FLAG_KEYWORDS_ADD
+    );
 }
 
 #[test]
 fn build_update_params_rejects_whitespace_only_cc() {
-    let action = make_update_action_with_lists(vec![], vec!["   "], vec![], vec![]);
+    let action = make_update_action_with_lists(UpdateLists {
+        cc_add: vec!["   "],
+        ..UpdateLists::default()
+    });
     let err = super::build_update_params(&action).unwrap_err();
-    assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
+    assert!(
+        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::FLAG_CC_ADD)),
+        "expected InputValidation naming {}, got {err:?}",
+        super::FLAG_CC_ADD
+    );
+}
+
+#[test]
+fn build_update_params_rejects_empty_groups_add() {
+    let action = make_update_action_with_lists(UpdateLists {
+        groups_add: vec![""],
+        ..UpdateLists::default()
+    });
+    let err = super::build_update_params(&action).unwrap_err();
+    assert!(
+        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::FLAG_GROUPS_ADD)),
+        "expected InputValidation naming {}, got {err:?}",
+        super::FLAG_GROUPS_ADD
+    );
+}
+
+#[test]
+fn build_update_params_rejects_whitespace_only_see_also_remove() {
+    let action = make_update_action_with_lists(UpdateLists {
+        see_also_remove: vec!["   "],
+        ..UpdateLists::default()
+    });
+    let err = super::build_update_params(&action).unwrap_err();
+    assert!(
+        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::FLAG_SEE_ALSO_REMOVE)),
+        "expected InputValidation naming {}, got {err:?}",
+        super::FLAG_SEE_ALSO_REMOVE
+    );
 }

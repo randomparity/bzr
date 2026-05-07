@@ -684,7 +684,13 @@ if [[ -n "$BUG1" ]]; then
     if assert_success; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "53e. bug update --cc-remove"
+test_begin "53e. bug view shows new cc"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug view "$BUG1" --json
+    if assert_success && assert_stdout_contains "testuser@test.bzr"; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "53f. bug update --cc-remove"
 if [[ -n "$BUG1" ]]; then
     run_bzr bug update "$BUG1" --cc-remove "testuser@test.bzr"
     if assert_success; then test_pass; fi

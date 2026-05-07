@@ -4,14 +4,23 @@ use crate::error::Result;
 use crate::output::{self, ActionResult, BatchFailure, BatchResult, ResourceKind};
 use crate::types::{IdListUpdate, OutputFormat, StringListUpdate, UpdateBugParams};
 
-fn clean_string_list(values: &[String]) -> Result<Vec<String>> {
+const FLAG_KEYWORDS_ADD: &str = "--keywords-add";
+const FLAG_KEYWORDS_REMOVE: &str = "--keywords-remove";
+const FLAG_CC_ADD: &str = "--cc-add";
+const FLAG_CC_REMOVE: &str = "--cc-remove";
+const FLAG_GROUPS_ADD: &str = "--groups-add";
+const FLAG_GROUPS_REMOVE: &str = "--groups-remove";
+const FLAG_SEE_ALSO_ADD: &str = "--see-also-add";
+const FLAG_SEE_ALSO_REMOVE: &str = "--see-also-remove";
+
+fn clean_string_list(field: &str, values: &[String]) -> Result<Vec<String>> {
     let mut out = Vec::with_capacity(values.len());
     for raw in values {
         let trimmed = raw.trim();
         if trimmed.is_empty() {
-            return Err(crate::error::BzrError::InputValidation(
-                "list value cannot be empty or whitespace-only".to_string(),
-            ));
+            return Err(crate::error::BzrError::InputValidation(format!(
+                "{field}: list value cannot be empty or whitespace-only"
+            )));
         }
         out.push(trimmed.to_string());
     }
@@ -65,20 +74,20 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
             remove: depends_on_remove.clone(),
         },
         keywords: StringListUpdate {
-            add: clean_string_list(keywords_add)?,
-            remove: clean_string_list(keywords_remove)?,
+            add: clean_string_list(FLAG_KEYWORDS_ADD, keywords_add)?,
+            remove: clean_string_list(FLAG_KEYWORDS_REMOVE, keywords_remove)?,
         },
         cc: StringListUpdate {
-            add: clean_string_list(cc_add)?,
-            remove: clean_string_list(cc_remove)?,
+            add: clean_string_list(FLAG_CC_ADD, cc_add)?,
+            remove: clean_string_list(FLAG_CC_REMOVE, cc_remove)?,
         },
         groups: StringListUpdate {
-            add: clean_string_list(groups_add)?,
-            remove: clean_string_list(groups_remove)?,
+            add: clean_string_list(FLAG_GROUPS_ADD, groups_add)?,
+            remove: clean_string_list(FLAG_GROUPS_REMOVE, groups_remove)?,
         },
         see_also: StringListUpdate {
-            add: clean_string_list(see_also_add)?,
-            remove: clean_string_list(see_also_remove)?,
+            add: clean_string_list(FLAG_SEE_ALSO_ADD, see_also_add)?,
+            remove: clean_string_list(FLAG_SEE_ALSO_REMOVE, see_also_remove)?,
         },
     };
     Ok((ids.clone(), params))
