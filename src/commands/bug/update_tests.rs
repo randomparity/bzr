@@ -240,8 +240,9 @@ fn build_update_params_rejects_empty_keyword() {
     });
     let err = super::build_update_params(&action).unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains("keywords-add")),
-        "expected InputValidation naming keywords-add, got {err:?}"
+        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::FLAG_KEYWORDS_ADD)),
+        "expected InputValidation naming {}, got {err:?}",
+        super::FLAG_KEYWORDS_ADD
     );
 }
 
@@ -253,8 +254,9 @@ fn build_update_params_rejects_whitespace_only_cc() {
     });
     let err = super::build_update_params(&action).unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains("cc-add")),
-        "expected InputValidation naming cc-add, got {err:?}"
+        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::FLAG_CC_ADD)),
+        "expected InputValidation naming {}, got {err:?}",
+        super::FLAG_CC_ADD
     );
 }
 
@@ -266,20 +268,22 @@ fn build_update_params_rejects_empty_groups_add() {
     });
     let err = super::build_update_params(&action).unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains("groups-add")),
-        "expected InputValidation naming groups-add, got {err:?}"
+        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::FLAG_GROUPS_ADD)),
+        "expected InputValidation naming {}, got {err:?}",
+        super::FLAG_GROUPS_ADD
     );
 }
 
 #[test]
-fn build_update_params_rejects_whitespace_see_also_remove() {
+fn build_update_params_rejects_whitespace_only_see_also_remove() {
     let action = make_update_action_with_lists(UpdateLists {
         see_also_remove: vec!["   "],
         ..UpdateLists::default()
     });
     let err = super::build_update_params(&action).unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains("see-also-remove")),
-        "expected InputValidation naming see-also-remove, got {err:?}"
+        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::FLAG_SEE_ALSO_REMOVE)),
+        "expected InputValidation naming {}, got {err:?}",
+        super::FLAG_SEE_ALSO_REMOVE
     );
 }
