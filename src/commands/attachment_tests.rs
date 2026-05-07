@@ -82,6 +82,7 @@ async fn attachment_upload_api_error_propagates() {
         summary: Some("Test".into()),
         content_type: None,
         private: false,
+        comment: None,
         flag: vec![],
     };
     let result = super::execute(&action, None, OutputFormat::Json, None).await;
@@ -131,6 +132,7 @@ async fn attachment_upload_returns_id() {
         summary: Some("Test upload".into()),
         content_type: Some("text/plain".into()),
         private: false,
+        comment: None,
         flag: vec![],
     };
     let (result, output) =
@@ -138,6 +140,38 @@ async fn attachment_upload_returns_id() {
     assert!(result.is_ok());
     let parsed = extract_json(&output);
     assert_eq!(parsed["id"], 200);
+}
+
+#[tokio::test]
+async fn attachment_upload_with_comment_includes_comment_in_request() {
+    use wiremock::matchers::body_string_contains;
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/42/attachment"))
+        .and(body_string_contains("\"comment\":\"see this\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [201]})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let upload_file = tmp.path().join("upload.txt");
+    std::fs::write(&upload_file, "test content").unwrap();
+
+    let action = AttachmentAction::Upload {
+        bug_id: 42,
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: Some("Test".into()),
+        content_type: Some("text/plain".into()),
+        private: false,
+        comment: Some("see this".into()),
+        flag: vec![],
+    };
+    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    assert!(
+        result.is_ok(),
+        "upload with --comment should succeed: {result:?}"
+    );
 }
 
 #[tokio::test]

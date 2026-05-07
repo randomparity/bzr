@@ -54,6 +54,10 @@ pub enum AttachmentAction {
     /// `--summary` sets the attachment's display label;
     /// it defaults to the file name if omitted.
     ///
+    /// `--comment <BODY>` posts a comment alongside the attachment
+    /// in a single API call. Use this when the attachment needs
+    /// explanatory context — typical for patches.
+    ///
     /// `--flag` accepts Bugzilla flag syntax (`name?`, `name+`,
     /// `name-`, `name?(user@example.com)`) and is repeatable.
     /// Requires credentials with attach-file permission on the
@@ -66,6 +70,7 @@ pub enum AttachmentAction {
     ///     --content-type text/plain
     ///   bzr attachment upload 12345 fix.patch \
     ///     --flag 'review?(maintainer@example.com)'
+    ///   bzr attachment upload 12345 fix.patch --comment "see #4567 for context"
     ///
     /// See bzr-attachment-update(1) to modify metadata after upload.
     #[command(verbatim_doc_comment)]
@@ -86,6 +91,16 @@ pub enum AttachmentAction {
         /// `insider` group (server-configured). Use carefully.
         #[arg(long)]
         private: bool,
+        /// Post a comment alongside the attachment in the same request.
+        ///
+        /// Folded into the underlying `Bug.add_attachment` API call so
+        /// the comment and attachment share a creation timestamp and
+        /// are visible to the same audience as the bug. The comment
+        /// inherits the bug's default privacy; there is no Bugzilla
+        /// API for marking an `add_attachment` comment private — use
+        /// `bzr comment add --private` separately if needed.
+        #[arg(long)]
+        comment: Option<String>,
         /// Set, request, or clear a flag using Bugzilla flag syntax.
         ///
         /// Repeatable. Accepted forms:

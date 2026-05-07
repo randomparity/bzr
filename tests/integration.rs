@@ -860,6 +860,7 @@ async fn attachment_upload_integration() {
         summary: Some("Test upload".to_string()),
         content_type: Some("text/plain".to_string()),
         private: false,
+        comment: None,
         flag: vec![],
     };
     let result = bzr::commands::attachment::execute(
@@ -872,6 +873,46 @@ async fn attachment_upload_integration() {
     assert!(
         result.is_ok(),
         "attachment upload should succeed: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn attachment_upload_with_comment_integration() {
+    use wiremock::matchers::body_string_contains;
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    let upload_file = tmp.path().join("upload.txt");
+    std::fs::write(&upload_file, "test content").unwrap();
+
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/42/attachment"))
+        .and(body_string_contains(
+            "\"comment\":\"see #6789 for context\"",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [102]})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = bzr::cli::AttachmentAction::Upload {
+        bug_id: 42,
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: Some("Test upload".to_string()),
+        content_type: Some("text/plain".to_string()),
+        private: false,
+        comment: Some("see #6789 for context".to_string()),
+        flag: vec![],
+    };
+    let result = bzr::commands::attachment::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "upload with --comment should succeed: {result:?}"
     );
 }
 

@@ -972,6 +972,30 @@ if [[ -n "$BUG1" ]]; then
     if assert_success; then test_pass; fi
 else test_skip "no BUG1"; fi
 
+test_begin "100f. attachment upload --comment posts comment in same call"
+if [[ -n "$BUG1" ]]; then
+    run_bzr comment list "$BUG1"
+    if assert_success; then
+        PRECOMMENT_COUNT=$(jq '. | length' "$BZR_STDOUT" 2>/dev/null || echo "")
+        run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
+            --summary "with comment" \
+            --comment "see #165 -- bzl-parity"
+        if assert_success; then
+            run_bzr comment list "$BUG1"
+            if assert_success; then
+                POSTCOMMENT_COUNT=$(jq '. | length' "$BZR_STDOUT" 2>/dev/null || echo "")
+                if [[ -n "$PRECOMMENT_COUNT" ]] \
+                    && [[ -n "$POSTCOMMENT_COUNT" ]] \
+                    && [[ "$POSTCOMMENT_COUNT" -eq $((PRECOMMENT_COUNT + 1)) ]]; then
+                    test_pass
+                else
+                    test_fail "comment count did not grow by 1 (pre=$PRECOMMENT_COUNT post=$POSTCOMMENT_COUNT)"
+                fi
+            fi
+        fi
+    fi
+else test_skip "no BUG1"; fi
+
 echo ""
 
 # ══════════════════════════════════════════════════════════════════════

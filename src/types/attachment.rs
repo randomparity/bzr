@@ -55,6 +55,9 @@ pub struct UploadAttachmentParams {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub flags: Vec<FlagUpdate>,
     pub is_private: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+    pub is_patch: bool,
 }
 
 // Serde serialize_with requires &T signature for the field type.

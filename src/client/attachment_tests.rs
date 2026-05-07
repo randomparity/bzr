@@ -405,6 +405,8 @@ async fn upload_attachment_private_sets_is_private_in_body() {
             data: b"shh".to_vec(),
             flags: Vec::new(),
             is_private: true,
+            comment: None,
+            is_patch: false,
         })
         .await
         .unwrap();
@@ -435,6 +437,8 @@ async fn upload_attachment_public_omits_is_private_or_sets_false() {
             data: b"hello".to_vec(),
             flags: Vec::new(),
             is_private: false,
+            comment: None,
+            is_patch: false,
         })
         .await
         .unwrap();
@@ -466,10 +470,77 @@ async fn upload_attachment_with_flags_sends_flags() {
             data: b"hello".to_vec(),
             flags,
             is_private: false,
+            comment: None,
+            is_patch: false,
         })
         .await
         .unwrap();
     assert_eq!(id, 200);
+}
+
+#[tokio::test]
+async fn upload_attachment_with_comment_sends_comment() {
+    use wiremock::matchers::body_string_contains;
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/1/attachment"))
+        .and(body_string_contains("\"comment\":\"see this\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [400]})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let id = client
+        .upload_attachment(&UploadAttachmentParams {
+            bug_id: 1,
+            file_name: "patch.diff".into(),
+            summary: "fix".into(),
+            content_type: "text/x-diff".into(),
+            data: b"diff --git".to_vec(),
+            flags: Vec::new(),
+            is_private: false,
+            comment: Some("see this".into()),
+            is_patch: false,
+        })
+        .await
+        .unwrap();
+    assert_eq!(id, 400);
+}
+
+#[tokio::test]
+async fn upload_attachment_without_comment_omits_comment() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/1/attachment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [401]})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let _ = client
+        .upload_attachment(&UploadAttachmentParams {
+            bug_id: 1,
+            file_name: "f.txt".into(),
+            summary: "f".into(),
+            content_type: "text/plain".into(),
+            data: b"x".to_vec(),
+            flags: Vec::new(),
+            is_private: false,
+            comment: None,
+            is_patch: false,
+        })
+        .await
+        .unwrap();
+
+    let received = mock.received_requests().await.unwrap();
+    assert_eq!(received.len(), 1, "expected exactly one POST request");
+    let body = std::str::from_utf8(&received[0].body).unwrap();
+    assert!(
+        !body.contains("\"comment\""),
+        "comment field should be omitted when None, but body contained it: {body}"
+    );
 }
 
 #[tokio::test]

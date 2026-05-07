@@ -39,6 +39,7 @@ pub async fn execute(
             summary,
             content_type,
             private,
+            comment,
             flag,
         } => {
             let path = Path::new(file);
@@ -58,6 +59,8 @@ pub async fn execute(
                 data,
                 flags,
                 is_private: *private,
+                comment: comment.clone(),
+                is_patch: false,
             };
             let att_id = client.upload_attachment(&upload_params).await?;
             output::print_result(

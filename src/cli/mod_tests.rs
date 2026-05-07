@@ -1139,6 +1139,47 @@ fn parse_attachment_upload_without_private_defaults_to_false() {
 }
 
 #[test]
+fn parse_attachment_upload_with_comment() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "attachment",
+        "upload",
+        "42",
+        "patch.diff",
+        "--comment",
+        "see this",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Attachment {
+            action:
+                AttachmentAction::Upload {
+                    bug_id,
+                    file,
+                    comment,
+                    ..
+                },
+        } => {
+            assert_eq!(bug_id, 42);
+            assert_eq!(file, "patch.diff");
+            assert_eq!(comment.as_deref(), Some("see this"));
+        }
+        _ => panic!("expected Attachment Upload"),
+    }
+}
+
+#[test]
+fn parse_attachment_upload_without_comment_defaults_to_none() {
+    let cli = Cli::try_parse_from(["bzr", "attachment", "upload", "42", "f.txt"]).unwrap();
+    match cli.command {
+        Commands::Attachment {
+            action: AttachmentAction::Upload { comment, .. },
+        } => assert!(comment.is_none(), "--comment absent should default to None"),
+        _ => panic!("expected Attachment Upload"),
+    }
+}
+
+#[test]
 fn parse_template_delete() {
     let cli = Cli::try_parse_from(["bzr", "template", "delete", "security-bug"]).unwrap();
     match cli.command {
