@@ -496,6 +496,28 @@ impl StringListUpdate {
     }
 }
 
+/// A comment to post atomically with a `Bug.update` call.
+///
+/// Serializes as `{"body": "...", "is_private": <bool>}`. Bugzilla's
+/// REST `Bug.update` accepts this as a sub-object on the request,
+/// which delivers the field changes and the comment in one
+/// round-trip.
+// Wired into `UpdateBugParams` and the CLI in subsequent tasks of issue #161.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "wired into UpdateBugParams in a follow-up task of #161"
+    )
+)]
+#[derive(Debug, Default, Serialize)]
+#[non_exhaustive]
+pub struct CommentUpdate {
+    pub body: String,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub is_private: bool,
+}
+
 #[derive(Debug, Default, Serialize)]
 #[non_exhaustive]
 pub struct UpdateBugParams {

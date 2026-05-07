@@ -858,3 +858,23 @@ fn update_bug_params_serializes_string_lists() {
         serde_json::json!({"add": ["https://example.com/issue/1"]})
     );
 }
+
+#[test]
+fn comment_update_serializes_public_body() {
+    let upd = CommentUpdate {
+        body: "hi".into(),
+        is_private: false,
+    };
+    let json = serde_json::to_value(&upd).unwrap();
+    assert_eq!(json, serde_json::json!({"body": "hi"}));
+}
+
+#[test]
+fn comment_update_serializes_private_body() {
+    let upd = CommentUpdate {
+        body: "hi".into(),
+        is_private: true,
+    };
+    let json = serde_json::to_value(&upd).unwrap();
+    assert_eq!(json, serde_json::json!({"body": "hi", "is_private": true}));
+}
