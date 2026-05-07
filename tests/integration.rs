@@ -984,7 +984,6 @@ async fn attachment_list_returns_is_patch_field_integration() {
         .await;
 
     let action = bzr::cli::AttachmentAction::List { bug_id: 42 };
-    // Capture stdout in JSON mode and assert is_patch field is present.
     let (result, output) = capture_stdout(bzr::commands::attachment::execute(
         &action,
         Some("test"),

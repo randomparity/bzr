@@ -1002,16 +1002,10 @@ if [[ -n "$BUG1" ]]; then
         --summary "patch test" --is-patch
     if assert_success; then
         run_bzr attachment list "$BUG1"
-        if assert_success; then
-            IS_PATCH=$(jq -r '[.[] | select(.summary == "patch test")][-1].is_patch' "$BZR_STDOUT" 2>/dev/null || echo "")
-            if [[ "$IS_PATCH" == "true" ]]; then
-                test_pass
-            else
-                test_fail "newly uploaded attachment should have is_patch=true (got: $IS_PATCH)"
-            fi
+        if assert_success \
+            && assert_json '[.[] | select(.summary == "patch test")][-1].is_patch' "true"; then
+            test_pass
         fi
-    else
-        test_fail "upload with --is-patch failed"
     fi
 else test_skip "no BUG1"; fi
 
@@ -1039,9 +1033,9 @@ else test_skip "no BUG1"; fi
 test_begin "100b. attachment list returns private attachment in Hybrid mode"
 if [[ -n "$BUG1" ]]; then
     run_bzr --api hybrid attachment list "$BUG1"
-    # Earlier Phase 10 tests uploaded several public attachments and this
-    # phase adds 1 private; the list must include ≥3 total AND the private
-    # one must be visible (is_private: true present).
+    # Several public attachments are uploaded earlier in the run and this
+    # section adds one private; the list must include ≥3 total AND the
+    # private one must be visible (is_private: true present).
     if assert_success \
         && assert_json_array_min_length '.' 3 \
         && [[ "$(jq '[.[] | select(.is_private == true)] | length' "$BZR_STDOUT")" -ge 1 ]]; then

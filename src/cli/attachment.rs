@@ -92,7 +92,7 @@ pub enum AttachmentAction {
         /// `insider` group (server-configured). Use carefully.
         #[arg(long)]
         private: bool,
-        /// Mark the new attachment as a patch (boolean, presence-only).
+        /// Mark the new attachment as a patch.
         ///
         /// Patches render as side-by-side diffs in the Bugzilla web UI
         /// and default `--content-type` to `text/plain` when no explicit
