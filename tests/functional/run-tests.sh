@@ -1039,8 +1039,9 @@ else test_skip "no BUG1"; fi
 test_begin "100b. attachment list returns private attachment in Hybrid mode"
 if [[ -n "$BUG1" ]]; then
     run_bzr --api hybrid attachment list "$BUG1"
-    # Earlier tests uploaded ≥2 public attachments + 1 private = ≥3 total,
-    # AND the private one must be visible (is_private: true present).
+    # Earlier Phase 10 tests uploaded several public attachments and this
+    # phase adds 1 private; the list must include ≥3 total AND the private
+    # one must be visible (is_private: true present).
     if assert_success \
         && assert_json_array_min_length '.' 3 \
         && [[ "$(jq '[.[] | select(.is_private == true)] | length' "$BZR_STDOUT")" -ge 1 ]]; then
