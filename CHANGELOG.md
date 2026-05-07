@@ -119,6 +119,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   dates (`YYYY-MM-DD`) are now canonicalized to `T00:00:00Z` on
   the wire; previously the bare form was passed through verbatim.
   Refs: #157.
+- `bzr bug update` list-mutation validation errors now identify
+  the offending flag. An empty or whitespace-only value supplied
+  to any of `--keywords-add/-remove`, `--cc-add/-remove`,
+  `--groups-add/-remove`, or `--see-also-add/-remove` produces
+  `<flag>: list value cannot be empty or whitespace-only` instead
+  of a bare message. Closes #174.
 
 ## [0.3.0] - 2026-05-05
 

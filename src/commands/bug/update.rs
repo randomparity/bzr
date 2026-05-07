@@ -4,14 +4,14 @@ use crate::error::Result;
 use crate::output::{self, ActionResult, BatchFailure, BatchResult, ResourceKind};
 use crate::types::{IdListUpdate, OutputFormat, StringListUpdate, UpdateBugParams};
 
-fn clean_string_list(values: &[String]) -> Result<Vec<String>> {
+fn clean_string_list(field: &str, values: &[String]) -> Result<Vec<String>> {
     let mut out = Vec::with_capacity(values.len());
     for raw in values {
         let trimmed = raw.trim();
         if trimmed.is_empty() {
-            return Err(crate::error::BzrError::InputValidation(
-                "list value cannot be empty or whitespace-only".to_string(),
-            ));
+            return Err(crate::error::BzrError::InputValidation(format!(
+                "{field}: list value cannot be empty or whitespace-only"
+            )));
         }
         out.push(trimmed.to_string());
     }
@@ -65,20 +65,20 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
             remove: depends_on_remove.clone(),
         },
         keywords: StringListUpdate {
-            add: clean_string_list(keywords_add)?,
-            remove: clean_string_list(keywords_remove)?,
+            add: clean_string_list("keywords-add", keywords_add)?,
+            remove: clean_string_list("keywords-remove", keywords_remove)?,
         },
         cc: StringListUpdate {
-            add: clean_string_list(cc_add)?,
-            remove: clean_string_list(cc_remove)?,
+            add: clean_string_list("cc-add", cc_add)?,
+            remove: clean_string_list("cc-remove", cc_remove)?,
         },
         groups: StringListUpdate {
-            add: clean_string_list(groups_add)?,
-            remove: clean_string_list(groups_remove)?,
+            add: clean_string_list("groups-add", groups_add)?,
+            remove: clean_string_list("groups-remove", groups_remove)?,
         },
         see_also: StringListUpdate {
-            add: clean_string_list(see_also_add)?,
-            remove: clean_string_list(see_also_remove)?,
+            add: clean_string_list("see-also-add", see_also_add)?,
+            remove: clean_string_list("see-also-remove", see_also_remove)?,
         },
     };
     Ok((ids.clone(), params))
