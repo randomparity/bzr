@@ -519,6 +519,14 @@ pub struct UpdateBugParams {
     pub blocks: IdListUpdate,
     #[serde(skip_serializing_if = "IdListUpdate::is_empty")]
     pub depends_on: IdListUpdate,
+    #[serde(skip_serializing_if = "StringListUpdate::is_empty")]
+    pub keywords: StringListUpdate,
+    #[serde(skip_serializing_if = "StringListUpdate::is_empty")]
+    pub cc: StringListUpdate,
+    #[serde(skip_serializing_if = "StringListUpdate::is_empty")]
+    pub groups: StringListUpdate,
+    #[serde(skip_serializing_if = "StringListUpdate::is_empty")]
+    pub see_also: StringListUpdate,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -811,3 +811,50 @@ fn string_list_update_skips_empty_remove() {
     let json = serde_json::to_value(&upd).unwrap();
     assert_eq!(json, serde_json::json!({"add": ["a"]}));
 }
+
+#[test]
+fn update_bug_params_omits_empty_string_lists() {
+    let params = UpdateBugParams::default();
+    let json = serde_json::to_value(&params).unwrap();
+    assert!(json.get("keywords").is_none());
+    assert!(json.get("cc").is_none());
+    assert!(json.get("groups").is_none());
+    assert!(json.get("see_also").is_none());
+}
+
+#[test]
+fn update_bug_params_serializes_string_lists() {
+    let params = UpdateBugParams {
+        keywords: StringListUpdate {
+            add: vec!["fix-needed".to_string()],
+            remove: vec!["wontfix".to_string()],
+        },
+        cc: StringListUpdate {
+            add: vec!["alice@example.com".to_string()],
+            remove: vec![],
+        },
+        groups: StringListUpdate {
+            add: vec![],
+            remove: vec!["secret".to_string()],
+        },
+        see_also: StringListUpdate {
+            add: vec!["https://example.com/issue/1".to_string()],
+            remove: vec![],
+        },
+        ..Default::default()
+    };
+    let json = serde_json::to_value(&params).unwrap();
+    assert_eq!(
+        json["keywords"],
+        serde_json::json!({"add": ["fix-needed"], "remove": ["wontfix"]})
+    );
+    assert_eq!(
+        json["cc"],
+        serde_json::json!({"add": ["alice@example.com"]})
+    );
+    assert_eq!(json["groups"], serde_json::json!({"remove": ["secret"]}));
+    assert_eq!(
+        json["see_also"],
+        serde_json::json!({"add": ["https://example.com/issue/1"]})
+    );
+}

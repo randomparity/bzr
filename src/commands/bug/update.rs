@@ -42,6 +42,7 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
             add: depends_on_add.clone(),
             remove: depends_on_remove.clone(),
         },
+        ..Default::default()
     };
     Ok((ids.clone(), params))
 }
