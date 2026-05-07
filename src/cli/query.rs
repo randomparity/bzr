@@ -105,28 +105,28 @@ pub enum QueryAction {
         /// Accepts the same forms as `bzr bug list --changed-since`.
         #[arg(long, value_name = "DATE")]
         changed_since: Option<String>,
-        /// Filter by Status Whiteboard substring (repeatable; prefix with ! to exclude)
+        /// Filter by Status Whiteboard substring (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
         whiteboard: Vec<String>,
-        /// Filter by Target Milestone (repeatable; prefix with ! to exclude)
+        /// Filter by Target Milestone (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
         target_milestone: Vec<String>,
-        /// Filter by Version (repeatable; prefix with ! to exclude)
+        /// Filter by Version (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
         version: Vec<String>,
-        /// Filter by Operating System (repeatable; prefix with ! to exclude)
+        /// Filter by Operating System (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
         op_sys: Vec<String>,
-        /// Filter by Platform (repeatable; prefix with ! to exclude)
+        /// Filter by Platform (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
         platform: Vec<String>,
-        /// Filter by Resolution (repeatable; prefix with ! to exclude)
+        /// Filter by Resolution (repeatable for OR; prefix with ! to exclude); empty matches open bugs
         #[arg(long)]
         resolution: Vec<String>,
-        /// Filter by QA Contact login (repeatable; prefix with ! to exclude)
+        /// Filter by QA Contact login (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
         qa_contact: Vec<String>,
-        /// Filter by URL field substring (repeatable; prefix with ! to exclude)
+        /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
         url: Vec<String>,
     },
