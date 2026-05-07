@@ -1888,3 +1888,68 @@ fn cli_missing_subcommand_errors() {
         clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
     );
 }
+
+#[tokio::test]
+async fn bug_list_issue_158_mixed_positive_and_negation_reaches_wire() {
+    // End-to-end: --product P (positive), --resolution '!FIXED'
+    // (notequals), --whiteboard '!wip' (notsubstring) all reach the
+    // wire correctly. Exercises the full pipeline:
+    // BugAction → SearchParams → REST encoder → wiremock.
+    //
+    // Note: FIELD_MAPPINGS iterates whiteboard (idx 7) before
+    // resolution (idx 12), so whiteboard gets f1 and resolution
+    // gets f2.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("product", "P"))
+        .and(query_param("f1", "status_whiteboard"))
+        .and(query_param("o1", "notsubstring"))
+        .and(query_param("v1", "wip"))
+        .and(query_param("f2", "resolution"))
+        .and(query_param("o2", "notequals"))
+        .and(query_param("v2", "FIXED"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = bzr::cli::BugAction::List {
+        product: vec!["P".into()],
+        component: vec![],
+        status: vec![],
+        assignee: vec![],
+        creator: vec![],
+        priority: vec![],
+        severity: vec![],
+        id: vec![],
+        alias: None,
+        summary: None,
+        limit: 50,
+        fields: None,
+        exclude_fields: None,
+        created_since: None,
+        changed_since: None,
+        whiteboard: vec!["!wip".into()],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec!["!FIXED".into()],
+        qa_contact: vec![],
+        url: vec![],
+    };
+    let (result, _output) = capture_stdout(bzr::commands::bug::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
+    .await;
+    assert!(result.is_ok(), "bug list should succeed: {result:?}");
+    // wiremock's `expect(1)` enforces that exactly one request matched
+    // every query-param matcher above; if any operator or value were
+    // wrong, the matcher would miss and the response would be a 404,
+    // causing `result` to be `Err`.
+}
