@@ -839,3 +839,218 @@ async fn search_bugs_sends_last_change_time_query_param() {
     let bugs = client.search_bugs(&params).await.unwrap();
     assert!(bugs.is_empty());
 }
+
+#[tokio::test]
+async fn search_bugs_sends_whiteboard_query_param() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("whiteboard", "needs-review"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        whiteboard: vec!["needs-review".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert!(bugs.is_empty());
+}
+
+#[tokio::test]
+async fn search_bugs_sends_target_milestone_query_param() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("target_milestone", "5.0"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        target_milestone: vec!["5.0".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert!(bugs.is_empty());
+}
+
+#[tokio::test]
+async fn search_bugs_sends_version_query_param() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("version", "9.4"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        version: vec!["9.4".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert!(bugs.is_empty());
+}
+
+#[tokio::test]
+async fn search_bugs_sends_op_sys_query_param() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("op_sys", "Linux"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        op_sys: vec!["Linux".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert!(bugs.is_empty());
+}
+
+#[tokio::test]
+async fn search_bugs_sends_platform_query_param() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("platform", "x86_64"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        platform: vec!["x86_64".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert!(bugs.is_empty());
+}
+
+#[tokio::test]
+async fn search_bugs_sends_resolution_query_param() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("resolution", "FIXED"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        resolution: vec!["FIXED".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert!(bugs.is_empty());
+}
+
+#[tokio::test]
+async fn search_bugs_sends_qa_contact_query_param() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("qa_contact", "qa@example.com"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        qa_contact: vec!["qa@example.com".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert!(bugs.is_empty());
+}
+
+#[tokio::test]
+async fn search_bugs_sends_url_query_param() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("url", "github.com/foo"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        url: vec!["github.com/foo".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert!(bugs.is_empty());
+}
+
+#[tokio::test]
+async fn search_bugs_negation_resolution_uses_notequals() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("f1", "resolution"))
+        .and(query_param("o1", "notequals"))
+        .and(query_param("v1", "FIXED"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        resolution: vec!["!FIXED".into()],
+        ..Default::default()
+    };
+    client.search_bugs(&params).await.unwrap();
+}
+
+#[tokio::test]
+async fn search_bugs_negation_whiteboard_uses_notsubstring() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("f1", "status_whiteboard"))
+        .and(query_param("o1", "notsubstring"))
+        .and(query_param("v1", "wip"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        whiteboard: vec!["!wip".into()],
+        ..Default::default()
+    };
+    client.search_bugs(&params).await.unwrap();
+}
+
+#[tokio::test]
+async fn search_bugs_negation_url_uses_notsubstring() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("f1", "bug_file_loc"))
+        .and(query_param("o1", "notsubstring"))
+        .and(query_param("v1", "github.com"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        url: vec!["!github.com".into()],
+        ..Default::default()
+    };
+    client.search_bugs(&params).await.unwrap();
+}
