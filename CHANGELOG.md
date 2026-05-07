@@ -83,6 +83,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   with each other; `--comment-private` requires one of the body
   flags. Empty / whitespace-only bodies are rejected (exit 7).
   Closes #161.
+- `bzr attachment upload --comment-private` marks the comment posted
+  alongside the attachment as private. Bugzilla's `Bug.add_attachment`
+  endpoint does not accept a privacy flag on the embedded comment, so
+  the upload is followed by a targeted `Bug.update` that flips the
+  newly created comment's `is_private` to `true`. Requires `--comment`
+  or `--comment-file`. Closes #170.
 
 ### Fixed
 
@@ -132,6 +138,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `--groups-add/-remove`, or `--see-also-add/-remove` produces
   `<flag>: list value cannot be empty or whitespace-only` instead
   of a bare message. Closes #174.
+- `Comment` JSON output now includes `attachment_id` (set when the
+  comment was created alongside an attachment, otherwise `null`).
+  Existing fields are unchanged; the field is also populated by the
+  XML-RPC fallback path. Refs: #170.
 
 ## [0.3.0] - 2026-05-05
 

@@ -1289,6 +1289,53 @@ fn parse_attachment_upload_without_is_patch_defaults_to_false() {
 }
 
 #[test]
+fn parse_attachment_upload_with_comment_private() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "attachment",
+        "upload",
+        "42",
+        "patch.diff",
+        "--comment",
+        "sensitive",
+        "--comment-private",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Attachment {
+            action:
+                AttachmentAction::Upload {
+                    bug_id,
+                    comment,
+                    comment_private,
+                    ..
+                },
+        } => {
+            assert_eq!(bug_id, 42);
+            assert_eq!(comment.as_deref(), Some("sensitive"));
+            assert!(comment_private, "--comment-private should set the flag");
+        }
+        _ => panic!("expected Attachment Upload"),
+    }
+}
+
+#[test]
+fn parse_attachment_upload_without_comment_private_defaults_to_false() {
+    let cli = Cli::try_parse_from(["bzr", "attachment", "upload", "42", "f.txt"]).unwrap();
+    match cli.command {
+        Commands::Attachment {
+            action: AttachmentAction::Upload {
+                comment_private, ..
+            },
+        } => assert!(
+            !comment_private,
+            "--comment-private absent should default to false"
+        ),
+        _ => panic!("expected Attachment Upload"),
+    }
+}
+
+#[test]
 fn parse_template_delete() {
     let cli = Cli::try_parse_from(["bzr", "template", "delete", "security-bug"]).unwrap();
     match cli.command {

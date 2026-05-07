@@ -150,6 +150,7 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
             comment_file.as_deref(),
             *comment_private,
         )?,
+        comment_is_private: std::collections::HashMap::new(),
     };
     Ok((ids.clone(), params))
 }

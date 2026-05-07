@@ -84,6 +84,7 @@ async fn attachment_upload_api_error_propagates() {
         private: false,
         is_patch: false,
         comment: None,
+        comment_private: false,
         flag: vec![],
     };
     let result = super::execute(&action, None, OutputFormat::Json, None).await;
@@ -135,6 +136,7 @@ async fn attachment_upload_returns_id() {
         private: false,
         is_patch: false,
         comment: None,
+        comment_private: false,
         flag: vec![],
     };
     let (result, output) =
@@ -168,6 +170,7 @@ async fn attachment_upload_with_comment_includes_comment_in_request() {
         private: false,
         is_patch: false,
         comment: Some("see this".into()),
+        comment_private: false,
         flag: vec![],
     };
     let result = super::execute(&action, None, OutputFormat::Json, None).await;
@@ -202,6 +205,7 @@ async fn attachment_upload_with_is_patch_defaults_content_type_to_text_plain() {
         private: false,
         is_patch: true,
         comment: None,
+        comment_private: false,
         flag: vec![],
     };
     let result = super::execute(&action, None, OutputFormat::Json, None).await;
@@ -238,6 +242,7 @@ async fn attachment_upload_is_patch_with_explicit_content_type_keeps_content_typ
         private: false,
         is_patch: true,
         comment: None,
+        comment_private: false,
         flag: vec![],
     };
     let result = super::execute(&action, None, OutputFormat::Json, None).await;
@@ -337,4 +342,187 @@ fn guess_content_type_case_insensitive() {
     assert_eq!(guess_content_type("FILE.TXT"), "text/plain");
     assert_eq!(guess_content_type("image.PNG"), "image/png");
     assert_eq!(guess_content_type("data.JSON"), "application/json");
+}
+
+#[tokio::test]
+async fn attachment_upload_with_comment_private_flips_privacy() {
+    use wiremock::matchers::body_string_contains;
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    let upload_file = tmp.path().join("p.diff");
+    std::fs::write(&upload_file, "diff --git a/x b/x").unwrap();
+
+    // Step 1: POST /rest/bug/42/attachment → returns attachment id 200
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/42/attachment"))
+        .and(body_string_contains("\"comment\":\"sensitive\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [200]})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    // Step 2: GET /rest/bug/42/comment → returns comments with one matching attachment_id=200
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": {
+                "42": {
+                    "comments": [
+                        {"id": 554, "bug_id": 42, "text": "old", "is_private": false},
+                        {"id": 555, "bug_id": 42, "text": "sensitive", "is_private": false, "attachment_id": 200}
+                    ]
+                }
+            }
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    // Step 3: PUT /rest/bug/42 with comment_is_private: {"555": true}
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/42"))
+        .and(body_string_contains("\"comment_is_private\""))
+        .and(body_string_contains("\"555\":true"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = AttachmentAction::Upload {
+        bug_id: 42,
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: Some("test".into()),
+        content_type: Some("text/x-diff".into()),
+        private: false,
+        is_patch: false,
+        comment: Some("sensitive".into()),
+        comment_private: true,
+        flag: vec![],
+    };
+    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    assert!(
+        result.is_ok(),
+        "two-call workflow should succeed: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn attachment_upload_comment_private_without_comment_is_input_error() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let upload_file = tmp.path().join("p.diff");
+    std::fs::write(&upload_file, "x").unwrap();
+
+    let action = AttachmentAction::Upload {
+        bug_id: 42,
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: None,
+        content_type: None,
+        private: false,
+        is_patch: false,
+        comment: None,
+        comment_private: true,
+        flag: vec![],
+    };
+    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    assert!(matches!(
+        result,
+        Err(crate::error::BzrError::InputValidation(_))
+    ));
+}
+
+#[tokio::test]
+async fn attachment_upload_comment_private_partial_failure_propagates_error() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    let upload_file = tmp.path().join("p.diff");
+    std::fs::write(&upload_file, "x").unwrap();
+
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/42/attachment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [200]})))
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": {
+                "42": {
+                    "comments": [
+                        {"id": 555, "bug_id": 42, "text": "x", "is_private": false, "attachment_id": 200}
+                    ]
+                }
+            }
+        })))
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/42"))
+        .respond_with(ResponseTemplate::new(403).set_body_string("Forbidden: editbugs required"))
+        .mount(&mock)
+        .await;
+
+    let action = AttachmentAction::Upload {
+        bug_id: 42,
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: None,
+        content_type: None,
+        private: false,
+        is_patch: false,
+        comment: Some("x".into()),
+        comment_private: true,
+        flag: vec![],
+    };
+    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    assert!(result.is_err(), "step-2 failure should propagate");
+}
+
+#[tokio::test]
+async fn attachment_upload_comment_private_no_matching_comment_is_data_integrity_error() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    let upload_file = tmp.path().join("p.diff");
+    std::fs::write(&upload_file, "x").unwrap();
+
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/42/attachment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [200]})))
+        .mount(&mock)
+        .await;
+
+    // Comments fetched successfully, but none has attachment_id matching
+    // the just-uploaded attachment. This is a Bugzilla server invariant
+    // violation — Bug.add_attachment with a `comment` body must create a
+    // comment whose `attachment_id` equals the new attachment's id.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": {
+                "42": {
+                    "comments": [
+                        {"id": 999, "bug_id": 42, "text": "unrelated", "is_private": false}
+                    ]
+                }
+            }
+        })))
+        .mount(&mock)
+        .await;
+
+    let action = AttachmentAction::Upload {
+        bug_id: 42,
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: None,
+        content_type: None,
+        private: false,
+        is_patch: false,
+        comment: Some("x".into()),
+        comment_private: true,
+        flag: vec![],
+    };
+    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    assert!(matches!(
+        result,
+        Err(crate::error::BzrError::DataIntegrity(_))
+    ));
 }

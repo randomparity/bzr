@@ -1151,6 +1151,31 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
+test_begin "100h. attachment upload --comment-private flips comment privacy"
+if [[ -n "$BUG1" ]]; then
+    run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
+        --summary "private comment test" \
+        --comment "sensitive context for #170" \
+        --comment-private
+    if assert_success && assert_json_exists '.id'; then
+        ATTACH_PRIV_ID=$(jq -r '.id' "$BZR_STDOUT" 2>/dev/null || echo "")
+        run_bzr comment list "$BUG1"
+        if assert_success; then
+            # The new comment is the one whose attachment_id matches
+            # the just-uploaded attachment. Assert it's marked private.
+            MATCHED=$(jq --arg a "$ATTACH_PRIV_ID" \
+                '[.[] | select(.attachment_id == ($a | tonumber))] | last' \
+                "$BZR_STDOUT" 2>/dev/null || echo "")
+            IS_PRIVATE=$(echo "$MATCHED" | jq -r '.is_private' 2>/dev/null || echo "")
+            if [[ "$IS_PRIVATE" == "true" ]]; then
+                test_pass
+            else
+                test_fail "comment matching attachment #${ATTACH_PRIV_ID} not marked private (is_private=${IS_PRIVATE})"
+            fi
+        fi
+    fi
+else test_skip "no BUG1"; fi
+
 echo ""
 
 # ══════════════════════════════════════════════════════════════════════

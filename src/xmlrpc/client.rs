@@ -390,6 +390,10 @@ fn value_to_comment(val: &Value) -> Result<crate::types::Comment> {
         creation_time: get_datetime_str(m, "creation_time"),
         count,
         is_private: get_bool_flag(m, "is_private"),
+        attachment_id: m
+            .get("attachment_id")
+            .and_then(Value::as_i64)
+            .and_then(|v| u64::try_from(v).ok()),
     })
 }
 

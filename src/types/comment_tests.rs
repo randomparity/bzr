@@ -23,3 +23,19 @@ fn comment_deserializes_full() {
     assert_eq!(comment.count, 3);
     assert!(comment.is_private);
 }
+
+#[test]
+fn comment_deserializes_with_attachment_id() {
+    let json = r#"{"id": 7, "attachment_id": 99}"#;
+    let comment: Comment = serde_json::from_str(json).unwrap();
+    assert_eq!(comment.id, 7);
+    assert_eq!(comment.attachment_id, Some(99));
+}
+
+#[test]
+fn comment_deserializes_without_attachment_id_defaults_to_none() {
+    let json = r#"{"id": 8}"#;
+    let comment: Comment = serde_json::from_str(json).unwrap();
+    assert_eq!(comment.id, 8);
+    assert!(comment.attachment_id.is_none());
+}

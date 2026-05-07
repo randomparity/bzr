@@ -12,6 +12,7 @@ fn make_comment(count: u64, text: &str) -> Comment {
         creation_time: Some("2025-02-01T08:00:00Z".into()),
         count,
         is_private: false,
+        attachment_id: None,
     }
 }
 
@@ -101,6 +102,7 @@ async fn print_comments_table_handles_missing_creator_and_unicode() {
         creation_time: None,
         count: 0,
         is_private: false,
+        attachment_id: None,
     }];
     let ((), output) = crate::test_helpers::capture_stdout(async {
         print_comments(&comments, OutputFormat::Table);

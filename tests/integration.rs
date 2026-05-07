@@ -990,6 +990,7 @@ async fn attachment_upload_integration() {
         private: false,
         is_patch: false,
         comment: None,
+        comment_private: false,
         flag: vec![],
     };
     let result = bzr::commands::attachment::execute(
@@ -1031,6 +1032,7 @@ async fn attachment_upload_with_comment_integration() {
         private: false,
         is_patch: false,
         comment: Some("see #6789 for context".to_string()),
+        comment_private: false,
         flag: vec![],
     };
     let result = bzr::commands::attachment::execute(
@@ -1071,6 +1073,7 @@ async fn attachment_upload_with_is_patch_integration() {
         private: false,
         is_patch: true,
         comment: None,
+        comment_private: false,
         flag: vec![],
     };
     let result = bzr::commands::attachment::execute(
@@ -1083,6 +1086,70 @@ async fn attachment_upload_with_is_patch_integration() {
     assert!(
         result.is_ok(),
         "upload with --is-patch should succeed: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn attachment_upload_with_comment_private_integration() {
+    use wiremock::matchers::body_string_contains;
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    let upload_file = tmp.path().join("upload.txt");
+    std::fs::write(&upload_file, "test content").unwrap();
+
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/42/attachment"))
+        .and(body_string_contains("\"comment\":\"sensitive\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [202]})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": {
+                "42": {
+                    "comments": [
+                        {"id": 800, "bug_id": 42, "text": "sensitive", "attachment_id": 202}
+                    ]
+                }
+            }
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/42"))
+        .and(body_string_contains("\"comment_is_private\""))
+        .and(body_string_contains("\"800\":true"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = bzr::cli::AttachmentAction::Upload {
+        bug_id: 42,
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: Some("test".into()),
+        content_type: Some("text/plain".into()),
+        private: false,
+        is_patch: false,
+        comment: Some("sensitive".into()),
+        comment_private: true,
+        flag: vec![],
+    };
+    let result = bzr::commands::attachment::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "upload --comment-private should drive POST→GET→PUT to success: {result:?}"
     );
 }
 

@@ -919,3 +919,29 @@ fn update_bug_params_serializes_private_comment() {
         serde_json::json!({"body": "secret", "is_private": true})
     );
 }
+
+#[test]
+fn update_bug_params_default_omits_comment_is_private() {
+    let params = UpdateBugParams::default();
+    let json = serde_json::to_value(&params).unwrap();
+    assert!(
+        !json.as_object().unwrap().contains_key("comment_is_private"),
+        "empty comment_is_private map should be skipped on the wire, got {json}"
+    );
+}
+
+#[test]
+fn update_bug_params_serializes_comment_is_private_map() {
+    use std::collections::HashMap;
+    let mut map = HashMap::new();
+    map.insert(5678u64, true);
+    let params = UpdateBugParams {
+        comment_is_private: map,
+        ..Default::default()
+    };
+    let json = serde_json::to_value(&params).unwrap();
+    assert_eq!(
+        json["comment_is_private"]["5678"],
+        serde_json::Value::Bool(true)
+    );
+}

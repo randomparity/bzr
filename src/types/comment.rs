@@ -25,6 +25,11 @@ pub struct Comment {
     pub count: u64,
     #[serde(default)]
     pub is_private: bool,
+    /// Set when the comment was created alongside an attachment via
+    /// `Bug.add_attachment`. Used by `attachment upload --comment-private`
+    /// to identify the just-created comment.
+    #[serde(default)]
+    pub attachment_id: Option<u64>,
 }
 
 #[cfg(test)]
