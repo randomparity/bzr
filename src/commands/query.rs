@@ -39,10 +39,17 @@ fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
         limit,
         fields,
         exclude_fields,
+        created_since,
+        changed_since,
     } = action
     else {
         unreachable!()
     };
+
+    let creation_time =
+        crate::validation::parse_optional_date(created_since.as_deref(), "--created-since")?;
+    let last_change_time =
+        crate::validation::parse_optional_date(changed_since.as_deref(), "--changed-since")?;
 
     let (query, preloaded_config) = if let Some(url_str) = from_url {
         let config = Config::load()?;
@@ -56,6 +63,12 @@ fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
         }
         if let Some(ef) = exclude_fields {
             query.exclude_fields = Some(ef.clone());
+        }
+        if creation_time.is_some() {
+            query.creation_time = creation_time;
+        }
+        if last_change_time.is_some() {
+            query.last_change_time = last_change_time;
         }
         (query, Some(config))
     } else {
@@ -77,6 +90,8 @@ fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
             limit: *limit,
             fields: fields.clone(),
             exclude_fields: exclude_fields.clone(),
+            creation_time,
+            last_change_time,
             ..SavedQuery::default()
         };
         (query, None)
@@ -146,10 +161,17 @@ async fn handle_run(
         fields,
         exclude_fields,
         server: server_override,
+        created_since,
+        changed_since,
     } = action
     else {
         unreachable!()
     };
+
+    let creation_time_override =
+        crate::validation::parse_optional_date(created_since.as_deref(), "--created-since")?;
+    let last_change_time_override =
+        crate::validation::parse_optional_date(changed_since.as_deref(), "--changed-since")?;
 
     let config = Config::load()?;
     let saved = config
@@ -162,7 +184,13 @@ async fn handle_run(
         .or(saved.server.as_deref());
 
     let mut params = saved.to_search_params();
-    params.apply_overrides(*limit, fields.as_deref(), exclude_fields.as_deref());
+    params.apply_overrides(
+        *limit,
+        fields.as_deref(),
+        exclude_fields.as_deref(),
+        creation_time_override.as_deref(),
+        last_change_time_override.as_deref(),
+    );
 
     let client = super::shared::connect_and_configure(effective_server, api).await?;
     let bugs = client.search_bugs(&params).await?;

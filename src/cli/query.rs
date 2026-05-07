@@ -20,12 +20,18 @@ pub enum QueryAction {
     /// overridden per invocation by the matching flags on
     /// `bzr query run`.
     ///
+    /// `--created-since` / `--changed-since` save Bugzilla
+    /// `creation_time` / `last_change_time` filters into the
+    /// query. Same accepted forms as `bzr bug list --created-since`.
+    /// Validated at save time; malformed input exits 7.
+    ///
     /// Examples:
     ///
     ///   bzr query save firefox-new --product Firefox --status NEW
     ///   bzr query save crashes --search "crash in tab"
     ///   bzr query save my-saved \
     ///     --from-url 'https://bz/buglist.cgi?product=Firefox'
+    ///   bzr query save recent-firefox --product Firefox --changed-since 2026-04-01
     ///
     /// See bzr-query-run(1) to execute a saved query,
     /// bzr-query-list(1) for the inventory, and bzr-bug-list(1) for
@@ -80,6 +86,16 @@ pub enum QueryAction {
         /// Exclude these fields (comma-separated)
         #[arg(long)]
         exclude_fields: Option<String>,
+        /// Filter to bugs created at or after this date (saved into the query).
+        ///
+        /// Accepts the same forms as `bzr bug list --created-since`.
+        #[arg(long, value_name = "DATE")]
+        created_since: Option<String>,
+        /// Filter to bugs last modified at or after this date (saved into the query).
+        ///
+        /// Accepts the same forms as `bzr bug list --changed-since`.
+        #[arg(long, value_name = "DATE")]
+        changed_since: Option<String>,
     },
     /// List all saved queries.
     ///
@@ -146,11 +162,17 @@ pub enum QueryAction {
     /// The output format matches `bzr bug list` (table by default,
     /// JSON with `--json`).
     ///
+    /// `--created-since` / `--changed-since` override the saved
+    /// query's date filters for this run; passing them clears
+    /// nothing (`None` keeps the saved value), matching the
+    /// existing `--limit` / `--fields` override convention.
+    ///
     /// Examples:
     ///
     ///   bzr query run firefox-new
     ///   bzr query run firefox-new --limit 10
     ///   bzr query run firefox-new --server staging
+    ///   bzr query run recent-firefox --changed-since 2026-05-01
     ///
     /// See bzr-query-save(1) to define a query, bzr-query-show(1)
     /// to inspect what will run, and bzr-bug-list(1) for ad-hoc
@@ -171,5 +193,15 @@ pub enum QueryAction {
         /// Override the server to run against
         #[arg(long)]
         server: Option<String>,
+        /// Override the saved `creation_time` filter for this run.
+        ///
+        /// Same accepted forms as `bzr bug list --created-since`.
+        #[arg(long, value_name = "DATE")]
+        created_since: Option<String>,
+        /// Override the saved `last_change_time` filter for this run.
+        ///
+        /// Same accepted forms as `bzr bug list --changed-since`.
+        #[arg(long, value_name = "DATE")]
+        changed_since: Option<String>,
     },
 }

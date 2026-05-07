@@ -144,3 +144,22 @@ async fn comment_add_api_error_returns_error() {
     let result = super::execute(&action, None, OutputFormat::Json, None).await;
     assert!(result.is_err());
 }
+
+#[tokio::test]
+async fn comment_list_rejects_malformed_since_with_exit_code_7() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let action = CommentAction::List {
+        bug_id: 42,
+        since: Some("nope".into()),
+    };
+    let result = crate::commands::comment::execute(&action, None, OutputFormat::Json, None).await;
+    let err = result.unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+    let msg = err.to_string();
+    assert!(msg.contains("--since"), "error should name the flag: {msg}");
+    assert!(
+        msg.contains("nope"),
+        "error should echo the offending input: {msg}"
+    );
+}

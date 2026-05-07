@@ -17,7 +17,11 @@ pub async fn execute(
 
     match action {
         CommentAction::List { bug_id, since } => {
-            let comments = client.get_comments_since(*bug_id, since.as_deref()).await?;
+            let canonical_since =
+                crate::validation::parse_optional_date(since.as_deref(), "--since")?;
+            let comments = client
+                .get_comments_since(*bug_id, canonical_since.as_deref())
+                .await?;
             output::print_comments(&comments, format);
         }
         CommentAction::Add {

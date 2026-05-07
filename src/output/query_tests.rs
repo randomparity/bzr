@@ -187,6 +187,60 @@ async fn print_query_detail_table_renders_url_fields() {
 
 #[cfg(unix)]
 #[tokio::test]
+async fn print_query_detail_table_shows_date_filters() {
+    let _lock = crate::ENV_LOCK.lock().await;
+    let mut query = make_list_query();
+    query.creation_time = Some("2026-04-01T00:00:00Z".into());
+    query.last_change_time = Some("2026-04-15T00:00:00Z".into());
+
+    let ((), output) = crate::test_helpers::capture_stdout(async {
+        print_query_detail("recent", &query, OutputFormat::Table);
+    })
+    .await;
+
+    assert!(output.contains("Created since"), "missing label: {output}");
+    assert!(
+        output.contains("2026-04-01T00:00:00Z"),
+        "missing creation_time value"
+    );
+    assert!(output.contains("Changed since"), "missing label: {output}");
+    assert!(
+        output.contains("2026-04-15T00:00:00Z"),
+        "missing last_change_time value"
+    );
+}
+
+#[test]
+fn query_detail_json_includes_date_filters() {
+    let mut query = make_list_query();
+    query.creation_time = Some("2026-04-01T00:00:00Z".into());
+    let view = QueryView {
+        name: "recent",
+        query: &query,
+    };
+    let json = serde_json::to_string_pretty(&view).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed["creation_time"], "2026-04-01T00:00:00Z");
+}
+
+#[test]
+fn query_summary_line_renders_date_filters() {
+    let mut query = make_list_query();
+    query.creation_time = Some("2026-04-01T00:00:00Z".into());
+    query.last_change_time = Some("2026-04-15T00:00:00Z".into());
+    let line = query_summary_line("recent", &query);
+    assert!(
+        line.contains("created>=2026-04-01T00:00:00Z"),
+        "summary missing created>=: {line}"
+    );
+    assert!(
+        line.contains("changed>=2026-04-15T00:00:00Z"),
+        "summary missing changed>=: {line}"
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
 async fn query_list_names_sort_before_render() {
     let _lock = crate::ENV_LOCK.lock().await;
     let mut queries: HashMap<String, SavedQuery> = HashMap::new();

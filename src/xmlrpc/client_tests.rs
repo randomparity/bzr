@@ -694,6 +694,36 @@ async fn xmlrpc_get_attachment_by_id_request_body_omits_exclude_fields() {
     assert_eq!(attachment.data.as_deref(), Some("YmU="));
 }
 
+#[tokio::test]
+async fn search_bugs_sends_creation_time_and_last_change_time() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<name>creation_time</name>"))
+        .and(body_string_contains(
+            "<string>2026-04-01T00:00:00Z</string>",
+        ))
+        .and(body_string_contains("<name>last_change_time</name>"))
+        .and(body_string_contains(
+            "<string>2026-04-15T00:00:00Z</string>",
+        ))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(7, "Date-filtered bug")),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let params = SearchParams {
+        creation_time: Some("2026-04-01T00:00:00Z".into()),
+        last_change_time: Some("2026-04-15T00:00:00Z".into()),
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert_eq!(bugs.len(), 1);
+}
+
 /// Custom wiremock matcher: body must NOT contain the given substring.
 struct NotBodyContains(&'static str);
 

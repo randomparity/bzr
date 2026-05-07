@@ -22,6 +22,8 @@ fn save_action(name: &str) -> QueryAction {
         limit: Some(25),
         fields: None,
         exclude_fields: None,
+        created_since: None,
+        changed_since: None,
     }
 }
 
@@ -41,6 +43,8 @@ fn product_save_action(name: &str, product: &str, limit: u32) -> QueryAction {
         limit: Some(limit),
         fields: None,
         exclude_fields: None,
+        created_since: None,
+        changed_since: None,
     }
 }
 
@@ -59,6 +63,8 @@ fn empty_save_action(name: &str, search: Option<String>) -> QueryAction {
         limit: None,
         fields: None,
         exclude_fields: None,
+        created_since: None,
+        changed_since: None,
     }
 }
 
@@ -77,6 +83,8 @@ fn url_save_action(name: &str, url: String) -> QueryAction {
         limit: None,
         fields: None,
         exclude_fields: None,
+        created_since: None,
+        changed_since: None,
     }
 }
 
@@ -87,6 +95,8 @@ fn run_action(name: &str) -> QueryAction {
         fields: None,
         exclude_fields: None,
         server: None,
+        created_since: None,
+        changed_since: None,
     }
 }
 
@@ -131,6 +141,8 @@ async fn query_save_persists_every_field() {
         limit: Some(7),
         fields: Some("id,summary".into()),
         exclude_fields: Some("comments".into()),
+        created_since: None,
+        changed_since: None,
     };
     let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
     result.unwrap();
@@ -300,6 +312,8 @@ async fn query_run_with_limit_override() {
         fields: None,
         exclude_fields: None,
         server: None,
+        created_since: None,
+        changed_since: None,
     };
     let (result, _) =
         capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
@@ -324,6 +338,8 @@ async fn query_save_existing_entry_reports_updated() {
         limit: Some(10),
         fields: None,
         exclude_fields: None,
+        created_since: None,
+        changed_since: None,
     };
     let (result, _) =
         capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
@@ -343,6 +359,8 @@ async fn query_save_existing_entry_reports_updated() {
         limit: Some(5),
         fields: None,
         exclude_fields: None,
+        created_since: None,
+        changed_since: None,
     };
     let (result, output) = capture_stdout(super::execute(
         &update_action,
@@ -414,6 +432,8 @@ async fn query_run_applies_field_overrides() {
         limit: Some(10),
         fields: Some("id,status".into()),
         exclude_fields: Some("cc".into()),
+        created_since: None,
+        changed_since: None,
     };
     let (result, _) =
         capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
@@ -434,6 +454,8 @@ async fn query_run_applies_field_overrides() {
         fields: Some("id,summary".into()),
         exclude_fields: Some("comments".into()),
         server: None,
+        created_since: None,
+        changed_since: None,
     };
     let (result, _) =
         capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
@@ -533,6 +555,8 @@ async fn query_run_with_server_override() {
         fields: None,
         exclude_fields: None,
         server: Some("test".into()),
+        created_since: None,
+        changed_since: None,
     };
     let (result, _) =
         capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
@@ -564,4 +588,121 @@ async fn query_save_from_url() {
     assert_eq!(saved.product, vec!["TestProduct"]);
     assert!(!saved.raw_params.is_empty());
     assert!(saved.source_url.is_some());
+}
+
+#[tokio::test]
+async fn query_save_rejects_malformed_created_since() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let action = QueryAction::Save {
+        name: "bad".into(),
+        from_url: None,
+        search: None,
+        product: vec!["Firefox".into()],
+        component: vec![],
+        status: vec![],
+        assignee: vec![],
+        creator: vec![],
+        priority: vec![],
+        severity: vec![],
+        limit: None,
+        fields: None,
+        exclude_fields: None,
+        created_since: Some("garbage".into()),
+        changed_since: None,
+    };
+
+    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let err = result.unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+    assert!(err.to_string().contains("--created-since"));
+}
+
+#[tokio::test]
+async fn query_save_stores_canonical_date_forms() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let action = QueryAction::Save {
+        name: "recent".into(),
+        from_url: None,
+        search: None,
+        product: vec!["Firefox".into()],
+        component: vec![],
+        status: vec![],
+        assignee: vec![],
+        creator: vec![],
+        priority: vec![],
+        severity: vec![],
+        limit: None,
+        fields: None,
+        exclude_fields: None,
+        created_since: Some("2026-04-01".into()),
+        changed_since: Some("2026-04-15T12:00:00Z".into()),
+    };
+    let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    result.unwrap();
+
+    let cfg = Config::load().unwrap();
+    let q = cfg.queries.get("recent").unwrap();
+    assert_eq!(q.creation_time.as_deref(), Some("2026-04-01T00:00:00Z"));
+    assert_eq!(q.last_change_time.as_deref(), Some("2026-04-15T12:00:00Z"));
+}
+
+#[tokio::test]
+async fn query_save_accepts_date_only_query() {
+    // SavedQuery::has_filters() must recognize date-only queries so the
+    // "query must have at least one filter set" rejection does not fire.
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let action = QueryAction::Save {
+        name: "date-only".into(),
+        from_url: None,
+        search: None,
+        product: vec![],
+        component: vec![],
+        status: vec![],
+        assignee: vec![],
+        creator: vec![],
+        priority: vec![],
+        severity: vec![],
+        limit: None,
+        fields: None,
+        exclude_fields: None,
+        created_since: Some("2026-04-01".into()),
+        changed_since: None,
+    };
+    let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    result.unwrap();
+    let cfg = Config::load().unwrap();
+    assert!(cfg.queries.contains_key("date-only"));
+}
+
+#[tokio::test]
+async fn query_run_rejects_malformed_created_since_override() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    // Pre-seed a saved query so the not-found branch doesn't fire first.
+    let mut cfg = Config::load().unwrap();
+    cfg.queries.insert(
+        "recent".into(),
+        crate::types::SavedQuery {
+            product: vec!["Firefox".into()],
+            ..crate::types::SavedQuery::default()
+        },
+    );
+    cfg.save().unwrap();
+
+    let action = QueryAction::Run {
+        name: "recent".into(),
+        limit: None,
+        fields: None,
+        exclude_fields: None,
+        server: None,
+        created_since: Some("not-a-date".into()),
+        changed_since: None,
+    };
+    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let err = result.unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+    assert!(err.to_string().contains("--created-since"));
 }

@@ -21,6 +21,7 @@ pub(crate) mod output;
 pub(crate) mod tls;
 pub mod types;
 pub mod url_parser;
+pub mod validation;
 pub mod xmlrpc;
 
 /// Dispatch a parsed CLI to the appropriate command handler.

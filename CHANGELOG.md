@@ -46,6 +46,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   matching `bzl-attachment-add`. The read-side `Attachment` struct
   also exposes `is_patch` so `bzr attachment list --json` includes the
   field. Closes #166.
+- `bzr bug list`, `bzr query save`, and `bzr query run` accept
+  `--created-since <DATE>` and `--changed-since <DATE>` filters
+  for Bugzilla's `creation_time` and `last_change_time` fields.
+  Inputs are ISO 8601 (`YYYY-MM-DDTHH:MM:SS[Z|±HH:MM]`) or a bare
+  `YYYY-MM-DD` (canonicalized to `T00:00:00Z`); malformed values
+  exit 7 before any network call. `bzr query run` accepts the same
+  flags as per-invocation overrides matching the existing
+  `--limit` / `--fields` convention. `bzr query show` and the
+  one-line `bzr query list` summary surface both filters when set.
+  Closes #157.
 
 ### Fixed
 
@@ -82,6 +92,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   template description is now used as the editor buffer's pre-fill
   only. Pass `--description`, `--description-file`, or pipe a
   description via stdin to use a non-template body. Refs: #159, #160.
+- `bzr bug history --since` and `bzr comment list --since` now
+  validate their input client-side via the same shared validator
+  introduced for `--created-since` / `--changed-since`. Malformed
+  dates exit 7 instead of being forwarded to the server. Bare
+  dates (`YYYY-MM-DD`) are now canonicalized to `T00:00:00Z` on
+  the wire; previously the bare form was passed through verbatim.
+  Refs: #157.
 
 ## [0.3.0] - 2026-05-05
 

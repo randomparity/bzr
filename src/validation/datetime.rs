@@ -1,0 +1,133 @@
+//! ISO-8601 date / datetime validation for Bugzilla search filters.
+//!
+//! Accepts four shapes (lengths fully constrain the format):
+//!   * `YYYY-MM-DD`            (10 chars) — canonicalized to `YYYY-MM-DDT00:00:00Z`
+//!   * `YYYY-MM-DDTHH:MM:SS`   (19 chars) — sent verbatim; server treats as UTC
+//!   * `YYYY-MM-DDTHH:MM:SSZ`  (20 chars) — sent verbatim
+//!   * `YYYY-MM-DDTHH:MM:SS±HH:MM` (25 chars) — sent verbatim
+//!
+//! Fractional seconds, week dates (`2026-W18-3`), and ordinal dates
+//! (`2026-128`) are rejected: they are valid ISO-8601 but the server
+//! is not guaranteed to accept them, and we'd rather fail fast at the
+//! CLI than ship a malformed payload.
+
+use crate::error::{BzrError, Result};
+
+/// Validate an ISO-8601 datetime or bare date for use as a Bugzilla
+/// search filter. On success, returns the canonical form sent to the
+/// server (bare dates are expanded to `YYYY-MM-DDT00:00:00Z`).
+///
+/// `flag` is the CLI flag name (e.g. "--created-since") and is
+/// included in the error message so callers can locate the offending
+/// input when multiple date flags are in play.
+pub fn parse_iso8601_or_date(s: &str, flag: &str) -> Result<String> {
+    match try_canonicalize(s) {
+        Some(canon) => Ok(canon),
+        None => Err(BzrError::InputValidation(format!(
+            "{flag}: '{s}' is not a valid ISO-8601 date or datetime.\n\
+             Expected: YYYY-MM-DD, YYYY-MM-DDTHH:MM:SS, \
+             YYYY-MM-DDTHH:MM:SSZ, or YYYY-MM-DDTHH:MM:SS±HH:MM"
+        ))),
+    }
+}
+
+fn try_canonicalize(s: &str) -> Option<String> {
+    // Length-check first; this also gates the byte-indexing below
+    // (each branch knows the input is exactly that many bytes long).
+    // ASCII-only because every accepted character is in [-+:0-9TZ].
+    if !s.is_ascii() {
+        return None;
+    }
+    match s.len() {
+        10 => parse_date(s).map(|()| format!("{s}T00:00:00Z")),
+        19 => parse_datetime_naive(s).map(|()| s.to_string()),
+        20 => parse_datetime_z(s).map(|()| s.to_string()),
+        25 => parse_datetime_offset(s).map(|()| s.to_string()),
+        _ => None,
+    }
+}
+
+fn parse_date(s: &str) -> Option<()> {
+    let bytes = s.as_bytes();
+    if bytes[4] != b'-' || bytes[7] != b'-' {
+        return None;
+    }
+    if !bytes[..4].iter().all(u8::is_ascii_digit)
+        || !bytes[5..7].iter().all(u8::is_ascii_digit)
+        || !bytes[8..10].iter().all(u8::is_ascii_digit)
+    {
+        return None;
+    }
+    let month: u32 = s[5..7].parse().ok()?;
+    let day: u32 = s[8..10].parse().ok()?;
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    Some(())
+}
+
+fn parse_time(s: &str) -> Option<()> {
+    debug_assert_eq!(s.len(), 8, "parse_time requires exactly 8 bytes (HH:MM:SS)");
+    let bytes = s.as_bytes();
+    if bytes[2] != b':' || bytes[5] != b':' {
+        return None;
+    }
+    if !bytes[..2].iter().all(u8::is_ascii_digit)
+        || !bytes[3..5].iter().all(u8::is_ascii_digit)
+        || !bytes[6..8].iter().all(u8::is_ascii_digit)
+    {
+        return None;
+    }
+    let h: u32 = s[..2].parse().ok()?;
+    let m: u32 = s[3..5].parse().ok()?;
+    let sec: u32 = s[6..8].parse().ok()?;
+    // Allow second == 60 for leap seconds.
+    if h > 23 || m > 59 || sec > 60 {
+        return None;
+    }
+    Some(())
+}
+
+fn parse_datetime_naive(s: &str) -> Option<()> {
+    if s.as_bytes()[10] != b'T' {
+        return None;
+    }
+    parse_date(&s[..10])?;
+    parse_time(&s[11..19])?;
+    Some(())
+}
+
+fn parse_datetime_z(s: &str) -> Option<()> {
+    if !s.ends_with('Z') {
+        return None;
+    }
+    parse_datetime_naive(&s[..19])?;
+    Some(())
+}
+
+fn parse_datetime_offset(s: &str) -> Option<()> {
+    parse_datetime_naive(&s[..19])?;
+    let bytes = s.as_bytes();
+    let sign = bytes[19];
+    if sign != b'+' && sign != b'-' {
+        return None;
+    }
+    if bytes[22] != b':' {
+        return None;
+    }
+    if !bytes[20..22].iter().all(u8::is_ascii_digit)
+        || !bytes[23..25].iter().all(u8::is_ascii_digit)
+    {
+        return None;
+    }
+    let h: u32 = s[20..22].parse().ok()?;
+    let m: u32 = s[23..25].parse().ok()?;
+    if h > 14 || m > 59 {
+        return None;
+    }
+    Some(())
+}
+
+#[cfg(test)]
+#[path = "datetime_tests.rs"]
+mod tests;

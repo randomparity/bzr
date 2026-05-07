@@ -84,6 +84,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   ├── list [--product <P>...] [--component <C>...] [--status <S>...] [--assignee <A>...]
 │   │        [--creator <C>...] [--priority <P>...] [--severity <S>...] [--id <ID>...]
 │   │        [--alias <A>] [--summary <S>] [--limit <N>] [--fields <F>] [--exclude-fields <F>]
+│   │        [--created-since <D>] [--changed-since <D>]
 │   ├── view <ID> [--fields <F>] [--exclude-fields <F>]
 │   ├── search [<QUERY>] [--from-url <URL>] [--save-as [NAME]] [--limit <N>] [--fields <F>] [--exclude-fields <F>]
 │   ├── history <ID> [--since <DATE>]
@@ -161,10 +162,12 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
     ├── save <NAME> (--from-url <URL> | [--product <P>...] [--component <C>...] [--status <S>...]
     │               [--assignee <A>...] [--creator <C>...] [--priority <P>...] [--severity <S>...]
     │               [--search <Q>]) [--limit <N>] [--fields <F>] [--exclude-fields <F>]
+    │               [--created-since <D>] [--changed-since <D>]
     ├── list
     ├── show <NAME>
     ├── delete <NAME>
     └── run <NAME> [--limit <N>] [--fields <F>] [--exclude-fields <F>] [--server <NAME>]
+                   [--created-since <D>] [--changed-since <D>]
 ```
 
 ---
@@ -184,6 +187,7 @@ bzr bug list --status NEW --status ASSIGNED          # OR: match either status
 bzr bug list --status '!CLOSED'                      # NOT: exclude CLOSED
 bzr bug list --status NEW --status '!VERIFIED'       # mixed positive and negated
 bzr bug list --summary "kernel panic" --product Kernel  # substring on summary
+bzr bug list --product Firefox --changed-since 2026-04-01  # filter by date range
 ```
 
 Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`, `--priority`, `--severity`) are repeatable for OR semantics and support a `!` prefix for negation (NOT).
@@ -205,6 +209,12 @@ Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`,
 | `--limit <N>` | No | 50 | Max results |
 | `--fields <F>` | No | | Only return these fields (comma-separated) |
 | `--exclude-fields <F>` | No | | Exclude these fields (comma-separated) |
+| `--created-since <DATE>` | No | | Filter to bugs whose `creation_time` is `>= DATE`. See [Date format](#date-format) below. |
+| `--changed-since <DATE>` | No | | Filter to bugs whose `last_change_time` is `>= DATE`. See [Date format](#date-format) below. |
+
+#### Date format
+
+`--created-since` and `--changed-since` accept ISO 8601 datetimes (`YYYY-MM-DDTHH:MM:SS`, `YYYY-MM-DDTHH:MM:SSZ`, or `YYYY-MM-DDTHH:MM:SS±HH:MM`) or a bare `YYYY-MM-DD`. Bare dates are treated as `00:00:00 UTC`. Fractional seconds, week dates, and ordinal dates are rejected with exit code 7. The same validator is used by `bzr bug history --since` and `bzr comment list --since`.
 
 ### `bzr bug view`
 
@@ -1133,6 +1143,9 @@ bzr query save my-p1 --assignee me@example.com --priority P1 --status NEW --stat
 
 # Import a query from a Bugzilla URL
 bzr query save my-query --from-url "https://bugzilla.example.com/buglist.cgi?product=Firefox&bug_status=NEW"
+
+# Save a date-range query (recent activity)
+bzr query save recent-firefox --product Firefox --changed-since 2026-04-01
 ```
 
 `--from-url` and manual filter flags (`--search`, `--product`, `--component`, etc.) are mutually exclusive.
@@ -1152,6 +1165,8 @@ bzr query save my-query --from-url "https://bugzilla.example.com/buglist.cgi?pro
 | `--limit <N>` | No | Max results |
 | `--fields <F>` | No | Only return these fields when the query runs (comma-separated) |
 | `--exclude-fields <F>` | No | Exclude these fields when the query runs (comma-separated) |
+| `--created-since <DATE>` | No | Save a `creation_time >= DATE` filter into the query. Same accepted forms as [`bzr bug list --created-since`](#date-format). |
+| `--changed-since <DATE>` | No | Save a `last_change_time >= DATE` filter into the query. Same accepted forms as [`bzr bug list --changed-since`](#date-format). |
 
 At least one filter must be set. Use either `--from-url` or one or more manual filter flags.
 
@@ -1203,6 +1218,9 @@ bzr query run firefox-new --fields id,summary,status
 
 # Run against a different server
 bzr query run my-query --server other-server --limit 50
+
+# Run with a different date cutoff
+bzr query run recent-firefox --changed-since 2026-05-01
 ```
 
 | Option | Required | Description |
@@ -1212,6 +1230,8 @@ bzr query run my-query --server other-server --limit 50
 | `--fields <F>` | No | Only return these fields (comma-separated) |
 | `--exclude-fields <F>` | No | Exclude these fields (comma-separated) |
 | `--server <NAME>` | No | Override the server to run the query against. Takes precedence over the server stored in the saved query. The global `--server` flag takes precedence over this flag. |
+| `--created-since <DATE>` | No | Override the saved `creation_time` filter for this run. Same accepted forms as [`bzr bug list --created-since`](#date-format). |
+| `--changed-since <DATE>` | No | Override the saved `last_change_time` filter for this run. Same accepted forms as [`bzr bug list --changed-since`](#date-format). |
 
 ---
 

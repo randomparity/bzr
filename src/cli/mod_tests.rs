@@ -1224,3 +1224,32 @@ fn parse_template_delete() {
         _ => panic!("expected Template Delete"),
     }
 }
+
+#[test]
+fn bug_list_parses_created_since_and_changed_since() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "list",
+        "--product",
+        "Firefox",
+        "--created-since",
+        "2026-04-01",
+        "--changed-since",
+        "2026-04-15T12:00:00Z",
+    ])
+    .unwrap();
+    let Commands::Bug {
+        action:
+            BugAction::List {
+                created_since,
+                changed_since,
+                ..
+            },
+    } = cli.command
+    else {
+        panic!("expected Bug::List variant");
+    };
+    assert_eq!(created_since.as_deref(), Some("2026-04-01"));
+    assert_eq!(changed_since.as_deref(), Some("2026-04-15T12:00:00Z"));
+}
