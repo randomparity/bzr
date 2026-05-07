@@ -39,7 +39,7 @@ pub fn print_attachments(attachments: &[Attachment], format: OutputFormat) {
 
 /// Top-level payload for `bzr attachment download` in bulk mode.
 ///
-/// Single-ID legacy mode continues to use [`super::DownloadResult`].
+/// Single-ID mode continues to use [`super::DownloadResult`].
 #[derive(Debug, Serialize)]
 #[non_exhaustive]
 pub struct AttachmentBatchResult {
@@ -95,16 +95,55 @@ pub struct DownloadedFile {
 
 /// Aggregate counters for the batch run.
 ///
-/// `succeeded` counts attachments written to disk; `failed` counts the
-/// sum of bug-level errors and per-attachment failures. A bug with
-/// three attachments where two are written and one fails contributes
-/// 2 to `succeeded` and 1 to `failed`.
+/// `succeeded` counts attachments successfully written to disk
+/// (across both `--bug` and positional-ID targets). `failed` counts
+/// failed *targets* — each `--bug <ID>` whose result is `Error` plus
+/// each positional attachment-ID whose result is `Error`. A bug whose
+/// listing succeeds but where some internal writes fail contributes
+/// each successful write to `succeeded` and one to `failed` for the
+/// bug itself.
 #[derive(Debug, Serialize)]
 #[non_exhaustive]
 pub struct BatchSummary {
     pub succeeded: usize,
     pub failed: usize,
     pub total_bytes: usize,
+}
+
+impl BatchSummary {
+    /// Compute the summary post-hoc from the populated result lists.
+    pub fn from_results(
+        bug_results: &[BugDownloadResult],
+        attachment_results: &[AttachmentDownloadResult],
+    ) -> Self {
+        let succeeded = bug_results.iter().map(|b| b.files.len()).sum::<usize>()
+            + attachment_results
+                .iter()
+                .filter(|a| a.status == TargetStatus::Ok)
+                .count();
+        let failed = bug_results
+            .iter()
+            .filter(|b| b.status == TargetStatus::Error)
+            .count()
+            + attachment_results
+                .iter()
+                .filter(|a| a.status == TargetStatus::Error)
+                .count();
+        let total_bytes = bug_results
+            .iter()
+            .flat_map(|b| &b.files)
+            .map(|f| f.bytes)
+            .sum::<usize>()
+            + attachment_results
+                .iter()
+                .filter_map(|a| a.bytes)
+                .sum::<usize>();
+        Self {
+            succeeded,
+            failed,
+            total_bytes,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]

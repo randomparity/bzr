@@ -37,8 +37,6 @@ pub async fn execute(
             out_dir,
         } => {
             if bug_ids.is_empty() && ids.len() == 1 {
-                // Legacy single shape — validation already ensured `--out`
-                // is not paired with `--bug` or with multiple IDs.
                 download_single(&client, ids[0], out.as_deref(), format).await?;
             } else {
                 download_batch(&client, ids, bug_ids, out_dir, format).await?;
@@ -318,38 +316,15 @@ async fn download_batch(
         attachment_results.push(download_attachment_target(client, att_id, out_dir).await);
     }
 
-    let succeeded: usize = bug_results.iter().map(|b| b.files.len()).sum::<usize>()
-        + attachment_results
-            .iter()
-            .filter(|a| a.status == TargetStatus::Ok)
-            .count();
-    let failed: usize = bug_results
-        .iter()
-        .filter(|b| b.status == TargetStatus::Error)
-        .count()
-        + attachment_results
-            .iter()
-            .filter(|a| a.status == TargetStatus::Error)
-            .count();
-    let total_bytes: usize = bug_results
-        .iter()
-        .flat_map(|b| &b.files)
-        .map(|f| f.bytes)
-        .sum::<usize>()
-        + attachment_results
-            .iter()
-            .filter_map(|a| a.bytes)
-            .sum::<usize>();
+    let summary = BatchSummary::from_results(&bug_results, &attachment_results);
+    let succeeded = summary.succeeded;
+    let failed = summary.failed;
 
     let result = AttachmentBatchResult {
         out_dir: out_dir.to_string(),
         bug_results,
         attachment_results,
-        summary: BatchSummary {
-            succeeded,
-            failed,
-            total_bytes,
-        },
+        summary,
     };
 
     output::print_attachment_batch(&result, format);
