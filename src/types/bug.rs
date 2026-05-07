@@ -95,34 +95,98 @@ pub struct SearchParams {
     /// Filter to bugs last modified at or after this datetime (server-canonical
     /// form). Validated client-side; see `creation_time`.
     pub last_change_time: Option<String>,
+    /// Filter by Status Whiteboard substring (repeatable). Negated
+    /// values use `notsubstring`. Server-side substring matching is
+    /// native to Bugzilla for this field.
+    pub whiteboard: Vec<String>,
+    /// Filter by Target Milestone (repeatable). Exact match.
+    pub target_milestone: Vec<String>,
+    /// Filter by Version (repeatable). Exact match.
+    pub version: Vec<String>,
+    /// Filter by Operating System (repeatable). Exact match.
+    pub op_sys: Vec<String>,
+    /// Filter by Platform / Hardware (repeatable). Exact match. The
+    /// Bugzilla `Bug.search` API parameter is `platform` (the bug
+    /// record field is `rep_platform`); we match the search-API
+    /// name here.
+    pub platform: Vec<String>,
+    /// Filter by Resolution (repeatable). Exact match. Empty
+    /// resolution matches open bugs.
+    pub resolution: Vec<String>,
+    /// Filter by QA Contact login (repeatable). Exact match.
+    pub qa_contact: Vec<String>,
+    /// Filter by URL field substring (repeatable). Negated values
+    /// use `notsubstring`.
+    pub url: Vec<String>,
+}
+
+/// Optional per-invocation overrides applied to a `SearchParams`
+/// (typically constructed from a `SavedQuery` by `bzr query run`).
+///
+/// Each `None` keeps whatever the saved value was; each `Some(_)`
+/// replaces it. Construct with `Overrides { limit,
+/// ..Default::default() }` and only populate the fields you want to
+/// override.
+#[derive(Clone, Copy, Debug, Default)]
+#[non_exhaustive]
+pub struct Overrides<'a> {
+    pub limit: Option<u32>,
+    pub fields: Option<&'a str>,
+    pub exclude_fields: Option<&'a str>,
+    pub creation_time: Option<&'a str>,
+    pub last_change_time: Option<&'a str>,
+    pub whiteboard: Option<&'a [String]>,
+    pub target_milestone: Option<&'a [String]>,
+    pub version: Option<&'a [String]>,
+    pub op_sys: Option<&'a [String]>,
+    pub platform: Option<&'a [String]>,
+    pub resolution: Option<&'a [String]>,
+    pub qa_contact: Option<&'a [String]>,
+    pub url: Option<&'a [String]>,
 }
 
 impl SearchParams {
-    /// Apply optional runtime overrides for limit, fields, `exclude_fields`,
-    /// and the two date filters. `Some(_)` replaces; `None` keeps the
-    /// saved value.
-    pub fn apply_overrides(
-        &mut self,
-        limit: Option<u32>,
-        fields: Option<&str>,
-        exclude_fields: Option<&str>,
-        creation_time: Option<&str>,
-        last_change_time: Option<&str>,
-    ) {
-        if let Some(l) = limit {
+    /// Apply optional per-invocation overrides. `Some(_)` replaces;
+    /// `None` keeps the saved value.
+    pub fn apply_overrides(&mut self, o: Overrides<'_>) {
+        if let Some(l) = o.limit {
             self.limit = Some(l);
         }
-        if let Some(f) = fields {
+        if let Some(f) = o.fields {
             self.include_fields = Some(f.to_string());
         }
-        if let Some(ef) = exclude_fields {
+        if let Some(ef) = o.exclude_fields {
             self.exclude_fields = Some(ef.to_string());
         }
-        if let Some(ct) = creation_time {
+        if let Some(ct) = o.creation_time {
             self.creation_time = Some(ct.to_string());
         }
-        if let Some(lct) = last_change_time {
+        if let Some(lct) = o.last_change_time {
             self.last_change_time = Some(lct.to_string());
+        }
+        if let Some(v) = o.whiteboard {
+            self.whiteboard = v.to_vec();
+        }
+        if let Some(v) = o.target_milestone {
+            self.target_milestone = v.to_vec();
+        }
+        if let Some(v) = o.version {
+            self.version = v.to_vec();
+        }
+        if let Some(v) = o.op_sys {
+            self.op_sys = v.to_vec();
+        }
+        if let Some(v) = o.platform {
+            self.platform = v.to_vec();
+        }
+        if let Some(v) = o.resolution {
+            self.resolution = v.to_vec();
+        }
+        if let Some(v) = o.qa_contact {
+            self.qa_contact = v.to_vec();
+        }
+        if let Some(v) = o.url {
+            self.url = v.to_vec();
         }
     }
 
@@ -130,7 +194,7 @@ impl SearchParams {
     ///
     /// # Panics
     ///
-    /// Panics if `name` is not one of the 7 known field names in
+    /// Panics if `name` is not one of the 15 known field names in
     /// `FIELD_MAPPINGS`. Only called with compile-time-known names.
     pub fn get_field(&self, name: &str) -> &[String] {
         macro_rules! as_ref {
@@ -146,6 +210,14 @@ impl SearchParams {
             "creator" => creator,
             "priority" => priority,
             "severity" => severity,
+            "whiteboard" => whiteboard,
+            "target_milestone" => target_milestone,
+            "version" => version,
+            "op_sys" => op_sys,
+            "platform" => platform,
+            "resolution" => resolution,
+            "qa_contact" => qa_contact,
+            "url" => url,
         })
     }
 
@@ -169,6 +241,14 @@ impl SearchParams {
             || !self.raw_params.is_empty()
             || self.creation_time.is_some()
             || self.last_change_time.is_some()
+            || !self.whiteboard.is_empty()
+            || !self.target_milestone.is_empty()
+            || !self.version.is_empty()
+            || !self.op_sys.is_empty()
+            || !self.platform.is_empty()
+            || !self.resolution.is_empty()
+            || !self.qa_contact.is_empty()
+            || !self.url.is_empty()
     }
 
     /// Returns true if any *structured* filter is set.
@@ -197,6 +277,14 @@ impl SearchParams {
             || !self.raw_params.is_empty()
             || self.creation_time.is_some()
             || self.last_change_time.is_some()
+            || !self.whiteboard.is_empty()
+            || !self.target_milestone.is_empty()
+            || !self.version.is_empty()
+            || !self.op_sys.is_empty()
+            || !self.platform.is_empty()
+            || !self.resolution.is_empty()
+            || !self.qa_contact.is_empty()
+            || !self.url.is_empty()
     }
 }
 
@@ -215,6 +303,28 @@ pub fn partition_filters(values: &[String]) -> (Vec<&str>, Vec<&str>) {
     (positive, negated)
 }
 
+/// Bugzilla boolean-chart operator used when a filter value is
+/// negated (`!`-prefix). Each `FieldMapping` row picks one based on
+/// the field's positive-side match style.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NegationOp {
+    /// For exact-match fields (the inverse of `equals`).
+    NotEquals,
+    /// For substring-match fields (the inverse of `substring`).
+    NotSubstring,
+}
+
+impl NegationOp {
+    /// Returns the wire-form operator string Bugzilla expects in
+    /// boolean-chart `oN` parameters.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NotEquals => "notequals",
+            Self::NotSubstring => "notsubstring",
+        }
+    }
+}
+
 /// Maps a filterable field across all naming contexts.
 pub struct FieldMapping {
     /// Name on `SearchParams` / `SavedQuery` (e.g. "status").
@@ -224,44 +334,101 @@ pub struct FieldMapping {
     pub url_param: &'static str,
     /// Bugzilla internal name for boolean charts (e.g. `bug_status`).
     pub internal_name: &'static str,
+    /// Boolean-chart operator used when a value is negated (`!`-prefix).
+    pub negation_operator: NegationOp,
 }
 
-/// Canonical field-mapping table for the 7 multi-value filter fields.
+/// Canonical field-mapping table for the 15 multi-value filter fields.
 pub const FIELD_MAPPINGS: &[FieldMapping] = &[
     FieldMapping {
         struct_field: "product",
         url_param: "product",
         internal_name: "product",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "component",
         url_param: "component",
         internal_name: "component",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "status",
         url_param: "bug_status",
         internal_name: "bug_status",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "assigned_to",
         url_param: "assigned_to",
         internal_name: "assigned_to",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "creator",
         url_param: "reporter",
         internal_name: "reporter",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "priority",
         url_param: "priority",
         internal_name: "priority",
+        negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
         struct_field: "severity",
         url_param: "bug_severity",
         internal_name: "bug_severity",
+        negation_operator: NegationOp::NotEquals,
+    },
+    FieldMapping {
+        struct_field: "whiteboard",
+        url_param: "status_whiteboard",
+        internal_name: "status_whiteboard",
+        negation_operator: NegationOp::NotSubstring,
+    },
+    FieldMapping {
+        struct_field: "target_milestone",
+        url_param: "target_milestone",
+        internal_name: "target_milestone",
+        negation_operator: NegationOp::NotEquals,
+    },
+    FieldMapping {
+        struct_field: "version",
+        url_param: "version",
+        internal_name: "version",
+        negation_operator: NegationOp::NotEquals,
+    },
+    FieldMapping {
+        struct_field: "op_sys",
+        url_param: "op_sys",
+        internal_name: "op_sys",
+        negation_operator: NegationOp::NotEquals,
+    },
+    FieldMapping {
+        struct_field: "platform",
+        url_param: "rep_platform",
+        internal_name: "rep_platform",
+        negation_operator: NegationOp::NotEquals,
+    },
+    FieldMapping {
+        struct_field: "resolution",
+        url_param: "resolution",
+        internal_name: "resolution",
+        negation_operator: NegationOp::NotEquals,
+    },
+    FieldMapping {
+        struct_field: "qa_contact",
+        url_param: "qa_contact",
+        internal_name: "qa_contact",
+        negation_operator: NegationOp::NotEquals,
+    },
+    FieldMapping {
+        struct_field: "url",
+        url_param: "bug_file_loc",
+        internal_name: "bug_file_loc",
+        negation_operator: NegationOp::NotSubstring,
     },
 ];
 
@@ -434,6 +601,30 @@ pub struct SavedQuery {
     /// Server-canonical form. See `creation_time`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_change_time: Option<String>,
+    /// Filter by Status Whiteboard substring. See `SearchParams::whiteboard`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub whiteboard: Vec<String>,
+    /// Filter by Target Milestone (exact match, repeatable).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub target_milestone: Vec<String>,
+    /// Filter by Version (exact match, repeatable).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub version: Vec<String>,
+    /// Filter by OS (exact match, repeatable).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub op_sys: Vec<String>,
+    /// Filter by Platform / Hardware (exact match, repeatable). API param `platform`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub platform: Vec<String>,
+    /// Filter by Resolution (exact match, repeatable; empty matches open bugs).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resolution: Vec<String>,
+    /// Filter by QA Contact login (exact match, repeatable).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub qa_contact: Vec<String>,
+    /// Filter by URL field substring (repeatable).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub url: Vec<String>,
 }
 
 impl SavedQuery {
@@ -459,6 +650,14 @@ impl SavedQuery {
             raw_params: self.raw_params,
             creation_time: self.creation_time,
             last_change_time: self.last_change_time,
+            whiteboard: self.whiteboard,
+            target_milestone: self.target_milestone,
+            version: self.version,
+            op_sys: self.op_sys,
+            platform: self.platform,
+            resolution: self.resolution,
+            qa_contact: self.qa_contact,
+            url: self.url,
             ..Default::default()
         }
     }
@@ -479,6 +678,14 @@ impl SavedQuery {
             "creator" => creator,
             "priority" => priority,
             "severity" => severity,
+            "whiteboard" => whiteboard,
+            "target_milestone" => target_milestone,
+            "version" => version,
+            "op_sys" => op_sys,
+            "platform" => platform,
+            "resolution" => resolution,
+            "qa_contact" => qa_contact,
+            "url" => url,
         })
     }
 
@@ -495,6 +702,14 @@ impl SavedQuery {
             || !self.raw_params.is_empty()
             || self.creation_time.is_some()
             || self.last_change_time.is_some()
+            || !self.whiteboard.is_empty()
+            || !self.target_milestone.is_empty()
+            || !self.version.is_empty()
+            || !self.op_sys.is_empty()
+            || !self.platform.is_empty()
+            || !self.resolution.is_empty()
+            || !self.qa_contact.is_empty()
+            || !self.url.is_empty()
     }
 }
 

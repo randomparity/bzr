@@ -24,6 +24,14 @@ fn save_action(name: &str) -> QueryAction {
         exclude_fields: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     }
 }
 
@@ -45,6 +53,14 @@ fn product_save_action(name: &str, product: &str, limit: u32) -> QueryAction {
         exclude_fields: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     }
 }
 
@@ -65,6 +81,14 @@ fn empty_save_action(name: &str, search: Option<String>) -> QueryAction {
         exclude_fields: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     }
 }
 
@@ -85,6 +109,14 @@ fn url_save_action(name: &str, url: String) -> QueryAction {
         exclude_fields: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     }
 }
 
@@ -97,6 +129,14 @@ fn run_action(name: &str) -> QueryAction {
         server: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     }
 }
 
@@ -143,6 +183,14 @@ async fn query_save_persists_every_field() {
         exclude_fields: Some("comments".into()),
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
     result.unwrap();
@@ -314,6 +362,14 @@ async fn query_run_with_limit_override() {
         server: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, _) =
         capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
@@ -340,6 +396,14 @@ async fn query_save_existing_entry_reports_updated() {
         exclude_fields: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, _) =
         capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
@@ -361,6 +425,14 @@ async fn query_save_existing_entry_reports_updated() {
         exclude_fields: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, output) = capture_stdout(super::execute(
         &update_action,
@@ -434,6 +506,14 @@ async fn query_run_applies_field_overrides() {
         exclude_fields: Some("cc".into()),
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, _) =
         capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
@@ -456,6 +536,14 @@ async fn query_run_applies_field_overrides() {
         server: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, _) =
         capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
@@ -557,6 +645,14 @@ async fn query_run_with_server_override() {
         server: Some("test".into()),
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, _) =
         capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
@@ -610,6 +706,14 @@ async fn query_save_rejects_malformed_created_since() {
         exclude_fields: None,
         created_since: Some("garbage".into()),
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
 
     let result = super::execute(&action, None, OutputFormat::Json, None).await;
@@ -638,6 +742,14 @@ async fn query_save_stores_canonical_date_forms() {
         exclude_fields: None,
         created_since: Some("2026-04-01".into()),
         changed_since: Some("2026-04-15T12:00:00Z".into()),
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
     result.unwrap();
@@ -670,6 +782,14 @@ async fn query_save_accepts_date_only_query() {
         exclude_fields: None,
         created_since: Some("2026-04-01".into()),
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
     result.unwrap();
@@ -700,9 +820,217 @@ async fn query_run_rejects_malformed_created_since_override() {
         server: None,
         created_since: Some("not-a-date".into()),
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let result = super::execute(&action, None, OutputFormat::Json, None).await;
     let err = result.unwrap_err();
     assert_eq!(err.exit_code(), 7);
     assert!(err.to_string().contains("--created-since"));
+}
+
+#[tokio::test]
+async fn query_save_persists_158_field_filters() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let action = QueryAction::Save {
+        name: "field-filters".into(),
+        from_url: None,
+        search: None,
+        product: vec![],
+        component: vec![],
+        status: vec![],
+        assignee: vec![],
+        creator: vec![],
+        priority: vec![],
+        severity: vec![],
+        limit: None,
+        fields: None,
+        exclude_fields: None,
+        created_since: None,
+        changed_since: None,
+        whiteboard: vec!["needs-review".into()],
+        target_milestone: vec!["5.0".into()],
+        version: vec!["9.4".into()],
+        op_sys: vec!["Linux".into()],
+        platform: vec!["x86_64".into()],
+        resolution: vec!["FIXED".into()],
+        qa_contact: vec!["qa@example.com".into()],
+        url: vec!["github.com/foo".into()],
+    };
+    let (result, _output) =
+        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    assert!(result.is_ok(), "save failed: {result:?}");
+
+    let cfg = Config::load().unwrap();
+    let q = cfg.queries.get("field-filters").unwrap();
+    assert_eq!(q.whiteboard, vec!["needs-review"]);
+    assert_eq!(q.target_milestone, vec!["5.0"]);
+    assert_eq!(q.version, vec!["9.4"]);
+    assert_eq!(q.op_sys, vec!["Linux"]);
+    assert_eq!(q.platform, vec!["x86_64"]);
+    assert_eq!(q.resolution, vec!["FIXED"]);
+    assert_eq!(q.qa_contact, vec!["qa@example.com"]);
+    assert_eq!(q.url, vec!["github.com/foo"]);
+}
+
+#[tokio::test]
+async fn query_save_accepts_whiteboard_only_filter() {
+    // Regression: SavedQuery::has_filters() must accept a query whose
+    // ONLY filter is one of the 8 new fields. Otherwise saving such
+    // a query would fail with "query must have at least one filter
+    // set".
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let action = QueryAction::Save {
+        name: "wb-only".into(),
+        from_url: None,
+        search: None,
+        product: vec![],
+        component: vec![],
+        status: vec![],
+        assignee: vec![],
+        creator: vec![],
+        priority: vec![],
+        severity: vec![],
+        limit: None,
+        fields: None,
+        exclude_fields: None,
+        created_since: None,
+        changed_since: None,
+        whiteboard: vec!["wip".into()],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
+    };
+    let (result, _output) =
+        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    assert!(
+        result.is_ok(),
+        "save with whiteboard-only filter must succeed: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn query_run_overrides_replace_saved_field_filters() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    // Save a query with whiteboard=original and resolution=FIXED.
+    let save_action = QueryAction::Save {
+        name: "field-override-test".into(),
+        from_url: None,
+        search: None,
+        product: vec![],
+        component: vec![],
+        status: vec![],
+        assignee: vec![],
+        creator: vec![],
+        priority: vec![],
+        severity: vec![],
+        limit: None,
+        fields: None,
+        exclude_fields: None,
+        created_since: None,
+        changed_since: None,
+        whiteboard: vec!["original".into()],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec!["FIXED".into()],
+        qa_contact: vec![],
+        url: vec![],
+    };
+    let (result, _) =
+        capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
+    assert!(result.is_ok(), "save failed: {result:?}");
+
+    // The run must hit the wire with the override values, not the saved ones.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("whiteboard", "overridden"))
+        .and(query_param("resolution", "WONTFIX"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let run_action = QueryAction::Run {
+        name: "field-override-test".into(),
+        limit: None,
+        fields: None,
+        exclude_fields: None,
+        server: None,
+        created_since: None,
+        changed_since: None,
+        whiteboard: vec!["overridden".into()],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec!["WONTFIX".into()],
+        qa_contact: vec![],
+        url: vec![],
+    };
+    let (result, _) =
+        capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
+    assert!(result.is_ok(), "run failed: {result:?}");
+}
+
+#[tokio::test]
+async fn query_run_empty_override_keeps_saved_field_filter() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    let save_action = QueryAction::Save {
+        name: "saved-wb".into(),
+        from_url: None,
+        search: None,
+        product: vec![],
+        component: vec![],
+        status: vec![],
+        assignee: vec![],
+        creator: vec![],
+        priority: vec![],
+        severity: vec![],
+        limit: None,
+        fields: None,
+        exclude_fields: None,
+        created_since: None,
+        changed_since: None,
+        whiteboard: vec!["original".into()],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
+    };
+    let (result, _) =
+        capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
+    assert!(result.is_ok(), "save failed: {result:?}");
+
+    // No --whiteboard override on run: the saved value must reach the wire.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("whiteboard", "original"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let run_action = run_action("saved-wb");
+    let (result, _) =
+        capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
+    assert!(result.is_ok(), "run failed: {result:?}");
 }

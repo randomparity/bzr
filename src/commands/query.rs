@@ -9,6 +9,17 @@ use crate::error::{BzrError, Result};
 use crate::output;
 use crate::types::{OutputFormat, QueryKind, SavedQuery};
 
+/// Translate clap's empty-Vec sentinel into `None` so
+/// `Overrides`'s `Option<&[String]>` semantics line up: an absent
+/// flag keeps the saved value, a non-empty flag replaces it.
+fn slice_override(v: &[String]) -> Option<&[String]> {
+    if v.is_empty() {
+        None
+    } else {
+        Some(v)
+    }
+}
+
 pub async fn execute(
     action: &QueryAction,
     server: Option<&str>,
@@ -41,6 +52,14 @@ fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
         exclude_fields,
         created_since,
         changed_since,
+        whiteboard,
+        target_milestone,
+        version,
+        op_sys,
+        platform,
+        resolution,
+        qa_contact,
+        url,
     } = action
     else {
         unreachable!()
@@ -92,6 +111,14 @@ fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
             exclude_fields: exclude_fields.clone(),
             creation_time,
             last_change_time,
+            whiteboard: whiteboard.clone(),
+            target_milestone: target_milestone.clone(),
+            version: version.clone(),
+            op_sys: op_sys.clone(),
+            platform: platform.clone(),
+            resolution: resolution.clone(),
+            qa_contact: qa_contact.clone(),
+            url: url.clone(),
             ..SavedQuery::default()
         };
         (query, None)
@@ -163,6 +190,14 @@ async fn handle_run(
         server: server_override,
         created_since,
         changed_since,
+        whiteboard,
+        target_milestone,
+        version,
+        op_sys,
+        platform,
+        resolution,
+        qa_contact,
+        url,
     } = action
     else {
         unreachable!()
@@ -184,13 +219,21 @@ async fn handle_run(
         .or(saved.server.as_deref());
 
     let mut params = saved.to_search_params();
-    params.apply_overrides(
-        *limit,
-        fields.as_deref(),
-        exclude_fields.as_deref(),
-        creation_time_override.as_deref(),
-        last_change_time_override.as_deref(),
-    );
+    params.apply_overrides(crate::types::Overrides {
+        limit: *limit,
+        fields: fields.as_deref(),
+        exclude_fields: exclude_fields.as_deref(),
+        creation_time: creation_time_override.as_deref(),
+        last_change_time: last_change_time_override.as_deref(),
+        whiteboard: slice_override(whiteboard),
+        target_milestone: slice_override(target_milestone),
+        version: slice_override(version),
+        op_sys: slice_override(op_sys),
+        platform: slice_override(platform),
+        resolution: slice_override(resolution),
+        qa_contact: slice_override(qa_contact),
+        url: slice_override(url),
+    });
 
     let client = super::shared::connect_and_configure(effective_server, api).await?;
     let bugs = client.search_bugs(&params).await?;

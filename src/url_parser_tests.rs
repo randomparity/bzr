@@ -404,3 +404,33 @@ fn parse_url_with_shell_backslashes_boolean_chart() {
     assert_eq!(raw_value(&parsed, "v1"), "user@example.com");
     assert_eq!(raw_value(&parsed, "classification"), "Community");
 }
+
+#[test]
+fn parse_url_with_new_158_field_params() {
+    let parsed = parse_test_url(
+        "status_whiteboard=needs-review\
+        &target_milestone=5.0\
+        &version=9.4\
+        &op_sys=Linux\
+        &rep_platform=x86_64\
+        &resolution=FIXED\
+        &qa_contact=qa%40example.com\
+        &bug_file_loc=github.com%2Ffoo",
+    );
+    assert_eq!(parsed.query.whiteboard, vec!["needs-review"]);
+    assert_eq!(parsed.query.target_milestone, vec!["5.0"]);
+    assert_eq!(parsed.query.version, vec!["9.4"]);
+    assert_eq!(parsed.query.op_sys, vec!["Linux"]);
+    assert_eq!(parsed.query.platform, vec!["x86_64"]);
+    assert_eq!(parsed.query.resolution, vec!["FIXED"]);
+    assert_eq!(parsed.query.qa_contact, vec!["qa@example.com"]);
+    assert_eq!(parsed.query.url, vec!["github.com/foo"]);
+    // Nothing falls through to raw_params.
+    assert!(parsed.query.raw_params.is_empty());
+}
+
+#[test]
+fn parse_url_repeated_whiteboard_accumulates() {
+    let parsed = parse_test_url("status_whiteboard=wip&status_whiteboard=review");
+    assert_eq!(parsed.query.whiteboard, vec!["wip", "review"]);
+}

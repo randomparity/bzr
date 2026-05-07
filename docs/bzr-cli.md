@@ -216,6 +216,36 @@ Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`,
 
 `--created-since` and `--changed-since` accept ISO 8601 datetimes (`YYYY-MM-DDTHH:MM:SS`, `YYYY-MM-DDTHH:MM:SSZ`, or `YYYY-MM-DDTHH:MM:SS±HH:MM`) or a bare `YYYY-MM-DD`. Bare dates are treated as `00:00:00 UTC`. Fractional seconds, week dates, and ordinal dates are rejected with exit code 7. The same validator is used by `bzr bug history --since` and `bzr comment list --since`.
 
+#### Additional field filters (issue #158)
+
+Eight additional field filters are accepted, each repeatable for OR
+within a field, AND across fields, with `!`-prefix to invert:
+
+| Flag | Match style | Negation operator |
+| --- | --- | --- |
+| `--whiteboard` | substring | `notsubstring` |
+| `--target-milestone` | exact | `notequals` |
+| `--version` | exact | `notequals` |
+| `--op-sys` | exact | `notequals` |
+| `--platform` | exact | `notequals` |
+| `--resolution` | exact (empty matches open) | `notequals` |
+| `--qa-contact` | exact | `notequals` |
+| `--url` | substring | `notsubstring` |
+
+Examples:
+
+```sh
+bzr bug list --whiteboard 'needs-review'
+bzr bug list --whiteboard '!wip' --resolution '!FIXED'
+bzr bug list --version 9.4 --version 9.5 --op-sys Linux
+```
+
+The `--platform` flag matches the Bugzilla `Bug.search` API
+parameter name. The output-side bug field is `rep_platform` (and
+`bzr bug create` accepts `--rep-platform` for the input side of bug
+creation); the search/list filter uses `--platform` to match
+upstream Bugzilla and `bzl-search`.
+
 ### `bzr bug view`
 
 Display detailed information about one or more bugs.
@@ -1172,6 +1202,12 @@ At least one filter must be set. Use either `--from-url` or one or more manual f
 
 When `--from-url` is used, `--limit`, `--fields`, and `--exclude-fields` may still be provided and will be stored with the saved query as overrides.
 
+All `bzr bug list` filter flags are also accepted; see
+[bug list](#bzr-bug-list) for syntax and semantics, including the
+`--whiteboard`, `--target-milestone`, `--version`, `--op-sys`,
+`--platform`, `--resolution`, `--qa-contact`, and `--url` filters
+added in #158.
+
 Agent note: saved queries are useful for agents because they turn multi-flag searches into stable named workflows. Pair them with `bzr --json query run <name>` for deterministic reuse.
 
 ### `bzr query list`
@@ -1232,6 +1268,12 @@ bzr query run recent-firefox --changed-since 2026-05-01
 | `--server <NAME>` | No | Override the server to run the query against. Takes precedence over the server stored in the saved query. The global `--server` flag takes precedence over this flag. |
 | `--created-since <DATE>` | No | Override the saved `creation_time` filter for this run. Same accepted forms as [`bzr bug list --created-since`](#date-format). |
 | `--changed-since <DATE>` | No | Override the saved `last_change_time` filter for this run. Same accepted forms as [`bzr bug list --changed-since`](#date-format). |
+
+All eight `bzr bug list` field filters from #158 are also accepted
+as overrides. Passing a flag replaces the saved value for that
+field; omitting it keeps the saved value. There is no clear
+sentinel — to clear a saved field, edit the config or re-save the
+query.
 
 ---
 

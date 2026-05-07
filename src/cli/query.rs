@@ -25,6 +25,11 @@ pub enum QueryAction {
     /// query. Same accepted forms as `bzr bug list --created-since`.
     /// Validated at save time; malformed input exits 7.
     ///
+    /// Eight additional bzl-parity field filters are accepted with the
+    /// same semantics as `bzr bug list --whiteboard` etc. (see
+    /// bzr-bug-list(1) for syntax and substring vs exact match
+    /// distinction).
+    ///
     /// Examples:
     ///
     ///   bzr query save firefox-new --product Firefox --status NEW
@@ -46,7 +51,7 @@ pub enum QueryAction {
         /// where possible; unrecognized parameters are stored
         /// verbatim and passed through at run time. Mutually
         /// exclusive with `--search` and every filter flag.
-        #[arg(long, conflicts_with_all = ["search", "product", "component", "status", "assignee", "creator", "priority", "severity"])]
+        #[arg(long, conflicts_with_all = ["search", "product", "component", "status", "assignee", "creator", "priority", "severity", "whiteboard", "target_milestone", "version", "op_sys", "platform", "resolution", "qa_contact", "url"])]
         from_url: Option<String>,
         /// Free-text search query (creates a `search`-kind saved query).
         ///
@@ -96,6 +101,30 @@ pub enum QueryAction {
         /// Accepts the same forms as `bzr bug list --changed-since`.
         #[arg(long, value_name = "DATE")]
         changed_since: Option<String>,
+        /// Filter by Status Whiteboard substring (repeatable for OR; prefix with ! to exclude)
+        #[arg(long)]
+        whiteboard: Vec<String>,
+        /// Filter by Target Milestone (repeatable for OR; prefix with ! to exclude)
+        #[arg(long)]
+        target_milestone: Vec<String>,
+        /// Filter by Version (repeatable for OR; prefix with ! to exclude)
+        #[arg(long)]
+        version: Vec<String>,
+        /// Filter by Operating System (repeatable for OR; prefix with ! to exclude)
+        #[arg(long)]
+        op_sys: Vec<String>,
+        /// Filter by Platform (repeatable for OR; prefix with ! to exclude)
+        #[arg(long)]
+        platform: Vec<String>,
+        /// Filter by Resolution (repeatable for OR; prefix with ! to exclude); empty matches open bugs
+        #[arg(long)]
+        resolution: Vec<String>,
+        /// Filter by QA Contact login (repeatable for OR; prefix with ! to exclude)
+        #[arg(long)]
+        qa_contact: Vec<String>,
+        /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude)
+        #[arg(long)]
+        url: Vec<String>,
     },
     /// List all saved queries.
     ///
@@ -167,6 +196,12 @@ pub enum QueryAction {
     /// nothing (`None` keeps the saved value), matching the
     /// existing `--limit` / `--fields` override convention.
     ///
+    /// All eight bzl-parity field filters from `bzr bug list` are
+    /// also overrideable here. Passing a flag replaces the saved
+    /// list for that field; omitting it keeps the saved value.
+    /// There is no clear sentinel — to clear a saved field, edit
+    /// the config or re-save the query.
+    ///
     /// Examples:
     ///
     ///   bzr query run firefox-new
@@ -203,5 +238,29 @@ pub enum QueryAction {
         /// Same accepted forms as `bzr bug list --changed-since`.
         #[arg(long, value_name = "DATE")]
         changed_since: Option<String>,
+        /// Override the saved Whiteboard filter for this run.
+        #[arg(long)]
+        whiteboard: Vec<String>,
+        /// Override the saved Target Milestone filter.
+        #[arg(long)]
+        target_milestone: Vec<String>,
+        /// Override the saved Version filter.
+        #[arg(long)]
+        version: Vec<String>,
+        /// Override the saved Operating System filter.
+        #[arg(long)]
+        op_sys: Vec<String>,
+        /// Override the saved Platform filter.
+        #[arg(long)]
+        platform: Vec<String>,
+        /// Override the saved Resolution filter.
+        #[arg(long)]
+        resolution: Vec<String>,
+        /// Override the saved QA Contact filter.
+        #[arg(long)]
+        qa_contact: Vec<String>,
+        /// Override the saved URL filter.
+        #[arg(long)]
+        url: Vec<String>,
     },
 }

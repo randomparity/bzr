@@ -56,6 +56,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `--limit` / `--fields` convention. `bzr query show` and the
   one-line `bzr query list` summary surface both filters when set.
   Closes #157.
+- `bzr bug list`, `bzr query save`, and `bzr query run` accept
+  eight new field filters: `--whiteboard`, `--target-milestone`,
+  `--version`, `--op-sys`, `--platform`, `--resolution`,
+  `--qa-contact`, and `--url`. All eight are repeatable for OR
+  within a field, AND across fields, and accept `!`-prefix to
+  invert. Substring fields (`--whiteboard`, `--url`) use
+  `notsubstring` for negation; the other six use `notequals`.
+  `bzr query show` lists each set field in its detail view.
+  Legacy `buglist.cgi` URL parameter names (`status_whiteboard`,
+  `rep_platform`, `bug_file_loc`) are recognized by `--from-url`.
+  Closes #158.
 
 ### Fixed
 

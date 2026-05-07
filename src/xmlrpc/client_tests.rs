@@ -803,3 +803,223 @@ async fn xmlrpc_get_attachments_returns_empty_when_bug_has_none() {
     let attachments = client.get_attachments(42).await.unwrap();
     assert!(attachments.is_empty());
 }
+
+#[tokio::test]
+async fn search_bugs_xmlrpc_sends_whiteboard() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<name>whiteboard</name>"))
+        .and(body_string_contains("<string>needs-review</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(1, "WB bug")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let params = SearchParams {
+        whiteboard: vec!["needs-review".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert_eq!(bugs.len(), 1);
+}
+
+#[tokio::test]
+async fn search_bugs_xmlrpc_sends_resolution() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<name>resolution</name>"))
+        .and(body_string_contains("<string>FIXED</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(1, "Res bug")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let params = SearchParams {
+        resolution: vec!["FIXED".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert_eq!(bugs.len(), 1);
+}
+
+#[tokio::test]
+async fn search_bugs_xmlrpc_negation_whiteboard_uses_notsubstring() {
+    // Boolean chart on the XML-RPC path uses fN/oN/vN keys with
+    // string values. For substring fields the operator must be
+    // `notsubstring`, not `notequals`.
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<string>status_whiteboard</string>"))
+        .and(body_string_contains("<string>notsubstring</string>"))
+        .and(body_string_contains("<string>wip</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(1, "WB bug")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let params = SearchParams {
+        whiteboard: vec!["!wip".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert_eq!(bugs.len(), 1);
+}
+
+#[tokio::test]
+async fn search_bugs_xmlrpc_sends_target_milestone() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<name>target_milestone</name>"))
+        .and(body_string_contains("<string>5.0</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(1, "TM bug")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let params = SearchParams {
+        target_milestone: vec!["5.0".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert_eq!(bugs.len(), 1);
+}
+
+#[tokio::test]
+async fn search_bugs_xmlrpc_sends_version() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<name>version</name>"))
+        .and(body_string_contains("<string>9.4</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(1, "Ver bug")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let params = SearchParams {
+        version: vec!["9.4".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert_eq!(bugs.len(), 1);
+}
+
+#[tokio::test]
+async fn search_bugs_xmlrpc_sends_op_sys() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<name>op_sys</name>"))
+        .and(body_string_contains("<string>Linux</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(1, "OS bug")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let params = SearchParams {
+        op_sys: vec!["Linux".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert_eq!(bugs.len(), 1);
+}
+
+#[tokio::test]
+async fn search_bugs_xmlrpc_sends_platform() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<name>platform</name>"))
+        .and(body_string_contains("<string>x86_64</string>"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(1, "Plat bug")),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let params = SearchParams {
+        platform: vec!["x86_64".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert_eq!(bugs.len(), 1);
+}
+
+#[tokio::test]
+async fn search_bugs_xmlrpc_sends_qa_contact() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<name>qa_contact</name>"))
+        .and(body_string_contains("<string>qa@example.com</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(1, "QA bug")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let params = SearchParams {
+        qa_contact: vec!["qa@example.com".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert_eq!(bugs.len(), 1);
+}
+
+#[tokio::test]
+async fn search_bugs_xmlrpc_sends_url() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<name>url</name>"))
+        .and(body_string_contains("<string>github.com/foo</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(1, "URL bug")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let params = SearchParams {
+        url: vec!["github.com/foo".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert_eq!(bugs.len(), 1);
+}
+
+#[tokio::test]
+async fn search_bugs_xmlrpc_negation_resolution_uses_notequals() {
+    // Boolean chart on the XML-RPC path uses fN/oN/vN keys with
+    // string values. For exact-match fields the operator must be
+    // `notequals`, not `notsubstring`.
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<string>resolution</string>"))
+        .and(body_string_contains("<string>notequals</string>"))
+        .and(body_string_contains("<string>FIXED</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(1, "Res bug")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let params = SearchParams {
+        resolution: vec!["!FIXED".into()],
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert_eq!(bugs.len(), 1);
+}

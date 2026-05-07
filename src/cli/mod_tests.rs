@@ -1253,3 +1253,191 @@ fn bug_list_parses_created_since_and_changed_since() {
     assert_eq!(created_since.as_deref(), Some("2026-04-01"));
     assert_eq!(changed_since.as_deref(), Some("2026-04-15T12:00:00Z"));
 }
+
+#[test]
+fn bug_list_parses_158_field_filters() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "list",
+        "--whiteboard",
+        "wip",
+        "--target-milestone",
+        "5.0",
+        "--version",
+        "9.4",
+        "--op-sys",
+        "Linux",
+        "--platform",
+        "x86_64",
+        "--resolution",
+        "FIXED",
+        "--qa-contact",
+        "qa@example.com",
+        "--url",
+        "github.com/foo",
+    ])
+    .unwrap();
+    let Commands::Bug {
+        action:
+            BugAction::List {
+                whiteboard,
+                target_milestone,
+                version,
+                op_sys,
+                platform,
+                resolution,
+                qa_contact,
+                url,
+                ..
+            },
+    } = cli.command
+    else {
+        panic!("expected Bug::List variant");
+    };
+    assert_eq!(whiteboard, vec!["wip"]);
+    assert_eq!(target_milestone, vec!["5.0"]);
+    assert_eq!(version, vec!["9.4"]);
+    assert_eq!(op_sys, vec!["Linux"]);
+    assert_eq!(platform, vec!["x86_64"]);
+    assert_eq!(resolution, vec!["FIXED"]);
+    assert_eq!(qa_contact, vec!["qa@example.com"]);
+    assert_eq!(url, vec!["github.com/foo"]);
+}
+
+#[test]
+fn bug_list_parses_repeated_whiteboard() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "list",
+        "--whiteboard",
+        "wip",
+        "--whiteboard",
+        "review",
+    ])
+    .unwrap();
+    let Commands::Bug {
+        action: BugAction::List { whiteboard, .. },
+    } = cli.command
+    else {
+        panic!("expected Bug::List variant");
+    };
+    assert_eq!(whiteboard, vec!["wip", "review"]);
+}
+
+#[test]
+fn bug_list_parses_negated_whiteboard() {
+    let cli = Cli::try_parse_from(["bzr", "bug", "list", "--whiteboard", "!wip"]).unwrap();
+    let Commands::Bug {
+        action: BugAction::List { whiteboard, .. },
+    } = cli.command
+    else {
+        panic!("expected Bug::List variant");
+    };
+    assert_eq!(whiteboard, vec!["!wip"]);
+}
+
+#[test]
+fn query_save_parses_158_field_filters() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "query",
+        "save",
+        "field-filters",
+        "--whiteboard",
+        "wip",
+        "--target-milestone",
+        "5.0",
+        "--version",
+        "9.4",
+        "--op-sys",
+        "Linux",
+        "--platform",
+        "x86_64",
+        "--resolution",
+        "FIXED",
+        "--qa-contact",
+        "qa@example.com",
+        "--url",
+        "github.com/foo",
+    ])
+    .unwrap();
+    let Commands::Query {
+        action:
+            QueryAction::Save {
+                whiteboard,
+                target_milestone,
+                version,
+                op_sys,
+                platform,
+                resolution,
+                qa_contact,
+                url,
+                ..
+            },
+    } = cli.command
+    else {
+        panic!("expected Query::Save variant");
+    };
+    assert_eq!(whiteboard, vec!["wip"]);
+    assert_eq!(target_milestone, vec!["5.0"]);
+    assert_eq!(version, vec!["9.4"]);
+    assert_eq!(op_sys, vec!["Linux"]);
+    assert_eq!(platform, vec!["x86_64"]);
+    assert_eq!(resolution, vec!["FIXED"]);
+    assert_eq!(qa_contact, vec!["qa@example.com"]);
+    assert_eq!(url, vec!["github.com/foo"]);
+}
+
+#[test]
+fn query_run_parses_158_field_filter_overrides() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "query",
+        "run",
+        "saved-q",
+        "--whiteboard",
+        "overridden",
+        "--target-milestone",
+        "6.0",
+        "--version",
+        "10.0",
+        "--op-sys",
+        "Windows",
+        "--platform",
+        "arm64",
+        "--resolution",
+        "WONTFIX",
+        "--qa-contact",
+        "newqa@example.com",
+        "--url",
+        "gitlab.com/x",
+    ])
+    .unwrap();
+    let Commands::Query {
+        action:
+            QueryAction::Run {
+                whiteboard,
+                target_milestone,
+                version,
+                op_sys,
+                platform,
+                resolution,
+                qa_contact,
+                url,
+                ..
+            },
+    } = cli.command
+    else {
+        panic!("expected Query::Run variant");
+    };
+    assert_eq!(whiteboard, vec!["overridden"]);
+    assert_eq!(target_milestone, vec!["6.0"]);
+    assert_eq!(version, vec!["10.0"]);
+    assert_eq!(op_sys, vec!["Windows"]);
+    assert_eq!(platform, vec!["arm64"]);
+    assert_eq!(resolution, vec!["WONTFIX"]);
+    assert_eq!(qa_contact, vec!["newqa@example.com"]);
+    assert_eq!(url, vec!["gitlab.com/x"]);
+}
