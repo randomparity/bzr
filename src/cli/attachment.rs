@@ -58,6 +58,11 @@ pub enum AttachmentAction {
     /// in a single API call. Use this when the attachment needs
     /// explanatory context — typical for patches.
     ///
+    /// `--comment-private` (used together with `--comment`) marks the
+    /// new comment private after upload. This requires `editbugs`
+    /// permission. Permission errors leave the attachment uploaded and
+    /// the comment public; rerun privacy via the web UI.
+    ///
     /// `--flag` accepts Bugzilla flag syntax (`name?`, `name+`,
     /// `name-`, `name?(user@example.com)`) and is repeatable.
     /// Requires credentials with attach-file permission on the
@@ -71,6 +76,8 @@ pub enum AttachmentAction {
     ///   bzr attachment upload 12345 fix.patch \
     ///     --flag 'review?(maintainer@example.com)'
     ///   bzr attachment upload 12345 fix.patch --comment "see #4567 for context"
+    ///   bzr attachment upload 12345 patch.diff \
+    ///     --comment "private context" --comment-private
     ///   bzr attachment upload 12345 fix.patch --is-patch
     ///
     /// See bzr-attachment-update(1) to modify metadata after upload.
@@ -105,11 +112,25 @@ pub enum AttachmentAction {
         /// Folded into the underlying `Bug.add_attachment` API call so
         /// the comment and attachment share a creation timestamp and
         /// are visible to the same audience as the bug. The comment
-        /// inherits the bug's default privacy; there is no Bugzilla
-        /// API for marking an `add_attachment` comment private — use
-        /// `bzr comment add --private` separately if needed.
+        /// inherits the bug's default privacy unless `--comment-private`
+        /// is also set, in which case a follow-up `Bug.update` call
+        /// flips the new comment private (two API round-trips total).
         #[arg(long)]
         comment: Option<String>,
+        /// Mark the comment posted via `--comment` private.
+        ///
+        /// Issues a follow-up `Bug.update` call after the upload to flip
+        /// the just-created comment's `is_private` flag. The Bugzilla
+        /// `Bug.add_attachment` API does not accept comment privacy in
+        /// the upload itself, so this is a two-call workflow internally.
+        ///
+        /// Requires `--comment <BODY>`; using `--comment-private` alone
+        /// is a usage error (exit 7). Marking a comment private requires
+        /// `editbugs` permission or insidergroup membership; on 403 the
+        /// attachment remains uploaded but the comment stays public, and
+        /// the command exits non-zero with a stderr warning.
+        #[arg(long)]
+        comment_private: bool,
         /// Set, request, or clear a flag using Bugzilla flag syntax.
         ///
         /// Repeatable. Accepted forms:

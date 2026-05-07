@@ -990,6 +990,7 @@ async fn attachment_upload_integration() {
         private: false,
         is_patch: false,
         comment: None,
+        comment_private: false,
         flag: vec![],
     };
     let result = bzr::commands::attachment::execute(
@@ -1031,6 +1032,7 @@ async fn attachment_upload_with_comment_integration() {
         private: false,
         is_patch: false,
         comment: Some("see #6789 for context".to_string()),
+        comment_private: false,
         flag: vec![],
     };
     let result = bzr::commands::attachment::execute(
@@ -1071,6 +1073,7 @@ async fn attachment_upload_with_is_patch_integration() {
         private: false,
         is_patch: true,
         comment: None,
+        comment_private: false,
         flag: vec![],
     };
     let result = bzr::commands::attachment::execute(

@@ -41,6 +41,7 @@ pub async fn execute(
             private,
             is_patch,
             comment,
+            comment_private: _,
             flag,
         } => {
             let path = Path::new(file);

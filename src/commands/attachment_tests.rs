@@ -84,6 +84,7 @@ async fn attachment_upload_api_error_propagates() {
         private: false,
         is_patch: false,
         comment: None,
+        comment_private: false,
         flag: vec![],
     };
     let result = super::execute(&action, None, OutputFormat::Json, None).await;
@@ -135,6 +136,7 @@ async fn attachment_upload_returns_id() {
         private: false,
         is_patch: false,
         comment: None,
+        comment_private: false,
         flag: vec![],
     };
     let (result, output) =
@@ -168,6 +170,7 @@ async fn attachment_upload_with_comment_includes_comment_in_request() {
         private: false,
         is_patch: false,
         comment: Some("see this".into()),
+        comment_private: false,
         flag: vec![],
     };
     let result = super::execute(&action, None, OutputFormat::Json, None).await;
@@ -202,6 +205,7 @@ async fn attachment_upload_with_is_patch_defaults_content_type_to_text_plain() {
         private: false,
         is_patch: true,
         comment: None,
+        comment_private: false,
         flag: vec![],
     };
     let result = super::execute(&action, None, OutputFormat::Json, None).await;
@@ -238,6 +242,7 @@ async fn attachment_upload_is_patch_with_explicit_content_type_keeps_content_typ
         private: false,
         is_patch: true,
         comment: None,
+        comment_private: false,
         flag: vec![],
     };
     let result = super::execute(&action, None, OutputFormat::Json, None).await;
