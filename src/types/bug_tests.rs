@@ -316,6 +316,12 @@ fn search_params_has_filters_for_each_individual_field() {
         ("raw_params", |p| {
             p.raw_params = vec![("f1".into(), "X".into())];
         }),
+        ("creation_time", |p| {
+            p.creation_time = Some("2026-04-01T00:00:00Z".into())
+        }),
+        ("last_change_time", |p| {
+            p.last_change_time = Some("2026-04-01T00:00:00Z".into())
+        }),
     ];
     for (name, setter) in cases {
         let mut p = SearchParams::default();
@@ -368,6 +374,12 @@ fn search_params_has_structured_filters_for_each_individual_field() {
         ("id", |p| p.id = vec![1]),
         ("raw_params", |p| {
             p.raw_params = vec![("f1".into(), "X".into())];
+        }),
+        ("creation_time", |p| {
+            p.creation_time = Some("2026-04-01T00:00:00Z".into())
+        }),
+        ("last_change_time", |p| {
+            p.last_change_time = Some("2026-04-01T00:00:00Z".into())
         }),
     ];
     for (name, setter) in cases {

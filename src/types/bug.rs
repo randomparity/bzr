@@ -88,6 +88,13 @@ pub struct SearchParams {
     /// Raw query parameters passed through verbatim to the REST API.
     /// Used for URL-imported queries with boolean chart params.
     pub raw_params: Vec<(String, String)>,
+    /// Filter to bugs created at or after this datetime (server-canonical
+    /// form: e.g. `2026-04-01T00:00:00Z`). Validated client-side at the
+    /// CLI layer via `crate::validation::parse_iso8601_or_date`.
+    pub creation_time: Option<String>,
+    /// Filter to bugs last modified at or after this datetime (server-canonical
+    /// form). Validated client-side; see `creation_time`.
+    pub last_change_time: Option<String>,
 }
 
 impl SearchParams {
@@ -150,6 +157,8 @@ impl SearchParams {
             || self.summary.is_some()
             || self.quicksearch.is_some()
             || !self.raw_params.is_empty()
+            || self.creation_time.is_some()
+            || self.last_change_time.is_some()
     }
 
     /// Returns true if any *structured* filter is set.
@@ -176,6 +185,8 @@ impl SearchParams {
             || self.alias.is_some()
             || !self.id.is_empty()
             || !self.raw_params.is_empty()
+            || self.creation_time.is_some()
+            || self.last_change_time.is_some()
     }
 }
 
