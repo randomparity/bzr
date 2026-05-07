@@ -120,32 +120,75 @@ pub struct SearchParams {
     pub url: Vec<String>,
 }
 
+/// Optional per-invocation overrides applied to a `SearchParams`
+/// (typically constructed from a `SavedQuery` by `bzr query run`).
+///
+/// Each `None` keeps whatever the saved value was; each `Some(_)`
+/// replaces it. The 8 multi-value fields use `&[String]` rather than
+/// `&Vec<String>` so callers can pass slices of `Vec` arguments
+/// without an extra allocation. Construct with `Overrides {
+/// limit, ..Default::default() }` and only populate the fields you
+/// want to override.
+#[derive(Clone, Copy, Debug, Default)]
+#[non_exhaustive]
+pub struct Overrides<'a> {
+    pub limit: Option<u32>,
+    pub fields: Option<&'a str>,
+    pub exclude_fields: Option<&'a str>,
+    pub creation_time: Option<&'a str>,
+    pub last_change_time: Option<&'a str>,
+    pub whiteboard: Option<&'a [String]>,
+    pub target_milestone: Option<&'a [String]>,
+    pub version: Option<&'a [String]>,
+    pub op_sys: Option<&'a [String]>,
+    pub platform: Option<&'a [String]>,
+    pub resolution: Option<&'a [String]>,
+    pub qa_contact: Option<&'a [String]>,
+    pub url: Option<&'a [String]>,
+}
+
 impl SearchParams {
-    /// Apply optional runtime overrides for limit, fields, `exclude_fields`,
-    /// and the two date filters. `Some(_)` replaces; `None` keeps the
-    /// saved value.
-    pub fn apply_overrides(
-        &mut self,
-        limit: Option<u32>,
-        fields: Option<&str>,
-        exclude_fields: Option<&str>,
-        creation_time: Option<&str>,
-        last_change_time: Option<&str>,
-    ) {
-        if let Some(l) = limit {
+    /// Apply optional per-invocation overrides. `Some(_)` replaces;
+    /// `None` keeps the saved value.
+    pub fn apply_overrides(&mut self, o: Overrides<'_>) {
+        if let Some(l) = o.limit {
             self.limit = Some(l);
         }
-        if let Some(f) = fields {
+        if let Some(f) = o.fields {
             self.include_fields = Some(f.to_string());
         }
-        if let Some(ef) = exclude_fields {
+        if let Some(ef) = o.exclude_fields {
             self.exclude_fields = Some(ef.to_string());
         }
-        if let Some(ct) = creation_time {
+        if let Some(ct) = o.creation_time {
             self.creation_time = Some(ct.to_string());
         }
-        if let Some(lct) = last_change_time {
+        if let Some(lct) = o.last_change_time {
             self.last_change_time = Some(lct.to_string());
+        }
+        if let Some(v) = o.whiteboard {
+            self.whiteboard = v.to_vec();
+        }
+        if let Some(v) = o.target_milestone {
+            self.target_milestone = v.to_vec();
+        }
+        if let Some(v) = o.version {
+            self.version = v.to_vec();
+        }
+        if let Some(v) = o.op_sys {
+            self.op_sys = v.to_vec();
+        }
+        if let Some(v) = o.platform {
+            self.platform = v.to_vec();
+        }
+        if let Some(v) = o.resolution {
+            self.resolution = v.to_vec();
+        }
+        if let Some(v) = o.qa_contact {
+            self.qa_contact = v.to_vec();
+        }
+        if let Some(v) = o.url {
+            self.url = v.to_vec();
         }
     }
 

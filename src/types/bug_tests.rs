@@ -585,7 +585,10 @@ fn apply_overrides_replaces_date_filters_when_some() {
         last_change_time: Some("2026-04-15T00:00:00Z".into()),
         ..Default::default()
     };
-    p.apply_overrides(None, None, None, Some("2026-05-01T00:00:00Z"), None);
+    p.apply_overrides(Overrides {
+        creation_time: Some("2026-05-01T00:00:00Z"),
+        ..Default::default()
+    });
     assert_eq!(p.creation_time.as_deref(), Some("2026-05-01T00:00:00Z"));
     // last_change_time unchanged because we passed None.
     assert_eq!(p.last_change_time.as_deref(), Some("2026-04-15T00:00:00Z"));
@@ -597,6 +600,9 @@ fn apply_overrides_keeps_date_filters_when_none() {
         creation_time: Some("2026-04-01T00:00:00Z".into()),
         ..Default::default()
     };
-    p.apply_overrides(Some(10), None, None, None, None);
+    p.apply_overrides(Overrides {
+        limit: Some(10),
+        ..Default::default()
+    });
     assert_eq!(p.creation_time.as_deref(), Some("2026-04-01T00:00:00Z"));
 }

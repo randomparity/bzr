@@ -1,7 +1,7 @@
 use crate::cli::BugAction;
 use crate::error::Result;
 use crate::output;
-use crate::types::{ApiMode, OutputFormat, SavedQuery, SearchParams};
+use crate::types::{ApiMode, OutputFormat, Overrides, SavedQuery, SearchParams};
 
 /// Determine the `save_as` name + query to persist after a successful URL-based
 /// search. Returns None when --save-as wasn't passed; errors when --save-as=""
@@ -40,7 +40,12 @@ fn build_params_from_url(
     if params.limit.is_none() && limit.is_none() {
         params.limit = Some(50);
     }
-    params.apply_overrides(limit, fields, exclude_fields, None, None);
+    params.apply_overrides(Overrides {
+        limit,
+        fields,
+        exclude_fields,
+        ..Default::default()
+    });
     params
 }
 
