@@ -162,69 +162,76 @@ pub enum TargetStatus {
 /// JSON mode emits a single object on stdout — no stderr writes.
 pub fn print_attachment_batch(result: &AttachmentBatchResult, format: OutputFormat) {
     print_formatted(result, format, |r| {
-        for bug in &r.bug_results {
-            match bug.status {
-                TargetStatus::Ok => {
-                    let _ = writeln!(
-                        io::stdout(),
-                        "{} {}: {} files saved",
-                        "Bug".bold(),
-                        format!("#{}", bug.bug_id).bold(),
-                        bug.files.len(),
-                    );
-                    for file in &bug.files {
-                        let _ = writeln!(io::stdout(), "  → {} ({} bytes)", file.path, file.bytes);
-                    }
-                }
-                TargetStatus::Error => {
-                    let _ = writeln!(
-                        io::stderr(),
-                        "Bug #{}: {}",
-                        bug.bug_id,
-                        bug.error.as_deref().unwrap_or("error"),
-                    );
-                    for file in &bug.files {
-                        let _ = writeln!(
-                            io::stdout(),
-                            "  → {} ({} bytes) [partial]",
-                            file.path,
-                            file.bytes,
-                        );
-                    }
-                }
-            }
-        }
-        for att in &r.attachment_results {
-            match att.status {
-                TargetStatus::Ok => {
-                    let _ = writeln!(
-                        io::stdout(),
-                        "{} #{}: {} ({} bytes)",
-                        "Attachment".bold(),
-                        att.attachment_id,
-                        att.path.as_deref().unwrap_or("?"),
-                        att.bytes.unwrap_or(0),
-                    );
-                }
-                TargetStatus::Error => {
-                    let _ = writeln!(
-                        io::stderr(),
-                        "Attachment #{}: {}",
-                        att.attachment_id,
-                        att.error.as_deref().unwrap_or("error"),
-                    );
-                }
-            }
-        }
-        let _ = writeln!(
-            io::stdout(),
-            "{} {} succeeded, {} failed, {} total bytes",
-            "Summary:".bold(),
-            r.summary.succeeded,
-            r.summary.failed,
-            r.summary.total_bytes,
-        );
+        write_attachment_batch_table(r, &mut io::stdout(), &mut io::stderr());
     });
+}
+
+/// Render the table-mode body of an [`AttachmentBatchResult`] to the given
+/// writers. Successes go to `out`, target-level failures go to `err`.
+/// Extracted from `print_attachment_batch` so tests can inject buffers
+/// for both streams; production calls use `io::stdout()` and `io::stderr()`.
+pub(super) fn write_attachment_batch_table(
+    r: &AttachmentBatchResult,
+    out: &mut impl std::io::Write,
+    err: &mut impl std::io::Write,
+) {
+    for bug in &r.bug_results {
+        match bug.status {
+            TargetStatus::Ok => {
+                let _ = writeln!(
+                    out,
+                    "{} {}: {} files saved",
+                    "Bug".bold(),
+                    format!("#{}", bug.bug_id).bold(),
+                    bug.files.len(),
+                );
+                for file in &bug.files {
+                    let _ = writeln!(out, "  → {} ({} bytes)", file.path, file.bytes);
+                }
+            }
+            TargetStatus::Error => {
+                let _ = writeln!(
+                    err,
+                    "Bug #{}: {}",
+                    bug.bug_id,
+                    bug.error.as_deref().unwrap_or("error"),
+                );
+                for file in &bug.files {
+                    let _ = writeln!(out, "  → {} ({} bytes) [partial]", file.path, file.bytes);
+                }
+            }
+        }
+    }
+    for att in &r.attachment_results {
+        match att.status {
+            TargetStatus::Ok => {
+                let _ = writeln!(
+                    out,
+                    "{} #{}: {} ({} bytes)",
+                    "Attachment".bold(),
+                    att.attachment_id,
+                    att.path.as_deref().unwrap_or("?"),
+                    att.bytes.unwrap_or(0),
+                );
+            }
+            TargetStatus::Error => {
+                let _ = writeln!(
+                    err,
+                    "Attachment #{}: {}",
+                    att.attachment_id,
+                    att.error.as_deref().unwrap_or("error"),
+                );
+            }
+        }
+    }
+    let _ = writeln!(
+        out,
+        "{} {} succeeded, {} failed, {} total bytes",
+        "Summary:".bold(),
+        r.summary.succeeded,
+        r.summary.failed,
+        r.summary.total_bytes,
+    );
 }
 
 #[cfg(test)]
