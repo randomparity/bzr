@@ -14,24 +14,11 @@ use clap::Parser;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
-// ── Bug commands ──────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn bug_list_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
-
-    Mock::given(method("GET"))
-        .and(path("/rest/bug"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "bugs": [
-                {"id": 1, "summary": "Test bug", "status": "NEW"}
-            ]
-        })))
-        .expect(1)
-        .mount(&mock)
-        .await;
-
-    let action = bzr::cli::BugAction::List {
+/// Build a `BugAction::List` with every field at its default value.
+/// Tests that exercise specific fields construct this and mutate the
+/// fields they care about.
+fn empty_list_action() -> bzr::cli::BugAction {
+    bzr::cli::BugAction::List {
         product: vec![],
         component: vec![],
         status: vec![],
@@ -55,7 +42,27 @@ async fn bug_list_integration() {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
-    };
+    }
+}
+
+// ── Bug commands ──────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn bug_list_integration() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [
+                {"id": 1, "summary": "Test bug", "status": "NEW"}
+            ]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = empty_list_action();
     let (result, output) = capture_stdout(bzr::commands::bug::execute(
         &action,
         Some("test"),
@@ -87,31 +94,16 @@ async fn bug_list_changed_since_canonicalizes_bare_date_on_wire() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::BugAction::List {
-        product: vec!["Firefox".into()],
-        component: vec![],
-        status: vec![],
-        assignee: vec![],
-        creator: vec![],
-        priority: vec![],
-        severity: vec![],
-        id: vec![],
-        alias: None,
-        summary: None,
-        limit: 50,
-        fields: None,
-        exclude_fields: None,
-        created_since: None,
-        changed_since: Some("2026-04-01".into()),
-        whiteboard: vec![],
-        target_milestone: vec![],
-        version: vec![],
-        op_sys: vec![],
-        platform: vec![],
-        resolution: vec![],
-        qa_contact: vec![],
-        url: vec![],
-    };
+    let mut action = empty_list_action();
+    if let bzr::cli::BugAction::List {
+        product,
+        changed_since,
+        ..
+    } = &mut action
+    {
+        *product = vec!["Firefox".into()];
+        *changed_since = Some("2026-04-01".into());
+    }
     let (result, _output) = capture_stdout(bzr::commands::bug::execute(
         &action,
         Some("test"),
@@ -633,31 +625,7 @@ api_key = "key-1234567890"
 async fn command_with_unknown_server_returns_error() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let action = bzr::cli::BugAction::List {
-        product: vec![],
-        component: vec![],
-        status: vec![],
-        assignee: vec![],
-        creator: vec![],
-        priority: vec![],
-        severity: vec![],
-        id: vec![],
-        alias: None,
-        summary: None,
-        limit: 50,
-        fields: None,
-        exclude_fields: None,
-        created_since: None,
-        changed_since: None,
-        whiteboard: vec![],
-        target_milestone: vec![],
-        version: vec![],
-        op_sys: vec![],
-        platform: vec![],
-        resolution: vec![],
-        qa_contact: vec![],
-        url: vec![],
-    };
+    let action = empty_list_action();
     let result = bzr::commands::bug::execute(
         &action,
         Some("nonexistent"),
@@ -1915,31 +1883,18 @@ async fn bug_list_issue_158_mixed_positive_and_negation_reaches_wire() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::BugAction::List {
-        product: vec!["P".into()],
-        component: vec![],
-        status: vec![],
-        assignee: vec![],
-        creator: vec![],
-        priority: vec![],
-        severity: vec![],
-        id: vec![],
-        alias: None,
-        summary: None,
-        limit: 50,
-        fields: None,
-        exclude_fields: None,
-        created_since: None,
-        changed_since: None,
-        whiteboard: vec!["!wip".into()],
-        target_milestone: vec![],
-        version: vec![],
-        op_sys: vec![],
-        platform: vec![],
-        resolution: vec!["!FIXED".into()],
-        qa_contact: vec![],
-        url: vec![],
-    };
+    let mut action = empty_list_action();
+    if let bzr::cli::BugAction::List {
+        product,
+        whiteboard,
+        resolution,
+        ..
+    } = &mut action
+    {
+        *product = vec!["P".into()];
+        *whiteboard = vec!["!wip".into()];
+        *resolution = vec!["!FIXED".into()];
+    }
     let (result, _output) = capture_stdout(bzr::commands::bug::execute(
         &action,
         Some("test"),
