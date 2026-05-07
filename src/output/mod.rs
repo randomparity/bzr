@@ -27,10 +27,6 @@ pub use result_types::{
 };
 
 // Re-export all public items from submodules.
-#[expect(
-    unused_imports,
-    reason = "wired into AttachmentAction::Download dispatch by Task 6"
-)]
 pub use attachment::{
     print_attachment_batch, print_attachments, AttachmentBatchResult, AttachmentDownloadResult,
     BatchSummary, BugDownloadResult, DownloadedFile, TargetStatus,

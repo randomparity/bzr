@@ -693,3 +693,217 @@ async fn write_one_attachment_overwrites_existing_file() {
     let written = std::fs::read(dir.join("9876.patch.diff")).unwrap();
     assert_eq!(written, b"NEW CONTENT");
 }
+
+fn bug_attachments_response(bug_id: u64, atts: &serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "bugs": { bug_id.to_string(): atts },
+    })
+}
+
+fn one_att(id: u64, bug_id: u64, file_name: &str, body: &[u8]) -> serde_json::Value {
+    serde_json::json!({
+        "id": id,
+        "bug_id": bug_id,
+        "file_name": file_name,
+        "summary": file_name,
+        "content_type": "text/plain",
+        "creator": "dev@test.com",
+        "creation_time": "2025-01-01T00:00:00Z",
+        "last_change_time": "2025-01-01T00:00:00Z",
+        "is_obsolete": false,
+        "is_patch": false,
+        "is_private": false,
+        "size": body.len(),
+        "data": b64(body),
+    })
+}
+
+#[tokio::test]
+async fn attachment_download_batch_per_bug_writes_per_bug_subdir() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/12345/attachment"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
+                12345,
+                &serde_json::json!([
+                    one_att(9876, 12345, "patch.diff", b"alpha"),
+                    one_att(9877, 12345, "trace.log", b"bravo charlie"),
+                ]),
+            )),
+        )
+        .mount(&mock)
+        .await;
+
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+    let action = AttachmentAction::Download {
+        ids: vec![],
+        bug_ids: vec![12345],
+        out: None,
+        out_dir: out_dir.clone(),
+    };
+
+    let (result, output) =
+        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    assert!(result.is_ok(), "expected ok, got {result:?}");
+
+    let parsed = extract_json(&output);
+    assert_eq!(parsed["summary"]["succeeded"], 2);
+    assert_eq!(parsed["summary"]["failed"], 0);
+    assert_eq!(parsed["summary"]["total_bytes"], 5 + 13);
+    assert_eq!(parsed["bug_results"][0]["bug_id"], 12345);
+    assert_eq!(parsed["bug_results"][0]["status"], "ok");
+
+    assert!(tmp.path().join("12345").join("9876.patch.diff").exists());
+    assert!(tmp.path().join("12345").join("9877.trace.log").exists());
+    let p1 = std::fs::read(tmp.path().join("12345").join("9876.patch.diff")).unwrap();
+    assert_eq!(p1, b"alpha");
+}
+
+#[tokio::test]
+async fn attachment_download_batch_collision_filenames_resolved_by_att_id_prefix() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/12345/attachment"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
+                12345,
+                &serde_json::json!([
+                    one_att(9876, 12345, "trace.log", b"first"),
+                    one_att(9877, 12345, "trace.log", b"second"),
+                ]),
+            )),
+        )
+        .mount(&mock)
+        .await;
+
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+    let action = AttachmentAction::Download {
+        ids: vec![],
+        bug_ids: vec![12345],
+        out: None,
+        out_dir,
+    };
+
+    let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    assert!(result.is_ok(), "expected ok, got {result:?}");
+
+    let p1 = tmp.path().join("12345").join("9876.trace.log");
+    let p2 = tmp.path().join("12345").join("9877.trace.log");
+    assert_eq!(std::fs::read(&p1).unwrap(), b"first");
+    assert_eq!(std::fs::read(&p2).unwrap(), b"second");
+}
+
+#[tokio::test]
+async fn attachment_download_batch_mixed_bug_and_positional_ids() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/12345/attachment"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
+                12345,
+                &serde_json::json!([one_att(9876, 12345, "patch.diff", b"from bug")]),
+            )),
+        )
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/4242"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "attachments": {
+                "4242": one_att(4242, 67890, "extra.bin", b"from positional"),
+            }
+        })))
+        .mount(&mock)
+        .await;
+
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+    let action = AttachmentAction::Download {
+        ids: vec![4242],
+        bug_ids: vec![12345],
+        out: None,
+        out_dir: out_dir.clone(),
+    };
+
+    let (result, output) =
+        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    assert!(result.is_ok(), "expected ok, got {result:?}");
+
+    let parsed = extract_json(&output);
+    assert_eq!(parsed["summary"]["succeeded"], 2);
+    assert_eq!(parsed["bug_results"][0]["bug_id"], 12345);
+    assert_eq!(parsed["attachment_results"][0]["attachment_id"], 4242);
+    assert_eq!(parsed["attachment_results"][0]["bug_id"], 67890);
+
+    assert!(tmp.path().join("12345").join("9876.patch.diff").exists());
+    assert!(tmp.path().join("67890").join("4242.extra.bin").exists());
+}
+
+#[tokio::test]
+async fn attachment_download_batch_empty_bug_zero_files_success() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/12345/attachment"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(bug_attachments_response(12345, &serde_json::json!([]))),
+        )
+        .mount(&mock)
+        .await;
+
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+    let action = AttachmentAction::Download {
+        ids: vec![],
+        bug_ids: vec![12345],
+        out: None,
+        out_dir,
+    };
+
+    let (result, output) =
+        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    assert!(result.is_ok(), "expected ok, got {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed["bug_results"][0]["status"], "ok");
+    assert_eq!(parsed["summary"]["succeeded"], 0);
+    assert_eq!(parsed["summary"]["failed"], 0);
+}
+
+#[tokio::test]
+async fn attachment_download_batch_legacy_single_id_unchanged() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/9876"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "attachments": {
+                "9876": one_att(9876, 12345, "patch.diff", b"legacy"),
+            }
+        })))
+        .mount(&mock)
+        .await;
+
+    let out_path = tmp.path().join("downloaded.bin");
+    let action = AttachmentAction::Download {
+        ids: vec![9876],
+        bug_ids: vec![],
+        out: Some(out_path.to_string_lossy().into_owned()),
+        out_dir: "./attachments".into(),
+    };
+
+    let (result, output) =
+        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    assert!(result.is_ok(), "expected ok, got {result:?}");
+
+    // Legacy path emits DownloadResult, not AttachmentBatchResult — the
+    // JSON has `id` at the top level, not `summary`.
+    let parsed = extract_json(&output);
+    assert_eq!(parsed["id"], 9876);
+    assert_eq!(parsed["size"].as_u64().unwrap_or(0), 6);
+    assert!(out_path.exists());
+    assert_eq!(std::fs::read(&out_path).unwrap(), b"legacy");
+}

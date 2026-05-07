@@ -8,7 +8,8 @@ use crate::cli::AttachmentAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::{
-    self, ActionResult, DownloadResult, DownloadedFile, ResourceKind, UploadResult,
+    self, ActionResult, AttachmentBatchResult, AttachmentDownloadResult, BatchSummary,
+    BugDownloadResult, DownloadResult, DownloadedFile, ResourceKind, TargetStatus, UploadResult,
 };
 use crate::types::ApiMode;
 use crate::types::Attachment;
@@ -33,18 +34,15 @@ pub async fn execute(
             ids,
             bug_ids,
             out,
-            out_dir: _,
+            out_dir,
         } => {
-            // Bulk dispatch (multi-ID and/or `--bug`) lands in Task 6;
-            // for this intermediate commit it returns a clear "not yet
-            // implemented" error rather than silently calling into the
-            // legacy single-ID path with the wrong arguments.
-            if !bug_ids.is_empty() || ids.len() != 1 {
-                return Err(crate::error::BzrError::Other(
-                    "bulk attachment download dispatch not yet wired (lands in Task 6)".into(),
-                ));
+            if bug_ids.is_empty() && ids.len() == 1 {
+                // Legacy single shape — validation already ensured `--out`
+                // is not paired with `--bug` or with multiple IDs.
+                download_single_legacy(&client, ids[0], out.as_deref(), format).await?;
+            } else {
+                download_batch(&client, ids, bug_ids, out_dir, format).await?;
             }
-            download_single_legacy(&client, ids[0], out.as_deref(), format).await?;
         }
         AttachmentAction::Upload {
             bug_id,
@@ -253,10 +251,6 @@ async fn download_single_legacy(
 /// `<out_dir>/<bug_id>/<att_id>.<file_name>`. Surfaces any failure
 /// back to the caller as `BzrError`; the caller decides whether to
 /// abort or record-and-continue.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "consumed by download_batch in Task 6")
-)]
 async fn write_one_attachment(
     client: &BugzillaClient,
     att: &Attachment,
@@ -295,6 +289,163 @@ async fn write_one_attachment(
         path: dest_str,
         bytes: bytes.len(),
     })
+}
+
+/// Bulk attachment download: walks every `--bug <ID>` then every
+/// positional attachment ID, recording successes and per-target
+/// failures. On any failure, returns `BatchPartialFailure` (exit 11).
+///
+/// Pre-flight: creates `out_dir` itself once. If that fails (e.g. an
+/// unwritable parent), returns `Io` (exit 6) without entering the
+/// loop — better than burying the same error in N per-attachment rows.
+async fn download_batch(
+    client: &BugzillaClient,
+    ids: &[u64],
+    bug_ids: &[u64],
+    out_dir: &str,
+    format: OutputFormat,
+) -> Result<()> {
+    std::fs::create_dir_all(out_dir)?;
+
+    let mut bug_results: Vec<BugDownloadResult> = Vec::new();
+    let mut attachment_results: Vec<AttachmentDownloadResult> = Vec::new();
+    let mut total_bytes: usize = 0;
+
+    for &bug_id in bug_ids {
+        bug_results.push(download_bug_target(client, bug_id, out_dir, &mut total_bytes).await);
+    }
+
+    for &att_id in ids {
+        attachment_results
+            .push(download_attachment_target(client, att_id, out_dir, &mut total_bytes).await);
+    }
+
+    let succeeded: usize = bug_results.iter().map(|b| b.files.len()).sum::<usize>()
+        + attachment_results
+            .iter()
+            .filter(|a| a.status == TargetStatus::Ok)
+            .count();
+    let failed: usize = bug_results
+        .iter()
+        .filter(|b| b.status == TargetStatus::Error)
+        .count()
+        + attachment_results
+            .iter()
+            .filter(|a| a.status == TargetStatus::Error)
+            .count();
+
+    let result = AttachmentBatchResult {
+        out_dir: out_dir.to_string(),
+        bug_results,
+        attachment_results,
+        summary: BatchSummary {
+            succeeded,
+            failed,
+            total_bytes,
+        },
+    };
+
+    output::print_attachment_batch(&result, format);
+
+    if failed > 0 {
+        return Err(crate::error::BzrError::BatchPartialFailure { succeeded, failed });
+    }
+    Ok(())
+}
+
+/// Download every attachment for one `--bug <ID>` target. Returns a
+/// `BugDownloadResult` describing the per-bug outcome — even on a
+/// listing-API failure (in which case `files` is empty and `error` is
+/// populated).
+async fn download_bug_target(
+    client: &BugzillaClient,
+    bug_id: u64,
+    out_dir: &str,
+    total_bytes: &mut usize,
+) -> BugDownloadResult {
+    let atts = match client.get_attachments(bug_id).await {
+        Ok(atts) => atts,
+        Err(e) => {
+            return BugDownloadResult {
+                bug_id,
+                status: TargetStatus::Error,
+                files: vec![],
+                error: Some(e.to_string()),
+            };
+        }
+    };
+
+    let mut files = Vec::new();
+    let mut first_error: Option<String> = None;
+    for att in &atts {
+        match write_one_attachment(client, att, out_dir).await {
+            Ok(file) => {
+                *total_bytes += file.bytes;
+                files.push(file);
+            }
+            Err(e) => {
+                if first_error.is_none() {
+                    first_error = Some(e.to_string());
+                }
+            }
+        }
+    }
+    let status = if first_error.is_some() {
+        TargetStatus::Error
+    } else {
+        TargetStatus::Ok
+    };
+    BugDownloadResult {
+        bug_id,
+        status,
+        files,
+        error: first_error,
+    }
+}
+
+/// Download one positional attachment-ID target. The returned record
+/// retains `bug_id` whenever the metadata fetch succeeds, so users can
+/// correlate post-fetch (e.g. write) failures back to a bug.
+async fn download_attachment_target(
+    client: &BugzillaClient,
+    att_id: u64,
+    out_dir: &str,
+    total_bytes: &mut usize,
+) -> AttachmentDownloadResult {
+    let att = match client.get_attachment(att_id).await {
+        Ok(att) => att,
+        Err(e) => {
+            return AttachmentDownloadResult {
+                attachment_id: att_id,
+                status: TargetStatus::Error,
+                bug_id: None,
+                path: None,
+                bytes: None,
+                error: Some(e.to_string()),
+            };
+        }
+    };
+    match write_one_attachment(client, &att, out_dir).await {
+        Ok(file) => {
+            *total_bytes += file.bytes;
+            AttachmentDownloadResult {
+                attachment_id: att_id,
+                status: TargetStatus::Ok,
+                bug_id: Some(att.bug_id),
+                path: Some(file.path),
+                bytes: Some(file.bytes),
+                error: None,
+            }
+        }
+        Err(e) => AttachmentDownloadResult {
+            attachment_id: att_id,
+            status: TargetStatus::Error,
+            bug_id: Some(att.bug_id),
+            path: None,
+            bytes: None,
+            error: Some(e.to_string()),
+        },
+    }
 }
 
 #[cfg(test)]

@@ -108,10 +108,6 @@ pub struct BatchSummary {
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[non_exhaustive]
 #[serde(rename_all = "lowercase")]
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "constructed by download_batch dispatch in Task 6")
-)]
 pub enum TargetStatus {
     Ok,
     Error,
@@ -123,13 +119,6 @@ pub enum TargetStatus {
 /// per-attachment failures print to stderr (one line each), so
 /// `2>/dev/null` quiets warnings without losing the success listing.
 /// JSON mode emits a single object on stdout — no stderr writes.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "wired into AttachmentAction::Download dispatch by Task 6"
-    )
-)]
 pub fn print_attachment_batch(result: &AttachmentBatchResult, format: OutputFormat) {
     print_formatted(result, format, |r| {
         for bug in &r.bug_results {
