@@ -444,3 +444,48 @@ async fn get_comments_since_rest_returns_empty_when_bug_acknowledged_with_no_com
         .unwrap();
     assert!(comments.is_empty(), "no comments expected: {comments:?}");
 }
+
+#[tokio::test]
+async fn get_comments_since_rest_propagates_attachment_id() {
+    // Regression guard for issue #170: the REST envelope path must preserve
+    // `Comment.attachment_id` end-to-end so `flip_new_comment_private` can
+    // identify the auto-generated upload comment. A wrapper that strips
+    // unknown fields before deserialization would pass the type-level unit
+    // test in `src/types/comment_tests.rs` while breaking this round trip.
+    use crate::client::test_helpers::test_client;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": {
+                "42": {
+                    "comments": [
+                        {
+                            "id": 7,
+                            "bug_id": 42,
+                            "creator": "alice@example.com",
+                            "time": "2026-01-01T00:00:00Z",
+                            "creation_time": "2026-01-01T00:00:00Z",
+                            "text": "Created attachment 99",
+                            "is_private": false,
+                            "count": 1,
+                            "attachment_id": 99
+                        }
+                    ]
+                }
+            }
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let comments = client
+        .get_comments_since_rest_for_test(42, None)
+        .await
+        .unwrap();
+    assert_eq!(comments.len(), 1);
+    assert_eq!(comments[0].attachment_id, Some(99));
+}
