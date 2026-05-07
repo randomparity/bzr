@@ -63,6 +63,57 @@ async fn bug_list_integration() {
 }
 
 #[tokio::test]
+async fn bug_list_changed_since_canonicalizes_bare_date_on_wire() {
+    // End-to-end: a bare-date `--changed-since` value must be canonicalized
+    // to `T00:00:00Z` by the time the REST request hits the server. Failing
+    // this test means either the validator dropped the canonicalization
+    // step or the encoder forgot to forward `last_change_time`.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("product", "Firefox"))
+        .and(query_param("last_change_time", "2026-04-01T00:00:00Z"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = bzr::cli::BugAction::List {
+        product: vec!["Firefox".into()],
+        component: vec![],
+        status: vec![],
+        assignee: vec![],
+        creator: vec![],
+        priority: vec![],
+        severity: vec![],
+        id: vec![],
+        alias: None,
+        summary: None,
+        limit: 50,
+        fields: None,
+        exclude_fields: None,
+        created_since: None,
+        changed_since: Some("2026-04-01".into()),
+    };
+    let (result, _output) = capture_stdout(bzr::commands::bug::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
+    .await;
+    assert!(
+        result.is_ok(),
+        "bug list with --changed-since should succeed: {result:?}"
+    );
+    // wiremock's `expect(1)` enforces that exactly one request matched the
+    // canonicalized `last_change_time` query parameter; if the value were
+    // sent as bare `2026-04-01`, the matcher would fail to match and the
+    // response would be a 404, causing `result` to be `Err`.
+}
+
+#[tokio::test]
 async fn bug_view_integration() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
