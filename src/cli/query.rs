@@ -5,10 +5,6 @@ use clap::Subcommand;
     clippy::doc_markdown,
     reason = "doc examples are literal shell commands; wrapping URLs in <> or identifiers in backticks would degrade copy-paste UX"
 )]
-#[expect(
-    clippy::large_enum_variant,
-    reason = "only constructed once from CLI args"
-)]
 pub enum QueryAction {
     /// Save a named query (filter flags or a Bugzilla URL) for later reuse.
     ///
@@ -200,6 +196,12 @@ pub enum QueryAction {
     /// nothing (`None` keeps the saved value), matching the
     /// existing `--limit` / `--fields` override convention.
     ///
+    /// All eight bzl-parity field filters from `bzr bug list` are
+    /// also overrideable here. Passing a flag replaces the saved
+    /// list for that field; omitting it keeps the saved value.
+    /// There is no clear sentinel — to clear a saved field, edit
+    /// the config or re-save the query.
+    ///
     /// Examples:
     ///
     ///   bzr query run firefox-new
@@ -236,5 +238,29 @@ pub enum QueryAction {
         /// Same accepted forms as `bzr bug list --changed-since`.
         #[arg(long, value_name = "DATE")]
         changed_since: Option<String>,
+        /// Override the saved Whiteboard filter for this run.
+        #[arg(long)]
+        whiteboard: Vec<String>,
+        /// Override the saved Target Milestone filter.
+        #[arg(long)]
+        target_milestone: Vec<String>,
+        /// Override the saved Version filter.
+        #[arg(long)]
+        version: Vec<String>,
+        /// Override the saved Operating System filter.
+        #[arg(long)]
+        op_sys: Vec<String>,
+        /// Override the saved Platform filter.
+        #[arg(long)]
+        platform: Vec<String>,
+        /// Override the saved Resolution filter.
+        #[arg(long)]
+        resolution: Vec<String>,
+        /// Override the saved QA Contact filter.
+        #[arg(long)]
+        qa_contact: Vec<String>,
+        /// Override the saved URL filter.
+        #[arg(long)]
+        url: Vec<String>,
     },
 }

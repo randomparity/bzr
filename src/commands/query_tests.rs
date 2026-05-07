@@ -129,6 +129,14 @@ fn run_action(name: &str) -> QueryAction {
         server: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     }
 }
 
@@ -354,6 +362,14 @@ async fn query_run_with_limit_override() {
         server: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, _) =
         capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
@@ -520,6 +536,14 @@ async fn query_run_applies_field_overrides() {
         server: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, _) =
         capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
@@ -621,6 +645,14 @@ async fn query_run_with_server_override() {
         server: Some("test".into()),
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, _) =
         capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
@@ -788,6 +820,14 @@ async fn query_run_rejects_malformed_created_since_override() {
         server: None,
         created_since: Some("not-a-date".into()),
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let result = super::execute(&action, None, OutputFormat::Json, None).await;
     let err = result.unwrap_err();

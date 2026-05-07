@@ -9,6 +9,17 @@ use crate::error::{BzrError, Result};
 use crate::output;
 use crate::types::{OutputFormat, QueryKind, SavedQuery};
 
+/// Translate clap's empty-Vec sentinel into `None` so
+/// `Overrides`'s `Option<&[String]>` semantics line up: an absent
+/// flag keeps the saved value, a non-empty flag replaces it.
+fn slice_override(v: &[String]) -> Option<&[String]> {
+    if v.is_empty() {
+        None
+    } else {
+        Some(v)
+    }
+}
+
 pub async fn execute(
     action: &QueryAction,
     server: Option<&str>,
@@ -179,6 +190,14 @@ async fn handle_run(
         server: server_override,
         created_since,
         changed_since,
+        whiteboard,
+        target_milestone,
+        version,
+        op_sys,
+        platform,
+        resolution,
+        qa_contact,
+        url,
     } = action
     else {
         unreachable!()
@@ -206,7 +225,14 @@ async fn handle_run(
         exclude_fields: exclude_fields.as_deref(),
         creation_time: creation_time_override.as_deref(),
         last_change_time: last_change_time_override.as_deref(),
-        ..Default::default()
+        whiteboard: slice_override(whiteboard),
+        target_milestone: slice_override(target_milestone),
+        version: slice_override(version),
+        op_sys: slice_override(op_sys),
+        platform: slice_override(platform),
+        resolution: slice_override(resolution),
+        qa_contact: slice_override(qa_contact),
+        url: slice_override(url),
     });
 
     let client = super::shared::connect_and_configure(effective_server, api).await?;
