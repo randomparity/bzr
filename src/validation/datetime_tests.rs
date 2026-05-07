@@ -141,6 +141,11 @@ fn rejects_offset_hours_above_fourteen() {
 }
 
 #[test]
+fn rejects_offset_minutes_above_fifty_nine() {
+    assert!(parse_iso8601_or_date("2026-04-01T12:30:45+05:60", FLAG).is_err());
+}
+
+#[test]
 fn rejects_non_ascii_input() {
     // 10 characters but non-ASCII — must not panic on byte indexing.
     assert!(parse_iso8601_or_date("2026-04-0\u{00E9}", FLAG).is_err());
@@ -153,4 +158,5 @@ fn error_message_includes_expected_forms() {
     assert!(msg.contains("YYYY-MM-DD"));
     assert!(msg.contains("YYYY-MM-DDTHH:MM:SS"));
     assert!(msg.contains("YYYY-MM-DDTHH:MM:SSZ"));
+    assert!(msg.contains("YYYY-MM-DDTHH:MM:SS±HH:MM"));
 }
