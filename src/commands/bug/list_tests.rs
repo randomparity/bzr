@@ -270,3 +270,42 @@ async fn bug_list_rejects_malformed_changed_since_with_exit_code_7() {
     assert_eq!(err.exit_code(), 7);
     assert!(err.to_string().contains("--changed-since"));
 }
+
+#[tokio::test]
+async fn bug_list_mixed_positive_notequals_notsubstring() {
+    // End-to-end coverage: --product (positive), --resolution '!FIXED'
+    // (notequals), --whiteboard '!wip' (notsubstring) all reach the
+    // wire with the right operator.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    // FIELD_MAPPINGS iterates whiteboard (idx 7) before resolution
+    // (idx 12), so whiteboard gets f1 and resolution gets f2.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("product", "P"))
+        .and(query_param("f1", "status_whiteboard"))
+        .and(query_param("o1", "notsubstring"))
+        .and(query_param("v1", "wip"))
+        .and(query_param("f2", "resolution"))
+        .and(query_param("o2", "notequals"))
+        .and(query_param("v2", "FIXED"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let mut action = empty_list_action();
+    if let BugAction::List {
+        product,
+        resolution,
+        whiteboard,
+        ..
+    } = &mut action
+    {
+        *product = vec!["P".into()];
+        *resolution = vec!["!FIXED".into()];
+        *whiteboard = vec!["!wip".into()];
+    }
+    let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
+    assert!(result.is_ok(), "bug list failed: {result:?}");
+}
