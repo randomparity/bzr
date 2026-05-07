@@ -478,3 +478,53 @@ async fn attachment_upload_comment_private_partial_failure_propagates_error() {
     let result = super::execute(&action, None, OutputFormat::Json, None).await;
     assert!(result.is_err(), "step-2 failure should propagate");
 }
+
+#[tokio::test]
+async fn attachment_upload_comment_private_no_matching_comment_is_data_integrity_error() {
+    use wiremock::matchers::{method, path};
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    let upload_file = tmp.path().join("p.diff");
+    std::fs::write(&upload_file, "x").unwrap();
+
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/42/attachment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [200]})))
+        .mount(&mock)
+        .await;
+
+    // Comments fetched successfully, but none has attachment_id matching
+    // the just-uploaded attachment. This is a Bugzilla server invariant
+    // violation — Bug.add_attachment with a `comment` body must create a
+    // comment whose `attachment_id` equals the new attachment's id.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": {
+                "42": {
+                    "comments": [
+                        {"id": 999, "bug_id": 42, "text": "unrelated", "is_private": false}
+                    ]
+                }
+            }
+        })))
+        .mount(&mock)
+        .await;
+
+    let action = AttachmentAction::Upload {
+        bug_id: 42,
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: None,
+        content_type: None,
+        private: false,
+        is_patch: false,
+        comment: Some("x".into()),
+        comment_private: true,
+        flag: vec![],
+    };
+    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    assert!(matches!(
+        result,
+        Err(crate::error::BzrError::DataIntegrity(_))
+    ));
+}

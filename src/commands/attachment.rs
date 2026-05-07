@@ -156,16 +156,14 @@ async fn flip_new_comment_private(
     bug_id: u64,
     new_attachment_id: u64,
 ) -> Result<()> {
-    let comments = match client.get_comments_since(bug_id, None).await {
-        Ok(comments) => comments,
-        Err(e) => {
-            warn_partial(new_attachment_id, &e);
-            return Err(e);
-        }
-    };
+    let comments = client
+        .get_comments_since(bug_id, None)
+        .await
+        .inspect_err(|e| warn_partial(new_attachment_id, e))?;
+    // `attachment_id` is unique per bug: Bugzilla sets it on exactly one
+    // comment when `Bug.add_attachment` includes a `comment` body.
     let Some(comment_id) = comments
         .iter()
-        .rev()
         .find(|c| c.attachment_id == Some(new_attachment_id))
         .map(|c| c.id)
     else {
@@ -182,11 +180,10 @@ async fn flip_new_comment_private(
         comment_is_private: map,
         ..Default::default()
     };
-    if let Err(e) = client.update_bug(bug_id, &params).await {
-        warn_partial(new_attachment_id, &e);
-        return Err(e);
-    }
-    Ok(())
+    client
+        .update_bug(bug_id, &params)
+        .await
+        .inspect_err(|e| warn_partial(new_attachment_id, e))
 }
 
 fn warn_partial(att_id: u64, err: &crate::error::BzrError) {
