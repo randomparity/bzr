@@ -238,7 +238,10 @@ fn add_vec_filters(rpc_params: &mut BTreeMap<String, Value>, params: &SearchPara
         }
         for v in negated {
             rpc_params.insert(format!("f{chart_idx}"), Value::from(mapping.internal_name));
-            rpc_params.insert(format!("o{chart_idx}"), Value::from("notequals"));
+            rpc_params.insert(
+                format!("o{chart_idx}"),
+                Value::from(mapping.negation_operator),
+            );
             rpc_params.insert(format!("v{chart_idx}"), Value::from(v));
             chart_idx += 1;
         }

@@ -68,7 +68,7 @@ fn append_negated_params(
             let v_key = format!("v{idx}");
             builder = builder.query(&[
                 (&f_key, mapping.internal_name),
-                (&o_key, "notequals"),
+                (&o_key, mapping.negation_operator),
                 (&v_key, v),
             ]);
             idx += 1;

@@ -224,6 +224,10 @@ pub struct FieldMapping {
     pub url_param: &'static str,
     /// Bugzilla internal name for boolean charts (e.g. `bug_status`).
     pub internal_name: &'static str,
+    /// Boolean-chart operator used when a value is negated (`!`-prefix).
+    /// `"notequals"` for exact-match fields; `"notsubstring"` for
+    /// substring-match fields like `whiteboard` and `url`.
+    pub negation_operator: &'static str,
 }
 
 /// Canonical field-mapping table for the 7 multi-value filter fields.
@@ -232,36 +236,43 @@ pub const FIELD_MAPPINGS: &[FieldMapping] = &[
         struct_field: "product",
         url_param: "product",
         internal_name: "product",
+        negation_operator: "notequals",
     },
     FieldMapping {
         struct_field: "component",
         url_param: "component",
         internal_name: "component",
+        negation_operator: "notequals",
     },
     FieldMapping {
         struct_field: "status",
         url_param: "bug_status",
         internal_name: "bug_status",
+        negation_operator: "notequals",
     },
     FieldMapping {
         struct_field: "assigned_to",
         url_param: "assigned_to",
         internal_name: "assigned_to",
+        negation_operator: "notequals",
     },
     FieldMapping {
         struct_field: "creator",
         url_param: "reporter",
         internal_name: "reporter",
+        negation_operator: "notequals",
     },
     FieldMapping {
         struct_field: "priority",
         url_param: "priority",
         internal_name: "priority",
+        negation_operator: "notequals",
     },
     FieldMapping {
         struct_field: "severity",
         url_param: "bug_severity",
         internal_name: "bug_severity",
+        negation_operator: "notequals",
     },
 ];
 
