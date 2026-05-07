@@ -712,10 +712,18 @@ async fn bug_history_integration() {
 
 #[tokio::test]
 async fn bug_update_integration() {
+    use wiremock::matchers::body_partial_json;
+
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/bug/42"))
+        .and(body_partial_json(serde_json::json!({
+            "keywords": {"add": ["fix-needed"], "remove": ["wontfix"]},
+            "cc": {"add": ["alice@example.com"]},
+            "groups": {"remove": ["secret"]},
+            "see_also": {"add": ["https://example.com/issue/1"]},
+        })))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "bugs": [{"id": 42, "changes": {}}]
         })))
@@ -737,13 +745,13 @@ async fn bug_update_integration() {
         blocks_remove: vec![],
         depends_on_add: vec![],
         depends_on_remove: vec![],
-        keywords_add: vec![],
-        keywords_remove: vec![],
-        cc_add: vec![],
+        keywords_add: vec!["fix-needed".to_string()],
+        keywords_remove: vec!["wontfix".to_string()],
+        cc_add: vec!["alice@example.com".to_string()],
         cc_remove: vec![],
         groups_add: vec![],
-        groups_remove: vec![],
-        see_also_add: vec![],
+        groups_remove: vec!["secret".to_string()],
+        see_also_add: vec!["https://example.com/issue/1".to_string()],
         see_also_remove: vec![],
     };
     let (result, output) = capture_stdout(bzr::commands::bug::execute(
