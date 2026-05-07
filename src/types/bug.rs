@@ -95,6 +95,29 @@ pub struct SearchParams {
     /// Filter to bugs last modified at or after this datetime (server-canonical
     /// form). Validated client-side; see `creation_time`.
     pub last_change_time: Option<String>,
+    /// Filter by Status Whiteboard substring (repeatable). Negated
+    /// values use `notsubstring`. Server-side substring matching is
+    /// native to Bugzilla for this field.
+    pub whiteboard: Vec<String>,
+    /// Filter by Target Milestone (repeatable). Exact match.
+    pub target_milestone: Vec<String>,
+    /// Filter by Version (repeatable). Exact match.
+    pub version: Vec<String>,
+    /// Filter by Operating System (repeatable). Exact match.
+    pub op_sys: Vec<String>,
+    /// Filter by Platform / Hardware (repeatable). Exact match. The
+    /// Bugzilla `Bug.search` API parameter is `platform` (the bug
+    /// record field is `rep_platform`); we match the search-API
+    /// name here.
+    pub platform: Vec<String>,
+    /// Filter by Resolution (repeatable). Exact match. Empty
+    /// resolution matches open bugs.
+    pub resolution: Vec<String>,
+    /// Filter by QA Contact login (repeatable). Exact match.
+    pub qa_contact: Vec<String>,
+    /// Filter by URL field substring (repeatable). Negated values
+    /// use `notsubstring`.
+    pub url: Vec<String>,
 }
 
 impl SearchParams {
@@ -130,7 +153,7 @@ impl SearchParams {
     ///
     /// # Panics
     ///
-    /// Panics if `name` is not one of the 7 known field names in
+    /// Panics if `name` is not one of the 15 known field names in
     /// `FIELD_MAPPINGS`. Only called with compile-time-known names.
     pub fn get_field(&self, name: &str) -> &[String] {
         macro_rules! as_ref {
@@ -146,6 +169,14 @@ impl SearchParams {
             "creator" => creator,
             "priority" => priority,
             "severity" => severity,
+            "whiteboard" => whiteboard,
+            "target_milestone" => target_milestone,
+            "version" => version,
+            "op_sys" => op_sys,
+            "platform" => platform,
+            "resolution" => resolution,
+            "qa_contact" => qa_contact,
+            "url" => url,
         })
     }
 
@@ -169,6 +200,14 @@ impl SearchParams {
             || !self.raw_params.is_empty()
             || self.creation_time.is_some()
             || self.last_change_time.is_some()
+            || !self.whiteboard.is_empty()
+            || !self.target_milestone.is_empty()
+            || !self.version.is_empty()
+            || !self.op_sys.is_empty()
+            || !self.platform.is_empty()
+            || !self.resolution.is_empty()
+            || !self.qa_contact.is_empty()
+            || !self.url.is_empty()
     }
 
     /// Returns true if any *structured* filter is set.
@@ -197,6 +236,14 @@ impl SearchParams {
             || !self.raw_params.is_empty()
             || self.creation_time.is_some()
             || self.last_change_time.is_some()
+            || !self.whiteboard.is_empty()
+            || !self.target_milestone.is_empty()
+            || !self.version.is_empty()
+            || !self.op_sys.is_empty()
+            || !self.platform.is_empty()
+            || !self.resolution.is_empty()
+            || !self.qa_contact.is_empty()
+            || !self.url.is_empty()
     }
 }
 
