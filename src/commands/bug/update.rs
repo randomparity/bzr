@@ -146,16 +146,25 @@ async fn update_single(
     params: &UpdateBugParams,
     format: OutputFormat,
 ) -> Result<()> {
+    use std::io::Write;
     client.update_bug(id, params).await?;
-    output::print_result(
-        &ActionResult::updated(id, ResourceKind::Bug),
-        &format!("Updated bug #{id}"),
-        format,
-    );
+    let suffix = if params.comment.is_some() {
+        " (with comment)"
+    } else {
+        ""
+    };
+    match format {
+        OutputFormat::Json => {
+            output::print_result(&ActionResult::updated(id, ResourceKind::Bug), "", format);
+        }
+        OutputFormat::Table => {
+            let _ = writeln!(std::io::stdout(), "Updated bug #{id}{suffix}");
+        }
+    }
     Ok(())
 }
 
-fn print_batch_result(batch: &BatchResult, format: OutputFormat) {
+fn print_batch_result(batch: &BatchResult, format: OutputFormat, with_comment: bool) {
     use std::io::Write;
     match format {
         OutputFormat::Json => {
@@ -165,7 +174,12 @@ fn print_batch_result(batch: &BatchResult, format: OutputFormat) {
             if !batch.succeeded.is_empty() {
                 let ids_str: Vec<String> =
                     batch.succeeded.iter().map(|id| format!("#{id}")).collect();
-                let _ = writeln!(std::io::stdout(), "Updated bugs: {}", ids_str.join(", "));
+                let suffix = if with_comment { " (with comment)" } else { "" };
+                let _ = writeln!(
+                    std::io::stdout(),
+                    "Updated bugs: {}{suffix}",
+                    ids_str.join(", ")
+                );
             }
             for f in &batch.failed {
                 let _ = writeln!(
@@ -197,7 +211,7 @@ async fn update_batch(
         }
     }
     let batch = BatchResult::new(succeeded, failed);
-    print_batch_result(&batch, format);
+    print_batch_result(&batch, format, params.comment.is_some());
     if !batch.failed.is_empty() {
         return Err(crate::error::BzrError::BatchPartialFailure {
             succeeded: batch.succeeded.len(),

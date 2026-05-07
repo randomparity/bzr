@@ -432,3 +432,114 @@ fn build_update_params_rejects_whitespace_only_comment_file() {
         crate::error::BzrError::InputValidation(ref m) if m.contains("empty comment")
     ));
 }
+
+#[tokio::test]
+async fn bug_update_table_output_with_comment_single() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_put_bug_ok(&mock, 42).await;
+
+    let mut action = make_update_action(vec![42]);
+    if let BugAction::Update {
+        ref mut comment, ..
+    } = action
+    {
+        *comment = Some("hi".into());
+    } else {
+        unreachable!();
+    }
+
+    let (result, output) = capture_stdout(crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Table,
+        None,
+    ))
+    .await;
+    assert!(result.is_ok());
+    assert!(
+        output.contains("Updated bug #42 (with comment)"),
+        "expected '(with comment)' suffix; got: {output}"
+    );
+}
+
+#[tokio::test]
+async fn bug_update_table_output_no_comment_single() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_put_bug_ok(&mock, 42).await;
+
+    let action = make_update_action(vec![42]);
+    let (result, output) = capture_stdout(crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Table,
+        None,
+    ))
+    .await;
+    assert!(result.is_ok());
+    assert!(output.contains("Updated bug #42"));
+    assert!(
+        !output.contains("(with comment)"),
+        "no comment was posted; suffix should be absent: {output}"
+    );
+}
+
+#[tokio::test]
+async fn bug_update_table_output_with_comment_batch_all_succeed() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_put_bug_ok(&mock, 1).await;
+    mock_put_bug_ok(&mock, 2).await;
+
+    let mut action = make_update_action(vec![1, 2]);
+    if let BugAction::Update {
+        ref mut comment, ..
+    } = action
+    {
+        *comment = Some("batch comment".into());
+    } else {
+        unreachable!();
+    }
+
+    let (result, output) = capture_stdout(crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Table,
+        None,
+    ))
+    .await;
+    assert!(result.is_ok());
+    assert!(output.contains("Updated bugs:"));
+    assert!(output.contains("(with comment)"));
+}
+
+#[tokio::test]
+async fn bug_update_json_output_unchanged_with_comment() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_put_bug_ok(&mock, 42).await;
+
+    let mut action = make_update_action(vec![42]);
+    if let BugAction::Update {
+        ref mut comment, ..
+    } = action
+    {
+        *comment = Some("hi".into());
+    } else {
+        unreachable!();
+    }
+
+    let (result, output) = capture_stdout(crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+    ))
+    .await;
+    assert!(result.is_ok());
+    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    // JSON schema must NOT change (spec section 6).
+    assert_eq!(parsed["action"], "updated");
+    assert_eq!(parsed["id"], 42);
+    assert!(
+        parsed.get("comment").is_none() && parsed.get("with_comment").is_none(),
+        "JSON schema should not gain a comment-related key: {parsed}"
+    );
+}
