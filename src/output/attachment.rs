@@ -42,13 +42,6 @@ pub fn print_attachments(attachments: &[Attachment], format: OutputFormat) {
 /// Single-ID legacy mode continues to use [`super::DownloadResult`].
 #[derive(Debug, Serialize)]
 #[non_exhaustive]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "consumed by print_attachment_batch renderer (Task 4) and dispatch (Task 6)"
-    )
-)]
 pub struct AttachmentBatchResult {
     pub out_dir: String,
     pub bug_results: Vec<BugDownloadResult>,
@@ -117,14 +110,91 @@ pub struct BatchSummary {
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(
     not(test),
-    expect(
-        dead_code,
-        reason = "consumed by print_attachment_batch renderer (Task 4) and dispatch (Task 6)"
-    )
+    expect(dead_code, reason = "constructed by download_batch dispatch in Task 6")
 )]
 pub enum TargetStatus {
     Ok,
     Error,
+}
+
+/// Render an [`AttachmentBatchResult`] in the requested format.
+///
+/// Successful entries print to stdout; bug-level failures and
+/// per-attachment failures print to stderr (one line each), so
+/// `2>/dev/null` quiets warnings without losing the success listing.
+/// JSON mode emits a single object on stdout — no stderr writes.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "wired into AttachmentAction::Download dispatch by Task 6"
+    )
+)]
+pub fn print_attachment_batch(result: &AttachmentBatchResult, format: OutputFormat) {
+    print_formatted(result, format, |r| {
+        for bug in &r.bug_results {
+            match bug.status {
+                TargetStatus::Ok => {
+                    let _ = writeln!(
+                        io::stdout(),
+                        "{} {}: {} files saved",
+                        "Bug".bold(),
+                        format!("#{}", bug.bug_id).bold(),
+                        bug.files.len(),
+                    );
+                    for file in &bug.files {
+                        let _ = writeln!(io::stdout(), "  → {} ({} bytes)", file.path, file.bytes,);
+                    }
+                }
+                TargetStatus::Error => {
+                    let _ = writeln!(
+                        io::stderr(),
+                        "Bug #{}: {}",
+                        bug.bug_id,
+                        bug.error.as_deref().unwrap_or("error"),
+                    );
+                    for file in &bug.files {
+                        let _ = writeln!(
+                            io::stdout(),
+                            "  → {} ({} bytes) [partial]",
+                            file.path,
+                            file.bytes,
+                        );
+                    }
+                }
+            }
+        }
+        for att in &r.attachment_results {
+            match att.status {
+                TargetStatus::Ok => {
+                    let _ = writeln!(
+                        io::stdout(),
+                        "{} #{}: {} ({} bytes)",
+                        "Attachment".bold(),
+                        att.attachment_id,
+                        att.path.as_deref().unwrap_or("?"),
+                        att.bytes.unwrap_or(0),
+                    );
+                }
+                TargetStatus::Error => {
+                    let _ = writeln!(
+                        io::stderr(),
+                        "Attachment #{}: {}",
+                        att.attachment_id,
+                        att.error.as_deref().unwrap_or("error"),
+                    );
+                }
+            }
+        }
+        let _ = writeln!(
+            io::stdout(),
+            "{} {} succeeded, {} failed, {} total bytes",
+            "Summary:".bold(),
+            r.summary.succeeded,
+            r.summary.failed,
+            r.summary.total_bytes,
+        );
+    });
 }
 
 #[cfg(test)]

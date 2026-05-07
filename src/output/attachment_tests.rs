@@ -290,3 +290,64 @@ fn target_status_serializes_lowercase() {
         "\"error\"",
     );
 }
+
+fn sample_batch_result() -> AttachmentBatchResult {
+    AttachmentBatchResult {
+        out_dir: "./attachments".into(),
+        bug_results: vec![BugDownloadResult {
+            bug_id: 12345,
+            status: TargetStatus::Ok,
+            files: vec![
+                DownloadedFile {
+                    attachment_id: 9876,
+                    path: "./attachments/12345/9876.patch.diff".into(),
+                    bytes: 4096,
+                },
+                DownloadedFile {
+                    attachment_id: 9877,
+                    path: "./attachments/12345/9877.trace.log".into(),
+                    bytes: 2048,
+                },
+            ],
+            error: None,
+        }],
+        attachment_results: vec![],
+        summary: BatchSummary {
+            succeeded: 2,
+            failed: 0,
+            total_bytes: 6144,
+        },
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn print_attachment_batch_table_includes_summary() {
+    let _lock = crate::ENV_LOCK.lock().await;
+    let result = sample_batch_result();
+    let ((), out) = crate::test_helpers::capture_stdout(async {
+        print_attachment_batch(&result, OutputFormat::Table);
+    })
+    .await;
+    assert!(out.contains("Bug #12345"), "missing bug header: {out}");
+    assert!(
+        out.contains("./attachments/12345/9876.patch.diff"),
+        "missing file path: {out}",
+    );
+    assert!(out.contains("2 succeeded"), "missing summary line: {out}",);
+    assert!(out.contains("6144"), "missing total_bytes: {out}");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn print_attachment_batch_json_emits_typed_payload() {
+    let _lock = crate::ENV_LOCK.lock().await;
+    let result = sample_batch_result();
+    let ((), out) = crate::test_helpers::capture_stdout(async {
+        print_attachment_batch(&result, OutputFormat::Json);
+    })
+    .await;
+    let parsed: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
+    assert_eq!(parsed["summary"]["succeeded"], 2);
+    assert_eq!(parsed["bug_results"][0]["files"][0]["attachment_id"], 9876);
+}
