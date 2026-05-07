@@ -26,19 +26,20 @@ pub async fn execute(
         }
         AttachmentAction::Download {
             ids,
-            bug_ids: _,
+            bug_ids,
             out,
             out_dir: _,
         } => {
-            // Bulk routing wired in Task 6. For now: legacy single-ID
-            // path only — the new validation rules in `validate_action`
-            // ensure exactly one positional ID and no `--bug` here.
-            let id = ids.first().copied().ok_or_else(|| {
-                crate::error::BzrError::InputValidation(
-                    "specify at least one attachment ID or --bug <ID>".into(),
-                )
-            })?;
-            download_single_legacy(&client, id, out.as_deref(), format).await?;
+            // Bulk dispatch (multi-ID and/or `--bug`) lands in Task 6;
+            // for this intermediate commit it returns a clear "not yet
+            // implemented" error rather than silently calling into the
+            // legacy single-ID path with the wrong arguments.
+            if !bug_ids.is_empty() || ids.len() != 1 {
+                return Err(crate::error::BzrError::Other(
+                    "bulk attachment download dispatch not yet wired (lands in Task 6)".into(),
+                ));
+            }
+            download_single_legacy(&client, ids[0], out.as_deref(), format).await?;
         }
         AttachmentAction::Upload {
             bug_id,
