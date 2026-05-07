@@ -41,6 +41,14 @@ fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
         exclude_fields,
         created_since,
         changed_since,
+        whiteboard,
+        target_milestone,
+        version,
+        op_sys,
+        platform,
+        resolution,
+        qa_contact,
+        url,
     } = action
     else {
         unreachable!()
@@ -92,6 +100,14 @@ fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
             exclude_fields: exclude_fields.clone(),
             creation_time,
             last_change_time,
+            whiteboard: whiteboard.clone(),
+            target_milestone: target_milestone.clone(),
+            version: version.clone(),
+            op_sys: op_sys.clone(),
+            platform: platform.clone(),
+            resolution: resolution.clone(),
+            qa_contact: qa_contact.clone(),
+            url: url.clone(),
             ..SavedQuery::default()
         };
         (query, None)

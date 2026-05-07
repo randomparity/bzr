@@ -5,6 +5,10 @@ use clap::Subcommand;
     clippy::doc_markdown,
     reason = "doc examples are literal shell commands; wrapping URLs in <> or identifiers in backticks would degrade copy-paste UX"
 )]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "only constructed once from CLI args"
+)]
 pub enum QueryAction {
     /// Save a named query (filter flags or a Bugzilla URL) for later reuse.
     ///
@@ -24,6 +28,11 @@ pub enum QueryAction {
     /// `creation_time` / `last_change_time` filters into the
     /// query. Same accepted forms as `bzr bug list --created-since`.
     /// Validated at save time; malformed input exits 7.
+    ///
+    /// Eight additional bzl-parity field filters are accepted with the
+    /// same semantics as `bzr bug list --whiteboard` etc. (see
+    /// bzr-bug-list(1) for syntax and substring vs exact match
+    /// distinction).
     ///
     /// Examples:
     ///
@@ -46,7 +55,7 @@ pub enum QueryAction {
         /// where possible; unrecognized parameters are stored
         /// verbatim and passed through at run time. Mutually
         /// exclusive with `--search` and every filter flag.
-        #[arg(long, conflicts_with_all = ["search", "product", "component", "status", "assignee", "creator", "priority", "severity"])]
+        #[arg(long, conflicts_with_all = ["search", "product", "component", "status", "assignee", "creator", "priority", "severity", "whiteboard", "target_milestone", "version", "op_sys", "platform", "resolution", "qa_contact", "url"])]
         from_url: Option<String>,
         /// Free-text search query (creates a `search`-kind saved query).
         ///
@@ -96,6 +105,30 @@ pub enum QueryAction {
         /// Accepts the same forms as `bzr bug list --changed-since`.
         #[arg(long, value_name = "DATE")]
         changed_since: Option<String>,
+        /// Filter by Status Whiteboard substring (repeatable; prefix with ! to exclude)
+        #[arg(long)]
+        whiteboard: Vec<String>,
+        /// Filter by Target Milestone (repeatable; prefix with ! to exclude)
+        #[arg(long)]
+        target_milestone: Vec<String>,
+        /// Filter by Version (repeatable; prefix with ! to exclude)
+        #[arg(long)]
+        version: Vec<String>,
+        /// Filter by Operating System (repeatable; prefix with ! to exclude)
+        #[arg(long)]
+        op_sys: Vec<String>,
+        /// Filter by Platform (repeatable; prefix with ! to exclude)
+        #[arg(long)]
+        platform: Vec<String>,
+        /// Filter by Resolution (repeatable; prefix with ! to exclude)
+        #[arg(long)]
+        resolution: Vec<String>,
+        /// Filter by QA Contact login (repeatable; prefix with ! to exclude)
+        #[arg(long)]
+        qa_contact: Vec<String>,
+        /// Filter by URL field substring (repeatable; prefix with ! to exclude)
+        #[arg(long)]
+        url: Vec<String>,
     },
     /// List all saved queries.
     ///

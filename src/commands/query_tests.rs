@@ -24,6 +24,14 @@ fn save_action(name: &str) -> QueryAction {
         exclude_fields: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     }
 }
 
@@ -45,6 +53,14 @@ fn product_save_action(name: &str, product: &str, limit: u32) -> QueryAction {
         exclude_fields: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     }
 }
 
@@ -65,6 +81,14 @@ fn empty_save_action(name: &str, search: Option<String>) -> QueryAction {
         exclude_fields: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     }
 }
 
@@ -85,6 +109,14 @@ fn url_save_action(name: &str, url: String) -> QueryAction {
         exclude_fields: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     }
 }
 
@@ -143,6 +175,14 @@ async fn query_save_persists_every_field() {
         exclude_fields: Some("comments".into()),
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
     result.unwrap();
@@ -340,6 +380,14 @@ async fn query_save_existing_entry_reports_updated() {
         exclude_fields: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, _) =
         capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
@@ -361,6 +409,14 @@ async fn query_save_existing_entry_reports_updated() {
         exclude_fields: None,
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, output) = capture_stdout(super::execute(
         &update_action,
@@ -434,6 +490,14 @@ async fn query_run_applies_field_overrides() {
         exclude_fields: Some("cc".into()),
         created_since: None,
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, _) =
         capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
@@ -610,6 +674,14 @@ async fn query_save_rejects_malformed_created_since() {
         exclude_fields: None,
         created_since: Some("garbage".into()),
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
 
     let result = super::execute(&action, None, OutputFormat::Json, None).await;
@@ -638,6 +710,14 @@ async fn query_save_stores_canonical_date_forms() {
         exclude_fields: None,
         created_since: Some("2026-04-01".into()),
         changed_since: Some("2026-04-15T12:00:00Z".into()),
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
     result.unwrap();
@@ -670,6 +750,14 @@ async fn query_save_accepts_date_only_query() {
         exclude_fields: None,
         created_since: Some("2026-04-01".into()),
         changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
     };
     let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
     result.unwrap();
