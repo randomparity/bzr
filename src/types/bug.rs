@@ -543,6 +543,13 @@ pub struct UpdateBugParams {
     pub see_also: StringListUpdate,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comment: Option<CommentUpdate>,
+    /// Edit the privacy of comments that are already on the bug.
+    /// Keys are comment IDs; values are `true` (mark private) or
+    /// `false` (mark public). Used by `attachment upload
+    /// --comment-private` to flip the privacy of the comment created
+    /// by `Bug.add_attachment`.
+    #[serde(skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub comment_is_private: std::collections::HashMap<u64, bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
