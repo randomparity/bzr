@@ -540,6 +540,30 @@ pub struct SavedQuery {
     /// Server-canonical form. See `creation_time`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_change_time: Option<String>,
+    /// Filter by Status Whiteboard substring. See `SearchParams::whiteboard`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub whiteboard: Vec<String>,
+    /// Filter by Target Milestone (exact match, repeatable).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub target_milestone: Vec<String>,
+    /// Filter by Version (exact match, repeatable).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub version: Vec<String>,
+    /// Filter by OS (exact match, repeatable).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub op_sys: Vec<String>,
+    /// Filter by Platform / Hardware (exact match, repeatable). API param `platform`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub platform: Vec<String>,
+    /// Filter by Resolution (exact match, repeatable; empty matches open bugs).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resolution: Vec<String>,
+    /// Filter by QA Contact login (exact match, repeatable).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub qa_contact: Vec<String>,
+    /// Filter by URL field substring (repeatable).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub url: Vec<String>,
 }
 
 impl SavedQuery {
@@ -565,6 +589,14 @@ impl SavedQuery {
             raw_params: self.raw_params,
             creation_time: self.creation_time,
             last_change_time: self.last_change_time,
+            whiteboard: self.whiteboard,
+            target_milestone: self.target_milestone,
+            version: self.version,
+            op_sys: self.op_sys,
+            platform: self.platform,
+            resolution: self.resolution,
+            qa_contact: self.qa_contact,
+            url: self.url,
             ..Default::default()
         }
     }
@@ -585,6 +617,14 @@ impl SavedQuery {
             "creator" => creator,
             "priority" => priority,
             "severity" => severity,
+            "whiteboard" => whiteboard,
+            "target_milestone" => target_milestone,
+            "version" => version,
+            "op_sys" => op_sys,
+            "platform" => platform,
+            "resolution" => resolution,
+            "qa_contact" => qa_contact,
+            "url" => url,
         })
     }
 
@@ -601,6 +641,14 @@ impl SavedQuery {
             || !self.raw_params.is_empty()
             || self.creation_time.is_some()
             || self.last_change_time.is_some()
+            || !self.whiteboard.is_empty()
+            || !self.target_milestone.is_empty()
+            || !self.version.is_empty()
+            || !self.op_sys.is_empty()
+            || !self.platform.is_empty()
+            || !self.resolution.is_empty()
+            || !self.qa_contact.is_empty()
+            || !self.url.is_empty()
     }
 }
 
