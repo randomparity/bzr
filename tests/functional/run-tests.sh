@@ -448,6 +448,22 @@ if [[ -n "$BUG1" ]]; then
     if assert_success; then test_pass; fi
 else test_skip "no BUG1"; fi
 
+test_begin "45a. bug list --changed-since (recent activity)"
+if [[ -n "$BUG2" ]]; then
+    # Capture a timestamp safely after BUG2 was created/modified, so the
+    # filter window includes BUG2 and excludes any older fixtures. Bugzilla
+    # matches "at or after" inclusively; subtract 5 minutes to tolerate clock
+    # skew between the runner and the container.
+    SINCE_TS=$(date -u -d '5 minutes ago' '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null \
+                || date -u -v-5M '+%Y-%m-%dT%H:%M:%SZ')
+    run_bzr bug list --product FuncTestProd --changed-since "$SINCE_TS"
+    if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
+else test_skip "no BUG2"; fi
+
+test_begin "45b. bug list --changed-since (malformed -> exit 7)"
+run_bzr bug list --product FuncTestProd --changed-since "tomorrow"
+if assert_exit_code 7; then test_pass; fi
+
 test_begin "46. bug view 999999 (negative test)"
 run_bzr bug view 999999
 if assert_failure; then test_pass; fi
