@@ -25,17 +25,7 @@ pub async fn execute(
             output::print_attachments(&attachments, format);
         }
         AttachmentAction::Download { id, out } => {
-            let (filename, data) = client.download_attachment(*id).await?;
-            let dest = out.as_deref().unwrap_or(&filename);
-            std::fs::write(dest, &data)?;
-            output::print_result(
-                &DownloadResult::new(*id, dest, data.len()),
-                &format!(
-                    "Downloaded attachment #{id} to {dest} ({} bytes)",
-                    data.len()
-                ),
-                format,
-            );
+            download_single_legacy(&client, *id, out.as_deref(), format).await?;
         }
         AttachmentAction::Upload {
             bug_id,
@@ -205,6 +195,30 @@ fn warn_partial(att_id: u64, err: &crate::error::BzrError) {
         std::io::stderr(),
         "  the comment was created public; mark it private via the Bugzilla web UI or with elevated credentials",
     );
+}
+
+/// Single-attachment download: writes one decoded blob to `out` (if
+/// supplied) or to the attachment's stored `file_name` in the current
+/// directory. Behavior matches the original inline arm — the function
+/// exists to keep `execute()` readable when the bulk path is added.
+async fn download_single_legacy(
+    client: &BugzillaClient,
+    id: u64,
+    out: Option<&str>,
+    format: OutputFormat,
+) -> Result<()> {
+    let (filename, data) = client.download_attachment(id).await?;
+    let dest = out.unwrap_or(&filename);
+    std::fs::write(dest, &data)?;
+    output::print_result(
+        &DownloadResult::new(id, dest, data.len()),
+        &format!(
+            "Downloaded attachment #{id} to {dest} ({} bytes)",
+            data.len(),
+        ),
+        format,
+    );
+    Ok(())
 }
 
 #[cfg(test)]
