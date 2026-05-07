@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used)]
 
-use super::print_attachments;
+use super::*;
 use crate::types::{Attachment, OutputFormat};
 
 fn make_attachment(id: u64, summary: &str) -> Attachment {
@@ -213,4 +213,80 @@ async fn print_attachments_json_one_via_print() {
     assert_eq!(parsed[0]["id"], 99);
     assert_eq!(parsed[0]["summary"], "Json patch");
     assert_eq!(parsed[0]["file_name"], "file_99.patch");
+}
+
+#[test]
+fn attachment_batch_result_json_shape() {
+    let result = AttachmentBatchResult {
+        out_dir: "./attachments".into(),
+        bug_results: vec![BugDownloadResult {
+            bug_id: 12345,
+            status: TargetStatus::Ok,
+            files: vec![DownloadedFile {
+                attachment_id: 9876,
+                path: "./attachments/12345/9876.patch.diff".into(),
+                bytes: 4096,
+            }],
+            error: None,
+        }],
+        attachment_results: vec![],
+        summary: BatchSummary {
+            succeeded: 1,
+            failed: 0,
+            total_bytes: 4096,
+        },
+    };
+
+    let json = serde_json::to_value(&result).unwrap();
+    assert_eq!(json["out_dir"], "./attachments");
+    assert_eq!(json["bug_results"][0]["bug_id"], 12345);
+    assert_eq!(json["bug_results"][0]["status"], "ok");
+    assert_eq!(json["bug_results"][0]["files"][0]["attachment_id"], 9876);
+    assert_eq!(json["bug_results"][0]["files"][0]["bytes"], 4096);
+    assert_eq!(json["summary"]["succeeded"], 1);
+    assert_eq!(json["summary"]["total_bytes"], 4096);
+}
+
+#[test]
+fn attachment_batch_result_omits_empty_optional_fields() {
+    let result = AttachmentBatchResult {
+        out_dir: "./attachments".into(),
+        bug_results: vec![BugDownloadResult {
+            bug_id: 12345,
+            status: TargetStatus::Ok,
+            files: vec![],
+            error: None,
+        }],
+        attachment_results: vec![AttachmentDownloadResult {
+            attachment_id: 999,
+            status: TargetStatus::Error,
+            bug_id: None,
+            path: None,
+            bytes: None,
+            error: Some("not found".into()),
+        }],
+        summary: BatchSummary {
+            succeeded: 0,
+            failed: 1,
+            total_bytes: 0,
+        },
+    };
+    let json = serde_json::to_value(&result).unwrap();
+    let bug = &json["bug_results"][0];
+    assert!(bug.get("files").is_none(), "files should skip when empty");
+    assert!(bug.get("error").is_none(), "error should skip when None");
+    let att = &json["attachment_results"][0];
+    assert!(att.get("path").is_none());
+    assert!(att.get("bytes").is_none());
+    assert!(att.get("bug_id").is_none());
+    assert_eq!(att["error"], "not found");
+}
+
+#[test]
+fn target_status_serializes_lowercase() {
+    assert_eq!(serde_json::to_string(&TargetStatus::Ok).unwrap(), "\"ok\"");
+    assert_eq!(
+        serde_json::to_string(&TargetStatus::Error).unwrap(),
+        "\"error\"",
+    );
 }
