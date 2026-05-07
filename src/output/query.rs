@@ -30,6 +30,12 @@ fn query_summary_line(name: &str, q: &SavedQuery) -> String {
     if let Some(qs) = &q.quicksearch {
         parts.push(format!("search=\"{qs}\""));
     }
+    if let Some(ct) = &q.creation_time {
+        parts.push(format!("created>={ct}"));
+    }
+    if let Some(lct) = &q.last_change_time {
+        parts.push(format!("changed>={lct}"));
+    }
     if let Some(limit) = q.limit {
         parts.push(format!("limit={limit}"));
     }
@@ -91,6 +97,8 @@ pub fn print_query_detail(name: &str, query: &SavedQuery, format: OutputFormat) 
         }
         print_optional_field("Fields", view.query.fields.as_deref());
         print_optional_field("Exclude", view.query.exclude_fields.as_deref());
+        print_optional_field("Created since", view.query.creation_time.as_deref());
+        print_optional_field("Changed since", view.query.last_change_time.as_deref());
         if !view.query.raw_params.is_empty() {
             print_field("Raw params", &view.query.raw_params.len().to_string());
         }
