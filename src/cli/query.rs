@@ -5,6 +5,10 @@ use clap::Subcommand;
     clippy::doc_markdown,
     reason = "doc examples are literal shell commands; wrapping URLs in <> or identifiers in backticks would degrade copy-paste UX"
 )]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "only constructed once from CLI args"
+)]
 pub enum QueryAction {
     /// Save a named query (filter flags or a Bugzilla URL) for later reuse.
     ///
@@ -20,12 +24,18 @@ pub enum QueryAction {
     /// overridden per invocation by the matching flags on
     /// `bzr query run`.
     ///
+    /// `--created-since` / `--changed-since` save Bugzilla
+    /// `creation_time` / `last_change_time` filters into the
+    /// query. Same accepted forms as `bzr bug list --created-since`.
+    /// Validated at save time; malformed input exits 7.
+    ///
     /// Examples:
     ///
     ///   bzr query save firefox-new --product Firefox --status NEW
     ///   bzr query save crashes --search "crash in tab"
     ///   bzr query save my-saved \
     ///     --from-url 'https://bz/buglist.cgi?product=Firefox'
+    ///   bzr query save recent-firefox --product Firefox --changed-since 2026-04-01
     ///
     /// See bzr-query-run(1) to execute a saved query,
     /// bzr-query-list(1) for the inventory, and bzr-bug-list(1) for
@@ -80,6 +90,16 @@ pub enum QueryAction {
         /// Exclude these fields (comma-separated)
         #[arg(long)]
         exclude_fields: Option<String>,
+        /// Filter to bugs created at or after this date (saved into the query).
+        ///
+        /// Accepts the same forms as `bzr bug list --created-since`.
+        #[arg(long, value_name = "DATE")]
+        created_since: Option<String>,
+        /// Filter to bugs last modified at or after this date (saved into the query).
+        ///
+        /// Accepts the same forms as `bzr bug list --changed-since`.
+        #[arg(long, value_name = "DATE")]
+        changed_since: Option<String>,
     },
     /// List all saved queries.
     ///
