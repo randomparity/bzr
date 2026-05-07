@@ -312,6 +312,18 @@ bzr bug create --product Fedora --component kernel \
   --description "System hangs at initramfs" \
   --priority high --severity major
 
+# Read the description from a file
+bzr bug create --product Fedora --component kernel \
+  --summary "Boot failure" \
+  --description-file /tmp/desc.txt
+
+# Pipe the description from stdin
+echo "long-form description" | bzr bug create \
+  --product Fedora --component kernel --summary "Boot failure"
+
+# Compose interactively in $EDITOR (no --summary or --description)
+bzr bug create --product Fedora --component kernel
+
 bzr bug create --template security-bug --summary "XSS in login form"
 ```
 
@@ -319,9 +331,10 @@ bzr bug create --template security-bug --summary "XSS in login form"
 |--------|----------|---------|-------------|
 | `--product <P>` | Yes* | | Product name |
 | `--component <C>` | Yes* | | Component name |
-| `--summary <S>` | Yes | | One-line summary |
+| `--summary <S>` | Yes** | | One-line summary |
 | `--version <V>` | No | "unspecified" | Version |
-| `--description <D>` | No | | Full description |
+| `--description <D>` | No | | Full description (mutually exclusive with `--description-file`) |
+| `--description-file <PATH>` | No | | Read the description from a UTF-8 file (mutually exclusive with `--description`) |
 | `--priority <P>` | No | | Priority level |
 | `--severity <S>` | No | | Severity level |
 | `--assignee <A>` | No | | Assignee email |
@@ -331,9 +344,31 @@ bzr bug create --template security-bug --summary "XSS in login form"
 | `--depends-on <IDs>` | No | | Bug IDs this bug depends on (comma-separated) |
 | `--template <T>` | No | | Name of a saved template to use for default field values |
 
-*Required unless a template provides the value. `--summary` is always required regardless of template.
+*Required unless a template provides the value.
+**`--summary` is required unless the editor flow is active. The editor flow opens `$EDITOR` (or `vi` fallback) with a templated buffer when stdin is a TTY and no description source is supplied; the first non-empty line above the buffer's `# ------------------------ >8 ------------------------` sentinel divider becomes the summary, the rest becomes the description.
 
-Agent note: this command is non-interactive, but agent workflows are more reliable when you pass `--description` explicitly and use `--template` for server-specific defaults such as product, component, `op-sys`, or `rep-platform`.
+#### Description source precedence
+
+Highest priority first:
+
+1. `--description "text"` — literal value.
+2. `--description-file PATH` — UTF-8 file contents.
+3. Piped stdin — when stdin is not a TTY (e.g. `echo body | bzr bug create ...`).
+4. `$EDITOR` — when stdin is a TTY and no explicit source is supplied. The buffer is pre-filled with `--summary` (if given) and any saved-template `description` body, followed by a `git commit -v`-style sentinel divider with informational field reminders.
+
+`--description` and `--description-file` are mutually exclusive (clap rejects with exit code 2). An empty piped stdin (when no other source is supplied) aborts with exit code 7.
+
+#### Exit codes (this command)
+
+| Code | Condition |
+|------|-----------|
+| 0 | Success |
+| 2 | Conflicting flags (e.g. `--description` and `--description-file` both set) |
+| 4 | Bugzilla API error (e.g. server requires `--op-sys` and it wasn't provided) |
+| 7 | Input validation: missing `--summary` outside the editor flow; missing or unreadable `--description-file`; empty stdin without an explicit description; empty editor buffer; `$EDITOR` exited non-zero |
+| 9 | Authentication failure |
+
+Agent note: agent workflows should pass `--description` (or `--description-file`) explicitly and supply `--summary`. The `$EDITOR` flow only fires when stdin is a TTY, which is rare in headless / CI invocations.
 
 ### `bzr bug clone`
 

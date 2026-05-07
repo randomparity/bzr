@@ -4,6 +4,7 @@ pub mod classification;
 pub mod comment;
 pub mod component;
 pub mod config;
+mod editor;
 pub mod field;
 pub mod flags;
 pub mod group;

@@ -495,6 +495,78 @@ if [[ -n "$BUG1" ]] && [[ -n "$BUG2" ]]; then
     fi
 else test_skip "no BUG1/BUG2"; fi
 
+# ── Bug create: description-source precedence ────────────────────────
+test_begin "48a. bug create --description-file"
+DESC_FILE=$(mktemp /tmp/bzr-func-desc.XXXXXX)
+echo "description from file" > "$DESC_FILE"
+run_bzr bug create --product FuncTestProd --component Backend \
+    --summary "From file" --description-file "$DESC_FILE" \
+    --op-sys All --rep-platform All
+if assert_success; then test_pass; fi
+rm -f "$DESC_FILE"
+
+test_begin "48b. bug create --description and --description-file conflict (clap exit 2)"
+DESC_FILE=$(mktemp /tmp/bzr-func-desc.XXXXXX)
+echo "should-not-appear" > "$DESC_FILE"
+run_bzr_raw bug create --product FuncTestProd --component Backend \
+    --summary "Conflict test" --description literal \
+    --description-file "$DESC_FILE" --op-sys All --rep-platform All
+if assert_exit_code 2; then test_pass; fi
+rm -f "$DESC_FILE"
+
+test_begin "48c. bug create stdin description (piped)"
+run_bzr bug create \
+    --product FuncTestProd --component Backend \
+    --summary "From stdin" --op-sys All --rep-platform All \
+    <<<"description from stdin"
+if assert_success; then test_pass; fi
+
+test_begin "48d. bug create --description-file wins over piped stdin"
+DESC_FILE=$(mktemp /tmp/bzr-func-desc.XXXXXX)
+echo "from file" > "$DESC_FILE"
+run_bzr bug create \
+    --product FuncTestProd --component Backend \
+    --summary "Precedence file>stdin" --description-file "$DESC_FILE" \
+    --op-sys All --rep-platform All \
+    <<<"from stdin"
+if assert_success; then
+    BUG_ID=$(jq -r '.id' "$BZR_STDOUT")
+    # Verify the description that landed is from the file, not stdin
+    run_bzr bug view "$BUG_ID"
+    if assert_stdout_contains "from file"; then test_pass; fi
+fi
+rm -f "$DESC_FILE"
+
+test_begin "48e. bug create --description-file missing path → exit 7"
+run_bzr_raw bug create --product FuncTestProd --component Backend \
+    --summary "Missing file" --description-file /nonexistent-bzr-path-xyz-123 \
+    --op-sys All --rep-platform All
+if assert_exit_code 7; then test_pass; fi
+
+test_begin "48f. bug create empty piped stdin without explicit description → exit 7"
+run_bzr_raw bug create \
+    --product FuncTestProd --component Backend \
+    --summary "Empty stdin" --op-sys All --rep-platform All \
+    </dev/null
+if assert_exit_code 7; then test_pass; fi
+
+test_begin "48g. bug create empty fake-editor → exit 7 (TTY-conditional)"
+EDITOR_SCRIPT=$(mktemp /tmp/bzr-empty-editor-XXXXXX.sh)
+cat > "$EDITOR_SCRIPT" <<'SH'
+#!/bin/sh
+: > "$1"
+SH
+chmod +x "$EDITOR_SCRIPT"
+# Note: this exercises the editor branch only when stdin is a TTY.
+# Under non-TTY (most CI), stdin is piped (empty here from < /dev/null)
+# so the empty-stdin branch fires first — also exit 7. Either way, the
+# expected exit code is 7.
+EDITOR="$EDITOR_SCRIPT" run_bzr_raw bug create \
+    --product FuncTestProd --component Backend \
+    --op-sys All --rep-platform All < /dev/null
+if assert_exit_code 7; then test_pass; fi
+rm -f "$EDITOR_SCRIPT"
+
 echo ""
 
 # ══════════════════════════════════════════════════════════════════════

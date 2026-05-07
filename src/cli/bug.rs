@@ -229,12 +229,26 @@ pub enum BugAction {
     },
     /// Create a new bug under a product and component.
     ///
-    /// `--summary` is always required. `--product` and `--component`
-    /// are required unless a saved template (`--template`) supplies
-    /// them; CLI flags override template values. Some Bugzilla
-    /// installations also require `--op-sys` and `--rep-platform` --
-    /// the API call fails with exit code 4 (Api) when the server
-    /// demands a field that wasn't provided.
+    /// `--product` and `--component` are required unless a saved
+    /// template (`--template`) supplies them; CLI flags override
+    /// template values. Some Bugzilla installations also require
+    /// `--op-sys` and `--rep-platform` -- the API call fails with
+    /// exit code 4 (Api) when the server demands a field that
+    /// wasn't provided.
+    ///
+    /// Description sources, highest priority first:
+    ///
+    ///   1. `--description "text"` (literal)
+    ///   2. `--description-file PATH` (UTF-8 file contents)
+    ///   3. piped stdin (when stdin is not a TTY)
+    ///   4. `$EDITOR` (when stdin is a TTY and none of the above)
+    ///
+    /// `--description` and `--description-file` are mutually
+    /// exclusive. When the editor flow is active, `--summary` is
+    /// optional: the first non-empty line of the buffer becomes
+    /// the summary and the rest becomes the description. A
+    /// `git commit -v`-style sentinel divider separates editable
+    /// content from informational field reminders.
     ///
     /// On success, prints the new bug ID, alias (if assigned), and
     /// URL to stdout. With `--json`, the same fields are emitted as
@@ -245,11 +259,17 @@ pub enum BugAction {
     ///   bzr bug create --product Fedora --component kernel \
     ///     --summary "Boot failure on 6.x" \
     ///     --description "System hangs at initramfs"
-    ///   bzr bug create --template security-bug \
-    ///     --summary "XSS in login form"
+    ///   bzr bug create --product Fedora --component kernel \
+    ///     --description-file /tmp/desc.txt --summary "Boot failure"
+    ///   bzr bug create --product Fedora --component kernel
+    ///     # opens $EDITOR; first non-empty line of the buffer
+    ///     # becomes the summary
+    ///   bzr bug create --template security-bug --summary "XSS in login"
     ///
     /// Exit codes: 0 on success, 4 on Bugzilla API error, 7 on
-    /// input validation (e.g. empty summary), 9 on auth failure.
+    /// input validation (missing --summary outside the editor flow,
+    /// empty editor buffer, missing or non-UTF-8 --description-file,
+    /// $EDITOR exited non-zero), 9 on auth failure.
     ///
     /// See bzr-bug-clone(1) for cloning an existing bug,
     /// bzr-template(1) for managing templates, and bzr-field(1) for
@@ -281,15 +301,22 @@ pub enum BugAction {
         /// valid names via `bzr product view <product>`.
         #[arg(long)]
         component: Option<String>,
-        /// Bug summary
+        /// Bug summary (required unless the editor flow is active)
         #[arg(long)]
-        summary: String,
+        summary: Option<String>,
         /// Version
         #[arg(long)]
         version: Option<String>,
         /// Bug description
-        #[arg(long)]
+        #[arg(long, conflicts_with = "description_file")]
         description: Option<String>,
+        /// Read the bug description from a UTF-8 file.
+        ///
+        /// Mutually exclusive with `--description`. The file path
+        /// must exist and be readable; non-existent paths or
+        /// non-UTF-8 contents fail with exit code 7.
+        #[arg(long, value_name = "PATH", conflicts_with = "description")]
+        description_file: Option<std::path::PathBuf>,
         /// Priority
         #[arg(long)]
         priority: Option<String>,

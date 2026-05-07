@@ -25,6 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   unrecognized API codes) still bail. JSON output for multi-ID is a
   wrapped `{"bugs": [...], "failed": [...]}` object regardless of
   `--permissive`. Closes #156.
+- `bzr bug create` now reads the description from `$EDITOR` when
+  `--description`, `--description-file`, and piped stdin are all
+  absent and stdin is a TTY. The buffer uses a
+  `git commit -v`-style sentinel divider; the first non-empty line
+  above the divider becomes the summary and the rest becomes the
+  description. `--summary` is optional when the editor flow is
+  active. Closes #159.
+- `bzr bug create --description-file <PATH>` reads the description
+  from a UTF-8 file (mutually exclusive with `--description`).
+  Missing or non-UTF-8 paths exit with code 7. Closes #160.
 
 ### Fixed
 
@@ -55,6 +65,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   scope: summary + description + comments); for a Summary-
   field-only match across all states, use the new
   `bzr bug list --summary <text>` instead.
+- `bzr bug create --template <NAME>` no longer auto-applies the
+  template's `description` field as a fallback when no explicit
+  description source is supplied outside the editor flow. The
+  template description is now used as the editor buffer's pre-fill
+  only. Pass `--description`, `--description-file`, or pipe a
+  description via stdin to use a non-template body. Refs: #159, #160.
 
 ## [0.3.0] - 2026-05-05
 
