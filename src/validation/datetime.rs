@@ -67,9 +67,9 @@ fn parse_date(s: &str) -> Option<()> {
 }
 
 fn parse_time(s: &str) -> Option<()> {
-    // Expects exactly "HH:MM:SS" (8 chars).
+    debug_assert_eq!(s.len(), 8, "parse_time requires exactly 8 bytes (HH:MM:SS)");
     let bytes = s.as_bytes();
-    if bytes.len() != 8 || bytes[2] != b':' || bytes[5] != b':' {
+    if bytes[2] != b':' || bytes[5] != b':' {
         return None;
     }
     if !bytes[..2].iter().all(u8::is_ascii_digit)

@@ -17,10 +17,8 @@ pub async fn execute(
 
     match action {
         CommentAction::List { bug_id, since } => {
-            let canonical_since = since
-                .as_deref()
-                .map(|s| crate::validation::parse_iso8601_or_date(s, "--since"))
-                .transpose()?;
+            let canonical_since =
+                crate::validation::parse_optional_date(since.as_deref(), "--since")?;
             let comments = client
                 .get_comments_since(*bug_id, canonical_since.as_deref())
                 .await?;

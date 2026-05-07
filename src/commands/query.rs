@@ -46,14 +46,10 @@ fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
         unreachable!()
     };
 
-    let creation_time = created_since
-        .as_deref()
-        .map(|s| crate::validation::parse_iso8601_or_date(s, "--created-since"))
-        .transpose()?;
-    let last_change_time = changed_since
-        .as_deref()
-        .map(|s| crate::validation::parse_iso8601_or_date(s, "--changed-since"))
-        .transpose()?;
+    let creation_time =
+        crate::validation::parse_optional_date(created_since.as_deref(), "--created-since")?;
+    let last_change_time =
+        crate::validation::parse_optional_date(changed_since.as_deref(), "--changed-since")?;
 
     let (query, preloaded_config) = if let Some(url_str) = from_url {
         let config = Config::load()?;
@@ -69,10 +65,10 @@ fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
             query.exclude_fields = Some(ef.clone());
         }
         if creation_time.is_some() {
-            query.creation_time.clone_from(&creation_time);
+            query.creation_time = creation_time;
         }
         if last_change_time.is_some() {
-            query.last_change_time.clone_from(&last_change_time);
+            query.last_change_time = last_change_time;
         }
         (query, Some(config))
     } else {
@@ -172,14 +168,10 @@ async fn handle_run(
         unreachable!()
     };
 
-    let creation_time_override = created_since
-        .as_deref()
-        .map(|s| crate::validation::parse_iso8601_or_date(s, "--created-since"))
-        .transpose()?;
-    let last_change_time_override = changed_since
-        .as_deref()
-        .map(|s| crate::validation::parse_iso8601_or_date(s, "--changed-since"))
-        .transpose()?;
+    let creation_time_override =
+        crate::validation::parse_optional_date(created_since.as_deref(), "--created-since")?;
+    let last_change_time_override =
+        crate::validation::parse_optional_date(changed_since.as_deref(), "--changed-since")?;
 
     let config = Config::load()?;
     let saved = config

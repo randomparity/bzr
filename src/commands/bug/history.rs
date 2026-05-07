@@ -5,7 +5,7 @@ use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output;
 use crate::types::OutputFormat;
-use crate::validation::parse_iso8601_or_date;
+use crate::validation::parse_optional_date;
 
 pub(super) async fn handle(
     client: &BugzillaClient,
@@ -16,10 +16,7 @@ pub(super) async fn handle(
         unreachable!()
     };
 
-    let canonical_since = since
-        .as_deref()
-        .map(|s| parse_iso8601_or_date(s, "--since"))
-        .transpose()?;
+    let canonical_since = parse_optional_date(since.as_deref(), "--since")?;
 
     let history = client
         .get_bug_history_since(*id, canonical_since.as_deref())
