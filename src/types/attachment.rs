@@ -38,6 +38,8 @@ pub struct Attachment {
     pub is_obsolete: bool,
     #[serde(default, deserialize_with = "bool_from_int_or_bool")]
     pub is_private: bool,
+    #[serde(default, deserialize_with = "bool_from_int_or_bool")]
+    pub is_patch: bool,
     #[serde(default)]
     pub data: Option<String>,
 }
@@ -55,6 +57,9 @@ pub struct UploadAttachmentParams {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub flags: Vec<FlagUpdate>,
     pub is_private: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+    pub is_patch: bool,
 }
 
 // Serde serialize_with requires &T signature for the field type.

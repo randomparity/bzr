@@ -12,14 +12,16 @@ pub fn print_attachments(attachments: &[Attachment], format: OutputFormat) {
             return;
         }
         for a in attachments {
+            let patch = if a.is_patch { " [PATCH]" } else { "" };
             let obsolete = if a.is_obsolete { " [OBSOLETE]" } else { "" };
             let private = if a.is_private { " [PRIVATE]" } else { "" };
             let _ = writeln!(
                 io::stdout(),
-                "{} #{} - {}{}{}",
+                "{} #{} - {}{}{}{}",
                 "Attachment".bold(),
                 a.id,
                 a.summary.bold(),
+                patch.cyan(),
                 obsolete.red(),
                 private.red(),
             );

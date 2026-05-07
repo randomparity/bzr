@@ -16,6 +16,7 @@ fn make_attachment(id: u64, summary: &str) -> Attachment {
         size: 1234,
         is_obsolete: false,
         is_private: false,
+        is_patch: false,
         data: None,
     }
 }
@@ -129,6 +130,7 @@ async fn print_attachments_table_missing_optional_fields_render_dash() {
         size: 0,
         is_obsolete: false,
         is_private: false,
+        is_patch: false,
         data: None,
     }];
     let ((), output) = crate::test_helpers::capture_stdout(async {
@@ -152,6 +154,50 @@ async fn print_attachments_table_missing_optional_fields_render_dash() {
     // Neither flag is set
     assert!(!output.contains("[OBSOLETE]"));
     assert!(!output.contains("[PRIVATE]"));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn print_attachments_table_renders_patch_tag() {
+    let _lock = crate::ENV_LOCK.lock().await;
+    let mut att = make_attachment(12, "Patch attachment");
+    att.is_patch = true;
+    let attachments = vec![att];
+    let ((), output) = crate::test_helpers::capture_stdout(async {
+        print_attachments(&attachments, OutputFormat::Table);
+    })
+    .await;
+    assert!(output.contains("Attachment"));
+    assert!(output.contains("#12"));
+    assert!(output.contains("Patch attachment"));
+    assert!(output.contains("[PATCH]"));
+    // is_patch alone should not enable the other tags.
+    assert!(!output.contains("[OBSOLETE]"));
+    assert!(!output.contains("[PRIVATE]"));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn print_attachments_table_patch_tag_precedes_obsolete_and_private() {
+    let _lock = crate::ENV_LOCK.lock().await;
+    let mut att = make_attachment(13, "All flags");
+    att.is_patch = true;
+    att.is_obsolete = true;
+    att.is_private = true;
+    let attachments = vec![att];
+    let ((), output) = crate::test_helpers::capture_stdout(async {
+        print_attachments(&attachments, OutputFormat::Table);
+    })
+    .await;
+    let patch_idx = output.find("[PATCH]").expect("[PATCH] tag should render");
+    let obsolete_idx = output
+        .find("[OBSOLETE]")
+        .expect("[OBSOLETE] tag should render");
+    let private_idx = output
+        .find("[PRIVATE]")
+        .expect("[PRIVATE] tag should render");
+    assert!(patch_idx < obsolete_idx);
+    assert!(obsolete_idx < private_idx);
 }
 
 #[cfg(unix)]

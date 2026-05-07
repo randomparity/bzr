@@ -35,6 +35,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `bzr bug create --description-file <PATH>` reads the description
   from a UTF-8 file (mutually exclusive with `--description`).
   Missing or non-UTF-8 paths exit with code 7. Closes #160.
+- `bzr attachment upload --comment <BODY>` posts a comment alongside the
+  attachment in a single API call. Folded into the underlying
+  `Bug.add_attachment` request so the attachment and comment share a
+  creation timestamp. Closes #165.
+- `bzr attachment upload --is-patch` marks the attachment as a patch
+  at upload time, removing the previous two-call pattern (upload then
+  `bzr attachment update --is-patch true`). When `--content-type` is
+  not supplied, `--is-patch` defaults the type to `text/plain`,
+  matching `bzl-attachment-add`. The read-side `Attachment` struct
+  also exposes `is_patch` so `bzr attachment list --json` includes the
+  field. Closes #166.
 
 ### Fixed
 

@@ -860,6 +860,8 @@ async fn attachment_upload_integration() {
         summary: Some("Test upload".to_string()),
         content_type: Some("text/plain".to_string()),
         private: false,
+        is_patch: false,
+        comment: None,
         flag: vec![],
     };
     let result = bzr::commands::attachment::execute(
@@ -873,6 +875,125 @@ async fn attachment_upload_integration() {
         result.is_ok(),
         "attachment upload should succeed: {result:?}"
     );
+}
+
+#[tokio::test]
+async fn attachment_upload_with_comment_integration() {
+    use wiremock::matchers::body_string_contains;
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    let upload_file = tmp.path().join("upload.txt");
+    std::fs::write(&upload_file, "test content").unwrap();
+
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/42/attachment"))
+        .and(body_string_contains(
+            "\"comment\":\"see #6789 for context\"",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [102]})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = bzr::cli::AttachmentAction::Upload {
+        bug_id: 42,
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: Some("Test upload".to_string()),
+        content_type: Some("text/plain".to_string()),
+        private: false,
+        is_patch: false,
+        comment: Some("see #6789 for context".to_string()),
+        flag: vec![],
+    };
+    let result = bzr::commands::attachment::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "upload with --comment should succeed: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn attachment_upload_with_is_patch_integration() {
+    use wiremock::matchers::body_string_contains;
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    let upload_file = tmp.path().join("fix.patch");
+    std::fs::write(&upload_file, "diff --git a/x b/x").unwrap();
+
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/42/attachment"))
+        .and(body_string_contains("\"is_patch\":true"))
+        .and(body_string_contains("\"content_type\":\"text/plain\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [103]})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = bzr::cli::AttachmentAction::Upload {
+        bug_id: 42,
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: Some("Test patch".to_string()),
+        content_type: None,
+        private: false,
+        is_patch: true,
+        comment: None,
+        flag: vec![],
+    };
+    let result = bzr::commands::attachment::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "upload with --is-patch should succeed: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn attachment_list_returns_is_patch_field_integration() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/attachment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": {
+                "42": [{
+                    "id": 100,
+                    "bug_id": 42,
+                    "file_name": "fix.patch",
+                    "summary": "patch",
+                    "content_type": "text/plain",
+                    "creation_time": "2026-05-06T00:00:00Z",
+                    "is_obsolete": false,
+                    "is_private": false,
+                    "is_patch": true,
+                    "size": 12
+                }]
+            }
+        })))
+        .mount(&mock)
+        .await;
+
+    let action = bzr::cli::AttachmentAction::List { bug_id: 42 };
+    let (result, output) = capture_stdout(bzr::commands::attachment::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    ))
+    .await;
+    assert!(result.is_ok(), "list should succeed: {result:?}");
+    let parsed = extract_json(&output);
+    assert_eq!(parsed[0]["is_patch"], true);
 }
 
 // ── Attachment update ────────────────────────────────────────────────

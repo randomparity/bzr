@@ -972,6 +972,43 @@ if [[ -n "$BUG1" ]]; then
     if assert_success; then test_pass; fi
 else test_skip "no BUG1"; fi
 
+test_begin "100f. attachment upload --comment posts comment in same call"
+if [[ -n "$BUG1" ]]; then
+    run_bzr comment list "$BUG1"
+    if assert_success; then
+        PRECOMMENT_COUNT=$(jq '. | length' "$BZR_STDOUT" 2>/dev/null || echo "")
+        run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
+            --summary "with comment" \
+            --comment "see #165 -- bzl-parity"
+        if assert_success; then
+            run_bzr comment list "$BUG1"
+            if assert_success; then
+                POSTCOMMENT_COUNT=$(jq '. | length' "$BZR_STDOUT" 2>/dev/null || echo "")
+                if [[ -n "$PRECOMMENT_COUNT" ]] \
+                    && [[ -n "$POSTCOMMENT_COUNT" ]] \
+                    && [[ "$POSTCOMMENT_COUNT" -eq $((PRECOMMENT_COUNT + 1)) ]]; then
+                    test_pass
+                else
+                    test_fail "comment count did not grow by 1 (pre=$PRECOMMENT_COUNT post=$POSTCOMMENT_COUNT)"
+                fi
+            fi
+        fi
+    fi
+else test_skip "no BUG1"; fi
+
+test_begin "100g. attachment upload --is-patch marks attachment as a patch"
+if [[ -n "$BUG1" ]]; then
+    run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
+        --summary "patch test" --is-patch
+    if assert_success; then
+        run_bzr attachment list "$BUG1"
+        if assert_success \
+            && assert_json '[.[] | select(.summary == "patch test")][-1].is_patch' "true"; then
+            test_pass
+        fi
+    fi
+else test_skip "no BUG1"; fi
+
 echo ""
 
 # ══════════════════════════════════════════════════════════════════════
@@ -996,8 +1033,9 @@ else test_skip "no BUG1"; fi
 test_begin "100b. attachment list returns private attachment in Hybrid mode"
 if [[ -n "$BUG1" ]]; then
     run_bzr --api hybrid attachment list "$BUG1"
-    # Earlier tests uploaded ≥2 public attachments + 1 private = ≥3 total,
-    # AND the private one must be visible (is_private: true present).
+    # Several public attachments are uploaded earlier in the run and this
+    # section adds one private; the list must include ≥3 total AND the
+    # private one must be visible (is_private: true present).
     if assert_success \
         && assert_json_array_min_length '.' 3 \
         && [[ "$(jq '[.[] | select(.is_private == true)] | length' "$BZR_STDOUT")" -ge 1 ]]; then

@@ -27,3 +27,24 @@ fn bool_from_int_or_bool_rejects_string() {
         "unexpected error: {err}"
     );
 }
+
+#[test]
+fn is_patch_deserializes_as_bool() {
+    let json = r#"{"id":1,"is_patch":true}"#;
+    let att: Attachment = serde_json::from_str(json).unwrap();
+    assert!(att.is_patch);
+}
+
+#[test]
+fn is_patch_deserializes_as_int() {
+    let json = r#"{"id":1,"is_patch":1}"#;
+    let att: Attachment = serde_json::from_str(json).unwrap();
+    assert!(att.is_patch);
+}
+
+#[test]
+fn is_patch_defaults_to_false_when_absent() {
+    let json = r#"{"id":1}"#;
+    let att: Attachment = serde_json::from_str(json).unwrap();
+    assert!(!att.is_patch);
+}

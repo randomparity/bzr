@@ -470,6 +470,7 @@ fn value_to_attachment(val: &Value) -> Result<crate::types::Attachment> {
         size,
         is_obsolete: get_bool_flag(m, "is_obsolete"),
         is_private: get_bool_flag(m, "is_private"),
+        is_patch: get_bool_flag(m, "is_patch"),
         data,
     })
 }
