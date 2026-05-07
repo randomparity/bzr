@@ -1058,6 +1058,7 @@ async fn attachment_download_batch_data_missing_falls_back_via_get() {
     assert_eq!(written, b"fallback");
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn attachment_download_batch_top_level_out_dir_unwritable_fails_fast() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
