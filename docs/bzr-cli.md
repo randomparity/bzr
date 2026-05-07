@@ -451,6 +451,10 @@ bzr bug update 12345 --status ASSIGNED --assignee dev@example.com
 bzr bug update 12345 --status RESOLVED --resolution FIXED
 bzr bug update 12345 --flag "review?(alice@example.com)"
 bzr bug update 12345 --blocks-add 100,200 --depends-on-add 50
+bzr bug update 12345 --keywords-add fix-needed,regression \
+    --cc-add alice@example.com
+bzr bug update 12345 --see-also-add https://example.com/issue/42 \
+    --see-also-add https://other.example/bug/7
 bzr bug update 100 200 300 --status RESOLVED --resolution DUPLICATE
 ```
 
@@ -469,6 +473,14 @@ bzr bug update 100 200 300 --status RESOLVED --resolution DUPLICATE
 | `--blocks-remove <IDs>` | No | Remove bug IDs from the blocks list (comma-separated) |
 | `--depends-on-add <IDs>` | No | Add bug IDs to the depends-on list (comma-separated) |
 | `--depends-on-remove <IDs>` | No | Remove bug IDs from the depends-on list (comma-separated) |
+| `--keywords-add <K>` | No | Add keywords (comma-separated) |
+| `--keywords-remove <K>` | No | Remove keywords (comma-separated) |
+| `--cc-add <U>` | No | Add CC entries (comma-separated; usernames or emails) |
+| `--cc-remove <U>` | No | Remove CC entries (comma-separated) |
+| `--groups-add <G>` | No | Add groups (comma-separated; requires permission) |
+| `--groups-remove <G>` | No | Remove groups (comma-separated; requires permission) |
+| `--see-also-add <URL>` | No | Add a see-also URL (repeat for multiple; no comma-list) |
+| `--see-also-remove <URL>` | No | Remove a see-also URL (repeat for multiple) |
 
 When updating multiple bugs, failures on individual bugs do not abort the batch. A summary is printed showing which bugs succeeded and which failed.
 

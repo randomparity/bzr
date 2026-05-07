@@ -2,7 +2,21 @@ use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::{self, ActionResult, BatchFailure, BatchResult, ResourceKind};
-use crate::types::{IdListUpdate, OutputFormat, UpdateBugParams};
+use crate::types::{IdListUpdate, OutputFormat, StringListUpdate, UpdateBugParams};
+
+fn clean_string_list(values: &[String]) -> Result<Vec<String>> {
+    let mut out = Vec::with_capacity(values.len());
+    for raw in values {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return Err(crate::error::BzrError::InputValidation(
+                "list value cannot be empty or whitespace-only".to_string(),
+            ));
+        }
+        out.push(trimmed.to_string());
+    }
+    Ok(out)
+}
 
 fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)> {
     let BugAction::Update {
@@ -19,6 +33,14 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
         blocks_remove,
         depends_on_add,
         depends_on_remove,
+        keywords_add,
+        keywords_remove,
+        cc_add,
+        cc_remove,
+        groups_add,
+        groups_remove,
+        see_also_add,
+        see_also_remove,
     } = action
     else {
         unreachable!()
@@ -41,6 +63,22 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
         depends_on: IdListUpdate {
             add: depends_on_add.clone(),
             remove: depends_on_remove.clone(),
+        },
+        keywords: StringListUpdate {
+            add: clean_string_list(keywords_add)?,
+            remove: clean_string_list(keywords_remove)?,
+        },
+        cc: StringListUpdate {
+            add: clean_string_list(cc_add)?,
+            remove: clean_string_list(cc_remove)?,
+        },
+        groups: StringListUpdate {
+            add: clean_string_list(groups_add)?,
+            remove: clean_string_list(groups_remove)?,
+        },
+        see_also: StringListUpdate {
+            add: clean_string_list(see_also_add)?,
+            remove: clean_string_list(see_also_remove)?,
         },
     };
     Ok((ids.clone(), params))

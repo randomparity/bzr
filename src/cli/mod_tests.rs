@@ -1441,3 +1441,92 @@ fn query_run_parses_158_field_filter_overrides() {
     assert_eq!(qa_contact, vec!["newqa@example.com"]);
     assert_eq!(url, vec!["gitlab.com/x"]);
 }
+
+#[test]
+fn parse_bug_update_keywords_add_comma_list() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "update",
+        "100",
+        "--keywords-add",
+        "fix-needed,regression",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Bug {
+            action: BugAction::Update { keywords_add, .. },
+        } => {
+            assert_eq!(keywords_add, vec!["fix-needed", "regression"]);
+        }
+        _ => panic!("expected Bug Update"),
+    }
+}
+
+#[test]
+fn parse_bug_update_cc_add_comma_list() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "update",
+        "100",
+        "--cc-add",
+        "a@example.com,b@example.com",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Bug {
+            action: BugAction::Update { cc_add, .. },
+        } => {
+            assert_eq!(cc_add, vec!["a@example.com", "b@example.com"]);
+        }
+        _ => panic!("expected Bug Update"),
+    }
+}
+
+#[test]
+fn parse_bug_update_groups_remove_comma_list() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "update",
+        "100",
+        "--groups-remove",
+        "secret,internal",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Bug {
+            action: BugAction::Update { groups_remove, .. },
+        } => {
+            assert_eq!(groups_remove, vec!["secret", "internal"]);
+        }
+        _ => panic!("expected Bug Update"),
+    }
+}
+
+#[test]
+fn parse_bug_update_see_also_add_repeated_flag() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "update",
+        "100",
+        "--see-also-add",
+        "https://a.example/?x=1,y=2",
+        "--see-also-add",
+        "https://b.example/issue/3",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Bug {
+            action: BugAction::Update { see_also_add, .. },
+        } => {
+            assert_eq!(
+                see_also_add,
+                vec!["https://a.example/?x=1,y=2", "https://b.example/issue/3"]
+            );
+        }
+        _ => panic!("expected Bug Update"),
+    }
+}

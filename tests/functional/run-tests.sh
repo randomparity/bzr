@@ -660,6 +660,36 @@ if [[ -n "$BUG3" ]] && [[ -n "$BUG2" ]]; then
     if assert_success; then test_pass; fi
 else test_skip "no BUG3/BUG2"; fi
 
+test_begin "53a. bug update --keywords-add (single keyword)"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug update "$BUG1" --keywords-add "fix-needed"
+    if assert_success; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "53b. bug view shows new keyword"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug view "$BUG1" --json
+    if assert_success && assert_stdout_contains "fix-needed"; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "53c. bug update --keywords-remove"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug update "$BUG1" --keywords-remove "fix-needed"
+    if assert_success; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "53d. bug update --cc-add (single user)"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug update "$BUG1" --cc-add "testuser@test.bzr"
+    if assert_success; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "53e. bug update --cc-remove"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug update "$BUG1" --cc-remove "testuser@test.bzr"
+    if assert_success; then test_pass; fi
+else test_skip "no BUG1"; fi
+
 echo ""
 
 # ══════════════════════════════════════════════════════════════════════

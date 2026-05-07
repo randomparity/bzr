@@ -67,6 +67,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Legacy `buglist.cgi` URL parameter names (`status_whiteboard`,
   `rep_platform`, `bug_file_loc`) are recognized by `--from-url`.
   Closes #158.
+- `bzr bug update` gains list-mutation flags for four
+  string-typed fields, mirroring the existing
+  `--blocks-add` / `--depends-on-add` convention:
+  `--keywords-add` / `--keywords-remove`,
+  `--cc-add` / `--cc-remove`,
+  `--groups-add` / `--groups-remove`,
+  `--see-also-add` / `--see-also-remove`. Comma-separated values
+  for the first three; `--see-also-*` accepts one URL per flag
+  instance (URLs may legitimately contain commas). Closes #163.
 
 ### Fixed
 

@@ -1,3 +1,5 @@
+#![expect(clippy::unwrap_used)]
+
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
@@ -20,6 +22,46 @@ fn make_update_action(ids: Vec<u64>) -> BugAction {
         blocks_remove: vec![],
         depends_on_add: vec![],
         depends_on_remove: vec![],
+        keywords_add: vec![],
+        keywords_remove: vec![],
+        cc_add: vec![],
+        cc_remove: vec![],
+        groups_add: vec![],
+        groups_remove: vec![],
+        see_also_add: vec![],
+        see_also_remove: vec![],
+    }
+}
+
+fn make_update_action_with_lists(
+    keywords_add: Vec<&str>,
+    cc_add: Vec<&str>,
+    groups_remove: Vec<&str>,
+    see_also_add: Vec<&str>,
+) -> BugAction {
+    let to_strings = |v: Vec<&str>| v.into_iter().map(String::from).collect();
+    BugAction::Update {
+        ids: vec![1],
+        status: None,
+        resolution: None,
+        assignee: None,
+        priority: None,
+        severity: None,
+        summary: None,
+        whiteboard: None,
+        flag: vec![],
+        blocks_add: vec![],
+        blocks_remove: vec![],
+        depends_on_add: vec![],
+        depends_on_remove: vec![],
+        keywords_add: to_strings(keywords_add),
+        keywords_remove: vec![],
+        cc_add: to_strings(cc_add),
+        cc_remove: vec![],
+        groups_add: vec![],
+        groups_remove: to_strings(groups_remove),
+        see_also_add: to_strings(see_also_add),
+        see_also_remove: vec![],
     }
 }
 
@@ -108,4 +150,47 @@ async fn bug_update_batch_table_format_all_succeed() {
     assert!(output.contains("Updated bugs:"));
     assert!(output.contains("#1"));
     assert!(output.contains("#2"));
+}
+
+#[test]
+fn build_update_params_populates_string_lists() {
+    let action = make_update_action_with_lists(
+        vec!["fix-needed"],
+        vec!["alice@example.com"],
+        vec!["secret"],
+        vec!["https://example.com/issue/1"],
+    );
+    let (ids, params) = super::build_update_params(&action).unwrap();
+    assert_eq!(ids, vec![1]);
+    assert_eq!(params.keywords.add, vec!["fix-needed"]);
+    assert_eq!(params.cc.add, vec!["alice@example.com"]);
+    assert_eq!(params.groups.remove, vec!["secret"]);
+    assert_eq!(params.see_also.add, vec!["https://example.com/issue/1"]);
+}
+
+#[test]
+fn build_update_params_trims_string_list_values() {
+    let action = make_update_action_with_lists(
+        vec!["  fix-needed  "],
+        vec![],
+        vec![],
+        vec!["  https://example.com/issue/1  "],
+    );
+    let (_ids, params) = super::build_update_params(&action).unwrap();
+    assert_eq!(params.keywords.add, vec!["fix-needed"]);
+    assert_eq!(params.see_also.add, vec!["https://example.com/issue/1"]);
+}
+
+#[test]
+fn build_update_params_rejects_empty_keyword() {
+    let action = make_update_action_with_lists(vec!["", "fix-needed"], vec![], vec![], vec![]);
+    let err = super::build_update_params(&action).unwrap_err();
+    assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
+}
+
+#[test]
+fn build_update_params_rejects_whitespace_only_cc() {
+    let action = make_update_action_with_lists(vec![], vec!["   "], vec![], vec![]);
+    let err = super::build_update_params(&action).unwrap_err();
+    assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
 }
