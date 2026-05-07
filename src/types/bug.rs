@@ -478,6 +478,24 @@ impl IdListUpdate {
     }
 }
 
+/// Represents an incremental update to a string-typed list field
+/// (keywords, cc, groups, `see_also`). Bugzilla accepts
+/// `{ "add": [...], "remove": [...] }` for these fields.
+#[derive(Debug, Default, Serialize)]
+#[non_exhaustive]
+pub struct StringListUpdate {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub add: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub remove: Vec<String>,
+}
+
+impl StringListUpdate {
+    pub fn is_empty(&self) -> bool {
+        self.add.is_empty() && self.remove.is_empty()
+    }
+}
+
 #[derive(Debug, Default, Serialize)]
 #[non_exhaustive]
 pub struct UpdateBugParams {

@@ -751,3 +751,63 @@ fn apply_overrides_default_is_noop() {
     assert_eq!(p.whiteboard, vec!["wip"]);
     assert_eq!(p.creation_time.as_deref(), Some("2026-04-01T00:00:00Z"));
 }
+
+#[test]
+fn string_list_update_is_empty_when_both_empty() {
+    let upd = StringListUpdate {
+        add: vec![],
+        remove: vec![],
+    };
+    assert!(upd.is_empty());
+}
+
+#[test]
+fn string_list_update_not_empty_when_only_add() {
+    let upd = StringListUpdate {
+        add: vec!["fix-needed".to_string()],
+        remove: vec![],
+    };
+    assert!(!upd.is_empty());
+}
+
+#[test]
+fn string_list_update_not_empty_when_only_remove() {
+    let upd = StringListUpdate {
+        add: vec![],
+        remove: vec!["regression".to_string()],
+    };
+    assert!(!upd.is_empty());
+}
+
+#[test]
+fn string_list_update_serializes_with_add_and_remove() {
+    let upd = StringListUpdate {
+        add: vec!["a".to_string(), "b".to_string()],
+        remove: vec!["c".to_string()],
+    };
+    let json = serde_json::to_value(&upd).unwrap();
+    assert_eq!(
+        json,
+        serde_json::json!({"add": ["a", "b"], "remove": ["c"]})
+    );
+}
+
+#[test]
+fn string_list_update_skips_empty_add() {
+    let upd = StringListUpdate {
+        add: vec![],
+        remove: vec!["c".to_string()],
+    };
+    let json = serde_json::to_value(&upd).unwrap();
+    assert_eq!(json, serde_json::json!({"remove": ["c"]}));
+}
+
+#[test]
+fn string_list_update_skips_empty_remove() {
+    let upd = StringListUpdate {
+        add: vec!["a".to_string()],
+        remove: vec![],
+    };
+    let json = serde_json::to_value(&upd).unwrap();
+    assert_eq!(json, serde_json::json!({"add": ["a"]}));
+}
