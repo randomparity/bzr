@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+use std::io::Write as _;
 use std::path::Path;
 
 use crate::cli::AttachmentAction;
+use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::{self, ActionResult, DownloadResult, ResourceKind, UploadResult};
 use crate::types::ApiMode;
@@ -41,9 +44,14 @@ pub async fn execute(
             private,
             is_patch,
             comment,
-            comment_private: _,
+            comment_private,
             flag,
         } => {
+            if *comment_private && comment.is_none() {
+                return Err(crate::error::BzrError::InputValidation(
+                    "--comment-private requires --comment".into(),
+                ));
+            }
             let path = Path::new(file);
             let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or(file);
             let data = std::fs::read(path)?;
@@ -67,6 +75,9 @@ pub async fn execute(
                 is_patch: *is_patch,
             };
             let att_id = client.upload_attachment(&upload_params).await?;
+            if *comment_private {
+                flip_new_comment_private(&client, *bug_id, att_id).await?;
+            }
             output::print_result(
                 &UploadResult::new(att_id, *bug_id, size),
                 &format!("Uploaded attachment #{att_id} to bug #{bug_id} ({size} bytes)"),
@@ -128,6 +139,65 @@ fn guess_content_type(filename: &str) -> &'static str {
         Some("patch" | "diff") => "text/x-diff",
         _ => "application/octet-stream",
     }
+}
+
+/// Flip the privacy of the comment that `Bug.add_attachment` just
+/// created. Identifies the comment by its `attachment_id` field —
+/// Bugzilla sets that to the new attachment ID when the comment was
+/// posted alongside the upload (#170).
+///
+/// On any failure between upload and the privacy flip, prints a stderr
+/// warning naming the attachment ID and the underlying error, then
+/// propagates the original error so the exit code reflects the failure.
+/// The attachment is **not** deleted on partial failure (destructive
+/// rollback is worse than a public comment the user can re-target).
+async fn flip_new_comment_private(
+    client: &BugzillaClient,
+    bug_id: u64,
+    new_attachment_id: u64,
+) -> Result<()> {
+    let comments = match client.get_comments_since(bug_id, None).await {
+        Ok(comments) => comments,
+        Err(e) => {
+            warn_partial(new_attachment_id, &e);
+            return Err(e);
+        }
+    };
+    let Some(comment_id) = comments
+        .iter()
+        .rev()
+        .find(|c| c.attachment_id == Some(new_attachment_id))
+        .map(|c| c.id)
+    else {
+        let err = crate::error::BzrError::DataIntegrity(format!(
+            "could not locate the new attachment-bound comment on bug #{bug_id} \
+             (no comment with attachment_id={new_attachment_id})",
+        ));
+        warn_partial(new_attachment_id, &err);
+        return Err(err);
+    };
+    let mut map = HashMap::new();
+    map.insert(comment_id, true);
+    let params = crate::types::UpdateBugParams {
+        comment_is_private: map,
+        ..Default::default()
+    };
+    if let Err(e) = client.update_bug(bug_id, &params).await {
+        warn_partial(new_attachment_id, &e);
+        return Err(e);
+    }
+    Ok(())
+}
+
+fn warn_partial(att_id: u64, err: &crate::error::BzrError) {
+    let _ = writeln!(
+        std::io::stderr(),
+        "warning: attachment #{att_id} uploaded but comment privacy flip failed: {err}",
+    );
+    let _ = writeln!(
+        std::io::stderr(),
+        "  the comment was created public; mark it private via the Bugzilla web UI or with elevated credentials",
+    );
 }
 
 #[cfg(test)]
