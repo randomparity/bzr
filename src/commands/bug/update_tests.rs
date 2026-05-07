@@ -30,6 +30,9 @@ fn make_update_action(ids: Vec<u64>) -> BugAction {
         groups_remove: vec![],
         see_also_add: vec![],
         see_also_remove: vec![],
+        comment: None,
+        comment_file: None,
+        comment_private: false,
     }
 }
 
@@ -69,6 +72,9 @@ fn make_update_action_with_lists(lists: UpdateLists<'_>) -> BugAction {
         groups_remove: to_strings(lists.groups_remove),
         see_also_add: to_strings(lists.see_also_add),
         see_also_remove: to_strings(lists.see_also_remove),
+        comment: None,
+        comment_file: None,
+        comment_private: false,
     }
 }
 

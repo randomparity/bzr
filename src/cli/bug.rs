@@ -534,6 +534,12 @@ pub enum BugAction {
     /// `name-`, `name?(user@example.com)`, or `name?,!` to clear.
     /// Repeatable.
     ///
+    /// `--comment <BODY>` (or `--comment-file <PATH>`) posts a comment
+    /// atomically with the field changes — a single `Bug.update`
+    /// round-trip rather than a separate `bzr comment add` call.
+    /// `--comment-private` marks it private. Empty / whitespace-only
+    /// bodies are rejected (exit 7).
+    ///
     /// List-typed fields support `*-add` / `*-remove` pairs for
     /// incremental edits: `--blocks`, `--depends-on`, `--keywords`,
     /// `--cc`, `--groups`, and `--see-also`. The first five accept
@@ -548,6 +554,8 @@ pub enum BugAction {
     ///
     ///   bzr bug update 100 --status RESOLVED --resolution FIXED
     ///   bzr bug update 100 200 300 --priority high --flag review+
+    ///   bzr bug update 100 --status RESOLVED --resolution FIXED \
+    ///     --comment "Fixed by patch in #200"
     ///   bzr bug update 100 --blocks-add 200,201 \
     ///     --depends-on-remove 99
     ///   bzr bug update 100 --keywords-add fix-needed,regression \
@@ -596,6 +604,28 @@ pub enum BugAction {
         /// Whiteboard
         #[arg(long)]
         whiteboard: Option<String>,
+        /// Post a comment atomically with the field changes.
+        ///
+        /// Mutually exclusive with `--comment-file`. Use
+        /// `--comment-private` to mark the comment private. Empty /
+        /// whitespace-only bodies are rejected (exit 7).
+        #[arg(long, value_name = "BODY", conflicts_with = "comment_file")]
+        comment: Option<String>,
+        /// Read the comment body from a UTF-8 file.
+        ///
+        /// Mutually exclusive with `--comment`. The file must exist
+        /// and be readable; non-existent paths or non-UTF-8 contents
+        /// fail with exit code 7. Empty / whitespace-only contents
+        /// are also rejected.
+        #[arg(long, value_name = "PATH", conflicts_with = "comment")]
+        comment_file: Option<std::path::PathBuf>,
+        /// Mark the comment private (visible only to users with
+        /// elevated permissions on the server).
+        ///
+        /// Requires `--comment` or `--comment-file`; using
+        /// `--comment-private` alone is a usage error (exit 7).
+        #[arg(long)]
+        comment_private: bool,
         /// Set, request, or clear a flag using Bugzilla flag syntax.
         ///
         /// Repeatable. Accepted forms:

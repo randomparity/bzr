@@ -753,6 +753,9 @@ async fn bug_update_integration() {
         groups_remove: vec!["secret".to_string()],
         see_also_add: vec!["https://example.com/issue/1".to_string()],
         see_also_remove: vec![],
+        comment: None,
+        comment_file: None,
+        comment_private: false,
     };
     let (result, output) = capture_stdout(bzr::commands::bug::execute(
         &action,

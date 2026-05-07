@@ -50,6 +50,9 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
         groups_remove,
         see_also_add,
         see_also_remove,
+        comment: _,
+        comment_file: _,
+        comment_private: _,
     } = action
     else {
         unreachable!()
