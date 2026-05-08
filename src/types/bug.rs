@@ -2,17 +2,46 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use super::common::FlagUpdate;
 
-/// Generates a match expression mapping `FIELD_MAPPINGS` `struct_field` names
-/// to struct fields. Used by `SearchParams::get_field` and
-/// `SavedQuery::get_field_mut` to keep both in sync with a single definition.
-macro_rules! match_field {
-    ($name:expr, $self:expr, $wrap:ident, $default:expr,
-     { $($field:literal => $member:ident),+ $(,)? }) => {
-        match $name {
-            $($field => $wrap!($self.$member),)+
-            _ => $default,
+#[derive(Clone, Copy)]
+enum FilterField {
+    Product,
+    Component,
+    Status,
+    AssignedTo,
+    Creator,
+    Priority,
+    Severity,
+    Whiteboard,
+    TargetMilestone,
+    Version,
+    OpSys,
+    Platform,
+    Resolution,
+    QaContact,
+    Url,
+}
+
+impl FilterField {
+    fn from_struct_field(name: &str) -> Option<Self> {
+        match name {
+            "product" => Some(Self::Product),
+            "component" => Some(Self::Component),
+            "status" => Some(Self::Status),
+            "assigned_to" => Some(Self::AssignedTo),
+            "creator" => Some(Self::Creator),
+            "priority" => Some(Self::Priority),
+            "severity" => Some(Self::Severity),
+            "whiteboard" => Some(Self::Whiteboard),
+            "target_milestone" => Some(Self::TargetMilestone),
+            "version" => Some(Self::Version),
+            "op_sys" => Some(Self::OpSys),
+            "platform" => Some(Self::Platform),
+            "resolution" => Some(Self::Resolution),
+            "qa_contact" => Some(Self::QaContact),
+            "url" => Some(Self::Url),
+            _ => None,
         }
-    };
+    }
 }
 
 /// Deserialize a string that may be null into an empty string.
@@ -194,55 +223,54 @@ impl SearchParams {
 
     /// Access a multi-value filter field by its `struct_field` name.
     pub(crate) fn get_field(&self, name: &str) -> Option<&[String]> {
-        macro_rules! some_ref {
-            ($e:expr) => {
-                Some($e.as_slice())
-            };
-        }
-        match_field!(name, self, some_ref, None, {
-            "product" => product,
-            "component" => component,
-            "status" => status,
-            "assigned_to" => assigned_to,
-            "creator" => creator,
-            "priority" => priority,
-            "severity" => severity,
-            "whiteboard" => whiteboard,
-            "target_milestone" => target_milestone,
-            "version" => version,
-            "op_sys" => op_sys,
-            "platform" => platform,
-            "resolution" => resolution,
-            "qa_contact" => qa_contact,
-            "url" => url,
-        })
+        FilterField::from_struct_field(name).map(|field| self.get_filter_field(field))
     }
 
     /// Access a multi-value filter field mutably by its `struct_field` name.
     #[cfg(test)]
     pub(crate) fn get_field_mut(&mut self, name: &str) -> Option<&mut Vec<String>> {
-        macro_rules! some_mut {
-            ($e:expr) => {
-                Some(&mut $e)
-            };
+        FilterField::from_struct_field(name).map(|field| self.get_filter_field_mut(field))
+    }
+
+    fn get_filter_field(&self, field: FilterField) -> &[String] {
+        match field {
+            FilterField::Product => &self.product,
+            FilterField::Component => &self.component,
+            FilterField::Status => &self.status,
+            FilterField::AssignedTo => &self.assigned_to,
+            FilterField::Creator => &self.creator,
+            FilterField::Priority => &self.priority,
+            FilterField::Severity => &self.severity,
+            FilterField::Whiteboard => &self.whiteboard,
+            FilterField::TargetMilestone => &self.target_milestone,
+            FilterField::Version => &self.version,
+            FilterField::OpSys => &self.op_sys,
+            FilterField::Platform => &self.platform,
+            FilterField::Resolution => &self.resolution,
+            FilterField::QaContact => &self.qa_contact,
+            FilterField::Url => &self.url,
         }
-        match_field!(name, self, some_mut, None, {
-            "product" => product,
-            "component" => component,
-            "status" => status,
-            "assigned_to" => assigned_to,
-            "creator" => creator,
-            "priority" => priority,
-            "severity" => severity,
-            "whiteboard" => whiteboard,
-            "target_milestone" => target_milestone,
-            "version" => version,
-            "op_sys" => op_sys,
-            "platform" => platform,
-            "resolution" => resolution,
-            "qa_contact" => qa_contact,
-            "url" => url,
-        })
+    }
+
+    #[cfg(test)]
+    fn get_filter_field_mut(&mut self, field: FilterField) -> &mut Vec<String> {
+        match field {
+            FilterField::Product => &mut self.product,
+            FilterField::Component => &mut self.component,
+            FilterField::Status => &mut self.status,
+            FilterField::AssignedTo => &mut self.assigned_to,
+            FilterField::Creator => &mut self.creator,
+            FilterField::Priority => &mut self.priority,
+            FilterField::Severity => &mut self.severity,
+            FilterField::Whiteboard => &mut self.whiteboard,
+            FilterField::TargetMilestone => &mut self.target_milestone,
+            FilterField::Version => &mut self.version,
+            FilterField::OpSys => &mut self.op_sys,
+            FilterField::Platform => &mut self.platform,
+            FilterField::Resolution => &mut self.resolution,
+            FilterField::QaContact => &mut self.qa_contact,
+            FilterField::Url => &mut self.url,
+        }
     }
 
     fn has_mapped_filters(&self) -> bool {
@@ -721,53 +749,51 @@ impl SavedQuery {
     /// Access a multi-value filter field mutably by its `struct_field` name.
     /// Maps `assigned_to` to `self.assignee` (TOML-friendly name).
     pub fn get_field_mut(&mut self, name: &str) -> Option<&mut Vec<String>> {
-        macro_rules! some_mut {
-            ($e:expr) => {
-                Some(&mut $e)
-            };
-        }
-        match_field!(name, self, some_mut, None, {
-            "product" => product,
-            "component" => component,
-            "status" => status,
-            "assigned_to" => assignee,
-            "creator" => creator,
-            "priority" => priority,
-            "severity" => severity,
-            "whiteboard" => whiteboard,
-            "target_milestone" => target_milestone,
-            "version" => version,
-            "op_sys" => op_sys,
-            "platform" => platform,
-            "resolution" => resolution,
-            "qa_contact" => qa_contact,
-            "url" => url,
-        })
+        FilterField::from_struct_field(name).map(|field| self.get_filter_field_mut(field))
     }
 
     fn get_field(&self, name: &str) -> Option<&[String]> {
-        macro_rules! some_ref {
-            ($e:expr) => {
-                Some($e.as_slice())
-            };
+        FilterField::from_struct_field(name).map(|field| self.get_filter_field(field))
+    }
+
+    fn get_filter_field(&self, field: FilterField) -> &[String] {
+        match field {
+            FilterField::Product => &self.product,
+            FilterField::Component => &self.component,
+            FilterField::Status => &self.status,
+            FilterField::AssignedTo => &self.assignee,
+            FilterField::Creator => &self.creator,
+            FilterField::Priority => &self.priority,
+            FilterField::Severity => &self.severity,
+            FilterField::Whiteboard => &self.whiteboard,
+            FilterField::TargetMilestone => &self.target_milestone,
+            FilterField::Version => &self.version,
+            FilterField::OpSys => &self.op_sys,
+            FilterField::Platform => &self.platform,
+            FilterField::Resolution => &self.resolution,
+            FilterField::QaContact => &self.qa_contact,
+            FilterField::Url => &self.url,
         }
-        match_field!(name, self, some_ref, None, {
-            "product" => product,
-            "component" => component,
-            "status" => status,
-            "assigned_to" => assignee,
-            "creator" => creator,
-            "priority" => priority,
-            "severity" => severity,
-            "whiteboard" => whiteboard,
-            "target_milestone" => target_milestone,
-            "version" => version,
-            "op_sys" => op_sys,
-            "platform" => platform,
-            "resolution" => resolution,
-            "qa_contact" => qa_contact,
-            "url" => url,
-        })
+    }
+
+    fn get_filter_field_mut(&mut self, field: FilterField) -> &mut Vec<String> {
+        match field {
+            FilterField::Product => &mut self.product,
+            FilterField::Component => &mut self.component,
+            FilterField::Status => &mut self.status,
+            FilterField::AssignedTo => &mut self.assignee,
+            FilterField::Creator => &mut self.creator,
+            FilterField::Priority => &mut self.priority,
+            FilterField::Severity => &mut self.severity,
+            FilterField::Whiteboard => &mut self.whiteboard,
+            FilterField::TargetMilestone => &mut self.target_milestone,
+            FilterField::Version => &mut self.version,
+            FilterField::OpSys => &mut self.op_sys,
+            FilterField::Platform => &mut self.platform,
+            FilterField::Resolution => &mut self.resolution,
+            FilterField::QaContact => &mut self.qa_contact,
+            FilterField::Url => &mut self.url,
+        }
     }
 
     fn has_mapped_filters(&self) -> bool {
