@@ -228,6 +228,14 @@ fn warn_partial(att_id: u64, err: &crate::error::BzrError, w: &mut Writers<'_>) 
     );
 }
 
+fn ensure_batch_complete(succeeded: usize, failed: usize) -> Result<()> {
+    if failed > 0 {
+        Err(crate::error::BzrError::BatchPartialFailure { succeeded, failed })
+    } else {
+        Ok(())
+    }
+}
+
 /// Single-attachment download: writes one decoded blob to `out` (if
 /// supplied) or to the attachment's stored `file_name` in the current
 /// directory. Paired with `download_batch` for bulk shapes; both paths
@@ -335,7 +343,7 @@ async fn download_batch(
     };
 
     write_attachment_batch(&result, format, w.out, w.err);
-    result.summary.outcome().ensure_complete()
+    ensure_batch_complete(result.summary.succeeded, result.summary.failed)
 }
 
 /// Download every attachment for one `--bug <ID>` target. Returns a

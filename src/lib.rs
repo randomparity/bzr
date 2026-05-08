@@ -9,7 +9,6 @@
     reason = "public API is for integration tests, not external consumers"
 )]
 
-pub(crate) mod batch;
 pub mod cli;
 pub mod client;
 pub mod commands;

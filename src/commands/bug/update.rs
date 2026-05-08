@@ -209,6 +209,14 @@ fn write_batch_result(
     }
 }
 
+fn ensure_batch_complete(succeeded: usize, failed: usize) -> Result<()> {
+    if failed > 0 {
+        Err(crate::error::BzrError::BatchPartialFailure { succeeded, failed })
+    } else {
+        Ok(())
+    }
+}
+
 async fn update_batch(
     client: &BugzillaClient,
     ids: &[u64],
@@ -229,7 +237,7 @@ async fn update_batch(
     }
     let batch = BatchResult::new(succeeded, failed);
     write_batch_result(&batch, format, params.comment.is_some(), w);
-    batch.outcome().ensure_complete()
+    ensure_batch_complete(batch.succeeded.len(), batch.failed.len())
 }
 
 pub(super) async fn handle(

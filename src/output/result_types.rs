@@ -244,10 +244,6 @@ impl BatchResult {
             failed,
         }
     }
-
-    pub(crate) fn outcome(&self) -> crate::batch::BatchOutcome {
-        crate::batch::BatchOutcome::new(self.succeeded.len(), self.failed.len())
-    }
 }
 
 /// Typed result payload for multi-ID `bzr bug view` JSON output.
