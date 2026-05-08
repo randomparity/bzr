@@ -868,6 +868,59 @@ fn update_bug_params_omits_dupe_of_when_none() {
 }
 
 #[test]
+fn update_bug_params_serializes_scalar_parity_fields() {
+    let params = UpdateBugParams {
+        alias: Some("short-name".into()),
+        deadline: Some("2026-12-31".into()),
+        estimated_time: Some(3.5),
+        remaining_time: Some(1.25),
+        work_time: Some(0.5),
+        ..Default::default()
+    };
+    let json = serde_json::to_value(&params).unwrap();
+
+    assert_eq!(json["alias"], "short-name");
+    assert_eq!(json["deadline"], "2026-12-31");
+    assert_eq!(json["estimated_time"], 3.5);
+    assert_eq!(json["remaining_time"], 1.25);
+    assert_eq!(json["work_time"], 0.5);
+}
+
+#[test]
+fn update_bug_params_serializes_reset_flags_only_when_true() {
+    let params = UpdateBugParams {
+        reset_assigned_to: true,
+        reset_qa_contact: true,
+        ..Default::default()
+    };
+    let json = serde_json::to_value(&params).unwrap();
+
+    assert_eq!(json["reset_assigned_to"], true);
+    assert_eq!(json["reset_qa_contact"], true);
+}
+
+#[test]
+fn update_bug_params_default_omits_scalar_parity_fields() {
+    let params = UpdateBugParams::default();
+    let json = serde_json::to_value(&params).unwrap();
+
+    for key in [
+        "alias",
+        "deadline",
+        "estimated_time",
+        "remaining_time",
+        "work_time",
+        "reset_assigned_to",
+        "reset_qa_contact",
+    ] {
+        assert!(
+            json.get(key).is_none(),
+            "expected {key} to be omitted: {json}"
+        );
+    }
+}
+
+#[test]
 fn update_bug_params_serializes_string_lists() {
     let params = UpdateBugParams {
         keywords: StringListUpdate {
