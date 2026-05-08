@@ -223,18 +223,44 @@ impl SearchParams {
         })
     }
 
+    /// Access a multi-value filter field mutably by its `struct_field` name.
+    pub fn get_field_mut(&mut self, name: &str) -> Option<&mut Vec<String>> {
+        macro_rules! some_mut {
+            ($e:expr) => {
+                Some(&mut $e)
+            };
+        }
+        match_field!(name, self, some_mut, None, {
+            "product" => product,
+            "component" => component,
+            "status" => status,
+            "assigned_to" => assigned_to,
+            "creator" => creator,
+            "priority" => priority,
+            "severity" => severity,
+            "whiteboard" => whiteboard,
+            "target_milestone" => target_milestone,
+            "version" => version,
+            "op_sys" => op_sys,
+            "platform" => platform,
+            "resolution" => resolution,
+            "qa_contact" => qa_contact,
+            "url" => url,
+        })
+    }
+
+    fn has_mapped_filters(&self) -> bool {
+        FIELD_MAPPINGS
+            .iter()
+            .any(|mapping| !self.get_field(mapping.struct_field).is_empty())
+    }
+
     /// Returns true if any filter fields are set (product, component, etc.).
     ///
     /// Note: `limit`, `include_fields`, and `exclude_fields` are intentionally
     /// excluded — they control pagination and field selection, not bug filtering.
     pub fn has_filters(&self) -> bool {
-        !self.product.is_empty()
-            || !self.component.is_empty()
-            || !self.status.is_empty()
-            || !self.assigned_to.is_empty()
-            || !self.creator.is_empty()
-            || !self.priority.is_empty()
-            || !self.severity.is_empty()
+        self.has_mapped_filters()
             || self.cc.is_some()
             || self.alias.is_some()
             || !self.id.is_empty()
@@ -243,14 +269,6 @@ impl SearchParams {
             || !self.raw_params.is_empty()
             || self.creation_time.is_some()
             || self.last_change_time.is_some()
-            || !self.whiteboard.is_empty()
-            || !self.target_milestone.is_empty()
-            || !self.version.is_empty()
-            || !self.op_sys.is_empty()
-            || !self.platform.is_empty()
-            || !self.resolution.is_empty()
-            || !self.qa_contact.is_empty()
-            || !self.url.is_empty()
     }
 
     /// Returns true if any *structured* filter is set.
@@ -266,27 +284,13 @@ impl SearchParams {
     /// authoritative — retrying via XML-RPC will return the same set
     /// (and may incur a long timeout on servers with slow XML-RPC).
     pub fn has_structured_filters(&self) -> bool {
-        !self.product.is_empty()
-            || !self.component.is_empty()
-            || !self.status.is_empty()
-            || !self.assigned_to.is_empty()
-            || !self.creator.is_empty()
-            || !self.priority.is_empty()
-            || !self.severity.is_empty()
+        self.has_mapped_filters()
             || self.cc.is_some()
             || self.alias.is_some()
             || !self.id.is_empty()
             || !self.raw_params.is_empty()
             || self.creation_time.is_some()
             || self.last_change_time.is_some()
-            || !self.whiteboard.is_empty()
-            || !self.target_milestone.is_empty()
-            || !self.version.is_empty()
-            || !self.op_sys.is_empty()
-            || !self.platform.is_empty()
-            || !self.resolution.is_empty()
-            || !self.qa_contact.is_empty()
-            || !self.url.is_empty()
     }
 }
 
@@ -742,27 +746,45 @@ impl SavedQuery {
         })
     }
 
+    fn get_field(&self, name: &str) -> Option<&[String]> {
+        macro_rules! some_ref {
+            ($e:expr) => {
+                Some($e.as_slice())
+            };
+        }
+        match_field!(name, self, some_ref, None, {
+            "product" => product,
+            "component" => component,
+            "status" => status,
+            "assigned_to" => assignee,
+            "creator" => creator,
+            "priority" => priority,
+            "severity" => severity,
+            "whiteboard" => whiteboard,
+            "target_milestone" => target_milestone,
+            "version" => version,
+            "op_sys" => op_sys,
+            "platform" => platform,
+            "resolution" => resolution,
+            "qa_contact" => qa_contact,
+            "url" => url,
+        })
+    }
+
+    fn has_mapped_filters(&self) -> bool {
+        FIELD_MAPPINGS.iter().any(|mapping| {
+            self.get_field(mapping.struct_field)
+                .is_some_and(|field| !field.is_empty())
+        })
+    }
+
     /// Returns true if the query has any meaningful filters set.
     pub fn has_filters(&self) -> bool {
-        !self.product.is_empty()
-            || !self.component.is_empty()
-            || !self.status.is_empty()
-            || !self.assignee.is_empty()
-            || !self.creator.is_empty()
-            || !self.priority.is_empty()
-            || !self.severity.is_empty()
+        self.has_mapped_filters()
             || self.quicksearch.is_some()
             || !self.raw_params.is_empty()
             || self.creation_time.is_some()
             || self.last_change_time.is_some()
-            || !self.whiteboard.is_empty()
-            || !self.target_milestone.is_empty()
-            || !self.version.is_empty()
-            || !self.op_sys.is_empty()
-            || !self.platform.is_empty()
-            || !self.resolution.is_empty()
-            || !self.qa_contact.is_empty()
-            || !self.url.is_empty()
     }
 }
 

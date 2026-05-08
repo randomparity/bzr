@@ -326,6 +326,27 @@ fn search_params_get_field_returns_correct_data() {
 }
 
 #[test]
+fn search_params_get_field_mut_updates_every_mapped_field() {
+    let mut params = SearchParams::default();
+
+    for mapping in FIELD_MAPPINGS {
+        params
+            .get_field_mut(mapping.struct_field)
+            .unwrap()
+            .push(format!("value-{}", mapping.struct_field));
+    }
+
+    for mapping in FIELD_MAPPINGS {
+        assert_eq!(
+            params.get_field(mapping.struct_field),
+            &[format!("value-{}", mapping.struct_field)],
+            "mapped field should roundtrip through mutable and immutable access: {}",
+            mapping.struct_field
+        );
+    }
+}
+
+#[test]
 #[should_panic(expected = "unknown field")]
 fn search_params_get_field_panics_on_unknown() {
     let params = SearchParams::default();
