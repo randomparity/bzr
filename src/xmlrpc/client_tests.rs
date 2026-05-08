@@ -691,20 +691,19 @@ async fn xmlrpc_get_attachments_parses_full_response() {
 }
 
 #[tokio::test]
-async fn xmlrpc_get_attachments_excludes_data_field_from_request() {
-    // Stock Bugzilla 5.0 REST `attachment list` omits the base64 `data`
-    // field; the XML-RPC list path must match by passing
-    // `exclude_fields: ["data"]` so we don't inline multi-MB payloads
-    // in `bzr attachment list` output. Download paths get data via
-    // get_attachment_by_id, which does not exclude it.
+async fn xmlrpc_get_attachments_requests_inline_data_field() {
     let mock = MockServer::start().await;
     let response_xml = xmlrpc_bugs_envelope(42, "");
 
     Mock::given(method("POST"))
         .and(path("/xmlrpc.cgi"))
         .and(body_string_contains("Bug.attachments"))
-        .and(body_string_contains("exclude_fields"))
+        .and(body_string_contains("include_fields"))
+        .and(body_string_contains("id"))
+        .and(body_string_contains("bug_id"))
+        .and(body_string_contains("file_name"))
         .and(body_string_contains("data"))
+        .and(NotBodyContains("exclude_fields"))
         .respond_with(ResponseTemplate::new(200).set_body_string(response_xml))
         .expect(1)
         .mount(&mock)
