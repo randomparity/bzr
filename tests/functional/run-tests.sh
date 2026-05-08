@@ -645,7 +645,7 @@ run_bzr bug create \
 if assert_success; then
     BUG_ID=$(jq -r '.id' "$BZR_STDOUT")
     # Verify the description that landed is from the file, not stdin
-    run_bzr bug view "$BUG_ID"
+    run_bzr comment list "$BUG_ID"
     if assert_stdout_contains "from file"; then test_pass; fi
 fi
 rm -f "$DESC_FILE"
