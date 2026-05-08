@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::ServerAction;
-use crate::test_helpers::{capture_stdout, setup_test_env};
+use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 #[tokio::test]
@@ -27,20 +27,27 @@ async fn server_info_returns_version_and_extensions() {
         .mount(&mock)
         .await;
 
-    let (result, output) = capture_stdout(super::execute(
+    let mut __io = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(
         &ServerAction::Info,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io.writers(),
+    )
     .await;
+
+    let output = __io.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["version"], "5.0.4");
 }
 
 #[tokio::test]
 async fn server_info_http_500_returns_error() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -49,7 +56,14 @@ async fn server_info_http_500_returns_error() {
         .mount(&mock)
         .await;
 
-    let result = super::execute(&ServerAction::Info, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &ServerAction::Info,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(

@@ -1,9 +1,9 @@
 use std::collections::HashMap;
-use std::io::{self, Write as _};
+use std::io::Write;
 
 use crate::types::{BugTemplate, OutputFormat};
 
-use super::formatting::{print_field, print_formatted, print_json, print_optional_field};
+use super::formatting::{write_field, write_formatted, write_json, write_optional_field};
 
 fn template_saved_message(name: &str, verb: &str) -> String {
     format!("{verb} template '{name}'")
@@ -30,36 +30,49 @@ fn template_summary_line(name: &str, tmpl: &BugTemplate) -> String {
     }
 }
 
-pub fn print_template_saved(name: &str, verb: &str, format: OutputFormat) {
+pub fn write_template_saved<W: Write + ?Sized>(
+    name: &str,
+    verb: &str,
+    format: OutputFormat,
+    out: &mut W,
+) {
     match format {
         OutputFormat::Json => {
-            print_json(&serde_json::json!({"name": name, "action": verb.to_lowercase()}));
+            write_json(
+                &serde_json::json!({"name": name, "action": verb.to_lowercase()}),
+                out,
+            );
         }
         OutputFormat::Table => {
-            let _ = writeln!(io::stdout(), "{}", template_saved_message(name, verb));
+            let _ = writeln!(out, "{}", template_saved_message(name, verb));
         }
     }
 }
 
-pub fn print_template_list(templates: &HashMap<String, BugTemplate>, format: OutputFormat) {
-    print_formatted(templates, format, |templates| {
+pub fn write_template_list<W: Write + ?Sized, S: ::std::hash::BuildHasher>(
+    templates: &HashMap<String, BugTemplate, S>,
+    format: OutputFormat,
+    out: &mut W,
+) {
+    write_formatted(templates, format, out, |templates, out| {
         if templates.is_empty() {
-            let _ = writeln!(io::stdout(), "No templates configured.");
+            let _ = writeln!(out, "No templates configured.");
             return;
         }
         let mut names: Vec<&str> = templates.keys().map(String::as_str).collect();
         names.sort_unstable();
         for name in names {
-            let _ = writeln!(
-                io::stdout(),
-                "{}",
-                template_summary_line(name, &templates[name])
-            );
+            let _ = writeln!(out, "{}", template_summary_line(name, &templates[name]));
         }
     });
 }
 
-pub fn print_template_detail(name: &str, template: &BugTemplate, format: OutputFormat) {
+pub fn write_template_detail<W: Write + ?Sized>(
+    name: &str,
+    template: &BugTemplate,
+    format: OutputFormat,
+    out: &mut W,
+) {
     #[derive(serde::Serialize)]
     struct TemplateView<'a> {
         name: &'a str,
@@ -68,17 +81,17 @@ pub fn print_template_detail(name: &str, template: &BugTemplate, format: OutputF
     }
 
     let view = TemplateView { name, template };
-    print_formatted(&view, format, |view| {
-        print_field("Name", view.name);
-        print_optional_field("Product", view.template.product.as_deref());
-        print_optional_field("Component", view.template.component.as_deref());
-        print_optional_field("Version", view.template.version.as_deref());
-        print_optional_field("Priority", view.template.priority.as_deref());
-        print_optional_field("Severity", view.template.severity.as_deref());
-        print_optional_field("Assignee", view.template.assignee.as_deref());
-        print_optional_field("OS", view.template.op_sys.as_deref());
-        print_optional_field("Platform", view.template.rep_platform.as_deref());
-        print_optional_field("Description", view.template.description.as_deref());
+    write_formatted(&view, format, out, |view, out| {
+        write_field(out, "Name", view.name);
+        write_optional_field(out, "Product", view.template.product.as_deref());
+        write_optional_field(out, "Component", view.template.component.as_deref());
+        write_optional_field(out, "Version", view.template.version.as_deref());
+        write_optional_field(out, "Priority", view.template.priority.as_deref());
+        write_optional_field(out, "Severity", view.template.severity.as_deref());
+        write_optional_field(out, "Assignee", view.template.assignee.as_deref());
+        write_optional_field(out, "OS", view.template.op_sys.as_deref());
+        write_optional_field(out, "Platform", view.template.rep_platform.as_deref());
+        write_optional_field(out, "Description", view.template.description.as_deref());
     });
 }
 

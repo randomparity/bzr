@@ -1,10 +1,10 @@
 use std::collections::HashMap;
-use std::io::{self, Write as _};
+use std::io::Write;
 
 use crate::types::{OutputFormat, QueryKind, SavedQuery};
 
 use super::formatting::{
-    print_field, print_formatted, print_json, print_list_field, print_optional_field,
+    write_field, write_formatted, write_json, write_list_field, write_optional_field,
 };
 
 fn kind_label(kind: &QueryKind) -> &'static str {
@@ -45,32 +45,49 @@ fn query_summary_line(name: &str, q: &SavedQuery) -> String {
     format!("{name} ({})", parts.join(", "))
 }
 
-pub fn print_query_saved(name: &str, verb: &str, format: OutputFormat) {
+pub fn write_query_saved<W: Write + ?Sized>(
+    name: &str,
+    verb: &str,
+    format: OutputFormat,
+    out: &mut W,
+) {
     match format {
         OutputFormat::Json => {
-            print_json(&serde_json::json!({"name": name, "action": verb.to_lowercase()}));
+            write_json(
+                &serde_json::json!({"name": name, "action": verb.to_lowercase()}),
+                out,
+            );
         }
         OutputFormat::Table => {
-            let _ = writeln!(io::stdout(), "{}", query_saved_message(name, verb));
+            let _ = writeln!(out, "{}", query_saved_message(name, verb));
         }
     }
 }
 
-pub fn print_query_list(queries: &HashMap<String, SavedQuery>, format: OutputFormat) {
-    print_formatted(queries, format, |queries| {
+pub fn write_query_list<W: Write + ?Sized, S: ::std::hash::BuildHasher>(
+    queries: &HashMap<String, SavedQuery, S>,
+    format: OutputFormat,
+    out: &mut W,
+) {
+    write_formatted(queries, format, out, |queries, out| {
         if queries.is_empty() {
-            let _ = writeln!(io::stdout(), "No saved queries configured.");
+            let _ = writeln!(out, "No saved queries configured.");
             return;
         }
         let mut names: Vec<&str> = queries.keys().map(String::as_str).collect();
         names.sort_unstable();
         for name in names {
-            let _ = writeln!(io::stdout(), "{}", query_summary_line(name, &queries[name]));
+            let _ = writeln!(out, "{}", query_summary_line(name, &queries[name]));
         }
     });
 }
 
-pub fn print_query_detail(name: &str, query: &SavedQuery, format: OutputFormat) {
+pub fn write_query_detail<W: Write + ?Sized>(
+    name: &str,
+    query: &SavedQuery,
+    format: OutputFormat,
+    out: &mut W,
+) {
     #[derive(serde::Serialize)]
     struct QueryView<'a> {
         name: &'a str,
@@ -79,36 +96,36 @@ pub fn print_query_detail(name: &str, query: &SavedQuery, format: OutputFormat) 
     }
 
     let view = QueryView { name, query };
-    print_formatted(&view, format, |view| {
-        print_field("Name", view.name);
-        print_field("Kind", kind_label(&view.query.kind));
-        print_optional_field("Source URL", view.query.source_url.as_deref());
-        print_optional_field("Server", view.query.server.as_deref());
-        print_list_field("Product", &view.query.product);
-        print_list_field("Component", &view.query.component);
-        print_list_field("Status", &view.query.status);
-        print_list_field("Assignee", &view.query.assignee);
-        print_list_field("Creator", &view.query.creator);
-        print_list_field("Priority", &view.query.priority);
-        print_list_field("Severity", &view.query.severity);
-        print_optional_field("Search", view.query.quicksearch.as_deref());
+    write_formatted(&view, format, out, |view, out| {
+        write_field(out, "Name", view.name);
+        write_field(out, "Kind", kind_label(&view.query.kind));
+        write_optional_field(out, "Source URL", view.query.source_url.as_deref());
+        write_optional_field(out, "Server", view.query.server.as_deref());
+        write_list_field(out, "Product", &view.query.product);
+        write_list_field(out, "Component", &view.query.component);
+        write_list_field(out, "Status", &view.query.status);
+        write_list_field(out, "Assignee", &view.query.assignee);
+        write_list_field(out, "Creator", &view.query.creator);
+        write_list_field(out, "Priority", &view.query.priority);
+        write_list_field(out, "Severity", &view.query.severity);
+        write_optional_field(out, "Search", view.query.quicksearch.as_deref());
         if let Some(limit) = view.query.limit {
-            print_field("Limit", &limit.to_string());
+            write_field(out, "Limit", &limit.to_string());
         }
-        print_optional_field("Fields", view.query.fields.as_deref());
-        print_optional_field("Exclude", view.query.exclude_fields.as_deref());
-        print_optional_field("Created since", view.query.creation_time.as_deref());
-        print_optional_field("Changed since", view.query.last_change_time.as_deref());
-        print_list_field("Whiteboard", &view.query.whiteboard);
-        print_list_field("Target Milestone", &view.query.target_milestone);
-        print_list_field("Version", &view.query.version);
-        print_list_field("OS", &view.query.op_sys);
-        print_list_field("Platform", &view.query.platform);
-        print_list_field("Resolution", &view.query.resolution);
-        print_list_field("QA Contact", &view.query.qa_contact);
-        print_list_field("URL", &view.query.url);
+        write_optional_field(out, "Fields", view.query.fields.as_deref());
+        write_optional_field(out, "Exclude", view.query.exclude_fields.as_deref());
+        write_optional_field(out, "Created since", view.query.creation_time.as_deref());
+        write_optional_field(out, "Changed since", view.query.last_change_time.as_deref());
+        write_list_field(out, "Whiteboard", &view.query.whiteboard);
+        write_list_field(out, "Target Milestone", &view.query.target_milestone);
+        write_list_field(out, "Version", &view.query.version);
+        write_list_field(out, "OS", &view.query.op_sys);
+        write_list_field(out, "Platform", &view.query.platform);
+        write_list_field(out, "Resolution", &view.query.resolution);
+        write_list_field(out, "QA Contact", &view.query.qa_contact);
+        write_list_field(out, "URL", &view.query.url);
         if !view.query.raw_params.is_empty() {
-            print_field("Raw params", &view.query.raw_params.len().to_string());
+            write_field(out, "Raw params", &view.query.raw_params.len().to_string());
         }
     });
 }

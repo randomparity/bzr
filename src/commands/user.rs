@@ -1,6 +1,6 @@
 use crate::cli::UserAction;
 use crate::error::Result;
-use crate::output::{self, ActionResult, ResourceKind};
+use crate::output::{self, ActionResult, ResourceKind, Writers};
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{CreateUserParams, UpdateUserParams};
@@ -25,6 +25,7 @@ pub async fn execute(
     server: Option<&str>,
     format: OutputFormat,
     api: Option<ApiMode>,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     let client = super::shared::connect_and_configure(server, api).await?;
 
@@ -32,9 +33,9 @@ pub async fn execute(
         UserAction::Search { query, details } => {
             let users = client.search_users(query, *details).await?;
             if *details {
-                output::print_users_detailed(&users, format);
+                output::write_users_detailed(&users, format, w.out);
             } else {
-                output::print_users(&users, format);
+                output::write_users(&users, format, w.out);
             }
         }
         UserAction::Create {
@@ -50,10 +51,11 @@ pub async fn execute(
                 password: password.clone(),
             };
             let id = client.create_user(&params).await?;
-            output::print_result(
+            output::write_result(
                 &ActionResult::created_named(id, email.as_str(), ResourceKind::User),
                 &format!("Created user #{id} ({email})"),
                 format,
+                w.out,
             );
         }
         UserAction::Update {
@@ -72,10 +74,11 @@ pub async fn execute(
                 login_denied_text: denied_text,
             };
             client.update_user(user, &params).await?;
-            output::print_result(
+            output::write_result(
                 &ActionResult::updated_named(user.as_str(), None, ResourceKind::User),
                 &format!("Updated user '{user}'"),
                 format,
+                w.out,
             );
         }
     }

@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::BugAction;
-use crate::test_helpers::{capture_stdout, extract_json, setup_test_env};
+use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 fn from_url_action(url: String, save_as: Option<String>) -> BugAction {
@@ -37,15 +37,16 @@ async fn handle_search_from_url_executes() {
     let url = format!("{server_url}/buglist.cgi?product=TestProduct&limit=10");
     let action = from_url_action(url, None);
 
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
-        &action,
-        None,
-        OutputFormat::Json,
-        None,
-    ))
-    .await;
+    let mut __io = crate::test_helpers::CapturedIo::new();
+
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+
+    let output = __io.out_str().to_string();
     assert!(result.is_ok(), "from-url search failed: {result:?}");
-    let parsed: serde_json::Value = extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed[0]["id"], 1);
 }
 
@@ -68,13 +69,18 @@ async fn handle_search_from_url_preserves_url_limit_when_cli_unset() {
     let url = format!("{}/buglist.cgi?product=TestProduct&limit=10", mock.uri());
     let action = from_url_action(url, None);
 
-    let (result, _) = capture_stdout(crate::commands::bug::execute(
+    let mut __io2 = crate::test_helpers::CapturedIo::new();
+
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io2.writers(),
+    )
     .await;
+
+    let _ = __io2.out_str().to_string();
     assert!(
         result.is_ok(),
         "from-url with explicit limit failed: {result:?}"
@@ -106,13 +112,16 @@ async fn handle_search_quicksearch_passes_limit_and_field_filters() {
         fields: Some("id,summary".into()),
         exclude_fields: Some("comments".into()),
     };
-    let (result, _) = capture_stdout(crate::commands::bug::execute(
+    let mut __io3 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io3.writers(),
+    )
     .await;
+    let _ = __io3.out_str().to_string();
     assert!(
         result.is_ok(),
         "quicksearch with filters failed: {result:?}"
@@ -141,13 +150,18 @@ async fn handle_search_from_url_passes_raw_params() {
     );
     let action = from_url_action(url, None);
 
-    let (result, _) = capture_stdout(crate::commands::bug::execute(
+    let mut __io4 = crate::test_helpers::CapturedIo::new();
+
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io4.writers(),
+    )
     .await;
+
+    let _ = __io4.out_str().to_string();
     assert!(
         result.is_ok(),
         "from-url with raw params failed: {result:?}"
@@ -168,13 +182,18 @@ async fn handle_search_from_url_saves_query() {
     let url = format!("{server_url}/buglist.cgi?product=TestProduct&known_name=my-query");
     let action = from_url_action(url, Some("my-query".into()));
 
-    let (result, _output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io5 = crate::test_helpers::CapturedIo::new();
+
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io5.writers(),
+    )
     .await;
+
+    let _output = __io5.out_str().to_string();
     assert!(result.is_ok(), "from-url save failed: {result:?}");
 
     let config = crate::config::Config::load().unwrap();
@@ -198,13 +217,16 @@ async fn handle_search_from_url_auto_names_from_known_name() {
     let url =
         format!("{server_url}/buglist.cgi?product=TestProduct&known_name=my%20saved%20search");
     let action = from_url_action(url, Some(String::new()));
-    let (result, _output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io6 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io6.writers(),
+    )
     .await;
+    let _output = __io6.out_str().to_string();
     assert!(
         result.is_ok(),
         "auto-name from known_name failed: {result:?}"
@@ -225,13 +247,16 @@ async fn handle_search_save_as_no_name_no_known_name_errors() {
         "https://bugzilla.example.com/buglist.cgi?product=Firefox".into(),
         Some(String::new()),
     );
-    let (result, _output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io7 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io7.writers(),
+    )
     .await;
+    let _output = __io7.out_str().to_string();
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(

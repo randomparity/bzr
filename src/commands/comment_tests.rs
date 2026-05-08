@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::CommentAction;
-use crate::test_helpers::{capture_stdout, setup_test_env};
+use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 #[tokio::test]
@@ -35,10 +35,19 @@ async fn comment_list_returns_comments() {
         bug_id: 42,
         since: None,
     };
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a1 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a1.writers(),
+    )
+    .await;
+    let output = __io_a1.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed[0]["id"], 1);
     assert_eq!(parsed[0]["text"], "Hello world");
     assert_eq!(parsed[0]["creator"], "user@test.com");
@@ -46,6 +55,7 @@ async fn comment_list_returns_comments() {
 
 #[tokio::test]
 async fn comment_add_with_body() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("POST"))
@@ -59,21 +69,36 @@ async fn comment_add_with_body() {
         body: Some("Test comment".to_string()),
         private: false,
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_ok());
 }
 
 #[tokio::test]
 async fn comment_add_empty_body_is_rejected() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    // No mock needed — execute() should reject before making any API call
+    // No mock needed — execute(, &mut __cap_io.writers()) should reject before making any API call
     let action = CommentAction::Add {
         bug_id: 42,
         body: Some("   ".to_string()),
         private: false,
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err(), "empty body should be rejected");
     let err = result.unwrap_err().to_string();
     assert!(
@@ -101,6 +126,7 @@ fn filter_comment_body_empty_input() {
 
 #[tokio::test]
 async fn comment_list_http_500_returns_error() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -113,7 +139,14 @@ async fn comment_list_http_500_returns_error() {
         bug_id: 42,
         since: None,
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(
@@ -124,6 +157,7 @@ async fn comment_list_http_500_returns_error() {
 
 #[tokio::test]
 async fn comment_add_api_error_returns_error() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("POST"))
@@ -141,19 +175,34 @@ async fn comment_add_api_error_returns_error() {
         body: Some("Test comment".to_string()),
         private: false,
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err());
 }
 
 #[tokio::test]
 async fn comment_list_rejects_malformed_since_with_exit_code_7() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = CommentAction::List {
         bug_id: 42,
         since: Some("nope".into()),
     };
-    let result = crate::commands::comment::execute(&action, None, OutputFormat::Json, None).await;
+    let result = crate::commands::comment::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     let err = result.unwrap_err();
     assert_eq!(err.exit_code(), 7);
     let msg = err.to_string();

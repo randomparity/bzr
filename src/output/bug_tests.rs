@@ -51,6 +51,24 @@ fn make_history_entry() -> HistoryEntry {
     }
 }
 
+fn capture_bugs(format: OutputFormat, bugs: &[Bug]) -> String {
+    let mut buf = Vec::new();
+    write_bugs(bugs, format, &mut buf);
+    String::from_utf8(buf).unwrap()
+}
+
+fn capture_bug_detail(format: OutputFormat, bug: &Bug) -> String {
+    let mut buf = Vec::new();
+    write_bug_detail(bug, format, &mut buf);
+    String::from_utf8(buf).unwrap()
+}
+
+fn capture_history(format: OutputFormat, history: &[HistoryEntry]) -> String {
+    let mut buf = Vec::new();
+    write_history(history, format, &mut buf);
+    String::from_utf8(buf).unwrap()
+}
+
 // ── BugRow conversion ────────────────────────────────────────────
 
 #[test]
@@ -102,17 +120,17 @@ fn bug_row_from_bug_missing_fields() {
     assert_eq!(row.assignee, "");
 }
 
-// ── print_bugs ───────────────────────────────────────────────────
+// ── write_bugs ───────────────────────────────────────────────────
 
 #[test]
-fn print_bugs_json_empty_list() {
+fn write_bugs_json_empty_list() {
     let bugs: Vec<Bug> = vec![];
     let json = serde_json::to_string_pretty(&bugs).unwrap();
     assert_eq!(json, "[]");
 }
 
 #[test]
-fn print_bugs_json_one_bug() {
+fn write_bugs_json_one_bug() {
     let bugs = vec![make_bug(42, "Login broken", "NEW")];
     let json = serde_json::to_string_pretty(&bugs).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -121,7 +139,7 @@ fn print_bugs_json_one_bug() {
 }
 
 #[test]
-fn print_bugs_table_renders_rows() {
+fn write_bugs_table_renders_rows() {
     let bugs = [make_bug(42, "Login broken", "NEW")];
     let rows: Vec<BugRow> = bugs.iter().map(BugRow::from).collect();
     let table = Table::new(rows).to_string();
@@ -133,10 +151,50 @@ fn print_bugs_table_renders_rows() {
     assert!(table.contains("SUMMARY"));
 }
 
-// ── print_bug_detail ─────────────────────────────────────────────
+#[test]
+fn write_bugs_table_empty_says_no_bugs_found() {
+    let output = capture_bugs(OutputFormat::Table, &[]);
+    assert!(output.contains("No bugs found."));
+}
 
 #[test]
-fn print_bug_detail_json_contains_all_fields() {
+fn write_bugs_json_empty_renders_empty_array() {
+    let output = capture_bugs(OutputFormat::Json, &[]);
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    assert!(parsed.is_array());
+    assert_eq!(parsed.as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn write_bugs_table_renders_columns_and_truncates() {
+    let bugs = vec![make_bug(42, "Login broken", "NEW")];
+    let output = capture_bugs(OutputFormat::Table, &bugs);
+    assert!(output.contains("ID"));
+    assert!(output.contains("STATUS"));
+    assert!(output.contains("PRIORITY"));
+    assert!(output.contains("ASSIGNEE"));
+    assert!(output.contains("SUMMARY"));
+    assert!(output.contains("42"));
+    assert!(output.contains("NEW"));
+    assert!(output.contains("P1"));
+    assert!(output.contains("dev"));
+    assert!(output.contains("Login broken"));
+}
+
+#[test]
+fn write_bugs_json_via_write() {
+    let bugs = vec![make_bug(99, "Crash on startup", "ASSIGNED")];
+    let output = capture_bugs(OutputFormat::Json, &bugs);
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    assert_eq!(parsed[0]["id"], 99);
+    assert_eq!(parsed[0]["summary"], "Crash on startup");
+    assert_eq!(parsed[0]["status"], "ASSIGNED");
+}
+
+// ── write_bug_detail ─────────────────────────────────────────────
+
+#[test]
+fn write_bug_detail_json_contains_all_fields() {
     let bug = make_bug(42, "Detail test", "ASSIGNED");
     let json = serde_json::to_string_pretty(&bug).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -155,7 +213,7 @@ fn print_bug_detail_json_contains_all_fields() {
 }
 
 #[test]
-fn print_bug_detail_json_with_resolution() {
+fn write_bug_detail_json_with_resolution() {
     let mut bug = make_bug(42, "Fixed bug", "RESOLVED");
     bug.resolution = Some("FIXED".into());
     let json = serde_json::to_string_pretty(&bug).unwrap();
@@ -163,124 +221,11 @@ fn print_bug_detail_json_with_resolution() {
     assert_eq!(parsed["resolution"], "FIXED");
 }
 
-// ── print_json helper ────────────────────────────────────────────
-
 #[test]
-fn print_json_produces_valid_json_for_bug() {
-    let bug = make_bug(1, "Test bug", "NEW");
-    let json = serde_json::to_string_pretty(&bug).unwrap();
-    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-    assert_eq!(parsed["id"], 1);
-    assert_eq!(parsed["summary"], "Test bug");
-    assert_eq!(parsed["status"], "NEW");
-}
-
-#[test]
-fn print_json_produces_valid_json_for_vec() {
-    let bugs = vec![make_bug(1, "A", "NEW"), make_bug(2, "B", "RESOLVED")];
-    let json = serde_json::to_string_pretty(&bugs).unwrap();
-    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-    assert!(parsed.is_array());
-    assert_eq!(parsed.as_array().unwrap().len(), 2);
-}
-
-// ── print_history ────────────────────────────────────────────────
-
-#[test]
-fn print_history_json_one_entry() {
-    let history = vec![make_history_entry()];
-    let json = serde_json::to_string_pretty(&history).unwrap();
-    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-    assert_eq!(parsed[0]["who"], "editor@example.com");
-    assert_eq!(parsed[0]["when"], "2025-04-01T12:00:00Z");
-    let changes = parsed[0]["changes"].as_array().unwrap();
-    assert_eq!(changes.len(), 2);
-    assert_eq!(changes[0]["field_name"], "status");
-    assert_eq!(changes[0]["removed"], "NEW");
-    assert_eq!(changes[0]["added"], "ASSIGNED");
-    assert_eq!(changes[1]["attachment_id"], 99);
-}
-
-#[test]
-fn print_history_json_empty() {
-    let history: Vec<HistoryEntry> = vec![];
-    let json = serde_json::to_string_pretty(&history).unwrap();
-    assert_eq!(json, "[]");
-}
-
-// ── capture_stdout-based formatter tests ─────────────────────────
-
-#[cfg(unix)]
-#[tokio::test]
-async fn print_bugs_table_empty_says_no_bugs_found() {
-    let _lock = crate::ENV_LOCK.lock().await;
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_bugs(&[], OutputFormat::Table);
-    })
-    .await;
-    assert!(output.contains("No bugs found."));
-}
-
-#[cfg(unix)]
-#[tokio::test]
-async fn print_bugs_json_empty_renders_empty_array() {
-    let _lock = crate::ENV_LOCK.lock().await;
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_bugs(&[], OutputFormat::Json);
-    })
-    .await;
-    let parsed = crate::test_helpers::extract_json(&output);
-    assert!(parsed.is_array());
-    assert_eq!(parsed.as_array().unwrap().len(), 0);
-}
-
-#[cfg(unix)]
-#[tokio::test]
-async fn print_bugs_table_renders_columns_and_truncates() {
-    let _lock = crate::ENV_LOCK.lock().await;
-    let bugs = vec![make_bug(42, "Login broken", "NEW")];
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_bugs(&bugs, OutputFormat::Table);
-    })
-    .await;
-    assert!(output.contains("ID"));
-    assert!(output.contains("STATUS"));
-    assert!(output.contains("PRIORITY"));
-    assert!(output.contains("ASSIGNEE"));
-    assert!(output.contains("SUMMARY"));
-    assert!(output.contains("42"));
-    assert!(output.contains("NEW"));
-    assert!(output.contains("P1"));
-    // Email is shortened to local part
-    assert!(output.contains("dev"));
-    assert!(output.contains("Login broken"));
-}
-
-#[cfg(unix)]
-#[tokio::test]
-async fn print_bugs_json_via_print() {
-    let _lock = crate::ENV_LOCK.lock().await;
-    let bugs = vec![make_bug(99, "Crash on startup", "ASSIGNED")];
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_bugs(&bugs, OutputFormat::Json);
-    })
-    .await;
-    let parsed = crate::test_helpers::extract_json(&output);
-    assert_eq!(parsed[0]["id"], 99);
-    assert_eq!(parsed[0]["summary"], "Crash on startup");
-    assert_eq!(parsed[0]["status"], "ASSIGNED");
-}
-
-#[cfg(unix)]
-#[tokio::test]
-async fn print_bug_detail_table_renders_all_fields() {
-    let _lock = crate::ENV_LOCK.lock().await;
+fn write_bug_detail_table_renders_all_fields() {
     let mut bug = make_bug(42, "Detail test", "ASSIGNED");
     bug.resolution = Some("FIXED".into());
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_bug_detail(&bug, OutputFormat::Table);
-    })
-    .await;
+    let output = capture_bug_detail(OutputFormat::Table, &bug);
     assert!(output.contains("Bug"));
     assert!(output.contains("#42"));
     assert!(output.contains("Detail test"));
@@ -307,10 +252,8 @@ async fn print_bug_detail_table_renders_all_fields() {
     assert!(output.contains("100"));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_bug_detail_table_handles_minimal_bug() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_bug_detail_table_handles_minimal_bug() {
     let bug = Bug {
         id: 1,
         summary: "Unicode summary — déjà vu".into(),
@@ -334,79 +277,96 @@ async fn print_bug_detail_table_handles_minimal_bug() {
         op_sys: None,
         rep_platform: None,
     };
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_bug_detail(&bug, OutputFormat::Table);
-    })
-    .await;
+    let output = capture_bug_detail(OutputFormat::Table, &bug);
     assert!(output.contains("Unicode summary — déjà vu"));
-    // Optional fields render as "-"
     assert!(output.contains('-'));
-    // No Keywords/Blocks/Depends on lines when empty
     assert!(!output.contains("Keywords"));
     assert!(!output.contains("Blocks"));
     assert!(!output.contains("Depends on"));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_bug_detail_json_via_print() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_bug_detail_json_via_write() {
     let bug = make_bug(7, "Json bug", "NEW");
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_bug_detail(&bug, OutputFormat::Json);
-    })
-    .await;
-    let parsed = crate::test_helpers::extract_json(&output);
+    let output = capture_bug_detail(OutputFormat::Json, &bug);
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
     assert_eq!(parsed["id"], 7);
     assert_eq!(parsed["summary"], "Json bug");
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_history_table_renders_changes() {
-    let _lock = crate::ENV_LOCK.lock().await;
+// ── write_json (pretty) ──────────────────────────────────────────
+
+#[test]
+fn write_json_produces_valid_json_for_bug() {
+    let bug = make_bug(1, "Test bug", "NEW");
+    let json = serde_json::to_string_pretty(&bug).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed["id"], 1);
+    assert_eq!(parsed["summary"], "Test bug");
+    assert_eq!(parsed["status"], "NEW");
+}
+
+#[test]
+fn write_json_produces_valid_json_for_vec() {
+    let bugs = vec![make_bug(1, "A", "NEW"), make_bug(2, "B", "RESOLVED")];
+    let json = serde_json::to_string_pretty(&bugs).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert!(parsed.is_array());
+    assert_eq!(parsed.as_array().unwrap().len(), 2);
+}
+
+// ── write_history ────────────────────────────────────────────────
+
+#[test]
+fn write_history_json_one_entry() {
     let history = vec![make_history_entry()];
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_history(&history, OutputFormat::Table);
-    })
-    .await;
+    let json = serde_json::to_string_pretty(&history).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed[0]["who"], "editor@example.com");
+    assert_eq!(parsed[0]["when"], "2025-04-01T12:00:00Z");
+    let changes = parsed[0]["changes"].as_array().unwrap();
+    assert_eq!(changes.len(), 2);
+    assert_eq!(changes[0]["field_name"], "status");
+    assert_eq!(changes[0]["removed"], "NEW");
+    assert_eq!(changes[0]["added"], "ASSIGNED");
+    assert_eq!(changes[1]["attachment_id"], 99);
+}
+
+#[test]
+fn write_history_json_empty() {
+    let history: Vec<HistoryEntry> = vec![];
+    let json = serde_json::to_string_pretty(&history).unwrap();
+    assert_eq!(json, "[]");
+}
+
+#[test]
+fn write_history_table_renders_changes() {
+    let history = vec![make_history_entry()];
+    let output = capture_history(OutputFormat::Table, &history);
     assert!(output.contains("Change"));
     assert!(output.contains("editor@example.com"));
     assert!(output.contains("2025-04-01T12:00:00Z"));
     assert!(output.contains("status"));
     assert!(output.contains("NEW"));
     assert!(output.contains("ASSIGNED"));
-    // Attachment-scoped change
     assert!(output.contains("flagtypes.name"));
     assert!(output.contains("[attachment #99]"));
     assert!(output.contains("review?"));
-    // Separator
     assert!(output.contains('─'));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_history_table_empty_renders_nothing() {
-    let _lock = crate::ENV_LOCK.lock().await;
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_history(&[], OutputFormat::Table);
-    })
-    .await;
-    // No "Change", separator, or other history content
+#[test]
+fn write_history_table_empty_renders_nothing() {
+    let output = capture_history(OutputFormat::Table, &[]);
     assert!(!output.contains("Change"));
     assert!(!output.contains('─'));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_history_json_via_print() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_history_json_via_write() {
     let history = vec![make_history_entry()];
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_history(&history, OutputFormat::Json);
-    })
-    .await;
-    let parsed = crate::test_helpers::extract_json(&output);
+    let output = capture_history(OutputFormat::Json, &history);
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
     assert_eq!(parsed[0]["who"], "editor@example.com");
 }
 
@@ -456,7 +416,6 @@ fn multi_bug_view_renders_success_blocks_with_dividers() {
     assert!(out.contains("Bug #1"));
     assert!(out.contains("Bug #2"));
     assert!(out.contains("Bug #3"));
-    // Three rows ⇒ exactly two dividers between them, no trailing divider.
     let divider = "─".repeat(60);
     assert_eq!(out.matches(&divider).count(), 2);
 }
@@ -471,8 +430,6 @@ fn multi_bug_view_renders_failure_block_with_unavailable_marker() {
     let mut buf = Vec::new();
     write_multi_bug_view(&rows, &mut buf);
     let out = String::from_utf8(buf).unwrap();
-    // The colored crate writes ANSI escapes around terms when a TTY is
-    // detected; tests compare on the plain substrings.
     assert!(out.contains("Bug #999"));
     assert!(out.contains("UNAVAILABLE"));
     assert!(out.contains("Error: bug not found: 999"));

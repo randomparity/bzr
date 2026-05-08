@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::BugAction;
-use crate::test_helpers::{capture_stdout, setup_test_env};
+use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 #[tokio::test]
@@ -24,13 +24,16 @@ async fn bug_history_empty_prints_no_history_message() {
         id: 42,
         since: None,
     };
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Table,
         None,
-    ))
+        &mut __io.writers(),
+    )
     .await;
+    let output = __io.out_str().to_string();
     assert!(result.is_ok(), "bug history should succeed: {result:?}");
     assert!(
         output.contains("No history for bug #42."),
@@ -40,13 +43,21 @@ async fn bug_history_empty_prints_no_history_message() {
 
 #[tokio::test]
 async fn bug_history_rejects_malformed_since_with_exit_code_7() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = BugAction::History {
         id: 42,
         since: Some("yesterday".into()),
     };
-    let result = crate::commands::bug::execute(&action, None, OutputFormat::Table, None).await;
+    let result = crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Table,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     let err = result.unwrap_err();
     assert_eq!(err.exit_code(), 7);
     let msg = err.to_string();

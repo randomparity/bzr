@@ -1,7 +1,9 @@
+use std::io::Write;
+
 use colored::Colorize;
 use serde::Serialize;
 
-use super::formatting::print_formatted;
+use super::formatting::write_formatted;
 use crate::types::{OutputFormat, ServerInfoResponse};
 
 /// Combined server information for display.
@@ -21,18 +23,21 @@ impl<'a> From<&'a ServerInfoResponse> for ServerInfo<'a> {
     }
 }
 
-#[expect(clippy::print_stdout)]
-pub fn print_server_info(response: &ServerInfoResponse, format: OutputFormat) {
+pub fn write_server_info<W: Write + ?Sized>(
+    response: &ServerInfoResponse,
+    format: OutputFormat,
+    out: &mut W,
+) {
     let info = ServerInfo::from(response);
-    print_formatted(&info, format, |info| {
-        println!("{} {}", "Bugzilla version:".bold(), info.version);
+    write_formatted(&info, format, out, |info, out| {
+        let _ = writeln!(out, "{} {}", "Bugzilla version:".bold(), info.version);
         if info.extensions.is_empty() {
-            println!("\nNo extensions installed.");
+            let _ = writeln!(out, "\nNo extensions installed.");
         } else {
-            println!("\n{}:", "Extensions".bold());
+            let _ = writeln!(out, "\n{}:", "Extensions".bold());
             for (name, ext) in info.extensions {
                 let ver = ext.version.as_deref().unwrap_or("unknown");
-                println!("  {name} ({ver})");
+                let _ = writeln!(out, "  {name} ({ver})");
             }
         }
     });

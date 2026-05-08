@@ -1,10 +1,10 @@
-use std::io::{self, Write};
+use std::io::Write;
 
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
 use super::formatting::{
-    colorize_status, print_formatted, shorten_email, truncate, write_divider, write_field,
+    colorize_status, shorten_email, truncate, write_divider, write_field, write_formatted,
     write_list_field, write_optional_field,
 };
 use crate::types::{Bug, HistoryEntry, OutputFormat};
@@ -36,25 +36,25 @@ impl From<&Bug> for BugRow {
     }
 }
 
-pub fn print_bugs(bugs: &[Bug], format: OutputFormat) {
-    print_formatted(bugs, format, |bugs| {
+pub fn write_bugs<W: Write + ?Sized>(bugs: &[Bug], format: OutputFormat, out: &mut W) {
+    write_formatted(bugs, format, out, |bugs, out| {
         if bugs.is_empty() {
-            let _ = writeln!(io::stdout(), "No bugs found.");
+            let _ = writeln!(out, "No bugs found.");
             return;
         }
         let rows: Vec<BugRow> = bugs.iter().map(BugRow::from).collect();
         let table = Table::new(rows).to_string();
-        let _ = writeln!(io::stdout(), "{table}");
+        let _ = writeln!(out, "{table}");
     });
 }
 
-pub fn print_bug_detail(bug: &Bug, format: OutputFormat) {
-    print_formatted(bug, format, |bug| {
-        write_bug_detail(bug, &mut io::stdout());
+pub fn write_bug_detail<W: Write + ?Sized>(bug: &Bug, format: OutputFormat, out: &mut W) {
+    write_formatted(bug, format, out, |bug, out| {
+        write_bug_detail_table(bug, out);
     });
 }
 
-fn write_bug_detail(bug: &Bug, out: &mut impl Write) {
+fn write_bug_detail_table(bug: &Bug, out: &mut (impl Write + ?Sized)) {
     let _ = writeln!(
         out,
         "{} #{}\n{}\n",
@@ -77,7 +77,7 @@ fn write_bug_detail(bug: &Bug, out: &mut impl Write) {
     write_id_list_field(out, "Depends on", &bug.depends_on);
 }
 
-fn write_id_list_field(out: &mut impl Write, label: &str, ids: &[u64]) {
+fn write_id_list_field(out: &mut (impl Write + ?Sized), label: &str, ids: &[u64]) {
     if !ids.is_empty() {
         let id_str = ids
             .iter()
@@ -88,11 +88,15 @@ fn write_id_list_field(out: &mut impl Write, label: &str, ids: &[u64]) {
     }
 }
 
-pub fn print_history(history: &[HistoryEntry], format: OutputFormat) {
-    print_formatted(history, format, |history| {
+pub fn write_history<W: Write + ?Sized>(
+    history: &[HistoryEntry],
+    format: OutputFormat,
+    out: &mut W,
+) {
+    write_formatted(history, format, out, |history, out| {
         for entry in history {
             let _ = writeln!(
-                io::stdout(),
+                out,
                 "{} by {} ({})",
                 "Change".bold(),
                 entry.who.cyan(),
@@ -103,26 +107,22 @@ pub fn print_history(history: &[HistoryEntry], format: OutputFormat) {
                     .attachment_id
                     .map(|id| format!(" [attachment #{id}]"))
                     .unwrap_or_default();
-                let _ = writeln!(
-                    io::stdout(),
-                    "  {}{attachment_suffix}:",
-                    change.field_name.bold()
-                );
+                let _ = writeln!(out, "  {}{attachment_suffix}:", change.field_name.bold());
                 if !change.removed.is_empty() {
-                    let _ = writeln!(io::stdout(), "    - {}", change.removed.red());
+                    let _ = writeln!(out, "    - {}", change.removed.red());
                 }
                 if !change.added.is_empty() {
-                    let _ = writeln!(io::stdout(), "    + {}", change.added.green());
+                    let _ = writeln!(out, "    + {}", change.added.green());
                 }
             }
-            write_divider(&mut io::stdout());
+            write_divider(out);
         }
     });
 }
 
 /// One row in a multi-ID `bzr bug view` output stream.
 ///
-/// Used by [`print_multi_bug_view`] to interleave successful detail
+/// Used by [`write_multi_bug_view`] to interleave successful detail
 /// blocks with `UNAVAILABLE` placeholder blocks for inaccessible bugs.
 #[non_exhaustive]
 #[derive(Debug)]
@@ -134,27 +134,23 @@ pub enum MultiBugRow {
 /// Render a multi-ID `bzr bug view` result.
 ///
 /// JSON mode is **not** handled here — the caller emits a
-/// `MultiBugViewResult` via `output::print_result`. This function only
+/// `MultiBugViewResult` via `output::write_result`. This function only
 /// covers table mode: argument-order detail blocks for `Ok`, visually
 /// distinct `UNAVAILABLE` placeholder blocks for `Failed`, with a
 /// `─`-divider line between every pair of blocks (no trailing divider).
-pub fn print_multi_bug_view(rows: &[MultiBugRow]) {
-    write_multi_bug_view(rows, &mut io::stdout());
-}
-
-fn write_multi_bug_view(rows: &[MultiBugRow], out: &mut impl Write) {
+pub fn write_multi_bug_view<W: Write + ?Sized>(rows: &[MultiBugRow], out: &mut W) {
     for (i, row) in rows.iter().enumerate() {
         if i > 0 {
             write_divider(out);
         }
         match row {
-            MultiBugRow::Ok(bug) => write_bug_detail(bug, out),
+            MultiBugRow::Ok(bug) => write_bug_detail_table(bug, out),
             MultiBugRow::Failed { id, error } => write_unavailable_block(id, error, out),
         }
     }
 }
 
-fn write_unavailable_block(id: &str, error: &str, out: &mut impl Write) {
+fn write_unavailable_block(id: &str, error: &str, out: &mut (impl Write + ?Sized)) {
     let _ = writeln!(
         out,
         "{} #{} — {}",

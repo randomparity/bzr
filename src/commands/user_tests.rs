@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::UserAction;
-use crate::test_helpers::{capture_stdout, setup_test_env};
+use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 #[test]
@@ -64,16 +64,26 @@ async fn user_search_returns_results() {
         query: "alice".to_string(),
         details: false,
     };
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a1 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a1.writers(),
+    )
+    .await;
+    let output = __io_a1.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed[0]["id"], 1);
     assert_eq!(parsed[0]["name"], "alice@test.com");
 }
 
 #[tokio::test]
 async fn update_user_disable_login_sends_denied_text() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
@@ -90,7 +100,14 @@ async fn update_user_disable_login_sends_denied_text() {
         disable_login: Some(true),
         login_denied_text: Some("Go away".to_string()),
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(
         result.is_ok(),
         "update with disable_login failed: {result:?}"
@@ -99,6 +116,7 @@ async fn update_user_disable_login_sends_denied_text() {
 
 #[tokio::test]
 async fn update_user_enable_login_sends_empty_denied_text() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
@@ -115,7 +133,14 @@ async fn update_user_enable_login_sends_empty_denied_text() {
         disable_login: Some(false),
         login_denied_text: None,
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(
         result.is_ok(),
         "update with enable_login failed: {result:?}"
@@ -139,16 +164,26 @@ async fn user_create_sends_post() {
         full_name: Some("New User".into()),
         password: None,
     };
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a2 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a2.writers(),
+    )
+    .await;
+    let output = __io_a2.out_str().to_string();
     assert!(result.is_ok(), "user create failed: {result:?}");
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["action"], "created");
     assert_eq!(parsed["id"], 99);
 }
 
 #[tokio::test]
 async fn user_search_http_500_returns_error() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -161,7 +196,14 @@ async fn user_search_http_500_returns_error() {
         query: "alice".to_string(),
         details: false,
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(
@@ -172,6 +214,7 @@ async fn user_search_http_500_returns_error() {
 
 #[tokio::test]
 async fn user_search_malformed_json_returns_error() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -184,6 +227,13 @@ async fn user_search_malformed_json_returns_error() {
         query: "alice".to_string(),
         details: false,
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err());
 }

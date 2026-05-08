@@ -2,7 +2,6 @@
 
 use super::*;
 use crate::error::BzrError;
-use crate::test_helpers::capture_stdout;
 use crate::types::AuthMethod;
 
 async fn setup_config_env() -> (tokio::sync::MutexGuard<'static, ()>, tempfile::TempDir) {
@@ -18,6 +17,7 @@ async fn setup_config_env() -> (tokio::sync::MutexGuard<'static, ()>, tempfile::
 /// Invoke `execute` with a `SetServer` action carrying an inline
 /// `api_key` and all other optional fields at their defaults.
 async fn seed_inline_server(name: &str, url: &str, api_key: &str) {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     execute(
         &ConfigAction::SetServer {
             name: name.into(),
@@ -35,6 +35,7 @@ async fn seed_inline_server(name: &str, url: &str, api_key: &str) {
         None,
         OutputFormat::Json,
         None,
+        &mut __cap_io.writers(),
     )
     .await
     .unwrap();
@@ -44,6 +45,7 @@ async fn seed_inline_server(name: &str, url: &str, api_key: &str) {
 /// the `BZR_KEYRING_TEST_SECRET` test hook and running `SetKeyring`.
 #[cfg(feature = "keyring")]
 async fn seed_keyring_secret(server_name: &str, secret: &str) {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     // SAFETY: Serialized via ENV_LOCK through setup_config_env.
     unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", secret) };
     execute(
@@ -55,6 +57,7 @@ async fn seed_keyring_secret(server_name: &str, secret: &str) {
         None,
         OutputFormat::Json,
         None,
+        &mut __cap_io.writers(),
     )
     .await
     .unwrap();
@@ -64,6 +67,7 @@ async fn seed_keyring_secret(server_name: &str, secret: &str) {
 
 #[tokio::test]
 async fn set_default_on_empty_config_returns_error() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _tmp) = setup_config_env().await;
     let config = Config::default();
     config.save().unwrap();
@@ -74,6 +78,7 @@ async fn set_default_on_empty_config_returns_error() {
         None,
         OutputFormat::Table,
         None,
+        &mut __cap_io.writers(),
     )
     .await;
     assert!(result.is_err());
@@ -86,7 +91,8 @@ async fn set_default_on_empty_config_returns_error() {
 #[tokio::test]
 async fn first_set_server_auto_sets_default() {
     let (_lock, _tmp) = setup_config_env().await;
-    let (result, output) = capture_stdout(execute(
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = execute(
         &ConfigAction::SetServer {
             name: "first".into(),
             url: "https://first.example.com".into(),
@@ -103,8 +109,10 @@ async fn first_set_server_auto_sets_default() {
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io.writers(),
+    )
     .await;
+    let output = __io.out_str().to_string();
     result.unwrap();
     let config = Config::load().unwrap();
     assert_eq!(config.default_server.as_deref(), Some("first"));
@@ -112,12 +120,14 @@ async fn first_set_server_auto_sets_default() {
 
     // The first server set must report `is_default: true` in JSON
     // output, since there was no prior default to take precedence.
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["is_default"], true);
 }
 
 #[tokio::test]
 async fn second_set_server_does_not_override_default() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _tmp) = setup_config_env().await;
     // Set up first server
     execute(
@@ -137,6 +147,7 @@ async fn second_set_server_does_not_override_default() {
         None,
         OutputFormat::Table,
         None,
+        &mut __cap_io.writers(),
     )
     .await
     .unwrap();
@@ -158,6 +169,7 @@ async fn second_set_server_does_not_override_default() {
         None,
         OutputFormat::Table,
         None,
+        &mut __cap_io.writers(),
     )
     .await
     .unwrap();
@@ -180,7 +192,9 @@ async fn set_server_update_preserves_existing_default() {
         seed_inline_server(name, url, &format!("{name}-key-1234567890")).await;
     }
 
-    let (result, output) = capture_stdout(execute(
+    let mut __io2 = crate::test_helpers::CapturedIo::new();
+
+    let result = execute(
         &ConfigAction::SetServer {
             name: "second".into(),
             url: "https://updated.example.com".into(),
@@ -197,11 +211,14 @@ async fn set_server_update_preserves_existing_default() {
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io2.writers(),
+    )
     .await;
+
+    let output = __io2.out_str().to_string();
     assert!(result.is_ok());
 
-    let parsed = crate::test_helpers::extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["name"], "second");
     assert_eq!(parsed["action"], "updated");
 
@@ -224,18 +241,23 @@ async fn set_default_persists_selected_server() {
         seed_inline_server(name, url, &format!("{name}-key-1234567890")).await;
     }
 
-    let (result, output) = capture_stdout(execute(
+    let mut __io3 = crate::test_helpers::CapturedIo::new();
+
+    let result = execute(
         &ConfigAction::SetDefault {
             name: "second".into(),
         },
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io3.writers(),
+    )
     .await;
+
+    let output = __io3.out_str().to_string();
     assert!(result.is_ok());
 
-    let parsed = crate::test_helpers::extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["name"], "second");
     assert_eq!(parsed["action"], "updated");
     assert_eq!(
@@ -246,6 +268,7 @@ async fn set_default_persists_selected_server() {
 
 #[tokio::test]
 async fn show_json_includes_populated_server_details() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _tmp) = setup_config_env().await;
     execute(
         &ConfigAction::SetServer {
@@ -264,15 +287,26 @@ async fn show_json_includes_populated_server_details() {
         None,
         OutputFormat::Json,
         None,
+        &mut __cap_io.writers(),
     )
     .await
     .unwrap();
 
-    let (result, output) =
-        capture_stdout(execute(&ConfigAction::Show, None, OutputFormat::Json, None)).await;
+    let mut __io_a1 = crate::test_helpers::CapturedIo::new();
+
+    let result = execute(
+        &ConfigAction::Show,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a1.writers(),
+    )
+    .await;
+
+    let output = __io_a1.out_str().to_string();
     assert!(result.is_ok());
 
-    let parsed = crate::test_helpers::extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["default_server"], "prod");
     assert_eq!(parsed["servers"]["prod"]["url"], "https://prod.example.com");
     assert_eq!(parsed["servers"]["prod"]["email"], "admin@example.com");
@@ -284,6 +318,7 @@ async fn show_json_includes_populated_server_details() {
 
 #[tokio::test]
 async fn set_server_with_env_var_persists_env_source() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _tmp) = setup_config_env().await;
     execute(
         &ConfigAction::SetServer {
@@ -302,6 +337,7 @@ async fn set_server_with_env_var_persists_env_source() {
         None,
         OutputFormat::Json,
         None,
+        &mut __cap_io.writers(),
     )
     .await
     .unwrap();
@@ -342,6 +378,7 @@ async fn set_keyring_stores_secret_and_rewrites_config() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn migrate_to_keyring_from_inline_rewrites_config() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
     let (_lock, _tmp) = setup_config_env().await;
 
@@ -362,6 +399,7 @@ async fn migrate_to_keyring_from_inline_rewrites_config() {
         None,
         OutputFormat::Json,
         None,
+        &mut __cap_io.writers(),
     )
     .await
     .unwrap();
@@ -380,6 +418,7 @@ async fn migrate_to_keyring_from_inline_rewrites_config() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn migrate_to_keyring_from_env_preserves_config() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
     let (_lock, _tmp) = setup_config_env().await;
 
@@ -402,6 +441,7 @@ async fn migrate_to_keyring_from_env_preserves_config() {
         None,
         OutputFormat::Json,
         None,
+        &mut __cap_io.writers(),
     )
     .await
     .unwrap();
@@ -416,6 +456,7 @@ async fn migrate_to_keyring_from_env_preserves_config() {
         None,
         OutputFormat::Json,
         None,
+        &mut __cap_io.writers(),
     )
     .await
     .unwrap();
@@ -436,6 +477,7 @@ async fn migrate_to_keyring_from_env_preserves_config() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn migrate_to_keyring_from_keyring_errors_before_storing() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
     let (_lock, _tmp) = setup_config_env().await;
 
@@ -455,6 +497,7 @@ async fn migrate_to_keyring_from_keyring_errors_before_storing() {
         None,
         OutputFormat::Json,
         None,
+        &mut __cap_io.writers(),
     )
     .await;
     assert!(result.is_err());
@@ -472,6 +515,7 @@ async fn migrate_to_keyring_from_keyring_errors_before_storing() {
 
 #[tokio::test]
 async fn migrate_to_keyring_without_yes_errors() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _tmp) = setup_config_env().await;
 
     seed_inline_server(
@@ -491,6 +535,7 @@ async fn migrate_to_keyring_without_yes_errors() {
         None,
         OutputFormat::Json,
         None,
+        &mut __cap_io.writers(),
     )
     .await;
 
@@ -503,6 +548,7 @@ async fn migrate_to_keyring_without_yes_errors() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn unset_keyring_removes_secret_and_clears_config() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
     let (_lock, _tmp) = setup_config_env().await;
 
@@ -519,6 +565,7 @@ async fn unset_keyring_removes_secret_and_clears_config() {
         None,
         OutputFormat::Json,
         None,
+        &mut __cap_io.writers(),
     )
     .await
     .unwrap();

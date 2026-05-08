@@ -1,8 +1,8 @@
-use std::io::{self, Write};
+use std::io::Write;
 
 use serde::Serialize;
 
-use super::formatting::{mask_api_key, print_field, print_formatted, print_optional_field};
+use super::formatting::{mask_api_key, write_field, write_formatted, write_optional_field};
 use crate::config::{CredentialSource, CredentialSourceKind};
 use crate::types::{AuthMethod, OutputFormat};
 
@@ -91,46 +91,45 @@ impl ConfigView {
     }
 }
 
-fn print_api_key(s: &ServerDisplayInfo) {
+fn write_api_key(out: &mut (impl Write + ?Sized), s: &ServerDisplayInfo) {
     let label = match s.api_key_source.as_str() {
         "env" => "API Key Env",
         "keyring" => "Keyring",
         _ => "API Key",
     };
-    print_field(label, &s.api_key);
+    write_field(out, label, &s.api_key);
 }
 
-fn print_server(name: &str, s: &ServerDisplayInfo) {
-    writeln!(io::stdout(), "\n[{name}]").expect("write to output");
-    print_field("URL", &s.url);
-    print_optional_field("Email", s.email.as_deref());
-    print_api_key(s);
-    print_field("API Key Source", &s.api_key_source);
-    print_field("Auth", &auth_display(s.auth_method.as_ref()));
+fn write_server(out: &mut (impl Write + ?Sized), name: &str, s: &ServerDisplayInfo) {
+    let _ = writeln!(out, "\n[{name}]");
+    write_field(out, "URL", &s.url);
+    write_optional_field(out, "Email", s.email.as_deref());
+    write_api_key(out, s);
+    write_field(out, "API Key Source", &s.api_key_source);
+    write_field(out, "Auth", &auth_display(s.auth_method.as_ref()));
     if s.tls_insecure {
-        print_field("TLS", "insecure (certificate verification disabled)");
+        write_field(out, "TLS", "insecure (certificate verification disabled)");
     }
     if let Some(ca) = &s.tls_ca_cert {
-        print_field("TLS CA Cert", ca);
+        write_field(out, "TLS CA Cert", ca);
     }
     if let Some(pin) = &s.tls_pin {
-        print_field("TLS Pin", pin);
+        write_field(out, "TLS Pin", pin);
     }
 }
 
-pub fn print_config(view: &ConfigView, format: OutputFormat) {
-    print_formatted(view, format, |v| {
-        let mut out = io::stdout();
-        writeln!(out, "Config file: {}\n", v.config_file).expect("write to output");
+pub fn write_config<W: Write + ?Sized>(view: &ConfigView, format: OutputFormat, out: &mut W) {
+    write_formatted(view, format, out, |v, out| {
+        let _ = writeln!(out, "Config file: {}\n", v.config_file);
         if let Some(ref def) = v.default_server {
-            writeln!(out, "Default server: {def}").expect("write to output");
+            let _ = writeln!(out, "Default server: {def}");
         }
         if v.servers.is_empty() {
-            writeln!(out, "No servers configured.").expect("write to output");
+            let _ = writeln!(out, "No servers configured.");
             return;
         }
         for (name, s) in &v.servers {
-            print_server(name, s);
+            write_server(out, name, s);
         }
     });
 }
