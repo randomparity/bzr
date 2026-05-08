@@ -33,6 +33,8 @@ pub struct Bug {
     #[serde(default)]
     pub dupe_of: Option<u64>,
     #[serde(default)]
+    pub deadline: Option<String>,
+    #[serde(default)]
     pub product: Option<String>,
     #[serde(default)]
     pub component: Option<String>,
@@ -521,6 +523,20 @@ pub struct UpdateBugParams {
     pub resolution: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dupe_of: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alias: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deadline: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_time: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remaining_time: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub work_time: Option<f64>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub reset_assigned_to: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub reset_qa_contact: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assigned_to: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

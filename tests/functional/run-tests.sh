@@ -463,6 +463,23 @@ if [[ -n "$BUG1" ]]; then
     if assert_success && assert_json '.priority' "Highest"; then test_pass; fi
 else test_skip "no BUG1"; fi
 
+test_begin "42a. bug update --deadline"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug update "$BUG1" --deadline 2026-12-31
+    if assert_success; then
+        run_bzr bug view "$BUG1" --json
+        if assert_success && assert_json '.deadline' "2026-12-31"; then
+            test_pass
+        fi
+    fi
+else test_skip "no BUG1"; fi
+
+test_begin "42b. bug update reset assignee and QA contact"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug update "$BUG1" --reset-assigned-to --reset-qa-contact
+    if assert_success; then test_pass; fi
+else test_skip "no BUG1"; fi
+
 test_begin "43. bug update (resolve)"
 if [[ -n "$BUG1" ]]; then
     run_bzr bug update "$BUG1" --status RESOLVED --resolution FIXED
