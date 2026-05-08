@@ -3,42 +3,19 @@
 //! Maps `keyring_core::Error` variants to user-facing `BzrError::Keyring`
 //! messages so callers get actionable guidance on failures.
 //!
-//! Entries are cached by `(service, account)` to give every
-//! operation on the same key a stable handle. In production, this is
-//! a small optimization — `Entry` is a thin wrapper over a platform
-//! credential and each method call reaches the backend anyway.
-
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::Arc;
 
 use keyring_core::{CredentialStore, Entry, Error as KrError};
 
 use crate::error::{BzrError, Result};
 
-type EntryCache = Mutex<HashMap<(String, String), Arc<Entry>>>;
-
-fn cache() -> &'static EntryCache {
-    static CACHE: OnceLock<EntryCache> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-fn entry_for(service: &str, account: &str) -> Result<Arc<Entry>> {
+fn entry_for(service: &str, account: &str) -> Result<Entry> {
     ensure_default_store(service, account)?;
-    let mut guard = cache()
-        .lock()
-        .map_err(|e| BzrError::Keyring(format!("keychain entry cache poisoned: {e}")))?;
-    let key = (service.to_string(), account.to_string());
-    if let Some(entry) = guard.get(&key) {
-        return Ok(Arc::clone(entry));
-    }
-    let entry = Entry::new(service, account).map_err(|e| {
+    Entry::new(service, account).map_err(|e| {
         BzrError::Keyring(format!(
             "failed to open keychain entry for service='{service}' account='{account}': {e}"
         ))
-    })?;
-    let arc = Arc::new(entry);
-    guard.insert(key, Arc::clone(&arc));
-    Ok(arc)
+    })
 }
 
 fn ensure_default_store(service: &str, account: &str) -> Result<()> {
@@ -139,7 +116,12 @@ fn map_error(service: &str, account: &str, err: &KrError) -> BzrError {
 
 #[cfg(test)]
 pub(crate) fn install_test_store() {
-    let store: Arc<CredentialStore> = Arc::new(test_store::Store::default());
+    use std::sync::OnceLock;
+
+    static STORE: OnceLock<Arc<CredentialStore>> = OnceLock::new();
+    let store = STORE
+        .get_or_init(|| Arc::new(test_store::Store::default()))
+        .clone();
     keyring_core::set_default_store(store);
 }
 
