@@ -164,7 +164,7 @@ All output flows through explicit writer references. No global fd state. No proc
 
 ### Verification gates
 
-1. `rg 'capture_stdout|extract_json' src/ tests/` returns zero hits at the end of Phase 4.
+1. `rg 'capture_stdout|extract_json' src/ tests/` returns zero hits at the end of Phase 3.
 2. `rg '#\[cfg\(unix\)\]\s*\n#\[tokio::test\]' src/output/*_tests.rs` returns zero hits — output-layer tests are now sync.
 3. `cargo test --locked` runs cleanly under load (`taskset -c 0,1` on a Linux CI runner).
 4. Stress run before merging: 50 consecutive `cargo test --locked` invocations in a draft PR. If all pass clean, the race class is empirically gone.
@@ -187,9 +187,11 @@ Lands first as a small standalone PR ahead of the migration.
 - Add `CapturedIo` in `src/test_helpers.rs`.
 - No callers yet. Pure additive change.
 
-### Phase 2 — Migration (output, command, dispatch, main)
+### Phase 2 — Full migration (output, command, dispatch, main, all tests)
 
-This is the bulk of the work and lands as a single PR so the tree never has a half-renamed surface. Within the PR, work proceeds bottom-up but the commit can be split into reviewable chunks:
+This is the bulk of the work and **must land as a single PR**. The reason is structural: the moment `execute()` gains its `Writers` parameter, every `capture_stdout(execute(…))` test call breaks (signature mismatch). There is no intermediate state where output helpers, command signatures, and tests can be partially migrated — they all observe each other through the type system. Splitting into smaller PRs would require either a transient migration helper (rejected: violates "replace, don't deprecate") or transient `print_*` shims (same objection).
+
+Within the single PR, the work proceeds bottom-up and the commit history may be split into reviewable chunks:
 
 - Rename `print_* → write_*` across `src/output/*.rs`. New shape: `&mut impl Write` (or a pair of them for stdout/stderr-emitting helpers), matching the existing leaf-layer convention. ~14 output files, ~60–80 helper renames.
 - Update output unit tests (`src/output/*_tests.rs`) to call `write_*` directly with `&mut Vec<u8>`. Drop `capture_stdout`, `tokio::test`, and the `#[cfg(unix)]` gate from these files. ~50 tests touched.
@@ -197,21 +199,20 @@ This is the bulk of the work and lands as a single PR so the tree never has a ha
 - Command-layer call sites previously calling `print_*` now call `write_*` with `w.out` / `w.err`.
 - `dispatch()` gains `w: &mut Writers<'_>` and forwards it.
 - `main.rs` constructs `Writers` from locked stdout/stderr.
-- Public API of the lib crate changes — acceptable per `lib.rs`'s docstring (lib crate is for integration tests, not external consumers).
-
-Command-layer tests still use `capture_stdout` at the end of Phase 2; they keep passing because the command body now writes to the locked `io::stdout()` via `w.out` constructed in `dispatch`. They migrate in Phase 3.
-
-### Phase 3 — Command-layer test migration
-
 - Migrate command-layer tests (`src/commands/**/*_tests.rs`, `src/lib_tests.rs`, `tests/integration.rs`) from `capture_stdout(execute(…))` to:
 
-```rust
-let mut io = CapturedIo::new();
-let result = execute(&action, server, format, api, &mut io.writers()).await;
-assert!(io.out_str().contains("…"));
-```
+  ```rust
+  let mut io = CapturedIo::new();
+  let result = execute(&action, server, format, api, &mut io.writers()).await;
+  assert!(io.out_str().contains("…"));
+  ```
 
-### Phase 4 — Tier 2 cleanup + tier 3 collapse
+  ~22 test files touched.
+- Public API of the lib crate changes — acceptable per `lib.rs`'s docstring (lib crate is for integration tests, not external consumers).
+
+After Phase 2, `capture_stdout` and `extract_json` have zero call sites in `src/` and `tests/`. They survive in `test_helpers.rs` only to be deleted in Phase 3.
+
+### Phase 3 — Tier 2 cleanup + tier 3 collapse
 
 Delete:
 
@@ -227,11 +228,11 @@ The original tier 3 ("lock everything" or "single-threaded test binary") becomes
 ## Risks and rollout
 
 - **Risk: a print-helper rename misses a call site.** The compiler catches this — `print_*` no longer exists after Phase 2.
-- **Risk: a test forgets to read `io.out_str()` after the call.** Type system doesn't catch this, but the assertion patterns in migrated tests will fail visibly during Phase 3.
+- **Risk: a test forgets to read `io.out_str()` after the call.** Type system doesn't catch this, but the assertion patterns in migrated tests will fail visibly during Phase 2.
 - **Risk: `colored` writes ANSI escapes into `Vec<u8>`.** It does not — `colored::control::SHOULD_COLORIZE` reads `is_terminal(stdout)`, which is false for a `Vec<u8>` writer. A regression assertion in Phase 2 confirms no `\x1b` byte appears in any captured output.
-- **Risk: PR size.** Phase 2 is large by design — it touches ~14 output files, ~50 output tests, 14 `execute()` signatures, plus `dispatch` and `main`. The alternative (split across multiple PRs with transient `print_*` shims) violates "replace, don't deprecate" and leaves the tree in an awkward intermediate state. Phase 4 must remain its own PR so the deletion is reviewable in isolation.
-- **Empirical confirmation.** Phase 4 closes with the 50-iteration stress run described in *Verification gates*. If any iteration fails, the migration is not complete and the failing test must be diagnosed before issue #192 is closed.
+- **Risk: PR size.** Phase 2 is large by design — it touches ~14 output files, ~50 output tests, 14 `execute()` signatures, ~22 command-layer test files, plus `dispatch` and `main`. The alternative (splitting into smaller PRs) requires either transient migration helpers in `test_helpers` or transient `print_*` shims in `src/output/`, both of which violate "replace, don't deprecate" and leave the tree in an awkward intermediate state. Once `execute()` gains its `Writers` parameter, every test calling `execute()` must update in lockstep — there is no green-tree intermediate. Phase 3 (deletion) must remain its own PR so the cleanup is reviewable in isolation.
+- **Empirical confirmation.** Phase 3 closes with the 50-iteration stress run described in *Verification gates*. If any iteration fails, the migration is not complete and the failing test must be diagnosed before issue #192 is closed.
 
 ## CHANGELOG
 
-Per project convention, each phase that ships user-visible behavior writes its CHANGELOG entry as the work lands. Phases 0 and 4 are user-visible (CI flake fix; final removal of the deprecated helper); intermediate phases are internal refactors and do not require CHANGELOG entries unless they change observable CLI behavior (none expected).
+Per project convention, each phase that ships user-visible behavior writes its CHANGELOG entry as the work lands. Phases 0 and 3 are user-visible (CI flake fix; final removal of the deprecated helper); intermediate phases are internal refactors and do not require CHANGELOG entries unless they change observable CLI behavior (none expected).
