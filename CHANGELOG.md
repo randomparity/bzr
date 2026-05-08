@@ -46,6 +46,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   matching `bzl-attachment-add`. The read-side `Attachment` struct
   also exposes `is_patch` so `bzr attachment list --json` includes the
   field. Closes #166.
+- `bzr attachment download` accepts multiple attachment IDs and
+  `--bug <ID>` (repeatable) for bulk downloads into per-bug
+  subdirectories at `<out-dir>/<bug-id>/<att-id>.<file_name>`. New
+  `--out-dir` flag (default `./attachments`). Legacy single-ID `--out`
+  shape unchanged. (#167)
 - `bzr bug list`, `bzr query save`, and `bzr query run` accept
   `--created-since <DATE>` and `--changed-since <DATE>` filters
   for Bugzilla's `creation_time` and `last_change_time` fields.

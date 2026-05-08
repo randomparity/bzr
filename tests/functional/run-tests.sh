@@ -1176,6 +1176,56 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
+test_begin "100i. attachment download --bug bulk into per-bug subdir"
+if [[ -n "$BUG1" ]]; then
+    BULK_DIR="$(mktemp -d /tmp/bzr-func-bulk.XXXXXX)"
+    run_bzr attachment download --bug "$BUG1" --out-dir "$BULK_DIR"
+    if assert_success; then
+        # Per-bug subdir must exist
+        if [[ -d "$BULK_DIR/$BUG1" ]]; then
+            # Bug had at least 5 attachments uploaded earlier in Phase 15;
+            # require ≥2 to be safe against per-deployment fixture drift.
+            NUM_FILES=$(find "$BULK_DIR/$BUG1" -type f | wc -l | tr -d ' ')
+            if [[ "$NUM_FILES" -ge 2 ]]; then
+                test_pass
+            else
+                test_fail "expected ≥2 files in $BULK_DIR/$BUG1, found $NUM_FILES"
+            fi
+        else
+            test_fail "expected per-bug subdir $BULK_DIR/$BUG1 not created"
+        fi
+    fi
+    rm -rf "$BULK_DIR"
+else test_skip "no BUG1"; fi
+
+test_begin "100j. attachment download mixes --bug and positional IDs"
+if [[ -n "$BUG1" ]] && [[ -n "${ATTACH_ID:-}" ]] && [[ "$ATTACH_ID" != "null" ]]; then
+    MIX_DIR="$(mktemp -d /tmp/bzr-func-mix.XXXXXX)"
+    # Use BUG1 (multi-attachment) AND a specific ATTACH_ID (which also
+    # belongs to BUG1, so positional + --bug both land in the same
+    # per-bug subdir). The test verifies the dispatch handles both
+    # input shapes; the disk layout is the same as the per-bug case.
+    run_bzr attachment download --bug "$BUG1" "$ATTACH_ID" --out-dir "$MIX_DIR"
+    if assert_success; then
+        if [[ -d "$MIX_DIR/$BUG1" ]]; then
+            # The positional ATTACH_ID's file must exist with the att-id
+            # prefix even though it would have been included by --bug too.
+            # The per-bug walk runs first, then positional — silent
+            # overwrite means the second write wins, but the file must
+            # exist either way.
+            POS_FILE_COUNT=$(find "$MIX_DIR/$BUG1" -name "${ATTACH_ID}.*" -type f | wc -l | tr -d ' ')
+            if [[ "$POS_FILE_COUNT" -ge 1 ]]; then
+                test_pass
+            else
+                test_fail "expected file ${ATTACH_ID}.* in $MIX_DIR/$BUG1, found $POS_FILE_COUNT"
+            fi
+        else
+            test_fail "expected per-bug subdir $MIX_DIR/$BUG1 not created"
+        fi
+    fi
+    rm -rf "$MIX_DIR"
+else test_skip "no BUG1 or no ATTACH_ID"; fi
+
 echo ""
 
 # ══════════════════════════════════════════════════════════════════════

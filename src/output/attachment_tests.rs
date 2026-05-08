@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used)]
 
-use super::print_attachments;
+use super::*;
 use crate::types::{Attachment, OutputFormat};
 
 fn make_attachment(id: u64, summary: &str) -> Attachment {
@@ -213,4 +213,317 @@ async fn print_attachments_json_one_via_print() {
     assert_eq!(parsed[0]["id"], 99);
     assert_eq!(parsed[0]["summary"], "Json patch");
     assert_eq!(parsed[0]["file_name"], "file_99.patch");
+}
+
+#[test]
+fn attachment_batch_result_json_shape() {
+    let result = AttachmentBatchResult {
+        out_dir: "./attachments".into(),
+        bug_results: vec![BugDownloadResult {
+            bug_id: 12345,
+            status: TargetStatus::Ok,
+            files: vec![DownloadedFile {
+                attachment_id: 9876,
+                path: "./attachments/12345/9876.patch.diff".into(),
+                bytes: 4096,
+            }],
+            error: None,
+        }],
+        attachment_results: vec![],
+        summary: BatchSummary {
+            succeeded: 1,
+            failed: 0,
+            total_bytes: 4096,
+        },
+    };
+
+    let json = serde_json::to_value(&result).unwrap();
+    assert_eq!(json["out_dir"], "./attachments");
+    assert_eq!(json["bug_results"][0]["bug_id"], 12345);
+    assert_eq!(json["bug_results"][0]["status"], "ok");
+    assert_eq!(json["bug_results"][0]["files"][0]["attachment_id"], 9876);
+    assert_eq!(json["bug_results"][0]["files"][0]["bytes"], 4096);
+    assert_eq!(json["summary"]["succeeded"], 1);
+    assert_eq!(json["summary"]["total_bytes"], 4096);
+}
+
+#[test]
+fn attachment_batch_result_omits_empty_optional_fields() {
+    let result = AttachmentBatchResult {
+        out_dir: "./attachments".into(),
+        bug_results: vec![BugDownloadResult {
+            bug_id: 12345,
+            status: TargetStatus::Ok,
+            files: vec![],
+            error: None,
+        }],
+        attachment_results: vec![AttachmentDownloadResult {
+            attachment_id: 999,
+            status: TargetStatus::Error,
+            bug_id: None,
+            path: None,
+            bytes: None,
+            error: Some("not found".into()),
+        }],
+        summary: BatchSummary {
+            succeeded: 0,
+            failed: 1,
+            total_bytes: 0,
+        },
+    };
+    let json = serde_json::to_value(&result).unwrap();
+    let bug = &json["bug_results"][0];
+    assert!(bug.get("files").is_none(), "files should skip when empty");
+    assert!(bug.get("error").is_none(), "error should skip when None");
+    let att = &json["attachment_results"][0];
+    assert!(att.get("path").is_none());
+    assert!(att.get("bytes").is_none());
+    assert!(att.get("bug_id").is_none());
+    assert_eq!(att["error"], "not found");
+}
+
+#[test]
+fn target_status_serializes_lowercase() {
+    assert_eq!(serde_json::to_string(&TargetStatus::Ok).unwrap(), "\"ok\"");
+    assert_eq!(
+        serde_json::to_string(&TargetStatus::Error).unwrap(),
+        "\"error\"",
+    );
+}
+
+fn sample_batch_result() -> AttachmentBatchResult {
+    AttachmentBatchResult {
+        out_dir: "./attachments".into(),
+        bug_results: vec![BugDownloadResult {
+            bug_id: 12345,
+            status: TargetStatus::Ok,
+            files: vec![
+                DownloadedFile {
+                    attachment_id: 9876,
+                    path: "./attachments/12345/9876.patch.diff".into(),
+                    bytes: 4096,
+                },
+                DownloadedFile {
+                    attachment_id: 9877,
+                    path: "./attachments/12345/9877.trace.log".into(),
+                    bytes: 2048,
+                },
+            ],
+            error: None,
+        }],
+        attachment_results: vec![],
+        summary: BatchSummary {
+            succeeded: 2,
+            failed: 0,
+            total_bytes: 6144,
+        },
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn print_attachment_batch_table_includes_summary() {
+    let _lock = crate::ENV_LOCK.lock().await;
+    let result = sample_batch_result();
+    let ((), out) = crate::test_helpers::capture_stdout(async {
+        print_attachment_batch(&result, OutputFormat::Table);
+    })
+    .await;
+    assert!(out.contains("Bug #12345"), "missing bug header: {out}");
+    assert!(
+        out.contains("./attachments/12345/9876.patch.diff"),
+        "missing file path: {out}",
+    );
+    assert!(out.contains("2 succeeded"), "missing summary line: {out}",);
+    assert!(out.contains("6144"), "missing total_bytes: {out}");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn print_attachment_batch_json_emits_typed_payload() {
+    let _lock = crate::ENV_LOCK.lock().await;
+    let result = sample_batch_result();
+    let ((), out) = crate::test_helpers::capture_stdout(async {
+        print_attachment_batch(&result, OutputFormat::Json);
+    })
+    .await;
+    let parsed: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
+    assert_eq!(parsed["summary"]["succeeded"], 2);
+    assert_eq!(parsed["bug_results"][0]["files"][0]["attachment_id"], 9876);
+}
+
+#[test]
+fn write_attachment_batch_table_bug_error_writes_to_err() {
+    let result = AttachmentBatchResult {
+        out_dir: "./attachments".into(),
+        bug_results: vec![BugDownloadResult {
+            bug_id: 99999,
+            status: TargetStatus::Error,
+            files: vec![],
+            error: Some("bug not found".into()),
+        }],
+        attachment_results: vec![],
+        summary: BatchSummary {
+            succeeded: 0,
+            failed: 1,
+            total_bytes: 0,
+        },
+    };
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+    write_attachment_batch_table(&result, &mut out, &mut err);
+    let err_str = String::from_utf8(err).unwrap();
+    let out_str = String::from_utf8(out).unwrap();
+    assert!(
+        err_str.contains("Bug #99999: bug not found"),
+        "stderr should carry bug-error: {err_str}",
+    );
+    assert!(out_str.contains("0 succeeded, 1 failed"));
+}
+
+#[test]
+fn write_attachment_batch_table_bug_error_with_partial_files() {
+    let result = AttachmentBatchResult {
+        out_dir: "./attachments".into(),
+        bug_results: vec![BugDownloadResult {
+            bug_id: 12345,
+            status: TargetStatus::Error,
+            files: vec![DownloadedFile {
+                attachment_id: 9876,
+                path: "./attachments/12345/9876.a.txt".into(),
+                bytes: 5,
+            }],
+            error: Some("write failed for #9877".into()),
+        }],
+        attachment_results: vec![],
+        summary: BatchSummary {
+            succeeded: 1,
+            failed: 1,
+            total_bytes: 5,
+        },
+    };
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+    write_attachment_batch_table(&result, &mut out, &mut err);
+    let out_str = String::from_utf8(out).unwrap();
+    let err_str = String::from_utf8(err).unwrap();
+    assert!(
+        err_str.contains("Bug #12345: write failed for #9877"),
+        "stderr should carry bug-error: {err_str}",
+    );
+    assert!(
+        out_str.contains("./attachments/12345/9876.a.txt") && out_str.contains("[partial]"),
+        "stdout should list partial file with [partial] tag: {out_str}",
+    );
+}
+
+#[test]
+fn write_attachment_batch_table_attachment_error_writes_to_err() {
+    let result = AttachmentBatchResult {
+        out_dir: "./attachments".into(),
+        bug_results: vec![],
+        attachment_results: vec![AttachmentDownloadResult {
+            attachment_id: 4242,
+            status: TargetStatus::Error,
+            bug_id: None,
+            path: None,
+            bytes: None,
+            error: Some("attachment 4242 not found".into()),
+        }],
+        summary: BatchSummary {
+            succeeded: 0,
+            failed: 1,
+            total_bytes: 0,
+        },
+    };
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+    write_attachment_batch_table(&result, &mut out, &mut err);
+    let err_str = String::from_utf8(err).unwrap();
+    assert!(
+        err_str.contains("Attachment #4242: attachment 4242 not found"),
+        "stderr should carry attachment-error: {err_str}",
+    );
+}
+
+#[test]
+fn write_attachment_batch_table_attachment_ok_writes_path_and_bytes() {
+    let result = AttachmentBatchResult {
+        out_dir: "./attachments".into(),
+        bug_results: vec![],
+        attachment_results: vec![AttachmentDownloadResult {
+            attachment_id: 4242,
+            status: TargetStatus::Ok,
+            bug_id: Some(67890),
+            path: Some("./attachments/67890/4242.extra.bin".into()),
+            bytes: Some(256),
+            error: None,
+        }],
+        summary: BatchSummary {
+            succeeded: 1,
+            failed: 0,
+            total_bytes: 256,
+        },
+    };
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+    write_attachment_batch_table(&result, &mut out, &mut err);
+    let out_str = String::from_utf8(out).unwrap();
+    assert!(
+        out_str.contains("Attachment") && out_str.contains("#4242"),
+        "stdout should include attachment header: {out_str}",
+    );
+    assert!(out_str.contains("./attachments/67890/4242.extra.bin"));
+    assert!(out_str.contains("256"));
+}
+
+#[test]
+fn batch_summary_from_results_aggregates_correctly() {
+    let bug_results = vec![
+        BugDownloadResult {
+            bug_id: 1,
+            status: TargetStatus::Ok,
+            files: vec![
+                DownloadedFile {
+                    attachment_id: 10,
+                    path: "p1".into(),
+                    bytes: 100,
+                },
+                DownloadedFile {
+                    attachment_id: 11,
+                    path: "p2".into(),
+                    bytes: 200,
+                },
+            ],
+            error: None,
+        },
+        BugDownloadResult {
+            bug_id: 2,
+            status: TargetStatus::Error,
+            files: vec![],
+            error: Some("missing".into()),
+        },
+    ];
+    let attachment_results = vec![
+        AttachmentDownloadResult {
+            attachment_id: 30,
+            status: TargetStatus::Ok,
+            bug_id: Some(3),
+            path: Some("p3".into()),
+            bytes: Some(50),
+            error: None,
+        },
+        AttachmentDownloadResult {
+            attachment_id: 31,
+            status: TargetStatus::Error,
+            bug_id: None,
+            path: None,
+            bytes: None,
+            error: Some("missing".into()),
+        },
+    ];
+    let summary = BatchSummary::from_results(&bug_results, &attachment_results);
+    assert_eq!(summary.succeeded, 3);
+    assert_eq!(summary.failed, 2);
+    assert_eq!(summary.total_bytes, 350);
 }
