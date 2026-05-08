@@ -2,7 +2,7 @@
 
 use crate::cli::QueryAction;
 use crate::config::Config;
-use crate::test_helpers::{capture_stdout, setup_test_env};
+use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
@@ -145,17 +145,34 @@ async fn query_save_and_show() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = save_action("test-q");
-    let (result, _output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a1 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a1.writers(),
+    )
+    .await;
+    let _output = __io_a1.out_str().to_string();
     assert!(result.is_ok(), "query save failed: {result:?}");
 
     let action = QueryAction::Show {
         name: "test-q".into(),
     };
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a2 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a2.writers(),
+    )
+    .await;
+    let output = __io_a2.out_str().to_string();
     assert!(result.is_ok(), "query show failed: {result:?}");
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["name"], "test-q");
     assert_eq!(parsed["kind"], "list");
     assert_eq!(parsed["product"][0], "Firefox");
@@ -192,16 +209,27 @@ async fn query_save_persists_every_field() {
         qa_contact: vec![],
         url: vec![],
     };
-    let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut __io.writers()).await;
+    let _ = __io.out_str().to_string();
     result.unwrap();
 
     let action = QueryAction::Show {
         name: "comprehensive".into(),
     };
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a3 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a3.writers(),
+    )
+    .await;
+    let output = __io_a3.out_str().to_string();
     result.unwrap();
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["product"][0], "Firefox");
     assert_eq!(parsed["component"][0], "General");
     assert_eq!(parsed["status"][0], "NEW");
@@ -219,22 +247,32 @@ async fn query_list_emits_saved_query_names() {
     // Saved queries must appear in `query list` output.
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let (result, _) = capture_stdout(super::execute(
+    let mut __io2 = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(
         &save_action("listed-query"),
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io2.writers(),
+    )
     .await;
+
+    let _ = __io2.out_str().to_string();
     result.unwrap();
 
-    let (result, output) = capture_stdout(super::execute(
+    let mut __io3 = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(
         &QueryAction::List,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io3.writers(),
+    )
     .await;
+
+    let output = __io3.out_str().to_string();
     result.unwrap();
     assert!(
         output.contains("listed-query"),
@@ -247,27 +285,52 @@ async fn query_save_search_kind() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = empty_save_action("crashes", Some("crash in tab".into()));
-    let (result, _output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a4 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a4.writers(),
+    )
+    .await;
+    let _output = __io_a4.out_str().to_string();
     assert!(result.is_ok(), "query save failed: {result:?}");
 
     let action = QueryAction::Show {
         name: "crashes".into(),
     };
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a5 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a5.writers(),
+    )
+    .await;
+    let output = __io_a5.out_str().to_string();
     assert!(result.is_ok(), "query show failed: {result:?}");
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["kind"], "search");
     assert_eq!(parsed["quicksearch"], "crash in tab");
 }
 
 #[tokio::test]
 async fn query_save_requires_filter() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = empty_save_action("empty", None);
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err(), "saving empty query should fail");
     let err = result.unwrap_err().to_string();
     assert!(
@@ -278,12 +341,20 @@ async fn query_save_requires_filter() {
 
 #[tokio::test]
 async fn query_delete_unknown_errors() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = QueryAction::Delete {
         name: "nonexistent".into(),
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err(), "deleting unknown query should fail");
     let err = result.unwrap_err().to_string();
     assert!(
@@ -297,8 +368,16 @@ async fn query_list_empty() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = QueryAction::List;
-    let (result, _output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a6 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a6.writers(),
+    )
+    .await;
+    let _output = __io_a6.out_str().to_string();
     assert!(result.is_ok(), "query list failed: {result:?}");
 }
 
@@ -308,8 +387,16 @@ async fn query_run_executes_saved_query() {
 
     // First, save a query
     let save_action = product_save_action("run-test", "TestProduct", 10);
-    let (result, _) =
-        capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
+    let mut __io_a7 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &save_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a7.writers(),
+    )
+    .await;
+    let _ = __io_a7.out_str().to_string();
     assert!(result.is_ok(), "query save failed: {result:?}");
 
     // Mock the bug search endpoint
@@ -329,10 +416,19 @@ async fn query_run_executes_saved_query() {
 
     // Run the saved query
     let run_action = run_action("run-test");
-    let (result, output) =
-        capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
+    let mut __io_a8 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &run_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a8.writers(),
+    )
+    .await;
+    let output = __io_a8.out_str().to_string();
     assert!(result.is_ok(), "query run failed: {result:?}");
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed[0]["id"], 1);
     assert_eq!(parsed[0]["product"], "TestProduct");
 }
@@ -342,8 +438,16 @@ async fn query_run_with_limit_override() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     let save_action = product_save_action("override-test", "TestProduct", 100);
-    let (result, _) =
-        capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
+    let mut __io_a9 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &save_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a9.writers(),
+    )
+    .await;
+    let _ = __io_a9.out_str().to_string();
     assert!(result.is_ok());
 
     Mock::given(method("GET"))
@@ -371,8 +475,16 @@ async fn query_run_with_limit_override() {
         qa_contact: vec![],
         url: vec![],
     };
-    let (result, _) =
-        capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
+    let mut __io_a10 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &run_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a10.writers(),
+    )
+    .await;
+    let _ = __io_a10.out_str().to_string();
     assert!(result.is_ok(), "query run with override failed: {result:?}");
 }
 
@@ -405,8 +517,16 @@ async fn query_save_existing_entry_reports_updated() {
         qa_contact: vec![],
         url: vec![],
     };
-    let (result, _) =
-        capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
+    let mut __io_a11 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &save_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a11.writers(),
+    )
+    .await;
+    let _ = __io_a11.out_str().to_string();
     assert!(result.is_ok());
 
     let update_action = QueryAction::Save {
@@ -434,16 +554,19 @@ async fn query_save_existing_entry_reports_updated() {
         qa_contact: vec![],
         url: vec![],
     };
-    let (result, output) = capture_stdout(super::execute(
+    let mut __io4 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
         &update_action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io4.writers(),
+    )
     .await;
+    let output = __io4.out_str().to_string();
     assert!(result.is_ok());
 
-    let parsed = crate::test_helpers::extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["name"], "existing");
     assert_eq!(parsed["action"], "updated");
 
@@ -456,33 +579,51 @@ async fn query_save_existing_entry_reports_updated() {
 
 #[tokio::test]
 async fn query_delete_removes_saved_query() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let save_action = product_save_action("delete-me", "Firefox", 1);
-    let (result, _) =
-        capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
+    let mut __io_a12 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &save_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a12.writers(),
+    )
+    .await;
+    let _ = __io_a12.out_str().to_string();
     assert!(result.is_ok());
 
     let delete_action = QueryAction::Delete {
         name: "delete-me".into(),
     };
-    let (result, output) = capture_stdout(super::execute(
+    let mut __io5 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
         &delete_action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io5.writers(),
+    )
     .await;
+    let output = __io5.out_str().to_string();
     assert!(result.is_ok());
-    let parsed = crate::test_helpers::extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["action"], "deleted");
 
     let show_action = QueryAction::Show {
         name: "delete-me".into(),
     };
-    let err = super::execute(&show_action, None, OutputFormat::Json, None)
-        .await
-        .unwrap_err();
+    let err = super::execute(
+        &show_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await
+    .unwrap_err();
     assert!(err.to_string().contains("not found"));
 }
 
@@ -515,8 +656,16 @@ async fn query_run_applies_field_overrides() {
         qa_contact: vec![],
         url: vec![],
     };
-    let (result, _) =
-        capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
+    let mut __io_a13 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &save_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a13.writers(),
+    )
+    .await;
+    let _ = __io_a13.out_str().to_string();
     assert!(result.is_ok());
 
     Mock::given(method("GET"))
@@ -545,17 +694,33 @@ async fn query_run_applies_field_overrides() {
         qa_contact: vec![],
         url: vec![],
     };
-    let (result, _) =
-        capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
+    let mut __io_a14 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &run_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a14.writers(),
+    )
+    .await;
+    let _ = __io_a14.out_str().to_string();
     assert!(result.is_ok());
 }
 
 #[tokio::test]
 async fn query_run_unknown_errors() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = run_action("nonexistent");
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err(), "running unknown query should fail");
     let err = result.unwrap_err().to_string();
     assert!(
@@ -569,23 +734,31 @@ async fn query_list_table_sorts_entries_by_name() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     for name in ["zzz", "aaa"] {
-        let (result, _) = capture_stdout(super::execute(
+        let mut __io6 = crate::test_helpers::CapturedIo::new();
+        let result = super::execute(
             &save_action(name),
             None,
             OutputFormat::Json,
             None,
-        ))
+            &mut __io6.writers(),
+        )
         .await;
+        let _ = __io6.out_str().to_string();
         assert!(result.is_ok());
     }
 
-    let (result, _) = capture_stdout(super::execute(
+    let mut __io7 = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(
         &QueryAction::List,
         None,
         OutputFormat::Table,
         None,
-    ))
+        &mut __io7.writers(),
+    )
     .await;
+
+    let _ = __io7.out_str().to_string();
     assert!(result.is_ok());
 
     let config = Config::load().unwrap();
@@ -596,6 +769,7 @@ async fn query_list_table_sorts_entries_by_name() {
 
 #[tokio::test]
 async fn query_show_unknown_errors() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let err = super::execute(
@@ -605,6 +779,7 @@ async fn query_show_unknown_errors() {
         None,
         OutputFormat::Json,
         None,
+        &mut __cap_io.writers(),
     )
     .await
     .unwrap_err();
@@ -618,8 +793,16 @@ async fn query_run_with_server_override() {
 
     // Save a query that records a different server than the mock
     let save_action = save_action("server-test");
-    let (result, _) =
-        capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
+    let mut __io_a15 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &save_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a15.writers(),
+    )
+    .await;
+    let _ = __io_a15.out_str().to_string();
     assert!(result.is_ok());
 
     // Patch the saved query to have a different server
@@ -654,8 +837,16 @@ async fn query_run_with_server_override() {
         qa_contact: vec![],
         url: vec![],
     };
-    let (result, _) =
-        capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
+    let mut __io_a16 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &run_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a16.writers(),
+    )
+    .await;
+    let _ = __io_a16.out_str().to_string();
     assert!(
         result.is_ok(),
         "query run with server override failed: {result:?}"
@@ -674,8 +865,16 @@ async fn query_save_from_url() {
         "{server_url}/buglist.cgi?product=TestProduct&f1=qa_contact&o1=changedfrom&v1=user%40example.com"
     );
     let action = url_save_action("url-query", url);
-    let (result, _output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a17 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a17.writers(),
+    )
+    .await;
+    let _output = __io_a17.out_str().to_string();
     assert!(result.is_ok(), "query save --from-url failed: {result:?}");
 
     let config = Config::load().unwrap();
@@ -688,6 +887,7 @@ async fn query_save_from_url() {
 
 #[tokio::test]
 async fn query_save_rejects_malformed_created_since() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = QueryAction::Save {
@@ -716,7 +916,14 @@ async fn query_save_rejects_malformed_created_since() {
         url: vec![],
     };
 
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     let err = result.unwrap_err();
     assert_eq!(err.exit_code(), 7);
     assert!(err.to_string().contains("--created-since"));
@@ -751,7 +958,16 @@ async fn query_save_stores_canonical_date_forms() {
         qa_contact: vec![],
         url: vec![],
     };
-    let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io8 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io8.writers(),
+    )
+    .await;
+    let _ = __io8.out_str().to_string();
     result.unwrap();
 
     let cfg = Config::load().unwrap();
@@ -791,7 +1007,16 @@ async fn query_save_accepts_date_only_query() {
         qa_contact: vec![],
         url: vec![],
     };
-    let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io9 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io9.writers(),
+    )
+    .await;
+    let _ = __io9.out_str().to_string();
     result.unwrap();
     let cfg = Config::load().unwrap();
     assert!(cfg.queries.contains_key("date-only"));
@@ -799,6 +1024,7 @@ async fn query_save_accepts_date_only_query() {
 
 #[tokio::test]
 async fn query_run_rejects_malformed_created_since_override() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     // Pre-seed a saved query so the not-found branch doesn't fire first.
@@ -829,7 +1055,14 @@ async fn query_run_rejects_malformed_created_since_override() {
         qa_contact: vec![],
         url: vec![],
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     let err = result.unwrap_err();
     assert_eq!(err.exit_code(), 7);
     assert!(err.to_string().contains("--created-since"));
@@ -864,8 +1097,16 @@ async fn query_save_persists_158_field_filters() {
         qa_contact: vec!["qa@example.com".into()],
         url: vec!["github.com/foo".into()],
     };
-    let (result, _output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a18 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a18.writers(),
+    )
+    .await;
+    let _output = __io_a18.out_str().to_string();
     assert!(result.is_ok(), "save failed: {result:?}");
 
     let cfg = Config::load().unwrap();
@@ -913,8 +1154,16 @@ async fn query_save_accepts_whiteboard_only_filter() {
         qa_contact: vec![],
         url: vec![],
     };
-    let (result, _output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a19 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a19.writers(),
+    )
+    .await;
+    let _output = __io_a19.out_str().to_string();
     assert!(
         result.is_ok(),
         "save with whiteboard-only filter must succeed: {result:?}"
@@ -951,8 +1200,16 @@ async fn query_run_overrides_replace_saved_field_filters() {
         qa_contact: vec![],
         url: vec![],
     };
-    let (result, _) =
-        capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
+    let mut __io_a20 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &save_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a20.writers(),
+    )
+    .await;
+    let _ = __io_a20.out_str().to_string();
     assert!(result.is_ok(), "save failed: {result:?}");
 
     // The run must hit the wire with the override values, not the saved ones.
@@ -982,8 +1239,16 @@ async fn query_run_overrides_replace_saved_field_filters() {
         qa_contact: vec![],
         url: vec![],
     };
-    let (result, _) =
-        capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
+    let mut __io_a21 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &run_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a21.writers(),
+    )
+    .await;
+    let _ = __io_a21.out_str().to_string();
     assert!(result.is_ok(), "run failed: {result:?}");
 }
 
@@ -1016,8 +1281,16 @@ async fn query_run_empty_override_keeps_saved_field_filter() {
         qa_contact: vec![],
         url: vec![],
     };
-    let (result, _) =
-        capture_stdout(super::execute(&save_action, None, OutputFormat::Json, None)).await;
+    let mut __io_a22 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &save_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a22.writers(),
+    )
+    .await;
+    let _ = __io_a22.out_str().to_string();
     assert!(result.is_ok(), "save failed: {result:?}");
 
     // No --whiteboard override on run: the saved value must reach the wire.
@@ -1030,7 +1303,15 @@ async fn query_run_empty_override_keeps_saved_field_filter() {
         .await;
 
     let run_action = run_action("saved-wb");
-    let (result, _) =
-        capture_stdout(super::execute(&run_action, None, OutputFormat::Json, None)).await;
+    let mut __io_a23 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &run_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a23.writers(),
+    )
+    .await;
+    let _ = __io_a23.out_str().to_string();
     assert!(result.is_ok(), "run failed: {result:?}");
 }

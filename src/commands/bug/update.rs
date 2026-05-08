@@ -1,7 +1,7 @@
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
-use crate::output::{self, ActionResult, BatchFailure, BatchResult, ResourceKind};
+use crate::output::{self, ActionResult, BatchFailure, BatchResult, ResourceKind, Writers};
 use crate::types::{IdListUpdate, OutputFormat, StringListUpdate, UpdateBugParams};
 
 const FLAG_KEYWORDS_ADD: &str = "--keywords-add";
@@ -160,45 +160,45 @@ async fn update_single(
     id: u64,
     params: &UpdateBugParams,
     format: OutputFormat,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
-    use std::io::Write;
     client.update_bug(id, params).await?;
     match format {
         OutputFormat::Json => {
-            output::print_result(&ActionResult::updated(id, ResourceKind::Bug), "", format);
+            output::write_result(
+                &ActionResult::updated(id, ResourceKind::Bug),
+                "",
+                format,
+                w.out,
+            );
         }
         OutputFormat::Table => {
             let suffix = comment_suffix(params.comment.is_some());
-            let _ = writeln!(std::io::stdout(), "Updated bug #{id}{suffix}");
+            let _ = writeln!(w.out, "Updated bug #{id}{suffix}");
         }
     }
     Ok(())
 }
 
-fn print_batch_result(batch: &BatchResult, format: OutputFormat, with_comment: bool) {
-    use std::io::Write;
+fn write_batch_result(
+    batch: &BatchResult,
+    format: OutputFormat,
+    with_comment: bool,
+    w: &mut Writers<'_>,
+) {
     match format {
         OutputFormat::Json => {
-            output::print_result(batch, "", format);
+            output::write_result(batch, "", format, w.out);
         }
         OutputFormat::Table => {
             if !batch.succeeded.is_empty() {
                 let ids_str: Vec<String> =
                     batch.succeeded.iter().map(|id| format!("#{id}")).collect();
                 let suffix = comment_suffix(with_comment);
-                let _ = writeln!(
-                    std::io::stdout(),
-                    "Updated bugs: {}{suffix}",
-                    ids_str.join(", ")
-                );
+                let _ = writeln!(w.out, "Updated bugs: {}{suffix}", ids_str.join(", "));
             }
             for f in &batch.failed {
-                let _ = writeln!(
-                    std::io::stderr(),
-                    "Failed to update bug #{}: {}",
-                    f.id,
-                    f.error
-                );
+                let _ = writeln!(w.err, "Failed to update bug #{}: {}", f.id, f.error);
             }
         }
     }
@@ -209,6 +209,7 @@ async fn update_batch(
     ids: &[u64],
     params: &UpdateBugParams,
     format: OutputFormat,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     let mut succeeded = Vec::new();
     let mut failed = Vec::new();
@@ -222,7 +223,7 @@ async fn update_batch(
         }
     }
     let batch = BatchResult::new(succeeded, failed);
-    print_batch_result(&batch, format, params.comment.is_some());
+    write_batch_result(&batch, format, params.comment.is_some(), w);
     if !batch.failed.is_empty() {
         return Err(crate::error::BzrError::BatchPartialFailure {
             succeeded: batch.succeeded.len(),
@@ -236,12 +237,13 @@ pub(super) async fn handle(
     client: &BugzillaClient,
     action: &BugAction,
     format: OutputFormat,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     let (ids, params) = build_update_params(action)?;
     if ids.len() == 1 {
-        update_single(client, ids[0], &params, format).await
+        update_single(client, ids[0], &params, format, w).await
     } else {
-        update_batch(client, &ids, &params, format).await
+        update_batch(client, &ids, &params, format, w).await
     }
 }
 

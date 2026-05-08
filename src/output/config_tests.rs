@@ -190,19 +190,16 @@ fn make_display_info(
     }
 }
 
-async fn capture_print_config(view: &ConfigView) -> String {
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_config(view, OutputFormat::Table);
-    })
-    .await;
-    output
+fn capture_write_config(view: &ConfigView) -> String {
+    let mut buf = Vec::new();
+    write_config(view, OutputFormat::Table, &mut buf);
+    String::from_utf8(buf).unwrap()
 }
 
-#[tokio::test]
-async fn print_config_renders_table_for_inline_server() {
-    // Exercises print_config / print_server / print_api_key with the
+#[test]
+fn write_config_renders_table_for_inline_server() {
+    // Exercises write_config / write_server / write_api_key with the
     // inline credential branch.
-    let _lock = crate::ENV_LOCK.lock().await;
     let mut info = make_display_info("https://bugzilla.example", "12345678...", "inline", true);
     info.email = Some("admin@example.com".into());
     info.auth_method = Some(AuthMethod::Header);
@@ -213,7 +210,7 @@ async fn print_config_renders_table_for_inline_server() {
         default_server: Some("prod".into()),
         servers,
     };
-    let output = capture_print_config(&view).await;
+    let output = capture_write_config(&view);
     for needle in [
         "Config file: /tmp/bzr/config.toml",
         "Default server: prod",
@@ -228,10 +225,9 @@ async fn print_config_renders_table_for_inline_server() {
     }
 }
 
-#[tokio::test]
-async fn print_config_renders_env_and_keyring_labels() {
-    // Exercises both non-inline branches of print_api_key in one run.
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_config_renders_env_and_keyring_labels() {
+    // Exercises both non-inline branches of write_api_key in one run.
     let mut servers = std::collections::BTreeMap::new();
     servers.insert(
         "env-srv".into(),
@@ -246,21 +242,20 @@ async fn print_config_renders_env_and_keyring_labels() {
         default_server: None,
         servers,
     };
-    let output = capture_print_config(&view).await;
+    let output = capture_write_config(&view);
     for needle in ["API Key Env", "BZR_API_KEY", "Keyring", "bzr/kr-srv"] {
         assert!(output.contains(needle), "missing {needle:?} in output");
     }
 }
 
-#[tokio::test]
-async fn print_config_renders_empty_servers_message() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_config_renders_empty_servers_message() {
     let view = ConfigView {
         config_file: "/tmp/bzr/config.toml".into(),
         default_server: None,
         servers: std::collections::BTreeMap::new(),
     };
-    let output = capture_print_config(&view).await;
+    let output = capture_write_config(&view);
     assert!(output.contains("No servers configured."));
 }
 

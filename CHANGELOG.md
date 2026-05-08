@@ -46,6 +46,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   matching `bzl-attachment-add`. The read-side `Attachment` struct
   also exposes `is_patch` so `bzr attachment list --json` includes the
   field. Closes #166.
+- `bzr attachment download` accepts multiple attachment IDs and
+  `--bug <ID>` (repeatable) for bulk downloads into per-bug
+  subdirectories at `<out-dir>/<bug-id>/<att-id>.<file_name>`. New
+  `--out-dir` flag (default `./attachments`). Legacy single-ID `--out`
+  shape unchanged. (#167)
 - `bzr bug list`, `bzr query save`, and `bzr query run` accept
   `--created-since <DATE>` and `--changed-since <DATE>` filters
   for Bugzilla's `creation_time` and `last_change_time` fields.
@@ -92,6 +97,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- CI flake in stdout-capture tests caused by process-wide `dup2`
+  fd-1 redirection racing concurrent writers (#192). Tests now own
+  per-test buffers via `CapturedIo`; production output flows through
+  explicit `Writers` from `main` to the formatters. The fd
+  redirection construct (`capture_stdout`, `extract_json`, the
+  `dup`/`dup2`/`close` extern block) has been removed from
+  `test_helpers.rs`, so the race class is structurally impossible.
 - `bzr bug search` no longer falls back to XML-RPC when the REST
   search returns an empty result for a free-text query
   (quicksearch or summary). Previously, an empty REST result with

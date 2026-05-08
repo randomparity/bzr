@@ -1,7 +1,13 @@
 #![expect(clippy::unwrap_used)]
 
-use super::print_group_info;
+use super::write_group_info;
 use crate::types::{GroupInfo, GroupMember, OutputFormat};
+
+fn capture(format: OutputFormat, group: &GroupInfo) -> String {
+    let mut buf = Vec::new();
+    write_group_info(group, format, &mut buf);
+    String::from_utf8(buf).unwrap()
+}
 
 fn make_group_info() -> GroupInfo {
     GroupInfo {
@@ -62,17 +68,10 @@ fn print_group_info_json_no_members() {
     assert!(parsed["membership"].as_array().unwrap().is_empty());
 }
 
-// ── capture_stdout-based formatter tests ─────────────────────────
-
-#[cfg(unix)]
-#[tokio::test]
-async fn print_group_info_table_renders_all_fields() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_group_info_table_renders_all_fields() {
     let group = make_group_info();
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_group_info(&group, OutputFormat::Table);
-    })
-    .await;
+    let output = capture(OutputFormat::Table, &group);
     assert!(output.contains("Group"));
     assert!(output.contains("core-team"));
     assert!(output.contains("Description"));
@@ -86,10 +85,8 @@ async fn print_group_info_table_renders_all_fields() {
     assert!(output.contains("Alice Smith"));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_group_info_table_no_members_omits_section() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_group_info_table_no_members_omits_section() {
     let group = GroupInfo {
         id: 6,
         name: "empty-group".into(),
@@ -97,20 +94,14 @@ async fn print_group_info_table_no_members_omits_section() {
         is_active: false,
         membership: vec![],
     };
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_group_info(&group, OutputFormat::Table);
-    })
-    .await;
+    let output = capture(OutputFormat::Table, &group);
     assert!(output.contains("empty-group"));
     assert!(output.contains("No"));
-    // No members section should be absent
     assert!(!output.contains("Members"));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_group_info_table_member_with_no_real_name_renders_empty_parens() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_group_info_table_member_with_no_real_name_renders_empty_parens() {
     let group = GroupInfo {
         id: 7,
         name: "ünicode-group".into(),
@@ -123,26 +114,18 @@ async fn print_group_info_table_member_with_no_real_name_renders_empty_parens() 
             email: None,
         }],
     };
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_group_info(&group, OutputFormat::Table);
-    })
-    .await;
+    let output = capture(OutputFormat::Table, &group);
     assert!(output.contains("ünicode-group"));
     assert!(output.contains("déscription"));
     assert!(output.contains("héllo"));
     assert!(output.contains("()"));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_group_info_json_via_print() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_group_info_json_via_write() {
     let group = make_group_info();
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_group_info(&group, OutputFormat::Json);
-    })
-    .await;
-    let parsed = crate::test_helpers::extract_json(&output);
+    let output = capture(OutputFormat::Json, &group);
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
     assert_eq!(parsed["id"], 5);
     assert_eq!(parsed["name"], "core-team");
     assert_eq!(parsed["membership"][0]["name"], "alice");

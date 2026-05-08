@@ -1,9 +1,16 @@
 #![expect(clippy::unwrap_used)]
 
-use crate::types::{Classification, ClassificationProduct};
+use super::write_classification;
+use crate::types::{Classification, ClassificationProduct, OutputFormat};
+
+fn capture(format: OutputFormat, c: &Classification) -> String {
+    let mut buf = Vec::new();
+    write_classification(c, format, &mut buf);
+    String::from_utf8(buf).unwrap()
+}
 
 #[test]
-fn print_classification_json() {
+fn write_classification_json() {
     let classification = Classification {
         id: 1,
         name: "Software".into(),
@@ -49,7 +56,7 @@ fn classification_text_format_fields() {
 }
 
 #[test]
-fn print_classification_json_empty_products() {
+fn write_classification_json_empty_products() {
     let classification = Classification {
         id: 2,
         name: "Empty".into(),
@@ -62,10 +69,8 @@ fn print_classification_json_empty_products() {
     assert_eq!(parsed["products"].as_array().unwrap().len(), 0);
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_classification_table_omits_products_header_when_empty() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_classification_table_omits_products_header_when_empty() {
     let with_products = Classification {
         id: 1,
         name: "Software".into(),
@@ -85,14 +90,8 @@ async fn print_classification_table_omits_products_header_when_empty() {
         products: vec![],
     };
 
-    let ((), populated) = crate::test_helpers::capture_stdout(async {
-        super::print_classification(&with_products, crate::types::OutputFormat::Table);
-    })
-    .await;
-    let ((), bare) = crate::test_helpers::capture_stdout(async {
-        super::print_classification(&empty, crate::types::OutputFormat::Table);
-    })
-    .await;
+    let populated = capture(OutputFormat::Table, &with_products);
+    let bare = capture(OutputFormat::Table, &empty);
 
     assert!(populated.contains("Products"));
     assert!(populated.contains("Widget"));

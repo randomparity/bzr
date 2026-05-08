@@ -129,41 +129,42 @@ fn print_users_json_includes_all_fields() {
     assert_eq!(parsed[0]["groups"][0]["name"], "admin");
 }
 
-// ── capture_stdout-based formatter tests ─────────────────────────
+fn capture_users(format: OutputFormat, users: &[BugzillaUser]) -> String {
+    let mut buf = Vec::new();
+    write_users(users, format, &mut buf);
+    String::from_utf8(buf).unwrap()
+}
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_users_table_empty_says_none_found() {
-    let _lock = crate::ENV_LOCK.lock().await;
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_users(&[], OutputFormat::Table);
-    })
-    .await;
+fn capture_users_detailed(format: OutputFormat, users: &[BugzillaUser]) -> String {
+    let mut buf = Vec::new();
+    write_users_detailed(users, format, &mut buf);
+    String::from_utf8(buf).unwrap()
+}
+
+fn capture_whoami(format: OutputFormat, whoami: &WhoamiResponse) -> String {
+    let mut buf = Vec::new();
+    write_whoami(whoami, format, &mut buf);
+    String::from_utf8(buf).unwrap()
+}
+
+#[test]
+fn write_users_table_empty_says_none_found() {
+    let output = capture_users(OutputFormat::Table, &[]);
     assert!(output.contains("No users found."));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_users_json_empty_renders_empty_array() {
-    let _lock = crate::ENV_LOCK.lock().await;
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_users(&[], OutputFormat::Json);
-    })
-    .await;
-    let parsed = crate::test_helpers::extract_json(&output);
+#[test]
+fn write_users_json_empty_renders_empty_array() {
+    let output = capture_users(OutputFormat::Json, &[]);
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
     assert!(parsed.is_array());
     assert_eq!(parsed.as_array().unwrap().len(), 0);
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_users_table_renders_basic_columns() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_users_table_renders_basic_columns() {
     let users = vec![make_user(1, "alice", Some(true), vec!["admin"])];
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_users(&users, OutputFormat::Table);
-    })
-    .await;
+    let output = capture_users(OutputFormat::Table, &users);
     assert!(output.contains("ID"));
     assert!(output.contains("NAME"));
     assert!(output.contains("REAL NAME"));
@@ -171,48 +172,34 @@ async fn print_users_table_renders_basic_columns() {
     assert!(output.contains("alice"));
     assert!(output.contains("alice Real"));
     assert!(output.contains("alice@example.com"));
-    // Basic table excludes detail columns
     assert!(!output.contains("CAN LOGIN"));
     assert!(!output.contains("GROUPS"));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_users_detailed_table_empty_says_none_found() {
-    let _lock = crate::ENV_LOCK.lock().await;
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_users_detailed(&[], OutputFormat::Table);
-    })
-    .await;
+#[test]
+fn write_users_detailed_table_empty_says_none_found() {
+    let output = capture_users_detailed(OutputFormat::Table, &[]);
     assert!(output.contains("No users found."));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_users_detailed_table_renders_groups_and_login() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_users_detailed_table_renders_groups_and_login() {
     let users = vec![
         make_user(1, "alice", Some(true), vec!["admin", "dev"]),
         make_user(2, "bob", Some(false), vec![]),
         make_user(3, "carol", None, vec!["testers"]),
     ];
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_users_detailed(&users, OutputFormat::Table);
-    })
-    .await;
+    let output = capture_users_detailed(OutputFormat::Table, &users);
     assert!(output.contains("CAN LOGIN"));
     assert!(output.contains("GROUPS"));
     assert!(output.contains("Yes"));
     assert!(output.contains("No"));
     assert!(output.contains("admin, dev"));
-    // None can_login renders as "-"
     assert!(output.contains('-'));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_users_detailed_handles_missing_real_name_and_email() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_users_detailed_handles_missing_real_name_and_email() {
     let users = vec![BugzillaUser {
         id: 99,
         name: "minimal".into(),
@@ -221,21 +208,11 @@ async fn print_users_detailed_handles_missing_real_name_and_email() {
         groups: vec![],
         can_login: None,
     }];
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_users_detailed(&users, OutputFormat::Table);
-    })
-    .await;
-    // Locate the data row that contains the user's name. Both
-    // can_login (None → "-") and groups (empty → "-") render as a
-    // dash in that row, anchored to the field semantics rather than
-    // the table border.
+    let output = capture_users_detailed(OutputFormat::Table, &users);
     let data_row = output
         .lines()
         .find(|line| line.contains("minimal"))
         .expect("data row for 'minimal' user");
-    // Two "-" cells (can_login + groups) should appear inside the
-    // row. Border separators are `|`, so count the dashes that fall
-    // between bars.
     let dash_cells = data_row
         .split('|')
         .filter(|cell| cell.trim() == "-")
@@ -246,15 +223,10 @@ async fn print_users_detailed_handles_missing_real_name_and_email() {
     );
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_whoami_table_renders_fields() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_whoami_table_renders_fields() {
     let whoami = make_whoami();
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_whoami(&whoami, OutputFormat::Table);
-    })
-    .await;
+    let output = capture_whoami(OutputFormat::Table, &whoami);
     assert!(output.contains("User"));
     assert!(output.contains("testuser"));
     assert!(output.contains("Test User"));
@@ -262,39 +234,26 @@ async fn print_whoami_table_renders_fields() {
     assert!(output.contains("42"));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_whoami_json_via_print() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_whoami_json_via_write() {
     let whoami = make_whoami();
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_whoami(&whoami, OutputFormat::Json);
-    })
-    .await;
-    let parsed = crate::test_helpers::extract_json(&output);
+    let output = capture_whoami(OutputFormat::Json, &whoami);
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
     assert_eq!(parsed["id"], 42);
     assert_eq!(parsed["name"], "testuser");
     assert_eq!(parsed["real_name"], "Test User");
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_whoami_table_renders_dashes_for_missing_fields() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_whoami_table_renders_dashes_for_missing_fields() {
     let whoami = WhoamiResponse {
         id: 1,
         name: "bot".into(),
         real_name: None,
         login: None,
     };
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_whoami(&whoami, OutputFormat::Table);
-    })
-    .await;
+    let output = capture_whoami(OutputFormat::Table, &whoami);
     assert!(output.contains("bot"));
-    // print_optional_field renders "  {label:<12}  -" for missing
-    // values. Anchor to those exact field renderings so the assertion
-    // fails when rendering changes, not when borders do.
     assert!(
         output.contains("Name          -"),
         "expected dashed Name field, got: {output}"

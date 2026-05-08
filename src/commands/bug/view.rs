@@ -1,13 +1,16 @@
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
-use crate::output::{self, print_multi_bug_view, BugViewFailure, MultiBugRow, MultiBugViewResult};
+use crate::output::{
+    self, write_multi_bug_view, BugViewFailure, MultiBugRow, MultiBugViewResult, Writers,
+};
 use crate::types::{Bug, OutputFormat};
 
 pub(super) async fn handle(
     client: &BugzillaClient,
     action: &BugAction,
     format: OutputFormat,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     let BugAction::View {
         ids,
@@ -29,11 +32,11 @@ pub(super) async fn handle(
     let exc = exclude_fields.as_deref();
 
     if ids.len() == 1 {
-        view_single(client, &ids[0], inc, exc, format).await
+        view_single(client, &ids[0], inc, exc, format, w).await
     } else if *permissive {
-        view_batch_permissive(client, ids, inc, exc, format).await
+        view_batch_permissive(client, ids, inc, exc, format, w).await
     } else {
-        view_batch_strict(client, ids, inc, exc, format).await
+        view_batch_strict(client, ids, inc, exc, format, w).await
     }
 }
 
@@ -43,35 +46,29 @@ async fn view_single(
     include_fields: Option<&str>,
     exclude_fields: Option<&str>,
     format: OutputFormat,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     let bug = client.get_bug(id, include_fields, exclude_fields).await?;
-    output::print_bug_detail(&bug, format);
+    output::write_bug_detail(&bug, format, w.out);
     Ok(())
 }
 
-/// Multi-ID strict path. On any failure, bail with that error's code.
-///
-/// Output handling differs by format:
-/// - Table: eager-print each detail block as it arrives. Preceding
-///   successes have already been written to stdout when the failure
-///   propagates.
-/// - JSON: collect all bugs in a buffer; emit nothing on failure
-///   (concatenated bare JSON objects would be invalid).
 async fn view_batch_strict(
     client: &BugzillaClient,
     ids: &[String],
     include_fields: Option<&str>,
     exclude_fields: Option<&str>,
     format: OutputFormat,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     match format {
         OutputFormat::Table => {
             for (i, id) in ids.iter().enumerate() {
                 let bug = client.get_bug(id, include_fields, exclude_fields).await?;
                 if i > 0 {
-                    output::write_divider(&mut std::io::stdout());
+                    output::write_divider(w.out);
                 }
-                output::print_bug_detail(&bug, format);
+                output::write_bug_detail(&bug, format, w.out);
             }
             Ok(())
         }
@@ -85,25 +82,19 @@ async fn view_batch_strict(
                 bugs,
                 failed: Vec::new(),
             };
-            output::print_result(&result, "", format);
+            output::write_result(&result, "", format, w.out);
             Ok(())
         }
     }
 }
 
-/// Multi-ID permissive path.
-///
-/// Per-resource errors (`BzrError::is_bug_get_per_resource()` — i.e.
-/// `NotFound` and `Bug.get` codes 100/101/102) are recorded as inline
-/// failure rows. Anything else (transport, auth, security, server
-/// internal, unrecognized `Api` codes) bails immediately with that
-/// error's exit code.
 async fn view_batch_permissive(
     client: &BugzillaClient,
     ids: &[String],
     include_fields: Option<&str>,
     exclude_fields: Option<&str>,
     format: OutputFormat,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     match format {
         OutputFormat::Table => {
@@ -120,7 +111,7 @@ async fn view_batch_permissive(
                     Err(e) => return Err(e),
                 }
             }
-            print_multi_bug_view(&rows);
+            write_multi_bug_view(&rows, w.out);
         }
         OutputFormat::Json => {
             let mut bugs: Vec<Bug> = Vec::with_capacity(ids.len());
@@ -137,7 +128,7 @@ async fn view_batch_permissive(
                     Err(e) => return Err(e),
                 }
             }
-            output::print_result(&MultiBugViewResult { bugs, failed }, "", format);
+            output::write_result(&MultiBugViewResult { bugs, failed }, "", format, w.out);
         }
     }
     Ok(())
