@@ -255,6 +255,41 @@ fn write_bug_detail_table_renders_all_fields() {
 }
 
 #[test]
+fn write_bug_detail_table_shows_dupe_of() {
+    let bug = crate::types::Bug {
+        id: 42,
+        summary: "duplicate source".into(),
+        status: "RESOLVED".into(),
+        resolution: Some("DUPLICATE".into()),
+        dupe_of: Some(99),
+        product: None,
+        component: None,
+        version: None,
+        assigned_to: None,
+        priority: None,
+        severity: None,
+        creation_time: None,
+        last_change_time: None,
+        creator: None,
+        url: None,
+        whiteboard: None,
+        keywords: vec![],
+        blocks: vec![],
+        depends_on: vec![],
+        cc: vec![],
+        op_sys: None,
+        rep_platform: None,
+    };
+    let mut out = Vec::new();
+
+    super::write_bug_detail(&bug, crate::types::OutputFormat::Table, &mut out);
+
+    let output = String::from_utf8(out).unwrap();
+    assert!(output.contains("Duplicate of"));
+    assert!(output.contains("99"));
+}
+
+#[test]
 fn write_bug_detail_table_handles_minimal_bug() {
     let bug = Bug {
         id: 1,
