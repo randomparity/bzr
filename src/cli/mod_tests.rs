@@ -353,6 +353,29 @@ fn parse_bug_update_with_flags() {
 }
 
 #[test]
+fn parse_bug_update_with_dupe_of() {
+    let cli = Cli::try_parse_from(["bzr", "bug", "update", "42", "--dupe-of", "99"]).unwrap();
+    match cli.command {
+        Commands::Bug {
+            action:
+                BugAction::Update {
+                    ids,
+                    dupe_of,
+                    status,
+                    resolution,
+                    ..
+                },
+        } => {
+            assert_eq!(ids, vec![42]);
+            assert_eq!(dupe_of, Some(99));
+            assert!(status.is_none());
+            assert!(resolution.is_none());
+        }
+        _ => panic!("expected Bug Update"),
+    }
+}
+
+#[test]
 fn parse_bug_update_with_comment() {
     let cli = Cli::try_parse_from(["bzr", "bug", "update", "42", "--comment", "see #99"]).unwrap();
     match cli.command {

@@ -524,11 +524,15 @@ pub enum BugAction {
     /// Update one or more bugs with the same set of changes.
     ///
     /// Accepts one or more bug IDs as positional args. All field
-    /// changes (`--status`, `--resolution`, `--assignee`,
+    /// changes (`--status`, `--resolution`, `--dupe-of`, `--assignee`,
     /// `--priority`, `--severity`, `--summary`, `--whiteboard`) are
     /// applied to every bug in the list. When closing a bug, both
     /// `--status` and `--resolution` typically need to be set
     /// together (e.g. `--status RESOLVED --resolution FIXED`).
+    ///
+    /// `--dupe-of <ID>` marks the bug as a duplicate. Bugzilla sets
+    /// status/resolution automatically; do not set status/resolution
+    /// just to make the duplicate transition.
     ///
     /// `--flag` accepts Bugzilla flag syntax: `name?`, `name+`,
     /// `name-`, `name?(user@example.com)`, or `name?,!` to clear.
@@ -553,6 +557,7 @@ pub enum BugAction {
     /// Examples:
     ///
     ///   bzr bug update 100 --status RESOLVED --resolution FIXED
+    ///   bzr bug update 100 --dupe-of 200
     ///   bzr bug update 100 200 300 --priority high --flag review+
     ///   bzr bug update 100 --status RESOLVED --resolution FIXED \
     ///     --comment "Fixed by patch in #200"
@@ -589,6 +594,12 @@ pub enum BugAction {
         /// Discover valid values via `bzr field list resolution`.
         #[arg(long)]
         resolution: Option<String>,
+        /// Mark this bug as a duplicate of another bug.
+        ///
+        /// Forwards Bugzilla's `dupe_of` field. Bugzilla handles the
+        /// status/resolution transition to RESOLVED/DUPLICATE.
+        #[arg(long, value_name = "ID")]
+        dupe_of: Option<u64>,
         /// Reassign
         #[arg(long)]
         assignee: Option<String>,

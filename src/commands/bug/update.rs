@@ -85,6 +85,7 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
         ids,
         status,
         resolution,
+        dupe_of: _,
         assignee,
         priority,
         severity,
