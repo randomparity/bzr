@@ -1,13 +1,14 @@
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
-use crate::output;
+use crate::output::{self, Writers};
 use crate::types::{OutputFormat, SearchParams};
 
 pub(super) async fn handle(
     client: &BugzillaClient,
     action: &BugAction,
     format: OutputFormat,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     let BugAction::My {
         created,
@@ -60,7 +61,7 @@ pub(super) async fn handle(
         }
     }
 
-    output::print_bugs(&all_bugs, format);
+    output::write_bugs(&all_bugs, format, w.out);
     Ok(())
 }
 

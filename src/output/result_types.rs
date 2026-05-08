@@ -1,14 +1,23 @@
+use std::io::Write;
+
 use serde::Serialize;
 
-use super::formatting::print_json;
+use super::formatting::write_json;
 use crate::types::OutputFormat;
 
 // ── Result output ───────────────────────────────────────────────────
 
-pub fn print_result(value: &(impl Serialize + ?Sized), human_message: &str, format: OutputFormat) {
+pub fn write_result<W: Write + ?Sized>(
+    value: &(impl Serialize + ?Sized),
+    human_message: &str,
+    format: OutputFormat,
+    out: &mut W,
+) {
     match format {
-        OutputFormat::Json => print_json(value),
-        OutputFormat::Table => println!("{human_message}"),
+        OutputFormat::Json => write_json(value, out),
+        OutputFormat::Table => {
+            let _ = writeln!(out, "{human_message}");
+        }
     }
 }
 

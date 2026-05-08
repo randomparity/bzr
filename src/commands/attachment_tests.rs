@@ -5,7 +5,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::AttachmentAction;
-use crate::test_helpers::{capture_stdout, extract_json, setup_test_env};
+use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 #[tokio::test]
@@ -35,10 +35,18 @@ async fn attachment_list_returns_attachments() {
         .await;
 
     let action = AttachmentAction::List { bug_id: 42 };
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a1 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a1.writers(),
+    )
+    .await;
+    let output = __io_a1.out_str().to_string();
     assert!(result.is_ok());
-    let parsed = extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed[0]["id"], 100);
     assert_eq!(parsed[0]["file_name"], "patch.diff");
     assert_eq!(parsed[0]["creator"], "dev@test.com");
@@ -46,6 +54,7 @@ async fn attachment_list_returns_attachments() {
 
 #[tokio::test]
 async fn attachment_list_api_error_propagates() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -55,12 +64,20 @@ async fn attachment_list_api_error_propagates() {
         .await;
 
     let action = AttachmentAction::List { bug_id: 999 };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err());
 }
 
 #[tokio::test]
 async fn attachment_upload_api_error_propagates() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, tmp) = setup_test_env().await;
 
     Mock::given(method("POST"))
@@ -87,7 +104,14 @@ async fn attachment_upload_api_error_propagates() {
         comment_private: false,
         flag: vec![],
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(
@@ -98,6 +122,7 @@ async fn attachment_upload_api_error_propagates() {
 
 #[tokio::test]
 async fn attachment_download_api_error_propagates() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -116,7 +141,14 @@ async fn attachment_download_api_error_propagates() {
         out: None,
         out_dir: "./attachments".into(),
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err());
 }
 
@@ -144,16 +176,25 @@ async fn attachment_upload_returns_id() {
         comment_private: false,
         flag: vec![],
     };
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a2 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a2.writers(),
+    )
+    .await;
+    let output = __io_a2.out_str().to_string();
     assert!(result.is_ok());
-    let parsed = extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["id"], 200);
 }
 
 #[tokio::test]
 async fn attachment_upload_with_comment_includes_comment_in_request() {
     use wiremock::matchers::body_string_contains;
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, tmp) = setup_test_env().await;
 
     Mock::given(method("POST"))
@@ -178,7 +219,14 @@ async fn attachment_upload_with_comment_includes_comment_in_request() {
         comment_private: false,
         flag: vec![],
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(
         result.is_ok(),
         "upload with --comment should succeed: {result:?}"
@@ -188,6 +236,7 @@ async fn attachment_upload_with_comment_includes_comment_in_request() {
 #[tokio::test]
 async fn attachment_upload_with_is_patch_defaults_content_type_to_text_plain() {
     use wiremock::matchers::body_string_contains;
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, tmp) = setup_test_env().await;
 
     Mock::given(method("POST"))
@@ -213,7 +262,14 @@ async fn attachment_upload_with_is_patch_defaults_content_type_to_text_plain() {
         comment_private: false,
         flag: vec![],
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(
         result.is_ok(),
         "upload --is-patch should succeed: {result:?}"
@@ -223,6 +279,7 @@ async fn attachment_upload_with_is_patch_defaults_content_type_to_text_plain() {
 #[tokio::test]
 async fn attachment_upload_is_patch_with_explicit_content_type_keeps_content_type() {
     use wiremock::matchers::body_string_contains;
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, tmp) = setup_test_env().await;
 
     Mock::given(method("POST"))
@@ -250,7 +307,14 @@ async fn attachment_upload_is_patch_with_explicit_content_type_keeps_content_typ
         comment_private: false,
         flag: vec![],
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(
         result.is_ok(),
         "upload --is-patch with explicit ct should succeed: {result:?}"
@@ -279,10 +343,18 @@ async fn attachment_update_succeeds() {
         is_private: None,
         flag: vec![],
     };
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a3 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a3.writers(),
+    )
+    .await;
+    let output = __io_a3.out_str().to_string();
     assert!(result.is_ok());
-    let parsed = extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["id"], 99);
     assert_eq!(parsed["action"], "updated");
 }
@@ -352,6 +424,7 @@ fn guess_content_type_case_insensitive() {
 #[tokio::test]
 async fn attachment_upload_with_comment_private_flips_privacy() {
     use wiremock::matchers::body_string_contains;
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, tmp) = setup_test_env().await;
 
     let upload_file = tmp.path().join("p.diff");
@@ -404,7 +477,14 @@ async fn attachment_upload_with_comment_private_flips_privacy() {
         comment_private: true,
         flag: vec![],
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(
         result.is_ok(),
         "two-call workflow should succeed: {result:?}"
@@ -413,6 +493,7 @@ async fn attachment_upload_with_comment_private_flips_privacy() {
 
 #[tokio::test]
 async fn attachment_upload_comment_private_without_comment_is_input_error() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, tmp) = setup_test_env().await;
     let upload_file = tmp.path().join("p.diff");
     std::fs::write(&upload_file, "x").unwrap();
@@ -428,7 +509,14 @@ async fn attachment_upload_comment_private_without_comment_is_input_error() {
         comment_private: true,
         flag: vec![],
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(matches!(
         result,
         Err(crate::error::BzrError::InputValidation(_))
@@ -437,6 +525,7 @@ async fn attachment_upload_comment_private_without_comment_is_input_error() {
 
 #[tokio::test]
 async fn attachment_upload_comment_private_partial_failure_propagates_error() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, tmp) = setup_test_env().await;
 
     let upload_file = tmp.path().join("p.diff");
@@ -479,12 +568,20 @@ async fn attachment_upload_comment_private_partial_failure_propagates_error() {
         comment_private: true,
         flag: vec![],
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err(), "step-2 failure should propagate");
 }
 
 #[tokio::test]
 async fn attachment_upload_comment_private_no_matching_comment_is_data_integrity_error() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, tmp) = setup_test_env().await;
 
     let upload_file = tmp.path().join("p.diff");
@@ -525,7 +622,14 @@ async fn attachment_upload_comment_private_no_matching_comment_is_data_integrity
         comment_private: true,
         flag: vec![],
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(matches!(
         result,
         Err(crate::error::BzrError::DataIntegrity(_))
@@ -534,13 +638,21 @@ async fn attachment_upload_comment_private_no_matching_comment_is_data_integrity
 
 #[tokio::test]
 async fn attachment_download_validation_rejects_no_ids_no_bugs() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let action = AttachmentAction::Download {
         ids: vec![],
         bug_ids: vec![],
         out: None,
         out_dir: "./attachments".into(),
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err(), "expected InputValidation");
     let msg = result.unwrap_err().to_string();
     assert!(
@@ -551,13 +663,21 @@ async fn attachment_download_validation_rejects_no_ids_no_bugs() {
 
 #[tokio::test]
 async fn attachment_download_validation_rejects_out_with_multiple_ids() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let action = AttachmentAction::Download {
         ids: vec![100, 200],
         bug_ids: vec![],
         out: Some("file.bin".into()),
         out_dir: "./attachments".into(),
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err(), "expected InputValidation");
     let msg = result.unwrap_err().to_string();
     assert!(
@@ -744,11 +864,21 @@ async fn attachment_download_batch_per_bug_writes_per_bug_subdir() {
         out_dir: out_dir.clone(),
     };
 
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a4 = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a4.writers(),
+    )
+    .await;
+
+    let output = __io_a4.out_str().to_string();
     assert!(result.is_ok(), "expected ok, got {result:?}");
 
-    let parsed = extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["summary"]["succeeded"], 2);
     assert_eq!(parsed["summary"]["failed"], 0);
     assert_eq!(parsed["summary"]["total_bytes"], 5 + 13);
@@ -787,7 +917,11 @@ async fn attachment_download_batch_collision_filenames_resolved_by_att_id_prefix
         out_dir,
     };
 
-    let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut __io.writers()).await;
+
+    let _ = __io.out_str().to_string();
     assert!(result.is_ok(), "expected ok, got {result:?}");
 
     let p1 = tmp.path().join("12345").join("9876.trace.log");
@@ -829,11 +963,21 @@ async fn attachment_download_batch_mixed_bug_and_positional_ids() {
         out_dir: out_dir.clone(),
     };
 
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a5 = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a5.writers(),
+    )
+    .await;
+
+    let output = __io_a5.out_str().to_string();
     assert!(result.is_ok(), "expected ok, got {result:?}");
 
-    let parsed = extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["summary"]["succeeded"], 2);
     assert_eq!(parsed["bug_results"][0]["bug_id"], 12345);
     assert_eq!(parsed["attachment_results"][0]["attachment_id"], 4242);
@@ -864,10 +1008,20 @@ async fn attachment_download_batch_empty_bug_zero_files_success() {
         out_dir,
     };
 
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a6 = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a6.writers(),
+    )
+    .await;
+
+    let output = __io_a6.out_str().to_string();
     assert!(result.is_ok(), "expected ok, got {result:?}");
-    let parsed = extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["bug_results"][0]["status"], "ok");
     assert_eq!(parsed["summary"]["succeeded"], 0);
     assert_eq!(parsed["summary"]["failed"], 0);
@@ -895,13 +1049,23 @@ async fn attachment_download_batch_legacy_single_id_unchanged() {
         out_dir: "./attachments".into(),
     };
 
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a7 = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a7.writers(),
+    )
+    .await;
+
+    let output = __io_a7.out_str().to_string();
     assert!(result.is_ok(), "expected ok, got {result:?}");
 
     // Legacy path emits DownloadResult, not AttachmentBatchResult — the
     // JSON has `id` at the top level, not `summary`.
-    let parsed = extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["id"], 9876);
     assert_eq!(parsed["size"].as_u64().unwrap_or(0), 6);
     assert!(out_path.exists());
@@ -941,14 +1105,24 @@ async fn attachment_download_batch_bug_not_found_partial_failure() {
         out_dir,
     };
 
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a8 = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a8.writers(),
+    )
+    .await;
+
+    let output = __io_a8.out_str().to_string();
     assert!(result.is_err(), "expected BatchPartialFailure");
     let err = result.unwrap_err();
     let exit = err.exit_code();
     assert_eq!(exit, 11, "expected exit 11, got {exit}: {err}");
 
-    let parsed = extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["summary"]["succeeded"], 1);
     assert_eq!(parsed["summary"]["failed"], 1);
     let bugs = parsed["bug_results"].as_array().unwrap();
@@ -960,6 +1134,7 @@ async fn attachment_download_batch_bug_not_found_partial_failure() {
 
 #[tokio::test]
 async fn attachment_download_batch_all_targets_fail_still_exit_11() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -979,7 +1154,14 @@ async fn attachment_download_batch_all_targets_fail_still_exit_11() {
         out: None,
         out_dir,
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err(), "expected BatchPartialFailure");
     let err = result.unwrap_err();
     let exit = err.exit_code();
@@ -1011,7 +1193,18 @@ async fn attachment_download_batch_obsolete_attachments_included() {
         out_dir: out_dir.clone(),
     };
 
-    let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io2 = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io2.writers(),
+    )
+    .await;
+
+    let _ = __io2.out_str().to_string();
     assert!(result.is_ok(), "expected ok, got {result:?}");
     assert!(tmp.path().join("12345").join("9876.old.patch").exists());
 }
@@ -1052,7 +1245,18 @@ async fn attachment_download_batch_data_missing_falls_back_via_get() {
         out_dir,
     };
 
-    let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io3 = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io3.writers(),
+    )
+    .await;
+
+    let _ = __io3.out_str().to_string();
     assert!(result.is_ok(), "expected ok, got {result:?}");
     let written = std::fs::read(tmp.path().join("12345").join("9876.patch.diff")).unwrap();
     assert_eq!(written, b"fallback");
@@ -1061,6 +1265,7 @@ async fn attachment_download_batch_data_missing_falls_back_via_get() {
 #[cfg(unix)]
 #[tokio::test]
 async fn attachment_download_batch_top_level_out_dir_unwritable_fails_fast() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     // /dev/null/attachments — create_dir_all on a path under /dev/null
@@ -1071,7 +1276,14 @@ async fn attachment_download_batch_top_level_out_dir_unwritable_fails_fast() {
         out: None,
         out_dir: "/dev/null/attachments".into(),
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err(), "expected Io");
     let err = result.unwrap_err();
     let exit = err.exit_code();

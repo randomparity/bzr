@@ -16,8 +16,8 @@ pub mod config;
 pub mod credentials;
 pub mod error;
 pub(crate) mod http;
-#[expect(clippy::print_stdout, clippy::expect_used)]
-pub(crate) mod output;
+#[expect(clippy::expect_used)]
+pub mod output;
 pub(crate) mod tls;
 pub mod types;
 pub mod url_parser;
@@ -28,51 +28,57 @@ pub mod xmlrpc;
 ///
 /// This is the shared dispatch logic used by both the binary (`main.rs`)
 /// and integration tests, ensuring they exercise the same code paths.
-pub async fn dispatch(cli: &cli::Cli, format: types::OutputFormat) -> error::Result<()> {
+pub async fn dispatch(
+    cli: &cli::Cli,
+    format: types::OutputFormat,
+    w: &mut output::Writers<'_>,
+) -> error::Result<()> {
     let api = cli.api;
     let server = cli.server.as_deref();
 
     match &cli.command {
-        cli::Commands::Bug { action } => commands::bug::execute(action, server, format, api).await,
+        cli::Commands::Bug { action } => {
+            commands::bug::execute(action, server, format, api, w).await
+        }
         cli::Commands::Comment { action } => {
-            commands::comment::execute(action, server, format, api).await
+            commands::comment::execute(action, server, format, api, w).await
         }
         cli::Commands::Attachment { action } => {
-            commands::attachment::execute(action, server, format, api).await
+            commands::attachment::execute(action, server, format, api, w).await
         }
         cli::Commands::Config { action } => {
-            commands::config::execute(action, server, format, api).await
+            commands::config::execute(action, server, format, api, w).await
         }
         cli::Commands::Product { action } => {
-            commands::product::execute(action, server, format, api).await
+            commands::product::execute(action, server, format, api, w).await
         }
         cli::Commands::Field { action } => {
-            commands::field::execute(action, server, format, api).await
+            commands::field::execute(action, server, format, api, w).await
         }
         cli::Commands::User { action } => {
-            commands::user::execute(action, server, format, api).await
+            commands::user::execute(action, server, format, api, w).await
         }
         cli::Commands::Group { action } => {
-            commands::group::execute(action, server, format, api).await
+            commands::group::execute(action, server, format, api, w).await
         }
         cli::Commands::Whoami { action } => {
             let whoami_action = action.as_ref().unwrap_or(&cli::WhoamiAction::Show);
-            commands::whoami::execute(whoami_action, server, format, api).await
+            commands::whoami::execute(whoami_action, server, format, api, w).await
         }
         cli::Commands::Server { action } => {
-            commands::server::execute(action, server, format, api).await
+            commands::server::execute(action, server, format, api, w).await
         }
         cli::Commands::Classification { action } => {
-            commands::classification::execute(action, server, format, api).await
+            commands::classification::execute(action, server, format, api, w).await
         }
         cli::Commands::Component { action } => {
-            commands::component::execute(action, server, format, api).await
+            commands::component::execute(action, server, format, api, w).await
         }
         cli::Commands::Template { action } => {
-            commands::template::execute(action, server, format, api).await
+            commands::template::execute(action, server, format, api, w).await
         }
         cli::Commands::Query { action } => {
-            commands::query::execute(action, server, format, api).await
+            commands::query::execute(action, server, format, api, w).await
         }
     }
 }

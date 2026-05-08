@@ -6,7 +6,7 @@
 use crate::cli::QueryAction;
 use crate::config::Config;
 use crate::error::{BzrError, Result};
-use crate::output;
+use crate::output::{self, Writers};
 use crate::types::{OutputFormat, QueryKind, SavedQuery};
 
 /// Translate clap's empty-Vec sentinel into `None` so
@@ -25,17 +25,18 @@ pub async fn execute(
     server: Option<&str>,
     format: OutputFormat,
     api: Option<crate::types::ApiMode>,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     match action {
-        QueryAction::Save { .. } => handle_save(action, format),
-        QueryAction::List => handle_list(format),
-        QueryAction::Show { .. } => handle_show(action, format),
-        QueryAction::Delete { .. } => handle_delete(action, format),
-        QueryAction::Run { .. } => handle_run(action, server, format, api).await,
+        QueryAction::Save { .. } => handle_save(action, format, w),
+        QueryAction::List => handle_list(format, w),
+        QueryAction::Show { .. } => handle_show(action, format, w),
+        QueryAction::Delete { .. } => handle_delete(action, format, w),
+        QueryAction::Run { .. } => handle_run(action, server, format, api, w).await,
     }
 }
 
-fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
+fn handle_save(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
     let QueryAction::Save {
         name,
         from_url,
@@ -139,17 +140,17 @@ fn handle_save(action: &QueryAction, format: OutputFormat) -> Result<()> {
     config.save()?;
 
     let verb = if is_update { "Updated" } else { "Saved" };
-    output::print_query_saved(name, verb, format);
+    output::write_query_saved(name, verb, format, w.out);
     Ok(())
 }
 
-fn handle_list(format: OutputFormat) -> Result<()> {
+fn handle_list(format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
     let config = Config::load()?;
-    output::print_query_list(&config.queries, format);
+    output::write_query_list(&config.queries, format, w.out);
     Ok(())
 }
 
-fn handle_show(action: &QueryAction, format: OutputFormat) -> Result<()> {
+fn handle_show(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
     let QueryAction::Show { name } = action else {
         unreachable!()
     };
@@ -158,11 +159,11 @@ fn handle_show(action: &QueryAction, format: OutputFormat) -> Result<()> {
         .queries
         .get(name.as_str())
         .ok_or_else(|| BzrError::config(format!("query '{name}' not found")))?;
-    output::print_query_detail(name, query, format);
+    output::write_query_detail(name, query, format, w.out);
     Ok(())
 }
 
-fn handle_delete(action: &QueryAction, format: OutputFormat) -> Result<()> {
+fn handle_delete(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
     let QueryAction::Delete { name } = action else {
         unreachable!()
     };
@@ -172,7 +173,7 @@ fn handle_delete(action: &QueryAction, format: OutputFormat) -> Result<()> {
     }
     config.save()?;
 
-    output::print_query_saved(name, "Deleted", format);
+    output::write_query_saved(name, "Deleted", format, w.out);
     Ok(())
 }
 
@@ -181,6 +182,7 @@ async fn handle_run(
     server: Option<&str>,
     format: OutputFormat,
     api: Option<crate::types::ApiMode>,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     let QueryAction::Run {
         name,
@@ -237,7 +239,7 @@ async fn handle_run(
 
     let client = super::shared::connect_and_configure(effective_server, api).await?;
     let bugs = client.search_bugs(&params).await?;
-    output::print_bugs(&bugs, format);
+    output::write_bugs(&bugs, format, w.out);
     Ok(())
 }
 

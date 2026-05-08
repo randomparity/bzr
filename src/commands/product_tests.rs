@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::ProductAction;
-use crate::test_helpers::{capture_stdout, extract_json, setup_test_env};
+use crate::test_helpers::setup_test_env;
 use crate::types::{OutputFormat, ProductListType};
 
 #[tokio::test]
@@ -32,15 +32,24 @@ async fn product_list_returns_products() {
     let action = ProductAction::List {
         r#type: ProductListType::Accessible,
     };
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a1 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a1.writers(),
+    )
+    .await;
+    let output = __io_a1.out_str().to_string();
     assert!(result.is_ok());
-    let parsed = extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed[0]["name"], "TestProduct");
 }
 
 #[tokio::test]
 async fn product_list_http_500_returns_error() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -52,7 +61,14 @@ async fn product_list_http_500_returns_error() {
     let action = ProductAction::List {
         r#type: ProductListType::Accessible,
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(
@@ -84,10 +100,18 @@ async fn product_view_returns_detail() {
     let action = ProductAction::View {
         name: "Firefox".to_string(),
     };
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a2 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a2.writers(),
+    )
+    .await;
+    let output = __io_a2.out_str().to_string();
     assert!(result.is_ok());
-    let parsed = extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["name"], "Firefox");
     assert_eq!(parsed["description"], "Web browser");
 }
@@ -108,10 +132,18 @@ async fn product_create_returns_id() {
         version: "1.0".to_string(),
         is_open: true,
     };
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a3 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a3.writers(),
+    )
+    .await;
+    let output = __io_a3.out_str().to_string();
     assert!(result.is_ok());
-    let parsed = extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["id"], 5);
 }
 
@@ -133,9 +165,17 @@ async fn product_update_succeeds() {
         default_milestone: None,
         is_open: None,
     };
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a4 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a4.writers(),
+    )
+    .await;
+    let output = __io_a4.out_str().to_string();
     assert!(result.is_ok());
-    let parsed = extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["action"], "updated");
 }

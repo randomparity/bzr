@@ -1,8 +1,10 @@
+#![expect(clippy::unwrap_used)]
+
 use wiremock::matchers::{body_partial_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::BugAction;
-use crate::test_helpers::{capture_stdout, setup_test_env};
+use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 #[tokio::test]
@@ -97,15 +99,14 @@ async fn bug_clone_copies_fields() {
         no_cc: false,
         no_keywords: false,
     };
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
-        &action,
-        None,
-        OutputFormat::Json,
-        None,
-    ))
-    .await;
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+    let output = __io.out_str().to_string();
     assert!(result.is_ok(), "bug clone failed: {result:?}");
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["id"], 200);
     assert_eq!(parsed["action"], "created");
 }
@@ -182,12 +183,15 @@ async fn bug_clone_no_comment_skips_comment() {
         no_cc: false,
         no_keywords: false,
     };
-    let (result, _output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io2 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io2.writers(),
+    )
     .await;
+    let _output = __io2.out_str().to_string();
     assert!(result.is_ok(), "bug clone --no-comment failed: {result:?}");
 }

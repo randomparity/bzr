@@ -1,7 +1,9 @@
+#![expect(clippy::unwrap_used)]
+
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
-use crate::test_helpers::{capture_stdout, setup_test_env};
+use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 #[tokio::test]
@@ -19,15 +21,21 @@ async fn whoami_returns_user_info() {
         .mount(&mock)
         .await;
 
-    let (result, output) = capture_stdout(super::execute(
+    let mut __io = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(
         &crate::cli::WhoamiAction::Show,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io.writers(),
+    )
     .await;
+
+    let output = __io.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["id"], 1);
     assert_eq!(parsed["name"], "admin@test.com");
     assert_eq!(parsed["real_name"], "Admin User");
@@ -35,6 +43,7 @@ async fn whoami_returns_user_info() {
 
 #[tokio::test]
 async fn whoami_http_500_returns_error() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -48,6 +57,7 @@ async fn whoami_http_500_returns_error() {
         None,
         OutputFormat::Json,
         None,
+        &mut __cap_io.writers(),
     )
     .await;
     assert!(result.is_err());

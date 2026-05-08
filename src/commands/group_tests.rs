@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::GroupAction;
-use crate::test_helpers::{capture_stdout, setup_test_env};
+use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 #[tokio::test]
@@ -29,10 +29,19 @@ async fn group_view_returns_info() {
     let action = GroupAction::View {
         group: "admin".to_string(),
     };
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a1 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a1.writers(),
+    )
+    .await;
+    let output = __io_a1.out_str().to_string();
     assert!(result.is_ok(), "group_view failed: {result:?}");
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["id"], 1);
     assert_eq!(parsed["name"], "admin");
     assert_eq!(parsed["description"], "Admin group");
@@ -54,16 +63,26 @@ async fn group_create_sends_post() {
         description: "A test group".into(),
         is_active: true,
     };
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a2 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a2.writers(),
+    )
+    .await;
+    let output = __io_a2.out_str().to_string();
     assert!(result.is_ok(), "group create failed: {result:?}");
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["action"], "created");
     assert_eq!(parsed["id"], 5);
 }
 
 #[tokio::test]
 async fn group_update_sends_put() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
@@ -81,12 +100,20 @@ async fn group_update_sends_put() {
         description: Some("Updated description".into()),
         is_active: None,
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "group update failed: {result:?}");
 }
 
 #[tokio::test]
 async fn group_add_user_sends_put() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     // add_user_to_group sends PUT /rest/user/{user} with group membership body
@@ -104,12 +131,20 @@ async fn group_add_user_sends_put() {
         group: "admin".into(),
         user: "alice@test.com".into(),
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "group add_user failed: {result:?}");
 }
 
 #[tokio::test]
 async fn group_remove_user_sends_put() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
@@ -126,12 +161,20 @@ async fn group_remove_user_sends_put() {
         group: "admin".into(),
         user: "bob@test.com".into(),
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "group remove_user failed: {result:?}");
 }
 
 #[tokio::test]
 async fn group_list_users_returns_members() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -149,12 +192,20 @@ async fn group_list_users_returns_members() {
         group: "admin".to_string(),
         details: false,
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "group list_users failed: {result:?}");
 }
 
 #[tokio::test]
 async fn group_list_users_with_details() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -171,7 +222,14 @@ async fn group_list_users_with_details() {
         group: "admin".to_string(),
         details: true,
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(
         result.is_ok(),
         "group list_users --details failed: {result:?}"
@@ -180,6 +238,7 @@ async fn group_list_users_with_details() {
 
 #[tokio::test]
 async fn group_view_http_500_returns_error() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -191,7 +250,14 @@ async fn group_view_http_500_returns_error() {
     let action = GroupAction::View {
         group: "admin".to_string(),
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(
@@ -202,6 +268,7 @@ async fn group_view_http_500_returns_error() {
 
 #[tokio::test]
 async fn group_view_malformed_json_returns_error() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("POST"))
@@ -213,6 +280,13 @@ async fn group_view_malformed_json_returns_error() {
     let action = GroupAction::View {
         group: "admin".to_string(),
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err());
 }

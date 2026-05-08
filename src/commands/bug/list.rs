@@ -1,7 +1,7 @@
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
-use crate::output;
+use crate::output::{self, Writers};
 use crate::types::{OutputFormat, SearchParams};
 use crate::validation::parse_optional_date;
 
@@ -9,6 +9,7 @@ pub(super) async fn handle(
     client: &BugzillaClient,
     action: &BugAction,
     format: OutputFormat,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     let BugAction::List {
         product,
@@ -69,7 +70,7 @@ pub(super) async fn handle(
         ..Default::default()
     };
     let bugs = client.search_bugs(&params).await?;
-    output::print_bugs(&bugs, format);
+    output::write_bugs(&bugs, format, w.out);
     Ok(())
 }
 
