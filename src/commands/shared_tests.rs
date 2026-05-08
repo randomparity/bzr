@@ -8,6 +8,20 @@ use crate::test_helpers::setup_test_env;
 use crate::tls::TlsConfig;
 use crate::ENV_LOCK;
 
+fn connect_context(
+    server_name: &str,
+    url: &str,
+    api_override: Option<crate::types::ApiMode>,
+) -> super::ConnectContext {
+    super::ConnectContext {
+        server_name: server_name.to_string(),
+        url: url.to_string(),
+        api_key: "test-key".to_string(),
+        email: None,
+        api_override,
+    }
+}
+
 #[tokio::test]
 async fn connect_client_returns_client() {
     let (_lock, mock, _tmp) = setup_test_env().await;
@@ -304,16 +318,8 @@ api_key = "test-key"
 
     let mut config = crate::config::Config::load().unwrap();
     let tls_config = TlsConfig::default();
-    let result = super::detect_with_tofu_fallback(
-        "test",
-        &server.uri(),
-        "test-key",
-        None,
-        None,
-        &tls_config,
-        &mut config,
-    )
-    .await;
+    let ctx = connect_context("test", &server.uri(), None);
+    let result = super::detect_with_tofu_fallback(&ctx, &tls_config, &mut config).await;
     assert!(result.is_ok(), "normal path should succeed");
 }
 
@@ -486,16 +492,8 @@ async fn detect_and_build_client_persists_and_returns_client() {
 
     let mut config = crate::config::Config::load().unwrap();
     let tls_config = TlsConfig::default();
-    let result = super::detect_and_build_client(
-        "test",
-        &server.uri(),
-        "test-key",
-        None,
-        None,
-        &tls_config,
-        &mut config,
-    )
-    .await;
+    let ctx = connect_context("test", &server.uri(), None);
+    let result = super::detect_and_build_client(&ctx, &tls_config, &mut config).await;
     assert!(result.is_ok(), "detect_and_build_client should succeed");
 
     // Verify the settings were persisted.
@@ -517,16 +515,8 @@ async fn detect_and_build_client_respects_api_override() {
 
     let mut config = crate::config::Config::load().unwrap();
     let tls_config = TlsConfig::default();
-    let result = super::detect_and_build_client(
-        "test",
-        &server.uri(),
-        "test-key",
-        None,
-        Some(crate::types::ApiMode::XmlRpc),
-        &tls_config,
-        &mut config,
-    )
-    .await;
+    let ctx = connect_context("test", &server.uri(), Some(crate::types::ApiMode::XmlRpc));
+    let result = super::detect_and_build_client(&ctx, &tls_config, &mut config).await;
     assert!(result.is_ok(), "api_override should still produce a client");
 }
 
@@ -542,15 +532,8 @@ async fn handle_tofu_returns_error_when_probe_fails() {
     write_config(&tmp, "https://127.0.0.1:1", "");
 
     let mut config = crate::config::Config::load().unwrap();
-    let result = super::handle_tofu(
-        "test",
-        "https://127.0.0.1:1",
-        "test-key",
-        None,
-        None,
-        &mut config,
-    )
-    .await;
+    let ctx = connect_context("test", "https://127.0.0.1:1", None);
+    let result = super::handle_tofu(&ctx, &mut config).await;
     assert!(
         result.is_err(),
         "handle_tofu should propagate probe failure"
@@ -572,12 +555,9 @@ async fn handle_pin_rotation_rejects_in_noninteractive() {
     );
 
     let mut config = crate::config::Config::load().unwrap();
+    let ctx = connect_context("test", "https://example.test", None);
     let result = super::handle_pin_rotation(
-        "test",
-        "https://example.test",
-        "test-key",
-        None,
-        None,
+        &ctx,
         "sha256//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
         "sha256//BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=",
         "CN=New",
@@ -610,16 +590,8 @@ async fn detect_with_tofu_fallback_propagates_auth_errors() {
     // and return BzrError::Auth, which is not a TLS error -> propagates.
     let mut config = crate::config::Config::load().unwrap();
     let tls_config = TlsConfig::default();
-    let result = super::detect_with_tofu_fallback(
-        "test",
-        &server.uri(),
-        "test-key",
-        None,
-        None,
-        &tls_config,
-        &mut config,
-    )
-    .await;
+    let ctx = connect_context("test", &server.uri(), None);
+    let result = super::detect_with_tofu_fallback(&ctx, &tls_config, &mut config).await;
     assert!(result.is_err(), "auth failure should propagate");
 }
 
@@ -803,17 +775,9 @@ async fn classify_and_handle_tls_failure_returns_none_for_non_tls_error() {
 
     let mut config = crate::config::Config::default();
     let tls_config = TlsConfig::default();
-    let result = super::classify_and_handle_tls_failure(
-        &bzr_err,
-        "test",
-        "http://127.0.0.1:1/unreachable",
-        "key",
-        None,
-        None,
-        &tls_config,
-        &mut config,
-    )
-    .await;
+    let ctx = connect_context("test", "http://127.0.0.1:1/unreachable", None);
+    let result =
+        super::classify_and_handle_tls_failure(&bzr_err, &ctx, &tls_config, &mut config).await;
     match result {
         Ok(None) => {}
         Ok(Some(_)) => panic!("expected Ok(None) for non-TLS error, got Some(client)"),

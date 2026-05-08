@@ -3,7 +3,7 @@ use crate::client::DetectedServerSettings;
 use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::tls::TlsConfig;
-use crate::types::ApiMode;
+use crate::types::{ApiMode, AuthMethod};
 
 /// Persist detected server settings to config.
 /// Always persists `auth_method` when `persist_auth` is true.
@@ -83,6 +83,40 @@ fn extract_hostname(url: &str) -> String {
         .unwrap_or_else(|| url.to_string())
 }
 
+struct ConnectContext {
+    server_name: String,
+    url: String,
+    api_key: String,
+    email: Option<String>,
+    api_override: Option<ApiMode>,
+}
+
+impl ConnectContext {
+    fn email_hint(&self) -> Option<&str> {
+        self.email.as_deref()
+    }
+
+    fn hostname(&self) -> String {
+        extract_hostname(&self.url)
+    }
+
+    fn build_client(
+        &self,
+        auth_method: AuthMethod,
+        api_mode: ApiMode,
+        tls_config: &TlsConfig,
+    ) -> Result<BugzillaClient> {
+        BugzillaClient::new(crate::client::BugzillaClientConfig {
+            base_url: &self.url,
+            credential: &self.api_key,
+            auth_method,
+            api_mode,
+            email_hint: self.email_hint(),
+            tls_config,
+        })
+    }
+}
+
 /// Handle the TOFU flow: probe the server certificate, prompt the user,
 /// and if accepted, retry detection and build the client.
 // Mutation testing: this function only fires after a terminal-stdin
@@ -90,23 +124,17 @@ fn extract_hostname(url: &str) -> String {
 // exclude_re does not reliably match `delete field` mutations on struct
 // expressions, so the function-level attribute is required.
 #[cfg_attr(test, mutants::skip)]
-async fn handle_tofu(
-    server_name: &str,
-    url: &str,
-    api_key: &str,
-    email: Option<&str>,
-    api_override: Option<ApiMode>,
-    config: &mut Config,
-) -> Result<BugzillaClient> {
-    let hostname = extract_hostname(url);
-    let (fingerprint, issuer, issuer_der) = crate::tls::tofu::probe_server_cert(url).await?;
+async fn handle_tofu(ctx: &ConnectContext, config: &mut Config) -> Result<BugzillaClient> {
+    let hostname = ctx.hostname();
+    let (fingerprint, issuer, issuer_der) = crate::tls::tofu::probe_server_cert(&ctx.url).await?;
 
-    let decision = crate::tls::tofu::prompt_tofu(server_name, &hostname, &fingerprint, &issuer)?;
+    let decision =
+        crate::tls::tofu::prompt_tofu(&ctx.server_name, &hostname, &fingerprint, &issuer)?;
 
     let tls_config = match decision {
         Some(true) => {
             // "always" — persist pin to config
-            if let Some(srv) = config.servers.get_mut(server_name) {
+            if let Some(srv) = config.servers.get_mut(&ctx.server_name) {
                 srv.tls_pin_sha256 = Some(fingerprint.clone());
                 srv.tls_pin_issuer = Some(issuer.clone());
                 srv.tls_pin_issuer_der.clone_from(&issuer_der);
@@ -116,7 +144,7 @@ async fn handle_tofu(
                 pin_sha256: Some(fingerprint),
                 pin_issuer: Some(issuer),
                 pin_issuer_der: issuer_der,
-                server_name: Some(server_name.to_string()),
+                server_name: Some(ctx.server_name.clone()),
                 ..Default::default()
             }
         }
@@ -126,7 +154,7 @@ async fn handle_tofu(
                 pin_sha256: Some(fingerprint),
                 pin_issuer: Some(issuer),
                 pin_issuer_der: issuer_der,
-                server_name: Some(server_name.to_string()),
+                server_name: Some(ctx.server_name.clone()),
                 ..Default::default()
             }
         }
@@ -139,39 +167,25 @@ async fn handle_tofu(
         }
     };
 
-    detect_and_build_client(
-        server_name,
-        url,
-        api_key,
-        email,
-        api_override,
-        &tls_config,
-        config,
-    )
-    .await
+    detect_and_build_client(ctx, &tls_config, config).await
 }
 
 /// Handle pin mismatch (certificate rotated but issuer unchanged):
 /// use the fingerprint and issuer parsed from the `PIN_MISMATCH` error,
 /// prompt the user, and if accepted, update the pin and retry.
 // Mutation testing: same rationale as handle_tofu above.
-#[expect(clippy::too_many_arguments, reason = "private orchestration fn")]
 #[cfg_attr(test, mutants::skip)]
 async fn handle_pin_rotation(
-    server_name: &str,
-    url: &str,
-    api_key: &str,
-    email: Option<&str>,
-    api_override: Option<ApiMode>,
+    ctx: &ConnectContext,
     old_pin: &str,
     new_fingerprint: &str,
     new_issuer: &str,
     config: &mut Config,
 ) -> Result<BugzillaClient> {
-    let hostname = extract_hostname(url);
+    let hostname = ctx.hostname();
 
     let accepted = crate::tls::tofu::prompt_rotation(
-        server_name,
+        &ctx.server_name,
         &hostname,
         old_pin,
         new_fingerprint,
@@ -182,7 +196,8 @@ async fn handle_pin_rotation(
         return Err(BzrError::config(format!(
             "certificate rotation rejected for server \"{server_name}\". \
              To clear the pin: bzr config set-server {server_name} \
-             --tls-pin-clear"
+             --tls-pin-clear",
+            server_name = ctx.server_name
         )));
     }
 
@@ -191,9 +206,9 @@ async fn handle_pin_rotation(
     // ISSUER_CHANGED would have fired), the DER bytes are still valid.
     let existing_issuer_der = config
         .servers
-        .get(server_name)
+        .get(&ctx.server_name)
         .and_then(|s| s.tls_pin_issuer_der.clone());
-    if let Some(srv) = config.servers.get_mut(server_name) {
+    if let Some(srv) = config.servers.get_mut(&ctx.server_name) {
         srv.tls_pin_sha256 = Some(new_fingerprint.to_owned());
         srv.tls_pin_issuer = Some(new_issuer.to_owned());
         config.save()?;
@@ -203,44 +218,26 @@ async fn handle_pin_rotation(
         pin_sha256: Some(new_fingerprint.to_owned()),
         pin_issuer: Some(new_issuer.to_owned()),
         pin_issuer_der: existing_issuer_der,
-        server_name: Some(server_name.to_string()),
+        server_name: Some(ctx.server_name.clone()),
         ..Default::default()
     };
 
-    detect_and_build_client(
-        server_name,
-        url,
-        api_key,
-        email,
-        api_override,
-        &tls_config,
-        config,
-    )
-    .await
+    detect_and_build_client(ctx, &tls_config, config).await
 }
 
 /// Detect server settings and build a client, persisting the detected
 /// settings to config. Shared tail logic for TOFU and pin rotation flows.
 async fn detect_and_build_client(
-    server_name: &str,
-    url: &str,
-    api_key: &str,
-    email: Option<&str>,
-    api_override: Option<ApiMode>,
-    tls_config: &crate::tls::TlsConfig,
+    ctx: &ConnectContext,
+    tls_config: &TlsConfig,
     config: &mut Config,
 ) -> Result<BugzillaClient> {
-    let settings = crate::client::detect_server_settings(url, api_key, email, tls_config).await?;
-    persist_detected_settings(config, server_name, &settings, true)?;
-    let api_mode = api_override.unwrap_or(settings.api_mode);
-    BugzillaClient::new(crate::client::BugzillaClientConfig {
-        base_url: url,
-        credential: api_key,
-        auth_method: settings.auth_method,
-        api_mode,
-        email_hint: email,
-        tls_config,
-    })
+    let settings =
+        crate::client::detect_server_settings(&ctx.url, &ctx.api_key, ctx.email_hint(), tls_config)
+            .await?;
+    persist_detected_settings(config, &ctx.server_name, &settings, true)?;
+    let api_mode = ctx.api_override.unwrap_or(settings.api_mode);
+    ctx.build_client(settings.auth_method, api_mode, tls_config)
 }
 
 /// Classify a TLS-layer failure and dispatch to the appropriate prompt.
@@ -252,22 +249,17 @@ async fn detect_and_build_client(
 ///   it and let the actual command surface it with full context).
 /// - `Err(_)` — issuer changed (treated as a hard failure with a clear
 ///   remediation hint), or a downstream prompt/probe error.
-#[expect(clippy::too_many_arguments, reason = "private orchestration fn")]
 async fn classify_and_handle_tls_failure(
     err: &BzrError,
-    server_name: &str,
-    url: &str,
-    api_key: &str,
-    email: Option<&str>,
-    api_override: Option<ApiMode>,
+    ctx: &ConnectContext,
     tls_config: &TlsConfig,
     config: &mut Config,
 ) -> Result<Option<BugzillaClient>> {
     if should_offer_tofu(err, tls_config) {
-        let client = handle_tofu(server_name, url, api_key, email, api_override, config).await?;
+        let client = handle_tofu(ctx, config).await?;
         return Ok(Some(client));
     }
-    if let Some(pin_failure) = crate::tls::pin_failure::classify(err, server_name) {
+    if let Some(pin_failure) = crate::tls::pin_failure::classify(err, &ctx.server_name) {
         match pin_failure {
             crate::tls::pin_failure::TlsPinFailure::PinMismatch { error, new_issuer } => {
                 let BzrError::PinMismatch {
@@ -276,18 +268,8 @@ async fn classify_and_handle_tls_failure(
                 else {
                     unreachable!("pin failure classifier returned a non-pin mismatch error")
                 };
-                let client = handle_pin_rotation(
-                    server_name,
-                    url,
-                    api_key,
-                    email,
-                    api_override,
-                    &expected,
-                    &actual,
-                    &new_issuer,
-                    config,
-                )
-                .await?;
+                let client =
+                    handle_pin_rotation(ctx, &expected, &actual, &new_issuer, config).await?;
                 return Ok(Some(client));
             }
             crate::tls::pin_failure::TlsPinFailure::IssuerChanged(error) => return Err(error),
@@ -299,30 +281,22 @@ async fn classify_and_handle_tls_failure(
 /// Run `detect_server_settings` and handle TLS errors with TOFU or
 /// pin rotation flows as appropriate.
 async fn detect_with_tofu_fallback(
-    server_name: &str,
-    url: &str,
-    api_key: &str,
-    email: Option<&str>,
-    api_override: Option<ApiMode>,
+    ctx: &ConnectContext,
     tls_config: &TlsConfig,
     config: &mut Config,
 ) -> Result<DetectOrClient> {
-    let err = match crate::client::detect_server_settings(url, api_key, email, tls_config).await {
+    let err = match crate::client::detect_server_settings(
+        &ctx.url,
+        &ctx.api_key,
+        ctx.email_hint(),
+        tls_config,
+    )
+    .await
+    {
         Ok(settings) => return Ok(DetectOrClient::Settings(settings)),
         Err(e) => e,
     };
-    match classify_and_handle_tls_failure(
-        &err,
-        server_name,
-        url,
-        api_key,
-        email,
-        api_override,
-        tls_config,
-        config,
-    )
-    .await?
-    {
+    match classify_and_handle_tls_failure(&err, ctx, tls_config, config).await? {
         Some(client) => Ok(DetectOrClient::Client(client)),
         None => Err(err),
     }
@@ -352,15 +326,19 @@ pub async fn connect_and_configure(
     let mut config = Config::load()?;
     let (server_name, srv) = config.resolve_server(server)?;
     let tls_config = srv.tls_config(server_name);
-    let (server_name, url, api_key, email) = (
-        server_name.to_string(),
-        srv.url.clone(),
-        srv.resolve_api_key(server_name)?,
-        srv.email.clone(),
-    );
+    let ctx = ConnectContext {
+        server_name: server_name.to_string(),
+        url: srv.url.clone(),
+        api_key: srv.resolve_api_key(server_name)?,
+        email: srv.email.clone(),
+        api_override,
+    };
 
     if tls_config.insecure {
-        tracing::warn!("TLS certificate verification disabled for server '{server_name}'");
+        tracing::warn!(
+            "TLS certificate verification disabled for server '{}'",
+            ctx.server_name
+        );
     }
 
     // Three cases: fully cached, partially cached (auth only), or uncached.
@@ -373,18 +351,9 @@ pub async fn connect_and_configure(
             // rotated cert / issuer change is caught here rather than at
             // the first real API call.
             if !tls_config.insecure {
-                if let Err(e) = probe_tls(&url, &tls_config).await {
-                    if let Some(client) = classify_and_handle_tls_failure(
-                        &e,
-                        &server_name,
-                        &url,
-                        &api_key,
-                        email.as_deref(),
-                        api_override,
-                        &tls_config,
-                        &mut config,
-                    )
-                    .await?
+                if let Err(e) = probe_tls(&ctx.url, &tls_config).await {
+                    if let Some(client) =
+                        classify_and_handle_tls_failure(&e, &ctx, &tls_config, &mut config).await?
                     {
                         return Ok(client);
                     }
@@ -397,54 +366,25 @@ pub async fn connect_and_configure(
         }
         (Some(method), None) => {
             tracing::debug!("auth_method cached but api_mode missing; re-detecting");
-            match detect_with_tofu_fallback(
-                &server_name,
-                &url,
-                &api_key,
-                email.as_deref(),
-                api_override,
-                &tls_config,
-                &mut config,
-            )
-            .await?
-            {
+            match detect_with_tofu_fallback(&ctx, &tls_config, &mut config).await? {
                 DetectOrClient::Client(client) => return Ok(client),
                 DetectOrClient::Settings(settings) => {
-                    persist_detected_settings(&mut config, &server_name, &settings, false)?;
+                    persist_detected_settings(&mut config, &ctx.server_name, &settings, false)?;
                     (method, settings.api_mode)
                 }
             }
         }
-        _ => {
-            match detect_with_tofu_fallback(
-                &server_name,
-                &url,
-                &api_key,
-                email.as_deref(),
-                api_override,
-                &tls_config,
-                &mut config,
-            )
-            .await?
-            {
-                DetectOrClient::Client(client) => return Ok(client),
-                DetectOrClient::Settings(settings) => {
-                    persist_detected_settings(&mut config, &server_name, &settings, true)?;
-                    (settings.auth_method, settings.api_mode)
-                }
+        _ => match detect_with_tofu_fallback(&ctx, &tls_config, &mut config).await? {
+            DetectOrClient::Client(client) => return Ok(client),
+            DetectOrClient::Settings(settings) => {
+                persist_detected_settings(&mut config, &ctx.server_name, &settings, true)?;
+                (settings.auth_method, settings.api_mode)
             }
-        }
+        },
     };
 
     let api_mode = api_override.unwrap_or(resolved_mode);
-    let client = BugzillaClient::new(crate::client::BugzillaClientConfig {
-        base_url: &url,
-        credential: &api_key,
-        auth_method: auth,
-        api_mode,
-        email_hint: email.as_deref(),
-        tls_config: &tls_config,
-    })?;
+    let client = ctx.build_client(auth, api_mode, &tls_config)?;
     Ok(client)
 }
 
