@@ -451,6 +451,7 @@ A comment may be posted atomically with the update via `--comment` or `--comment
 ```bash
 bzr bug update 12345 --status ASSIGNED --assignee dev@example.com
 bzr bug update 12345 --status RESOLVED --resolution FIXED
+bzr bug update 12345 --dupe-of 67890
 bzr bug update 12345 --flag "review?(alice@example.com)"
 bzr bug update 12345 --blocks-add 100,200 --depends-on-add 50
 bzr bug update 12345 --keywords-add fix-needed,regression \
@@ -467,6 +468,7 @@ bzr bug update 100 200 300 --status RESOLVED --resolution DUPLICATE
 | `<ID...>` | Yes | Bug ID(s) — pass multiple for batch updates |
 | `--status <S>` | No | New status |
 | `--resolution <R>` | No | Resolution (FIXED, WONTFIX, DUPLICATE, etc.) |
+| `--dupe-of <ID>` | No | Mark this bug as a duplicate of another bug; Bugzilla sets status/resolution |
 | `--assignee <A>` | No | Reassign to email |
 | `--priority <P>` | No | Set priority |
 | `--severity <S>` | No | Set severity |

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `bzr bug update --dupe-of <ID>` marks a bug as a duplicate by
+  forwarding Bugzilla's `dupe_of` field. Bugzilla performs the
+  RESOLVED/DUPLICATE transition, and `bzr bug view --json` now
+  includes `dupe_of` for verification. Closes #162.
 - `bzr bug list --summary <substring>` filters bugs by a substring
   match against the Summary field across all bug states. This is
   the structured counterpart to `bzr bug search`, which uses
