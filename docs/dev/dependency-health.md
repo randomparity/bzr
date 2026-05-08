@@ -54,3 +54,80 @@ windows-sys v0.52.0
     └── rpassword v7.5.2
         └── bzr v0.4.0-dev
 ```
+
+## Platform Transitive Dependencies
+
+Task 4 of the platform drift plan attempted conservative updates for broad platform
+transitives on May 8, 2026:
+
+```console
+$ cargo update -p windows-sys
+error: There are multiple `windows-sys` packages in your project, and the specification
+`windows-sys` is ambiguous.
+Please re-run this command with one of the following specifications:
+  windows-sys@0.52.0
+  windows-sys@0.59.0
+  windows-sys@0.60.2
+  windows-sys@0.61.2
+
+$ cargo update -p windows-sys@0.52.0
+$ cargo update -p windows-sys@0.59.0
+$ cargo update -p windows-sys@0.60.2
+$ cargo update -p windows-sys@0.61.2
+Locking 0 packages to latest Rust 1.88 compatible versions
+
+$ cargo update -p windows-targets
+error: There are multiple `windows-targets` packages in your project, and the
+specification `windows-targets` is ambiguous.
+Please re-run this command with one of the following specifications:
+  windows-targets@0.52.6
+  windows-targets@0.53.5
+
+$ cargo update -p windows-targets@0.52.6
+$ cargo update -p windows-targets@0.53.5
+Locking 0 packages to latest Rust 1.88 compatible versions
+
+$ cargo update -p security-framework
+error: There are multiple `security-framework` packages in your project, and the
+specification `security-framework` is ambiguous.
+Please re-run this command with one of the following specifications:
+  security-framework@2.11.1
+  security-framework@3.5.1
+
+$ cargo update -p security-framework@2.11.1
+$ cargo update -p security-framework@3.5.1
+Locking 0 packages to latest Rust 1.88 compatible versions
+
+$ cargo update -p core-foundation
+error: There are multiple `core-foundation` packages in your project, and the
+specification `core-foundation` is ambiguous.
+Please re-run this command with one of the following specifications:
+  core-foundation@0.9.4
+  core-foundation@0.10.1
+
+$ cargo update -p core-foundation@0.9.4
+$ cargo update -p core-foundation@0.10.1
+$ cargo update -p core-foundation-sys
+Locking 0 packages to latest Rust 1.88 compatible versions
+```
+
+The generated lockfile diff did not reduce duplicate families. It only moved some
+existing `windows-sys` dependency edges from newer already-present versions to older
+already-present versions, so the lockfile change was discarded.
+
+The before and after duplicate graph remains constrained by upstream dependency ranges:
+
+```text
+core-foundation: 0.9.4 via security-framework 2.11.1, and 0.10.1 via
+security-framework 3.5.1
+
+security-framework: 2.11.1 via keyring 3.6.3, and 3.5.1 via keyring 3.6.3 plus
+rustls-native-certs 0.8.3
+
+windows-sys: 0.52.0 via ring/rtoolbox, 0.59.0 via dbus, 0.60.2 via keyring, and
+0.61.2 via clap/anstyle, colored, dirs-sys, tokio, tracing-subscriber, schannel,
+socket2, and rpassword
+
+windows-targets: 0.52.6 via windows-sys 0.52.0 and 0.59.0, and 0.53.5 via
+windows-sys 0.60.2
+```
