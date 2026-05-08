@@ -807,6 +807,38 @@ fn one_att(id: u64, bug_id: u64, file_name: &str, body: &[u8]) -> serde_json::Va
     })
 }
 
+fn xmlrpc_one_att(id: u64, bug_id: u64, file_name: &str, body: &[u8]) -> String {
+    format!(
+        "<value><struct>\
+            <member><name>id</name><value><int>{id}</int></value></member>\
+            <member><name>bug_id</name><value><int>{bug_id}</int></value></member>\
+            <member><name>file_name</name><value><string>{file_name}</string></value></member>\
+            <member><name>summary</name><value><string>{file_name}</string></value></member>\
+            <member><name>content_type</name><value><string>text/plain</string></value></member>\
+            <member><name>creator</name><value><string>dev@test.com</string></value></member>\
+            <member><name>creation_time</name><value><dateTime.iso8601>20250101T00:00:00</dateTime.iso8601></value></member>\
+            <member><name>last_change_time</name><value><dateTime.iso8601>20250101T00:00:00</dateTime.iso8601></value></member>\
+            <member><name>is_obsolete</name><value><int>0</int></value></member>\
+            <member><name>is_patch</name><value><int>0</int></value></member>\
+            <member><name>is_private</name><value><int>0</int></value></member>\
+            <member><name>size</name><value><int>{}</int></value></member>\
+            <member><name>data</name><value><base64>{}</base64></value></member>\
+        </struct></value>",
+        body.len(),
+        b64(body),
+    )
+}
+
+fn xmlrpc_bug_attachments_response(bug_id: u64, entries: &str) -> String {
+    format!(
+        "<?xml version=\"1.0\"?><methodResponse><params><param><value><struct>\
+            <member><name>bugs</name><value><struct>\
+                <member><name>{bug_id}</name><value><array><data>{entries}</data></array></value></member>\
+            </struct></value></member>\
+        </struct></value></param></params></methodResponse>"
+    )
+}
+
 #[tokio::test]
 async fn attachment_download_batch_per_bug_writes_per_bug_subdir() {
     let (_lock, mock, tmp) = setup_test_env().await;
@@ -858,6 +890,68 @@ async fn attachment_download_batch_per_bug_writes_per_bug_subdir() {
     assert!(tmp.path().join("12345").join("9877.trace.log").exists());
     let p1 = std::fs::read(tmp.path().join("12345").join("9876.patch.diff")).unwrap();
     assert_eq!(p1, b"alpha");
+}
+
+#[tokio::test]
+async fn attachment_download_batch_hybrid_uses_xmlrpc_inline_data_without_fallback() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    let entries = format!(
+        "{}{}",
+        xmlrpc_one_att(9876, 12345, "patch.diff", b"alpha"),
+        xmlrpc_one_att(9877, 12345, "trace.log", b"bravo"),
+    );
+
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(xmlrpc_bug_attachments_response(12345, &entries)),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/9876"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/9877"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+    let action = AttachmentAction::Download {
+        ids: vec![],
+        bug_ids: vec![12345],
+        out: None,
+        out_dir,
+    };
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        Some(crate::types::ApiMode::Hybrid),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "expected ok, got {result:?}");
+    assert_eq!(
+        std::fs::read(tmp.path().join("12345").join("9876.patch.diff")).unwrap(),
+        b"alpha",
+    );
+    assert_eq!(
+        std::fs::read(tmp.path().join("12345").join("9877.trace.log")).unwrap(),
+        b"bravo",
+    );
 }
 
 #[tokio::test]

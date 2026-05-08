@@ -125,6 +125,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   When the cap fires, the empty REST result is returned with a
   warning suggesting `--api rest` or `api_mode = "rest"` for
   servers where XML-RPC is consistently slow.
+- `bzr attachment download --bug <ID>` no longer performs one extra
+  per-attachment fetch in Hybrid/XmlRpc mode when the XML-RPC
+  attachment listing can return inline data. Closes #190.
 
 ### Changed
 

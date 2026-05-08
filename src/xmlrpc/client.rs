@@ -7,6 +7,22 @@ use crate::types::{
 };
 use crate::xmlrpc::{self, Value};
 
+const ATTACHMENT_LIST_FIELDS: &[&str] = &[
+    "id",
+    "bug_id",
+    "file_name",
+    "summary",
+    "content_type",
+    "creator",
+    "creation_time",
+    "last_change_time",
+    "size",
+    "is_obsolete",
+    "is_private",
+    "is_patch",
+    "data",
+];
+
 pub struct XmlRpcClient {
     http: reqwest::Client,
     base_url: String,
@@ -187,14 +203,12 @@ impl XmlRpcClient {
         #[expect(clippy::cast_possible_wrap, reason = "bug IDs fit in i64")]
         let bug_id_value = Value::Int(bug_id as i64);
         rpc_params.insert("ids".into(), Value::Array(vec![bug_id_value]));
-        // Match stock Bugzilla 5.0 REST `attachment list` behavior, which
-        // omits the base64 `data` field. Without this, `bzr attachment list`
-        // would inline multi-MB payloads in JSON output. The download path
-        // (get_attachment_by_id) does not exclude data.
-        rpc_params.insert(
-            "exclude_fields".into(),
-            Value::Array(vec![Value::from("data")]),
-        );
+        let include_fields = ATTACHMENT_LIST_FIELDS
+            .iter()
+            .copied()
+            .map(Value::from)
+            .collect();
+        rpc_params.insert("include_fields".into(), Value::Array(include_fields));
 
         let result = self.call("Bug.attachments", rpc_params).await?;
         extract_attachments(&result, bug_id)
