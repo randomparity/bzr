@@ -259,20 +259,27 @@ async fn classify_and_handle_tls_failure(
         let client = handle_tofu(ctx, config).await?;
         return Ok(Some(client));
     }
-    if let Some(pin_failure) = crate::tls::pin_failure::classify(err, &ctx.server_name) {
+    if let Some(pin_failure) = crate::tls::pin_failure::classify(err) {
         match pin_failure {
-            crate::tls::pin_failure::TlsPinFailure::PinMismatch { error, new_issuer } => {
-                let BzrError::PinMismatch {
-                    expected, actual, ..
-                } = error
-                else {
-                    unreachable!("pin failure classifier returned a non-pin mismatch error")
-                };
+            crate::tls::pin_failure::TlsPinFailure::PinMismatch {
+                expected,
+                actual,
+                new_issuer,
+            } => {
                 let client =
                     handle_pin_rotation(ctx, &expected, &actual, &new_issuer, config).await?;
                 return Ok(Some(client));
             }
-            crate::tls::pin_failure::TlsPinFailure::IssuerChanged(error) => return Err(error),
+            crate::tls::pin_failure::TlsPinFailure::IssuerChanged {
+                expected_issuer,
+                actual_issuer,
+            } => {
+                return Err(BzrError::IssuerChanged {
+                    server: ctx.server_name.clone(),
+                    expected_issuer,
+                    actual_issuer,
+                });
+            }
         }
     }
     Ok(None)

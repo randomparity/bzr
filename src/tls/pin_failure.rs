@@ -2,34 +2,37 @@ use crate::error::{format_error_chain, BzrError};
 
 #[derive(Debug)]
 pub(crate) enum TlsPinFailure {
-    PinMismatch { error: BzrError, new_issuer: String },
-    IssuerChanged(BzrError),
+    PinMismatch {
+        expected: String,
+        actual: String,
+        new_issuer: String,
+    },
+    IssuerChanged {
+        expected_issuer: String,
+        actual_issuer: String,
+    },
 }
 
-pub(crate) fn classify(err: &BzrError, server_name: &str) -> Option<TlsPinFailure> {
+pub(crate) fn classify(err: &BzrError) -> Option<TlsPinFailure> {
     let BzrError::Http(reqwest_error) = err else {
         return None;
     };
-    classify_chain(&format_error_chain(reqwest_error), server_name)
+    classify_chain(&format_error_chain(reqwest_error))
 }
 
-fn classify_chain(chain: &str, server_name: &str) -> Option<TlsPinFailure> {
+fn classify_chain(chain: &str) -> Option<TlsPinFailure> {
     if let Some((expected, actual, issuer)) = parse_pin_mismatch_details(chain) {
         return Some(TlsPinFailure::PinMismatch {
-            error: BzrError::PinMismatch {
-                server: server_name.to_string(),
-                expected,
-                actual,
-            },
+            expected,
+            actual,
             new_issuer: issuer,
         });
     }
     if let Some((expected_issuer, actual_issuer)) = parse_issuer_changed_details(chain) {
-        return Some(TlsPinFailure::IssuerChanged(BzrError::IssuerChanged {
-            server: server_name.to_string(),
+        return Some(TlsPinFailure::IssuerChanged {
             expected_issuer,
             actual_issuer,
-        }));
+        });
     }
     None
 }
