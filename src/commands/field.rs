@@ -13,7 +13,7 @@ pub async fn execute(
 ) -> Result<()> {
     match action {
         FieldAction::Aliases => {
-            output::write_field_aliases(crate::client::FIELD_ALIASES, format, w.out);
+            output::write_field_aliases(crate::field_aliases::FIELD_ALIASES, format, w.out);
             return Ok(());
         }
         FieldAction::List { name } => {

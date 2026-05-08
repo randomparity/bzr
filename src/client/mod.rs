@@ -6,7 +6,6 @@ mod classification;
 mod comment;
 mod component;
 mod field;
-pub(crate) use field::FIELD_ALIASES;
 mod group;
 mod product;
 mod server;

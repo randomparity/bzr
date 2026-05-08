@@ -5,63 +5,52 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::client::test_helpers::test_client;
 use crate::error::BzrError;
+use crate::field_aliases::resolve_field_alias;
 
 #[test]
 fn resolve_field_alias_maps_status() {
-    assert_eq!(super::resolve_field_alias("status").as_ref(), "bug_status");
+    assert_eq!(resolve_field_alias("status").as_ref(), "bug_status");
 }
 
 #[test]
 fn resolve_field_alias_maps_severity() {
-    assert_eq!(
-        super::resolve_field_alias("severity").as_ref(),
-        "bug_severity"
-    );
+    assert_eq!(resolve_field_alias("severity").as_ref(), "bug_severity");
 }
 
 #[test]
 fn resolve_field_alias_maps_id() {
-    assert_eq!(super::resolve_field_alias("id").as_ref(), "bug_id");
+    assert_eq!(resolve_field_alias("id").as_ref(), "bug_id");
 }
 
 #[test]
 fn resolve_field_alias_maps_type() {
-    assert_eq!(super::resolve_field_alias("type").as_ref(), "bug_type");
+    assert_eq!(resolve_field_alias("type").as_ref(), "bug_type");
 }
 
 #[test]
 fn resolve_field_alias_maps_group() {
-    assert_eq!(super::resolve_field_alias("group").as_ref(), "bug_group");
+    assert_eq!(resolve_field_alias("group").as_ref(), "bug_group");
 }
 
 #[test]
 fn resolve_field_alias_maps_file_loc() {
-    assert_eq!(
-        super::resolve_field_alias("file_loc").as_ref(),
-        "bug_file_loc"
-    );
+    assert_eq!(resolve_field_alias("file_loc").as_ref(), "bug_file_loc");
 }
 
 #[test]
 fn resolve_field_alias_passes_through_unknown() {
-    assert_eq!(super::resolve_field_alias("priority").as_ref(), "priority");
+    assert_eq!(resolve_field_alias("priority").as_ref(), "priority");
 }
 
 #[test]
 fn resolve_field_alias_passes_through_already_prefixed() {
-    assert_eq!(
-        super::resolve_field_alias("bug_status").as_ref(),
-        "bug_status"
-    );
+    assert_eq!(resolve_field_alias("bug_status").as_ref(), "bug_status");
 }
 
 #[test]
 fn resolve_field_alias_is_case_insensitive() {
-    assert_eq!(super::resolve_field_alias("Status").as_ref(), "bug_status");
-    assert_eq!(
-        super::resolve_field_alias("SEVERITY").as_ref(),
-        "bug_severity"
-    );
+    assert_eq!(resolve_field_alias("Status").as_ref(), "bug_status");
+    assert_eq!(resolve_field_alias("SEVERITY").as_ref(), "bug_severity");
 }
 
 #[tokio::test]
