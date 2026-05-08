@@ -100,7 +100,10 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   │              [--no-comment] [--add-depends-on] [--add-blocks] [--no-cc] [--no-keywords]
 │   └── update <ID...> [--status <S>] [--resolution <R>] [--assignee <A>]
 │                       [--priority <P>] [--severity <S>] [--summary <S>]
-│                       [--whiteboard <W>] [--flag <F>...] [--blocks-add <IDs>]
+│                       [--alias <A>] [--deadline <DATE>] [--estimated-time <HOURS>]
+│                       [--remaining-time <HOURS>] [--work-time <HOURS>]
+│                       [--whiteboard <W>] [--reset-assigned-to] [--reset-qa-contact]
+│                       [--flag <F>...] [--blocks-add <IDs>]
 │                       [--blocks-remove <IDs>] [--depends-on-add <IDs>]
 │                       [--depends-on-remove <IDs>]
 ├── comment
@@ -452,6 +455,9 @@ A comment may be posted atomically with the update via `--comment` or `--comment
 bzr bug update 12345 --status ASSIGNED --assignee dev@example.com
 bzr bug update 12345 --status RESOLVED --resolution FIXED
 bzr bug update 12345 --dupe-of 67890
+bzr bug update 12345 --deadline 2026-12-31 --estimated-time 3.5
+bzr bug update 12345 --work-time 0.5 --remaining-time 1.25
+bzr bug update 12345 --reset-assigned-to --reset-qa-contact
 bzr bug update 12345 --flag "review?(alice@example.com)"
 bzr bug update 12345 --blocks-add 100,200 --depends-on-add 50
 bzr bug update 12345 --keywords-add fix-needed,regression \
@@ -469,6 +475,13 @@ bzr bug update 100 200 300 --status RESOLVED --resolution WONTFIX
 | `--status <S>` | No | New status |
 | `--resolution <R>` | No | Resolution (FIXED, WONTFIX, DUPLICATE, etc.) |
 | `--dupe-of <ID>` | No | Mark this bug as a duplicate of another bug; Bugzilla sets status/resolution |
+| `--alias <ALIAS>` | No | Set this bug's alias; only valid for single-bug updates |
+| `--deadline <DATE>` | No | Set deadline date (`YYYY-MM-DD`) |
+| `--estimated-time <HOURS>` | No | Set total estimated work time in hours |
+| `--remaining-time <HOURS>` | No | Set remaining work time in hours |
+| `--work-time <HOURS>` | No | Add work time in hours for this update |
+| `--reset-assigned-to` | No | Reset assignee to the component default |
+| `--reset-qa-contact` | No | Reset QA contact to the component default |
 | `--assignee <A>` | No | Reassign to email |
 | `--priority <P>` | No | Set priority |
 | `--severity <S>` | No | Set severity |
