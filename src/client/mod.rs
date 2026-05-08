@@ -59,8 +59,8 @@ pub struct BugzillaClient {
 }
 
 /// Configuration needed to construct a [`BugzillaClient`].
-#[derive(Clone, Copy)]
 #[non_exhaustive]
+#[derive(Clone, Copy)]
 pub struct BugzillaClientConfig<'a> {
     pub base_url: &'a str,
     pub credential: &'a str,
