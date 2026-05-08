@@ -245,7 +245,8 @@ fn extract_id(response: &Value) -> Result<u64> {
 fn add_vec_filters(rpc_params: &mut BTreeMap<String, Value>, params: &SearchParams) {
     let mut chart_idx = 1u32;
     for mapping in FIELD_MAPPINGS {
-        let (positive, negated) = partition_filters(params.get_field(mapping.struct_field));
+        let (positive, negated) =
+            partition_filters(params.get_field(mapping.struct_field).unwrap_or_default());
         if !positive.is_empty() {
             let arr: Vec<Value> = positive.iter().map(|v| Value::from(*v)).collect();
             rpc_params.insert(mapping.struct_field.into(), Value::Array(arr));

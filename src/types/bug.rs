@@ -193,18 +193,13 @@ impl SearchParams {
     }
 
     /// Access a multi-value filter field by its `struct_field` name.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `name` is not one of the 15 known field names in
-    /// `FIELD_MAPPINGS`. Only called with compile-time-known names.
-    pub fn get_field(&self, name: &str) -> &[String] {
-        macro_rules! as_ref {
+    pub(crate) fn get_field(&self, name: &str) -> Option<&[String]> {
+        macro_rules! some_ref {
             ($e:expr) => {
-                &$e
+                Some($e.as_slice())
             };
         }
-        match_field!(name, self, as_ref, panic!("unknown field: {name}"), {
+        match_field!(name, self, some_ref, None, {
             "product" => product,
             "component" => component,
             "status" => status,
@@ -224,7 +219,8 @@ impl SearchParams {
     }
 
     /// Access a multi-value filter field mutably by its `struct_field` name.
-    pub fn get_field_mut(&mut self, name: &str) -> Option<&mut Vec<String>> {
+    #[cfg(test)]
+    pub(crate) fn get_field_mut(&mut self, name: &str) -> Option<&mut Vec<String>> {
         macro_rules! some_mut {
             ($e:expr) => {
                 Some(&mut $e)
@@ -250,9 +246,10 @@ impl SearchParams {
     }
 
     fn has_mapped_filters(&self) -> bool {
-        FIELD_MAPPINGS
-            .iter()
-            .any(|mapping| !self.get_field(mapping.struct_field).is_empty())
+        FIELD_MAPPINGS.iter().any(|mapping| {
+            self.get_field(mapping.struct_field)
+                .is_some_and(|field| !field.is_empty())
+        })
     }
 
     /// Returns true if any filter fields are set (product, component, etc.).
