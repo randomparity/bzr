@@ -118,6 +118,13 @@ fn make_update_action_with_scalar_parity_fields() -> BugAction {
     }
 }
 
+fn update_ids_mut(action: &mut BugAction) -> Option<&mut Vec<u64>> {
+    let BugAction::Update { ids, .. } = action else {
+        return None;
+    };
+    Some(ids)
+}
+
 #[derive(Default)]
 struct UpdateLists<'a> {
     keywords_add: Vec<&'a str>,
@@ -203,10 +210,7 @@ async fn bug_update_alias_multiple_ids_rejected_before_connect() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     let mut action = make_update_action_with_scalar_parity_fields();
-    let BugAction::Update { ids, .. } = &mut action else {
-        panic!("expected update action");
-    };
-    *ids = vec![42, 43];
+    *update_ids_mut(&mut action).expect("expected update action") = vec![42, 43];
 
     let mut io = crate::test_helpers::CapturedIo::new();
     let result =
@@ -356,10 +360,7 @@ fn build_update_params_populates_scalar_parity_fields() {
 #[test]
 fn build_update_params_rejects_alias_with_multiple_ids() {
     let mut action = make_update_action_with_scalar_parity_fields();
-    let BugAction::Update { ids, .. } = &mut action else {
-        panic!("expected update action");
-    };
-    *ids = vec![42, 43];
+    *update_ids_mut(&mut action).expect("expected update action") = vec![42, 43];
 
     let err = super::build_update_params(&action).unwrap_err();
     assert!(
