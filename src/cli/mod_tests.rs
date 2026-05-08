@@ -499,17 +499,159 @@ fn parse_attachment_list() {
 }
 
 #[test]
-fn parse_attachment_download() {
+fn parse_attachment_download_single_id_legacy() {
     let cli = Cli::try_parse_from(["bzr", "attachment", "download", "100"]).unwrap();
     match cli.command {
         Commands::Attachment {
-            action: AttachmentAction::Download { id, out },
+            action:
+                AttachmentAction::Download {
+                    ids,
+                    bug_ids,
+                    out,
+                    out_dir,
+                },
         } => {
-            assert_eq!(id, 100);
+            assert_eq!(ids, vec![100]);
+            assert!(bug_ids.is_empty());
             assert!(out.is_none());
+            assert_eq!(out_dir, "./attachments");
         }
         _ => panic!("expected Attachment Download"),
     }
+}
+
+#[test]
+fn parse_attachment_download_with_out() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "attachment",
+        "download",
+        "100",
+        "--out",
+        "patch.diff",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Attachment {
+            action: AttachmentAction::Download { ids, out, .. },
+        } => {
+            assert_eq!(ids, vec![100]);
+            assert_eq!(out.as_deref(), Some("patch.diff"));
+        }
+        _ => panic!("expected Attachment Download"),
+    }
+}
+
+#[test]
+fn parse_attachment_download_multiple_positional_ids() {
+    let cli = Cli::try_parse_from(["bzr", "attachment", "download", "100", "200", "300"]).unwrap();
+    match cli.command {
+        Commands::Attachment {
+            action: AttachmentAction::Download { ids, bug_ids, .. },
+        } => {
+            assert_eq!(ids, vec![100, 200, 300]);
+            assert!(bug_ids.is_empty());
+        }
+        _ => panic!("expected Attachment Download"),
+    }
+}
+
+#[test]
+fn parse_attachment_download_bug_flag_repeatable() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "attachment",
+        "download",
+        "--bug",
+        "12345",
+        "--bug",
+        "67890",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Attachment {
+            action: AttachmentAction::Download { ids, bug_ids, .. },
+        } => {
+            assert!(ids.is_empty());
+            assert_eq!(bug_ids, vec![12345, 67890]);
+        }
+        _ => panic!("expected Attachment Download"),
+    }
+}
+
+#[test]
+fn parse_attachment_download_mixed_bug_and_positional() {
+    let cli =
+        Cli::try_parse_from(["bzr", "attachment", "download", "--bug", "12345", "9876"]).unwrap();
+    match cli.command {
+        Commands::Attachment {
+            action: AttachmentAction::Download { ids, bug_ids, .. },
+        } => {
+            assert_eq!(ids, vec![9876]);
+            assert_eq!(bug_ids, vec![12345]);
+        }
+        _ => panic!("expected Attachment Download"),
+    }
+}
+
+#[test]
+fn parse_attachment_download_out_dir_default() {
+    let cli = Cli::try_parse_from(["bzr", "attachment", "download", "--bug", "12345"]).unwrap();
+    match cli.command {
+        Commands::Attachment {
+            action: AttachmentAction::Download { out_dir, .. },
+        } => assert_eq!(out_dir, "./attachments"),
+        _ => panic!("expected Attachment Download"),
+    }
+}
+
+#[test]
+fn parse_attachment_download_out_dir_explicit() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "attachment",
+        "download",
+        "--bug",
+        "12345",
+        "--out-dir",
+        "/tmp/att",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Attachment {
+            action: AttachmentAction::Download { out_dir, .. },
+        } => assert_eq!(out_dir, "/tmp/att"),
+        _ => panic!("expected Attachment Download"),
+    }
+}
+
+#[test]
+fn parse_attachment_download_clap_conflict_out_with_out_dir() {
+    let result = Cli::try_parse_from([
+        "bzr",
+        "attachment",
+        "download",
+        "100",
+        "--out",
+        "x",
+        "--out-dir",
+        "y",
+    ]);
+    assert!(result.is_err(), "clap should reject --out with --out-dir");
+}
+
+#[test]
+fn parse_attachment_download_clap_conflict_out_with_bug() {
+    let result = Cli::try_parse_from([
+        "bzr",
+        "attachment",
+        "download",
+        "--bug",
+        "12345",
+        "--out",
+        "x",
+    ]);
+    assert!(result.is_err(), "clap should reject --out with --bug");
 }
 
 #[test]

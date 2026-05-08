@@ -4,7 +4,7 @@ use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::commands::editor;
 use crate::error::Result;
-use crate::output::{self, ActionResult, ResourceKind};
+use crate::output::{self, ActionResult, ResourceKind, Writers};
 use crate::types::{CreateBugParams, OutputFormat};
 
 fn read_description_file(path: &std::path::Path) -> Result<String> {
@@ -57,12 +57,6 @@ impl MergedFields {
 }
 
 /// Parse the post-editor buffer into `(summary, description)`.
-///
-/// Truncates at the sentinel divider, takes the first non-empty line
-/// as the summary, and joins the remaining lines (after stripping
-/// leading and trailing blank lines) as the description. Returns
-/// `InputValidation` when no non-empty line is found above the
-/// sentinel.
 fn parse_editor_buffer(raw: &str) -> Result<(String, String)> {
     let mut iter = raw
         .lines()
@@ -88,11 +82,6 @@ fn parse_editor_buffer(raw: &str) -> Result<(String, String)> {
     Ok((summary, description))
 }
 
-/// Build the pre-filled `$EDITOR` buffer.
-///
-/// Layout: optional pre-filled summary on line 1, optional template
-/// description body, the sentinel divider, and a read-only field
-/// reminder block populated from `params`.
 fn build_editor_template(
     summary_pre_fill: Option<&str>,
     template_description: Option<&str>,
@@ -139,10 +128,6 @@ fn build_editor_template(
     buf
 }
 
-/// Resolve the description source by precedence (#1-#3): explicit
-/// `--description`, `--description-file`, or piped stdin. Returns
-/// `None` when no explicit source is supplied and stdin is a TTY --
-/// the caller then dispatches the `$EDITOR` flow (#4).
 fn resolve_description(
     description: Option<&str>,
     description_file: Option<&std::path::Path>,
@@ -166,8 +151,6 @@ fn resolve_description(
     Ok(None)
 }
 
-/// Resolve the optional `--template` reference into a cloned
-/// `BugTemplate`, surfacing a config error when the name is unknown.
 fn load_template(name: Option<&str>) -> Result<Option<crate::types::BugTemplate>> {
     let Some(name) = name else { return Ok(None) };
     let config = crate::config::Config::load()?;
@@ -178,8 +161,6 @@ fn load_template(name: Option<&str>) -> Result<Option<crate::types::BugTemplate>
     Ok(Some(t.clone()))
 }
 
-/// Drive the `$EDITOR` flow: build the pre-filled buffer from the
-/// merged field set, launch the editor, and parse the result.
 fn run_editor_flow(
     summary_pre_fill: Option<&str>,
     merged: &MergedFields,
@@ -257,6 +238,7 @@ pub(super) async fn handle(
     client: &BugzillaClient,
     action: &BugAction,
     format: OutputFormat,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     let BugAction::Create {
         template: template_name,
@@ -309,10 +291,11 @@ pub(super) async fn handle(
         keywords: vec![],
     };
     let id = client.create_bug(&params).await?;
-    output::print_result(
+    output::write_result(
         &ActionResult::created(id, ResourceKind::Bug),
         &format!("Created bug #{id}"),
         format,
+        w.out,
     );
     Ok(())
 }

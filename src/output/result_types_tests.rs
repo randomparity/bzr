@@ -162,10 +162,23 @@ fn action_result_updated_named_without_id_skips_id() {
 }
 
 #[test]
-fn print_result_uses_pretty_json() {
+fn write_result_uses_pretty_json() {
     let result = ActionResult::created(1, ResourceKind::Bug);
-    let json = serde_json::to_string_pretty(&result).unwrap();
-    assert!(json.contains('\n'), "expected pretty-printed JSON");
+    let mut buf = Vec::new();
+    write_result(&result, "human", OutputFormat::Json, &mut buf);
+    let s = String::from_utf8(buf).unwrap();
+    assert!(s.contains('\n'), "expected pretty-printed JSON");
+    assert!(s.contains("\"id\": 1"));
+    assert!(s.contains("\"resource\": \"bug\""));
+}
+
+#[test]
+fn write_result_table_emits_human_message() {
+    let result = ActionResult::created(1, ResourceKind::Bug);
+    let mut buf = Vec::new();
+    write_result(&result, "Created bug #1", OutputFormat::Table, &mut buf);
+    let s = String::from_utf8(buf).unwrap();
+    assert_eq!(s, "Created bug #1\n");
 }
 
 #[test]

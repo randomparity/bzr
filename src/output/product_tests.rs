@@ -32,17 +32,17 @@ fn make_product(id: u64, name: &str) -> Product {
     }
 }
 
-// ── print_products ───────────────────────────────────────────────
+// ── write_products ───────────────────────────────────────────────
 
 #[test]
-fn print_products_json_empty() {
+fn write_products_json_empty() {
     let products: Vec<Product> = vec![];
     let json = serde_json::to_string_pretty(&products).unwrap();
     assert_eq!(json, "[]");
 }
 
 #[test]
-fn print_products_json_one_product() {
+fn write_products_json_one_product() {
     let products = vec![make_product(1, "Widget")];
     let json = serde_json::to_string_pretty(&products).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -66,10 +66,10 @@ fn product_row_conversion() {
     assert!(table.contains('1')); // 1 component
 }
 
-// ── print_product_detail ─────────────────────────────────────────
+// ── write_product_detail ─────────────────────────────────────────
 
 #[test]
-fn print_product_detail_json() {
+fn write_product_detail_json() {
     let product = make_product(3, "Acme");
     let json = serde_json::to_string_pretty(&product).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();

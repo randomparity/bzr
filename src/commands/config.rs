@@ -5,13 +5,12 @@
 //! sibling command modules.
 
 use std::fmt::Write as _;
-use std::io::{self, Write as _};
 use std::path::PathBuf;
 
 use crate::cli::ConfigAction;
 use crate::config::{Config, ServerConfig};
 use crate::error::Result;
-use crate::output::{self, ConfigResult};
+use crate::output::{self, ConfigResult, Writers};
 use crate::types::OutputFormat;
 
 pub async fn execute(
@@ -19,6 +18,7 @@ pub async fn execute(
     _server: Option<&str>,
     format: OutputFormat,
     _api: Option<crate::types::ApiMode>,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     match action {
         ConfigAction::SetServer {
@@ -49,6 +49,7 @@ pub async fn execute(
                     tls_pin_clear: *tls_pin_clear,
                 },
                 format,
+                w,
             )
             .await
         }
@@ -63,13 +64,14 @@ pub async fn execute(
             let path = Config::path()?;
             config.save()?;
 
-            output::print_result(
+            output::write_result(
                 &ConfigResult::default_set(name.as_str(), path.to_string_lossy()),
                 &format!(
                     "Default server set to '{name}'\nConfig file: {}",
                     path.display()
                 ),
                 format,
+                w.out,
             );
             Ok(())
         }
@@ -77,15 +79,15 @@ pub async fn execute(
             let config = Config::load()?;
             let path = Config::path()?;
             let view = output::ConfigView::from_config(&config, &path);
-            output::print_config(&view, format);
+            output::write_config(&view, format, w.out);
             Ok(())
         }
         ConfigAction::SetKeyring {
             name,
             service,
             account,
-        } => set_keyring(name, service.as_deref(), account.as_deref(), format),
-        ConfigAction::UnsetKeyring { name } => unset_keyring(name.as_str(), format),
+        } => set_keyring(name, service.as_deref(), account.as_deref(), format, w),
+        ConfigAction::UnsetKeyring { name } => unset_keyring(name.as_str(), format, w),
         ConfigAction::MigrateToKeyring {
             name,
             service,
@@ -97,6 +99,7 @@ pub async fn execute(
             account.as_deref(),
             *yes,
             format,
+            w,
         ),
     }
 }
@@ -115,7 +118,11 @@ struct SetServerArgs<'a> {
     tls_pin_clear: bool,
 }
 
-async fn set_server(args: &SetServerArgs<'_>, format: OutputFormat) -> Result<()> {
+async fn set_server(
+    args: &SetServerArgs<'_>,
+    format: OutputFormat,
+    w: &mut Writers<'_>,
+) -> Result<()> {
     let SetServerArgs {
         name,
         url,
@@ -138,7 +145,7 @@ async fn set_server(args: &SetServerArgs<'_>, format: OutputFormat) -> Result<()
             server.tls_pin_issuer = None;
             server.tls_pin_issuer_der = None;
             config.save()?;
-            let _ = writeln!(io::stderr(), "Certificate pin cleared for server '{name}'.");
+            let _ = writeln!(w.err, "Certificate pin cleared for server '{name}'.");
             return Ok(());
         }
         return Err(crate::error::BzrError::config(format!(
@@ -173,8 +180,8 @@ async fn set_server(args: &SetServerArgs<'_>, format: OutputFormat) -> Result<()
     if tls_pin_now {
         let (fingerprint, issuer, issuer_der) =
             crate::tls::tofu::probe_server_cert(&server_config.url).await?;
-        let _ = writeln!(io::stderr(), "Certificate fingerprint: {fingerprint}");
-        let _ = writeln!(io::stderr(), "Issuer:                  {issuer}");
+        let _ = writeln!(w.err, "Certificate fingerprint: {fingerprint}");
+        let _ = writeln!(w.err, "Issuer:                  {issuer}");
         let confirmed = crate::tls::tofu::confirm_pin()?;
         if confirmed {
             server_config.tls_pin_sha256 = Some(fingerprint);
@@ -207,10 +214,11 @@ async fn set_server(args: &SetServerArgs<'_>, format: OutputFormat) -> Result<()
     }
     let _ = write!(human, "\nConfig file: {}", path.display());
 
-    output::print_result(
+    output::write_result(
         &ConfigResult::configured(name, url, is_default, path.to_string_lossy(), is_update),
         &human,
         format,
+        w.out,
     );
     Ok(())
 }
@@ -220,6 +228,7 @@ fn set_keyring(
     service: Option<&str>,
     account: Option<&str>,
     format: OutputFormat,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     let mut config = Config::load()?;
     if !config.servers.contains_key(name) {
@@ -253,15 +262,16 @@ fn set_keyring(
          (service={service_name}, account={account_name})\nConfig file: {}",
         path.display()
     );
-    output::print_result(
+    output::write_result(
         &ConfigResult::configured(name, &server_url, false, path.to_string_lossy(), true),
         &human,
         format,
+        w.out,
     );
     Ok(())
 }
 
-fn unset_keyring(name: &str, format: OutputFormat) -> Result<()> {
+fn unset_keyring(name: &str, format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
     let mut config = Config::load()?;
     let server = config
         .servers
@@ -290,10 +300,11 @@ fn unset_keyring(name: &str, format: OutputFormat) -> Result<()> {
          `bzr config set-keyring` to re-credential.\nConfig file: {}",
         path.display()
     );
-    output::print_result(
+    output::write_result(
         &ConfigResult::configured(name, &server_url, false, path.to_string_lossy(), true),
         &human,
         format,
+        w.out,
     );
     Ok(())
 }
@@ -304,6 +315,7 @@ fn migrate_to_keyring(
     account: Option<&str>,
     yes: bool,
     format: OutputFormat,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     if !yes {
         return Err(crate::error::BzrError::InputValidation(
@@ -363,10 +375,11 @@ fn migrate_to_keyring(
         )
     };
 
-    output::print_result(
+    output::write_result(
         &ConfigResult::configured(name, &server_url, false, path.to_string_lossy(), true),
         &human,
         format,
+        w.out,
     );
     Ok(())
 }

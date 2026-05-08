@@ -12,6 +12,6 @@ path = "src/main.rs"
 
 [dependencies]
 bzr = { path = "..", default-features = false }
-clap = { version = ">=4.5.60, <4.6", features = ["derive"] }
+clap = { version = ">=4.5.60, <4.7", features = ["derive"] }
 clap_mangen = "0.3"
 anyhow = "1"

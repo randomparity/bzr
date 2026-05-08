@@ -114,10 +114,20 @@ fn template_summary_line_without_fields_is_name_only() {
     assert_eq!(line, "zzz");
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_template_detail_table_renders_missing_fields_as_dash() {
-    let _lock = crate::ENV_LOCK.lock().await;
+fn capture_detail(name: &str, template: &BugTemplate, format: OutputFormat) -> String {
+    let mut buf = Vec::new();
+    write_template_detail(name, template, format, &mut buf);
+    String::from_utf8(buf).unwrap()
+}
+
+fn capture_list(templates: &HashMap<String, BugTemplate>, format: OutputFormat) -> String {
+    let mut buf = Vec::new();
+    write_template_list(templates, format, &mut buf);
+    String::from_utf8(buf).unwrap()
+}
+
+#[test]
+fn write_template_detail_table_renders_missing_fields_as_dash() {
     let template = BugTemplate {
         product: Some("Widget".into()),
         component: None,
@@ -130,10 +140,7 @@ async fn print_template_detail_table_renders_missing_fields_as_dash() {
         description: Some("Default description".into()),
     };
 
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_template_detail("default", &template, OutputFormat::Table);
-    })
-    .await;
+    let output = capture_detail("default", &template, OutputFormat::Table);
 
     assert!(output.contains("Name"));
     assert!(output.contains("default"));
@@ -145,10 +152,8 @@ async fn print_template_detail_table_renders_missing_fields_as_dash() {
     assert!(output.contains("Default description"));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_template_list_table_renders_sorted_summaries() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_template_list_table_renders_sorted_summaries() {
     let mut templates: HashMap<String, BugTemplate> = HashMap::new();
     templates.insert("zzz".into(), make_template());
     templates.insert(
@@ -166,10 +171,7 @@ async fn print_template_list_table_renders_sorted_summaries() {
         },
     );
 
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_template_list(&templates, OutputFormat::Table);
-    })
-    .await;
+    let output = capture_list(&templates, OutputFormat::Table);
 
     let aaa_pos = output.find("aaa").expect("aaa should appear in output");
     let zzz_pos = output.find("zzz").expect("zzz should appear in output");
@@ -178,14 +180,9 @@ async fn print_template_list_table_renders_sorted_summaries() {
     assert!(output.contains("product=Widget"));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_template_list_table_announces_empty() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_template_list_table_announces_empty() {
     let templates: HashMap<String, BugTemplate> = HashMap::new();
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_template_list(&templates, OutputFormat::Table);
-    })
-    .await;
+    let output = capture_list(&templates, OutputFormat::Table);
     assert!(output.contains("No templates configured."));
 }

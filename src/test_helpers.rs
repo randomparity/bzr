@@ -57,100 +57,43 @@ api_mode = "rest"
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 }
 
-/// Capture stdout written during an async operation.
-///
-/// Redirects file descriptor 1 to a temp file, runs the future, restores
-/// stdout, then returns the captured content. Must be called while holding
-/// `ENV_LOCK` (tests are single-threaded via `setup_test_env`).
-///
-/// # Panics
-///
-/// Panics if stdout redirection or temp file operations fail.
-#[cfg(unix)]
-#[expect(clippy::unwrap_used)]
-pub async fn capture_stdout<F, T>(f: F) -> (T, String)
-where
-    F: std::future::Future<Output = T>,
-{
-    use std::io::{Read, Seek, Write};
-    use std::os::unix::io::AsRawFd;
-
-    extern "C" {
-        fn dup(fd: std::ffi::c_int) -> std::ffi::c_int;
-        fn dup2(oldfd: std::ffi::c_int, newfd: std::ffi::c_int) -> std::ffi::c_int;
-        fn close(fd: std::ffi::c_int) -> std::ffi::c_int;
-    }
-
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let tmp_fd = tmp.as_file().as_raw_fd();
-
-    // SAFETY: dup() on a valid fd is safe; tests are serialized via ENV_LOCK.
-    let saved_stdout = unsafe { dup(1) };
-    assert!(saved_stdout >= 0, "dup(1) failed");
-
-    // SAFETY: dup2() on valid fds is safe.
-    unsafe {
-        dup2(tmp_fd, 1);
-    }
-
-    let result = f.await;
-    std::io::stdout().flush().unwrap();
-
-    // SAFETY: Restoring the saved fd.
-    unsafe {
-        dup2(saved_stdout, 1);
-        close(saved_stdout);
-    }
-
-    let mut captured = String::new();
-    let mut file = tmp.reopen().unwrap();
-    file.seek(std::io::SeekFrom::Start(0)).unwrap();
-    file.read_to_string(&mut captured).unwrap();
-
-    (result, captured)
+/// Owned `Vec<u8>` buffers for capturing stdout and stderr in tests, plus
+/// a `Writers` constructor that borrows them.
+pub struct CapturedIo {
+    pub out: Vec<u8>,
+    pub err: Vec<u8>,
 }
 
-/// Extract the first valid JSON value from a string that may contain
-/// other test output mixed in (due to concurrent test threads writing
-/// to the same stdout fd).
-///
-/// # Panics
-///
-/// Panics if no valid JSON is found in the output.
-#[expect(
-    clippy::panic,
-    reason = "test helper: unrecoverable if output is not JSON"
-)]
-pub fn extract_json(output: &str) -> serde_json::Value {
-    if let Ok(v) = serde_json::from_str(output) {
-        return v;
-    }
-    for (i, ch) in output.char_indices() {
-        if ch == '[' || ch == '{' {
-            if let Some(v) = try_parse_from(&output[i..], ch) {
-                return v;
-            }
+impl CapturedIo {
+    pub fn new() -> Self {
+        Self {
+            out: Vec::new(),
+            err: Vec::new(),
         }
     }
-    panic!("no valid JSON found in captured output: {output}");
+
+    /// Construct a `Writers` borrowing this buffer pair.
+    pub fn writers(&mut self) -> crate::output::Writers<'_> {
+        crate::output::Writers::new(&mut self.out, &mut self.err)
+    }
+
+    /// View captured stdout as `&str` (non-UTF-8 bytes are replaced with the
+    /// empty string — tests should hold UTF-8 invariants and this method
+    /// makes assertion failures more readable than working in raw bytes).
+    pub fn out_str(&self) -> &str {
+        std::str::from_utf8(&self.out).unwrap_or("")
+    }
+
+    /// View captured stderr as `&str`. Same caveat as `out_str`.
+    pub fn err_str(&self) -> &str {
+        std::str::from_utf8(&self.err).unwrap_or("")
+    }
 }
 
-/// Try to parse JSON starting at `slice`, whose first char is `opener` (`[` or `{`).
-/// First attempts the full slice, then progressively shorter prefixes ending at
-/// each matching close bracket, walking from the end backwards.
-fn try_parse_from(slice: &str, opener: char) -> Option<serde_json::Value> {
-    if let Ok(v) = serde_json::from_str(slice) {
-        return Some(v);
+impl Default for CapturedIo {
+    fn default() -> Self {
+        Self::new()
     }
-    let closing = if opener == '[' { ']' } else { '}' };
-    for (j, jch) in slice.char_indices().rev() {
-        if jch == closing {
-            if let Ok(v) = serde_json::from_str(&slice[..=j]) {
-                return Some(v);
-            }
-        }
-    }
-    None
 }
 
 /// Build a mock XML-RPC Bug.search response containing one bug.

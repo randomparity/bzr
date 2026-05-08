@@ -5,7 +5,13 @@ use std::collections::HashMap;
 use super::*;
 use crate::types::{OutputFormat, QueryKind, SavedQuery};
 
-/// Shared test helper — mirrors the `QueryView` in `print_query_detail` for JSON assertions.
+fn capture_detail(name: &str, query: &SavedQuery, format: OutputFormat) -> String {
+    let mut buf = Vec::new();
+    write_query_detail(name, query, format, &mut buf);
+    String::from_utf8(buf).unwrap()
+}
+
+/// Shared test helper — mirrors the `QueryView` in `write_query_detail` for JSON assertions.
 #[derive(serde::Serialize)]
 struct QueryView<'a> {
     name: &'a str,
@@ -111,20 +117,15 @@ fn query_summary_line_renders_search_query() {
     assert!(line.contains("limit=10"));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_query_detail_table_renders_fields() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_query_detail_table_renders_fields() {
     let mut query = make_list_query();
     query.component = vec!["General".into()];
     query.assignee = vec!["dev@example.com".into()];
     query.fields = Some("id,summary".into());
     query.exclude_fields = Some("comments".into());
 
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_query_detail("firefox-new", &query, OutputFormat::Table);
-    })
-    .await;
+    let output = capture_detail("firefox-new", &query, OutputFormat::Table);
 
     assert!(output.contains("Name"));
     assert!(output.contains("firefox-new"));
@@ -166,16 +167,10 @@ fn query_summary_line_renders_url_query() {
     assert!(line.contains("2 raw params"));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_query_detail_table_renders_url_fields() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_query_detail_table_renders_url_fields() {
     let query = make_url_query();
-
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_query_detail("url-q", &query, OutputFormat::Table);
-    })
-    .await;
+    let output = capture_detail("url-q", &query, OutputFormat::Table);
 
     assert!(output.contains("Source URL"));
     assert!(output.contains("bugzilla.example.com"));
@@ -185,18 +180,13 @@ async fn print_query_detail_table_renders_url_fields() {
     assert!(output.contains('2'));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_query_detail_table_shows_date_filters() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_query_detail_table_shows_date_filters() {
     let mut query = make_list_query();
     query.creation_time = Some("2026-04-01T00:00:00Z".into());
     query.last_change_time = Some("2026-04-15T00:00:00Z".into());
 
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_query_detail("recent", &query, OutputFormat::Table);
-    })
-    .await;
+    let output = capture_detail("recent", &query, OutputFormat::Table);
 
     assert!(output.contains("Created since"), "missing label: {output}");
     assert!(
@@ -239,10 +229,8 @@ fn query_summary_line_renders_date_filters() {
     );
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn query_list_names_sort_before_render() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn query_list_names_sort_before_render() {
     let mut queries: HashMap<String, SavedQuery> = HashMap::new();
     queries.insert("zzz".into(), make_list_query());
     queries.insert("aaa".into(), make_search_query());
@@ -263,10 +251,8 @@ async fn query_list_names_sort_before_render() {
     );
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_query_detail_table_shows_158_field_filters() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_query_detail_table_shows_158_field_filters() {
     let mut query = make_list_query();
     query.whiteboard = vec!["needs-review".into()];
     query.target_milestone = vec!["5.0".into()];
@@ -277,10 +263,7 @@ async fn print_query_detail_table_shows_158_field_filters() {
     query.qa_contact = vec!["qa@example.com".into()];
     query.url = vec!["github.com/foo".into()];
 
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_query_detail("complete", &query, OutputFormat::Table);
-    })
-    .await;
+    let output = capture_detail("complete", &query, OutputFormat::Table);
 
     assert!(output.contains("Whiteboard"), "missing label: {output}");
     assert!(output.contains("needs-review"));

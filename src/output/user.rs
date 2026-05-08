@@ -1,9 +1,9 @@
-use std::io::{self, Write as _};
+use std::io::Write;
 
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
-use super::formatting::{opt_yes_no, print_field, print_formatted, print_optional_field};
+use super::formatting::{opt_yes_no, write_field, write_formatted, write_optional_field};
 use crate::types::{BugzillaUser, OutputFormat, WhoamiResponse};
 
 #[derive(Tabled)]
@@ -62,34 +62,38 @@ fn detailed_row(user: &BugzillaUser) -> DetailedUserRow {
     }
 }
 
-pub fn print_users(users: &[BugzillaUser], format: OutputFormat) {
-    print_formatted(users, format, |users| {
+pub fn write_users<W: Write + ?Sized>(users: &[BugzillaUser], format: OutputFormat, out: &mut W) {
+    write_formatted(users, format, out, |users, out| {
         if users.is_empty() {
-            let _ = writeln!(io::stdout(), "No users found.");
+            let _ = writeln!(out, "No users found.");
             return;
         }
         let rows: Vec<UserRow> = users.iter().map(basic_row).collect();
-        let _ = writeln!(io::stdout(), "{}", Table::new(rows));
+        let _ = writeln!(out, "{}", Table::new(rows));
     });
 }
 
-pub fn print_users_detailed(users: &[BugzillaUser], format: OutputFormat) {
-    print_formatted(users, format, |users| {
+pub fn write_users_detailed<W: Write + ?Sized>(
+    users: &[BugzillaUser],
+    format: OutputFormat,
+    out: &mut W,
+) {
+    write_formatted(users, format, out, |users, out| {
         if users.is_empty() {
-            let _ = writeln!(io::stdout(), "No users found.");
+            let _ = writeln!(out, "No users found.");
             return;
         }
         let rows: Vec<DetailedUserRow> = users.iter().map(detailed_row).collect();
-        let _ = writeln!(io::stdout(), "{}", Table::new(rows));
+        let _ = writeln!(out, "{}", Table::new(rows));
     });
 }
 
-pub fn print_whoami(whoami: &WhoamiResponse, format: OutputFormat) {
-    print_formatted(whoami, format, |whoami| {
-        let _ = writeln!(io::stdout(), "{} {}", "User".bold(), whoami.name.bold());
-        print_optional_field("Name", whoami.real_name.as_deref());
-        print_optional_field("Login", whoami.login.as_deref());
-        print_field("ID", &whoami.id.to_string());
+pub fn write_whoami<W: Write + ?Sized>(whoami: &WhoamiResponse, format: OutputFormat, out: &mut W) {
+    write_formatted(whoami, format, out, |whoami, out| {
+        let _ = writeln!(out, "{} {}", "User".bold(), whoami.name.bold());
+        write_optional_field(out, "Name", whoami.real_name.as_deref());
+        write_optional_field(out, "Login", whoami.login.as_deref());
+        write_field(out, "ID", &whoami.id.to_string());
     });
 }
 

@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::BugAction;
-use crate::test_helpers::{capture_stdout, setup_test_env};
+use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 fn make_update_action(ids: Vec<u64>) -> BugAction {
@@ -96,15 +96,14 @@ async fn bug_update_sends_put() {
     mock_put_bug_ok(&mock, 42).await;
 
     let action = make_update_action(vec![42]);
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
-        &action,
-        None,
-        OutputFormat::Json,
-        None,
-    ))
-    .await;
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+    let output = __io.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["action"], "updated");
     assert_eq!(parsed["id"], 42);
 }
@@ -124,13 +123,16 @@ async fn bug_update_batch_mixed_results() {
         .await;
 
     let action = make_update_action(vec![1, 2]);
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io2 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io2.writers(),
+    )
     .await;
+    let output = __io2.out_str().to_string();
     assert!(matches!(
         result,
         Err(crate::error::BzrError::BatchPartialFailure {
@@ -138,7 +140,8 @@ async fn bug_update_batch_mixed_results() {
             failed: 1,
         })
     ));
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["succeeded"], serde_json::json!([1]));
     assert_eq!(parsed["failed"][0]["id"], 2);
 }
@@ -152,13 +155,16 @@ async fn bug_update_batch_table_format_all_succeed() {
     mock_put_bug_ok(&mock, 2).await;
 
     let action = make_update_action(vec![1, 2]);
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io3 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Table,
         None,
-    ))
+        &mut __io3.writers(),
+    )
     .await;
+    let output = __io3.out_str().to_string();
     assert!(result.is_ok());
     assert!(output.contains("Updated bugs:"));
     assert!(output.contains("#1"));
@@ -440,13 +446,16 @@ async fn bug_update_table_output_with_comment_single() {
     mock_put_bug_ok(&mock, 42).await;
 
     let action = make_update_action_with_comment(vec![42], Some("hi"), None, false);
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io4 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Table,
         None,
-    ))
+        &mut __io4.writers(),
+    )
     .await;
+    let output = __io4.out_str().to_string();
     assert!(result.is_ok());
     assert!(
         output.contains("Updated bug #42 (with comment)"),
@@ -460,13 +469,16 @@ async fn bug_update_table_output_no_comment_single() {
     mock_put_bug_ok(&mock, 42).await;
 
     let action = make_update_action(vec![42]);
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io5 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Table,
         None,
-    ))
+        &mut __io5.writers(),
+    )
     .await;
+    let output = __io5.out_str().to_string();
     assert!(result.is_ok());
     assert!(output.contains("Updated bug #42"));
     assert!(
@@ -482,13 +494,16 @@ async fn bug_update_table_output_with_comment_batch_all_succeed() {
     mock_put_bug_ok(&mock, 2).await;
 
     let action = make_update_action_with_comment(vec![1, 2], Some("batch comment"), None, false);
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io6 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Table,
         None,
-    ))
+        &mut __io6.writers(),
+    )
     .await;
+    let output = __io6.out_str().to_string();
     assert!(result.is_ok());
     assert!(output.contains("Updated bugs:"));
     assert!(output.contains("(with comment)"));
@@ -500,15 +515,19 @@ async fn bug_update_json_output_unchanged_with_comment() {
     mock_put_bug_ok(&mock, 42).await;
 
     let action = make_update_action_with_comment(vec![42], Some("hi"), None, false);
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io7 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io7.writers(),
+    )
     .await;
+    let output = __io7.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["action"], "updated");
     assert_eq!(parsed["id"], 42);
     assert!(
