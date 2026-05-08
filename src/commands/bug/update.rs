@@ -86,6 +86,13 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
         status,
         resolution,
         dupe_of,
+        alias,
+        deadline,
+        estimated_time,
+        remaining_time,
+        work_time,
+        reset_assigned_to,
+        reset_qa_contact,
         assignee,
         priority,
         severity,
@@ -107,24 +114,29 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
         comment,
         comment_file,
         comment_private,
-        ..
     } = action
     else {
         unreachable!()
     };
+
+    if alias.is_some() && ids.len() > 1 {
+        return Err(crate::error::BzrError::InputValidation(
+            "--alias can only be used when updating one bug".into(),
+        ));
+    }
 
     let flags = crate::commands::flags::parse_flags(flag)?;
     let params = UpdateBugParams {
         status: status.clone(),
         resolution: resolution.clone(),
         dupe_of: *dupe_of,
-        alias: None,
-        deadline: None,
-        estimated_time: None,
-        remaining_time: None,
-        work_time: None,
-        reset_assigned_to: false,
-        reset_qa_contact: false,
+        alias: alias.clone(),
+        deadline: deadline.clone(),
+        estimated_time: *estimated_time,
+        remaining_time: *remaining_time,
+        work_time: *work_time,
+        reset_assigned_to: *reset_assigned_to,
+        reset_qa_contact: *reset_qa_contact,
         assigned_to: assignee.clone(),
         priority: priority.clone(),
         severity: severity.clone(),

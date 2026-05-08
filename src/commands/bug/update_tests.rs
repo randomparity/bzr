@@ -81,6 +81,43 @@ fn make_update_action_with_dupe_of(id: u64, dupe_of: u64) -> BugAction {
     }
 }
 
+fn make_update_action_with_scalar_parity_fields() -> BugAction {
+    BugAction::Update {
+        ids: vec![42],
+        status: None,
+        resolution: None,
+        dupe_of: None,
+        alias: Some("short-name".into()),
+        deadline: Some("2026-12-31".into()),
+        estimated_time: Some(3.5),
+        remaining_time: Some(1.25),
+        work_time: Some(0.5),
+        reset_assigned_to: true,
+        reset_qa_contact: true,
+        assignee: None,
+        priority: None,
+        severity: None,
+        summary: None,
+        whiteboard: None,
+        flag: vec![],
+        blocks_add: vec![],
+        blocks_remove: vec![],
+        depends_on_add: vec![],
+        depends_on_remove: vec![],
+        keywords_add: vec![],
+        keywords_remove: vec![],
+        cc_add: vec![],
+        cc_remove: vec![],
+        groups_add: vec![],
+        groups_remove: vec![],
+        see_also_add: vec![],
+        see_also_remove: vec![],
+        comment: None,
+        comment_file: None,
+        comment_private: false,
+    }
+}
+
 #[derive(Default)]
 struct UpdateLists<'a> {
     keywords_add: Vec<&'a str>,
@@ -159,6 +196,33 @@ async fn bug_update_sends_put() {
         serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["action"], "updated");
     assert_eq!(parsed["id"], 42);
+}
+
+#[tokio::test]
+async fn bug_update_alias_multiple_ids_rejected_before_connect() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    let mut action = make_update_action_with_scalar_parity_fields();
+    let BugAction::Update { ids, .. } = &mut action else {
+        panic!("expected update action");
+    };
+    *ids = vec![42, 43];
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    assert!(matches!(
+        result,
+        Err(crate::error::BzrError::InputValidation(ref msg)) if msg.contains("--alias")
+    ));
+    let received = mock.received_requests().await.unwrap();
+    assert!(
+        received.is_empty(),
+        "expected validation before network I/O, got {} request(s)",
+        received.len()
+    );
 }
 
 #[tokio::test]
@@ -273,6 +337,35 @@ fn build_update_params_populates_dupe_of() {
     assert_eq!(params.dupe_of, Some(99));
     assert!(params.status.is_none());
     assert!(params.resolution.is_none());
+}
+
+#[test]
+fn build_update_params_populates_scalar_parity_fields() {
+    let action = make_update_action_with_scalar_parity_fields();
+    let (_ids, params) = super::build_update_params(&action).unwrap();
+
+    assert_eq!(params.alias.as_deref(), Some("short-name"));
+    assert_eq!(params.deadline.as_deref(), Some("2026-12-31"));
+    assert_eq!(params.estimated_time, Some(3.5));
+    assert_eq!(params.remaining_time, Some(1.25));
+    assert_eq!(params.work_time, Some(0.5));
+    assert!(params.reset_assigned_to);
+    assert!(params.reset_qa_contact);
+}
+
+#[test]
+fn build_update_params_rejects_alias_with_multiple_ids() {
+    let mut action = make_update_action_with_scalar_parity_fields();
+    let BugAction::Update { ids, .. } = &mut action else {
+        panic!("expected update action");
+    };
+    *ids = vec![42, 43];
+
+    let err = super::build_update_params(&action).unwrap_err();
+    assert!(
+        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("--alias")),
+        "expected --alias validation error, got {err:?}"
+    );
 }
 
 #[test]
