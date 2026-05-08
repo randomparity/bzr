@@ -1,19 +1,19 @@
-use std::io::{self, Write as _};
+use std::io::Write;
 
 use colored::Colorize;
 
-use super::formatting::print_formatted;
+use super::formatting::write_formatted;
 use crate::types::{Comment, OutputFormat};
 
-pub fn print_comments(comments: &[Comment], format: OutputFormat) {
-    print_formatted(comments, format, |comments| {
+pub fn write_comments<W: Write + ?Sized>(comments: &[Comment], format: OutputFormat, out: &mut W) {
+    write_formatted(comments, format, out, |comments, out| {
         if comments.is_empty() {
-            let _ = writeln!(io::stdout(), "No comments.");
+            let _ = writeln!(out, "No comments.");
             return;
         }
         for c in comments {
             let _ = writeln!(
-                io::stdout(),
+                out,
                 "{} #{} by {} ({})",
                 "Comment".bold(),
                 c.count,
@@ -21,14 +21,14 @@ pub fn print_comments(comments: &[Comment], format: OutputFormat) {
                 c.creation_time.as_deref().unwrap_or(""),
             );
             if c.is_private {
-                let _ = writeln!(io::stdout(), "  {}", "[PRIVATE]".red());
+                let _ = writeln!(out, "  {}", "[PRIVATE]".red());
             }
-            let _ = writeln!(io::stdout());
+            let _ = writeln!(out);
             for line in c.text.lines() {
-                let _ = writeln!(io::stdout(), "  {line}");
+                let _ = writeln!(out, "  {line}");
             }
-            let _ = writeln!(io::stdout());
-            let _ = writeln!(io::stdout(), "{}", "─".repeat(60));
+            let _ = writeln!(out);
+            let _ = writeln!(out, "{}", "─".repeat(60));
         }
     });
 }

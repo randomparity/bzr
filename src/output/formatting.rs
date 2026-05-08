@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use std::io::Write;
 
 use colored::Colorize;
 use serde::Serialize;
@@ -7,23 +7,26 @@ use crate::types::OutputFormat;
 
 // ── Formatting primitives ───────────────────────────────────────────
 
-pub(super) fn print_json(value: &(impl Serialize + ?Sized)) {
-    writeln!(
-        io::stdout(),
+pub(super) fn write_json<W: Write + ?Sized>(value: &(impl Serialize + ?Sized), out: &mut W) {
+    let _ = writeln!(
+        out,
         "{}",
         serde_json::to_string_pretty(value).expect("serializable to JSON")
-    )
-    .expect("write to output");
+    );
 }
 
-pub(super) fn print_formatted<T: Serialize + ?Sized>(
+pub(super) fn write_formatted<T, W>(
     value: &T,
     format: OutputFormat,
-    table_fn: impl FnOnce(&T),
-) {
+    out: &mut W,
+    table_fn: impl FnOnce(&T, &mut W),
+) where
+    T: Serialize + ?Sized,
+    W: Write + ?Sized,
+{
     match format {
-        OutputFormat::Json => print_json(value),
-        OutputFormat::Table => table_fn(value),
+        OutputFormat::Json => write_json(value, out),
+        OutputFormat::Table => table_fn(value, out),
     }
 }
 
@@ -31,34 +34,26 @@ pub(super) fn print_formatted<T: Serialize + ?Sized>(
 // Shared formatting for bug/resource detail views. All use consistent
 // 12-char label alignment and render absent values as "-".
 
-pub(super) fn write_field(out: &mut impl Write, label: &str, value: &str) {
+pub(super) fn write_field<W: Write + ?Sized>(out: &mut W, label: &str, value: &str) {
     let _ = writeln!(out, "  {label:<12}  {value}");
 }
 
-pub(super) fn write_optional_field(out: &mut impl Write, label: &str, value: Option<&str>) {
+pub(super) fn write_optional_field<W: Write + ?Sized>(
+    out: &mut W,
+    label: &str,
+    value: Option<&str>,
+) {
     let _ = writeln!(out, "  {label:<12}  {}", value.unwrap_or("-"));
 }
 
-pub(super) fn write_list_field(out: &mut impl Write, label: &str, items: &[String]) {
+pub(super) fn write_list_field<W: Write + ?Sized>(out: &mut W, label: &str, items: &[String]) {
     if !items.is_empty() {
         let _ = writeln!(out, "  {label:<12}  {}", items.join(", "));
     }
 }
 
-pub(super) fn print_field(label: &str, value: &str) {
-    write_field(&mut io::stdout(), label, value);
-}
-
-pub(super) fn print_optional_field(label: &str, value: Option<&str>) {
-    write_optional_field(&mut io::stdout(), label, value);
-}
-
-pub(super) fn print_list_field(label: &str, items: &[String]) {
-    write_list_field(&mut io::stdout(), label, items);
-}
-
-pub(super) fn print_bool_field(label: &str, value: bool) {
-    writeln!(io::stdout(), "  {label:<12}  {}", yes_no(value)).expect("write to output");
+pub(super) fn write_bool_field<W: Write + ?Sized>(out: &mut W, label: &str, value: bool) {
+    let _ = writeln!(out, "  {label:<12}  {}", yes_no(value));
 }
 
 // ── Section divider ─────────────────────────────────────────────────
@@ -70,7 +65,7 @@ pub(super) fn print_bool_field(label: &str, value: bool) {
 pub(super) const DIVIDER_WIDTH: usize = 60;
 
 /// Write a horizontal section divider followed by a newline.
-pub(crate) fn write_divider(out: &mut impl Write) {
+pub(crate) fn write_divider<W: Write + ?Sized>(out: &mut W) {
     let _ = writeln!(out, "{}", "─".repeat(DIVIDER_WIDTH));
 }
 

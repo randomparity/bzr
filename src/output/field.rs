@@ -1,9 +1,9 @@
-use std::io::{self, Write as _};
+use std::io::Write;
 
 use serde::Serialize;
 use tabled::{Table, Tabled};
 
-use super::formatting::{print_formatted, yes_no};
+use super::formatting::{write_formatted, yes_no};
 use crate::types::{FieldValue, OutputFormat};
 
 #[derive(Tabled)]
@@ -16,8 +16,12 @@ struct FieldValueRow {
     can_change_to: String,
 }
 
-pub fn print_field_values(values: &[FieldValue], format: OutputFormat) {
-    print_formatted(values, format, |values| {
+pub fn write_field_values<W: Write + ?Sized>(
+    values: &[FieldValue],
+    format: OutputFormat,
+    out: &mut W,
+) {
+    write_formatted(values, format, out, |values, out| {
         let rows: Vec<FieldValueRow> = values
             .iter()
             .map(|v| {
@@ -38,7 +42,7 @@ pub fn print_field_values(values: &[FieldValue], format: OutputFormat) {
                 }
             })
             .collect();
-        let _ = writeln!(io::stdout(), "{}", Table::new(rows));
+        let _ = writeln!(out, "{}", Table::new(rows));
     });
 }
 
@@ -50,13 +54,17 @@ struct FieldAliasRow {
     api_name: &'static str,
 }
 
-pub fn print_field_aliases(aliases: &[(&'static str, &'static str)], format: OutputFormat) {
+pub fn write_field_aliases<W: Write + ?Sized>(
+    aliases: &[(&'static str, &'static str)],
+    format: OutputFormat,
+    out: &mut W,
+) {
     let rows: Vec<FieldAliasRow> = aliases
         .iter()
         .map(|&(alias, api_name)| FieldAliasRow { alias, api_name })
         .collect();
-    print_formatted(&rows, format, |rows| {
-        let _ = writeln!(io::stdout(), "{}", Table::new(rows));
+    write_formatted(&rows, format, out, |rows, out| {
+        let _ = writeln!(out, "{}", Table::new(rows));
     });
 }
 

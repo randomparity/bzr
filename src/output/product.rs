@@ -1,8 +1,9 @@
 use std::fmt::Write as _;
+use std::io::Write;
 
 use tabled::{Table, Tabled};
 
-use super::formatting::{print_formatted, truncate};
+use super::formatting::{truncate, write_formatted};
 use crate::types::{OutputFormat, Product};
 
 fn format_named_list(heading: &str, items: &[(impl AsRef<str>, bool)]) -> String {
@@ -56,11 +57,10 @@ struct ProductRow {
     components: usize,
 }
 
-#[expect(clippy::print_stdout)]
-pub fn print_products(products: &[Product], format: OutputFormat) {
-    print_formatted(products, format, |products| {
+pub fn write_products<W: Write + ?Sized>(products: &[Product], format: OutputFormat, out: &mut W) {
+    write_formatted(products, format, out, |products, out| {
         if products.is_empty() {
-            println!("No products found.");
+            let _ = writeln!(out, "No products found.");
             return;
         }
         let rows: Vec<ProductRow> = products
@@ -75,14 +75,17 @@ pub fn print_products(products: &[Product], format: OutputFormat) {
                 }
             })
             .collect();
-        println!("{}", Table::new(rows));
+        let _ = writeln!(out, "{}", Table::new(rows));
     });
 }
 
-#[expect(clippy::print_stdout)]
-pub fn print_product_detail(product: &Product, format: OutputFormat) {
-    print_formatted(product, format, |product| {
-        print!("{}", format_product_detail(product));
+pub fn write_product_detail<W: Write + ?Sized>(
+    product: &Product,
+    format: OutputFormat,
+    out: &mut W,
+) {
+    write_formatted(product, format, out, |product, out| {
+        let _ = write!(out, "{}", format_product_detail(product));
     });
 }
 

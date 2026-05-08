@@ -1,13 +1,14 @@
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
-use crate::output::{self, ActionResult, ResourceKind};
+use crate::output::{self, ActionResult, ResourceKind, Writers};
 use crate::types::{CreateBugParams, OutputFormat};
 
 pub(super) async fn handle(
     client: &BugzillaClient,
     action: &BugAction,
     format: OutputFormat,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     let BugAction::Clone {
         id,
@@ -90,10 +91,11 @@ pub(super) async fn handle(
             .await?;
     }
 
-    output::print_result(
+    output::write_result(
         &ActionResult::created(new_id, ResourceKind::Bug),
         &format!("Cloned bug #{} → #{new_id}", source.id),
         format,
+        w.out,
     );
     Ok(())
 }

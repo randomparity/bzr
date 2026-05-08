@@ -1,28 +1,27 @@
-use std::io::{self, Write as _};
+use std::io::Write;
 
 use colored::Colorize;
 
-use super::formatting::{print_formatted, truncate};
+use super::formatting::{truncate, write_formatted};
 use crate::types::{Classification, OutputFormat};
 
-pub fn print_classification(classification: &Classification, format: OutputFormat) {
-    print_formatted(classification, format, |classification| {
+pub fn write_classification<W: Write + ?Sized>(
+    classification: &Classification,
+    format: OutputFormat,
+    out: &mut W,
+) {
+    write_formatted(classification, format, out, |classification, out| {
         let _ = writeln!(
-            io::stdout(),
+            out,
             "{} {}\n{}\n",
             "Classification".bold(),
             classification.name.bold(),
             classification.description,
         );
         if !classification.products.is_empty() {
-            let _ = writeln!(io::stdout(), "{}:", "Products".bold());
+            let _ = writeln!(out, "{}:", "Products".bold());
             for p in &classification.products {
-                let _ = writeln!(
-                    io::stdout(),
-                    "  {} - {}",
-                    p.name,
-                    truncate(&p.description, 60)
-                );
+                let _ = writeln!(out, "  {} - {}", p.name, truncate(&p.description, 60));
             }
         }
     });

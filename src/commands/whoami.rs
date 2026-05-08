@@ -2,7 +2,7 @@
 
 use crate::cli::WhoamiAction;
 use crate::error::Result;
-use crate::output;
+use crate::output::{self, Writers};
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 
@@ -11,10 +11,11 @@ pub async fn execute(
     server: Option<&str>,
     format: OutputFormat,
     api: Option<ApiMode>,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     let client = super::shared::connect_and_configure(server, api).await?;
     let whoami = client.whoami().await?;
-    output::print_whoami(&whoami, format);
+    output::write_whoami(&whoami, format, w.out);
     Ok(())
 }
 

@@ -7,7 +7,7 @@ use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::{BugAction, TemplateAction};
 use crate::error::BzrError;
-use crate::test_helpers::{capture_stdout, setup_test_env};
+use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 fn create_action() -> BugAction {
@@ -40,15 +40,21 @@ async fn bug_create_sends_post() {
         .mount(&mock)
         .await;
 
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io = crate::test_helpers::CapturedIo::new();
+
+    let result = crate::commands::bug::execute(
         &create_action(),
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io.writers(),
+    )
     .await;
+
+    let output = __io.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["action"], "created");
     assert_eq!(parsed["id"], 99);
 }
@@ -73,13 +79,16 @@ async fn bug_create_missing_product_returns_input_validation() {
         blocks: vec![],
         depends_on: vec![],
     };
-    let (result, _output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io2 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io2.writers(),
+    )
     .await;
+    let _output = __io2.out_str().to_string();
     let err = result.unwrap_err();
     assert!(
         matches!(&err, BzrError::InputValidation(msg) if msg.contains("--product")),
@@ -107,13 +116,16 @@ async fn bug_create_missing_component_returns_input_validation() {
         blocks: vec![],
         depends_on: vec![],
     };
-    let (result, _output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io3 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io3.writers(),
+    )
     .await;
+    let _output = __io3.out_str().to_string();
     let err = result.unwrap_err();
     assert!(
         matches!(&err, BzrError::InputValidation(msg) if msg.contains("--component")),
@@ -141,13 +153,16 @@ async fn bug_create_with_unknown_template_errors() {
         blocks: vec![],
         depends_on: vec![],
     };
-    let (result, _output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io4 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io4.writers(),
+    )
     .await;
+    let _output = __io4.out_str().to_string();
     let err = result.unwrap_err();
     assert!(
         matches!(&err, BzrError::Config(msg) if msg.contains("does-not-exist")),
@@ -173,13 +188,16 @@ async fn bug_create_with_template_fills_missing_fields() {
         rep_platform: None,
         description: Some("from template".into()),
     };
-    let (result, _) = capture_stdout(crate::commands::template::execute(
+    let mut __io5 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::template::execute(
         &save,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io5.writers(),
+    )
     .await;
+    let _ = __io5.out_str().to_string();
     assert!(result.is_ok(), "template save failed: {result:?}");
 
     // The mock should see the template's product/component/version
@@ -210,18 +228,22 @@ async fn bug_create_with_template_fills_missing_fields() {
         blocks: vec![],
         depends_on: vec![],
     };
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io6 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io6.writers(),
+    )
     .await;
+    let output = __io6.out_str().to_string();
     assert!(
         result.is_ok(),
         "bug create with template failed: {result:?}"
     );
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["id"], 7);
     assert_eq!(parsed["action"], "created");
 }
@@ -258,13 +280,16 @@ async fn bug_create_reads_description_from_file() {
         blocks: vec![],
         depends_on: vec![],
     };
-    let (result, _output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io7 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io7.writers(),
+    )
     .await;
+    let _output = __io7.out_str().to_string();
     assert!(result.is_ok(), "got {result:?}");
     let _ = std::fs::remove_file(&desc_path);
 }
@@ -289,13 +314,16 @@ async fn bug_create_description_file_missing_returns_input_validation() {
         blocks: vec![],
         depends_on: vec![],
     };
-    let (result, _output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io8 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io8.writers(),
+    )
     .await;
+    let _output = __io8.out_str().to_string();
     let err = result.unwrap_err();
     assert!(
         matches!(&err, BzrError::InputValidation(m) if m.contains("description-file")),
@@ -327,13 +355,16 @@ async fn bug_create_description_file_non_utf8_returns_input_validation() {
         blocks: vec![],
         depends_on: vec![],
     };
-    let (result, _output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io9 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io9.writers(),
+    )
     .await;
+    let _output = __io9.out_str().to_string();
     let err = result.unwrap_err();
     let _ = std::fs::remove_file(&bad_path);
     assert!(
@@ -362,13 +393,16 @@ async fn bug_create_missing_summary_without_editor_flow_is_rejected() {
         blocks: vec![],
         depends_on: vec![],
     };
-    let (result, _output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io10 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io10.writers(),
+    )
     .await;
+    let _output = __io10.out_str().to_string();
     let err = result.unwrap_err();
     assert!(
         matches!(&err, BzrError::InputValidation(m) if m.contains("--summary")),
@@ -567,13 +601,18 @@ async fn bug_create_editor_flow_resolves_via_editor_when_stdin_is_tty() {
         .mount(&mock)
         .await;
 
-    let (result, _output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io11 = crate::test_helpers::CapturedIo::new();
+
+    let result = crate::commands::bug::execute(
         &editor_action_no_summary_no_description(),
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io11.writers(),
+    )
     .await;
+
+    let _output = __io11.out_str().to_string();
 
     // SAFETY: setup_test_env holds bzr::ENV_LOCK for the duration of
     // this test, serializing env access across all tests using it.
@@ -622,13 +661,18 @@ async fn bug_create_editor_branch_unreachable_when_stdin_piped() {
         .mount(&mock)
         .await;
 
-    let (result, _output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io12 = crate::test_helpers::CapturedIo::new();
+
+    let result = crate::commands::bug::execute(
         &editor_action_no_summary_no_description(),
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io12.writers(),
+    )
     .await;
+
+    let _output = __io12.out_str().to_string();
 
     // SAFETY: setup_test_env holds bzr::ENV_LOCK for the duration of
     // this test, serializing env access across all tests using it.
@@ -665,13 +709,16 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
         rep_platform: None,
         description: Some("template body".into()),
     };
-    let (result, _) = capture_stdout(crate::commands::template::execute(
+    let mut __io13 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::template::execute(
         &save,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io13.writers(),
+    )
     .await;
+    let _ = __io13.out_str().to_string();
     assert!(result.is_ok(), "template save failed: {result:?}");
 
     // Invoke bug create with the template, no other description source,
@@ -694,13 +741,16 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
         blocks: vec![],
         depends_on: vec![],
     };
-    let (result, _output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io14 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io14.writers(),
+    )
     .await;
+    let _output = __io14.out_str().to_string();
     let err = result.unwrap_err();
     assert!(
         matches!(&err, BzrError::InputValidation(_)),
