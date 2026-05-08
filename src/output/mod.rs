@@ -20,7 +20,6 @@ mod user;
 mod writers;
 
 // Re-export shared types and helpers used by commands.
-pub(crate) use formatting::write_divider;
 pub use result_types::{
     write_result, ActionResult, BatchFailure, BatchResult, BugViewFailure, ConfigResult,
     DownloadResult, MembershipResult, MultiBugViewResult, ResourceKind, SearchResult, TagResult,

@@ -6,6 +6,48 @@ use crate::output::{
 };
 use crate::types::{Bug, OutputFormat};
 
+#[derive(Clone, Copy)]
+enum BugViewMode {
+    Strict,
+    Permissive,
+}
+
+struct BugViewBatch {
+    rows: Vec<BugViewRow>,
+}
+
+enum BugViewRow {
+    Ok(Box<Bug>),
+    Failed(BugViewFailure),
+}
+
+impl BugViewBatch {
+    fn into_json_result(self) -> MultiBugViewResult {
+        let mut bugs = Vec::with_capacity(self.rows.len());
+        let mut failed = Vec::new();
+        for row in self.rows {
+            match row {
+                BugViewRow::Ok(bug) => bugs.push(*bug),
+                BugViewRow::Failed(failure) => failed.push(failure),
+            }
+        }
+        MultiBugViewResult { bugs, failed }
+    }
+
+    fn into_table_rows(self) -> Vec<MultiBugRow> {
+        self.rows
+            .into_iter()
+            .map(|row| match row {
+                BugViewRow::Ok(bug) => MultiBugRow::Ok(bug),
+                BugViewRow::Failed(failure) => MultiBugRow::Failed {
+                    id: failure.id,
+                    error: failure.error,
+                },
+            })
+            .collect()
+    }
+}
+
 pub(super) async fn handle(
     client: &BugzillaClient,
     action: &BugAction,
@@ -32,12 +74,17 @@ pub(super) async fn handle(
     let exc = exclude_fields.as_deref();
 
     if ids.len() == 1 {
-        view_single(client, &ids[0], inc, exc, format, w).await
-    } else if *permissive {
-        view_batch_permissive(client, ids, inc, exc, format, w).await
-    } else {
-        view_batch_strict(client, ids, inc, exc, format, w).await
+        return view_single(client, &ids[0], inc, exc, format, w).await;
     }
+
+    let mode = if *permissive {
+        BugViewMode::Permissive
+    } else {
+        BugViewMode::Strict
+    };
+    let batch = fetch_batch(client, ids, inc, exc, mode).await?;
+    write_batch(batch, format, w);
+    Ok(())
 }
 
 async fn view_single(
@@ -53,85 +100,40 @@ async fn view_single(
     Ok(())
 }
 
-async fn view_batch_strict(
+async fn fetch_batch(
     client: &BugzillaClient,
     ids: &[String],
     include_fields: Option<&str>,
     exclude_fields: Option<&str>,
-    format: OutputFormat,
-    w: &mut Writers<'_>,
-) -> Result<()> {
-    match format {
-        OutputFormat::Table => {
-            for (i, id) in ids.iter().enumerate() {
-                let bug = client.get_bug(id, include_fields, exclude_fields).await?;
-                if i > 0 {
-                    output::write_divider(w.out);
-                }
-                output::write_bug_detail(&bug, format, w.out);
+    mode: BugViewMode,
+) -> Result<BugViewBatch> {
+    let mut rows = Vec::with_capacity(ids.len());
+    for id in ids {
+        match client.get_bug(id, include_fields, exclude_fields).await {
+            Ok(bug) => rows.push(BugViewRow::Ok(Box::new(bug))),
+            Err(e) if matches!(mode, BugViewMode::Permissive) && e.is_bug_get_per_resource() => {
+                rows.push(BugViewRow::Failed(BugViewFailure {
+                    id: id.clone(),
+                    error: e.to_string(),
+                }));
             }
-            Ok(())
-        }
-        OutputFormat::Json => {
-            let mut bugs = Vec::with_capacity(ids.len());
-            for id in ids {
-                let bug = client.get_bug(id, include_fields, exclude_fields).await?;
-                bugs.push(bug);
-            }
-            let result = MultiBugViewResult {
-                bugs,
-                failed: Vec::new(),
-            };
-            output::write_result(&result, "", format, w.out);
-            Ok(())
+            Err(e) => return Err(e),
         }
     }
+    Ok(BugViewBatch { rows })
 }
 
-async fn view_batch_permissive(
-    client: &BugzillaClient,
-    ids: &[String],
-    include_fields: Option<&str>,
-    exclude_fields: Option<&str>,
-    format: OutputFormat,
-    w: &mut Writers<'_>,
-) -> Result<()> {
+fn write_batch(batch: BugViewBatch, format: OutputFormat, w: &mut Writers<'_>) {
     match format {
         OutputFormat::Table => {
-            let mut rows: Vec<MultiBugRow> = Vec::with_capacity(ids.len());
-            for id in ids {
-                match client.get_bug(id, include_fields, exclude_fields).await {
-                    Ok(bug) => rows.push(MultiBugRow::Ok(Box::new(bug))),
-                    Err(e) if e.is_bug_get_per_resource() => {
-                        rows.push(MultiBugRow::Failed {
-                            id: id.clone(),
-                            error: e.to_string(),
-                        });
-                    }
-                    Err(e) => return Err(e),
-                }
-            }
+            let rows = batch.into_table_rows();
             write_multi_bug_view(&rows, w.out);
         }
         OutputFormat::Json => {
-            let mut bugs: Vec<Bug> = Vec::with_capacity(ids.len());
-            let mut failed: Vec<BugViewFailure> = Vec::new();
-            for id in ids {
-                match client.get_bug(id, include_fields, exclude_fields).await {
-                    Ok(bug) => bugs.push(bug),
-                    Err(e) if e.is_bug_get_per_resource() => {
-                        failed.push(BugViewFailure {
-                            id: id.clone(),
-                            error: e.to_string(),
-                        });
-                    }
-                    Err(e) => return Err(e),
-                }
-            }
-            output::write_result(&MultiBugViewResult { bugs, failed }, "", format, w.out);
+            let result = batch.into_json_result();
+            output::write_result(&result, "", format, w.out);
         }
     }
-    Ok(())
 }
 
 #[cfg(test)]
