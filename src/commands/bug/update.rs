@@ -226,13 +226,7 @@ async fn update_batch(
     }
     let batch = BatchResult::new(succeeded, failed);
     write_batch_result(&batch, format, params.comment.is_some(), w);
-    if !batch.failed.is_empty() {
-        return Err(crate::error::BzrError::BatchPartialFailure {
-            succeeded: batch.succeeded.len(),
-            failed: batch.failed.len(),
-        });
-    }
-    Ok(())
+    batch.outcome().ensure_complete()
 }
 
 pub(super) async fn handle(

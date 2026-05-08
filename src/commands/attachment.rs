@@ -324,9 +324,6 @@ async fn download_batch(
     }
 
     let summary = BatchSummary::from_results(&bug_results, &attachment_results);
-    let succeeded = summary.succeeded;
-    let failed = summary.failed;
-
     let result = AttachmentBatchResult {
         out_dir: out_dir.to_string(),
         bug_results,
@@ -335,11 +332,7 @@ async fn download_batch(
     };
 
     output::write_attachment_batch(&result, format, w.out, w.err);
-
-    if failed > 0 {
-        return Err(crate::error::BzrError::BatchPartialFailure { succeeded, failed });
-    }
-    Ok(())
+    result.summary.outcome().ensure_complete()
 }
 
 /// Download every attachment for one `--bug <ID>` target. Returns a

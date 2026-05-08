@@ -149,6 +149,10 @@ impl BatchSummary {
             total_bytes,
         }
     }
+
+    pub(crate) fn outcome(&self) -> crate::batch::BatchOutcome {
+        crate::batch::BatchOutcome::new(self.succeeded, self.failed)
+    }
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
