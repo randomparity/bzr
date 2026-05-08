@@ -1,16 +1,16 @@
 #![expect(clippy::unwrap_used)]
 
-use super::*;
+use std::collections::BTreeMap;
 
 #[test]
 fn value_conversions() {
+    use crate::xmlrpc::value::Value;
+
     assert_eq!(Value::from("hello").as_str().unwrap(), "hello");
     assert_eq!(Value::from(42i64).as_i64().unwrap(), 42);
-    assert!(Value::from(true).as_bool().unwrap());
 
     let s = Value::String("test".into());
     assert!(s.as_i64().is_none());
-    assert!(s.as_bool().is_none());
     assert!(s.as_struct().is_none());
     assert!(s.as_array().is_none());
     assert!(s.as_f64().is_none());
@@ -18,12 +18,16 @@ fn value_conversions() {
 
 #[test]
 fn from_string_value() {
+    use crate::xmlrpc::value::Value;
+
     let v: Value = "owned".to_string().into();
     assert_eq!(v.as_str().unwrap(), "owned");
 }
 
 #[test]
 fn from_vec_and_btreemap_value() {
+    use crate::xmlrpc::value::Value;
+
     let arr: Value = vec![Value::Int(1), Value::Int(2)].into();
     assert_eq!(arr.as_array().unwrap().len(), 2);
 

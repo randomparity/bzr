@@ -159,7 +159,7 @@ async fn view_multi_strict_all_succeed_table() {
 }
 
 #[tokio::test]
-async fn view_multi_strict_first_failure_bails() {
+async fn view_multi_strict_failure_emits_no_partial_table() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
@@ -189,8 +189,11 @@ async fn view_multi_strict_first_failure_bails() {
     .await;
     let output = __io4.out_str().to_string();
     assert!(result.is_err());
-    assert!(output.contains("Bug #1"));
-    // Bug #3 must NOT have been fetched.
+    assert!(
+        output.trim().is_empty(),
+        "strict multi-ID table output should be all-or-nothing, got: {output}"
+    );
+    // Bug #3 must NOT have been fetched after bug #2 failed.
     assert!(!output.contains("Bug #3"));
 }
 

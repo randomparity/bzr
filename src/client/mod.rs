@@ -6,7 +6,6 @@ mod classification;
 mod comment;
 mod component;
 mod field;
-pub(crate) use field::FIELD_ALIASES;
 mod group;
 mod product;
 mod server;
@@ -57,6 +56,18 @@ pub struct BugzillaClient {
     pub(super) xmlrpc: Option<XmlRpcClient>,
     /// Email hint for Bugzilla 5.0 compatibility (whoami fallback via user lookup).
     email_hint: Option<String>,
+}
+
+/// Configuration needed to construct a [`BugzillaClient`].
+#[non_exhaustive]
+#[derive(Clone, Copy)]
+pub struct BugzillaClientConfig<'a> {
+    pub base_url: &'a str,
+    pub credential: &'a str,
+    pub auth_method: AuthMethod,
+    pub api_mode: ApiMode,
+    pub email_hint: Option<&'a str>,
+    pub tls_config: &'a crate::tls::TlsConfig,
 }
 
 /// Generic response for endpoints that return a single `id` field.
@@ -137,21 +148,23 @@ impl BugzillaClient {
         DATA_KEYS.iter().any(|key| map.contains_key(*key))
     }
 
-    pub fn new(
-        base_url: &str,
-        api_key: &str,
-        auth_method: AuthMethod,
-        api_mode: ApiMode,
-        email_hint: Option<&str>,
-        tls_config: &crate::tls::TlsConfig,
-    ) -> Result<Self> {
+    pub fn new(config: BugzillaClientConfig<'_>) -> Result<Self> {
+        let BugzillaClientConfig {
+            base_url,
+            credential,
+            auth_method,
+            api_mode,
+            email_hint,
+            tls_config,
+        } = config;
+
         let auth = match auth_method {
             AuthMethod::Header => {
-                let value = HeaderValue::from_str(api_key)
+                let value = HeaderValue::from_str(credential)
                     .map_err(|_| BzrError::config("invalid API key characters"))?;
                 PreparedAuth::Header(value)
             }
-            AuthMethod::QueryParam => PreparedAuth::QueryParam(api_key.to_string()),
+            AuthMethod::QueryParam => PreparedAuth::QueryParam(credential.to_string()),
         };
 
         let http = crate::tls::build_tls_client(tls_config)?;
@@ -165,7 +178,7 @@ impl BugzillaClient {
                  overriding configured header auth for XML-RPC calls"
             );
         }
-        let xmlrpc = Some(XmlRpcClient::new(http.clone(), base_url, api_key));
+        let xmlrpc = Some(XmlRpcClient::new(http.clone(), base_url, credential));
 
         tracing::debug!(base_url, %auth_method, %api_mode, "created Bugzilla client");
 
@@ -173,7 +186,7 @@ impl BugzillaClient {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
             auth,
-            api_key: api_key.to_string(),
+            api_key: credential.to_string(),
             api_mode,
             xmlrpc,
             email_hint: email_hint.map(String::from),

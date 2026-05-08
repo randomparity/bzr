@@ -1,7 +1,10 @@
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
-use crate::output::{self, ActionResult, BatchFailure, BatchResult, ResourceKind, Writers};
+use crate::output::result_types::{
+    write_result, ActionResult, BatchFailure, BatchResult, ResourceKind,
+};
+use crate::output::writers::Writers;
 use crate::types::{IdListUpdate, OutputFormat, StringListUpdate, UpdateBugParams};
 
 const FLAG_KEYWORDS_ADD: &str = "--keywords-add";
@@ -196,7 +199,7 @@ async fn update_single(
     client.update_bug(id, params).await?;
     match format {
         OutputFormat::Json => {
-            output::write_result(
+            write_result(
                 &ActionResult::updated(id, ResourceKind::Bug),
                 "",
                 format,
@@ -219,7 +222,7 @@ fn write_batch_result(
 ) {
     match format {
         OutputFormat::Json => {
-            output::write_result(batch, "", format, w.out);
+            write_result(batch, "", format, w.out);
         }
         OutputFormat::Table => {
             if !batch.succeeded.is_empty() {
@@ -232,6 +235,14 @@ fn write_batch_result(
                 let _ = writeln!(w.err, "Failed to update bug #{}: {}", f.id, f.error);
             }
         }
+    }
+}
+
+fn ensure_batch_complete(succeeded: usize, failed: usize) -> Result<()> {
+    if failed > 0 {
+        Err(crate::error::BzrError::BatchPartialFailure { succeeded, failed })
+    } else {
+        Ok(())
     }
 }
 
@@ -255,13 +266,7 @@ async fn update_batch(
     }
     let batch = BatchResult::new(succeeded, failed);
     write_batch_result(&batch, format, params.comment.is_some(), w);
-    if !batch.failed.is_empty() {
-        return Err(crate::error::BzrError::BatchPartialFailure {
-            succeeded: batch.succeeded.len(),
-            failed: batch.failed.len(),
-        });
-    }
-    Ok(())
+    ensure_batch_complete(batch.succeeded.len(), batch.failed.len())
 }
 
 pub(super) async fn handle(

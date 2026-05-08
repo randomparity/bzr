@@ -41,7 +41,7 @@ async fn seed_inline_server(name: &str, url: &str, api_key: &str) {
     .unwrap();
 }
 
-/// Store `secret` in the (mock) keychain for `server_name` by priming
+/// Store `secret` in the test keychain for `server_name` by priming
 /// the `BZR_KEYRING_TEST_SECRET` test hook and running `SetKeyring`.
 #[cfg(feature = "keyring")]
 async fn seed_keyring_secret(server_name: &str, secret: &str) {
@@ -351,7 +351,7 @@ async fn set_server_with_env_var_persists_env_source() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn set_keyring_stores_secret_and_rewrites_config() {
-    ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+    crate::credentials::keyring::install_test_store();
     let (_lock, _tmp) = setup_config_env().await;
 
     // Create an inline server first.
@@ -368,7 +368,7 @@ async fn set_keyring_stores_secret_and_rewrites_config() {
     assert!(server.api_key_env.is_none());
     assert!(server.api_key_keyring.is_some());
 
-    // Resolving the API key now fetches from the (mock) keychain.
+    // Resolving the API key now fetches from the test keychain.
     assert_eq!(server.resolve_api_key("prod").unwrap(), "new-keyring-value");
 
     // Cleanup the keychain entry so subsequent tests don't see it.
@@ -379,7 +379,7 @@ async fn set_keyring_stores_secret_and_rewrites_config() {
 #[tokio::test]
 async fn migrate_to_keyring_from_inline_rewrites_config() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+    crate::credentials::keyring::install_test_store();
     let (_lock, _tmp) = setup_config_env().await;
 
     seed_inline_server(
@@ -419,7 +419,7 @@ async fn migrate_to_keyring_from_inline_rewrites_config() {
 #[tokio::test]
 async fn migrate_to_keyring_from_env_preserves_config() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+    crate::credentials::keyring::install_test_store();
     let (_lock, _tmp) = setup_config_env().await;
 
     // SAFETY: Serialized via ENV_LOCK through setup_config_env.
@@ -478,7 +478,7 @@ async fn migrate_to_keyring_from_env_preserves_config() {
 #[tokio::test]
 async fn migrate_to_keyring_from_keyring_errors_before_storing() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+    crate::credentials::keyring::install_test_store();
     let (_lock, _tmp) = setup_config_env().await;
 
     // Set up a keyring-backed server.
@@ -549,7 +549,7 @@ async fn migrate_to_keyring_without_yes_errors() {
 #[tokio::test]
 async fn unset_keyring_removes_secret_and_clears_config() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+    crate::credentials::keyring::install_test_store();
     let (_lock, _tmp) = setup_config_env().await;
 
     // Build a keyring-backed server by first creating an inline one,

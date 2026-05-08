@@ -8,7 +8,7 @@ use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 fn cert_capture_accepts_any_cert() {
     let provider = crate::tls::default_provider();
     let capture = CertCapture {
-        captured: Mutex::new(None),
+        captured: OnceLock::new(),
         provider,
     };
     let cert_data = b"fake cert data";
@@ -18,9 +18,7 @@ fn cert_capture_accepts_any_cert() {
     let result = capture.verify_server_cert(&cert, &[], &server_name, &[], UnixTime::now());
     assert!(result.is_ok(), "CertCapture should accept any cert");
 
-    let captured = capture.captured.lock().unwrap();
-    assert!(captured.is_some(), "cert should be captured");
-    let (der, _issuer) = captured.as_ref().unwrap();
+    let (der, _issuer) = capture.captured.get().unwrap();
     assert_eq!(der, cert_data, "captured DER should match input");
 }
 
@@ -28,7 +26,7 @@ fn cert_capture_accepts_any_cert() {
 fn cert_capture_supported_verify_schemes_not_empty() {
     let provider = crate::tls::default_provider();
     let capture = CertCapture {
-        captured: Mutex::new(None),
+        captured: OnceLock::new(),
         provider,
     };
     assert!(
@@ -101,20 +99,20 @@ fn parse_tofu_response_rejects_other() {
 }
 
 #[test]
-fn parse_yes_no_accepts_y() {
-    assert!(parse_yes_no("y"));
-    assert!(parse_yes_no("Y"));
-    assert!(parse_yes_no("yes"));
-    assert!(parse_yes_no("YES"));
-    assert!(parse_yes_no("  y  "));
+fn is_yes_response_accepts_y() {
+    assert!(is_yes_response("y"));
+    assert!(is_yes_response("Y"));
+    assert!(is_yes_response("yes"));
+    assert!(is_yes_response("YES"));
+    assert!(is_yes_response("  y  "));
 }
 
 #[test]
-fn parse_yes_no_rejects_others() {
-    assert!(!parse_yes_no("n"));
-    assert!(!parse_yes_no(""));
-    assert!(!parse_yes_no("no"));
-    assert!(!parse_yes_no("anything"));
+fn is_yes_response_rejects_others() {
+    assert!(!is_yes_response("n"));
+    assert!(!is_yes_response(""));
+    assert!(!is_yes_response("no"));
+    assert!(!is_yes_response("anything"));
 }
 
 /// Construct a `DigitallySignedStruct` for tests covering `CertCapture`'s
@@ -148,7 +146,7 @@ fn dummy_dss() -> DigitallySignedStruct {
 fn cert_capture_verify_tls12_signature_returns_ok() {
     let provider = crate::tls::default_provider();
     let capture = CertCapture {
-        captured: Mutex::new(None),
+        captured: OnceLock::new(),
         provider,
     };
     let cert = CertificateDer::from(b"fake".to_vec());
@@ -161,7 +159,7 @@ fn cert_capture_verify_tls12_signature_returns_ok() {
 fn cert_capture_verify_tls13_signature_returns_ok() {
     let provider = crate::tls::default_provider();
     let capture = CertCapture {
-        captured: Mutex::new(None),
+        captured: OnceLock::new(),
         provider,
     };
     let cert = CertificateDer::from(b"fake".to_vec());

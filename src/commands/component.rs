@@ -1,6 +1,7 @@
 use crate::cli::ComponentAction;
 use crate::error::Result;
-use crate::output::{self, ActionResult, ResourceKind, Writers};
+use crate::output::result_types::{write_result, ActionResult, ResourceKind};
+use crate::output::writers::Writers;
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{CreateComponentParams, UpdateComponentParams};
@@ -28,7 +29,7 @@ pub async fn execute(
                 default_assignee: default_assignee.clone(),
             };
             let id = client.create_component(&params).await?;
-            output::write_result(
+            write_result(
                 &ActionResult::created(id, ResourceKind::Component),
                 &format!("Created component #{id} in product '{product}'"),
                 format,
@@ -47,7 +48,7 @@ pub async fn execute(
                 default_assignee: default_assignee.clone(),
             };
             client.update_component(*id, &params).await?;
-            output::write_result(
+            write_result(
                 &ActionResult::updated(*id, ResourceKind::Component),
                 &format!("Updated component #{id}"),
                 format,

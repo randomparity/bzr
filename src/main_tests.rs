@@ -1,7 +1,6 @@
 #![expect(clippy::expect_used)]
 
 use super::*;
-use bzr::cli::Commands;
 use std::sync::{Mutex, OnceLock};
 
 fn env_lock() -> std::sync::MutexGuard<'static, ()> {

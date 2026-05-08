@@ -1,8 +1,12 @@
 #![expect(clippy::unwrap_used, clippy::panic)]
 
-use super::*;
-use crate::types::ProductListType;
-use clap::{CommandFactory, Parser};
+use super::{
+    AttachmentAction, BugAction, ClassificationAction, Cli, Commands, CommentAction,
+    ComponentAction, ConfigAction, FieldAction, GroupAction, ProductAction, QueryAction,
+    ServerAction, TemplateAction, UserAction,
+};
+use crate::types::{ApiMode, ProductListType};
+use clap::{CommandFactory as _, Parser as _};
 
 /// Doc-comment coverage for items already converted to multi-paragraph
 /// `long_about` per docs/dev/cli-doc-style.md. Phase 1 + 2a of the
@@ -914,6 +918,12 @@ fn parse_no_color_flag() {
 fn parse_quiet_flag() {
     let cli = Cli::try_parse_from(["bzr", "--quiet", "whoami", "show"]).unwrap();
     assert!(cli.quiet);
+}
+
+#[test]
+fn quiet_help_mentions_tracing_is_suppressed() {
+    let help = Cli::command().render_long_help().to_string();
+    assert!(help.contains("tracing logs are also suppressed"), "{help}");
 }
 
 #[test]

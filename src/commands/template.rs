@@ -5,7 +5,10 @@
 use crate::cli::TemplateAction;
 use crate::config::Config;
 use crate::error::{BzrError, Result};
-use crate::output::{self, Writers};
+use crate::output::resources::template::{
+    write_template_detail, write_template_list, write_template_saved,
+};
+use crate::output::writers::Writers;
 use crate::types::BugTemplate;
 use crate::types::OutputFormat;
 
@@ -67,11 +70,11 @@ pub async fn execute(
             config.save()?;
 
             let verb = if is_update { "Updated" } else { "Saved" };
-            output::write_template_saved(name, verb, format, w.out);
+            write_template_saved(name, verb, format, w.out);
         }
         TemplateAction::List => {
             let config = Config::load()?;
-            output::write_template_list(&config.templates, format, w.out);
+            write_template_list(&config.templates, format, w.out);
         }
         TemplateAction::Show { name } => {
             let config = Config::load()?;
@@ -79,7 +82,7 @@ pub async fn execute(
                 .templates
                 .get(name.as_str())
                 .ok_or_else(|| BzrError::config(format!("template '{name}' not found")))?;
-            output::write_template_detail(name, template, format, w.out);
+            write_template_detail(name, template, format, w.out);
         }
         TemplateAction::Delete { name } => {
             let mut config = Config::load()?;
@@ -88,12 +91,7 @@ pub async fn execute(
             }
             config.save()?;
 
-            output::write_result(
-                &serde_json::json!({"name": name, "action": "deleted"}),
-                &format!("Deleted template '{name}'"),
-                format,
-                w.out,
-            );
+            write_template_saved(name, "Deleted", format, w.out);
         }
     }
     Ok(())

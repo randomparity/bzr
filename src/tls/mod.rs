@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 pub(crate) mod fingerprint;
+pub(crate) mod pin_failure;
 pub(crate) mod tofu;
 pub(crate) mod verifier;
 
@@ -27,6 +28,7 @@ pub(crate) fn base_tls_builder(
 
 /// TLS configuration for a server connection.
 #[derive(Debug, Clone, Default)]
+#[non_exhaustive]
 pub struct TlsConfig {
     pub insecure: bool,
     pub ca_cert_path: Option<PathBuf>,

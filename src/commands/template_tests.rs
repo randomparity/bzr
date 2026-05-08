@@ -257,6 +257,42 @@ async fn template_delete_existing_removes_entry() {
 }
 
 #[tokio::test]
+async fn template_delete_json_matches_domain_mutation_output() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let mut save_io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &save_action("delete-json-shape"),
+        None,
+        OutputFormat::Json,
+        None,
+        &mut save_io.writers(),
+    )
+    .await;
+    let _ = save_io.out_str().to_string();
+    assert!(result.is_ok());
+
+    let mut delete_io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &TemplateAction::Delete {
+            name: "delete-json-shape".into(),
+        },
+        None,
+        OutputFormat::Json,
+        None,
+        &mut delete_io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok());
+    let parsed = serde_json::from_str::<serde_json::Value>(delete_io.out_str().trim()).unwrap();
+    assert_eq!(
+        parsed,
+        serde_json::json!({"name": "delete-json-shape", "action": "deleted"})
+    );
+}
+
+#[tokio::test]
 async fn template_delete_table_prints_deleted_message() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 

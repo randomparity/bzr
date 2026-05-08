@@ -10,7 +10,9 @@ use std::path::PathBuf;
 use crate::cli::ConfigAction;
 use crate::config::{Config, ServerConfig};
 use crate::error::Result;
-use crate::output::{self, ConfigResult, Writers};
+use crate::output::resources::config::{write_config, ConfigView};
+use crate::output::result_types::{write_result, ConfigResult};
+use crate::output::writers::Writers;
 use crate::types::OutputFormat;
 
 pub async fn execute(
@@ -64,7 +66,7 @@ pub async fn execute(
             let path = Config::path()?;
             config.save()?;
 
-            output::write_result(
+            write_result(
                 &ConfigResult::default_set(name.as_str(), path.to_string_lossy()),
                 &format!(
                     "Default server set to '{name}'\nConfig file: {}",
@@ -78,8 +80,8 @@ pub async fn execute(
         ConfigAction::Show => {
             let config = Config::load()?;
             let path = Config::path()?;
-            let view = output::ConfigView::from_config(&config, &path);
-            output::write_config(&view, format, w.out);
+            let view = ConfigView::from_config(&config, &path);
+            write_config(&view, format, w.out);
             Ok(())
         }
         ConfigAction::SetKeyring {
@@ -214,7 +216,7 @@ async fn set_server(
     }
     let _ = write!(human, "\nConfig file: {}", path.display());
 
-    output::write_result(
+    write_result(
         &ConfigResult::configured(name, url, is_default, path.to_string_lossy(), is_update),
         &human,
         format,
@@ -262,7 +264,7 @@ fn set_keyring(
          (service={service_name}, account={account_name})\nConfig file: {}",
         path.display()
     );
-    output::write_result(
+    write_result(
         &ConfigResult::configured(name, &server_url, false, path.to_string_lossy(), true),
         &human,
         format,
@@ -300,7 +302,7 @@ fn unset_keyring(name: &str, format: OutputFormat, w: &mut Writers<'_>) -> Resul
          `bzr config set-keyring` to re-credential.\nConfig file: {}",
         path.display()
     );
-    output::write_result(
+    write_result(
         &ConfigResult::configured(name, &server_url, false, path.to_string_lossy(), true),
         &human,
         format,
@@ -375,7 +377,7 @@ fn migrate_to_keyring(
         )
     };
 
-    output::write_result(
+    write_result(
         &ConfigResult::configured(name, &server_url, false, path.to_string_lossy(), true),
         &human,
         format,

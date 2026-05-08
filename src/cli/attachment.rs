@@ -33,7 +33,7 @@ pub enum AttachmentAction {
     ///    bzr attachment download 9876 9877 9878 [--out-dir DIR]
     ///
     /// 3. Every attachment of one or more bugs (mixable with #2):
-    ///    bzr attachment download --bug 12345 [--bug 67890] [9876] [--out-dir DIR]
+    ///    bzr attachment download --bug 12345 [--bug 67890] \[9876\] [--out-dir DIR]
     ///
     /// In shapes 2 and 3, files are written to
     /// `<out-dir>/<bug-id>/<att-id>.<file_name>`. The attachment-ID

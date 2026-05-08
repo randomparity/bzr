@@ -1,6 +1,9 @@
 use crate::cli::GroupAction;
 use crate::error::Result;
-use crate::output::{self, ActionResult, MembershipResult, ResourceKind, Writers};
+use crate::output::resources::group::write_group_info;
+use crate::output::resources::user::{write_users, write_users_detailed};
+use crate::output::result_types::{write_result, ActionResult, MembershipResult, ResourceKind};
+use crate::output::writers::Writers;
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{CreateGroupParams, UpdateGroupParams};
@@ -17,7 +20,7 @@ pub async fn execute(
     match action {
         GroupAction::AddUser { group, user } => {
             client.add_user_to_group(user, group).await?;
-            output::write_result(
+            write_result(
                 &MembershipResult::added(user.as_str(), group.as_str()),
                 &format!("Added {user} to group '{group}'"),
                 format,
@@ -26,7 +29,7 @@ pub async fn execute(
         }
         GroupAction::RemoveUser { group, user } => {
             client.remove_user_from_group(user, group).await?;
-            output::write_result(
+            write_result(
                 &MembershipResult::removed(user.as_str(), group.as_str()),
                 &format!("Removed {user} from group '{group}'"),
                 format,
@@ -36,14 +39,14 @@ pub async fn execute(
         GroupAction::ListUsers { group, details } => {
             let users = client.get_group_members(group, *details).await?;
             if *details {
-                output::write_users_detailed(&users, format, w.out);
+                write_users_detailed(&users, format, w.out);
             } else {
-                output::write_users(&users, format, w.out);
+                write_users(&users, format, w.out);
             }
         }
         GroupAction::View { group } => {
             let info = client.get_group(group).await?;
-            output::write_group_info(&info, format, w.out);
+            write_group_info(&info, format, w.out);
         }
         GroupAction::Create {
             name,
@@ -56,7 +59,7 @@ pub async fn execute(
                 is_active: *is_active,
             };
             let id = client.create_group(&params).await?;
-            output::write_result(
+            write_result(
                 &ActionResult::created_named(id, name.as_str(), ResourceKind::Group),
                 &format!("Created group #{id} '{name}'"),
                 format,
@@ -73,7 +76,7 @@ pub async fn execute(
                 is_active: *is_active,
             };
             client.update_group(group, &params).await?;
-            output::write_result(
+            write_result(
                 &ActionResult::updated_named(group.as_str(), None, ResourceKind::Group),
                 &format!("Updated group '{group}'"),
                 format,

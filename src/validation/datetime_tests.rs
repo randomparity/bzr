@@ -111,6 +111,23 @@ fn rejects_day_above_thirty_one() {
 }
 
 #[test]
+fn rejects_day_past_month_length() {
+    assert!(parse_iso8601_or_date("2026-04-31", FLAG).is_err());
+    assert!(parse_iso8601_or_date("2026-02-30", FLAG).is_err());
+}
+
+#[test]
+fn rejects_february_twenty_ninth_on_non_leap_year() {
+    assert!(parse_iso8601_or_date("2025-02-29", FLAG).is_err());
+}
+
+#[test]
+fn accepts_february_twenty_ninth_on_leap_year() {
+    let canon = parse_iso8601_or_date("2024-02-29", FLAG).unwrap();
+    assert_eq!(canon, "2024-02-29T00:00:00Z");
+}
+
+#[test]
 fn rejects_hour_above_twenty_three() {
     assert!(parse_iso8601_or_date("2026-04-01T25:00:00Z", FLAG).is_err());
 }
@@ -138,6 +155,11 @@ fn rejects_offset_with_invalid_sign() {
 #[test]
 fn rejects_offset_hours_above_fourteen() {
     assert!(parse_iso8601_or_date("2026-04-01T12:30:45+15:00", FLAG).is_err());
+}
+
+#[test]
+fn rejects_offset_minutes_when_hour_is_fourteen() {
+    assert!(parse_iso8601_or_date("2026-04-01T12:30:45+14:01", FLAG).is_err());
 }
 
 #[test]

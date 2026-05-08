@@ -55,7 +55,7 @@ use crate::types::{ApiMode, OutputFormat};
 ///
 /// Examples:
 ///
-///   bzr config set-server prod --url https://bugzilla.example.com \
+///   bzr config set-server prod --url <https://bugzilla.example.com> \
 ///     --api-key-env BZR_API_KEY
 ///   bzr bug list --product Firefox --status NEW --limit 25
 ///   bzr bug view 12345 --json | jq .summary
@@ -105,9 +105,9 @@ pub struct Cli {
 
     /// Suppress all stdout output.
     ///
-    /// Redirects stdout to /dev/null. Stderr (errors, warnings,
-    /// `tracing` logs) is unaffected. Useful for scripts that only
-    /// care about exit codes.
+    /// Redirects stdout to /dev/null; tracing logs are also suppressed.
+    /// Stderr is still used for errors and warnings. Useful for scripts
+    /// that only care about exit codes.
     #[arg(long, global = true)]
     pub quiet: bool,
 
@@ -235,7 +235,7 @@ pub enum Commands {
     ///
     /// Examples:
     ///
-    ///   bzr config set-server prod --url https://bz.example.com \
+    ///   bzr config set-server prod --url <https://bz.example.com> \
     ///     --api-key-env BZR_API_KEY
     ///   bzr config set-default prod
     ///   bzr config set-keyring prod

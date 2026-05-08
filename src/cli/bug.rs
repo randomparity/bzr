@@ -568,7 +568,7 @@ pub enum BugAction {
     ///     --depends-on-remove 99
     ///   bzr bug update 100 --keywords-add fix-needed,regression \
     ///     --cc-add alice@example.com \
-    ///     --see-also-add https://example.com/issue/42
+    ///     --see-also-add <https://example.com/issue/42>
     ///
     /// See bzr-bug-create(1) for new bugs, bzr-bug-clone(1) for
     /// cloning, and bzr-comment-add(1) for adding a comment as part

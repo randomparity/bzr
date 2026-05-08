@@ -1,0 +1,12 @@
+pub(crate) mod attachment;
+pub(crate) mod bug;
+pub(crate) mod classification;
+pub(crate) mod comment;
+pub(crate) mod config;
+pub(crate) mod field;
+pub(crate) mod group;
+pub(crate) mod product;
+pub(crate) mod query;
+pub(crate) mod server;
+pub(crate) mod template;
+pub(crate) mod user;

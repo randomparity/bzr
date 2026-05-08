@@ -1,5 +1,5 @@
 use std::io::{self, IsTerminal, Write};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, OnceLock};
 
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
@@ -15,7 +15,7 @@ use crate::tls::verifier::{extract_issuer_der, extract_issuer_dn};
 /// certificate DER bytes and issuer for TOFU inspection.
 #[derive(Debug)]
 struct CertCapture {
-    captured: Mutex<Option<(Vec<u8>, String)>>,
+    captured: OnceLock<(Vec<u8>, String)>,
     provider: Arc<rustls::crypto::CryptoProvider>,
 }
 
@@ -30,9 +30,7 @@ impl ServerCertVerifier for CertCapture {
     ) -> std::result::Result<ServerCertVerified, rustls::Error> {
         let der = end_entity.as_ref().to_vec();
         let issuer = extract_issuer_dn(&der);
-        #[expect(clippy::unwrap_used)]
-        let mut guard = self.captured.lock().unwrap();
-        *guard = Some((der, issuer));
+        let _ = self.captured.set((der, issuer));
         Ok(ServerCertVerified::assertion())
     }
 
@@ -72,7 +70,7 @@ pub(crate) async fn probe_server_cert(url: &str) -> Result<(String, String, Opti
     let provider = super::default_provider();
 
     let capture = Arc::new(CertCapture {
-        captured: Mutex::new(None),
+        captured: OnceLock::new(),
         provider: provider.clone(),
     });
 
@@ -97,10 +95,9 @@ pub(crate) async fn probe_server_cert(url: &str) -> Result<(String, String, Opti
         BzrError::config(format!("failed to probe server certificate at {url}: {e}"))
     })?;
 
-    #[expect(clippy::unwrap_used)]
-    let guard = capture.captured.lock().unwrap();
-    let (der, issuer) = guard
-        .as_ref()
+    let (der, issuer) = capture
+        .captured
+        .get()
         .ok_or_else(|| BzrError::config(format!("no certificate captured from {url}")))?;
 
     let fingerprint = compute_fingerprint(der);
@@ -138,9 +135,9 @@ pub(crate) fn parse_tofu_response(input: &str) -> Option<bool> {
     }
 }
 
-/// Parse a yes/no response from user input.
+/// Return whether user input is an affirmative yes response.
 /// Returns `true` for "y" or "yes" (case-insensitive).
-pub(crate) fn parse_yes_no(input: &str) -> bool {
+pub(crate) fn is_yes_response(input: &str) -> bool {
     input.trim().eq_ignore_ascii_case("y") || input.trim().eq_ignore_ascii_case("yes")
 }
 
@@ -148,7 +145,7 @@ pub(crate) fn parse_yes_no(input: &str) -> bool {
 /// if stdin is not a terminal.
 pub(crate) fn confirm_pin() -> Result<bool> {
     let input = read_interactive_line("Pin this certificate? [y/N] ")?;
-    Ok(input.as_deref().is_some_and(parse_yes_no))
+    Ok(input.as_deref().is_some_and(is_yes_response))
 }
 
 /// Prompt the user for first-contact TOFU decision.
@@ -199,7 +196,7 @@ pub(crate) fn prompt_rotation(
     let _ = writeln!(io::stderr());
 
     let input = read_interactive_line("Accept the new certificate? [y/N] ")?;
-    Ok(input.as_deref().is_some_and(parse_yes_no))
+    Ok(input.as_deref().is_some_and(is_yes_response))
 }
 
 #[cfg(test)]

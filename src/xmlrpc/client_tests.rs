@@ -1,15 +1,21 @@
 #![expect(clippy::unwrap_used)]
 
+use std::collections::BTreeMap;
+
+use super::{
+    add_vec_filters, extract_bugs, extract_id, get_datetime_str, get_int_array, get_nonempty_str,
+    get_str_array, value_to_comment, value_to_group_info, XmlRpcClient,
+};
+use crate::error::BzrError;
+use crate::test_helpers::xmlrpc_bug_response;
+use crate::types::{CreateUserParams, SearchParams};
+use crate::xmlrpc::value::Value;
 use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-
-use super::*;
 
 fn test_http_client() -> reqwest::Client {
     reqwest::Client::new()
 }
-
-use crate::test_helpers::xmlrpc_bug_response;
 
 fn xmlrpc_fault_response(code: i64, message: &str) -> String {
     format!(

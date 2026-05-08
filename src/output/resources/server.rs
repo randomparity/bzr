@@ -3,7 +3,7 @@ use std::io::Write;
 use colored::Colorize;
 use serde::Serialize;
 
-use super::formatting::write_formatted;
+use crate::output::formatting::write_formatted;
 use crate::types::{OutputFormat, ServerInfoResponse};
 
 /// Combined server information for display.

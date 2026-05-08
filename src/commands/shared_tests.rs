@@ -8,6 +8,20 @@ use crate::test_helpers::setup_test_env;
 use crate::tls::TlsConfig;
 use crate::ENV_LOCK;
 
+fn connect_context(
+    server_name: &str,
+    url: &str,
+    api_override: Option<crate::types::ApiMode>,
+) -> super::ConnectContext {
+    super::ConnectContext {
+        server_name: server_name.to_string(),
+        url: url.to_string(),
+        api_key: "test-key".to_string(),
+        email: None,
+        api_override,
+    }
+}
+
 #[tokio::test]
 async fn connect_client_returns_client() {
     let (_lock, mock, _tmp) = setup_test_env().await;
@@ -257,34 +271,6 @@ fn extract_hostname_returns_raw_on_invalid() {
     assert_eq!(super::extract_hostname("not-a-url"), "not-a-url");
 }
 
-#[test]
-fn is_pin_mismatch_returns_false_for_non_http() {
-    let err = BzrError::Config("PIN_MISMATCH".into());
-    assert!(!super::is_pin_mismatch(&err));
-}
-
-#[test]
-fn is_issuer_changed_returns_false_for_non_http() {
-    let err = BzrError::Config("ISSUER_CHANGED".into());
-    assert!(!super::is_issuer_changed(&err));
-}
-
-#[test]
-fn parse_pin_mismatch_extracts_fingerprint_and_issuer() {
-    let chain = "error sending request: PIN_MISMATCH for test: \
-                 expected sha256//old==, got sha256//new==, \
-                 issuer CN=Test CA, O=Test";
-    let (fp, issuer) = super::parse_pin_mismatch_details(chain).unwrap();
-    assert_eq!(fp, "sha256//new==");
-    assert_eq!(issuer, "CN=Test CA, O=Test");
-}
-
-#[test]
-fn parse_pin_mismatch_returns_none_for_unrelated_error() {
-    let chain = "connection refused";
-    assert!(super::parse_pin_mismatch_details(chain).is_none());
-}
-
 #[tokio::test]
 async fn detect_with_tofu_fallback_normal_path() {
     let _lock = ENV_LOCK.lock().await;
@@ -332,29 +318,9 @@ api_key = "test-key"
 
     let mut config = crate::config::Config::load().unwrap();
     let tls_config = TlsConfig::default();
-    let result = super::detect_with_tofu_fallback(
-        "test",
-        &server.uri(),
-        "test-key",
-        None,
-        None,
-        &tls_config,
-        &mut config,
-    )
-    .await;
+    let ctx = connect_context("test", &server.uri(), None);
+    let result = super::detect_with_tofu_fallback(&ctx, &tls_config, &mut config).await;
     assert!(result.is_ok(), "normal path should succeed");
-}
-
-#[test]
-fn is_issuer_changed_returns_false_for_config_error() {
-    let err = BzrError::Config("ISSUER_CHANGED inside config".into());
-    assert!(!super::is_issuer_changed(&err));
-}
-
-#[test]
-fn is_pin_mismatch_returns_false_for_config_error() {
-    let err = BzrError::Config("PIN_MISMATCH inside config".into());
-    assert!(!super::is_pin_mismatch(&err));
 }
 
 #[test]
@@ -368,18 +334,6 @@ fn persist_detected_settings_skips_unknown_server() {
     };
     let result = super::persist_detected_settings(&mut config, "nonexistent", &settings, true);
     assert!(result.is_ok());
-}
-
-#[test]
-fn parse_pin_mismatch_no_got_returns_none() {
-    let chain = "PIN_MISMATCH for test: expected sha256//old==";
-    assert!(super::parse_pin_mismatch_details(chain).is_none());
-}
-
-#[test]
-fn parse_pin_mismatch_no_issuer_returns_none() {
-    let chain = "PIN_MISMATCH for test: expected sha256//old==, got sha256//new==";
-    assert!(super::parse_pin_mismatch_details(chain).is_none());
 }
 
 /// Build a config TOML with the given extra fields injected into the
@@ -538,16 +492,8 @@ async fn detect_and_build_client_persists_and_returns_client() {
 
     let mut config = crate::config::Config::load().unwrap();
     let tls_config = TlsConfig::default();
-    let result = super::detect_and_build_client(
-        "test",
-        &server.uri(),
-        "test-key",
-        None,
-        None,
-        &tls_config,
-        &mut config,
-    )
-    .await;
+    let ctx = connect_context("test", &server.uri(), None);
+    let result = super::detect_and_build_client(&ctx, &tls_config, &mut config).await;
     assert!(result.is_ok(), "detect_and_build_client should succeed");
 
     // Verify the settings were persisted.
@@ -569,16 +515,8 @@ async fn detect_and_build_client_respects_api_override() {
 
     let mut config = crate::config::Config::load().unwrap();
     let tls_config = TlsConfig::default();
-    let result = super::detect_and_build_client(
-        "test",
-        &server.uri(),
-        "test-key",
-        None,
-        Some(crate::types::ApiMode::XmlRpc),
-        &tls_config,
-        &mut config,
-    )
-    .await;
+    let ctx = connect_context("test", &server.uri(), Some(crate::types::ApiMode::XmlRpc));
+    let result = super::detect_and_build_client(&ctx, &tls_config, &mut config).await;
     assert!(result.is_ok(), "api_override should still produce a client");
 }
 
@@ -594,15 +532,8 @@ async fn handle_tofu_returns_error_when_probe_fails() {
     write_config(&tmp, "https://127.0.0.1:1", "");
 
     let mut config = crate::config::Config::load().unwrap();
-    let result = super::handle_tofu(
-        "test",
-        "https://127.0.0.1:1",
-        "test-key",
-        None,
-        None,
-        &mut config,
-    )
-    .await;
+    let ctx = connect_context("test", "https://127.0.0.1:1", None);
+    let result = super::handle_tofu(&ctx, &mut config).await;
     assert!(
         result.is_err(),
         "handle_tofu should propagate probe failure"
@@ -624,12 +555,9 @@ async fn handle_pin_rotation_rejects_in_noninteractive() {
     );
 
     let mut config = crate::config::Config::load().unwrap();
+    let ctx = connect_context("test", "https://example.test", None);
     let result = super::handle_pin_rotation(
-        "test",
-        "https://example.test",
-        "test-key",
-        None,
-        None,
+        &ctx,
         "sha256//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
         "sha256//BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=",
         "CN=New",
@@ -662,16 +590,8 @@ async fn detect_with_tofu_fallback_propagates_auth_errors() {
     // and return BzrError::Auth, which is not a TLS error -> propagates.
     let mut config = crate::config::Config::load().unwrap();
     let tls_config = TlsConfig::default();
-    let result = super::detect_with_tofu_fallback(
-        "test",
-        &server.uri(),
-        "test-key",
-        None,
-        None,
-        &tls_config,
-        &mut config,
-    )
-    .await;
+    let ctx = connect_context("test", &server.uri(), None);
+    let result = super::detect_with_tofu_fallback(&ctx, &tls_config, &mut config).await;
     assert!(result.is_err(), "auth failure should propagate");
 }
 
@@ -696,19 +616,6 @@ async fn should_offer_tofu_false_for_non_tls_http_error() {
     let bzr_err = BzrError::Http(err);
     let tls = TlsConfig::default();
     assert!(!super::should_offer_tofu(&bzr_err, &tls));
-    // Same error should also not match pin/issuer predicates.
-    assert!(!super::is_pin_mismatch(&bzr_err));
-    assert!(!super::is_issuer_changed(&bzr_err));
-}
-
-/// `parse_pin_mismatch_details` happy path is already covered;
-/// these guard the slicing-boundary branches.
-#[test]
-fn parse_pin_mismatch_handles_marker_at_start() {
-    let chain = "PIN_MISMATCH for test: expected old, got new, issuer CN=X";
-    let (fp, issuer) = super::parse_pin_mismatch_details(chain).unwrap();
-    assert_eq!(fp, "new");
-    assert_eq!(issuer, "CN=X");
 }
 
 #[test]
@@ -868,17 +775,9 @@ async fn classify_and_handle_tls_failure_returns_none_for_non_tls_error() {
 
     let mut config = crate::config::Config::default();
     let tls_config = TlsConfig::default();
-    let result = super::classify_and_handle_tls_failure(
-        &bzr_err,
-        "test",
-        "http://127.0.0.1:1/unreachable",
-        "key",
-        None,
-        None,
-        &tls_config,
-        &mut config,
-    )
-    .await;
+    let ctx = connect_context("test", "http://127.0.0.1:1/unreachable", None);
+    let result =
+        super::classify_and_handle_tls_failure(&bzr_err, &ctx, &tls_config, &mut config).await;
     match result {
         Ok(None) => {}
         Ok(Some(_)) => panic!("expected Ok(None) for non-TLS error, got Some(client)"),

@@ -3,7 +3,7 @@ use std::io::Write;
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
-use super::formatting::{opt_yes_no, write_field, write_formatted, write_optional_field};
+use crate::output::formatting::{opt_yes_no, write_field, write_formatted, write_optional_field};
 use crate::types::{BugzillaUser, OutputFormat, WhoamiResponse};
 
 #[derive(Tabled)]

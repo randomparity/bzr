@@ -1,6 +1,8 @@
 #![expect(clippy::unwrap_used)]
 
-use super::*;
+use crate::xmlrpc::value::Value;
+
+use super::parse_response;
 
 #[test]
 fn parse_success_response_with_struct() {

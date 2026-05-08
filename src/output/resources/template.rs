@@ -3,7 +3,7 @@ use std::io::Write;
 
 use crate::types::{BugTemplate, OutputFormat};
 
-use super::formatting::{write_field, write_formatted, write_json, write_optional_field};
+use crate::output::formatting::{write_field, write_formatted, write_json, write_optional_field};
 
 fn template_saved_message(name: &str, verb: &str) -> String {
     format!("{verb} template '{name}'")

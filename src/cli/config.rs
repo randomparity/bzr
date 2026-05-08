@@ -28,11 +28,11 @@ pub enum ConfigAction {
     ///
     /// Examples:
     ///
-    ///   bzr config set-server prod --url https://bz.example.com \
+    ///   bzr config set-server prod --url <https://bz.example.com> \
     ///     --api-key-env BZR_API_KEY
-    ///   bzr config set-server staging --url https://stage.example.com \
+    ///   bzr config set-server staging --url <https://stage.example.com> \
     ///     --api-key-env STAGE_KEY --tls-pin-now
-    ///   bzr config set-server self-hosted --url https://bz.local \
+    ///   bzr config set-server self-hosted --url <https://bz.local> \
     ///     --api-key-env BZR_API_KEY \
     ///     --tls-ca-cert /etc/pki/tls/local-ca.pem
     ///
@@ -181,7 +181,7 @@ pub enum ConfigAction {
     ///
     /// Lists every configured server with its URL, default-flag
     /// status, and credential indirection (env-var name, keyring
-    /// entry, or "<inline>" for inline keys). Inline API keys are
+    /// entry, or `"<inline>"` for inline keys). Inline API keys are
     /// redacted -- the secret never appears in this output. With
     /// `--json`, the same data is emitted as a JSON object suitable
     /// for scripting.
@@ -247,10 +247,10 @@ pub enum ConfigAction {
     /// Remove a server's API key from the OS keychain.
     ///
     /// Deletes the keychain entry for `<server-name>` (or the
-    /// service/account configured by `set-keyring`) and reverts the
-    /// server's config to its inline / env-var credential
-    /// indirection. Use this when rotating keys, decommissioning a
-    /// server, or switching back to env-var or inline storage.
+    /// service/account configured by `set-keyring`) and clears the
+    /// server's keyring credential reference. The server entry is
+    /// preserved with no API key source; re-run `set-server` or
+    /// `set-keyring` afterward to re-credential it.
     ///
     /// Examples:
     ///
@@ -265,14 +265,16 @@ pub enum ConfigAction {
         name: String,
     },
 
-    /// Move an existing inline or env-var API key into the OS keychain.
+    /// Copy an existing inline or env-var API key into the OS keychain.
     ///
     /// Reads the server's currently configured key (whether stored
     /// inline as `api_key` or read from the env var named by
-    /// `api_key_env`), stores it in the OS keychain, and rewrites
-    /// the server's config to use the keychain. Prompts for
-    /// confirmation unless `--yes` is passed. `--service` and
-    /// `--account` override the default keychain naming
+    /// `api_key_env`) and stores it in the OS keychain. `--yes` is
+    /// required to confirm the non-interactive migration. Inline
+    /// sources are rewritten to use the keychain; env-var sources
+    /// leave `config.toml` unchanged so shared env vars are not
+    /// removed implicitly. `--service` and `--account` override the
+    /// default keychain naming
     /// (`bzr` / `<server-name>`).
     ///
     /// If the env-var path is in use and the variable is unset at

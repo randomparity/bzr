@@ -6,11 +6,14 @@ use base64::Engine;
 use crate::cli::AttachmentAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
-use crate::output::{
-    self, ActionResult, AttachmentBatchResult, AttachmentDownloadResult, BatchSummary,
-    BugDownloadResult, DownloadResult, DownloadedFile, ResourceKind, TargetStatus, UploadResult,
-    Writers,
+use crate::output::resources::attachment::{
+    write_attachment_batch, write_attachments, AttachmentBatchResult, AttachmentDownloadResult,
+    BatchSummary, BugDownloadResult, DownloadedFile, TargetStatus,
 };
+use crate::output::result_types::{
+    write_result, ActionResult, DownloadResult, ResourceKind, UploadResult,
+};
+use crate::output::writers::Writers;
 use crate::types::ApiMode;
 use crate::types::Attachment;
 use crate::types::OutputFormat;
@@ -29,7 +32,7 @@ pub async fn execute(
     match action {
         AttachmentAction::List { bug_id } => {
             let attachments = client.get_attachments(*bug_id).await?;
-            output::write_attachments(&attachments, format, w.out);
+            write_attachments(&attachments, format, w.out);
         }
         AttachmentAction::Download {
             ids,
@@ -80,7 +83,7 @@ pub async fn execute(
             if *comment_private {
                 flip_new_comment_private(&client, *bug_id, att_id, w).await?;
             }
-            output::write_result(
+            write_result(
                 &UploadResult::new(att_id, *bug_id, size),
                 &format!("Uploaded attachment #{att_id} to bug #{bug_id} ({size} bytes)"),
                 format,
@@ -108,7 +111,7 @@ pub async fn execute(
                 flags,
             };
             client.update_attachment(*id, &params).await?;
-            output::write_result(
+            write_result(
                 &ActionResult::updated(*id, ResourceKind::Attachment),
                 &format!("Updated attachment #{id}"),
                 format,
@@ -225,6 +228,14 @@ fn warn_partial(att_id: u64, err: &crate::error::BzrError, w: &mut Writers<'_>) 
     );
 }
 
+fn ensure_batch_complete(succeeded: usize, failed: usize) -> Result<()> {
+    if failed > 0 {
+        Err(crate::error::BzrError::BatchPartialFailure { succeeded, failed })
+    } else {
+        Ok(())
+    }
+}
+
 /// Single-attachment download: writes one decoded blob to `out` (if
 /// supplied) or to the attachment's stored `file_name` in the current
 /// directory. Paired with `download_batch` for bulk shapes; both paths
@@ -239,7 +250,7 @@ async fn download_single(
     let (filename, data) = client.download_attachment(id).await?;
     let dest = out.unwrap_or(&filename);
     std::fs::write(dest, &data)?;
-    output::write_result(
+    write_result(
         &DownloadResult::new(id, dest, data.len()),
         &format!(
             "Downloaded attachment #{id} to {dest} ({} bytes)",
@@ -324,9 +335,6 @@ async fn download_batch(
     }
 
     let summary = BatchSummary::from_results(&bug_results, &attachment_results);
-    let succeeded = summary.succeeded;
-    let failed = summary.failed;
-
     let result = AttachmentBatchResult {
         out_dir: out_dir.to_string(),
         bug_results,
@@ -334,12 +342,8 @@ async fn download_batch(
         summary,
     };
 
-    output::write_attachment_batch(&result, format, w.out, w.err);
-
-    if failed > 0 {
-        return Err(crate::error::BzrError::BatchPartialFailure { succeeded, failed });
-    }
-    Ok(())
+    write_attachment_batch(&result, format, w.out, w.err);
+    ensure_batch_complete(result.summary.succeeded, result.summary.failed)
 }
 
 /// Download every attachment for one `--bug <ID>` target. Returns a

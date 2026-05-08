@@ -5,6 +5,8 @@ use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
 use bzr::cli::Cli;
+#[cfg(test)]
+use bzr::cli::Commands;
 use bzr::error::{self, BzrError};
 use bzr::types::OutputFormat;
 
@@ -55,7 +57,7 @@ async fn main() -> ExitCode {
     let stderr = std::io::stderr();
     let mut out = stdout.lock();
     let mut err = stderr.lock();
-    let mut writers = bzr::output::Writers::new(&mut out, &mut err);
+    let mut writers = bzr::output::writers::Writers::new(&mut out, &mut err);
 
     if let Err(e) = bzr::dispatch(&cli, format, &mut writers).await {
         #[expect(clippy::print_stderr)]

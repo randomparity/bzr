@@ -5,7 +5,9 @@ use crate::http::AUTH_QUERY_PARAM;
 use crate::types::{
     partition_filters, Bug, CreateUserParams, GroupInfo, GroupMember, SearchParams, FIELD_MAPPINGS,
 };
-use crate::xmlrpc::{self, Value};
+use crate::xmlrpc::call::build_request;
+use crate::xmlrpc::parsing::parse_response;
+use crate::xmlrpc::value::Value;
 
 const ATTACHMENT_LIST_FIELDS: &[&str] = &[
     "id",
@@ -49,7 +51,7 @@ impl XmlRpcClient {
     async fn call(&self, method: &str, mut params: BTreeMap<String, Value>) -> Result<Value> {
         params.insert(AUTH_QUERY_PARAM.into(), Value::from(self.api_key.as_str()));
 
-        let body = xmlrpc::build_request(method, params);
+        let body = build_request(method, params);
         let url = format!("{}/xmlrpc.cgi", self.base_url);
 
         tracing::debug!(
@@ -82,7 +84,7 @@ impl XmlRpcClient {
         let body_text = resp.text().await?;
         tracing::trace!(body_len = body_text.len(), "XML-RPC response received");
 
-        xmlrpc::parse_response(&body_text)
+        parse_response(&body_text)
     }
 
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
@@ -245,7 +247,8 @@ fn extract_id(response: &Value) -> Result<u64> {
 fn add_vec_filters(rpc_params: &mut BTreeMap<String, Value>, params: &SearchParams) {
     let mut chart_idx = 1u32;
     for mapping in FIELD_MAPPINGS {
-        let (positive, negated) = partition_filters(params.get_field(mapping.struct_field));
+        let (positive, negated) =
+            partition_filters(params.get_field(mapping.struct_field).unwrap_or_default());
         if !positive.is_empty() {
             let arr: Vec<Value> = positive.iter().map(|v| Value::from(*v)).collect();
             rpc_params.insert(mapping.struct_field.into(), Value::Array(arr));

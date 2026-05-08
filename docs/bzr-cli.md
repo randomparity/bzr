@@ -37,7 +37,7 @@ For installation and quick start, see [README.md](../README.md).
 | `--output <FORMAT>` | Output format: `table` or `json`. Defaults to table at a TTY; auto-selects json when stdout is not a TTY. |
 | `--json` | Shorthand for `--output json` |
 | `--no-color` | Disable colored output. Color is also suppressed automatically when stdout is not a TTY. |
-| `--quiet` | Suppress all stdout output (exit code confirms success) |
+| `--quiet` | Suppress stdout and tracing logs (exit code confirms success) |
 | `--api <MODE>` | Override API transport: `rest`, `xmlrpc`, or `hybrid`. Auto-detected from server version if not set. |
 | `-v, --verbose` | Increase log verbosity (`-v`=info, `-vv`=debug, `-vvv`=trace; `RUST_LOG` overrides) |
 | `-h, --help` | Print help |

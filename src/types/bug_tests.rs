@@ -249,7 +249,7 @@ fn saved_query_url_kind_to_search_params_includes_raw_params() {
 fn field_mappings_covers_all_search_params_vec_fields() {
     let params = SearchParams::default();
     for mapping in FIELD_MAPPINGS {
-        let field = params.get_field(mapping.struct_field);
+        let field = params.get_field(mapping.struct_field).unwrap();
         assert!(
             field.is_empty(),
             "default field should be empty: {}",
@@ -329,16 +329,42 @@ fn search_params_get_field_returns_correct_data() {
         status: vec!["NEW".into(), "ASSIGNED".into()],
         ..Default::default()
     };
-    assert_eq!(params.get_field("product"), &["Firefox"]);
-    assert_eq!(params.get_field("status"), &["NEW", "ASSIGNED"]);
-    assert!(params.get_field("creator").is_empty());
+    assert_eq!(
+        params.get_field("product"),
+        Some(["Firefox".to_string()].as_slice())
+    );
+    assert_eq!(
+        params.get_field("status"),
+        Some(["NEW".to_string(), "ASSIGNED".to_string()].as_slice())
+    );
+    assert!(params.get_field("creator").unwrap().is_empty());
 }
 
 #[test]
-#[should_panic(expected = "unknown field")]
-fn search_params_get_field_panics_on_unknown() {
+fn search_params_get_field_mut_updates_every_mapped_field() {
+    let mut params = SearchParams::default();
+
+    for mapping in FIELD_MAPPINGS {
+        params
+            .get_field_mut(mapping.struct_field)
+            .unwrap()
+            .push(format!("value-{}", mapping.struct_field));
+    }
+
+    for mapping in FIELD_MAPPINGS {
+        assert_eq!(
+            params.get_field(mapping.struct_field),
+            Some([format!("value-{}", mapping.struct_field)].as_slice()),
+            "mapped field should roundtrip through mutable and immutable access: {}",
+            mapping.struct_field
+        );
+    }
+}
+
+#[test]
+fn search_params_get_field_returns_none_on_unknown() {
     let params = SearchParams::default();
-    params.get_field("nonexistent");
+    assert!(params.get_field("nonexistent").is_none());
 }
 
 #[test]

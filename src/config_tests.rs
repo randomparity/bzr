@@ -464,8 +464,7 @@ fn credential_source_rejects_all_three() {
 #[cfg(feature = "keyring")]
 #[test]
 fn resolve_api_key_from_keyring() {
-    // Install mock backend (idempotent across tests).
-    ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+    crate::credentials::keyring::install_test_store();
     crate::credentials::keyring::store("bzr", "resolve-test-srv1", "keyring-secret").unwrap();
 
     let server = ServerConfig {
@@ -499,7 +498,7 @@ fn resolve_api_key_from_keyring() {
 #[cfg(feature = "keyring")]
 #[test]
 fn resolve_api_key_from_keyring_with_explicit_service_and_account() {
-    ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+    crate::credentials::keyring::install_test_store();
     crate::credentials::keyring::store(
         "resolve-test-myservice",
         "resolve-test-myacct",
@@ -537,7 +536,7 @@ fn resolve_api_key_from_keyring_with_explicit_service_and_account() {
 #[cfg(feature = "keyring")]
 #[test]
 fn resolve_api_key_from_keyring_defaults_account_to_server_name() {
-    ::keyring::set_default_credential_builder(::keyring::mock::default_credential_builder());
+    crate::credentials::keyring::install_test_store();
     // Store under the server name (no explicit account).
     crate::credentials::keyring::store("bzr", "resolve-test-srv2", "default-account-secret")
         .unwrap();

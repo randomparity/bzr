@@ -2,7 +2,7 @@ use std::io::Write;
 
 use colored::Colorize;
 
-use super::formatting::{truncate, write_formatted};
+use crate::output::formatting::{truncate, write_formatted};
 use crate::types::{Classification, OutputFormat};
 
 pub fn write_classification<W: Write + ?Sized>(

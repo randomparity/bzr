@@ -1,6 +1,7 @@
 use crate::cli::ServerAction;
 use crate::error::Result;
-use crate::output::{self, Writers};
+use crate::output::resources::server::write_server_info;
+use crate::output::writers::Writers;
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 
@@ -16,7 +17,7 @@ pub async fn execute(
     match action {
         ServerAction::Info => {
             let info = client.server_info().await?;
-            output::write_server_info(&info, format, w.out);
+            write_server_info(&info, format, w.out);
         }
     }
     Ok(())

@@ -3,7 +3,7 @@ use std::io::Write;
 use serde::Serialize;
 use tabled::{Table, Tabled};
 
-use super::formatting::{write_formatted, yes_no};
+use crate::output::formatting::{write_formatted, yes_no};
 use crate::types::{FieldValue, OutputFormat};
 
 #[derive(Tabled)]

@@ -3,7 +3,7 @@ use std::io::Write;
 
 use crate::types::{OutputFormat, QueryKind, SavedQuery};
 
-use super::formatting::{
+use crate::output::formatting::{
     write_field, write_formatted, write_json, write_list_field, write_optional_field,
 };
 

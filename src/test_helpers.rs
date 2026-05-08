@@ -84,6 +84,7 @@ pub fn make_attachment(
 
 /// Owned `Vec<u8>` buffers for capturing stdout and stderr in tests, plus
 /// a `Writers` constructor that borrows them.
+#[non_exhaustive]
 pub struct CapturedIo {
     pub out: Vec<u8>,
     pub err: Vec<u8>,
@@ -98,8 +99,8 @@ impl CapturedIo {
     }
 
     /// Construct a `Writers` borrowing this buffer pair.
-    pub fn writers(&mut self) -> crate::output::Writers<'_> {
-        crate::output::Writers::new(&mut self.out, &mut self.err)
+    pub fn writers(&mut self) -> crate::output::writers::Writers<'_> {
+        crate::output::writers::Writers::new(&mut self.out, &mut self.err)
     }
 
     /// View captured stdout as `&str` (non-UTF-8 bytes are replaced with the
