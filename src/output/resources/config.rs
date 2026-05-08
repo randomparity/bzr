@@ -2,8 +2,8 @@ use std::io::Write;
 
 use serde::Serialize;
 
-use super::formatting::{mask_api_key, write_field, write_formatted, write_optional_field};
 use crate::config::{CredentialSource, CredentialSourceKind};
+use crate::output::formatting::{mask_api_key, write_field, write_formatted, write_optional_field};
 use crate::types::{AuthMethod, OutputFormat};
 
 fn auth_display(auth_method: Option<&AuthMethod>) -> String {

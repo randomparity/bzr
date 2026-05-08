@@ -3,7 +3,7 @@ use std::io::Write;
 use colored::Colorize;
 use serde::Serialize;
 
-use super::formatting::{write_field, write_formatted, write_optional_field};
+use crate::output::formatting::{write_field, write_formatted, write_optional_field};
 use crate::types::{Attachment, OutputFormat};
 
 pub fn write_attachments<W: Write + ?Sized>(
@@ -44,7 +44,7 @@ pub fn write_attachments<W: Write + ?Sized>(
 
 /// Top-level payload for `bzr attachment download` in bulk mode.
 ///
-/// Single-ID mode continues to use [`super::DownloadResult`].
+/// Single-ID mode continues to use [`crate::output::DownloadResult`].
 #[derive(Debug, Serialize)]
 #[non_exhaustive]
 pub struct AttachmentBatchResult {
@@ -179,7 +179,7 @@ pub fn write_attachment_batch<O, E>(
     E: Write + ?Sized,
 {
     match format {
-        OutputFormat::Json => super::formatting::write_json(result, out),
+        OutputFormat::Json => crate::output::formatting::write_json(result, out),
         OutputFormat::Table => write_attachment_batch_table(result, out, err),
     }
 }

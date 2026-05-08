@@ -3,7 +3,7 @@ use std::io::Write;
 
 use tabled::{Table, Tabled};
 
-use super::formatting::{truncate, write_formatted};
+use crate::output::formatting::{truncate, write_formatted};
 use crate::types::{OutputFormat, Product};
 
 fn format_named_list(heading: &str, items: &[(impl AsRef<str>, bool)]) -> String {

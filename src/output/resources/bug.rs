@@ -3,7 +3,7 @@ use std::io::Write;
 use colored::Colorize;
 use tabled::{Table, Tabled};
 
-use super::formatting::{
+use crate::output::formatting::{
     colorize_status, shorten_email, truncate, write_divider, write_field, write_formatted,
     write_list_field, write_optional_field,
 };
