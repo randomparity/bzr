@@ -59,9 +59,15 @@ api_mode = "rest"
 
 /// Capture stdout written during an async operation.
 ///
-/// Redirects file descriptor 1 to a temp file, runs the future, restores
-/// stdout, then returns the captured content. Must be called while holding
-/// `ENV_LOCK` (tests are single-threaded via `setup_test_env`).
+/// Redirects file descriptor 1 process-wide to a temp file via `dup2`, runs
+/// the future, restores stdout, and returns the captured content. The
+/// redirection is process-global, so any concurrently running test that
+/// writes to fd 1 during the redirection window will land its bytes in the
+/// captured file. This race is the subject of issue #192 and the helper is
+/// being phased out — see
+/// `docs/superpowers/specs/2026-05-07-issue-192-stdout-capture-flakes-design.md`.
+/// New tests should plumb output through `Writers` and capture into
+/// owned buffers instead.
 ///
 /// # Panics
 ///

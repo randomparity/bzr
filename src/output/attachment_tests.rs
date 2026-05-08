@@ -347,7 +347,7 @@ async fn print_attachment_batch_json_emits_typed_payload() {
         print_attachment_batch(&result, OutputFormat::Json);
     })
     .await;
-    let parsed: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
+    let parsed = crate::test_helpers::extract_json(&out);
     assert_eq!(parsed["summary"]["succeeded"], 2);
     assert_eq!(parsed["bug_results"][0]["files"][0]["attachment_id"], 9876);
 }
