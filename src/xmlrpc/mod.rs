@@ -8,6 +8,10 @@ mod fault;
 pub(crate) mod parsing;
 pub(crate) mod value;
 
+#[cfg(fuzzing)]
+#[doc(hidden)]
+pub use parsing::parse_response;
+
 #[cfg(test)]
 #[path = "mod_tests.rs"]
 mod tests;

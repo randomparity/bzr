@@ -154,3 +154,6 @@ print_stdout = "deny"
 print_stderr = "deny"
 module_name_repetitions = "allow"
 similar_names = "allow"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(fuzzing)"] }
