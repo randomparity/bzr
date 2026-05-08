@@ -97,6 +97,17 @@ if [[ -f data/params ]]; then
     perl -pi -e "s/'insidergroup' => ''/'insidergroup' => 'admin'/g" data/params 2>/dev/null || true
 fi
 
+# ── Disable outbound mail for functional tests ──────────────────────
+# Comment and attachment mutations trigger bugmail. The functional
+# containers do not run an MTA, so use Bugzilla's built-in no-op mailer.
+echo "==> Disabling outbound mail..."
+if [[ -f data/params.json ]]; then
+    perl -pi -e 's/"mail_delivery_method"\s*:\s*"[^"]*"/"mail_delivery_method":"None"/g' data/params.json 2>/dev/null || true
+fi
+if [[ -f data/params ]]; then
+    perl -pi -e "s/'mail_delivery_method' => '[^']*'/'mail_delivery_method' => 'None'/g" data/params 2>/dev/null || true
+fi
+
 # ── Fix permissions ──────────────────────────────────────────────────
 chown -R apache:apache "$BZ_DIR/data" "$BZ_DIR/lib" 2>/dev/null || true
 
