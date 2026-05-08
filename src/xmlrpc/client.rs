@@ -5,7 +5,8 @@ use crate::http::AUTH_QUERY_PARAM;
 use crate::types::{
     partition_filters, Bug, CreateUserParams, GroupInfo, GroupMember, SearchParams, FIELD_MAPPINGS,
 };
-use crate::xmlrpc::{self, Value};
+use crate::xmlrpc::value::Value;
+use crate::xmlrpc::{build_request, parse_response};
 
 const ATTACHMENT_LIST_FIELDS: &[&str] = &[
     "id",
@@ -49,7 +50,7 @@ impl XmlRpcClient {
     async fn call(&self, method: &str, mut params: BTreeMap<String, Value>) -> Result<Value> {
         params.insert(AUTH_QUERY_PARAM.into(), Value::from(self.api_key.as_str()));
 
-        let body = xmlrpc::build_request(method, params);
+        let body = build_request(method, params);
         let url = format!("{}/xmlrpc.cgi", self.base_url);
 
         tracing::debug!(
@@ -82,7 +83,7 @@ impl XmlRpcClient {
         let body_text = resp.text().await?;
         tracing::trace!(body_len = body_text.len(), "XML-RPC response received");
 
-        xmlrpc::parse_response(&body_text)
+        parse_response(&body_text)
     }
 
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {

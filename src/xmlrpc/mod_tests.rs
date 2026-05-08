@@ -1,5 +1,7 @@
 #![expect(clippy::unwrap_used)]
 
+use std::collections::BTreeMap;
+
 use super::*;
 
 #[test]

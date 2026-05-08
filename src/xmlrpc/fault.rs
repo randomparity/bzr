@@ -1,7 +1,7 @@
 //! XML-RPC fault response parsing.
 
 use crate::error::BzrError;
-use crate::xmlrpc::Value;
+use crate::xmlrpc::value::Value;
 
 /// Convert an XML-RPC `<fault>` value to a `BzrError`.
 ///
