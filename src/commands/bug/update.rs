@@ -107,6 +107,7 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
         comment,
         comment_file,
         comment_private,
+        ..
     } = action
     else {
         unreachable!()
