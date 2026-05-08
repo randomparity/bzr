@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used, clippy::expect_used)]
 
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::BugAction;
@@ -13,6 +13,36 @@ fn make_update_action(ids: Vec<u64>) -> BugAction {
         status: Some("RESOLVED".into()),
         resolution: Some("FIXED".into()),
         dupe_of: None,
+        assignee: None,
+        priority: None,
+        severity: None,
+        summary: None,
+        whiteboard: None,
+        flag: vec![],
+        blocks_add: vec![],
+        blocks_remove: vec![],
+        depends_on_add: vec![],
+        depends_on_remove: vec![],
+        keywords_add: vec![],
+        keywords_remove: vec![],
+        cc_add: vec![],
+        cc_remove: vec![],
+        groups_add: vec![],
+        groups_remove: vec![],
+        see_also_add: vec![],
+        see_also_remove: vec![],
+        comment: None,
+        comment_file: None,
+        comment_private: false,
+    }
+}
+
+fn make_update_action_with_dupe_of(id: u64, dupe_of: u64) -> BugAction {
+    BugAction::Update {
+        ids: vec![id],
+        status: None,
+        resolution: None,
+        dupe_of: Some(dupe_of),
         assignee: None,
         priority: None,
         severity: None,
@@ -111,6 +141,29 @@ async fn bug_update_sends_put() {
 }
 
 #[tokio::test]
+async fn bug_update_sends_dupe_of_body() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/42"))
+        .and(body_json(serde_json::json!({"dupe_of": 99})))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": [{"id": 42, "changes": {}}]})),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = make_update_action_with_dupe_of(42, 99);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
 async fn bug_update_batch_mixed_results() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
@@ -188,6 +241,17 @@ fn build_update_params_populates_string_lists() {
     assert_eq!(params.cc.add, vec!["alice@example.com"]);
     assert_eq!(params.groups.remove, vec!["secret"]);
     assert_eq!(params.see_also.add, vec!["https://example.com/issue/1"]);
+}
+
+#[test]
+fn build_update_params_populates_dupe_of() {
+    let action = make_update_action_with_dupe_of(42, 99);
+    let (ids, params) = super::build_update_params(&action).unwrap();
+
+    assert_eq!(ids, vec![42]);
+    assert_eq!(params.dupe_of, Some(99));
+    assert!(params.status.is_none());
+    assert!(params.resolution.is_none());
 }
 
 #[test]
