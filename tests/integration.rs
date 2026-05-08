@@ -801,6 +801,13 @@ async fn bug_update_integration() {
         status: Some("RESOLVED".to_string()),
         resolution: Some("FIXED".to_string()),
         dupe_of: None,
+        alias: None,
+        deadline: None,
+        estimated_time: None,
+        remaining_time: None,
+        work_time: None,
+        reset_assigned_to: false,
+        reset_qa_contact: false,
         assignee: None,
         priority: None,
         severity: None,
@@ -840,6 +847,78 @@ async fn bug_update_integration() {
 }
 
 #[tokio::test]
+async fn bug_update_scalar_parity_fields_integration() {
+    use wiremock::matchers::body_partial_json;
+
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/42"))
+        .and(body_partial_json(serde_json::json!({
+            "alias": "short-name",
+            "deadline": "2026-12-31",
+            "estimated_time": 3.5,
+            "remaining_time": 1.25,
+            "work_time": 0.5,
+            "reset_assigned_to": true,
+            "reset_qa_contact": true,
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 42, "changes": {}}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = bzr::cli::BugAction::Update {
+        ids: vec![42],
+        status: None,
+        resolution: None,
+        dupe_of: None,
+        alias: Some("short-name".to_string()),
+        deadline: Some("2026-12-31".to_string()),
+        estimated_time: Some(3.5),
+        remaining_time: Some(1.25),
+        work_time: Some(0.5),
+        reset_assigned_to: true,
+        reset_qa_contact: true,
+        assignee: None,
+        priority: None,
+        severity: None,
+        summary: None,
+        whiteboard: None,
+        flag: vec![],
+        blocks_add: vec![],
+        blocks_remove: vec![],
+        depends_on_add: vec![],
+        depends_on_remove: vec![],
+        keywords_add: vec![],
+        keywords_remove: vec![],
+        cc_add: vec![],
+        cc_remove: vec![],
+        groups_add: vec![],
+        groups_remove: vec![],
+        see_also_add: vec![],
+        see_also_remove: vec![],
+        comment: None,
+        comment_file: None,
+        comment_private: false,
+    };
+
+    let mut io = bzr::test_helpers::CapturedIo::new();
+    let result = bzr::commands::bug::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "bug update should succeed: {result:?}");
+}
+
+#[tokio::test]
 async fn bug_update_with_comment_integration() {
     use wiremock::matchers::body_partial_json;
 
@@ -867,6 +946,13 @@ async fn bug_update_with_comment_integration() {
         status: Some("RESOLVED".to_string()),
         resolution: Some("FIXED".to_string()),
         dupe_of: None,
+        alias: None,
+        deadline: None,
+        estimated_time: None,
+        remaining_time: None,
+        work_time: None,
+        reset_assigned_to: false,
+        reset_qa_contact: false,
         assignee: None,
         priority: None,
         severity: None,

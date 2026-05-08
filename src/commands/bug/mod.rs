@@ -22,6 +22,8 @@ pub async fn execute(
     api: Option<ApiMode>,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    update::validate_action(action)?;
+
     // Search builds its own client because --from-url may resolve a different
     // server from the URL hostname. Skip the shared connect to avoid double
     // auth/version detection on every `bug search` invocation.

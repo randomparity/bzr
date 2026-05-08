@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   forwarding Bugzilla's `dupe_of` field. Bugzilla performs the
   RESOLVED/DUPLICATE transition, and `bzr bug view --json` now
   includes `dupe_of` for verification. Closes #162.
+- `bzr bug update` now supports `--alias`, `--deadline`,
+  `--estimated-time`, `--remaining-time`, `--work-time`,
+  `--reset-assigned-to`, and `--reset-qa-contact`, forwarding the
+  corresponding Bugzilla `Bug.update` fields. Bug JSON output also
+  includes `deadline` for verification. Closes #164.
 - `bzr bug list --summary <substring>` filters bugs by a substring
   match against the Summary field across all bug states. This is
   the structured counterpart to `bzr bug search`, which uses

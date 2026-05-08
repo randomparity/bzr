@@ -380,6 +380,54 @@ fn parse_bug_update_with_dupe_of() {
 }
 
 #[test]
+fn parse_bug_update_scalar_parity_flags() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "update",
+        "42",
+        "--alias",
+        "short-name",
+        "--deadline",
+        "2026-12-31",
+        "--estimated-time",
+        "3.5",
+        "--remaining-time",
+        "1.25",
+        "--work-time",
+        "0.5",
+        "--reset-assigned-to",
+        "--reset-qa-contact",
+    ])
+    .unwrap();
+
+    let Commands::Bug { action } = cli.command else {
+        panic!("expected bug command");
+    };
+    let BugAction::Update {
+        alias,
+        deadline,
+        estimated_time,
+        remaining_time,
+        work_time,
+        reset_assigned_to,
+        reset_qa_contact,
+        ..
+    } = action
+    else {
+        panic!("expected bug update");
+    };
+
+    assert_eq!(alias.as_deref(), Some("short-name"));
+    assert_eq!(deadline.as_deref(), Some("2026-12-31"));
+    assert_eq!(estimated_time, Some(3.5));
+    assert_eq!(remaining_time, Some(1.25));
+    assert_eq!(work_time, Some(0.5));
+    assert!(reset_assigned_to);
+    assert!(reset_qa_contact);
+}
+
+#[test]
 fn parse_bug_update_rejects_dupe_of_with_status() {
     let result = Cli::try_parse_from([
         "bzr",

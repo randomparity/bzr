@@ -83,12 +83,34 @@ fn resolve_comment(
     }))
 }
 
+pub(super) fn validate_action(action: &BugAction) -> Result<()> {
+    match action {
+        BugAction::Update {
+            ids,
+            alias: Some(_),
+            ..
+        } if ids.len() > 1 => Err(crate::error::BzrError::InputValidation(
+            "--alias can only be used when updating one bug".into(),
+        )),
+        _ => Ok(()),
+    }
+}
+
 fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)> {
+    validate_action(action)?;
+
     let BugAction::Update {
         ids,
         status,
         resolution,
         dupe_of,
+        alias,
+        deadline,
+        estimated_time,
+        remaining_time,
+        work_time,
+        reset_assigned_to,
+        reset_qa_contact,
         assignee,
         priority,
         severity,
@@ -120,6 +142,13 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
         status: status.clone(),
         resolution: resolution.clone(),
         dupe_of: *dupe_of,
+        alias: alias.clone(),
+        deadline: deadline.clone(),
+        estimated_time: *estimated_time,
+        remaining_time: *remaining_time,
+        work_time: *work_time,
+        reset_assigned_to: *reset_assigned_to,
+        reset_qa_contact: *reset_qa_contact,
         assigned_to: assignee.clone(),
         priority: priority.clone(),
         severity: severity.clone(),

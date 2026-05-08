@@ -549,6 +549,9 @@ pub enum BugAction {
     /// `--cc`, `--groups`, and `--see-also`. The first five accept
     /// comma-separated values. `--see-also-add` / `--see-also-remove`
     /// do not split on commas — repeat the flag to pass multiple URLs.
+    /// Additional update fields include `--alias`, `--deadline`,
+    /// `--estimated-time`, `--remaining-time`, `--work-time`,
+    /// `--reset-assigned-to`, and `--reset-qa-contact`.
     ///
     /// On batch updates, partial failures (some bugs updated,
     /// others rejected) exit with code 11 (BatchPartialFailure) and
@@ -600,6 +603,29 @@ pub enum BugAction {
         /// status/resolution transition to RESOLVED/DUPLICATE.
         #[arg(long, value_name = "ID")]
         dupe_of: Option<u64>,
+        /// Set this bug's alias.
+        ///
+        /// Bugzilla only allows alias updates for a single bug at a time.
+        #[arg(long, value_name = "ALIAS")]
+        alias: Option<String>,
+        /// Set the deadline date (`YYYY-MM-DD`).
+        #[arg(long, value_name = "DATE")]
+        deadline: Option<String>,
+        /// Set the total estimated time in hours.
+        #[arg(long, value_name = "HOURS")]
+        estimated_time: Option<f64>,
+        /// Set the remaining time in hours.
+        #[arg(long, value_name = "HOURS")]
+        remaining_time: Option<f64>,
+        /// Add work time in hours for this update.
+        #[arg(long, value_name = "HOURS")]
+        work_time: Option<f64>,
+        /// Reset assignee to the component default.
+        #[arg(long)]
+        reset_assigned_to: bool,
+        /// Reset QA contact to the component default.
+        #[arg(long)]
+        reset_qa_contact: bool,
         /// Reassign
         #[arg(long)]
         assignee: Option<String>,

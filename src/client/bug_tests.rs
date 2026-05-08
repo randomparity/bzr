@@ -152,13 +152,13 @@ async fn get_bug_passes_params() {
 }
 
 #[tokio::test]
-async fn get_bug_default_fields_include_dupe_of() {
+async fn get_bug_default_fields_include_bug_json_fields() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
         .and(query_param(
             "include_fields",
-            "id,summary,status,resolution,dupe_of,product,component,version,assigned_to,priority,severity,creation_time,last_change_time,creator,url,whiteboard,keywords,blocks,depends_on,cc,op_sys,rep_platform",
+            "id,summary,status,resolution,dupe_of,product,component,version,assigned_to,priority,severity,creation_time,last_change_time,creator,url,whiteboard,keywords,blocks,depends_on,cc,op_sys,rep_platform,deadline",
         ))
         .respond_with(ResponseTemplate::new(200).set_body_json(
             serde_json::json!({"bugs": [{"id": 1, "summary": "test", "status": "NEW"}]}),
