@@ -17,6 +17,7 @@ mod result_types;
 mod server;
 mod template;
 mod user;
+mod writers;
 
 // Re-export shared types and helpers used by commands.
 pub(crate) use formatting::write_divider;
@@ -25,6 +26,14 @@ pub use result_types::{
     DownloadResult, MembershipResult, MultiBugViewResult, ResourceKind, SearchResult, TagResult,
     UploadResult,
 };
+#[cfg_attr(
+    not(any(test, feature = "test-helpers")),
+    expect(
+        unused_imports,
+        reason = "scaffolding for #192 phase 2 — re-export becomes load-bearing when commands::*::execute() gains a Writers parameter"
+    )
+)]
+pub use writers::Writers;
 
 // Re-export all public items from submodules.
 pub use attachment::{
