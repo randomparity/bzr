@@ -29,6 +29,8 @@ BUG1=""
 BUG2=""
 BUG3=""
 BUG4=""
+BUG_DUP_SOURCE=""
+BUG_DUP_TARGET=""
 CLONE_ID=""
 TMPL_BUG=""
 COMMENT_ID=""
@@ -375,6 +377,37 @@ if assert_success && assert_json_exists '.id'; then
     BUG2=$(jq -r '.id' "$BZR_STDOUT")
     test_pass
 fi
+
+test_begin "34a. bug create (duplicate target)"
+run_bzr bug create --product FuncTestProd --component Backend --summary "Duplicate target" --op-sys All --rep-platform All
+if assert_success && assert_json_exists '.id'; then
+    BUG_DUP_TARGET=$(jq -r '.id' "$BZR_STDOUT")
+    test_pass
+fi
+
+test_begin "34b. bug create (duplicate source)"
+run_bzr bug create --product FuncTestProd --component Backend --summary "Duplicate source" --op-sys All --rep-platform All
+if assert_success && assert_json_exists '.id'; then
+    BUG_DUP_SOURCE=$(jq -r '.id' "$BZR_STDOUT")
+    test_pass
+fi
+
+test_begin "34c. bug update --dupe-of"
+if [[ -n "$BUG_DUP_SOURCE" ]] && [[ -n "$BUG_DUP_TARGET" ]]; then
+    run_bzr bug update "$BUG_DUP_SOURCE" --dupe-of "$BUG_DUP_TARGET"
+    if assert_success; then test_pass; fi
+else test_skip "no duplicate source/target"; fi
+
+test_begin "34d. bug view verifies duplicate transition"
+if [[ -n "$BUG_DUP_SOURCE" ]] && [[ -n "$BUG_DUP_TARGET" ]]; then
+    run_bzr bug view "$BUG_DUP_SOURCE" --json
+    if assert_success \
+        && assert_json '.status' "RESOLVED" \
+        && assert_json '.resolution' "DUPLICATE" \
+        && assert_json '.dupe_of' "$BUG_DUP_TARGET"; then
+        test_pass
+    fi
+else test_skip "no duplicate source/target"; fi
 
 test_begin "35. bug view"
 if [[ -n "$BUG1" ]]; then

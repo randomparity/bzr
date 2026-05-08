@@ -64,6 +64,9 @@ fn write_bug_detail_table(bug: &Bug, out: &mut (impl Write + ?Sized)) {
     );
     write_field(out, "Status", &colorize_status(&bug.status));
     write_optional_field(out, "Resolution", bug.resolution.as_deref());
+    if let Some(dupe_of) = bug.dupe_of {
+        let _ = writeln!(out, "  {:<12}  {dupe_of}", "Duplicate of");
+    }
     write_optional_field(out, "Product", bug.product.as_deref());
     write_optional_field(out, "Component", bug.component.as_deref());
     write_optional_field(out, "Assignee", bug.assigned_to.as_deref());

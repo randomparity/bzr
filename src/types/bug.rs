@@ -31,6 +31,8 @@ pub struct Bug {
     #[serde(default)]
     pub resolution: Option<String>,
     #[serde(default)]
+    pub dupe_of: Option<u64>,
+    #[serde(default)]
     pub product: Option<String>,
     #[serde(default)]
     pub component: Option<String>,
@@ -517,6 +519,8 @@ pub struct UpdateBugParams {
     pub status: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resolution: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dupe_of: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assigned_to: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
