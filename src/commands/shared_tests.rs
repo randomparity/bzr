@@ -257,34 +257,6 @@ fn extract_hostname_returns_raw_on_invalid() {
     assert_eq!(super::extract_hostname("not-a-url"), "not-a-url");
 }
 
-#[test]
-fn is_pin_mismatch_returns_false_for_non_http() {
-    let err = BzrError::Config("PIN_MISMATCH".into());
-    assert!(!super::is_pin_mismatch(&err));
-}
-
-#[test]
-fn is_issuer_changed_returns_false_for_non_http() {
-    let err = BzrError::Config("ISSUER_CHANGED".into());
-    assert!(!super::is_issuer_changed(&err));
-}
-
-#[test]
-fn parse_pin_mismatch_extracts_fingerprint_and_issuer() {
-    let chain = "error sending request: PIN_MISMATCH for test: \
-                 expected sha256//old==, got sha256//new==, \
-                 issuer CN=Test CA, O=Test";
-    let (fp, issuer) = super::parse_pin_mismatch_details(chain).unwrap();
-    assert_eq!(fp, "sha256//new==");
-    assert_eq!(issuer, "CN=Test CA, O=Test");
-}
-
-#[test]
-fn parse_pin_mismatch_returns_none_for_unrelated_error() {
-    let chain = "connection refused";
-    assert!(super::parse_pin_mismatch_details(chain).is_none());
-}
-
 #[tokio::test]
 async fn detect_with_tofu_fallback_normal_path() {
     let _lock = ENV_LOCK.lock().await;
@@ -346,18 +318,6 @@ api_key = "test-key"
 }
 
 #[test]
-fn is_issuer_changed_returns_false_for_config_error() {
-    let err = BzrError::Config("ISSUER_CHANGED inside config".into());
-    assert!(!super::is_issuer_changed(&err));
-}
-
-#[test]
-fn is_pin_mismatch_returns_false_for_config_error() {
-    let err = BzrError::Config("PIN_MISMATCH inside config".into());
-    assert!(!super::is_pin_mismatch(&err));
-}
-
-#[test]
 fn persist_detected_settings_skips_unknown_server() {
     // If the server name doesn't exist in config, persist is a no-op
     let mut config = crate::config::Config::default();
@@ -368,18 +328,6 @@ fn persist_detected_settings_skips_unknown_server() {
     };
     let result = super::persist_detected_settings(&mut config, "nonexistent", &settings, true);
     assert!(result.is_ok());
-}
-
-#[test]
-fn parse_pin_mismatch_no_got_returns_none() {
-    let chain = "PIN_MISMATCH for test: expected sha256//old==";
-    assert!(super::parse_pin_mismatch_details(chain).is_none());
-}
-
-#[test]
-fn parse_pin_mismatch_no_issuer_returns_none() {
-    let chain = "PIN_MISMATCH for test: expected sha256//old==, got sha256//new==";
-    assert!(super::parse_pin_mismatch_details(chain).is_none());
 }
 
 /// Build a config TOML with the given extra fields injected into the
@@ -696,19 +644,6 @@ async fn should_offer_tofu_false_for_non_tls_http_error() {
     let bzr_err = BzrError::Http(err);
     let tls = TlsConfig::default();
     assert!(!super::should_offer_tofu(&bzr_err, &tls));
-    // Same error should also not match pin/issuer predicates.
-    assert!(!super::is_pin_mismatch(&bzr_err));
-    assert!(!super::is_issuer_changed(&bzr_err));
-}
-
-/// `parse_pin_mismatch_details` happy path is already covered;
-/// these guard the slicing-boundary branches.
-#[test]
-fn parse_pin_mismatch_handles_marker_at_start() {
-    let chain = "PIN_MISMATCH for test: expected old, got new, issuer CN=X";
-    let (fp, issuer) = super::parse_pin_mismatch_details(chain).unwrap();
-    assert_eq!(fp, "new");
-    assert_eq!(issuer, "CN=X");
 }
 
 #[test]

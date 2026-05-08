@@ -74,35 +74,6 @@ async fn probe_tls(url: &str, tls_config: &TlsConfig) -> Result<()> {
     }
 }
 
-/// Check if a reqwest error contains a `PIN_MISMATCH` from the pinned verifier.
-fn is_pin_mismatch(err: &BzrError) -> bool {
-    matches!(err, BzrError::Http(e) if {
-        let chain = crate::error::format_error_chain(e);
-        chain.contains("PIN_MISMATCH")
-    })
-}
-
-/// Check if a reqwest error contains an `ISSUER_CHANGED` from the pinned verifier.
-fn is_issuer_changed(err: &BzrError) -> bool {
-    matches!(err, BzrError::Http(e) if {
-        let chain = crate::error::format_error_chain(e);
-        chain.contains("ISSUER_CHANGED")
-    })
-}
-
-/// Extract the new fingerprint and issuer from a `PIN_MISMATCH` error chain.
-///
-/// Error format: `PIN_MISMATCH for <server>: expected <old>, got <new>, issuer <issuer>`
-fn parse_pin_mismatch_details(chain: &str) -> Option<(String, String)> {
-    let rest = chain.get(chain.find("PIN_MISMATCH")?..)?;
-    let got_start = rest.find(", got ")? + ", got ".len();
-    let after_got = &rest[got_start..];
-    let issuer_pos = after_got.find(", issuer ")?;
-    let new_fp = after_got[..issuer_pos].to_string();
-    let new_issuer = after_got[issuer_pos + ", issuer ".len()..].to_string();
-    Some((new_fp, new_issuer))
-}
-
 /// Extract the hostname from a URL string, falling back to the raw URL
 /// if parsing fails.
 fn extract_hostname(url: &str) -> String {
@@ -296,35 +267,31 @@ async fn classify_and_handle_tls_failure(
         let client = handle_tofu(server_name, url, api_key, email, api_override, config).await?;
         return Ok(Some(client));
     }
-    if is_pin_mismatch(err) {
-        let old_pin = tls_config.pin_sha256.as_deref().unwrap_or("<unknown>");
-        let chain = match err {
-            BzrError::Http(re) => crate::error::format_error_chain(re),
-            _ => String::new(),
-        };
-        let (new_fp, new_issuer) = parse_pin_mismatch_details(&chain)
-            .unwrap_or_else(|| ("<unknown>".to_string(), "<unknown>".to_string()));
-        let client = handle_pin_rotation(
-            server_name,
-            url,
-            api_key,
-            email,
-            api_override,
-            old_pin,
-            &new_fp,
-            &new_issuer,
-            config,
-        )
-        .await?;
-        return Ok(Some(client));
-    }
-    if is_issuer_changed(err) {
-        return Err(BzrError::config(format!(
-            "TLS certificate issuer changed for server \"{server_name}\" \
-                 — this could indicate a MITM attack.\n  \
-                 If this is expected, clear the pin and re-connect:\n    \
-                 bzr config set-server {server_name} --tls-pin-clear"
-        )));
+    if let Some(pin_failure) = crate::tls::pin_failure::classify(err, server_name) {
+        match pin_failure {
+            crate::tls::pin_failure::TlsPinFailure::PinMismatch { error, new_issuer } => {
+                let BzrError::PinMismatch {
+                    expected, actual, ..
+                } = error
+                else {
+                    unreachable!("pin failure classifier returned a non-pin mismatch error")
+                };
+                let client = handle_pin_rotation(
+                    server_name,
+                    url,
+                    api_key,
+                    email,
+                    api_override,
+                    &expected,
+                    &actual,
+                    &new_issuer,
+                    config,
+                )
+                .await?;
+                return Ok(Some(client));
+            }
+            crate::tls::pin_failure::TlsPinFailure::IssuerChanged(error) => return Err(error),
+        }
     }
     Ok(None)
 }

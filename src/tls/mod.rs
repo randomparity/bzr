@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 pub(crate) mod fingerprint;
+pub(crate) mod pin_failure;
 pub(crate) mod tofu;
 pub(crate) mod verifier;
 
