@@ -27,7 +27,10 @@ pub use result_types::{
 };
 
 // Re-export all public items from submodules.
-pub use attachment::print_attachments;
+pub use attachment::{
+    print_attachment_batch, print_attachments, AttachmentBatchResult, AttachmentDownloadResult,
+    BatchSummary, BugDownloadResult, DownloadedFile, TargetStatus,
+};
 pub use bug::{print_bug_detail, print_bugs, print_history, print_multi_bug_view, MultiBugRow};
 pub use classification::print_classification;
 pub use comment::print_comments;

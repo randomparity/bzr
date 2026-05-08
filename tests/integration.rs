@@ -946,8 +946,10 @@ async fn attachment_download_integration() {
 
     let out_path = tmp.path().join("downloaded.txt");
     let action = bzr::cli::AttachmentAction::Download {
-        id: 99,
+        ids: vec![99],
+        bug_ids: vec![],
         out: Some(out_path.to_string_lossy().into_owned()),
+        out_dir: "./attachments".into(),
     };
     let result = bzr::commands::attachment::execute(
         &action,
@@ -963,6 +965,74 @@ async fn attachment_download_integration() {
     assert!(out_path.exists(), "downloaded file should exist");
     let content = std::fs::read_to_string(&out_path).unwrap();
     assert_eq!(content, "Hello world");
+}
+
+#[tokio::test]
+async fn attachment_download_bulk_per_bug_integration() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/77/attachment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": {
+                "77": [
+                    {
+                        "id": 1001,
+                        "bug_id": 77,
+                        "file_name": "a.txt",
+                        "summary": "first",
+                        "content_type": "text/plain",
+                        "size": 5,
+                        "is_obsolete": false,
+                        "is_patch": false,
+                        "is_private": false,
+                        "data": "QUFBQUE="
+                    },
+                    {
+                        "id": 1002,
+                        "bug_id": 77,
+                        "file_name": "b.txt",
+                        "summary": "second",
+                        "content_type": "text/plain",
+                        "size": 4,
+                        "is_obsolete": false,
+                        "is_patch": false,
+                        "is_private": false,
+                        "data": "QkJCQg=="
+                    }
+                ]
+            }
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+    let action = bzr::cli::AttachmentAction::Download {
+        ids: vec![],
+        bug_ids: vec![77],
+        out: None,
+        out_dir,
+    };
+    let result = bzr::commands::attachment::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+    )
+    .await;
+    assert!(result.is_ok(), "expected ok: {result:?}");
+
+    assert!(tmp.path().join("77").join("1001.a.txt").exists());
+    assert!(tmp.path().join("77").join("1002.b.txt").exists());
+    assert_eq!(
+        std::fs::read(tmp.path().join("77").join("1001.a.txt")).unwrap(),
+        b"AAAAA"
+    );
+    assert_eq!(
+        std::fs::read(tmp.path().join("77").join("1002.b.txt")).unwrap(),
+        b"BBBB"
+    );
 }
 
 // ── Attachment upload ────────────────────────────────────────────────
