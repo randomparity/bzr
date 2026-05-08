@@ -115,6 +115,7 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
     let params = UpdateBugParams {
         status: status.clone(),
         resolution: resolution.clone(),
+        dupe_of: None,
         assigned_to: assignee.clone(),
         priority: priority.clone(),
         severity: severity.clone(),

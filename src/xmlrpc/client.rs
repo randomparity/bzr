@@ -297,6 +297,7 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         summary: get_str(m, "summary").unwrap_or_default(),
         status: get_str(m, "status").unwrap_or_default(),
         resolution: get_nonempty_str(m, "resolution"),
+        dupe_of: None,
         product: get_nonempty_str(m, "product"),
         component: get_nonempty_str(m, "component"),
         version: get_nonempty_str(m, "version"),

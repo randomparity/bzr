@@ -823,6 +823,51 @@ fn update_bug_params_omits_empty_string_lists() {
 }
 
 #[test]
+fn bug_deserializes_dupe_of() {
+    let bug: Bug = serde_json::from_value(serde_json::json!({
+        "id": 101,
+        "summary": "duplicate source",
+        "status": "RESOLVED",
+        "resolution": "DUPLICATE",
+        "dupe_of": 202
+    }))
+    .unwrap();
+
+    assert_eq!(bug.dupe_of, Some(202));
+}
+
+#[test]
+fn bug_defaults_missing_dupe_of_to_none() {
+    let bug: Bug = serde_json::from_value(serde_json::json!({
+        "id": 101,
+        "summary": "ordinary bug",
+        "status": "NEW"
+    }))
+    .unwrap();
+
+    assert_eq!(bug.dupe_of, None);
+}
+
+#[test]
+fn update_bug_params_serializes_dupe_of() {
+    let params = UpdateBugParams {
+        dupe_of: Some(202),
+        ..Default::default()
+    };
+    let json = serde_json::to_value(&params).unwrap();
+
+    assert_eq!(json, serde_json::json!({"dupe_of": 202}));
+}
+
+#[test]
+fn update_bug_params_omits_dupe_of_when_none() {
+    let params = UpdateBugParams::default();
+    let json = serde_json::to_value(&params).unwrap();
+
+    assert!(json.get("dupe_of").is_none());
+}
+
+#[test]
 fn update_bug_params_serializes_string_lists() {
     let params = UpdateBugParams {
         keywords: StringListUpdate {
