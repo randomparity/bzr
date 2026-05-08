@@ -48,6 +48,13 @@ WHERE login_name = 'admin@test.bzr'
 LIMIT 1;
 SQL
 
+# ── Seed functional-test keywords ───────────────────────────────────
+echo "==> Seeding functional-test keywords..."
+mysql -u root bugs <<'SQL'
+INSERT IGNORE INTO keyworddefs (name, description)
+VALUES ('fix-needed', 'Functional test keyword');
+SQL
+
 # ── Configure insidergroup ──────────────────────────────────────────
 # Bugzilla's default `insidergroup` is empty, which forbids anyone
 # (including admins) from marking comments private. Real deployments
