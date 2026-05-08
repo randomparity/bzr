@@ -9,6 +9,7 @@
 
 use std::io::Write;
 
+#[non_exhaustive]
 pub struct Writers<'a> {
     pub out: &'a mut dyn Write,
     pub err: &'a mut dyn Write,

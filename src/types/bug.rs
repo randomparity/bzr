@@ -329,6 +329,7 @@ impl NegationOp {
 }
 
 /// Maps a filterable field across all naming contexts.
+#[non_exhaustive]
 pub struct FieldMapping {
     /// Name on `SearchParams` / `SavedQuery` (e.g. "status").
     /// Also used as the REST API query parameter.
@@ -613,6 +614,7 @@ pub enum QueryKind {
 
 /// A reusable bug query stored in the config file.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 pub struct SavedQuery {
     #[serde(default)]
     pub kind: QueryKind,

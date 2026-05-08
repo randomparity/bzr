@@ -84,6 +84,7 @@ pub fn make_attachment(
 
 /// Owned `Vec<u8>` buffers for capturing stdout and stderr in tests, plus
 /// a `Writers` constructor that borrows them.
+#[non_exhaustive]
 pub struct CapturedIo {
     pub out: Vec<u8>,
     pub err: Vec<u8>,

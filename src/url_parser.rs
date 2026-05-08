@@ -46,6 +46,7 @@ fn classify_param(key: &str) -> ParamKind {
 
 /// Result of parsing a Bugzilla URL.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct ParsedUrl {
     pub query: SavedQuery,
     /// Suggested name extracted from URL's `known_name` or `query_based_on` param.
