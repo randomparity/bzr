@@ -7,49 +7,49 @@ pub fn test_http_client() -> reqwest::Client {
 }
 
 pub fn test_client(base_url: &str) -> BugzillaClient {
-    BugzillaClient::new(
+    BugzillaClient::new(BugzillaClientConfig {
         base_url,
-        "test-key",
-        AuthMethod::Header,
-        ApiMode::Rest,
-        None,
-        &crate::tls::TlsConfig::default(),
-    )
+        credential: "test-key",
+        auth_method: AuthMethod::Header,
+        api_mode: ApiMode::Rest,
+        email_hint: None,
+        tls_config: &crate::tls::TlsConfig::default(),
+    })
     .unwrap()
 }
 
 pub fn test_client_hybrid(base_url: &str) -> BugzillaClient {
-    BugzillaClient::new(
+    BugzillaClient::new(BugzillaClientConfig {
         base_url,
-        "test-key",
-        AuthMethod::Header,
-        ApiMode::Hybrid,
-        None,
-        &crate::tls::TlsConfig::default(),
-    )
+        credential: "test-key",
+        auth_method: AuthMethod::Header,
+        api_mode: ApiMode::Hybrid,
+        email_hint: None,
+        tls_config: &crate::tls::TlsConfig::default(),
+    })
     .unwrap()
 }
 
 pub fn test_client_query_param(base_url: &str) -> BugzillaClient {
-    BugzillaClient::new(
+    BugzillaClient::new(BugzillaClientConfig {
         base_url,
-        "test-key",
-        AuthMethod::QueryParam,
-        ApiMode::Rest,
-        None,
-        &crate::tls::TlsConfig::default(),
-    )
+        credential: "test-key",
+        auth_method: AuthMethod::QueryParam,
+        api_mode: ApiMode::Rest,
+        email_hint: None,
+        tls_config: &crate::tls::TlsConfig::default(),
+    })
     .unwrap()
 }
 
 pub fn test_client_xmlrpc(base_url: &str) -> BugzillaClient {
-    BugzillaClient::new(
+    BugzillaClient::new(BugzillaClientConfig {
         base_url,
-        "test-key",
-        AuthMethod::Header,
-        ApiMode::XmlRpc,
-        None,
-        &crate::tls::TlsConfig::default(),
-    )
+        credential: "test-key",
+        auth_method: AuthMethod::Header,
+        api_mode: ApiMode::XmlRpc,
+        email_hint: None,
+        tls_config: &crate::tls::TlsConfig::default(),
+    })
     .unwrap()
 }

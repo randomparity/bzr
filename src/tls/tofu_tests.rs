@@ -101,20 +101,20 @@ fn parse_tofu_response_rejects_other() {
 }
 
 #[test]
-fn parse_yes_no_accepts_y() {
-    assert!(parse_yes_no("y"));
-    assert!(parse_yes_no("Y"));
-    assert!(parse_yes_no("yes"));
-    assert!(parse_yes_no("YES"));
-    assert!(parse_yes_no("  y  "));
+fn is_yes_response_accepts_y() {
+    assert!(is_yes_response("y"));
+    assert!(is_yes_response("Y"));
+    assert!(is_yes_response("yes"));
+    assert!(is_yes_response("YES"));
+    assert!(is_yes_response("  y  "));
 }
 
 #[test]
-fn parse_yes_no_rejects_others() {
-    assert!(!parse_yes_no("n"));
-    assert!(!parse_yes_no(""));
-    assert!(!parse_yes_no("no"));
-    assert!(!parse_yes_no("anything"));
+fn is_yes_response_rejects_others() {
+    assert!(!is_yes_response("n"));
+    assert!(!is_yes_response(""));
+    assert!(!is_yes_response("no"));
+    assert!(!is_yes_response("anything"));
 }
 
 /// Construct a `DigitallySignedStruct` for tests covering `CertCapture`'s

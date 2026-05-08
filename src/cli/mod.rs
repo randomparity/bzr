@@ -105,9 +105,9 @@ pub struct Cli {
 
     /// Suppress all stdout output.
     ///
-    /// Redirects stdout to /dev/null. Stderr (errors, warnings,
-    /// `tracing` logs) is unaffected. Useful for scripts that only
-    /// care about exit codes.
+    /// Redirects stdout to /dev/null; tracing logs are also suppressed.
+    /// Stderr is still used for errors and warnings. Useful for scripts
+    /// that only care about exit codes.
     #[arg(long, global = true)]
     pub quiet: bool,
 

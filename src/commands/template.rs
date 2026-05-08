@@ -88,12 +88,7 @@ pub async fn execute(
             }
             config.save()?;
 
-            output::write_result(
-                &serde_json::json!({"name": name, "action": "deleted"}),
-                &format!("Deleted template '{name}'"),
-                format,
-                w.out,
-            );
+            output::write_template_saved(name, "Deleted", format, w.out);
         }
     }
     Ok(())

@@ -138,9 +138,9 @@ pub(crate) fn parse_tofu_response(input: &str) -> Option<bool> {
     }
 }
 
-/// Parse a yes/no response from user input.
+/// Return whether user input is an affirmative yes response.
 /// Returns `true` for "y" or "yes" (case-insensitive).
-pub(crate) fn parse_yes_no(input: &str) -> bool {
+pub(crate) fn is_yes_response(input: &str) -> bool {
     input.trim().eq_ignore_ascii_case("y") || input.trim().eq_ignore_ascii_case("yes")
 }
 
@@ -148,7 +148,7 @@ pub(crate) fn parse_yes_no(input: &str) -> bool {
 /// if stdin is not a terminal.
 pub(crate) fn confirm_pin() -> Result<bool> {
     let input = read_interactive_line("Pin this certificate? [y/N] ")?;
-    Ok(input.as_deref().is_some_and(parse_yes_no))
+    Ok(input.as_deref().is_some_and(is_yes_response))
 }
 
 /// Prompt the user for first-contact TOFU decision.
@@ -199,7 +199,7 @@ pub(crate) fn prompt_rotation(
     let _ = writeln!(io::stderr());
 
     let input = read_interactive_line("Accept the new certificate? [y/N] ")?;
-    Ok(input.as_deref().is_some_and(parse_yes_no))
+    Ok(input.as_deref().is_some_and(is_yes_response))
 }
 
 #[cfg(test)]

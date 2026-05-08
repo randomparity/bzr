@@ -262,14 +262,14 @@ async fn detect_and_build_client(
     let settings = crate::client::detect_server_settings(url, api_key, email, tls_config).await?;
     persist_detected_settings(config, server_name, &settings, true)?;
     let api_mode = api_override.unwrap_or(settings.api_mode);
-    BugzillaClient::new(
-        url,
-        api_key,
-        settings.auth_method,
+    BugzillaClient::new(crate::client::BugzillaClientConfig {
+        base_url: url,
+        credential: api_key,
+        auth_method: settings.auth_method,
         api_mode,
-        email,
+        email_hint: email,
         tls_config,
-    )
+    })
 }
 
 /// Classify a TLS-layer failure and dispatch to the appropriate prompt.
@@ -470,14 +470,14 @@ pub async fn connect_and_configure(
     };
 
     let api_mode = api_override.unwrap_or(resolved_mode);
-    let client = BugzillaClient::new(
-        &url,
-        &api_key,
-        auth,
+    let client = BugzillaClient::new(crate::client::BugzillaClientConfig {
+        base_url: &url,
+        credential: &api_key,
+        auth_method: auth,
         api_mode,
-        email.as_deref(),
-        &tls_config,
-    )?;
+        email_hint: email.as_deref(),
+        tls_config: &tls_config,
+    })?;
     Ok(client)
 }
 

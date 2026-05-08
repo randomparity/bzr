@@ -60,10 +60,27 @@ fn parse_date(s: &str) -> Option<()> {
     }
     let month: u32 = s[5..7].parse().ok()?;
     let day: u32 = s[8..10].parse().ok()?;
-    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+    let year: u32 = s[..4].parse().ok()?;
+    let max_day = days_in_month(year, month)?;
+    if day == 0 || day > max_day {
         return None;
     }
     Some(())
+}
+
+fn days_in_month(year: u32, month: u32) -> Option<u32> {
+    let days = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if is_leap_year(year) => 29,
+        2 => 28,
+        _ => return None,
+    };
+    Some(days)
+}
+
+fn is_leap_year(year: u32) -> bool {
+    year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400))
 }
 
 fn parse_time(s: &str) -> Option<()> {
@@ -122,7 +139,7 @@ fn parse_datetime_offset(s: &str) -> Option<()> {
     }
     let h: u32 = s[20..22].parse().ok()?;
     let m: u32 = s[23..25].parse().ok()?;
-    if h > 14 || m > 59 {
+    if h > 14 || m > 59 || (h == 14 && m > 0) {
         return None;
     }
     Some(())

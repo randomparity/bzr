@@ -371,14 +371,14 @@ async fn xmlrpc_mode_get_group_bypasses_rest() {
         .mount(&mock)
         .await;
 
-    let client = super::BugzillaClient::new(
-        &mock.uri(),
-        "test-key",
-        AuthMethod::Header,
-        ApiMode::XmlRpc,
-        None,
-        &crate::tls::TlsConfig::default(),
-    )
+    let client = super::BugzillaClient::new(crate::client::BugzillaClientConfig {
+        base_url: &mock.uri(),
+        credential: "test-key",
+        auth_method: AuthMethod::Header,
+        api_mode: ApiMode::XmlRpc,
+        email_hint: None,
+        tls_config: &crate::tls::TlsConfig::default(),
+    })
     .unwrap();
 
     let info = client.get_group("admin").await.unwrap();

@@ -869,6 +869,12 @@ fn parse_quiet_flag() {
 }
 
 #[test]
+fn quiet_help_mentions_tracing_is_suppressed() {
+    let help = Cli::command().render_long_help().to_string();
+    assert!(help.contains("tracing logs are also suppressed"), "{help}");
+}
+
+#[test]
 fn parse_api_override() {
     let cli = Cli::try_parse_from(["bzr", "--api", "xmlrpc", "whoami", "show"]).unwrap();
     assert_eq!(cli.api, Some(ApiMode::XmlRpc));

@@ -33,14 +33,14 @@ fn safe_url_preserves_path() {
 
 #[test]
 fn new_trims_trailing_slash_and_keeps_email_hint() {
-    let client = BugzillaClient::new(
-        "https://bugzilla.example.com/",
-        "test-key",
-        AuthMethod::Header,
-        ApiMode::Rest,
-        Some("user@example.com"),
-        &crate::tls::TlsConfig::default(),
-    )
+    let client = BugzillaClient::new(BugzillaClientConfig {
+        base_url: "https://bugzilla.example.com/",
+        credential: "test-key",
+        auth_method: AuthMethod::Header,
+        api_mode: ApiMode::Rest,
+        email_hint: Some("user@example.com"),
+        tls_config: &crate::tls::TlsConfig::default(),
+    })
     .unwrap();
 
     assert_eq!(client.base_url, "https://bugzilla.example.com");
@@ -60,14 +60,14 @@ fn apply_auth_adds_query_param_credentials() {
 
 #[test]
 fn alternate_auth_rejects_invalid_header_characters() {
-    let client = BugzillaClient::new(
-        "https://bugzilla.example.com",
-        "bad\nkey",
-        AuthMethod::QueryParam,
-        ApiMode::Rest,
-        None,
-        &crate::tls::TlsConfig::default(),
-    )
+    let client = BugzillaClient::new(BugzillaClientConfig {
+        base_url: "https://bugzilla.example.com",
+        credential: "bad\nkey",
+        auth_method: AuthMethod::QueryParam,
+        api_mode: ApiMode::Rest,
+        email_hint: None,
+        tls_config: &crate::tls::TlsConfig::default(),
+    })
     .unwrap();
 
     let builder = client.http.get(client.url("bug"));
