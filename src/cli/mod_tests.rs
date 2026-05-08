@@ -376,6 +376,52 @@ fn parse_bug_update_with_dupe_of() {
 }
 
 #[test]
+fn parse_bug_update_rejects_dupe_of_with_status() {
+    let result = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "update",
+        "42",
+        "--dupe-of",
+        "99",
+        "--status",
+        "RESOLVED",
+    ]);
+
+    match result {
+        Ok(_) => panic!("expected ArgumentConflict, got Ok"),
+        Err(err) => assert!(
+            err.kind() == clap::error::ErrorKind::ArgumentConflict,
+            "expected ArgumentConflict, got {:?}",
+            err.kind()
+        ),
+    }
+}
+
+#[test]
+fn parse_bug_update_rejects_dupe_of_with_resolution() {
+    let result = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "update",
+        "42",
+        "--dupe-of",
+        "99",
+        "--resolution",
+        "DUPLICATE",
+    ]);
+
+    match result {
+        Ok(_) => panic!("expected ArgumentConflict, got Ok"),
+        Err(err) => assert!(
+            err.kind() == clap::error::ErrorKind::ArgumentConflict,
+            "expected ArgumentConflict, got {:?}",
+            err.kind()
+        ),
+    }
+}
+
+#[test]
 fn parse_bug_update_with_comment() {
     let cli = Cli::try_parse_from(["bzr", "bug", "update", "42", "--comment", "see #99"]).unwrap();
     match cli.command {

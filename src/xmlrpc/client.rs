@@ -297,7 +297,7 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         summary: get_str(m, "summary").unwrap_or_default(),
         status: get_str(m, "status").unwrap_or_default(),
         resolution: get_nonempty_str(m, "resolution"),
-        dupe_of: None,
+        dupe_of: get_u64(m, "dupe_of"),
         product: get_nonempty_str(m, "product"),
         component: get_nonempty_str(m, "component"),
         version: get_nonempty_str(m, "version"),
@@ -516,6 +516,12 @@ fn get_datetime_str(m: &BTreeMap<String, Value>, key: &str) -> Option<String> {
         Value::String(s) if !s.is_empty() => Some(s.clone()),
         _ => None,
     }
+}
+
+fn get_u64(m: &BTreeMap<String, Value>, key: &str) -> Option<u64> {
+    m.get(key)
+        .and_then(Value::as_i64)
+        .and_then(|v| u64::try_from(v).ok())
 }
 
 fn get_str_array(m: &BTreeMap<String, Value>, key: &str) -> Vec<String> {

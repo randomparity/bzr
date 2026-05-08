@@ -460,7 +460,7 @@ bzr bug update 12345 --see-also-add https://example.com/issue/42 \
     --see-also-add https://other.example/bug/7
 bzr bug update 12345 --status RESOLVED --resolution FIXED \
     --comment "Fixed by patch in #200"
-bzr bug update 100 200 300 --status RESOLVED --resolution DUPLICATE
+bzr bug update 100 200 300 --status RESOLVED --resolution WONTFIX
 ```
 
 | Option | Required | Description |

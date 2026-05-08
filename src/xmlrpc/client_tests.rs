@@ -135,6 +135,34 @@ async fn get_bug_by_id() {
 }
 
 #[tokio::test]
+async fn get_bug_by_id_parses_dupe_of() {
+    let mock = MockServer::start().await;
+    let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <methodResponse><params><param><value><struct>
+          <member><name>bugs</name><value><array><data>
+            <value><struct>
+              <member><name>id</name><value><int>100</int></value></member>
+              <member><name>summary</name><value><string>Duplicate bug</string></value></member>
+              <member><name>status</name><value><string>RESOLVED</string></value></member>
+              <member><name>resolution</name><value><string>DUPLICATE</string></value></member>
+              <member><name>dupe_of</name><value><int>99</int></value></member>
+            </struct></value>
+          </data></array></value></member>
+        </struct></value></param></params></methodResponse>"#;
+
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(xml))
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let bug = client.get_bug("100").await.unwrap();
+
+    assert_eq!(bug.dupe_of, Some(99));
+}
+
+#[tokio::test]
 async fn fault_response_maps_to_error() {
     let mock = MockServer::start().await;
     Mock::given(method("POST"))

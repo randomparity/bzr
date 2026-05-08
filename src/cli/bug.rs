@@ -585,14 +585,14 @@ pub enum BugAction {
         /// When closing a bug, `--resolution` must usually be set
         /// in the same call. Discover valid values via
         /// `bzr field list status`.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "dupe_of")]
         status: Option<String>,
         /// Resolution to set when closing a bug.
         ///
         /// Required by most workflows when `--status` transitions
         /// to a closed state (e.g. `RESOLVED`, `VERIFIED`).
         /// Discover valid values via `bzr field list resolution`.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "dupe_of")]
         resolution: Option<String>,
         /// Mark this bug as a duplicate of another bug.
         ///
