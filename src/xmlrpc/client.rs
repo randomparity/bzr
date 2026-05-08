@@ -5,8 +5,9 @@ use crate::http::AUTH_QUERY_PARAM;
 use crate::types::{
     partition_filters, Bug, CreateUserParams, GroupInfo, GroupMember, SearchParams, FIELD_MAPPINGS,
 };
+use crate::xmlrpc::call::build_request;
+use crate::xmlrpc::parsing::parse_response;
 use crate::xmlrpc::value::Value;
-use crate::xmlrpc::{build_request, parse_response};
 
 const ATTACHMENT_LIST_FIELDS: &[&str] = &[
     "id",

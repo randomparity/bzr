@@ -1,6 +1,9 @@
 use std::collections::BTreeMap;
 
-use super::*;
+use crate::error::BzrError;
+use crate::xmlrpc::value::Value;
+
+use super::fault_to_error;
 
 #[test]
 fn fault_struct_maps_to_api_error() {

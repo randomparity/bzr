@@ -1,4 +1,8 @@
-use super::*;
+use std::collections::BTreeMap;
+
+use crate::xmlrpc::value::Value;
+
+use super::build_request;
 
 #[test]
 fn build_simple_request() {
