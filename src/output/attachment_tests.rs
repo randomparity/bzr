@@ -1,24 +1,11 @@
 #![expect(clippy::unwrap_used)]
 
 use super::*;
+use crate::test_helpers::make_attachment;
 use crate::types::{Attachment, OutputFormat};
 
-fn make_attachment(id: u64, summary: &str) -> Attachment {
-    Attachment {
-        id,
-        bug_id: 42,
-        file_name: format!("file_{id}.patch"),
-        summary: summary.into(),
-        content_type: "text/plain".into(),
-        creator: Some("author@example.com".into()),
-        creation_time: Some("2025-03-01T09:00:00Z".into()),
-        last_change_time: Some("2025-03-02T10:00:00Z".into()),
-        size: 1234,
-        is_obsolete: false,
-        is_private: false,
-        is_patch: false,
-        data: None,
-    }
+fn output_attachment(id: u64, summary: &str) -> Attachment {
+    make_attachment(id, 42, &format!("file_{id}.patch"), summary, None)
 }
 
 fn capture(format: OutputFormat, attachments: &[Attachment]) -> String {
@@ -46,7 +33,7 @@ fn write_attachments_json_empty() {
 
 #[test]
 fn write_attachments_json_one_attachment() {
-    let attachments = vec![make_attachment(10, "Fix patch")];
+    let attachments = vec![output_attachment(10, "Fix patch")];
     let json = serde_json::to_string_pretty(&attachments).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed[0]["id"], 10);
@@ -58,7 +45,7 @@ fn write_attachments_json_one_attachment() {
 
 #[test]
 fn attachment_text_format_fields() {
-    let att = make_attachment(10, "Fix patch");
+    let att = output_attachment(10, "Fix patch");
     assert_eq!(att.file_name, "file_10.patch");
     assert_eq!(att.content_type, "text/plain");
     assert_eq!(att.size, 1234);
@@ -69,7 +56,7 @@ fn attachment_text_format_fields() {
 
 #[test]
 fn write_attachments_json_obsolete_and_private() {
-    let mut att = make_attachment(11, "Old patch");
+    let mut att = output_attachment(11, "Old patch");
     att.is_obsolete = true;
     att.is_private = true;
     let json = serde_json::to_string(&att).unwrap();
@@ -94,7 +81,7 @@ fn write_attachments_json_empty_renders_empty_array() {
 
 #[test]
 fn write_attachments_table_renders_all_fields() {
-    let mut att = make_attachment(7, "Helpful patch");
+    let mut att = output_attachment(7, "Helpful patch");
     att.is_obsolete = true;
     att.is_private = true;
     let output = capture(OutputFormat::Table, &[att]);
@@ -146,7 +133,7 @@ fn write_attachments_table_missing_optional_fields_render_dash() {
 
 #[test]
 fn write_attachments_table_renders_patch_tag() {
-    let mut att = make_attachment(12, "Patch attachment");
+    let mut att = output_attachment(12, "Patch attachment");
     att.is_patch = true;
     let output = capture(OutputFormat::Table, &[att]);
     assert!(output.contains("Attachment"));
@@ -159,7 +146,7 @@ fn write_attachments_table_renders_patch_tag() {
 
 #[test]
 fn write_attachments_table_patch_tag_precedes_obsolete_and_private() {
-    let mut att = make_attachment(13, "All flags");
+    let mut att = output_attachment(13, "All flags");
     att.is_patch = true;
     att.is_obsolete = true;
     att.is_private = true;
@@ -177,7 +164,7 @@ fn write_attachments_table_patch_tag_precedes_obsolete_and_private() {
 
 #[test]
 fn write_attachments_json_one_via_write() {
-    let output = capture(OutputFormat::Json, &[make_attachment(99, "Json patch")]);
+    let output = capture(OutputFormat::Json, &[output_attachment(99, "Json patch")]);
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
     assert_eq!(parsed[0]["id"], 99);
     assert_eq!(parsed[0]["summary"], "Json patch");
@@ -186,7 +173,7 @@ fn write_attachments_json_one_via_write() {
 
 #[test]
 fn write_attachments_does_not_emit_ansi_when_writing_to_buffer() {
-    let output = capture(OutputFormat::Table, &[make_attachment(1, "p")]);
+    let output = capture(OutputFormat::Table, &[output_attachment(1, "p")]);
     assert!(
         !output.contains('\x1b'),
         "expected no ANSI escapes when writing to Vec<u8>: {output:?}",

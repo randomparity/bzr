@@ -57,6 +57,31 @@ api_mode = "rest"
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 }
 
+/// Build a full-shaped attachment fixture with common test defaults.
+pub fn make_attachment(
+    id: u64,
+    bug_id: u64,
+    file_name: &str,
+    summary: &str,
+    data: Option<String>,
+) -> crate::types::Attachment {
+    crate::types::Attachment {
+        id,
+        bug_id,
+        file_name: file_name.into(),
+        summary: summary.into(),
+        content_type: "text/plain".into(),
+        creator: Some("author@example.com".into()),
+        creation_time: Some("2025-03-01T09:00:00Z".into()),
+        last_change_time: Some("2025-03-02T10:00:00Z".into()),
+        size: 1234,
+        is_obsolete: false,
+        is_private: false,
+        is_patch: false,
+        data,
+    }
+}
+
 /// Owned `Vec<u8>` buffers for capturing stdout and stderr in tests, plus
 /// a `Writers` constructor that borrows them.
 pub struct CapturedIo {

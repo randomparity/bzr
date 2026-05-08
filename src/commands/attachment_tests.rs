@@ -5,7 +5,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::AttachmentAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::{make_attachment, setup_test_env};
 use crate::types::OutputFormat;
 
 #[tokio::test]
@@ -697,21 +697,16 @@ async fn write_one_attachment_writes_inline_data_with_att_id_prefix() {
         .await
         .unwrap();
 
-    let att = crate::types::Attachment {
-        id: 9876,
-        bug_id: 12345,
-        file_name: "patch.diff".into(),
-        summary: "Fix patch".into(),
-        content_type: "text/x-diff".into(),
-        creator: None,
-        creation_time: None,
-        last_change_time: None,
-        size: 11,
-        is_obsolete: false,
-        is_private: false,
-        is_patch: true,
-        data: Some(b64(b"Hello world")),
-    };
+    let mut att = make_attachment(
+        9876,
+        12345,
+        "patch.diff",
+        "Fix patch",
+        Some(b64(b"Hello world")),
+    );
+    att.content_type = "text/x-diff".into();
+    att.size = 11;
+    att.is_patch = true;
     let out_dir = tmp.path().to_string_lossy().into_owned();
 
     let file = super::write_one_attachment(&client, &att, &out_dir)
@@ -752,21 +747,8 @@ async fn write_one_attachment_falls_back_when_data_missing() {
         .await
         .unwrap();
 
-    let att = crate::types::Attachment {
-        id: 9876,
-        bug_id: 12345,
-        file_name: "patch.diff".into(),
-        summary: "Fix patch".into(),
-        content_type: "text/plain".into(),
-        creator: None,
-        creation_time: None,
-        last_change_time: None,
-        size: 11,
-        is_obsolete: false,
-        is_private: false,
-        is_patch: false,
-        data: None,
-    };
+    let mut att = make_attachment(9876, 12345, "patch.diff", "Fix patch", None);
+    att.size = 11;
     let out_dir = tmp.path().to_string_lossy().into_owned();
 
     let file = super::write_one_attachment(&client, &att, &out_dir)
@@ -789,21 +771,8 @@ async fn write_one_attachment_overwrites_existing_file() {
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("9876.patch.diff"), b"OLD CONTENT").unwrap();
 
-    let att = crate::types::Attachment {
-        id: 9876,
-        bug_id: 12345,
-        file_name: "patch.diff".into(),
-        summary: "v2".into(),
-        content_type: "text/plain".into(),
-        creator: None,
-        creation_time: None,
-        last_change_time: None,
-        size: 11,
-        is_obsolete: false,
-        is_private: false,
-        is_patch: false,
-        data: Some(b64(b"NEW CONTENT")),
-    };
+    let mut att = make_attachment(9876, 12345, "patch.diff", "v2", Some(b64(b"NEW CONTENT")));
+    att.size = 11;
     let out_dir = tmp.path().to_string_lossy().into_owned();
 
     super::write_one_attachment(&client, &att, &out_dir)
@@ -1297,21 +1266,14 @@ async fn write_one_attachment_invalid_base64_returns_data_integrity() {
         .await
         .unwrap();
 
-    let att = crate::types::Attachment {
-        id: 9876,
-        bug_id: 12345,
-        file_name: "patch.diff".into(),
-        summary: "broken".into(),
-        content_type: "text/plain".into(),
-        creator: None,
-        creation_time: None,
-        last_change_time: None,
-        size: 0,
-        is_obsolete: false,
-        is_private: false,
-        is_patch: false,
-        data: Some("not valid base64 !!".into()),
-    };
+    let mut att = make_attachment(
+        9876,
+        12345,
+        "patch.diff",
+        "broken",
+        Some("not valid base64 !!".into()),
+    );
+    att.size = 0;
     let out_dir = tmp.path().to_string_lossy().into_owned();
 
     let result = super::write_one_attachment(&client, &att, &out_dir).await;
