@@ -28,11 +28,11 @@ pub enum ConfigAction {
     ///
     /// Examples:
     ///
-    ///   bzr config set-server prod --url https://bz.example.com \
+    ///   bzr config set-server prod --url <https://bz.example.com> \
     ///     --api-key-env BZR_API_KEY
-    ///   bzr config set-server staging --url https://stage.example.com \
+    ///   bzr config set-server staging --url <https://stage.example.com> \
     ///     --api-key-env STAGE_KEY --tls-pin-now
-    ///   bzr config set-server self-hosted --url https://bz.local \
+    ///   bzr config set-server self-hosted --url <https://bz.local> \
     ///     --api-key-env BZR_API_KEY \
     ///     --tls-ca-cert /etc/pki/tls/local-ca.pem
     ///
@@ -181,7 +181,7 @@ pub enum ConfigAction {
     ///
     /// Lists every configured server with its URL, default-flag
     /// status, and credential indirection (env-var name, keyring
-    /// entry, or "<inline>" for inline keys). Inline API keys are
+    /// entry, or `"<inline>"` for inline keys). Inline API keys are
     /// redacted -- the secret never appears in this output. With
     /// `--json`, the same data is emitted as a JSON object suitable
     /// for scripting.

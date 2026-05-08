@@ -1,8 +1,12 @@
 #![expect(clippy::unwrap_used, clippy::panic)]
 
-use super::*;
-use crate::types::ProductListType;
-use clap::{CommandFactory, Parser};
+use super::{
+    AttachmentAction, BugAction, ClassificationAction, Cli, Commands, CommentAction,
+    ComponentAction, ConfigAction, FieldAction, GroupAction, ProductAction, QueryAction,
+    ServerAction, TemplateAction, UserAction,
+};
+use crate::types::{ApiMode, ProductListType};
+use clap::{CommandFactory as _, Parser as _};
 
 /// Doc-comment coverage for items already converted to multi-paragraph
 /// `long_about` per docs/dev/cli-doc-style.md. Phase 1 + 2a of the

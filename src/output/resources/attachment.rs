@@ -44,7 +44,7 @@ pub fn write_attachments<W: Write + ?Sized>(
 
 /// Top-level payload for `bzr attachment download` in bulk mode.
 ///
-/// Single-ID mode continues to use [`crate::output::DownloadResult`].
+/// Single-ID mode continues to use [`crate::output::result_types::DownloadResult`].
 #[derive(Debug, Serialize)]
 #[non_exhaustive]
 pub struct AttachmentBatchResult {

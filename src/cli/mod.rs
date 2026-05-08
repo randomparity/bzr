@@ -55,7 +55,7 @@ use crate::types::{ApiMode, OutputFormat};
 ///
 /// Examples:
 ///
-///   bzr config set-server prod --url https://bugzilla.example.com \
+///   bzr config set-server prod --url <https://bugzilla.example.com> \
 ///     --api-key-env BZR_API_KEY
 ///   bzr bug list --product Firefox --status NEW --limit 25
 ///   bzr bug view 12345 --json | jq .summary
@@ -235,7 +235,7 @@ pub enum Commands {
     ///
     /// Examples:
     ///
-    ///   bzr config set-server prod --url https://bz.example.com \
+    ///   bzr config set-server prod --url <https://bz.example.com> \
     ///     --api-key-env BZR_API_KEY
     ///   bzr config set-default prod
     ///   bzr config set-keyring prod
