@@ -64,7 +64,7 @@ keyring = { version = "3" }
 # No-op proc-macro for `#[mutants::skip]`. Used in a few places where
 # `exclude_re` in .cargo/mutants.toml cannot reach (e.g. cargo-mutants's
 # `delete field` operator on struct expressions).
-mutants = "0.0.3"
+mutants = "0.0.4"
 
 [package.metadata.deb]
 maintainer = "David Christensen <randomparity@gmail.com>"
