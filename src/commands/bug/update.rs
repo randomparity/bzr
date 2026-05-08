@@ -80,7 +80,22 @@ fn resolve_comment(
     }))
 }
 
+pub(super) fn validate_action(action: &BugAction) -> Result<()> {
+    match action {
+        BugAction::Update {
+            ids,
+            alias: Some(_),
+            ..
+        } if ids.len() > 1 => Err(crate::error::BzrError::InputValidation(
+            "--alias can only be used when updating one bug".into(),
+        )),
+        _ => Ok(()),
+    }
+}
+
 fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)> {
+    validate_action(action)?;
+
     let BugAction::Update {
         ids,
         status,
@@ -118,12 +133,6 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
     else {
         unreachable!()
     };
-
-    if alias.is_some() && ids.len() > 1 {
-        return Err(crate::error::BzrError::InputValidation(
-            "--alias can only be used when updating one bug".into(),
-        ));
-    }
 
     let flags = crate::commands::flags::parse_flags(flag)?;
     let params = UpdateBugParams {

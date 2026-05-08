@@ -1,7 +1,7 @@
 //! Bug subcommand handlers, split per-action.
 
 use crate::cli::BugAction;
-use crate::error::{BzrError, Result};
+use crate::error::Result;
 use crate::output::Writers;
 use crate::types::{ApiMode, OutputFormat};
 
@@ -14,19 +14,6 @@ mod search;
 mod update;
 mod view;
 
-fn validate_pre_connect(action: &BugAction) -> Result<()> {
-    match action {
-        BugAction::Update {
-            ids,
-            alias: Some(_),
-            ..
-        } if ids.len() > 1 => Err(BzrError::InputValidation(
-            "--alias can only be used when updating one bug".into(),
-        )),
-        _ => Ok(()),
-    }
-}
-
 /// Dispatch bug actions to their respective handlers.
 pub async fn execute(
     action: &BugAction,
@@ -35,7 +22,7 @@ pub async fn execute(
     api: Option<ApiMode>,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    validate_pre_connect(action)?;
+    update::validate_action(action)?;
 
     // Search builds its own client because --from-url may resolve a different
     // server from the URL hostname. Skip the shared connect to avoid double
