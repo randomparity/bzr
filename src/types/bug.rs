@@ -33,6 +33,8 @@ pub struct Bug {
     #[serde(default)]
     pub dupe_of: Option<u64>,
     #[serde(default)]
+    pub deadline: Option<String>,
+    #[serde(default)]
     pub product: Option<String>,
     #[serde(default)]
     pub component: Option<String>,

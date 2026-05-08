@@ -22,6 +22,15 @@ fn bug_deserializes_full() {
 }
 
 #[test]
+fn bug_deserializes_deadline() {
+    let json = r#"{"id": 42, "deadline": "2026-12-31"}"#;
+    let bug: Bug = serde_json::from_str(json).unwrap();
+    let serialized = serde_json::to_value(&bug).unwrap();
+
+    assert_eq!(serialized["deadline"], "2026-12-31");
+}
+
+#[test]
 fn partition_filters_positive_only() {
     let vals: Vec<String> = vec!["NEW".into(), "ASSIGNED".into()];
     let (pos, neg) = partition_filters(&vals);
