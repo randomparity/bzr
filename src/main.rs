@@ -51,7 +51,13 @@ async fn main() -> ExitCode {
         suppress_stdout();
     }
 
-    if let Err(e) = bzr::dispatch(&cli, format).await {
+    let stdout = std::io::stdout();
+    let stderr = std::io::stderr();
+    let mut out = stdout.lock();
+    let mut err = stderr.lock();
+    let mut writers = bzr::output::Writers::new(&mut out, &mut err);
+
+    if let Err(e) = bzr::dispatch(&cli, format, &mut writers).await {
         #[expect(clippy::print_stderr)]
         {
             eprintln!("{}", format_dispatch_error(&e, format));

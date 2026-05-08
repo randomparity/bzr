@@ -3,7 +3,7 @@ use std::io::{IsTerminal, Read};
 use crate::cli::CommentAction;
 use crate::commands::editor;
 use crate::error::{BzrError, Result};
-use crate::output::{self, ActionResult, ResourceKind, SearchResult, TagResult};
+use crate::output::{self, ActionResult, ResourceKind, SearchResult, TagResult, Writers};
 use crate::types::ApiMode;
 use crate::types::{OutputFormat, UpdateCommentTagsParams};
 
@@ -12,6 +12,7 @@ pub async fn execute(
     server: Option<&str>,
     format: OutputFormat,
     api: Option<ApiMode>,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     let client = super::shared::connect_and_configure(server, api).await?;
 
@@ -22,7 +23,7 @@ pub async fn execute(
             let comments = client
                 .get_comments_since(*bug_id, canonical_since.as_deref())
                 .await?;
-            output::print_comments(&comments, format);
+            output::write_comments(&comments, format, w.out);
         }
         CommentAction::Add {
             bug_id,
@@ -37,10 +38,11 @@ pub async fn execute(
                 return Err(BzrError::InputValidation("empty comment, aborting".into()));
             }
             let id = client.add_comment(*bug_id, &text, *private).await?;
-            output::print_result(
+            output::write_result(
                 &ActionResult::created(id, ResourceKind::Comment),
                 &format!("Added comment #{id} to bug #{bug_id}"),
                 format,
+                w.out,
             );
         }
         CommentAction::Tag {
@@ -58,15 +60,16 @@ pub async fn execute(
             } else {
                 tags.join(", ")
             };
-            output::print_result(
+            output::write_result(
                 &TagResult::updated(*comment_id, tags),
                 &format!("Tags on comment #{comment_id}: {display}"),
                 format,
+                w.out,
             );
         }
         CommentAction::SearchTags { query } => {
             let tags = client.search_comment_tags(query).await?;
-            output::print_result(
+            output::write_result(
                 &SearchResult::new(tags.clone()),
                 &if tags.is_empty() {
                     "No tags.".to_string()
@@ -77,6 +80,7 @@ pub async fn execute(
                         .join("\n")
                 },
                 format,
+                w.out,
             );
         }
     }

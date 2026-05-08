@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::BugAction;
-use crate::test_helpers::{capture_stdout, setup_test_env};
+use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 fn empty_list_action() -> BugAction {
@@ -60,15 +60,14 @@ async fn bug_list_returns_bugs() {
         .await;
 
     let action = empty_list_action();
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
-        &action,
-        None,
-        OutputFormat::Json,
-        None,
-    ))
-    .await;
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+    let output = __io.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed[0]["id"], 1);
     assert_eq!(parsed[0]["summary"], "Test bug");
     assert_eq!(parsed[0]["status"], "NEW");
@@ -77,6 +76,7 @@ async fn bug_list_returns_bugs() {
 
 #[tokio::test]
 async fn bug_list_passes_every_field_through_to_search_params() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     // Every CLI field on `bug list` must round-trip into the search
     // query string.
     let (_lock, mock, _tmp) = setup_test_env().await;
@@ -136,7 +136,14 @@ async fn bug_list_passes_every_field_through_to_search_params() {
         qa_contact: vec!["qa@test.com".into()],
         url: vec!["github.com/foo".into()],
     };
-    let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
+    let result = crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(
         result.is_ok(),
         "bug list with all fields failed: {result:?}"
@@ -145,6 +152,7 @@ async fn bug_list_passes_every_field_through_to_search_params() {
 
 #[tokio::test]
 async fn bug_list_summary_only_sends_substring_filter() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     // `--summary` alone must be passed verbatim as the REST `summary`
     // query parameter and must not trigger an XML-RPC fallback even
     // when the result is empty (issue #152).
@@ -190,12 +198,20 @@ async fn bug_list_summary_only_sends_substring_filter() {
         qa_contact: vec![],
         url: vec![],
     };
-    let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
+    let result = crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "bug list --summary failed: {result:?}");
 }
 
 #[tokio::test]
 async fn bug_list_http_500_returns_error() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -205,7 +221,14 @@ async fn bug_list_http_500_returns_error() {
         .await;
 
     let action = empty_list_action();
-    let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
+    let result = crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(
@@ -216,6 +239,7 @@ async fn bug_list_http_500_returns_error() {
 
 #[tokio::test]
 async fn bug_list_malformed_json_returns_error() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -225,12 +249,20 @@ async fn bug_list_malformed_json_returns_error() {
         .await;
 
     let action = empty_list_action();
-    let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
+    let result = crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err());
 }
 
 #[tokio::test]
 async fn bug_list_rejects_malformed_created_since_with_exit_code_7() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let mut action = empty_list_action();
@@ -238,7 +270,14 @@ async fn bug_list_rejects_malformed_created_since_with_exit_code_7() {
         *created_since = Some("not-a-date".into());
     }
 
-    let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
+    let result = crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     let err = result.unwrap_err();
     assert_eq!(
         err.exit_code(),
@@ -258,6 +297,7 @@ async fn bug_list_rejects_malformed_created_since_with_exit_code_7() {
 
 #[tokio::test]
 async fn bug_list_rejects_malformed_changed_since_with_exit_code_7() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let mut action = empty_list_action();
@@ -265,7 +305,14 @@ async fn bug_list_rejects_malformed_changed_since_with_exit_code_7() {
         *changed_since = Some("2026-13-99".into());
     }
 
-    let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
+    let result = crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     let err = result.unwrap_err();
     assert_eq!(err.exit_code(), 7);
     assert!(err.to_string().contains("--changed-since"));
@@ -273,6 +320,7 @@ async fn bug_list_rejects_malformed_changed_since_with_exit_code_7() {
 
 #[tokio::test]
 async fn bug_list_mixed_positive_notequals_notsubstring() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     // End-to-end coverage: --product (positive), --resolution '!FIXED'
     // (notequals), --whiteboard '!wip' (notsubstring) all reach the
     // wire with the right operator.
@@ -306,6 +354,13 @@ async fn bug_list_mixed_positive_notequals_notsubstring() {
         *resolution = vec!["!FIXED".into()];
         *whiteboard = vec!["!wip".into()];
     }
-    let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
+    let result = crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "bug list failed: {result:?}");
 }

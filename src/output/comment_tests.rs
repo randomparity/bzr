@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used)]
 
-use super::print_comments;
+use super::write_comments;
 use crate::types::{Comment, OutputFormat};
 
 fn make_comment(count: u64, text: &str) -> Comment {
@@ -16,15 +16,21 @@ fn make_comment(count: u64, text: &str) -> Comment {
     }
 }
 
+fn capture(format: OutputFormat, comments: &[Comment]) -> String {
+    let mut buf = Vec::new();
+    write_comments(comments, format, &mut buf);
+    String::from_utf8(buf).unwrap()
+}
+
 #[test]
-fn print_comments_json_empty() {
+fn write_comments_json_empty() {
     let comments: Vec<Comment> = vec![];
     let json = serde_json::to_string_pretty(&comments).unwrap();
     assert_eq!(json, "[]");
 }
 
 #[test]
-fn print_comments_json_one_comment() {
+fn write_comments_json_one_comment() {
     let comments = vec![make_comment(0, "First comment text")];
     let json = serde_json::to_string_pretty(&comments).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -34,7 +40,7 @@ fn print_comments_json_one_comment() {
 }
 
 #[test]
-fn print_comments_json_private_flag() {
+fn write_comments_json_private_flag() {
     let mut comment = make_comment(1, "secret");
     comment.is_private = true;
     let json = serde_json::to_string(&comment).unwrap();
@@ -42,43 +48,25 @@ fn print_comments_json_private_flag() {
     assert_eq!(parsed["is_private"], true);
 }
 
-// ── capture_stdout-based formatter tests ─────────────────────────
-
-#[cfg(unix)]
-#[tokio::test]
-async fn print_comments_table_empty_says_no_comments() {
-    let _lock = crate::ENV_LOCK.lock().await;
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_comments(&[], OutputFormat::Table);
-    })
-    .await;
+#[test]
+fn write_comments_table_empty_says_no_comments() {
+    let output = capture(OutputFormat::Table, &[]);
     assert!(output.contains("No comments."));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_comments_json_empty_renders_empty_array() {
-    let _lock = crate::ENV_LOCK.lock().await;
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_comments(&[], OutputFormat::Json);
-    })
-    .await;
-    let parsed = crate::test_helpers::extract_json(&output);
+#[test]
+fn write_comments_json_empty_renders_empty_array() {
+    let output = capture(OutputFormat::Json, &[]);
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
     assert!(parsed.is_array());
     assert_eq!(parsed.as_array().unwrap().len(), 0);
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_comments_table_renders_comment_fields() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_comments_table_renders_comment_fields() {
     let mut c = make_comment(2, "Line one\nLine two");
     c.is_private = true;
-    let comments = vec![c];
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_comments(&comments, OutputFormat::Table);
-    })
-    .await;
+    let output = capture(OutputFormat::Table, &[c]);
     assert!(output.contains("Comment"));
     assert!(output.contains("#2"));
     assert!(output.contains("commenter@example.com"));
@@ -86,14 +74,11 @@ async fn print_comments_table_renders_comment_fields() {
     assert!(output.contains("[PRIVATE]"));
     assert!(output.contains("Line one"));
     assert!(output.contains("Line two"));
-    // Separator row
     assert!(output.contains('─'));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_comments_table_handles_missing_creator_and_unicode() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_comments_table_handles_missing_creator_and_unicode() {
     let comments = vec![Comment {
         id: 1,
         bug_id: 42,
@@ -104,28 +89,29 @@ async fn print_comments_table_handles_missing_creator_and_unicode() {
         is_private: false,
         attachment_id: None,
     }];
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_comments(&comments, OutputFormat::Table);
-    })
-    .await;
-    // Falls back to "unknown" for missing creator and "" for missing time
+    let output = capture(OutputFormat::Table, &comments);
     assert!(output.contains("unknown"));
     assert!(output.contains("héllo, wörld"));
-    // Private flag absent — verify [PRIVATE] is NOT present
     assert!(!output.contains("[PRIVATE]"));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_comments_json_one_comment_via_print() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_comments_json_one_comment_via_write() {
     let comments = vec![make_comment(7, "json body")];
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_comments(&comments, OutputFormat::Json);
-    })
-    .await;
-    let parsed = crate::test_helpers::extract_json(&output);
+    let output = capture(OutputFormat::Json, &comments);
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
     assert_eq!(parsed[0]["count"], 7);
     assert_eq!(parsed[0]["text"], "json body");
     assert_eq!(parsed[0]["bug_id"], 42);
+}
+
+#[test]
+fn write_comments_table_does_not_emit_ansi_when_writing_to_buffer() {
+    // colored disables ANSI for non-TTY writers; Vec<u8> is not a TTY.
+    let comments = vec![make_comment(3, "body")];
+    let output = capture(OutputFormat::Table, &comments);
+    assert!(
+        !output.contains('\x1b'),
+        "expected no ANSI escapes when writing to Vec<u8>: {output:?}",
+    );
 }

@@ -1,6 +1,6 @@
 use crate::cli::BugAction;
 use crate::error::Result;
-use crate::output;
+use crate::output::{self, Writers};
 use crate::types::{ApiMode, OutputFormat, Overrides, SavedQuery, SearchParams};
 
 /// Determine the `save_as` name + query to persist after a successful URL-based
@@ -56,6 +56,7 @@ pub(super) async fn handle(
     server: Option<&str>,
     format: OutputFormat,
     api: Option<ApiMode>,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     let BugAction::Search {
         query,
@@ -100,7 +101,7 @@ pub(super) async fn handle(
     };
 
     let bugs = client.search_bugs(&params).await?;
-    output::print_bugs(&bugs, format);
+    output::write_bugs(&bugs, format, w.out);
 
     if let Some((name, query)) = save_info {
         let mut config = crate::config::Config::load()?;
@@ -108,7 +109,7 @@ pub(super) async fn handle(
         config.queries.insert(name.clone(), query);
         config.save()?;
         let verb = if is_update { "Updated" } else { "Saved" };
-        crate::output::print_query_saved(&name, verb, format);
+        crate::output::write_query_saved(&name, verb, format, w.out);
     }
 
     Ok(())

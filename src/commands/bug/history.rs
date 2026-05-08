@@ -1,9 +1,7 @@
-use std::io::{self, Write};
-
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
-use crate::output;
+use crate::output::{self, Writers};
 use crate::types::OutputFormat;
 use crate::validation::parse_optional_date;
 
@@ -11,6 +9,7 @@ pub(super) async fn handle(
     client: &BugzillaClient,
     action: &BugAction,
     format: OutputFormat,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     let BugAction::History { id, since } = action else {
         unreachable!()
@@ -22,9 +21,9 @@ pub(super) async fn handle(
         .get_bug_history_since(*id, canonical_since.as_deref())
         .await?;
     if history.is_empty() {
-        let _ = writeln!(io::stdout(), "No history for bug #{id}.");
+        let _ = writeln!(w.out, "No history for bug #{id}.");
     } else {
-        output::print_history(&history, format);
+        output::write_history(&history, format, w.out);
     }
     Ok(())
 }

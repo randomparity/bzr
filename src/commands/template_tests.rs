@@ -2,7 +2,7 @@
 
 use crate::cli::TemplateAction;
 use crate::config::Config;
-use crate::test_helpers::{capture_stdout, setup_test_env};
+use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 fn save_action(name: &str) -> TemplateAction {
@@ -26,18 +26,35 @@ async fn template_save_and_show() {
 
     // Save a template
     let action = save_action("test-tmpl");
-    let (result, _output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a1 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a1.writers(),
+    )
+    .await;
+    let _output = __io_a1.out_str().to_string();
     assert!(result.is_ok(), "template save failed: {result:?}");
 
     // Show the saved template
     let action = TemplateAction::Show {
         name: "test-tmpl".into(),
     };
-    let (result, output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a2 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a2.writers(),
+    )
+    .await;
+    let output = __io_a2.out_str().to_string();
     assert!(result.is_ok(), "template show failed: {result:?}");
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["name"], "test-tmpl");
     assert_eq!(parsed["product"], "TestProduct");
     assert_eq!(parsed["priority"], "P1");
@@ -45,6 +62,7 @@ async fn template_save_and_show() {
 
 #[tokio::test]
 async fn template_save_requires_field() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = TemplateAction::Save {
@@ -59,7 +77,14 @@ async fn template_save_requires_field() {
         rep_platform: None,
         description: None,
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err(), "saving empty template should fail");
     let err = result.unwrap_err().to_string();
     assert!(
@@ -86,7 +111,9 @@ async fn template_save_with_single_field_succeeds() {
         rep_platform: None,
         description: None,
     };
-    let (result, _) = capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut __io.writers()).await;
+    let _ = __io.out_str().to_string();
     assert!(
         result.is_ok(),
         "single-field template should save: {result:?}"
@@ -95,12 +122,20 @@ async fn template_save_with_single_field_succeeds() {
 
 #[tokio::test]
 async fn template_delete_unknown_errors() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = TemplateAction::Delete {
         name: "nonexistent".into(),
     };
-    let result = super::execute(&action, None, OutputFormat::Json, None).await;
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err(), "deleting unknown template should fail");
     let err = result.unwrap_err().to_string();
     assert!(
@@ -114,8 +149,16 @@ async fn template_list_empty() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = TemplateAction::List;
-    let (result, _output) =
-        capture_stdout(super::execute(&action, None, OutputFormat::Json, None)).await;
+    let mut __io_a3 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a3.writers(),
+    )
+    .await;
+    let _output = __io_a3.out_str().to_string();
     assert!(result.is_ok(), "template list failed: {result:?}");
 }
 
@@ -123,13 +166,18 @@ async fn template_list_empty() {
 async fn template_save_existing_entry_reports_updated_and_replaces_fields() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let (result, _) = capture_stdout(super::execute(
+    let mut __io2 = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(
         &save_action("existing"),
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io2.writers(),
+    )
     .await;
+
+    let _ = __io2.out_str().to_string();
     assert!(result.is_ok());
 
     let update = TemplateAction::Save {
@@ -144,11 +192,19 @@ async fn template_save_existing_entry_reports_updated_and_replaces_fields() {
         rep_platform: None,
         description: Some("updated".into()),
     };
-    let (result, output) =
-        capture_stdout(super::execute(&update, None, OutputFormat::Json, None)).await;
+    let mut __io_a4 = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &update,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io_a4.writers(),
+    )
+    .await;
+    let output = __io_a4.out_str().to_string();
     assert!(result.is_ok());
 
-    let parsed = crate::test_helpers::extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["name"], "existing");
     assert_eq!(parsed["action"], "updated");
 
@@ -164,27 +220,37 @@ async fn template_save_existing_entry_reports_updated_and_replaces_fields() {
 async fn template_delete_existing_removes_entry() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let (result, _) = capture_stdout(super::execute(
+    let mut __io3 = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(
         &save_action("delete-me"),
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io3.writers(),
+    )
     .await;
+
+    let _ = __io3.out_str().to_string();
     assert!(result.is_ok());
 
-    let (result, output) = capture_stdout(super::execute(
+    let mut __io4 = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(
         &TemplateAction::Delete {
             name: "delete-me".into(),
         },
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io4.writers(),
+    )
     .await;
+
+    let output = __io4.out_str().to_string();
     assert!(result.is_ok());
 
-    let parsed = crate::test_helpers::extract_json(&output);
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["name"], "delete-me");
     assert_eq!(parsed["action"], "deleted");
     assert!(!Config::load().unwrap().templates.contains_key("delete-me"));
@@ -194,24 +260,34 @@ async fn template_delete_existing_removes_entry() {
 async fn template_delete_table_prints_deleted_message() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let (result, _) = capture_stdout(super::execute(
+    let mut __io5 = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(
         &save_action("table-delete"),
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io5.writers(),
+    )
     .await;
+
+    let _ = __io5.out_str().to_string();
     assert!(result.is_ok());
 
-    let (result, _output) = capture_stdout(super::execute(
+    let mut __io6 = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(
         &TemplateAction::Delete {
             name: "table-delete".into(),
         },
         None,
         OutputFormat::Table,
         None,
-    ))
+        &mut __io6.writers(),
+    )
     .await;
+
+    let _output = __io6.out_str().to_string();
     assert!(result.is_ok());
     assert!(!Config::load()
         .unwrap()
@@ -224,23 +300,31 @@ async fn template_list_table_sorts_entries_by_name() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     for name in ["zzz", "aaa"] {
-        let (result, _) = capture_stdout(super::execute(
+        let mut __io7 = crate::test_helpers::CapturedIo::new();
+        let result = super::execute(
             &save_action(name),
             None,
             OutputFormat::Json,
             None,
-        ))
+            &mut __io7.writers(),
+        )
         .await;
+        let _ = __io7.out_str().to_string();
         assert!(result.is_ok());
     }
 
-    let (result, output) = capture_stdout(super::execute(
+    let mut __io8 = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(
         &TemplateAction::List,
         None,
         OutputFormat::Table,
         None,
-    ))
+        &mut __io8.writers(),
+    )
     .await;
+
+    let output = __io8.out_str().to_string();
     assert!(result.is_ok());
     assert!(output.is_empty() || output.contains("product="));
 
@@ -252,6 +336,7 @@ async fn template_list_table_sorts_entries_by_name() {
 
 #[tokio::test]
 async fn template_show_unknown_errors() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let err = super::execute(
@@ -261,6 +346,7 @@ async fn template_show_unknown_errors() {
         None,
         OutputFormat::Json,
         None,
+        &mut __cap_io.writers(),
     )
     .await
     .unwrap_err();

@@ -5,7 +5,7 @@
 use crate::cli::TemplateAction;
 use crate::config::Config;
 use crate::error::{BzrError, Result};
-use crate::output;
+use crate::output::{self, Writers};
 use crate::types::BugTemplate;
 use crate::types::OutputFormat;
 
@@ -18,6 +18,7 @@ pub async fn execute(
     _server: Option<&str>,
     format: OutputFormat,
     _api: Option<crate::types::ApiMode>,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     match action {
         TemplateAction::Save {
@@ -66,11 +67,11 @@ pub async fn execute(
             config.save()?;
 
             let verb = if is_update { "Updated" } else { "Saved" };
-            output::print_template_saved(name, verb, format);
+            output::write_template_saved(name, verb, format, w.out);
         }
         TemplateAction::List => {
             let config = Config::load()?;
-            output::print_template_list(&config.templates, format);
+            output::write_template_list(&config.templates, format, w.out);
         }
         TemplateAction::Show { name } => {
             let config = Config::load()?;
@@ -78,7 +79,7 @@ pub async fn execute(
                 .templates
                 .get(name.as_str())
                 .ok_or_else(|| BzrError::config(format!("template '{name}' not found")))?;
-            output::print_template_detail(name, template, format);
+            output::write_template_detail(name, template, format, w.out);
         }
         TemplateAction::Delete { name } => {
             let mut config = Config::load()?;
@@ -87,19 +88,12 @@ pub async fn execute(
             }
             config.save()?;
 
-            #[expect(clippy::print_stdout)]
-            match format {
-                OutputFormat::Json => {
-                    output::print_result(
-                        &serde_json::json!({"name": name, "action": "deleted"}),
-                        "",
-                        format,
-                    );
-                }
-                OutputFormat::Table => {
-                    println!("Deleted template '{name}'");
-                }
-            }
+            output::write_result(
+                &serde_json::json!({"name": name, "action": "deleted"}),
+                &format!("Deleted template '{name}'"),
+                format,
+                w.out,
+            );
         }
     }
     Ok(())

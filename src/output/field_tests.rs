@@ -1,17 +1,29 @@
 #![expect(clippy::unwrap_used)]
 
-use super::{print_field_aliases, print_field_values};
+use super::{write_field_aliases, write_field_values};
 use crate::types::{FieldValue, OutputFormat, StatusTransition};
 
+fn capture_values(format: OutputFormat, values: &[FieldValue]) -> String {
+    let mut buf = Vec::new();
+    write_field_values(values, format, &mut buf);
+    String::from_utf8(buf).unwrap()
+}
+
+fn capture_aliases(format: OutputFormat, aliases: &[(&'static str, &'static str)]) -> String {
+    let mut buf = Vec::new();
+    write_field_aliases(aliases, format, &mut buf);
+    String::from_utf8(buf).unwrap()
+}
+
 #[test]
-fn print_field_values_json_empty() {
+fn write_field_values_json_empty() {
     let values: Vec<FieldValue> = vec![];
     let json = serde_json::to_string_pretty(&values).unwrap();
     assert_eq!(json, "[]");
 }
 
 #[test]
-fn print_field_values_json_with_transitions() {
+fn write_field_values_json_with_transitions() {
     let values = vec![FieldValue {
         name: "NEW".into(),
         sort_key: 0,
@@ -35,7 +47,7 @@ fn print_field_values_json_with_transitions() {
 }
 
 #[test]
-fn print_field_values_json_active_and_inactive() {
+fn write_field_values_json_active_and_inactive() {
     let values = vec![
         FieldValue {
             name: "NEW".into(),
@@ -62,7 +74,7 @@ fn print_field_values_json_active_and_inactive() {
 }
 
 #[test]
-fn print_field_aliases_json_serialization() {
+fn write_field_aliases_json_serialization() {
     let aliases: &[(&str, &str)] = &[("status", "bug_status"), ("severity", "bug_severity")];
     let rows: Vec<super::FieldAliasRow> = aliases
         .iter()
@@ -78,38 +90,24 @@ fn print_field_aliases_json_serialization() {
     assert_eq!(arr[1]["api_name"], "bug_severity");
 }
 
-// ── capture_stdout-based formatter tests ─────────────────────────
-
-#[cfg(unix)]
-#[tokio::test]
-async fn print_field_values_table_empty_renders_only_headers() {
-    let _lock = crate::ENV_LOCK.lock().await;
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_field_values(&[], OutputFormat::Table);
-    })
-    .await;
+#[test]
+fn write_field_values_table_empty_renders_only_headers() {
+    let output = capture_values(OutputFormat::Table, &[]);
     assert!(output.contains("NAME"));
     assert!(output.contains("ACTIVE"));
     assert!(output.contains("CAN CHANGE TO"));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_field_values_json_empty_renders_empty_array() {
-    let _lock = crate::ENV_LOCK.lock().await;
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_field_values(&[], OutputFormat::Json);
-    })
-    .await;
-    let parsed = crate::test_helpers::extract_json(&output);
+#[test]
+fn write_field_values_json_empty_renders_empty_array() {
+    let output = capture_values(OutputFormat::Json, &[]);
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
     assert!(parsed.is_array());
     assert_eq!(parsed.as_array().unwrap().len(), 0);
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_field_values_table_renders_transitions_and_inactive() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_field_values_table_renders_transitions_and_inactive() {
     let values = vec![
         FieldValue {
             name: "NEW".into(),
@@ -131,10 +129,7 @@ async fn print_field_values_table_renders_transitions_and_inactive() {
             can_change_to: None,
         },
     ];
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_field_values(&values, OutputFormat::Table);
-    })
-    .await;
+    let output = capture_values(OutputFormat::Table, &values);
     assert!(output.contains("NEW"));
     assert!(output.contains("CLOSED"));
     assert!(output.contains("Yes"));
@@ -142,10 +137,8 @@ async fn print_field_values_table_renders_transitions_and_inactive() {
     assert!(output.contains("ASSIGNED, RESOLVED"));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_field_values_table_handles_unicode_value_name() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_field_values_table_handles_unicode_value_name() {
     let values = vec![FieldValue {
         name: "résolu".into(),
         sort_key: 0,
@@ -154,18 +147,13 @@ async fn print_field_values_table_handles_unicode_value_name() {
             name: "fermé".into(),
         }]),
     }];
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_field_values(&values, OutputFormat::Table);
-    })
-    .await;
+    let output = capture_values(OutputFormat::Table, &values);
     assert!(output.contains("résolu"));
     assert!(output.contains("fermé"));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_field_values_json_via_print() {
-    let _lock = crate::ENV_LOCK.lock().await;
+#[test]
+fn write_field_values_json_via_write() {
     let values = vec![FieldValue {
         name: "NEW".into(),
         sort_key: 0,
@@ -174,24 +162,17 @@ async fn print_field_values_json_via_print() {
             name: "ASSIGNED".into(),
         }]),
     }];
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_field_values(&values, OutputFormat::Json);
-    })
-    .await;
-    let parsed = crate::test_helpers::extract_json(&output);
+    let output = capture_values(OutputFormat::Json, &values);
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
     assert_eq!(parsed[0]["name"], "NEW");
     assert_eq!(parsed[0]["is_active"], true);
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_field_aliases_table_renders_rows() {
-    let _lock = crate::ENV_LOCK.lock().await;
-    let aliases: &[(&str, &str)] = &[("status", "bug_status"), ("severity", "bug_severity")];
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_field_aliases(aliases, OutputFormat::Table);
-    })
-    .await;
+#[test]
+fn write_field_aliases_table_renders_rows() {
+    let aliases: &[(&'static str, &'static str)] =
+        &[("status", "bug_status"), ("severity", "bug_severity")];
+    let output = capture_aliases(OutputFormat::Table, aliases);
     assert!(output.contains("ALIAS"));
     assert!(output.contains("API FIELD NAME"));
     assert!(output.contains("status"));
@@ -200,16 +181,11 @@ async fn print_field_aliases_table_renders_rows() {
     assert!(output.contains("bug_severity"));
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn print_field_aliases_json_via_print() {
-    let _lock = crate::ENV_LOCK.lock().await;
-    let aliases: &[(&str, &str)] = &[("status", "bug_status")];
-    let ((), output) = crate::test_helpers::capture_stdout(async {
-        print_field_aliases(aliases, OutputFormat::Json);
-    })
-    .await;
-    let parsed = crate::test_helpers::extract_json(&output);
+#[test]
+fn write_field_aliases_json_via_write() {
+    let aliases: &[(&'static str, &'static str)] = &[("status", "bug_status")];
+    let output = capture_aliases(OutputFormat::Json, aliases);
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
     assert_eq!(parsed[0]["alias"], "status");
     assert_eq!(parsed[0]["api_name"], "bug_status");
 }

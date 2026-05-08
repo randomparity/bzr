@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::BugAction;
-use crate::test_helpers::{capture_stdout, extract_json, setup_test_env};
+use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 fn make_view_action(ids: &[&str], permissive: bool) -> BugAction {
@@ -52,13 +52,16 @@ async fn view_single_unchanged_table() {
         .await;
 
     let action = make_view_action(&["42"], false);
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Table,
         None,
-    ))
+        &mut __io.writers(),
+    )
     .await;
+    let output = __io.out_str().to_string();
     assert!(result.is_ok(), "{:?}", result.err());
     assert!(output.contains("Bug #42"));
     assert!(output.contains("Test bug"));
@@ -76,15 +79,19 @@ async fn view_single_unchanged_json() {
         .await;
 
     let action = make_view_action(&["42"], false);
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io2 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io2.writers(),
+    )
     .await;
+    let output = __io2.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value = extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     // Single-ID JSON shape must remain a bare Bug object — no `bugs`/`failed`.
     assert_eq!(parsed["id"], 42);
     assert!(parsed.get("bugs").is_none());
@@ -93,6 +100,7 @@ async fn view_single_unchanged_json() {
 
 #[tokio::test]
 async fn view_single_failure_propagates() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/999999"))
@@ -104,7 +112,14 @@ async fn view_single_failure_propagates() {
         .await;
 
     let action = make_view_action(&["999999"], false);
-    let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
+    let result = crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(
@@ -125,13 +140,16 @@ async fn view_multi_strict_all_succeed_table() {
     }
 
     let action = make_view_action(&["1", "2", "3"], false);
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io3 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Table,
         None,
-    ))
+        &mut __io3.writers(),
+    )
     .await;
+    let output = __io3.out_str().to_string();
     assert!(result.is_ok());
     assert!(output.contains("Bug #1"));
     assert!(output.contains("Bug #2"));
@@ -160,13 +178,16 @@ async fn view_multi_strict_first_failure_bails() {
     // confirms the loop never gets that far.
 
     let action = make_view_action(&["1", "2", "3"], false);
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io4 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Table,
         None,
-    ))
+        &mut __io4.writers(),
+    )
     .await;
+    let output = __io4.out_str().to_string();
     assert!(result.is_err());
     assert!(output.contains("Bug #1"));
     // Bug #3 must NOT have been fetched.
@@ -185,15 +206,19 @@ async fn view_multi_strict_json_all_succeed_emits_wrapped_shape() {
     }
 
     let action = make_view_action(&["1", "2"], false);
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io5 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io5.writers(),
+    )
     .await;
+    let output = __io5.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value = extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["bugs"].as_array().unwrap().len(), 2);
     assert_eq!(parsed["failed"].as_array().unwrap().len(), 0);
     assert_eq!(parsed["bugs"][0]["id"], 1);
@@ -217,20 +242,25 @@ async fn view_multi_strict_json_failure_emits_no_partial_json() {
         .await;
 
     let action = make_view_action(&["1", "2"], false);
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io6 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io6.writers(),
+    )
     .await;
+    let output = __io6.out_str().to_string();
     assert!(result.is_err());
     // No JSON should have been emitted — the buffer was discarded on Err.
     // capture_stdout's process-wide fd-1 redirection can capture stray bytes
     // from concurrent tests, so we cannot assert the buffer is byte-empty.
     // Instead we assert no JSON value can be parsed out of it: extract_json
     // panics when no JSON is found, which we catch and treat as success.
-    let parsed = std::panic::catch_unwind(|| crate::test_helpers::extract_json(&output));
+    let parsed = std::panic::catch_unwind(|| {
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap()
+    });
     assert!(parsed.is_err(), "expected no JSON in stdout, got: {output}");
 }
 
@@ -256,13 +286,16 @@ async fn view_multi_permissive_partial_table() {
         .await;
 
     let action = make_view_action(&["1", "2", "3"], true);
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io7 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Table,
         None,
-    ))
+        &mut __io7.writers(),
+    )
     .await;
+    let output = __io7.out_str().to_string();
     assert!(
         result.is_ok(),
         "permissive must exit Ok, got: {:?}",
@@ -296,15 +329,19 @@ async fn view_multi_permissive_json_shape() {
         .await;
 
     let action = make_view_action(&["1", "2"], true);
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io8 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io8.writers(),
+    )
     .await;
+    let output = __io8.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value = extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["bugs"].as_array().unwrap().len(), 1);
     assert_eq!(parsed["bugs"][0]["id"], 1);
     let failed = parsed["failed"].as_array().unwrap();
@@ -333,15 +370,19 @@ async fn view_multi_permissive_all_fail_returns_empty_bugs() {
     }
 
     let action = make_view_action(&["1", "2", "3"], true);
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io9 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io9.writers(),
+    )
     .await;
+    let output = __io9.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value = extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["bugs"].as_array().unwrap().len(), 0);
     assert_eq!(parsed["failed"].as_array().unwrap().len(), 3);
 }
@@ -363,15 +404,19 @@ async fn view_multi_permissive_with_alias_preserves_id_string() {
         .await;
 
     let action = make_view_action(&["1", "my-alias"], true);
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io10 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io10.writers(),
+    )
     .await;
+    let output = __io10.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value = extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     let failed = parsed["failed"].as_array().unwrap();
     assert_eq!(
         failed[0]["id"], "my-alias",
@@ -381,10 +426,18 @@ async fn view_multi_permissive_with_alias_preserves_id_string() {
 
 #[tokio::test]
 async fn view_permissive_single_id_rejected() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = make_view_action(&["42"], true);
-    let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
+    let result = crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err());
     let err = result.unwrap_err();
     assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
@@ -396,6 +449,7 @@ async fn view_permissive_single_id_rejected() {
 
 #[tokio::test]
 async fn view_multi_permissive_transport_error_bails() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
@@ -414,7 +468,14 @@ async fn view_multi_permissive_transport_error_bails() {
         .await;
 
     let action = make_view_action(&["1", "2", "3"], true);
-    let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
+    let result = crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(
         result.is_err(),
         "transport error must bail despite --permissive"
@@ -425,6 +486,7 @@ async fn view_multi_permissive_transport_error_bails() {
 
 #[tokio::test]
 async fn view_multi_permissive_api_session_wide_bails() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
@@ -446,7 +508,14 @@ async fn view_multi_permissive_api_session_wide_bails() {
         .await;
 
     let action = make_view_action(&["1", "2", "3"], true);
-    let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
+    let result = crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(
         result.is_err(),
         "session-wide Api code must bail despite --permissive"
@@ -470,21 +539,26 @@ async fn view_multi_permissive_api_102_suppressed() {
         .await;
 
     let action = make_view_action(&["1", "2"], true);
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io11 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io11.writers(),
+    )
     .await;
+    let output = __io11.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value = extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["failed"].as_array().unwrap().len(), 1);
     assert_eq!(parsed["failed"][0]["id"], "2");
 }
 
 #[tokio::test]
 async fn view_multi_permissive_api_410_bails() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
@@ -509,7 +583,14 @@ async fn view_multi_permissive_api_410_bails() {
         .await;
 
     let action = make_view_action(&["1", "2", "3"], true);
-    let result = crate::commands::bug::execute(&action, None, OutputFormat::Json, None).await;
+    let result = crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(
         result.is_err(),
         "auth-flavored Api code must bail despite --permissive"

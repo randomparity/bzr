@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::io::Write as _;
 use std::path::Path;
 
 use base64::Engine;
@@ -10,6 +9,7 @@ use crate::error::Result;
 use crate::output::{
     self, ActionResult, AttachmentBatchResult, AttachmentDownloadResult, BatchSummary,
     BugDownloadResult, DownloadResult, DownloadedFile, ResourceKind, TargetStatus, UploadResult,
+    Writers,
 };
 use crate::types::ApiMode;
 use crate::types::Attachment;
@@ -21,6 +21,7 @@ pub async fn execute(
     server: Option<&str>,
     format: OutputFormat,
     api: Option<ApiMode>,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     validate_action(action)?;
     let client = super::shared::connect_and_configure(server, api).await?;
@@ -28,7 +29,7 @@ pub async fn execute(
     match action {
         AttachmentAction::List { bug_id } => {
             let attachments = client.get_attachments(*bug_id).await?;
-            output::print_attachments(&attachments, format);
+            output::write_attachments(&attachments, format, w.out);
         }
         AttachmentAction::Download {
             ids,
@@ -37,9 +38,9 @@ pub async fn execute(
             out_dir,
         } => {
             if bug_ids.is_empty() && ids.len() == 1 {
-                download_single(&client, ids[0], out.as_deref(), format).await?;
+                download_single(&client, ids[0], out.as_deref(), format, w).await?;
             } else {
-                download_batch(&client, ids, bug_ids, out_dir, format).await?;
+                download_batch(&client, ids, bug_ids, out_dir, format, w).await?;
             }
         }
         AttachmentAction::Upload {
@@ -77,12 +78,13 @@ pub async fn execute(
             };
             let att_id = client.upload_attachment(&upload_params).await?;
             if *comment_private {
-                flip_new_comment_private(&client, *bug_id, att_id).await?;
+                flip_new_comment_private(&client, *bug_id, att_id, w).await?;
             }
-            output::print_result(
+            output::write_result(
                 &UploadResult::new(att_id, *bug_id, size),
                 &format!("Uploaded attachment #{att_id} to bug #{bug_id} ({size} bytes)"),
                 format,
+                w.out,
             );
         }
         AttachmentAction::Update {
@@ -106,10 +108,11 @@ pub async fn execute(
                 flags,
             };
             client.update_attachment(*id, &params).await?;
-            output::print_result(
+            output::write_result(
                 &ActionResult::updated(*id, ResourceKind::Attachment),
                 &format!("Updated attachment #{id}"),
                 format,
+                w.out,
             );
         }
     }
@@ -179,11 +182,12 @@ async fn flip_new_comment_private(
     client: &BugzillaClient,
     bug_id: u64,
     new_attachment_id: u64,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     let comments = client
         .get_comments_since(bug_id, None)
         .await
-        .inspect_err(|e| warn_partial(new_attachment_id, e))?;
+        .inspect_err(|e| warn_partial(new_attachment_id, e, w))?;
     // `attachment_id` is unique per bug: Bugzilla sets it on exactly one
     // comment when `Bug.add_attachment` includes a `comment` body.
     let Some(comment_id) = comments
@@ -195,7 +199,7 @@ async fn flip_new_comment_private(
             "could not locate the new attachment-bound comment on bug #{bug_id} \
              (no comment with attachment_id={new_attachment_id})",
         ));
-        warn_partial(new_attachment_id, &err);
+        warn_partial(new_attachment_id, &err, w);
         return Err(err);
     };
     let mut map = HashMap::new();
@@ -207,16 +211,16 @@ async fn flip_new_comment_private(
     client
         .update_bug(bug_id, &params)
         .await
-        .inspect_err(|e| warn_partial(new_attachment_id, e))
+        .inspect_err(|e| warn_partial(new_attachment_id, e, w))
 }
 
-fn warn_partial(att_id: u64, err: &crate::error::BzrError) {
+fn warn_partial(att_id: u64, err: &crate::error::BzrError, w: &mut Writers<'_>) {
     let _ = writeln!(
-        std::io::stderr(),
+        w.err,
         "warning: attachment #{att_id} uploaded but comment privacy flip failed: {err}",
     );
     let _ = writeln!(
-        std::io::stderr(),
+        w.err,
         "  the comment was created public; mark it private via the Bugzilla web UI or with elevated credentials",
     );
 }
@@ -230,17 +234,19 @@ async fn download_single(
     id: u64,
     out: Option<&str>,
     format: OutputFormat,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     let (filename, data) = client.download_attachment(id).await?;
     let dest = out.unwrap_or(&filename);
     std::fs::write(dest, &data)?;
-    output::print_result(
+    output::write_result(
         &DownloadResult::new(id, dest, data.len()),
         &format!(
             "Downloaded attachment #{id} to {dest} ({} bytes)",
             data.len(),
         ),
         format,
+        w.out,
     );
     Ok(())
 }
@@ -302,6 +308,7 @@ async fn download_batch(
     bug_ids: &[u64],
     out_dir: &str,
     format: OutputFormat,
+    w: &mut Writers<'_>,
 ) -> Result<()> {
     std::fs::create_dir_all(out_dir)?;
 
@@ -327,7 +334,7 @@ async fn download_batch(
         summary,
     };
 
-    output::print_attachment_batch(&result, format);
+    output::write_attachment_batch(&result, format, w.out, w.err);
 
     if failed > 0 {
         return Err(crate::error::BzrError::BatchPartialFailure { succeeded, failed });

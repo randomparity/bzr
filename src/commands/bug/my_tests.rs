@@ -1,10 +1,10 @@
-#![expect(clippy::expect_used)]
+#![expect(clippy::unwrap_used, clippy::expect_used)]
 
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::cli::BugAction;
-use crate::test_helpers::{capture_stdout, setup_test_env};
+use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 async fn mount_whoami(mock: &MockServer) {
@@ -50,15 +50,14 @@ async fn bug_my_returns_assigned_by_default() {
         fields: None,
         exclude_fields: None,
     };
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
-        &action,
-        None,
-        OutputFormat::Json,
-        None,
-    ))
-    .await;
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+    let output = __io.out_str().to_string();
     assert!(result.is_ok(), "bug my failed: {result:?}");
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed[0]["id"], 10);
     assert_eq!(parsed[0]["summary"], "Assigned bug");
 }
@@ -90,13 +89,16 @@ async fn bug_my_passes_status_limit_and_field_filters() {
         fields: Some("id,summary".into()),
         exclude_fields: Some("comments".into()),
     };
-    let (result, _) = capture_stdout(crate::commands::bug::execute(
+    let mut __io2 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io2.writers(),
+    )
     .await;
+    let _ = __io2.out_str().to_string();
     assert!(result.is_ok(), "bug my with filters failed: {result:?}");
 }
 
@@ -124,13 +126,16 @@ async fn bug_my_created_only_runs_creator_search_not_assigned() {
         fields: None,
         exclude_fields: None,
     };
-    let (result, _) = capture_stdout(crate::commands::bug::execute(
+    let mut __io3 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io3.writers(),
+    )
     .await;
+    let _ = __io3.out_str().to_string();
     assert!(result.is_ok(), "bug my --created failed: {result:?}");
 }
 
@@ -157,13 +162,16 @@ async fn bug_my_cc_only_runs_cc_search_not_assigned_or_creator() {
         fields: None,
         exclude_fields: None,
     };
-    let (result, _) = capture_stdout(crate::commands::bug::execute(
+    let mut __io4 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io4.writers(),
+    )
     .await;
+    let _ = __io4.out_str().to_string();
     assert!(result.is_ok(), "bug my --cc failed: {result:?}");
 }
 
@@ -197,15 +205,19 @@ async fn bug_my_all_deduplicates() {
         fields: None,
         exclude_fields: None,
     };
-    let (result, output) = capture_stdout(crate::commands::bug::execute(
+    let mut __io5 = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
         &action,
         None,
         OutputFormat::Json,
         None,
-    ))
+        &mut __io5.writers(),
+    )
     .await;
+    let output = __io5.out_str().to_string();
     assert!(result.is_ok(), "bug my --all failed: {result:?}");
-    let parsed: serde_json::Value = crate::test_helpers::extract_json(&output);
+    let parsed: serde_json::Value =
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     let bugs = parsed.as_array().expect("expected JSON array");
     assert_eq!(bugs.len(), 1, "duplicate bug should be deduplicated");
     assert_eq!(bugs[0]["id"], 42);

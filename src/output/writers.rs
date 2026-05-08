@@ -9,26 +9,12 @@
 
 use std::io::Write;
 
-#[cfg_attr(
-    not(any(test, feature = "test-helpers")),
-    expect(
-        dead_code,
-        reason = "scaffolding for #192 phase 2 — first production caller added when commands::*::execute() gains a Writers parameter"
-    )
-)]
 pub struct Writers<'a> {
     pub out: &'a mut dyn Write,
     pub err: &'a mut dyn Write,
 }
 
 impl<'a> Writers<'a> {
-    #[cfg_attr(
-        not(any(test, feature = "test-helpers")),
-        expect(
-            dead_code,
-            reason = "scaffolding for #192 phase 2 — first production caller added when main constructs Writers from locked stdout/stderr"
-        )
-    )]
     pub fn new(out: &'a mut dyn Write, err: &'a mut dyn Write) -> Self {
         Self { out, err }
     }

@@ -1,15 +1,19 @@
-use std::io::{self, Write as _};
+use std::io::Write;
 
 use colored::Colorize;
 use serde::Serialize;
 
-use super::formatting::{print_field, print_formatted, print_optional_field};
+use super::formatting::{write_field, write_formatted, write_optional_field};
 use crate::types::{Attachment, OutputFormat};
 
-pub fn print_attachments(attachments: &[Attachment], format: OutputFormat) {
-    print_formatted(attachments, format, |attachments| {
+pub fn write_attachments<W: Write + ?Sized>(
+    attachments: &[Attachment],
+    format: OutputFormat,
+    out: &mut W,
+) {
+    write_formatted(attachments, format, out, |attachments, out| {
         if attachments.is_empty() {
-            let _ = writeln!(io::stdout(), "No attachments.");
+            let _ = writeln!(out, "No attachments.");
             return;
         }
         for a in attachments {
@@ -17,7 +21,7 @@ pub fn print_attachments(attachments: &[Attachment], format: OutputFormat) {
             let obsolete = if a.is_obsolete { " [OBSOLETE]" } else { "" };
             let private = if a.is_private { " [PRIVATE]" } else { "" };
             let _ = writeln!(
-                io::stdout(),
+                out,
                 "{} #{} - {}{}{}{}",
                 "Attachment".bold(),
                 a.id,
@@ -26,13 +30,14 @@ pub fn print_attachments(attachments: &[Attachment], format: OutputFormat) {
                 obsolete.red(),
                 private.red(),
             );
-            print_field(
+            write_field(
+                out,
                 "File",
                 &format!("{} ({}, {} bytes)", a.file_name, a.content_type, a.size),
             );
-            print_optional_field("Creator", a.creator.as_deref());
-            print_optional_field("Created", a.creation_time.as_deref());
-            let _ = writeln!(io::stdout());
+            write_optional_field(out, "Creator", a.creator.as_deref());
+            write_optional_field(out, "Created", a.creation_time.as_deref());
+            let _ = writeln!(out);
         }
     });
 }
@@ -156,24 +161,33 @@ pub enum TargetStatus {
 
 /// Render an [`AttachmentBatchResult`] in the requested format.
 ///
-/// Successful entries print to stdout; bug-level failures and
-/// per-attachment failures print to stderr (one line each), so
+/// Successful entries print to `out`; bug-level failures and
+/// per-attachment failures print to `err` (one line each), so
 /// `2>/dev/null` quiets warnings without losing the success listing.
-/// JSON mode emits a single object on stdout — no stderr writes.
-pub fn print_attachment_batch(result: &AttachmentBatchResult, format: OutputFormat) {
-    print_formatted(result, format, |r| {
-        write_attachment_batch_table(r, &mut io::stdout(), &mut io::stderr());
-    });
+/// JSON mode emits a single object on `out` — no `err` writes.
+pub fn write_attachment_batch<O, E>(
+    result: &AttachmentBatchResult,
+    format: OutputFormat,
+    out: &mut O,
+    err: &mut E,
+) where
+    O: Write + ?Sized,
+    E: Write + ?Sized,
+{
+    match format {
+        OutputFormat::Json => super::formatting::write_json(result, out),
+        OutputFormat::Table => write_attachment_batch_table(result, out, err),
+    }
 }
 
 /// Render the table-mode body of an [`AttachmentBatchResult`] to the given
 /// writers. Successes go to `out`, target-level failures go to `err`.
-/// Extracted from `print_attachment_batch` so tests can inject buffers
-/// for both streams; production calls use `io::stdout()` and `io::stderr()`.
-pub(super) fn write_attachment_batch_table(
+/// Extracted from `write_attachment_batch` so tests can inject buffers
+/// for both streams; production calls receive `Writers::out` and `Writers::err`.
+pub(super) fn write_attachment_batch_table<O: Write + ?Sized, E: Write + ?Sized>(
     r: &AttachmentBatchResult,
-    out: &mut impl std::io::Write,
-    err: &mut impl std::io::Write,
+    out: &mut O,
+    err: &mut E,
 ) {
     for bug in &r.bug_results {
         match bug.status {
