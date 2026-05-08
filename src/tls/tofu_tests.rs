@@ -8,7 +8,7 @@ use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 fn cert_capture_accepts_any_cert() {
     let provider = crate::tls::default_provider();
     let capture = CertCapture {
-        captured: Mutex::new(None),
+        captured: OnceLock::new(),
         provider,
     };
     let cert_data = b"fake cert data";
@@ -18,9 +18,7 @@ fn cert_capture_accepts_any_cert() {
     let result = capture.verify_server_cert(&cert, &[], &server_name, &[], UnixTime::now());
     assert!(result.is_ok(), "CertCapture should accept any cert");
 
-    let captured = capture.captured.lock().unwrap();
-    assert!(captured.is_some(), "cert should be captured");
-    let (der, _issuer) = captured.as_ref().unwrap();
+    let (der, _issuer) = capture.captured.get().unwrap();
     assert_eq!(der, cert_data, "captured DER should match input");
 }
 
@@ -28,7 +26,7 @@ fn cert_capture_accepts_any_cert() {
 fn cert_capture_supported_verify_schemes_not_empty() {
     let provider = crate::tls::default_provider();
     let capture = CertCapture {
-        captured: Mutex::new(None),
+        captured: OnceLock::new(),
         provider,
     };
     assert!(
@@ -148,7 +146,7 @@ fn dummy_dss() -> DigitallySignedStruct {
 fn cert_capture_verify_tls12_signature_returns_ok() {
     let provider = crate::tls::default_provider();
     let capture = CertCapture {
-        captured: Mutex::new(None),
+        captured: OnceLock::new(),
         provider,
     };
     let cert = CertificateDer::from(b"fake".to_vec());
@@ -161,7 +159,7 @@ fn cert_capture_verify_tls12_signature_returns_ok() {
 fn cert_capture_verify_tls13_signature_returns_ok() {
     let provider = crate::tls::default_provider();
     let capture = CertCapture {
-        captured: Mutex::new(None),
+        captured: OnceLock::new(),
         provider,
     };
     let cert = CertificateDer::from(b"fake".to_vec());
