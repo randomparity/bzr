@@ -53,6 +53,7 @@ fn xmlrpc_attachments_response(ids: &[u64]) -> String {
                 <member><name>size</name><value><int>1</int></value></member>\
                 <member><name>is_obsolete</name><value><int>0</int></value></member>\
                 <member><name>is_private</name><value><int>0</int></value></member>\
+                <member><name>data</name><value><base64>aW5saW5lLWRhdGE=</base64></value></member>\
             </struct></value>",
         )
         .unwrap();
@@ -89,6 +90,25 @@ async fn hybrid_uses_xmlrpc_directly_for_attachment_list() {
     let attachments = client.get_attachments(42).await.unwrap();
     assert_eq!(attachments.len(), 3);
     assert_eq!(attachments[0].file_name, "xmlrpc-1.txt");
+    assert_eq!(attachments[0].data.as_deref(), Some("aW5saW5lLWRhdGE="));
+}
+
+#[tokio::test]
+async fn xmlrpc_mode_attachment_list_preserves_inline_data() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(xmlrpc_attachments_response(&[7])))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_xmlrpc(&mock.uri());
+    let attachments = client.get_attachments(42).await.unwrap();
+
+    assert_eq!(attachments.len(), 1);
+    assert_eq!(attachments[0].id, 7);
+    assert_eq!(attachments[0].data.as_deref(), Some("aW5saW5lLWRhdGE="));
 }
 
 #[tokio::test]
