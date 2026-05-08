@@ -247,10 +247,10 @@ pub enum ConfigAction {
     /// Remove a server's API key from the OS keychain.
     ///
     /// Deletes the keychain entry for `<server-name>` (or the
-    /// service/account configured by `set-keyring`) and reverts the
-    /// server's config to its inline / env-var credential
-    /// indirection. Use this when rotating keys, decommissioning a
-    /// server, or switching back to env-var or inline storage.
+    /// service/account configured by `set-keyring`) and clears the
+    /// server's keyring credential reference. The server entry is
+    /// preserved with no API key source; re-run `set-server` or
+    /// `set-keyring` afterward to re-credential it.
     ///
     /// Examples:
     ///
@@ -265,14 +265,16 @@ pub enum ConfigAction {
         name: String,
     },
 
-    /// Move an existing inline or env-var API key into the OS keychain.
+    /// Copy an existing inline or env-var API key into the OS keychain.
     ///
     /// Reads the server's currently configured key (whether stored
     /// inline as `api_key` or read from the env var named by
-    /// `api_key_env`), stores it in the OS keychain, and rewrites
-    /// the server's config to use the keychain. Prompts for
-    /// confirmation unless `--yes` is passed. `--service` and
-    /// `--account` override the default keychain naming
+    /// `api_key_env`) and stores it in the OS keychain. `--yes` is
+    /// required to confirm the non-interactive migration. Inline
+    /// sources are rewritten to use the keychain; env-var sources
+    /// leave `config.toml` unchanged so shared env vars are not
+    /// removed implicitly. `--service` and `--account` override the
+    /// default keychain naming
     /// (`bzr` / `<server-name>`).
     ///
     /// If the env-var path is in use and the variable is unset at
