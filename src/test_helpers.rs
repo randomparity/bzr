@@ -99,8 +99,8 @@ impl CapturedIo {
     }
 
     /// Construct a `Writers` borrowing this buffer pair.
-    pub fn writers(&mut self) -> crate::output::Writers<'_> {
-        crate::output::Writers::new(&mut self.out, &mut self.err)
+    pub fn writers(&mut self) -> crate::output::writers::Writers<'_> {
+        crate::output::writers::Writers::new(&mut self.out, &mut self.err)
     }
 
     /// View captured stdout as `&str` (non-UTF-8 bytes are replaced with the

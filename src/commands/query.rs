@@ -6,7 +6,9 @@
 use crate::cli::QueryAction;
 use crate::config::Config;
 use crate::error::{BzrError, Result};
-use crate::output::{self, Writers};
+use crate::output::resources::bug::write_bugs;
+use crate::output::resources::query::{write_query_detail, write_query_list, write_query_saved};
+use crate::output::writers::Writers;
 use crate::types::{OutputFormat, QueryKind, SavedQuery};
 
 /// Translate clap's empty-Vec sentinel into `None` so
@@ -140,13 +142,13 @@ fn handle_save(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) 
     config.save()?;
 
     let verb = if is_update { "Updated" } else { "Saved" };
-    output::write_query_saved(name, verb, format, w.out);
+    write_query_saved(name, verb, format, w.out);
     Ok(())
 }
 
 fn handle_list(format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
     let config = Config::load()?;
-    output::write_query_list(&config.queries, format, w.out);
+    write_query_list(&config.queries, format, w.out);
     Ok(())
 }
 
@@ -159,7 +161,7 @@ fn handle_show(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) 
         .queries
         .get(name.as_str())
         .ok_or_else(|| BzrError::config(format!("query '{name}' not found")))?;
-    output::write_query_detail(name, query, format, w.out);
+    write_query_detail(name, query, format, w.out);
     Ok(())
 }
 
@@ -173,7 +175,7 @@ fn handle_delete(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>
     }
     config.save()?;
 
-    output::write_query_saved(name, "Deleted", format, w.out);
+    write_query_saved(name, "Deleted", format, w.out);
     Ok(())
 }
 
@@ -239,7 +241,7 @@ async fn handle_run(
 
     let client = super::shared::connect_and_configure(effective_server, api).await?;
     let bugs = client.search_bugs(&params).await?;
-    output::write_bugs(&bugs, format, w.out);
+    write_bugs(&bugs, format, w.out);
     Ok(())
 }
 

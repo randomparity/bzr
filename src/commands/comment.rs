@@ -3,7 +3,11 @@ use std::io::{IsTerminal, Read};
 use crate::cli::CommentAction;
 use crate::commands::editor;
 use crate::error::{BzrError, Result};
-use crate::output::{self, ActionResult, ResourceKind, SearchResult, TagResult, Writers};
+use crate::output::resources::comment::write_comments;
+use crate::output::result_types::{
+    write_result, ActionResult, ResourceKind, SearchResult, TagResult,
+};
+use crate::output::writers::Writers;
 use crate::types::ApiMode;
 use crate::types::{OutputFormat, UpdateCommentTagsParams};
 
@@ -23,7 +27,7 @@ pub async fn execute(
             let comments = client
                 .get_comments_since(*bug_id, canonical_since.as_deref())
                 .await?;
-            output::write_comments(&comments, format, w.out);
+            write_comments(&comments, format, w.out);
         }
         CommentAction::Add {
             bug_id,
@@ -38,7 +42,7 @@ pub async fn execute(
                 return Err(BzrError::InputValidation("empty comment, aborting".into()));
             }
             let id = client.add_comment(*bug_id, &text, *private).await?;
-            output::write_result(
+            write_result(
                 &ActionResult::created(id, ResourceKind::Comment),
                 &format!("Added comment #{id} to bug #{bug_id}"),
                 format,
@@ -60,7 +64,7 @@ pub async fn execute(
             } else {
                 tags.join(", ")
             };
-            output::write_result(
+            write_result(
                 &TagResult::updated(*comment_id, tags),
                 &format!("Tags on comment #{comment_id}: {display}"),
                 format,
@@ -69,7 +73,7 @@ pub async fn execute(
         }
         CommentAction::SearchTags { query } => {
             let tags = client.search_comment_tags(query).await?;
-            output::write_result(
+            write_result(
                 &SearchResult::new(tags.clone()),
                 &if tags.is_empty() {
                     "No tags.".to_string()

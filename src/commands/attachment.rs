@@ -6,11 +6,14 @@ use base64::Engine;
 use crate::cli::AttachmentAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
-use crate::output::{
-    self, ActionResult, AttachmentBatchResult, AttachmentDownloadResult, BatchSummary,
-    BugDownloadResult, DownloadResult, DownloadedFile, ResourceKind, TargetStatus, UploadResult,
-    Writers,
+use crate::output::resources::attachment::{
+    write_attachment_batch, write_attachments, AttachmentBatchResult, AttachmentDownloadResult,
+    BatchSummary, BugDownloadResult, DownloadedFile, TargetStatus,
 };
+use crate::output::result_types::{
+    write_result, ActionResult, DownloadResult, ResourceKind, UploadResult,
+};
+use crate::output::writers::Writers;
 use crate::types::ApiMode;
 use crate::types::Attachment;
 use crate::types::OutputFormat;
@@ -29,7 +32,7 @@ pub async fn execute(
     match action {
         AttachmentAction::List { bug_id } => {
             let attachments = client.get_attachments(*bug_id).await?;
-            output::write_attachments(&attachments, format, w.out);
+            write_attachments(&attachments, format, w.out);
         }
         AttachmentAction::Download {
             ids,
@@ -80,7 +83,7 @@ pub async fn execute(
             if *comment_private {
                 flip_new_comment_private(&client, *bug_id, att_id, w).await?;
             }
-            output::write_result(
+            write_result(
                 &UploadResult::new(att_id, *bug_id, size),
                 &format!("Uploaded attachment #{att_id} to bug #{bug_id} ({size} bytes)"),
                 format,
@@ -108,7 +111,7 @@ pub async fn execute(
                 flags,
             };
             client.update_attachment(*id, &params).await?;
-            output::write_result(
+            write_result(
                 &ActionResult::updated(*id, ResourceKind::Attachment),
                 &format!("Updated attachment #{id}"),
                 format,
@@ -239,7 +242,7 @@ async fn download_single(
     let (filename, data) = client.download_attachment(id).await?;
     let dest = out.unwrap_or(&filename);
     std::fs::write(dest, &data)?;
-    output::write_result(
+    write_result(
         &DownloadResult::new(id, dest, data.len()),
         &format!(
             "Downloaded attachment #{id} to {dest} ({} bytes)",
@@ -331,7 +334,7 @@ async fn download_batch(
         summary,
     };
 
-    output::write_attachment_batch(&result, format, w.out, w.err);
+    write_attachment_batch(&result, format, w.out, w.err);
     result.summary.outcome().ensure_complete()
 }
 

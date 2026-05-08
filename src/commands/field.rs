@@ -1,6 +1,7 @@
 use crate::cli::FieldAction;
 use crate::error::Result;
-use crate::output::{self, Writers};
+use crate::output::resources::field::{write_field_aliases, write_field_values};
+use crate::output::writers::Writers;
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 
@@ -13,7 +14,7 @@ pub async fn execute(
 ) -> Result<()> {
     match action {
         FieldAction::Aliases => {
-            output::write_field_aliases(crate::field_aliases::FIELD_ALIASES, format, w.out);
+            write_field_aliases(crate::field_aliases::FIELD_ALIASES, format, w.out);
             return Ok(());
         }
         FieldAction::List { name } => {
@@ -22,7 +23,7 @@ pub async fn execute(
             if values.is_empty() && format == OutputFormat::Table {
                 let _ = writeln!(w.out, "No values for field '{name}'.");
             } else {
-                output::write_field_values(&values, format, w.out);
+                write_field_values(&values, format, w.out);
             }
         }
     }

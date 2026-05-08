@@ -1,9 +1,9 @@
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
-use crate::output::{
-    self, write_multi_bug_view, BugViewFailure, MultiBugRow, MultiBugViewResult, Writers,
-};
+use crate::output::resources::bug::{write_bug_detail, write_multi_bug_view, MultiBugRow};
+use crate::output::result_types::{write_result, BugViewFailure, MultiBugViewResult};
+use crate::output::writers::Writers;
 use crate::types::{Bug, OutputFormat};
 
 #[derive(Clone, Copy)]
@@ -96,7 +96,7 @@ async fn view_single(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let bug = client.get_bug(id, include_fields, exclude_fields).await?;
-    output::write_bug_detail(&bug, format, w.out);
+    write_bug_detail(&bug, format, w.out);
     Ok(())
 }
 
@@ -131,7 +131,7 @@ fn write_batch(batch: BugViewBatch, format: OutputFormat, w: &mut Writers<'_>) {
         }
         OutputFormat::Json => {
             let result = batch.into_json_result();
-            output::write_result(&result, "", format, w.out);
+            write_result(&result, "", format, w.out);
         }
     }
 }

@@ -33,7 +33,7 @@ pub mod xmlrpc;
 pub async fn dispatch(
     cli: &cli::Cli,
     format: types::OutputFormat,
-    w: &mut output::Writers<'_>,
+    w: &mut output::writers::Writers<'_>,
 ) -> error::Result<()> {
     let api = cli.api;
     let server = cli.server.as_deref();

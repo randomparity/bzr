@@ -1,6 +1,7 @@
 use crate::cli::ClassificationAction;
 use crate::error::Result;
-use crate::output::{self, Writers};
+use crate::output::resources::classification::write_classification;
+use crate::output::writers::Writers;
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 
@@ -16,7 +17,7 @@ pub async fn execute(
     match action {
         ClassificationAction::View { name } => {
             let classification = client.get_classification(name).await?;
-            output::write_classification(&classification, format, w.out);
+            write_classification(&classification, format, w.out);
         }
     }
     Ok(())

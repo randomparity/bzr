@@ -4,7 +4,8 @@ use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::commands::editor;
 use crate::error::Result;
-use crate::output::{self, ActionResult, ResourceKind, Writers};
+use crate::output::result_types::{write_result, ActionResult, ResourceKind};
+use crate::output::writers::Writers;
 use crate::types::{CreateBugParams, OutputFormat};
 
 fn read_description_file(path: &std::path::Path) -> Result<String> {
@@ -291,7 +292,7 @@ pub(super) async fn handle(
         keywords: vec![],
     };
     let id = client.create_bug(&params).await?;
-    output::write_result(
+    write_result(
         &ActionResult::created(id, ResourceKind::Bug),
         &format!("Created bug #{id}"),
         format,

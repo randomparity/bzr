@@ -1,7 +1,8 @@
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
-use crate::output::{self, Writers};
+use crate::output::resources::bug::write_bugs;
+use crate::output::writers::Writers;
 use crate::types::{OutputFormat, SearchParams};
 
 pub(super) async fn handle(
@@ -61,7 +62,7 @@ pub(super) async fn handle(
         }
     }
 
-    output::write_bugs(&all_bugs, format, w.out);
+    write_bugs(&all_bugs, format, w.out);
     Ok(())
 }
 

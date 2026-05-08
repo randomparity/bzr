@@ -2,7 +2,7 @@
 
 use crate::cli::BugAction;
 use crate::error::Result;
-use crate::output::Writers;
+use crate::output::writers::Writers;
 use crate::types::{ApiMode, OutputFormat};
 
 mod clone;

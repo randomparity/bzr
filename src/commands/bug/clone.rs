@@ -1,7 +1,8 @@
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
-use crate::output::{self, ActionResult, ResourceKind, Writers};
+use crate::output::result_types::{write_result, ActionResult, ResourceKind};
+use crate::output::writers::Writers;
 use crate::types::{CreateBugParams, OutputFormat};
 
 pub(super) async fn handle(
@@ -91,7 +92,7 @@ pub(super) async fn handle(
             .await?;
     }
 
-    output::write_result(
+    write_result(
         &ActionResult::created(new_id, ResourceKind::Bug),
         &format!("Cloned bug #{} → #{new_id}", source.id),
         format,

@@ -1,7 +1,8 @@
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
-use crate::output::{self, Writers};
+use crate::output::resources::bug::write_history;
+use crate::output::writers::Writers;
 use crate::types::OutputFormat;
 use crate::validation::parse_optional_date;
 
@@ -23,7 +24,7 @@ pub(super) async fn handle(
     if history.is_empty() {
         let _ = writeln!(w.out, "No history for bug #{id}.");
     } else {
-        output::write_history(&history, format, w.out);
+        write_history(&history, format, w.out);
     }
     Ok(())
 }
