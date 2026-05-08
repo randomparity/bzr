@@ -159,6 +159,46 @@ fn try_parse_from(slice: &str, opener: char) -> Option<serde_json::Value> {
     None
 }
 
+/// Owned `Vec<u8>` buffers for capturing stdout and stderr in tests, plus
+/// a `Writers` constructor that borrows them. Replaces `capture_stdout` for
+/// tests against code that takes a `Writers` parameter.
+pub struct CapturedIo {
+    pub out: Vec<u8>,
+    pub err: Vec<u8>,
+}
+
+impl CapturedIo {
+    pub fn new() -> Self {
+        Self {
+            out: Vec::new(),
+            err: Vec::new(),
+        }
+    }
+
+    /// Construct a `Writers` borrowing this buffer pair.
+    pub fn writers(&mut self) -> crate::output::Writers<'_> {
+        crate::output::Writers::new(&mut self.out, &mut self.err)
+    }
+
+    /// View captured stdout as `&str` (non-UTF-8 bytes are replaced with the
+    /// empty string — tests should hold UTF-8 invariants and this method
+    /// makes assertion failures more readable than working in raw bytes).
+    pub fn out_str(&self) -> &str {
+        std::str::from_utf8(&self.out).unwrap_or("")
+    }
+
+    /// View captured stderr as `&str`. Same caveat as `out_str`.
+    pub fn err_str(&self) -> &str {
+        std::str::from_utf8(&self.err).unwrap_or("")
+    }
+}
+
+impl Default for CapturedIo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Build a mock XML-RPC Bug.search response containing one bug.
 pub fn xmlrpc_bug_response(id: i64, summary: &str) -> String {
     format!(
