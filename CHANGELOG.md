@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-09
+
 ### Added
 
 - `bzr bug update --dupe-of <ID>` marks a bug as a duplicate by
