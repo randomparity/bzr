@@ -129,12 +129,15 @@ pub(crate) fn install_test_store() {
 mod test_store {
     use std::any::Any;
     use std::collections::HashMap;
-    use std::sync::{Arc, Mutex};
+    use std::sync::{Arc, Mutex, MutexGuard};
 
     use keyring_core::api::{CredentialApi, CredentialPersistence, CredentialStoreApi};
     use keyring_core::{Credential, Entry, Error, Result};
 
-    type Secrets = Arc<Mutex<HashMap<(String, String), Vec<u8>>>>;
+    type SecretKey = (String, String);
+    type SecretMap = HashMap<SecretKey, Vec<u8>>;
+    type Secrets = Arc<Mutex<SecretMap>>;
+    type SecretGuard<'a> = MutexGuard<'a, SecretMap>;
 
     #[derive(Debug, Default)]
     pub(crate) struct Store {
@@ -184,9 +187,7 @@ mod test_store {
             (self.service.clone(), self.user.clone())
         }
 
-        fn lock_secrets(
-            &self,
-        ) -> Result<std::sync::MutexGuard<'_, HashMap<(String, String), Vec<u8>>>> {
+        fn lock_secrets(&self) -> Result<SecretGuard<'_>> {
             self.secrets.lock().map_err(|e| {
                 Error::PlatformFailure(Box::new(std::io::Error::other(format!(
                     "test keyring store poisoned: {e}"
