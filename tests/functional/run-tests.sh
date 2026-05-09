@@ -372,21 +372,27 @@ if assert_success && assert_json_exists '.id'; then
 fi
 
 test_begin "34. bug create (bug two)"
-run_bzr bug create --product FuncTestProd --component Backend --summary "Bug two searchable" --op-sys All --rep-platform All
+run_bzr bug create --product FuncTestProd --component Backend \
+    --summary "Bug two searchable" --description "Description of bug two" \
+    --op-sys All --rep-platform All
 if assert_success && assert_json_exists '.id'; then
     BUG2=$(jq -r '.id' "$BZR_STDOUT")
     test_pass
 fi
 
 test_begin "34a. bug create (duplicate target)"
-run_bzr bug create --product FuncTestProd --component Backend --summary "Duplicate target" --op-sys All --rep-platform All
+run_bzr bug create --product FuncTestProd --component Backend \
+    --summary "Duplicate target" --description "Duplicate target description" \
+    --op-sys All --rep-platform All
 if assert_success && assert_json_exists '.id'; then
     BUG_DUP_TARGET=$(jq -r '.id' "$BZR_STDOUT")
     test_pass
 fi
 
 test_begin "34b. bug create (duplicate source)"
-run_bzr bug create --product FuncTestProd --component Backend --summary "Duplicate source" --op-sys All --rep-platform All
+run_bzr bug create --product FuncTestProd --component Backend \
+    --summary "Duplicate source" --description "Duplicate source description" \
+    --op-sys All --rep-platform All
 if assert_success && assert_json_exists '.id'; then
     BUG_DUP_SOURCE=$(jq -r '.id' "$BZR_STDOUT")
     test_pass
@@ -593,7 +599,9 @@ fi
 
 test_begin "48. bug create (bug four — with relationships)"
 if [[ -n "$BUG1" ]] && [[ -n "$BUG2" ]]; then
-    run_bzr bug create --product FuncTestProd --component Backend --summary "Bug with relationships" --blocks "$BUG1" --depends-on "$BUG2" --op-sys All --rep-platform All
+    run_bzr bug create --product FuncTestProd --component Backend \
+        --summary "Bug with relationships" --description "Relationship test description" \
+        --blocks "$BUG1" --depends-on "$BUG2" --op-sys All --rep-platform All
     if assert_success && assert_json_exists '.id'; then
         BUG4=$(jq -r '.id' "$BZR_STDOUT")
         test_pass
@@ -637,7 +645,7 @@ run_bzr bug create \
 if assert_success; then
     BUG_ID=$(jq -r '.id' "$BZR_STDOUT")
     # Verify the description that landed is from the file, not stdin
-    run_bzr bug view "$BUG_ID"
+    run_bzr comment list "$BUG_ID"
     if assert_stdout_contains "from file"; then test_pass; fi
 fi
 rm -f "$DESC_FILE"
@@ -864,7 +872,8 @@ run_bzr template show func-tmpl
 if assert_success && assert_json '.product' "FuncTestProd"; then test_pass; fi
 
 test_begin "68. bug create --template"
-run_bzr bug create --template func-tmpl --summary "Bug from template" --op-sys All --rep-platform All
+run_bzr bug create --template func-tmpl --summary "Bug from template" \
+    --description "Description from template test" --op-sys All --rep-platform All
 if assert_success && assert_json_exists '.id'; then
     TMPL_BUG=$(jq -r '.id' "$BZR_STDOUT")
     test_pass

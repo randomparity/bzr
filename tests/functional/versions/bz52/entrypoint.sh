@@ -59,6 +59,13 @@ WHERE login_name = 'admin@test.bzr'
 LIMIT 1;
 SQL
 
+# ── Seed functional-test keywords ───────────────────────────────────
+echo "==> Seeding functional-test keywords..."
+mysql -u root bugs <<'SQL'
+INSERT IGNORE INTO keyworddefs (name, description)
+VALUES ('fix-needed', 'Functional test keyword');
+SQL
+
 # ── Configure insidergroup ──────────────────────────────────────────
 # Bugzilla's default `insidergroup` is empty, which forbids anyone
 # (including admins) from marking comments private. Real deployments
@@ -72,6 +79,17 @@ if [[ -f data/params.json ]]; then
 fi
 if [[ -f data/params ]]; then
     perl -pi -e "s/'insidergroup' => ''/'insidergroup' => 'admin'/g" data/params 2>/dev/null || true
+fi
+
+# ── Disable outbound mail for functional tests ──────────────────────
+# Comment and attachment mutations trigger bugmail. The functional
+# containers do not run an MTA, so use Bugzilla's built-in no-op mailer.
+echo "==> Disabling outbound mail..."
+if [[ -f data/params.json ]]; then
+    perl -pi -e 's/"mail_delivery_method"\s*:\s*"[^"]*"/"mail_delivery_method":"None"/g' data/params.json 2>/dev/null || true
+fi
+if [[ -f data/params ]]; then
+    perl -pi -e "s/'mail_delivery_method' => '[^']*'/'mail_delivery_method' => 'None'/g" data/params 2>/dev/null || true
 fi
 
 # ── Fix permissions ──────────────────────────────────────────────────
