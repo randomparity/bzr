@@ -763,6 +763,32 @@ fn warn_json_field_selection_silent_without_selection() {
 }
 
 #[test]
+fn warn_json_field_selection_silent_for_exclude_id_only() {
+    for excl in ["id", "ID", "id,"] {
+        let warning = capture_json_warning(ColumnSpec {
+            include: None,
+            exclude: Some(excl),
+        });
+        assert!(
+            warning.is_empty(),
+            "excluding only id restricts nothing (client re-adds id): {excl:?} -> {warning:?}"
+        );
+    }
+}
+
+#[test]
+fn warn_json_field_selection_warns_for_exclude_non_id() {
+    let warning = capture_json_warning(ColumnSpec {
+        include: None,
+        exclude: Some("id,cc"),
+    });
+    assert!(
+        warning.contains("null/empty"),
+        "a non-id field is genuinely dropped, so warn: {warning:?}"
+    );
+}
+
+#[test]
 fn write_bugs_partial_unknown_warns_with_new_wording_and_shows_known() {
     let bugs = vec![make_bug(1, "summary text", "NEW")];
     let spec = ColumnSpec {

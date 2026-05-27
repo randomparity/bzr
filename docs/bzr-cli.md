@@ -255,6 +255,12 @@ upstream Bugzilla and `bzl-search`.
 
 Display detailed information about one or more bugs.
 
+On XML-RPC servers, single-bug `bzr bug view` fetches the full bug
+regardless of `--fields`/`--exclude-fields`; the selection still
+controls which detail rows render, and under `--json` the returned
+object is complete (the field-restriction note below applies to REST
+servers and to `bug list`/`bug my`/`bug search`/`query run`).
+
 ```bash
 bzr bug view 12345
 bzr bug view 12345 12346 12347

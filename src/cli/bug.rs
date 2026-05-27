@@ -158,7 +158,11 @@ pub enum BugAction {
     /// Session-wide failures (transport, auth, security) still bail.
     ///
     /// Use `--fields` to fetch only specific fields (faster on large
-    /// bugs); `--exclude-fields` is the inverse.
+    /// bugs); `--exclude-fields` is the inverse. On XML-RPC servers,
+    /// single-bug `bug view` fetches the full bug regardless of the
+    /// field list (the selection still controls which detail rows or
+    /// table columns render, and under `--json` the returned object is
+    /// complete).
     ///
     /// Examples:
     ///

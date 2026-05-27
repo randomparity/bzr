@@ -303,6 +303,22 @@ pub fn validate_table_columns(spec: ColumnSpec<'_>) -> crate::error::Result<()> 
     Ok(())
 }
 
+/// Whether a `--json` field selection actually restricts which fields carry real values,
+/// mirroring `force_id_fields` in the client: an include narrows the fetched set, and an exclude
+/// matters only if it drops a field other than `id` (the client always re-adds `id`). Blank-only
+/// input (`""`, `,,`, `id`) restricts nothing.
+fn json_selection_restricts(spec: ColumnSpec<'_>) -> bool {
+    if canonical_field_list(spec.include).is_some() {
+        return true;
+    }
+    spec.exclude.is_some_and(|list| {
+        list.split(',').any(|t| {
+            let t = t.trim();
+            !t.is_empty() && !t.eq_ignore_ascii_case("id")
+        })
+    })
+}
+
 /// Warn that under `--json` a `--fields`/`--exclude-fields` selection controls
 /// which fields are *fetched*, not which are shown: `id` is always present, but
 /// every other unselected field deserializes to null/empty rather than its real
@@ -317,9 +333,7 @@ pub fn warn_json_field_selection<E: Write + ?Sized>(
     if !interactive {
         return;
     }
-    let active = canonical_field_list(spec.include).is_some()
-        || canonical_field_list(spec.exclude).is_some();
-    if active {
+    if json_selection_restricts(spec) {
         let _ = writeln!(
             err,
             "warning: under --json, --fields/--exclude-fields controls which fields are fetched, \
