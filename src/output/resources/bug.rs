@@ -21,10 +21,21 @@ pub struct ColumnSpec<'a> {
 /// A selectable column in bug table output: the tokens that map to it,
 /// its header, and how to render one bug's cell.
 struct BugColumn {
-    /// Accepted field tokens (lowercase) that resolve to this column.
+    /// Accepted field tokens (lowercase) that resolve to this column. By
+    /// convention `aliases[0]` is the canonical Bugzilla field name used for
+    /// the server's `include_fields`/`exclude_fields` payload; the remaining
+    /// entries are accepted synonyms for column selection only.
     aliases: &'static [&'static str],
     header: &'static str,
     render: fn(&Bug) -> String,
+}
+
+impl BugColumn {
+    /// The canonical Bugzilla field name (first alias), used when building
+    /// the server's `include_fields`/`exclude_fields` payload.
+    fn canonical(&self) -> &'static str {
+        self.aliases[0]
+    }
 }
 
 /// Columns shown when `--fields` is not supplied. Order and headers match
@@ -51,7 +62,7 @@ const COLUMNS: &[BugColumn] = &[
         render: |b| b.priority.clone().unwrap_or_default(),
     },
     BugColumn {
-        aliases: &["assignee", "assigned_to"],
+        aliases: &["assigned_to", "assignee"],
         header: "ASSIGNEE",
         render: |b| shorten_email(b.assigned_to.as_deref().unwrap_or("")),
     },
@@ -116,7 +127,7 @@ const COLUMNS: &[BugColumn] = &[
         render: |b| b.op_sys.clone().unwrap_or_default(),
     },
     BugColumn {
-        aliases: &["platform", "rep_platform"],
+        aliases: &["rep_platform", "platform"],
         header: "PLATFORM",
         render: |b| b.rep_platform.clone().unwrap_or_default(),
     },
@@ -163,6 +174,31 @@ fn join_ids(ids: &[u64]) -> String {
 fn resolve_bug_column(token: &str) -> Option<&'static BugColumn> {
     let token = token.trim().to_ascii_lowercase();
     COLUMNS.iter().find(|c| c.aliases.contains(&token.as_str()))
+}
+
+/// Translate a comma-separated field list (which may use column aliases such
+/// as `assignee` or `updated`) into canonical Bugzilla field names for the
+/// server's `include_fields` / `exclude_fields` parameters. Unknown tokens
+/// (e.g. custom `cf_*` fields) pass through unchanged. Empty input or an
+/// all-empty list yields `None`.
+pub fn canonical_field_list(fields: Option<&str>) -> Option<String> {
+    let fields = fields?;
+    let mut out: Vec<&str> = Vec::new();
+    for token in fields.split(',') {
+        let token = token.trim();
+        if token.is_empty() {
+            continue;
+        }
+        match resolve_bug_column(token) {
+            Some(col) => out.push(col.canonical()),
+            None => out.push(token),
+        }
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out.join(","))
+    }
 }
 
 fn default_columns() -> Vec<&'static BugColumn> {

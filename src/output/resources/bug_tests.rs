@@ -233,6 +233,42 @@ fn write_bugs_json_ignores_columns() {
     );
 }
 
+#[test]
+fn write_bugs_assignee_alias_still_selects_column() {
+    let bugs = vec![make_bug(1, "s", "NEW")];
+    let spec = ColumnSpec {
+        include: Some("id,assignee"),
+        exclude: None,
+    };
+    let (out, err) = capture_bugs_spec(OutputFormat::Table, &bugs, spec);
+    assert!(out.contains("ASSIGNEE"), "alias resolves column:\n{out}");
+    assert!(err.is_empty(), "no warning: {err:?}");
+}
+
+// ── canonical_field_list ─────────────────────────────────────────
+
+#[test]
+fn canonical_field_list_translates_aliases() {
+    let got = canonical_field_list(Some("assignee,updated,created,reporter,platform"));
+    assert_eq!(
+        got.as_deref(),
+        Some("assigned_to,last_change_time,creation_time,creator,rep_platform")
+    );
+}
+
+#[test]
+fn canonical_field_list_passes_through_unknown_and_canonical() {
+    let got = canonical_field_list(Some("id,cf_custom,summary"));
+    assert_eq!(got.as_deref(), Some("id,cf_custom,summary"));
+}
+
+#[test]
+fn canonical_field_list_handles_empty_and_blanks() {
+    assert_eq!(canonical_field_list(None), None);
+    assert_eq!(canonical_field_list(Some("")), None);
+    assert_eq!(canonical_field_list(Some(",, ,")), None);
+}
+
 // ── write_bug_detail ─────────────────────────────────────────────
 
 #[test]

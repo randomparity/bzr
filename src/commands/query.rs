@@ -6,7 +6,7 @@
 use crate::cli::QueryAction;
 use crate::config::Config;
 use crate::error::{BzrError, Result};
-use crate::output::resources::bug::{write_bugs, ColumnSpec};
+use crate::output::resources::bug::{canonical_field_list, write_bugs, ColumnSpec};
 use crate::output::resources::query::{write_query_detail, write_query_list, write_query_saved};
 use crate::output::writers::Writers;
 use crate::types::{OutputFormat, QueryKind, SavedQuery};
@@ -238,6 +238,8 @@ async fn handle_run(
         qa_contact: slice_override(qa_contact),
         url: slice_override(url),
     });
+    params.include_fields = canonical_field_list(params.include_fields.as_deref());
+    params.exclude_fields = canonical_field_list(params.exclude_fields.as_deref());
 
     let client = super::shared::connect_and_configure(effective_server, api).await?;
     let bugs = client.search_bugs(&params).await?;

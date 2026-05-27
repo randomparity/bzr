@@ -2,7 +2,7 @@ use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
 use crate::output::resources::bug::{
-    write_bug_detail, write_multi_bug_view, ColumnSpec, MultiBugRow,
+    canonical_field_list, write_bug_detail, write_multi_bug_view, ColumnSpec, MultiBugRow,
 };
 use crate::output::result_types::{write_result, BugViewFailure, MultiBugViewResult};
 use crate::output::writers::Writers;
@@ -72,11 +72,23 @@ pub(super) async fn handle(
         ));
     }
 
+    // Raw values drive column / detail-row selection (aliases resolve fine);
+    // canonical values go to the server so aliased fields are populated.
     let inc = fields.as_deref();
     let exc = exclude_fields.as_deref();
+    let inc_canonical = canonical_field_list(inc);
+    let exc_canonical = canonical_field_list(exc);
 
     if ids.len() == 1 {
-        return view_single(client, &ids[0], inc, exc, format, w).await;
+        return view_single(
+            client,
+            &ids[0],
+            inc_canonical.as_deref(),
+            exc_canonical.as_deref(),
+            format,
+            w,
+        )
+        .await;
     }
 
     let mode = if *permissive {
@@ -84,7 +96,14 @@ pub(super) async fn handle(
     } else {
         BugViewMode::Strict
     };
-    let batch = fetch_batch(client, ids, inc, exc, mode).await?;
+    let batch = fetch_batch(
+        client,
+        ids,
+        inc_canonical.as_deref(),
+        exc_canonical.as_deref(),
+        mode,
+    )
+    .await?;
     let spec = ColumnSpec {
         include: inc,
         exclude: exc,
