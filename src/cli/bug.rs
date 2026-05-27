@@ -21,11 +21,12 @@ pub enum BugAction {
     ///
     /// `--limit` defaults to 50; raise it for broader scans, but very
     /// large values may exceed the server's max-results setting and
-    /// return a truncated list. In table output, `--fields` selects which
-    /// columns are shown (in the given order) and `--exclude-fields`
-    /// removes columns; in `--json` output both trim the response payload.
-    /// Fields with no table column (e.g. custom `cf_*` fields) are skipped
-    /// with a warning in table mode — use `--json` to see them.
+    /// return a truncated list. `--fields` and `--exclude-fields` control
+    /// which fields are requested from the server; in table output they
+    /// select and remove columns (in the given order), while `--json`
+    /// always emits the full bug object. Fields with no table column
+    /// (e.g. custom `cf_*` fields) are skipped with a warning in table
+    /// mode and are not shown in any output mode.
     ///
     /// `--created-since` / `--changed-since` filter by Bugzilla's
     /// `creation_time` / `last_change_time` fields. Both accept ISO
@@ -87,11 +88,13 @@ pub enum BugAction {
         /// Max number of results
         #[arg(long, default_value = "50")]
         limit: u32,
-        /// Fields to show as columns / return (comma-separated). In table
-        /// output, selects columns; with --json, trims the payload.
+        /// Fields to request from the server (comma-separated). In table
+        /// output, selects which columns to show; --json always emits the
+        /// full bug object.
         #[arg(long)]
         fields: Option<String>,
-        /// Fields to drop from columns / response (comma-separated).
+        /// Fields to drop from the server request (comma-separated). In
+        /// table output, removes those columns.
         #[arg(long)]
         exclude_fields: Option<String>,
         /// Filter to bugs created at or after this date.
@@ -179,11 +182,13 @@ pub enum BugAction {
         /// security) — those always bail.
         #[arg(long)]
         permissive: bool,
-        /// Fields to show as detail rows / return (comma-separated). In table
-        /// output, selects which rows display; with --json, trims the payload.
+        /// Fields to request from the server (comma-separated). In table
+        /// output, selects which detail rows to show; --json always emits
+        /// the full bug object.
         #[arg(long)]
         fields: Option<String>,
-        /// Fields to drop from detail rows / response (comma-separated).
+        /// Fields to drop from the server request (comma-separated). In
+        /// table output, removes those detail rows.
         #[arg(long)]
         exclude_fields: Option<String>,
     },
@@ -253,11 +258,13 @@ pub enum BugAction {
         /// Max number of results (default: 50)
         #[arg(long)]
         limit: Option<u32>,
-        /// Fields to show as columns / return (comma-separated). In table
-        /// output, selects columns; with --json, trims the payload.
+        /// Fields to request from the server (comma-separated). In table
+        /// output, selects which columns to show; --json always emits the
+        /// full bug object.
         #[arg(long)]
         fields: Option<String>,
-        /// Fields to drop from columns / response (comma-separated).
+        /// Fields to drop from the server request (comma-separated). In
+        /// table output, removes those columns.
         #[arg(long)]
         exclude_fields: Option<String>,
     },
@@ -448,11 +455,13 @@ pub enum BugAction {
         /// the limit applies to the single active category.
         #[arg(long, default_value = "50")]
         limit: u32,
-        /// Fields to show as columns / return (comma-separated). In table
-        /// output, selects columns; with --json, trims the payload.
+        /// Fields to request from the server (comma-separated). In table
+        /// output, selects which columns to show; --json always emits the
+        /// full bug object.
         #[arg(long)]
         fields: Option<String>,
-        /// Fields to drop from columns / response (comma-separated).
+        /// Fields to drop from the server request (comma-separated). In
+        /// table output, removes those columns.
         #[arg(long)]
         exclude_fields: Option<String>,
     },

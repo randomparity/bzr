@@ -2395,3 +2395,40 @@ async fn bug_list_issue_158_mixed_positive_and_negation_reaches_wire() {
     // wrong, the matcher would miss and the response would be a 404,
     // causing `result` to be `Err`.
 }
+
+/// Guards against the misleading "trims output" messaging (issue #206, F4):
+/// `--fields`/`--exclude-fields` control which fields are *requested from
+/// the server*; `--json` always emits the full bug object. None of these
+/// phrases — which imply `--json` output is trimmed, or that custom fields
+/// can be seen via `--json` — may reappear in the CLI help or the manual.
+#[test]
+fn cli_and_docs_avoid_misleading_trim_phrasing() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let forbidden = [
+        "trims the payload",
+        "trim the response payload",
+        "trims JSON output",
+        "to see them",
+        "JSON: fields to return",
+        "JSON: fields to exclude",
+    ];
+
+    let mut files = vec![root.join("docs/bzr-cli.md")];
+    for entry in std::fs::read_dir(root.join("src/cli")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_some_and(|e| e == "rs") {
+            files.push(path);
+        }
+    }
+
+    for file in &files {
+        let content = std::fs::read_to_string(file).unwrap();
+        for phrase in forbidden {
+            assert!(
+                !content.contains(phrase),
+                "{}: remove misleading phrase {phrase:?}",
+                file.display()
+            );
+        }
+    }
+}
