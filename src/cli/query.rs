@@ -219,10 +219,11 @@ pub enum QueryAction {
         /// Override the saved limit
         #[arg(long)]
         limit: Option<u32>,
-        /// Override the saved fields selection
+        /// Fields to show as columns / return (comma-separated). In table
+        /// output, selects columns; with --json, trims the payload.
         #[arg(long)]
         fields: Option<String>,
-        /// Override the saved exclude-fields selection
+        /// Fields to drop from columns / response (comma-separated).
         #[arg(long)]
         exclude_fields: Option<String>,
         /// Override the server to run against

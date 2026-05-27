@@ -185,6 +185,8 @@ List bugs matching filter criteria.
 bzr bug list --product Fedora --status ASSIGNED --limit 20
 bzr bug list --assignee user@example.com
 bzr bug list --product Fedora --fields id,summary,status
+# Select table columns
+bzr bug list --product Fedora --fields id,priority,severity,status,summary
 bzr bug list --id 100 --id 200 --id 300
 bzr bug list --status NEW --status ASSIGNED          # OR: match either status
 bzr bug list --status '!CLOSED'                      # NOT: exclude CLOSED
@@ -210,8 +212,8 @@ Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`,
 | `--alias <A>` | No | | Filter by bug alias |
 | `--summary <S>` | No | | Substring match on the Summary field (matches all bug states) |
 | `--limit <N>` | No | 50 | Max results |
-| `--fields <F>` | No | | Only return these fields (comma-separated) |
-| `--exclude-fields <F>` | No | | Exclude these fields (comma-separated) |
+| `--fields <F>` | No | | Table: columns to show (in order). JSON: fields to return (comma-separated). |
+| `--exclude-fields <F>` | No | | Table: columns to drop. JSON: fields to exclude (comma-separated). |
 | `--created-since <DATE>` | No | | Filter to bugs whose `creation_time` is `>= DATE`. See [Date format](#date-format) below. |
 | `--changed-since <DATE>` | No | | Filter to bugs whose `last_change_time` is `>= DATE`. See [Date format](#date-format) below. |
 
@@ -266,8 +268,8 @@ bzr bug view my-alias --fields id,summary,assigned_to
 |--------|----------|-------------|
 | `<IDS>...` | Yes | One or more bug IDs or aliases. Aliases and numeric IDs may be mixed. |
 | `--permissive` | No | Multi-ID only. Continue past per-bug failures, surfacing them as `Bug #N — UNAVAILABLE` placeholder rows (table) or entries in `failed` (JSON). Exit 0 even if some bugs fail. Has no effect on session-wide failures (transport, auth, security) — those still bail. Setting `--permissive` with a single ID returns input-validation error (exit 7). |
-| `--fields <F>` | No | Only return these fields (comma-separated) |
-| `--exclude-fields <F>` | No | Exclude these fields (comma-separated) |
+| `--fields <F>` | No | Table: detail rows to show. JSON: fields to return (comma-separated). |
+| `--exclude-fields <F>` | No | Table: detail rows to drop. JSON: fields to exclude (comma-separated). |
 
 **Output shapes:**
 
@@ -300,8 +302,8 @@ bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?known_name=m
 | `--from-url <URL>` | No* | | Execute a search from a Bugzilla buglist.cgi URL. Recognized parameters (product, component, status, etc.) are mapped to structured fields; unrecognized parameters (boolean charts, field-change filters) are passed through to the REST API verbatim. |
 | `--save-as [NAME]` | No | | Save this URL query for future reuse. If `NAME` is omitted, uses the URL's `known_name` parameter as the query name. Requires `--from-url`. |
 | `--limit <N>` | No | 50 | Max results. When `--from-url` is used, the URL's own limit parameter takes precedence unless overridden here. |
-| `--fields <F>` | No | | Only return these fields (comma-separated) |
-| `--exclude-fields <F>` | No | | Exclude these fields (comma-separated) |
+| `--fields <F>` | No | | Table: columns to show (in order). JSON: fields to return (comma-separated). |
+| `--exclude-fields <F>` | No | | Table: columns to drop. JSON: fields to exclude (comma-separated). |
 
 *One of `<QUERY>` or `--from-url` must be provided.
 
@@ -342,8 +344,8 @@ bzr bug my --status NEW --status '!RESOLVED'  # mixed positive and negated
 | `--all` | No | | Show all bugs related to me (assigned + created + CC'd) |
 | `--status <S>` | No | | Filter by status (repeatable; `!` prefix to exclude) |
 | `--limit <N>` | No | 50 | Max results per category. With `--all`, each of the three categories (assigned, created, CC'd) is queried separately up to this limit; duplicates across categories are removed. |
-| `--fields <F>` | No | | Only return these fields (comma-separated) |
-| `--exclude-fields <F>` | No | | Exclude these fields (comma-separated) |
+| `--fields <F>` | No | | Table: columns to show (in order). JSON: fields to return (comma-separated). |
+| `--exclude-fields <F>` | No | | Table: columns to drop. JSON: fields to exclude (comma-separated). |
 
 ### `bzr bug create`
 
@@ -1269,8 +1271,8 @@ bzr query save recent-firefox --product Firefox --changed-since 2026-04-01
 | `--severity <S>` | No* | Filter by severity (repeatable; prefix with `!` to exclude) |
 | `--search <Q>` | No* | Free-text search query |
 | `--limit <N>` | No | Max results |
-| `--fields <F>` | No | Only return these fields when the query runs (comma-separated) |
-| `--exclude-fields <F>` | No | Exclude these fields when the query runs (comma-separated) |
+| `--fields <F>` | No | Stored with the query; at run time selects table columns and trims JSON output (comma-separated). |
+| `--exclude-fields <F>` | No | Stored with the query; at run time drops table columns and trims JSON output (comma-separated). |
 | `--created-since <DATE>` | No | Save a `creation_time >= DATE` filter into the query. Same accepted forms as [`bzr bug list --created-since`](#date-format). |
 | `--changed-since <DATE>` | No | Save a `last_change_time >= DATE` filter into the query. Same accepted forms as [`bzr bug list --changed-since`](#date-format). |
 
@@ -1339,8 +1341,8 @@ bzr query run recent-firefox --changed-since 2026-05-01
 |--------|----------|-------------|
 | `<NAME>` | Yes | Query name |
 | `--limit <N>` | No | Override the saved limit |
-| `--fields <F>` | No | Only return these fields (comma-separated) |
-| `--exclude-fields <F>` | No | Exclude these fields (comma-separated) |
+| `--fields <F>` | No | Table: columns to show (in order). JSON: fields to return (comma-separated). |
+| `--exclude-fields <F>` | No | Table: columns to drop. JSON: fields to exclude (comma-separated). |
 | `--server <NAME>` | No | Override the server to run the query against. Takes precedence over the server stored in the saved query. The global `--server` flag takes precedence over this flag. |
 | `--created-since <DATE>` | No | Override the saved `creation_time` filter for this run. Same accepted forms as [`bzr bug list --created-since`](#date-format). |
 | `--changed-since <DATE>` | No | Override the saved `last_change_time` filter for this run. Same accepted forms as [`bzr bug list --changed-since`](#date-format). |

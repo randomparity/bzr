@@ -21,8 +21,11 @@ pub enum BugAction {
     ///
     /// `--limit` defaults to 50; raise it for broader scans, but very
     /// large values may exceed the server's max-results setting and
-    /// return a truncated list. Use `--fields` / `--exclude-fields` to
-    /// trim the response payload.
+    /// return a truncated list. In table output, `--fields` selects which
+    /// columns are shown (in the given order) and `--exclude-fields`
+    /// removes columns; in `--json` output both trim the response payload.
+    /// Fields with no table column (e.g. custom `cf_*` fields) are skipped
+    /// with a warning in table mode — use `--json` to see them.
     ///
     /// `--created-since` / `--changed-since` filter by Bugzilla's
     /// `creation_time` / `last_change_time` fields. Both accept ISO
@@ -84,10 +87,11 @@ pub enum BugAction {
         /// Max number of results
         #[arg(long, default_value = "50")]
         limit: u32,
-        /// Only return these fields (comma-separated)
+        /// Fields to show as columns / return (comma-separated). In table
+        /// output, selects columns; with --json, trims the payload.
         #[arg(long)]
         fields: Option<String>,
-        /// Exclude these fields (comma-separated)
+        /// Fields to drop from columns / response (comma-separated).
         #[arg(long)]
         exclude_fields: Option<String>,
         /// Filter to bugs created at or after this date.
@@ -175,10 +179,11 @@ pub enum BugAction {
         /// security) — those always bail.
         #[arg(long)]
         permissive: bool,
-        /// Only return these fields (comma-separated)
+        /// Fields to show as detail rows / return (comma-separated). In table
+        /// output, selects which rows display; with --json, trims the payload.
         #[arg(long)]
         fields: Option<String>,
-        /// Exclude these fields (comma-separated)
+        /// Fields to drop from detail rows / response (comma-separated).
         #[arg(long)]
         exclude_fields: Option<String>,
     },
@@ -248,10 +253,11 @@ pub enum BugAction {
         /// Max number of results (default: 50)
         #[arg(long)]
         limit: Option<u32>,
-        /// Only return these fields (comma-separated)
+        /// Fields to show as columns / return (comma-separated). In table
+        /// output, selects columns; with --json, trims the payload.
         #[arg(long)]
         fields: Option<String>,
-        /// Exclude these fields (comma-separated)
+        /// Fields to drop from columns / response (comma-separated).
         #[arg(long)]
         exclude_fields: Option<String>,
     },
@@ -442,10 +448,11 @@ pub enum BugAction {
         /// the limit applies to the single active category.
         #[arg(long, default_value = "50")]
         limit: u32,
-        /// Only return these fields (comma-separated)
+        /// Fields to show as columns / return (comma-separated). In table
+        /// output, selects columns; with --json, trims the payload.
         #[arg(long)]
         fields: Option<String>,
-        /// Exclude these fields (comma-separated)
+        /// Fields to drop from columns / response (comma-separated).
         #[arg(long)]
         exclude_fields: Option<String>,
     },

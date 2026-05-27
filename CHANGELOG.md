@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `bzr bug list`, `bug search`, `bug my`, and `query run`: `--fields` now
+  selects which columns appear in table output (in the order given) and
+  `--exclude-fields` removes columns, instead of always rendering a fixed
+  five-column table. `bug view` honors an explicit field set for its detail
+  rows. `--json` output is unchanged. (#206)
+
 ## [0.4.0] - 2026-05-09
 
 ### Added
