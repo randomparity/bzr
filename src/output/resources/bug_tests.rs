@@ -2,7 +2,6 @@
 
 use super::*;
 use crate::types::{Bug, FieldChange, HistoryEntry};
-use tabled::Table;
 
 fn make_bug(id: u64, summary: &str, status: &str) -> Bug {
     Bug {
@@ -54,9 +53,18 @@ fn make_history_entry() -> HistoryEntry {
 }
 
 fn capture_bugs(format: OutputFormat, bugs: &[Bug]) -> String {
-    let mut buf = Vec::new();
-    write_bugs(bugs, format, &mut buf);
-    String::from_utf8(buf).unwrap()
+    capture_bugs_spec(format, bugs, ColumnSpec::default()).0
+}
+
+/// Returns (stdout, stderr) so column-selection tests can assert warnings.
+fn capture_bugs_spec(format: OutputFormat, bugs: &[Bug], spec: ColumnSpec<'_>) -> (String, String) {
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+    write_bugs(bugs, spec, format, &mut out, &mut err);
+    (
+        String::from_utf8(out).unwrap(),
+        String::from_utf8(err).unwrap(),
+    )
 }
 
 fn capture_bug_detail(format: OutputFormat, bug: &Bug) -> String {
@@ -69,59 +77,6 @@ fn capture_history(format: OutputFormat, history: &[HistoryEntry]) -> String {
     let mut buf = Vec::new();
     write_history(history, format, &mut buf);
     String::from_utf8(buf).unwrap()
-}
-
-// ── BugRow conversion ────────────────────────────────────────────
-
-#[test]
-fn bug_row_from_bug_truncates_summary() {
-    let mut bug = make_bug(1, &"x".repeat(100), "NEW");
-    let row = BugRow::from(&bug);
-    assert_eq!(row.summary.chars().count(), 72);
-    assert!(row.summary.ends_with("..."));
-
-    bug.summary = "short".into();
-    let row = BugRow::from(&bug);
-    assert_eq!(row.summary, "short");
-}
-
-#[test]
-fn bug_row_from_bug_shortens_assignee() {
-    let bug = make_bug(1, "test", "NEW");
-    let row = BugRow::from(&bug);
-    assert_eq!(row.assignee, "dev");
-}
-
-#[test]
-fn bug_row_from_bug_missing_fields() {
-    let bug = Bug {
-        id: 1,
-        summary: "minimal".into(),
-        status: "NEW".into(),
-        resolution: None,
-        dupe_of: None,
-        deadline: None,
-        product: None,
-        component: None,
-        version: None,
-        assigned_to: None,
-        priority: None,
-        severity: None,
-        creation_time: None,
-        last_change_time: None,
-        creator: None,
-        url: None,
-        whiteboard: None,
-        keywords: vec![],
-        blocks: vec![],
-        depends_on: vec![],
-        cc: vec![],
-        op_sys: None,
-        rep_platform: None,
-    };
-    let row = BugRow::from(&bug);
-    assert_eq!(row.priority, "");
-    assert_eq!(row.assignee, "");
 }
 
 // ── write_bugs ───────────────────────────────────────────────────
@@ -140,19 +95,6 @@ fn write_bugs_json_one_bug() {
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed[0]["id"], 42);
     assert_eq!(parsed[0]["summary"], "Login broken");
-}
-
-#[test]
-fn write_bugs_table_renders_rows() {
-    let bugs = [make_bug(42, "Login broken", "NEW")];
-    let rows: Vec<BugRow> = bugs.iter().map(BugRow::from).collect();
-    let table = Table::new(rows).to_string();
-    assert!(table.contains("42"));
-    assert!(table.contains("NEW"));
-    assert!(table.contains("Login broken"));
-    assert!(table.contains("ID"));
-    assert!(table.contains("STATUS"));
-    assert!(table.contains("SUMMARY"));
 }
 
 #[test]
@@ -193,6 +135,96 @@ fn write_bugs_json_via_write() {
     assert_eq!(parsed[0]["id"], 99);
     assert_eq!(parsed[0]["summary"], "Crash on startup");
     assert_eq!(parsed[0]["status"], "ASSIGNED");
+}
+
+#[test]
+fn write_bugs_fields_selects_only_requested_columns() {
+    let bugs = vec![make_bug(217559, "kernel panic on boot", "ASSIGNED")];
+    let spec = ColumnSpec {
+        include: Some("id,priority"),
+        exclude: None,
+    };
+    let (out, err) = capture_bugs_spec(OutputFormat::Table, &bugs, spec);
+    assert!(out.contains("ID"), "ID column present:\n{out}");
+    assert!(out.contains("PRIORITY"), "PRIORITY column present:\n{out}");
+    assert!(!out.contains("STATUS"), "STATUS must be absent:\n{out}");
+    assert!(!out.contains("ASSIGNEE"), "ASSIGNEE must be absent:\n{out}");
+    assert!(!out.contains("SUMMARY"), "SUMMARY must be absent:\n{out}");
+    assert!(err.is_empty(), "no warning for known fields: {err:?}");
+}
+
+#[test]
+fn write_bugs_fields_adds_non_default_columns_populated() {
+    let bugs = vec![make_bug(218034, "LPM crash", "WORKING")];
+    let spec = ColumnSpec {
+        include: Some("id,priority,severity,status,product,summary"),
+        exclude: None,
+    };
+    let (out, _err) = capture_bugs_spec(OutputFormat::Table, &bugs, spec);
+    for header in ["ID", "PRIORITY", "SEVERITY", "STATUS", "PRODUCT", "SUMMARY"] {
+        assert!(out.contains(header), "{header} column present:\n{out}");
+    }
+    // make_bug populates severity=major and product=TestProduct.
+    assert!(out.contains("major"), "severity value rendered:\n{out}");
+    assert!(
+        out.contains("TestProduct"),
+        "product value rendered:\n{out}"
+    );
+}
+
+#[test]
+fn write_bugs_no_fields_keeps_default_columns() {
+    let bugs = vec![make_bug(1, "summary text", "NEW")];
+    let out = capture_bugs(OutputFormat::Table, &bugs);
+    for header in ["ID", "STATUS", "PRIORITY", "ASSIGNEE", "SUMMARY"] {
+        assert!(out.contains(header), "default header {header}:\n{out}");
+    }
+}
+
+#[test]
+fn write_bugs_exclude_fields_drops_default_column() {
+    let bugs = vec![make_bug(1, "summary text", "NEW")];
+    let spec = ColumnSpec {
+        include: None,
+        exclude: Some("summary"),
+    };
+    let (out, _err) = capture_bugs_spec(OutputFormat::Table, &bugs, spec);
+    assert!(out.contains("ID"), "ID retained:\n{out}");
+    assert!(!out.contains("SUMMARY"), "SUMMARY excluded:\n{out}");
+}
+
+#[test]
+fn write_bugs_unknown_field_warns_and_falls_back() {
+    let bugs = vec![make_bug(1, "summary text", "NEW")];
+    let spec = ColumnSpec {
+        include: Some("cf_custom_thing"),
+        exclude: None,
+    };
+    let (out, err) = capture_bugs_spec(OutputFormat::Table, &bugs, spec);
+    assert!(
+        err.contains("cf_custom_thing"),
+        "warns about unknown field: {err:?}"
+    );
+    // All requested columns were unknown -> fall back to the default set.
+    assert!(
+        out.contains("ID") && out.contains("SUMMARY"),
+        "fallback default columns:\n{out}"
+    );
+}
+
+#[test]
+fn write_bugs_json_ignores_columns() {
+    let bugs = vec![make_bug(42, "x", "NEW")];
+    let spec = ColumnSpec {
+        include: Some("id"),
+        exclude: None,
+    };
+    let (out, _err) = capture_bugs_spec(OutputFormat::Json, &bugs, spec);
+    // JSON path is unchanged: full serialized struct, not column-filtered.
+    assert!(
+        out.contains("\"summary\""),
+        "JSON still serializes summary:\n{out}"
+    );
 }
 
 // ── write_bug_detail ─────────────────────────────────────────────
