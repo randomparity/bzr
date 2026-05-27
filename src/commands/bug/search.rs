@@ -1,6 +1,6 @@
 use crate::cli::BugAction;
 use crate::error::Result;
-use crate::output::resources::bug::write_bugs;
+use crate::output::resources::bug::{write_bugs, ColumnSpec};
 use crate::output::resources::query::write_query_saved;
 use crate::output::writers::Writers;
 use crate::types::{ApiMode, OutputFormat, Overrides, SavedQuery, SearchParams};
@@ -103,7 +103,11 @@ pub(super) async fn handle(
     };
 
     let bugs = client.search_bugs(&params).await?;
-    write_bugs(&bugs, format, w.out);
+    let spec = ColumnSpec {
+        include: fields.as_deref(),
+        exclude: exclude_fields.as_deref(),
+    };
+    write_bugs(&bugs, spec, format, w.out, w.err);
 
     if let Some((name, query)) = save_info {
         let mut config = crate::config::Config::load()?;

@@ -1,7 +1,7 @@
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
-use crate::output::resources::bug::write_bugs;
+use crate::output::resources::bug::{write_bugs, ColumnSpec};
 use crate::output::writers::Writers;
 use crate::types::{OutputFormat, SearchParams};
 use crate::validation::parse_optional_date;
@@ -71,7 +71,11 @@ pub(super) async fn handle(
         ..Default::default()
     };
     let bugs = client.search_bugs(&params).await?;
-    write_bugs(&bugs, format, w.out);
+    let spec = ColumnSpec {
+        include: fields.as_deref(),
+        exclude: exclude_fields.as_deref(),
+    };
+    write_bugs(&bugs, spec, format, w.out, w.err);
     Ok(())
 }
 
