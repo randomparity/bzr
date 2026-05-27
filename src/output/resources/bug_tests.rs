@@ -625,3 +625,77 @@ fn multi_bug_view_interleaves_success_and_failure_in_order() {
     let pos_gamma = out.find("Bug #12").unwrap();
     assert!(pos_alpha < pos_unavail && pos_unavail < pos_gamma);
 }
+
+// ── validate_table_columns (F2/F3) ───────────────────────────────
+
+#[test]
+fn validate_table_columns_ok_for_default_spec() {
+    assert!(validate_table_columns(ColumnSpec::default()).is_ok());
+}
+
+#[test]
+fn validate_table_columns_ok_for_partial_unknown_include() {
+    let spec = ColumnSpec {
+        include: Some("id,cf_custom"),
+        exclude: None,
+    };
+    assert!(validate_table_columns(spec).is_ok());
+}
+
+#[test]
+fn validate_table_columns_errors_for_all_unknown_include() {
+    let spec = ColumnSpec {
+        include: Some("cf_custom"),
+        exclude: None,
+    };
+    let err = validate_table_columns(spec).unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+    assert!(
+        err.to_string().contains("cf_custom"),
+        "names the offending field: {err}"
+    );
+}
+
+#[test]
+fn validate_table_columns_errors_when_exclude_removes_all_defaults() {
+    let spec = ColumnSpec {
+        include: None,
+        exclude: Some("id,status,priority,assignee,summary"),
+    };
+    let err = validate_table_columns(spec).unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+}
+
+#[test]
+fn validate_table_columns_errors_when_exclude_removes_sole_include() {
+    let spec = ColumnSpec {
+        include: Some("id"),
+        exclude: Some("id"),
+    };
+    let err = validate_table_columns(spec).unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+}
+
+#[test]
+fn validate_table_columns_ok_for_all_blank_include() {
+    let spec = ColumnSpec {
+        include: Some(",,"),
+        exclude: None,
+    };
+    assert!(validate_table_columns(spec).is_ok());
+}
+
+#[test]
+fn write_bugs_partial_unknown_warns_with_new_wording_and_shows_known() {
+    let bugs = vec![make_bug(1, "summary text", "NEW")];
+    let spec = ColumnSpec {
+        include: Some("id,cf_x"),
+        exclude: None,
+    };
+    let (out, err) = capture_bugs_spec(OutputFormat::Table, &bugs, spec);
+    assert!(
+        err.contains("ignoring field(s) with no table column: cf_x"),
+        "new warning wording: {err:?}"
+    );
+    assert!(out.contains("ID"), "known column shown:\n{out}");
+}

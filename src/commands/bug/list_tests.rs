@@ -364,3 +364,56 @@ async fn bug_list_mixed_positive_notequals_notsubstring() {
     .await;
     assert!(result.is_ok(), "bug list failed: {result:?}");
 }
+
+#[tokio::test]
+async fn bug_list_table_all_unknown_fields_exits_7_before_network() {
+    // No /rest/bug mock is mounted: the field selection must be rejected
+    // (exit 7) before any search request is issued (F2).
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let mut action = empty_list_action();
+    let BugAction::List { fields, .. } = &mut action else {
+        unreachable!()
+    };
+    *fields = Some("cf_custom".into());
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Table,
+        None,
+        &mut __io.writers(),
+    )
+    .await;
+    let err = result.unwrap_err();
+    assert_eq!(err.exit_code(), 7, "all-unknown --fields exits 7: {err}");
+}
+
+#[tokio::test]
+async fn bug_list_json_unknown_fields_is_not_validated() {
+    // Validation is table-only: --json with unknown fields proceeds and
+    // emits the full bug object (F2 gate is Table-only, F4 reality).
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "summary": "Test bug", "status": "NEW"}]
+        })))
+        .mount(&mock)
+        .await;
+
+    let mut action = empty_list_action();
+    let BugAction::List { fields, .. } = &mut action else {
+        unreachable!()
+    };
+    *fields = Some("cf_custom".into());
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+    assert!(result.is_ok(), "json path is not validated: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    assert_eq!(parsed[0]["summary"], "Test bug");
+}

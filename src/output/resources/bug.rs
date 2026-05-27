@@ -208,10 +208,40 @@ fn default_columns() -> Vec<&'static BugColumn> {
         .collect()
 }
 
+/// Split a comma list into (resolved columns, unknown tokens), trimming and
+/// skipping blanks. Shared by `resolve_columns` and `validate_table_columns`
+/// so the renderer and the pre-flight validator can't drift.
+fn partition_include(list: &str) -> (Vec<&'static BugColumn>, Vec<&str>) {
+    let mut knowns = Vec::new();
+    let mut unknowns = Vec::new();
+    for token in list.split(',') {
+        let token = token.trim();
+        if token.is_empty() {
+            continue;
+        }
+        match resolve_bug_column(token) {
+            Some(col) => knowns.push(col),
+            None => unknowns.push(token),
+        }
+    }
+    (knowns, unknowns)
+}
+
+/// Apply `spec.exclude` to `columns` in place, dropping any column whose
+/// header matches an excluded token.
+fn apply_exclude(columns: &mut Vec<&'static BugColumn>, exclude: Option<&str>) {
+    if let Some(list) = exclude {
+        let excluded: Vec<&'static BugColumn> =
+            list.split(',').filter_map(resolve_bug_column).collect();
+        columns.retain(|c| !excluded.iter().any(|e| e.header == c.header));
+    }
+}
+
 /// Resolve `spec` into the ordered list of columns to render. Unknown
-/// include tokens are collected and reported on `err`. If every requested
+/// include tokens are reported as a warning on `err`. If every requested
 /// token is unknown, falls back to the default column set so output stays
-/// useful.
+/// useful. Infallible by design — the fully-degenerate cases (zero columns)
+/// are rejected up front by [`validate_table_columns`].
 fn resolve_columns<E: Write + ?Sized>(
     spec: ColumnSpec<'_>,
     err: &mut E,
@@ -219,38 +249,58 @@ fn resolve_columns<E: Write + ?Sized>(
     let mut columns = match spec.include {
         None => default_columns(),
         Some(list) => {
-            let mut cols = Vec::new();
-            let mut unknown = Vec::new();
-            for token in list.split(',') {
-                let token = token.trim();
-                if token.is_empty() {
-                    continue;
-                }
-                match resolve_bug_column(token) {
-                    Some(col) => cols.push(col),
-                    None => unknown.push(token),
-                }
-            }
-            if !unknown.is_empty() {
+            let (knowns, unknowns) = partition_include(list);
+            if !unknowns.is_empty() {
                 let _ = writeln!(
                     err,
-                    "warning: field(s) not displayable in table output: {}; use --json to see them",
-                    unknown.join(", ")
+                    "warning: ignoring field(s) with no table column: {}",
+                    unknowns.join(", ")
                 );
             }
-            if cols.is_empty() {
+            if knowns.is_empty() {
                 default_columns()
             } else {
-                cols
+                knowns
             }
         }
     };
-    if let Some(list) = spec.exclude {
-        let excluded: Vec<&'static BugColumn> =
-            list.split(',').filter_map(resolve_bug_column).collect();
-        columns.retain(|c| !excluded.iter().any(|e| e.header == c.header));
-    }
+    apply_exclude(&mut columns, spec.exclude);
     columns
+}
+
+/// Validate that `spec` yields at least one renderable table column. Call
+/// ONLY when output is a table, before the network request. Errors (exit 7)
+/// when a `--fields` value resolves to zero columns (all tokens unknown), or
+/// when `--exclude-fields` removes every column. Partial-unknown (some valid,
+/// some not) is allowed and handled as a warning at render time.
+pub fn validate_table_columns(spec: ColumnSpec<'_>) -> crate::error::Result<()> {
+    let mut columns = match spec.include {
+        None => default_columns(),
+        Some(list) => {
+            let (knowns, unknowns) = partition_include(list);
+            if knowns.is_empty() {
+                if unknowns.is_empty() {
+                    // All-blank like ",," — treat as no selection, not an error.
+                    default_columns()
+                } else {
+                    return Err(crate::error::BzrError::InputValidation(format!(
+                        "none of the requested fields can be shown as table columns: {}; \
+                         these fields have no table representation",
+                        unknowns.join(", ")
+                    )));
+                }
+            } else {
+                knowns
+            }
+        }
+    };
+    apply_exclude(&mut columns, spec.exclude);
+    if columns.is_empty() {
+        return Err(crate::error::BzrError::InputValidation(
+            "--exclude-fields removed every table column; nothing left to display".into(),
+        ));
+    }
+    Ok(())
 }
 
 /// Whether a detail-view field should render given `spec`. With no include

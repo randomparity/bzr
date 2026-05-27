@@ -6,7 +6,9 @@
 use crate::cli::QueryAction;
 use crate::config::Config;
 use crate::error::{BzrError, Result};
-use crate::output::resources::bug::{canonical_field_list, write_bugs, ColumnSpec};
+use crate::output::resources::bug::{
+    canonical_field_list, validate_table_columns, write_bugs, ColumnSpec,
+};
 use crate::output::resources::query::{write_query_detail, write_query_list, write_query_saved};
 use crate::output::writers::Writers;
 use crate::types::{OutputFormat, QueryKind, SavedQuery};
@@ -241,14 +243,18 @@ async fn handle_run(
     params.include_fields = canonical_field_list(params.include_fields.as_deref());
     params.exclude_fields = canonical_field_list(params.exclude_fields.as_deref());
 
-    let client = super::shared::connect_and_configure(effective_server, api).await?;
-    let bugs = client.search_bugs(&params).await?;
     // Source columns from the resolved params (saved-query fields + CLI
     // overrides), not the raw flags, so a stored field selection is honored.
     let spec = ColumnSpec {
         include: params.include_fields.as_deref(),
         exclude: params.exclude_fields.as_deref(),
     };
+    if format == OutputFormat::Table {
+        validate_table_columns(spec)?;
+    }
+
+    let client = super::shared::connect_and_configure(effective_server, api).await?;
+    let bugs = client.search_bugs(&params).await?;
     write_bugs(&bugs, spec, format, w.out, w.err);
     Ok(())
 }
