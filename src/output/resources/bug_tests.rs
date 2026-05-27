@@ -69,8 +69,14 @@ fn capture_bugs_spec(format: OutputFormat, bugs: &[Bug], spec: ColumnSpec<'_>) -
 
 fn capture_bug_detail(format: OutputFormat, bug: &Bug) -> String {
     let mut buf = Vec::new();
-    write_bug_detail(bug, format, &mut buf);
+    write_bug_detail(bug, ColumnSpec::default(), format, &mut buf);
     String::from_utf8(buf).unwrap()
+}
+
+fn capture_detail_spec(bug: &Bug, spec: ColumnSpec<'_>) -> String {
+    let mut out = Vec::new();
+    write_bug_detail(bug, spec, OutputFormat::Table, &mut out);
+    String::from_utf8(out).unwrap()
 }
 
 fn capture_history(format: OutputFormat, history: &[HistoryEntry]) -> String {
@@ -317,7 +323,12 @@ fn write_bug_detail_table_shows_dupe_of() {
     };
     let mut out = Vec::new();
 
-    super::write_bug_detail(&bug, crate::types::OutputFormat::Table, &mut out);
+    super::write_bug_detail(
+        &bug,
+        ColumnSpec::default(),
+        crate::types::OutputFormat::Table,
+        &mut out,
+    );
 
     let output = String::from_utf8(out).unwrap();
     assert!(output.contains("Duplicate of"));
@@ -366,6 +377,43 @@ fn write_bug_detail_json_via_write() {
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
     assert_eq!(parsed["id"], 7);
     assert_eq!(parsed["summary"], "Json bug");
+}
+
+#[test]
+fn detail_default_shows_all_present_fields() {
+    let bug = make_bug(7, "boom", "ASSIGNED");
+    let out = capture_detail_spec(&bug, ColumnSpec::default());
+    assert!(out.contains("Status"), "status row present:\n{out}");
+    assert!(out.contains("Priority"), "priority row present:\n{out}");
+    assert!(out.contains("Product"), "product row present:\n{out}");
+}
+
+#[test]
+fn detail_include_limits_rows() {
+    let bug = make_bug(7, "boom", "ASSIGNED");
+    let spec = ColumnSpec {
+        include: Some("id,priority"),
+        exclude: None,
+    };
+    let out = capture_detail_spec(&bug, spec);
+    assert!(out.contains("Priority"), "priority row present:\n{out}");
+    assert!(
+        !out.contains("Status"),
+        "status row hidden when not requested:\n{out}"
+    );
+    assert!(!out.contains("Product"), "product row hidden:\n{out}");
+}
+
+#[test]
+fn detail_exclude_drops_row() {
+    let bug = make_bug(7, "boom", "ASSIGNED");
+    let spec = ColumnSpec {
+        include: None,
+        exclude: Some("priority"),
+    };
+    let out = capture_detail_spec(&bug, spec);
+    assert!(out.contains("Status"), "status retained:\n{out}");
+    assert!(!out.contains("Priority"), "priority excluded:\n{out}");
 }
 
 // ── write_json (pretty) ──────────────────────────────────────────
@@ -487,7 +535,7 @@ fn multi_bug_view_renders_success_blocks_with_dividers() {
         MultiBugRow::Ok(Box::new(sample_bug(3, "third"))),
     ];
     let mut buf = Vec::new();
-    write_multi_bug_view(&rows, &mut buf);
+    write_multi_bug_view(&rows, ColumnSpec::default(), &mut buf);
     let out = String::from_utf8(buf).unwrap();
     assert!(out.contains("Bug #1"));
     assert!(out.contains("Bug #2"));
@@ -504,7 +552,7 @@ fn multi_bug_view_renders_failure_block_with_unavailable_marker() {
         error: "bug not found: 999".into(),
     }];
     let mut buf = Vec::new();
-    write_multi_bug_view(&rows, &mut buf);
+    write_multi_bug_view(&rows, ColumnSpec::default(), &mut buf);
     let out = String::from_utf8(buf).unwrap();
     assert!(out.contains("Bug #999"));
     assert!(out.contains("UNAVAILABLE"));
@@ -516,7 +564,7 @@ fn multi_bug_view_single_row_emits_no_divider() {
     no_color();
     let rows = vec![MultiBugRow::Ok(Box::new(sample_bug(7, "only")))];
     let mut buf = Vec::new();
-    write_multi_bug_view(&rows, &mut buf);
+    write_multi_bug_view(&rows, ColumnSpec::default(), &mut buf);
     let out = String::from_utf8(buf).unwrap();
     let divider = "─".repeat(60);
     assert_eq!(out.matches(&divider).count(), 0);
@@ -534,7 +582,7 @@ fn multi_bug_view_interleaves_success_and_failure_in_order() {
         MultiBugRow::Ok(Box::new(sample_bug(12, "gamma"))),
     ];
     let mut buf = Vec::new();
-    write_multi_bug_view(&rows, &mut buf);
+    write_multi_bug_view(&rows, ColumnSpec::default(), &mut buf);
     let out = String::from_utf8(buf).unwrap();
     let pos_alpha = out.find("Bug #10").unwrap();
     let pos_unavail = out.find("Bug #11").unwrap();

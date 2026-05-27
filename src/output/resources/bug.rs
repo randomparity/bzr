@@ -217,6 +217,24 @@ fn resolve_columns<E: Write + ?Sized>(
     columns
 }
 
+/// Whether a detail-view field should render given `spec`. With no include
+/// list, every field shows (minus excludes). Tokens are matched against the
+/// column registry so `assignee`/`assigned_to` etc. are equivalent. Fields
+/// with no registry entry always show by default.
+fn field_selected(spec: ColumnSpec<'_>, field: &str) -> bool {
+    let Some(target) = resolve_bug_column(field) else {
+        return true;
+    };
+    let matches = |list: &str| {
+        list.split(',')
+            .filter_map(resolve_bug_column)
+            .any(|c| c.header == target.header)
+    };
+    let included = spec.include.is_none_or(matches);
+    let excluded = spec.exclude.is_some_and(matches);
+    included && !excluded
+}
+
 pub fn write_bugs<W: Write + ?Sized, E: Write + ?Sized>(
     bugs: &[Bug],
     spec: ColumnSpec<'_>,
@@ -239,36 +257,73 @@ pub fn write_bugs<W: Write + ?Sized, E: Write + ?Sized>(
     });
 }
 
-pub fn write_bug_detail<W: Write + ?Sized>(bug: &Bug, format: OutputFormat, out: &mut W) {
+pub fn write_bug_detail<W: Write + ?Sized>(
+    bug: &Bug,
+    spec: ColumnSpec<'_>,
+    format: OutputFormat,
+    out: &mut W,
+) {
     write_formatted(bug, format, out, |bug, out| {
-        write_bug_detail_table(bug, out);
+        write_bug_detail_table(bug, spec, out);
     });
 }
 
-fn write_bug_detail_table(bug: &Bug, out: &mut (impl Write + ?Sized)) {
-    let _ = writeln!(
-        out,
-        "{} #{}\n{}\n",
-        "Bug".bold(),
-        bug.id.to_string().bold(),
-        bug.summary.bold()
-    );
-    write_field(out, "Status", &colorize_status(&bug.status));
-    write_optional_field(out, "Resolution", bug.resolution.as_deref());
-    if let Some(dupe_of) = bug.dupe_of {
-        let _ = writeln!(out, "  {:<12}  {dupe_of}", "Duplicate of");
+fn write_bug_detail_table(bug: &Bug, spec: ColumnSpec<'_>, out: &mut (impl Write + ?Sized)) {
+    if field_selected(spec, "summary") {
+        let _ = writeln!(
+            out,
+            "{} #{}\n{}\n",
+            "Bug".bold(),
+            bug.id.to_string().bold(),
+            bug.summary.bold()
+        );
+    } else {
+        let _ = writeln!(out, "{} #{}\n", "Bug".bold(), bug.id.to_string().bold());
     }
-    write_optional_field(out, "Product", bug.product.as_deref());
-    write_optional_field(out, "Component", bug.component.as_deref());
-    write_optional_field(out, "Assignee", bug.assigned_to.as_deref());
-    write_optional_field(out, "Priority", bug.priority.as_deref());
-    write_optional_field(out, "Severity", bug.severity.as_deref());
-    write_optional_field(out, "Creator", bug.creator.as_deref());
-    write_optional_field(out, "Created", bug.creation_time.as_deref());
-    write_optional_field(out, "Updated", bug.last_change_time.as_deref());
-    write_list_field(out, "Keywords", &bug.keywords);
-    write_id_list_field(out, "Blocks", &bug.blocks);
-    write_id_list_field(out, "Depends on", &bug.depends_on);
+    if field_selected(spec, "status") {
+        write_field(out, "Status", &colorize_status(&bug.status));
+    }
+    if field_selected(spec, "resolution") {
+        write_optional_field(out, "Resolution", bug.resolution.as_deref());
+    }
+    if field_selected(spec, "dupe_of") {
+        if let Some(dupe_of) = bug.dupe_of {
+            let _ = writeln!(out, "  {:<12}  {dupe_of}", "Duplicate of");
+        }
+    }
+    if field_selected(spec, "product") {
+        write_optional_field(out, "Product", bug.product.as_deref());
+    }
+    if field_selected(spec, "component") {
+        write_optional_field(out, "Component", bug.component.as_deref());
+    }
+    if field_selected(spec, "assigned_to") {
+        write_optional_field(out, "Assignee", bug.assigned_to.as_deref());
+    }
+    if field_selected(spec, "priority") {
+        write_optional_field(out, "Priority", bug.priority.as_deref());
+    }
+    if field_selected(spec, "severity") {
+        write_optional_field(out, "Severity", bug.severity.as_deref());
+    }
+    if field_selected(spec, "creator") {
+        write_optional_field(out, "Creator", bug.creator.as_deref());
+    }
+    if field_selected(spec, "creation_time") {
+        write_optional_field(out, "Created", bug.creation_time.as_deref());
+    }
+    if field_selected(spec, "last_change_time") {
+        write_optional_field(out, "Updated", bug.last_change_time.as_deref());
+    }
+    if field_selected(spec, "keywords") {
+        write_list_field(out, "Keywords", &bug.keywords);
+    }
+    if field_selected(spec, "blocks") {
+        write_id_list_field(out, "Blocks", &bug.blocks);
+    }
+    if field_selected(spec, "depends_on") {
+        write_id_list_field(out, "Depends on", &bug.depends_on);
+    }
 }
 
 fn write_id_list_field(out: &mut (impl Write + ?Sized), label: &str, ids: &[u64]) {
@@ -332,13 +387,17 @@ pub enum MultiBugRow {
 /// covers table mode: argument-order detail blocks for `Ok`, visually
 /// distinct `UNAVAILABLE` placeholder blocks for `Failed`, with a
 /// `─`-divider line between every pair of blocks (no trailing divider).
-pub fn write_multi_bug_view<W: Write + ?Sized>(rows: &[MultiBugRow], out: &mut W) {
+pub fn write_multi_bug_view<W: Write + ?Sized>(
+    rows: &[MultiBugRow],
+    spec: ColumnSpec<'_>,
+    out: &mut W,
+) {
     for (i, row) in rows.iter().enumerate() {
         if i > 0 {
             write_divider(out);
         }
         match row {
-            MultiBugRow::Ok(bug) => write_bug_detail_table(bug, out),
+            MultiBugRow::Ok(bug) => write_bug_detail_table(bug, spec, out),
             MultiBugRow::Failed { id, error } => write_unavailable_block(id, error, out),
         }
     }

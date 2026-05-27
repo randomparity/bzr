@@ -1,7 +1,9 @@
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
-use crate::output::resources::bug::{write_bug_detail, write_multi_bug_view, MultiBugRow};
+use crate::output::resources::bug::{
+    write_bug_detail, write_multi_bug_view, ColumnSpec, MultiBugRow,
+};
 use crate::output::result_types::{write_result, BugViewFailure, MultiBugViewResult};
 use crate::output::writers::Writers;
 use crate::types::{Bug, OutputFormat};
@@ -83,7 +85,11 @@ pub(super) async fn handle(
         BugViewMode::Strict
     };
     let batch = fetch_batch(client, ids, inc, exc, mode).await?;
-    write_batch(batch, format, w);
+    let spec = ColumnSpec {
+        include: inc,
+        exclude: exc,
+    };
+    write_batch(batch, spec, format, w);
     Ok(())
 }
 
@@ -96,7 +102,11 @@ async fn view_single(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let bug = client.get_bug(id, include_fields, exclude_fields).await?;
-    write_bug_detail(&bug, format, w.out);
+    let spec = ColumnSpec {
+        include: include_fields,
+        exclude: exclude_fields,
+    };
+    write_bug_detail(&bug, spec, format, w.out);
     Ok(())
 }
 
@@ -123,11 +133,16 @@ async fn fetch_batch(
     Ok(BugViewBatch { rows })
 }
 
-fn write_batch(batch: BugViewBatch, format: OutputFormat, w: &mut Writers<'_>) {
+fn write_batch(
+    batch: BugViewBatch,
+    spec: ColumnSpec<'_>,
+    format: OutputFormat,
+    w: &mut Writers<'_>,
+) {
     match format {
         OutputFormat::Table => {
             let rows = batch.into_table_rows();
-            write_multi_bug_view(&rows, w.out);
+            write_multi_bug_view(&rows, spec, w.out);
         }
         OutputFormat::Json => {
             let result = batch.into_json_result();
