@@ -27,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   for every bug subcommand (`bug list`, `bug my`, `bug search`, `query run`),
   so the exit code is deterministic and independent of server reachability.
   Partial-unknown selections still warn and show the valid columns. (#206)
+- Under `--json`, `id` is always fetched, so `--exclude-fields id` does not
+  drop it and it is never null; every other unselected field still comes back
+  null/empty. The stderr advisory now discloses this `id` exception and prints
+  only when stderr is a terminal, so piped and CI runs aren't spammed. (#206)
 
 ## [0.4.0] - 2026-05-09
 

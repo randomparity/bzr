@@ -1,5 +1,7 @@
 //! Bug subcommand handlers, split per-action.
 
+use std::io::IsTerminal;
+
 use crate::cli::BugAction;
 use crate::error::Result;
 use crate::output::resources::bug::{
@@ -66,7 +68,7 @@ pub async fn execute(
     // header-only detail block is a coherent sparse result, not an error.
     if let Some(spec) = bug_column_spec(action) {
         if format == OutputFormat::Json {
-            warn_json_field_selection(spec, w.err);
+            warn_json_field_selection(spec, std::io::stderr().is_terminal(), w.err);
         } else if !matches!(action, BugAction::View { .. }) {
             validate_table_columns(spec)?;
         }

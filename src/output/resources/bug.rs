@@ -303,17 +303,28 @@ pub fn validate_table_columns(spec: ColumnSpec<'_>) -> crate::error::Result<()> 
     Ok(())
 }
 
-/// Warn that in JSON output `--fields`/`--exclude-fields` restricts which
-/// fields are *fetched*, not which are emitted: every key is still present,
-/// but unselected fields serialize as null/empty, not their real values.
-/// No-op when no field selection is active.
-pub fn warn_json_field_selection<E: Write + ?Sized>(spec: ColumnSpec<'_>, err: &mut E) {
-    if spec.include.is_some() || spec.exclude.is_some() {
+/// Warn that under `--json` a `--fields`/`--exclude-fields` selection controls
+/// which fields are *fetched*, not which are shown: `id` is always present, but
+/// every other unselected field deserializes to null/empty rather than its real
+/// value. No-op unless `interactive` (stderr is a terminal) and a non-blank
+/// selection is active — matching `validate_table_columns`'s notion of "no
+/// selection" for all-blank input like `""` / `,,`.
+pub fn warn_json_field_selection<E: Write + ?Sized>(
+    spec: ColumnSpec<'_>,
+    interactive: bool,
+    err: &mut E,
+) {
+    if !interactive {
+        return;
+    }
+    let active = canonical_field_list(spec.include).is_some()
+        || canonical_field_list(spec.exclude).is_some();
+    if active {
         let _ = writeln!(
             err,
-            "warning: in --json output, --fields/--exclude-fields selects which fields are \
-             fetched, not which are shown; unselected fields are returned as null/empty, \
-             not their real values"
+            "warning: under --json, --fields/--exclude-fields controls which fields are fetched, \
+             not which are shown; id is always present, any other unselected field is returned \
+             as null/empty, not its real value"
         );
     }
 }

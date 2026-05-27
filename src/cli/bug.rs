@@ -24,10 +24,11 @@ pub enum BugAction {
     /// return a truncated list. `--fields` and `--exclude-fields` control
     /// which fields are requested from the server; in table output they
     /// select and remove columns (in the given order). Under `--json` all
-    /// keys are still emitted, but unselected fields come back null/empty,
-    /// not their real values (a warning is printed). Fields with no table
-    /// column (e.g. custom `cf_*` fields) are skipped with a warning in
-    /// table mode.
+    /// keys are still emitted, but only selected fields carry real values:
+    /// `id` is always populated and every other unselected field comes back
+    /// null/empty (an advisory prints when stderr is a terminal). Fields with
+    /// no table column (e.g. custom `cf_*` fields) are skipped with a warning
+    /// in table mode.
     ///
     /// `--created-since` / `--changed-since` filter by Bugzilla's
     /// `creation_time` / `last_change_time` fields. Both accept ISO

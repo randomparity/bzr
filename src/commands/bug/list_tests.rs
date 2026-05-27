@@ -397,9 +397,12 @@ async fn bug_list_table_all_unknown_fields_exits_7_before_network() {
 }
 
 #[tokio::test]
-async fn bug_list_json_fields_warns_about_value_blanking() {
-    // --json with a field selection warns that unselected fields come back
-    // null/empty (F1), but still emits the full bug object — warn, don't block.
+async fn bug_list_json_fields_does_not_block() {
+    // --json with a field selection still emits the full bug object — warn,
+    // don't block. The stderr advisory is TTY-gated (fd 2 is non-TTY under
+    // `cargo test`), so the content is locked by the unit test in
+    // bug_tests.rs; here we only assert the path succeeds and the full
+    // struct is emitted regardless of whether fd 2 is a terminal in CI.
     let (_lock, mock, _tmp) = setup_test_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -420,11 +423,6 @@ async fn bug_list_json_fields_warns_about_value_blanking() {
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
             .await;
     assert!(result.is_ok(), "json path is not blocked: {result:?}");
-    assert!(
-        __io.err_str().contains("null/empty"),
-        "warns about value-blanking: {:?}",
-        __io.err_str()
-    );
     let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
     assert!(
         parsed[0].get("status").is_some(),

@@ -3,6 +3,8 @@
 //! Query operations (save/list/show/delete) are pure local file I/O.
 //! Only `run` requires a network client.
 
+use std::io::IsTerminal;
+
 use crate::cli::QueryAction;
 use crate::config::Config;
 use crate::error::{BzrError, Result};
@@ -251,7 +253,9 @@ async fn handle_run(
     };
     match format {
         OutputFormat::Table => validate_table_columns(spec)?,
-        OutputFormat::Json => warn_json_field_selection(spec, w.err),
+        OutputFormat::Json => {
+            warn_json_field_selection(spec, std::io::stderr().is_terminal(), w.err);
+        }
     }
 
     let client = super::shared::connect_and_configure(effective_server, api).await?;

@@ -689,7 +689,7 @@ fn validate_table_columns_ok_for_all_blank_include() {
 
 fn capture_json_warning(spec: ColumnSpec<'_>) -> String {
     let mut err = Vec::new();
-    warn_json_field_selection(spec, &mut err);
+    warn_json_field_selection(spec, true, &mut err);
     String::from_utf8(err).unwrap()
 }
 
@@ -703,6 +703,42 @@ fn warn_json_field_selection_warns_for_include() {
         warning.contains("null/empty"),
         "warns about value-blanking: {warning:?}"
     );
+    assert!(
+        warning.contains("id is always present"),
+        "discloses the id exception: {warning:?}"
+    );
+}
+
+#[test]
+fn warn_json_field_selection_silent_when_not_interactive() {
+    let mut err = Vec::new();
+    warn_json_field_selection(
+        ColumnSpec {
+            include: Some("summary"),
+            exclude: None,
+        },
+        false,
+        &mut err,
+    );
+    let warning = String::from_utf8(err).unwrap();
+    assert!(
+        warning.is_empty(),
+        "no warning when stderr is not a terminal: {warning:?}"
+    );
+}
+
+#[test]
+fn warn_json_field_selection_silent_for_blank_selection() {
+    for blank in ["", ",,"] {
+        let warning = capture_json_warning(ColumnSpec {
+            include: Some(blank),
+            exclude: None,
+        });
+        assert!(
+            warning.is_empty(),
+            "blank include {blank:?} is no selection: {warning:?}"
+        );
+    }
 }
 
 #[test]
