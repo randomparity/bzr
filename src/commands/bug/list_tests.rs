@@ -368,8 +368,10 @@ async fn bug_list_mixed_positive_notequals_notsubstring() {
 #[tokio::test]
 async fn bug_list_table_all_unknown_fields_exits_7_before_network() {
     // No /rest/bug mock is mounted: the field selection must be rejected
-    // (exit 7) before any search request is issued (F2).
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    // (exit 7) before any network I/O at all (F2). The validation is
+    // hoisted ahead of `connect_and_configure`, so not even the auth/TLS
+    // probe round-trip fires — the mock sees zero requests.
+    let (_lock, mock, _tmp) = setup_test_env().await;
 
     let mut action = empty_list_action();
     let BugAction::List { fields, .. } = &mut action else {
@@ -388,6 +390,72 @@ async fn bug_list_table_all_unknown_fields_exits_7_before_network() {
     .await;
     let err = result.unwrap_err();
     assert_eq!(err.exit_code(), 7, "all-unknown --fields exits 7: {err}");
+    assert!(
+        mock.received_requests().await.unwrap().is_empty(),
+        "validation must run before any network I/O"
+    );
+}
+
+#[tokio::test]
+async fn bug_list_json_fields_warns_about_value_blanking() {
+    // --json with a field selection warns that unselected fields come back
+    // null/empty (F1), but still emits the full bug object — warn, don't block.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "summary": "Test bug", "status": "NEW"}]
+        })))
+        .mount(&mock)
+        .await;
+
+    let mut action = empty_list_action();
+    let BugAction::List { fields, .. } = &mut action else {
+        unreachable!()
+    };
+    *fields = Some("summary".into());
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+    assert!(result.is_ok(), "json path is not blocked: {result:?}");
+    assert!(
+        __io.err_str().contains("null/empty"),
+        "warns about value-blanking: {:?}",
+        __io.err_str()
+    );
+    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    assert!(
+        parsed[0].get("status").is_some(),
+        "full struct keys still emitted:\n{}",
+        __io.out_str()
+    );
+}
+
+#[tokio::test]
+async fn bug_list_json_without_fields_does_not_warn() {
+    // --json with no field selection: no value-blanking warning (F1).
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "summary": "Test bug", "status": "NEW"}]
+        })))
+        .mount(&mock)
+        .await;
+
+    let action = empty_list_action();
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+    assert!(result.is_ok(), "json list succeeds: {result:?}");
+    assert!(
+        __io.err_str().is_empty(),
+        "no warning without a field selection: {:?}",
+        __io.err_str()
+    );
 }
 
 #[tokio::test]

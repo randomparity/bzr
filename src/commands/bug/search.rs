@@ -1,8 +1,6 @@
 use crate::cli::BugAction;
 use crate::error::Result;
-use crate::output::resources::bug::{
-    canonical_field_list, validate_table_columns, write_bugs, ColumnSpec,
-};
+use crate::output::resources::bug::{canonical_field_list, write_bugs, ColumnSpec};
 use crate::output::resources::query::write_query_saved;
 use crate::output::writers::Writers;
 use crate::types::{ApiMode, OutputFormat, Overrides, SavedQuery, SearchParams};
@@ -78,9 +76,6 @@ pub(super) async fn handle(
         include: fields.as_deref(),
         exclude: exclude_fields.as_deref(),
     };
-    if format == OutputFormat::Table {
-        validate_table_columns(spec)?;
-    }
 
     let (client, params, save_info) = if let Some(url_str) = from_url {
         let config = crate::config::Config::load()?;

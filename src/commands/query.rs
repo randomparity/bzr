@@ -7,7 +7,7 @@ use crate::cli::QueryAction;
 use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::output::resources::bug::{
-    canonical_field_list, validate_table_columns, write_bugs, ColumnSpec,
+    canonical_field_list, validate_table_columns, warn_json_field_selection, write_bugs, ColumnSpec,
 };
 use crate::output::resources::query::{write_query_detail, write_query_list, write_query_saved};
 use crate::output::writers::Writers;
@@ -249,8 +249,9 @@ async fn handle_run(
         include: params.include_fields.as_deref(),
         exclude: params.exclude_fields.as_deref(),
     };
-    if format == OutputFormat::Table {
-        validate_table_columns(spec)?;
+    match format {
+        OutputFormat::Table => validate_table_columns(spec)?,
+        OutputFormat::Json => warn_json_field_selection(spec, w.err),
     }
 
     let client = super::shared::connect_and_configure(effective_server, api).await?;

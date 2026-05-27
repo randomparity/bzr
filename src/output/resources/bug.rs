@@ -303,6 +303,21 @@ pub fn validate_table_columns(spec: ColumnSpec<'_>) -> crate::error::Result<()> 
     Ok(())
 }
 
+/// Warn that in JSON output `--fields`/`--exclude-fields` restricts which
+/// fields are *fetched*, not which are emitted: every key is still present,
+/// but unselected fields serialize as null/empty, not their real values.
+/// No-op when no field selection is active.
+pub fn warn_json_field_selection<E: Write + ?Sized>(spec: ColumnSpec<'_>, err: &mut E) {
+    if spec.include.is_some() || spec.exclude.is_some() {
+        let _ = writeln!(
+            err,
+            "warning: in --json output, --fields/--exclude-fields selects which fields are \
+             fetched, not which are shown; unselected fields are returned as null/empty, \
+             not their real values"
+        );
+    }
+}
+
 /// Whether a detail-view field should render given `spec`. With no include
 /// list, every field shows (minus excludes). Tokens are matched against the
 /// column registry so `assignee`/`assigned_to` etc. are equivalent. Fields

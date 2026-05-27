@@ -685,6 +685,47 @@ fn validate_table_columns_ok_for_all_blank_include() {
     assert!(validate_table_columns(spec).is_ok());
 }
 
+// ── warn_json_field_selection (F1) ───────────────────────────────
+
+fn capture_json_warning(spec: ColumnSpec<'_>) -> String {
+    let mut err = Vec::new();
+    warn_json_field_selection(spec, &mut err);
+    String::from_utf8(err).unwrap()
+}
+
+#[test]
+fn warn_json_field_selection_warns_for_include() {
+    let warning = capture_json_warning(ColumnSpec {
+        include: Some("summary"),
+        exclude: None,
+    });
+    assert!(
+        warning.contains("null/empty"),
+        "warns about value-blanking: {warning:?}"
+    );
+}
+
+#[test]
+fn warn_json_field_selection_warns_for_exclude() {
+    let warning = capture_json_warning(ColumnSpec {
+        include: None,
+        exclude: Some("status"),
+    });
+    assert!(
+        warning.contains("null/empty"),
+        "warns about value-blanking: {warning:?}"
+    );
+}
+
+#[test]
+fn warn_json_field_selection_silent_without_selection() {
+    let warning = capture_json_warning(ColumnSpec::default());
+    assert!(
+        warning.is_empty(),
+        "no warning when no field selection is active: {warning:?}"
+    );
+}
+
 #[test]
 fn write_bugs_partial_unknown_warns_with_new_wording_and_shows_known() {
     let bugs = vec![make_bug(1, "summary text", "NEW")];

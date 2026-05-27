@@ -1,9 +1,7 @@
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
-use crate::output::resources::bug::{
-    canonical_field_list, validate_table_columns, write_bugs, ColumnSpec,
-};
+use crate::output::resources::bug::{canonical_field_list, write_bugs, ColumnSpec};
 use crate::output::writers::Writers;
 use crate::types::{OutputFormat, SearchParams};
 
@@ -30,9 +28,6 @@ pub(super) async fn handle(
         include: fields.as_deref(),
         exclude: exclude_fields.as_deref(),
     };
-    if format == OutputFormat::Table {
-        validate_table_columns(spec)?;
-    }
 
     let whoami = client.whoami().await?;
     let email = whoami.name;

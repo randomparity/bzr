@@ -23,10 +23,11 @@ pub enum BugAction {
     /// large values may exceed the server's max-results setting and
     /// return a truncated list. `--fields` and `--exclude-fields` control
     /// which fields are requested from the server; in table output they
-    /// select and remove columns (in the given order), while `--json`
-    /// always emits the full bug object. Fields with no table column
-    /// (e.g. custom `cf_*` fields) are skipped with a warning in table
-    /// mode and are not shown in any output mode.
+    /// select and remove columns (in the given order). Under `--json` all
+    /// keys are still emitted, but unselected fields come back null/empty,
+    /// not their real values (a warning is printed). Fields with no table
+    /// column (e.g. custom `cf_*` fields) are skipped with a warning in
+    /// table mode.
     ///
     /// `--created-since` / `--changed-since` filter by Bugzilla's
     /// `creation_time` / `last_change_time` fields. Both accept ISO
@@ -88,13 +89,14 @@ pub enum BugAction {
         /// Max number of results
         #[arg(long, default_value = "50")]
         limit: u32,
-        /// Fields to request from the server (comma-separated). In table
-        /// output, selects which columns to show; --json always emits the
-        /// full bug object.
+        /// Fields to request from the server (comma-separated). Table:
+        /// selects which columns to show. --json: all keys are emitted, but
+        /// unselected fields come back null/empty, not their real values.
         #[arg(long)]
         fields: Option<String>,
-        /// Fields to drop from the server request (comma-separated). In
-        /// table output, removes those columns.
+        /// Fields to drop from the server request (comma-separated). Table:
+        /// removes those columns. --json: all keys are still emitted, but
+        /// dropped fields come back null/empty, not their real values.
         #[arg(long)]
         exclude_fields: Option<String>,
         /// Filter to bugs created at or after this date.
@@ -182,13 +184,14 @@ pub enum BugAction {
         /// security) — those always bail.
         #[arg(long)]
         permissive: bool,
-        /// Fields to request from the server (comma-separated). In table
-        /// output, selects which detail rows to show; --json always emits
-        /// the full bug object.
+        /// Fields to request from the server (comma-separated). Table:
+        /// selects which detail rows to show. --json: all keys are emitted,
+        /// but unselected fields come back null/empty, not their real values.
         #[arg(long)]
         fields: Option<String>,
-        /// Fields to drop from the server request (comma-separated). In
-        /// table output, removes those detail rows.
+        /// Fields to drop from the server request (comma-separated). Table:
+        /// removes those detail rows. --json: all keys are still emitted, but
+        /// dropped fields come back null/empty, not their real values.
         #[arg(long)]
         exclude_fields: Option<String>,
     },
@@ -258,13 +261,14 @@ pub enum BugAction {
         /// Max number of results (default: 50)
         #[arg(long)]
         limit: Option<u32>,
-        /// Fields to request from the server (comma-separated). In table
-        /// output, selects which columns to show; --json always emits the
-        /// full bug object.
+        /// Fields to request from the server (comma-separated). Table:
+        /// selects which columns to show. --json: all keys are emitted, but
+        /// unselected fields come back null/empty, not their real values.
         #[arg(long)]
         fields: Option<String>,
-        /// Fields to drop from the server request (comma-separated). In
-        /// table output, removes those columns.
+        /// Fields to drop from the server request (comma-separated). Table:
+        /// removes those columns. --json: all keys are still emitted, but
+        /// dropped fields come back null/empty, not their real values.
         #[arg(long)]
         exclude_fields: Option<String>,
     },
@@ -455,13 +459,14 @@ pub enum BugAction {
         /// the limit applies to the single active category.
         #[arg(long, default_value = "50")]
         limit: u32,
-        /// Fields to request from the server (comma-separated). In table
-        /// output, selects which columns to show; --json always emits the
-        /// full bug object.
+        /// Fields to request from the server (comma-separated). Table:
+        /// selects which columns to show. --json: all keys are emitted, but
+        /// unselected fields come back null/empty, not their real values.
         #[arg(long)]
         fields: Option<String>,
-        /// Fields to drop from the server request (comma-separated). In
-        /// table output, removes those columns.
+        /// Fields to drop from the server request (comma-separated). Table:
+        /// removes those columns. --json: all keys are still emitted, but
+        /// dropped fields come back null/empty, not their real values.
         #[arg(long)]
         exclude_fields: Option<String>,
     },
