@@ -145,7 +145,7 @@ fn write_bugs_json_via_write() {
 
 #[test]
 fn write_bugs_fields_selects_only_requested_columns() {
-    let bugs = vec![make_bug(217559, "kernel panic on boot", "ASSIGNED")];
+    let bugs = vec![make_bug(217_559, "kernel panic on boot", "ASSIGNED")];
     let spec = ColumnSpec {
         include: Some("id,priority"),
         exclude: None,
@@ -161,7 +161,7 @@ fn write_bugs_fields_selects_only_requested_columns() {
 
 #[test]
 fn write_bugs_fields_adds_non_default_columns_populated() {
-    let bugs = vec![make_bug(218034, "LPM crash", "WORKING")];
+    let bugs = vec![make_bug(218_034, "LPM crash", "WORKING")];
     let spec = ColumnSpec {
         include: Some("id,priority,severity,status,product,summary"),
         exclude: None,

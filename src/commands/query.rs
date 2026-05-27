@@ -241,6 +241,8 @@ async fn handle_run(
 
     let client = super::shared::connect_and_configure(effective_server, api).await?;
     let bugs = client.search_bugs(&params).await?;
+    // Source columns from the resolved params (saved-query fields + CLI
+    // overrides), not the raw flags, so a stored field selection is honored.
     let spec = ColumnSpec {
         include: params.include_fields.as_deref(),
         exclude: params.exclude_fields.as_deref(),
