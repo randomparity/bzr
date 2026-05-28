@@ -2637,3 +2637,48 @@ async fn e2e_multi_bug_view_json_trims_bugs_keeps_wrapper() {
         "failed wrapper key present and empty"
     );
 }
+
+/// End-to-end `--exclude-fields id --json` contract: the CLI drops `id` from
+/// the output object, yet the bug still deserializes because `force_id_fields`
+/// keeps `id` on the wire (the lone `id` exclude collapses to `None`, so no
+/// `exclude_fields` query param is sent). The mock is gated on
+/// `query_param_is_missing("exclude_fields")`, so a regression that forwarded
+/// `exclude_fields=id` would miss the matcher → 404 → this test fails.
+#[tokio::test]
+async fn e2e_bug_list_json_exclude_id_drops_key_but_parses() {
+    use wiremock::matchers::query_param_is_missing;
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param_is_missing("exclude_fields"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "summary": "keep me", "status": "NEW"}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let (result, out, _err) = dispatch_cli_with_io(&[
+        "bzr",
+        "--server",
+        "test",
+        "--json",
+        "bug",
+        "list",
+        "--product",
+        "Firefox",
+        "--exclude-fields",
+        "id",
+    ])
+    .await;
+
+    assert!(
+        result.is_ok(),
+        "exclude id should parse and succeed: {result:?}"
+    );
+    let parsed = serde_json::from_str::<serde_json::Value>(out.trim()).unwrap();
+    let keys = json_keys(&parsed[0]);
+    assert!(!keys.contains(&"id"), "id dropped from output:\n{out}");
+    assert_eq!(parsed[0]["summary"], "keep me", "summary retained:\n{out}");
+}

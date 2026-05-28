@@ -37,6 +37,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and keeps the other fields. `bug view` is exempt in both modes, since a
   sparse or empty single-bug object is a coherent result. Unknown `--fields`
   tokens (typos, custom `cf_*` fields) are reported once on stderr. (#206)
+- `bzr bug view --json` stays lenient where the list-style commands now exit
+  7: a selection that resolves to no known fields (an unknown/mistyped
+  `--fields`, or an `--exclude-fields` covering everything) emits an empty
+  `{}` object and exits 0 with a one-line stderr warning, rather than failing.
+  A `{}` plus a zero exit can therefore signal a misspelled field name —
+  consistent with `bug view` being exempt from the zero-field error in table
+  mode too. (#206)
+
+### Changed
+
+- Enabling `serde_json`'s `preserve_order` feature (needed for #206 bug-field
+  trimming) is crate-wide: JSON values built via the `json!` macro now
+  serialize keys in insertion order rather than alphabetically. The
+  user-visible effect is cosmetic key ordering — the error envelope
+  (`{"error":{"type",…,"message",…,"exit_code"}}`) and the `query`/`template`
+  `--json` result objects emit their keys in a different order. JSON key order
+  is not a contract for spec-compliant consumers; typed result structs (e.g.
+  `ActionResult`) are unaffected, since they already serialize in declaration
+  order. (#206)
 
 ## [0.4.0] - 2026-05-09
 

@@ -41,7 +41,13 @@ nulled.
    is in table mode.** A sparse or empty single-bug object (`{}`) is a
    coherent result, matching the existing detail-view exemption. To keep a
    typo from silently yielding `{}`, `bug view --json` still **warns** about
-   unknown `--fields` tokens (it just doesn't exit 7).
+   unknown `--fields` tokens (it just doesn't exit 7). Accepted trade-off:
+   this makes the exit code for an identical typo diverge by command —
+   `bug view --json --fields <typo>` exits 0 with `{}` while
+   `bug list`/`my`/`search`/`query run` exit 7. The asymmetry is the
+   deliberate price of `view` staying exempt; it is documented in the
+   `bug view` help and `docs/bzr-cli.md` so a `{}`-plus-exit-0 result is
+   discoverable as a possible misspelling.
 4. **`preserve_order` for `serde_json`.** Enable the feature so projected
    objects keep struct-declaration order rather than going alphabetical,
    keeping trimmed output consistent with the existing full-object output.

@@ -165,6 +165,14 @@ pub enum BugAction {
     /// list, so there the selection only controls which detail rows (table)
     /// or object keys (JSON) appear, not what is sent over the wire.
     ///
+    /// Under `--json`, `bug view` stays lenient when the selection resolves
+    /// to nothing known: an unknown or mistyped `--fields`, or an
+    /// `--exclude-fields` covering every field, yields an empty `{}` object
+    /// and exits 0, with a one-line warning on stderr. `bug list`, `my`,
+    /// `search`, and `query run` instead exit 7 in that case. So a `{}`
+    /// object plus a zero exit can mean a field name was misspelled — check
+    /// stderr.
+    ///
     /// Examples:
     ///
     ///   bzr bug view 12345

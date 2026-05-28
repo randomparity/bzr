@@ -285,6 +285,14 @@ bzr bug view my-alias --fields id,summary,assigned_to
 - **Multi-ID, table:** one detail block per bug in argument order, separated by a `─` divider line. Inaccessible bugs (under `--permissive`) appear as `Bug #N — UNAVAILABLE` blocks.
 - **Multi-ID, `--json`:** wrapped object `{"bugs": [...], "failed": [...]}`. The `failed` array is always present (empty when there are no failures) so `jq` consumers can rely on `.bugs[]` regardless of whether `--permissive` was passed.
 
+> **Note:** Under `--json`, `bzr bug view` stays lenient when the field
+> selection resolves to nothing known — an unknown/mistyped `--fields`, or an
+> `--exclude-fields` covering every field — emitting an empty `{}` object and
+> exiting 0 with a one-line stderr warning. The list-style commands
+> (`bzr bug list`, `bzr bug my`, `bzr bug search`, `query run`) instead exit 7
+> for the same mistake. A `{}` result with a zero exit can therefore mean a
+> field name was misspelled; check stderr.
+
 ### `bzr bug search`
 
 Search bugs using Bugzilla's quicksearch syntax, or execute a search from a Bugzilla buglist.cgi URL.
