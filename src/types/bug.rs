@@ -602,6 +602,21 @@ pub struct UpdateBugParams {
     pub comment_is_private: std::collections::HashMap<u64, bool>,
 }
 
+impl UpdateBugParams {
+    /// True when no field would be sent to the server — i.e. the params
+    /// serialize to an empty JSON object. Every field declares
+    /// `skip_serializing_if`, so serialization is the single source of
+    /// truth for "no changes requested" and stays correct as fields are
+    /// added.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        serde_json::to_value(self)
+            .ok()
+            .and_then(|v| v.as_object().map(serde_json::Map::is_empty))
+            .unwrap_or(false)
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct HistoryEntry {
