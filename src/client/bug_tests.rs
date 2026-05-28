@@ -1075,3 +1075,177 @@ async fn search_bugs_negation_url_uses_notsubstring() {
     };
     client.search_bugs(&params).await.unwrap();
 }
+
+// ── force_id_fields (F1) ─────────────────────────────────────────
+
+#[test]
+fn force_id_fields_prepends_id_to_idless_include() {
+    let (inc, exc) = force_id_fields(Some("summary,status"), None);
+    assert_eq!(inc.as_deref(), Some("id,summary,status"));
+    assert_eq!(exc, None);
+}
+
+#[test]
+fn force_id_fields_leaves_include_with_id_unchanged() {
+    let (inc, _) = force_id_fields(Some("summary,id,status"), None);
+    assert_eq!(inc.as_deref(), Some("summary,id,status"));
+}
+
+#[test]
+fn force_id_fields_matches_id_case_insensitively() {
+    let (inc, _) = force_id_fields(Some("summary,ID"), None);
+    assert_eq!(inc.as_deref(), Some("summary,ID"));
+}
+
+#[test]
+fn force_id_fields_trims_tokens_when_detecting_id() {
+    let (inc, _) = force_id_fields(Some(" id , summary "), None);
+    assert_eq!(inc.as_deref(), Some(" id , summary "));
+}
+
+#[test]
+fn force_id_fields_include_none_stays_none() {
+    let (inc, _) = force_id_fields(None, None);
+    assert_eq!(inc, None);
+}
+
+#[test]
+fn force_id_fields_strips_id_from_exclude() {
+    let (_, exc) = force_id_fields(None, Some("id,status"));
+    assert_eq!(exc.as_deref(), Some("status"));
+}
+
+#[test]
+fn force_id_fields_exclude_only_id_becomes_none() {
+    let (_, exc) = force_id_fields(None, Some("id"));
+    assert_eq!(exc, None);
+}
+
+#[test]
+fn force_id_fields_exclude_without_id_unchanged() {
+    let (_, exc) = force_id_fields(None, Some("status,priority"));
+    assert_eq!(exc.as_deref(), Some("status,priority"));
+}
+
+// ── F1: id is always fetched at the client entry points ──────────
+
+#[tokio::test]
+async fn search_bugs_prepends_id_to_idless_include_fields() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("include_fields", "id,summary,status"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 7, "summary": "s", "status": "NEW"}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        include_fields: Some("summary,status".into()),
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert_eq!(bugs.len(), 1);
+}
+
+#[tokio::test]
+async fn search_bugs_strips_id_from_exclude_fields() {
+    use wiremock::matchers::query_param_is_missing;
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param_is_missing("exclude_fields"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        exclude_fields: Some("id".into()),
+        ..Default::default()
+    };
+    client.search_bugs(&params).await.unwrap();
+}
+
+#[tokio::test]
+async fn get_bug_prepends_id_to_idless_include_fields() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .and(query_param("include_fields", "id,summary,status"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({"bugs": [{"id": 1, "summary": "test", "status": "NEW"}]}),
+        ))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let bug = client
+        .get_bug("1", Some("summary,status"), None)
+        .await
+        .unwrap();
+    assert_eq!(bug.id, 1);
+}
+
+#[tokio::test]
+async fn get_bug_via_search_fallback_carries_id() {
+    let mock = MockServer::start().await;
+    // Direct endpoint crashes with 100500, forcing the search fallback.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "error": true,
+            "code": BUGZILLA_INTERNAL_ERROR,
+            "message": "Extension crash"
+        })))
+        .mount(&mock)
+        .await;
+    // The search fallback must request id even though the caller omitted it.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("id", "1"))
+        .and(query_param("include_fields", "id,summary,status"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({"bugs": [{"id": 1, "summary": "test", "status": "NEW"}]}),
+        ))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let bug = client
+        .get_bug("1", Some("summary,status"), None)
+        .await
+        .unwrap();
+    assert_eq!(bug.id, 1);
+}
+
+#[tokio::test]
+async fn xmlrpc_search_idless_include_fields_carries_id() {
+    use crate::client::test_helpers::test_client_xmlrpc;
+    use wiremock::matchers::body_string_contains;
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<name>include_fields</name>"))
+        .and(body_string_contains("<string>id</string>"))
+        .and(body_string_contains("<string>summary</string>"))
+        .and(body_string_contains("<string>status</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(5, "x")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_xmlrpc(&mock.uri());
+    let params = SearchParams {
+        include_fields: Some("summary,status".into()),
+        ..Default::default()
+    };
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert_eq!(bugs.len(), 1);
+}

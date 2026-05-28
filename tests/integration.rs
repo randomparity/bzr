@@ -1962,6 +1962,29 @@ async fn dispatch_cli_with_output(args: &[&str]) -> (bzr::error::Result<()>, Str
     (result, io.out_str().to_string())
 }
 
+/// Like [`dispatch_cli_with_output`] but also returns captured stderr, for
+/// tests that assert on warnings emitted to stderr.
+async fn dispatch_cli_with_io(args: &[&str]) -> (bzr::error::Result<()>, String, String) {
+    let cli = match bzr::cli::Cli::try_parse_from(args) {
+        Ok(c) => c,
+        Err(e) => {
+            return (
+                Err(bzr::error::BzrError::InputValidation(e.to_string())),
+                String::new(),
+                String::new(),
+            );
+        }
+    };
+    let format = if cli.json {
+        bzr::types::OutputFormat::Json
+    } else {
+        cli.output.unwrap_or(bzr::types::OutputFormat::Json)
+    };
+    let mut io = bzr::test_helpers::CapturedIo::new();
+    let result = bzr::dispatch(&cli, format, &mut io.writers()).await;
+    (result, io.out_str().to_string(), io.err_str().to_string())
+}
+
 #[tokio::test]
 async fn e2e_bug_list_via_cli_args() {
     let (_lock, mock, _tmp) = setup_test_env().await;
@@ -2394,4 +2417,268 @@ async fn bug_list_issue_158_mixed_positive_and_negation_reaches_wire() {
     // every query-param matcher above; if any operator or value were
     // wrong, the matcher would miss and the response would be a 404,
     // causing `result` to be `Err`.
+}
+
+/// Guards the #206 `--json` prose against misleading phrasings. `--json` now
+/// trims output to the selected fields, but a few specific phrases stay
+/// forbidden: the older marketing-style "trims the payload" wordings, and any
+/// claim that custom `cf_*` fields become visible via `--json` ("to see them")
+/// — they can't, since `Bug` is a fixed struct with no `#[serde(flatten)]`.
+/// None of these may reappear in the CLI help or the manual.
+#[test]
+fn cli_and_docs_avoid_misleading_trim_phrasing() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let forbidden = [
+        "trims the payload",
+        "trim the response payload",
+        "trims JSON output",
+        "to see them",
+        "JSON: fields to return",
+        "JSON: fields to exclude",
+    ];
+
+    let mut files = vec![root.join("docs/bzr-cli.md")];
+    for entry in std::fs::read_dir(root.join("src/cli")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_some_and(|e| e == "rs") {
+            files.push(path);
+        }
+    }
+
+    for file in &files {
+        let content = std::fs::read_to_string(file).unwrap();
+        for phrase in forbidden {
+            assert!(
+                !content.contains(phrase),
+                "{}: remove misleading phrase {phrase:?}",
+                file.display()
+            );
+        }
+    }
+}
+
+// ── #206 --json field trimming ───────────────────────────────────────
+
+fn json_keys(value: &serde_json::Value) -> Vec<&str> {
+    value
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect()
+}
+
+/// An all-unknown `--fields` value under `--json` exits 7 before any network
+/// I/O — measured against the full field universe, not the table defaults.
+#[tokio::test]
+async fn e2e_bug_list_json_all_unknown_fields_exits_7() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let (result, _out, _err) = dispatch_cli_with_io(&[
+        "bzr",
+        "--server",
+        "test",
+        "--json",
+        "bug",
+        "list",
+        "--product",
+        "Firefox",
+        "--fields",
+        "cf_nope,cf_alsonope",
+    ])
+    .await;
+
+    let err = result.unwrap_err();
+    assert_eq!(
+        err.exit_code(),
+        7,
+        "all-unknown --fields under --json exits 7"
+    );
+}
+
+/// A partial-unknown selection warns once on stderr and projects the array to
+/// the known fields.
+#[tokio::test]
+async fn e2e_bug_list_json_partial_unknown_warns_and_projects() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 7, "summary": "boom", "status": "NEW"}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let (result, out, err) = dispatch_cli_with_io(&[
+        "bzr",
+        "--server",
+        "test",
+        "--json",
+        "bug",
+        "list",
+        "--product",
+        "Firefox",
+        "--fields",
+        "summary,cf_x",
+    ])
+    .await;
+
+    assert!(result.is_ok(), "partial-unknown should succeed: {result:?}");
+    assert!(
+        err.contains("ignoring unknown field(s): cf_x"),
+        "stderr warning: {err:?}"
+    );
+    let parsed = serde_json::from_str::<serde_json::Value>(out.trim()).unwrap();
+    assert_eq!(
+        json_keys(&parsed[0]),
+        vec!["summary"],
+        "projected to summary only:\n{out}"
+    );
+}
+
+/// `bug view --json` with an all-unknown field stays lenient: exit 0, an empty
+/// `{}` object, and a stderr warning so the typo isn't silent.
+#[tokio::test]
+async fn e2e_bug_view_json_all_unknown_is_lenient_with_warning() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 42, "summary": "view", "status": "NEW"}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let (result, out, err) = dispatch_cli_with_io(&[
+        "bzr", "--server", "test", "--json", "bug", "view", "42", "--fields", "sumary",
+    ])
+    .await;
+
+    assert!(result.is_ok(), "view stays lenient: {result:?}");
+    assert!(
+        err.contains("ignoring unknown field(s): sumary"),
+        "stderr warning: {err:?}"
+    );
+    let parsed = serde_json::from_str::<serde_json::Value>(out.trim()).unwrap();
+    assert!(
+        parsed.as_object().unwrap().is_empty(),
+        "empty object for all-unknown view:\n{out}"
+    );
+}
+
+/// Single-ID `bug view --json --fields` trims the bare object to the selected
+/// fields.
+#[tokio::test]
+async fn e2e_bug_view_json_single_trims_object() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 42, "summary": "view", "status": "NEW"}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let (result, out, _err) = dispatch_cli_with_io(&[
+        "bzr", "--server", "test", "--json", "bug", "view", "42", "--fields", "summary",
+    ])
+    .await;
+
+    assert!(result.is_ok(), "single view: {result:?}");
+    let parsed = serde_json::from_str::<serde_json::Value>(out.trim()).unwrap();
+    assert_eq!(
+        json_keys(&parsed),
+        vec!["summary"],
+        "trimmed object:\n{out}"
+    );
+}
+
+/// Multi-ID `bug view --json --fields summary` trims each entry in `bugs`
+/// while the `{"bugs": [...], "failed": [...]}` wrapper stays intact.
+#[tokio::test]
+async fn e2e_multi_bug_view_json_trims_bugs_keeps_wrapper() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "summary": "alpha", "status": "NEW"}]
+        })))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/2"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 2, "summary": "beta", "status": "NEW"}]
+        })))
+        .mount(&mock)
+        .await;
+
+    let (result, out, _err) = dispatch_cli_with_io(&[
+        "bzr", "--server", "test", "--json", "bug", "view", "1", "2", "--fields", "summary",
+    ])
+    .await;
+
+    assert!(result.is_ok(), "multi view: {result:?}");
+    let parsed = serde_json::from_str::<serde_json::Value>(out.trim()).unwrap();
+    let bugs = parsed["bugs"].as_array().unwrap();
+    assert_eq!(bugs.len(), 2);
+    for b in bugs {
+        assert_eq!(json_keys(b), vec!["summary"], "each bug trimmed to summary");
+    }
+    assert!(
+        parsed["failed"].as_array().unwrap().is_empty(),
+        "failed wrapper key present and empty"
+    );
+}
+
+/// End-to-end `--exclude-fields id --json` contract: the CLI drops `id` from
+/// the output object, yet the bug still deserializes because `force_id_fields`
+/// keeps `id` on the wire (the lone `id` exclude collapses to `None`, so no
+/// `exclude_fields` query param is sent). The mock is gated on
+/// `query_param_is_missing("exclude_fields")`, so a regression that forwarded
+/// `exclude_fields=id` would miss the matcher → 404 → this test fails.
+#[tokio::test]
+async fn e2e_bug_list_json_exclude_id_drops_key_but_parses() {
+    use wiremock::matchers::query_param_is_missing;
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param_is_missing("exclude_fields"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "summary": "keep me", "status": "NEW"}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let (result, out, _err) = dispatch_cli_with_io(&[
+        "bzr",
+        "--server",
+        "test",
+        "--json",
+        "bug",
+        "list",
+        "--product",
+        "Firefox",
+        "--exclude-fields",
+        "id",
+    ])
+    .await;
+
+    assert!(
+        result.is_ok(),
+        "exclude id should parse and succeed: {result:?}"
+    );
+    let parsed = serde_json::from_str::<serde_json::Value>(out.trim()).unwrap();
+    let keys = json_keys(&parsed[0]);
+    assert!(!keys.contains(&"id"), "id dropped from output:\n{out}");
+    assert_eq!(parsed[0]["summary"], "keep me", "summary retained:\n{out}");
 }

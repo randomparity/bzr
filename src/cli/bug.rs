@@ -21,8 +21,14 @@ pub enum BugAction {
     ///
     /// `--limit` defaults to 50; raise it for broader scans, but very
     /// large values may exceed the server's max-results setting and
-    /// return a truncated list. Use `--fields` / `--exclude-fields` to
-    /// trim the response payload.
+    /// return a truncated list. `--fields` and `--exclude-fields` control
+    /// which fields are requested from the server; in table output they
+    /// select and remove columns (in the given order). Under `--json` the
+    /// output object is trimmed to the selected fields (gh-style):
+    /// `--fields summary` returns `{"summary": ...}` with no `id` unless you
+    /// ask for it, and `--exclude-fields id` drops `id`. With no selection the
+    /// full object is returned. Unknown fields (typos, custom `cf_*` fields
+    /// that have no table column) are skipped with a warning.
     ///
     /// `--created-since` / `--changed-since` filter by Bugzilla's
     /// `creation_time` / `last_change_time` fields. Both accept ISO
@@ -84,10 +90,14 @@ pub enum BugAction {
         /// Max number of results
         #[arg(long, default_value = "50")]
         limit: u32,
-        /// Only return these fields (comma-separated)
+        /// Fields to request from the server (comma-separated). Table:
+        /// selects which columns to show (in order). --json: the JSON object
+        /// contains only the selected fields (id is included only if requested).
         #[arg(long)]
         fields: Option<String>,
-        /// Exclude these fields (comma-separated)
+        /// Fields to drop from the server request (comma-separated). Table:
+        /// removes those columns. --json: the JSON object omits the dropped
+        /// fields (including id, if excluded).
         #[arg(long)]
         exclude_fields: Option<String>,
         /// Filter to bugs created at or after this date.
@@ -148,7 +158,20 @@ pub enum BugAction {
     /// Session-wide failures (transport, auth, security) still bail.
     ///
     /// Use `--fields` to fetch only specific fields (faster on large
-    /// bugs); `--exclude-fields` is the inverse.
+    /// bugs over REST); `--exclude-fields` is the inverse. Under `--json`
+    /// the returned object is trimmed to the selected fields (gh-style) on
+    /// every transport, since trimming happens client-side after the fetch.
+    /// On XML-RPC servers the full bug is fetched regardless of the field
+    /// list, so there the selection only controls which detail rows (table)
+    /// or object keys (JSON) appear, not what is sent over the wire.
+    ///
+    /// Under `--json`, `bug view` stays lenient when the selection resolves
+    /// to nothing known: an unknown or mistyped `--fields`, or an
+    /// `--exclude-fields` covering every field, yields an empty `{}` object
+    /// and exits 0, with a one-line warning on stderr. `bug list`, `my`,
+    /// `search`, and `query run` instead exit 7 in that case. So a `{}`
+    /// object plus a zero exit can mean a field name was misspelled — check
+    /// stderr.
     ///
     /// Examples:
     ///
@@ -175,10 +198,14 @@ pub enum BugAction {
         /// security) — those always bail.
         #[arg(long)]
         permissive: bool,
-        /// Only return these fields (comma-separated)
+        /// Fields to request from the server (comma-separated). Table:
+        /// selects which detail rows to show. --json: the JSON object contains
+        /// only the selected fields (id is included only if requested).
         #[arg(long)]
         fields: Option<String>,
-        /// Exclude these fields (comma-separated)
+        /// Fields to drop from the server request (comma-separated). Table:
+        /// removes those detail rows. --json: the JSON object omits the
+        /// dropped fields (including id, if excluded).
         #[arg(long)]
         exclude_fields: Option<String>,
     },
@@ -248,10 +275,14 @@ pub enum BugAction {
         /// Max number of results (default: 50)
         #[arg(long)]
         limit: Option<u32>,
-        /// Only return these fields (comma-separated)
+        /// Fields to request from the server (comma-separated). Table:
+        /// selects which columns to show (in order). --json: the JSON object
+        /// contains only the selected fields (id is included only if requested).
         #[arg(long)]
         fields: Option<String>,
-        /// Exclude these fields (comma-separated)
+        /// Fields to drop from the server request (comma-separated). Table:
+        /// removes those columns. --json: the JSON object omits the dropped
+        /// fields (including id, if excluded).
         #[arg(long)]
         exclude_fields: Option<String>,
     },
@@ -442,10 +473,14 @@ pub enum BugAction {
         /// the limit applies to the single active category.
         #[arg(long, default_value = "50")]
         limit: u32,
-        /// Only return these fields (comma-separated)
+        /// Fields to request from the server (comma-separated). Table:
+        /// selects which columns to show (in order). --json: the JSON object
+        /// contains only the selected fields (id is included only if requested).
         #[arg(long)]
         fields: Option<String>,
-        /// Exclude these fields (comma-separated)
+        /// Fields to drop from the server request (comma-separated). Table:
+        /// removes those columns. --json: the JSON object omits the dropped
+        /// fields (including id, if excluded).
         #[arg(long)]
         exclude_fields: Option<String>,
     },

@@ -2,7 +2,6 @@
 
 use super::*;
 use crate::types::{Bug, FieldChange, HistoryEntry};
-use tabled::Table;
 
 fn make_bug(id: u64, summary: &str, status: &str) -> Bug {
     Bug {
@@ -54,74 +53,36 @@ fn make_history_entry() -> HistoryEntry {
 }
 
 fn capture_bugs(format: OutputFormat, bugs: &[Bug]) -> String {
-    let mut buf = Vec::new();
-    write_bugs(bugs, format, &mut buf);
-    String::from_utf8(buf).unwrap()
+    capture_bugs_spec(format, bugs, ColumnSpec::default()).0
+}
+
+/// Returns (stdout, stderr) so column-selection tests can assert warnings.
+fn capture_bugs_spec(format: OutputFormat, bugs: &[Bug], spec: ColumnSpec<'_>) -> (String, String) {
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+    write_bugs(bugs, spec, format, &mut out, &mut err);
+    (
+        String::from_utf8(out).unwrap(),
+        String::from_utf8(err).unwrap(),
+    )
 }
 
 fn capture_bug_detail(format: OutputFormat, bug: &Bug) -> String {
     let mut buf = Vec::new();
-    write_bug_detail(bug, format, &mut buf);
+    write_bug_detail(bug, ColumnSpec::default(), format, &mut buf);
     String::from_utf8(buf).unwrap()
+}
+
+fn capture_detail_spec(bug: &Bug, spec: ColumnSpec<'_>) -> String {
+    let mut out = Vec::new();
+    write_bug_detail(bug, spec, OutputFormat::Table, &mut out);
+    String::from_utf8(out).unwrap()
 }
 
 fn capture_history(format: OutputFormat, history: &[HistoryEntry]) -> String {
     let mut buf = Vec::new();
     write_history(history, format, &mut buf);
     String::from_utf8(buf).unwrap()
-}
-
-// ── BugRow conversion ────────────────────────────────────────────
-
-#[test]
-fn bug_row_from_bug_truncates_summary() {
-    let mut bug = make_bug(1, &"x".repeat(100), "NEW");
-    let row = BugRow::from(&bug);
-    assert_eq!(row.summary.chars().count(), 72);
-    assert!(row.summary.ends_with("..."));
-
-    bug.summary = "short".into();
-    let row = BugRow::from(&bug);
-    assert_eq!(row.summary, "short");
-}
-
-#[test]
-fn bug_row_from_bug_shortens_assignee() {
-    let bug = make_bug(1, "test", "NEW");
-    let row = BugRow::from(&bug);
-    assert_eq!(row.assignee, "dev");
-}
-
-#[test]
-fn bug_row_from_bug_missing_fields() {
-    let bug = Bug {
-        id: 1,
-        summary: "minimal".into(),
-        status: "NEW".into(),
-        resolution: None,
-        dupe_of: None,
-        deadline: None,
-        product: None,
-        component: None,
-        version: None,
-        assigned_to: None,
-        priority: None,
-        severity: None,
-        creation_time: None,
-        last_change_time: None,
-        creator: None,
-        url: None,
-        whiteboard: None,
-        keywords: vec![],
-        blocks: vec![],
-        depends_on: vec![],
-        cc: vec![],
-        op_sys: None,
-        rep_platform: None,
-    };
-    let row = BugRow::from(&bug);
-    assert_eq!(row.priority, "");
-    assert_eq!(row.assignee, "");
 }
 
 // ── write_bugs ───────────────────────────────────────────────────
@@ -140,19 +101,6 @@ fn write_bugs_json_one_bug() {
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed[0]["id"], 42);
     assert_eq!(parsed[0]["summary"], "Login broken");
-}
-
-#[test]
-fn write_bugs_table_renders_rows() {
-    let bugs = [make_bug(42, "Login broken", "NEW")];
-    let rows: Vec<BugRow> = bugs.iter().map(BugRow::from).collect();
-    let table = Table::new(rows).to_string();
-    assert!(table.contains("42"));
-    assert!(table.contains("NEW"));
-    assert!(table.contains("Login broken"));
-    assert!(table.contains("ID"));
-    assert!(table.contains("STATUS"));
-    assert!(table.contains("SUMMARY"));
 }
 
 #[test]
@@ -193,6 +141,135 @@ fn write_bugs_json_via_write() {
     assert_eq!(parsed[0]["id"], 99);
     assert_eq!(parsed[0]["summary"], "Crash on startup");
     assert_eq!(parsed[0]["status"], "ASSIGNED");
+}
+
+#[test]
+fn write_bugs_fields_selects_only_requested_columns() {
+    let bugs = vec![make_bug(217_559, "kernel panic on boot", "ASSIGNED")];
+    let spec = ColumnSpec {
+        include: Some("id,priority"),
+        exclude: None,
+    };
+    let (out, err) = capture_bugs_spec(OutputFormat::Table, &bugs, spec);
+    assert!(out.contains("ID"), "ID column present:\n{out}");
+    assert!(out.contains("PRIORITY"), "PRIORITY column present:\n{out}");
+    assert!(!out.contains("STATUS"), "STATUS must be absent:\n{out}");
+    assert!(!out.contains("ASSIGNEE"), "ASSIGNEE must be absent:\n{out}");
+    assert!(!out.contains("SUMMARY"), "SUMMARY must be absent:\n{out}");
+    assert!(err.is_empty(), "no warning for known fields: {err:?}");
+}
+
+#[test]
+fn write_bugs_fields_adds_non_default_columns_populated() {
+    let bugs = vec![make_bug(218_034, "LPM crash", "WORKING")];
+    let spec = ColumnSpec {
+        include: Some("id,priority,severity,status,product,summary"),
+        exclude: None,
+    };
+    let (out, _err) = capture_bugs_spec(OutputFormat::Table, &bugs, spec);
+    for header in ["ID", "PRIORITY", "SEVERITY", "STATUS", "PRODUCT", "SUMMARY"] {
+        assert!(out.contains(header), "{header} column present:\n{out}");
+    }
+    // make_bug populates severity=major and product=TestProduct.
+    assert!(out.contains("major"), "severity value rendered:\n{out}");
+    assert!(
+        out.contains("TestProduct"),
+        "product value rendered:\n{out}"
+    );
+}
+
+#[test]
+fn write_bugs_no_fields_keeps_default_columns() {
+    let bugs = vec![make_bug(1, "summary text", "NEW")];
+    let out = capture_bugs(OutputFormat::Table, &bugs);
+    for header in ["ID", "STATUS", "PRIORITY", "ASSIGNEE", "SUMMARY"] {
+        assert!(out.contains(header), "default header {header}:\n{out}");
+    }
+}
+
+#[test]
+fn write_bugs_exclude_fields_drops_default_column() {
+    let bugs = vec![make_bug(1, "summary text", "NEW")];
+    let spec = ColumnSpec {
+        include: None,
+        exclude: Some("summary"),
+    };
+    let (out, _err) = capture_bugs_spec(OutputFormat::Table, &bugs, spec);
+    assert!(out.contains("ID"), "ID retained:\n{out}");
+    assert!(!out.contains("SUMMARY"), "SUMMARY excluded:\n{out}");
+}
+
+#[test]
+fn write_bugs_unknown_field_warns_and_falls_back() {
+    let bugs = vec![make_bug(1, "summary text", "NEW")];
+    let spec = ColumnSpec {
+        include: Some("cf_custom_thing"),
+        exclude: None,
+    };
+    let (out, err) = capture_bugs_spec(OutputFormat::Table, &bugs, spec);
+    assert!(
+        err.contains("cf_custom_thing"),
+        "warns about unknown field: {err:?}"
+    );
+    // All requested columns were unknown -> fall back to the default set.
+    assert!(
+        out.contains("ID") && out.contains("SUMMARY"),
+        "fallback default columns:\n{out}"
+    );
+}
+
+#[test]
+fn write_bugs_json_trims_to_selected_fields() {
+    let bugs = vec![make_bug(42, "x", "NEW")];
+    let spec = ColumnSpec {
+        include: Some("id"),
+        exclude: None,
+    };
+    let (out, _err) = capture_bugs_spec(OutputFormat::Json, &bugs, spec);
+    let parsed: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
+    let keys: Vec<&str> = parsed[0]
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(keys, vec!["id"], "JSON array element trimmed to id:\n{out}");
+}
+
+#[test]
+fn write_bugs_assignee_alias_still_selects_column() {
+    let bugs = vec![make_bug(1, "s", "NEW")];
+    let spec = ColumnSpec {
+        include: Some("id,assignee"),
+        exclude: None,
+    };
+    let (out, err) = capture_bugs_spec(OutputFormat::Table, &bugs, spec);
+    assert!(out.contains("ASSIGNEE"), "alias resolves column:\n{out}");
+    assert!(err.is_empty(), "no warning: {err:?}");
+}
+
+// ── canonical_field_list ─────────────────────────────────────────
+
+#[test]
+fn canonical_field_list_translates_aliases() {
+    let got = canonical_field_list(Some("assignee,updated,created,reporter,platform"));
+    assert_eq!(
+        got.as_deref(),
+        Some("assigned_to,last_change_time,creation_time,creator,rep_platform")
+    );
+}
+
+#[test]
+fn canonical_field_list_passes_through_unknown_and_canonical() {
+    let got = canonical_field_list(Some("id,cf_custom,summary"));
+    assert_eq!(got.as_deref(), Some("id,cf_custom,summary"));
+}
+
+#[test]
+fn canonical_field_list_handles_empty_and_blanks() {
+    assert_eq!(canonical_field_list(None), None);
+    assert_eq!(canonical_field_list(Some("")), None);
+    assert_eq!(canonical_field_list(Some(",, ,")), None);
 }
 
 // ── write_bug_detail ─────────────────────────────────────────────
@@ -285,7 +362,12 @@ fn write_bug_detail_table_shows_dupe_of() {
     };
     let mut out = Vec::new();
 
-    super::write_bug_detail(&bug, crate::types::OutputFormat::Table, &mut out);
+    super::write_bug_detail(
+        &bug,
+        ColumnSpec::default(),
+        crate::types::OutputFormat::Table,
+        &mut out,
+    );
 
     let output = String::from_utf8(out).unwrap();
     assert!(output.contains("Duplicate of"));
@@ -334,6 +416,43 @@ fn write_bug_detail_json_via_write() {
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
     assert_eq!(parsed["id"], 7);
     assert_eq!(parsed["summary"], "Json bug");
+}
+
+#[test]
+fn detail_default_shows_all_present_fields() {
+    let bug = make_bug(7, "boom", "ASSIGNED");
+    let out = capture_detail_spec(&bug, ColumnSpec::default());
+    assert!(out.contains("Status"), "status row present:\n{out}");
+    assert!(out.contains("Priority"), "priority row present:\n{out}");
+    assert!(out.contains("Product"), "product row present:\n{out}");
+}
+
+#[test]
+fn detail_include_limits_rows() {
+    let bug = make_bug(7, "boom", "ASSIGNED");
+    let spec = ColumnSpec {
+        include: Some("id,priority"),
+        exclude: None,
+    };
+    let out = capture_detail_spec(&bug, spec);
+    assert!(out.contains("Priority"), "priority row present:\n{out}");
+    assert!(
+        !out.contains("Status"),
+        "status row hidden when not requested:\n{out}"
+    );
+    assert!(!out.contains("Product"), "product row hidden:\n{out}");
+}
+
+#[test]
+fn detail_exclude_drops_row() {
+    let bug = make_bug(7, "boom", "ASSIGNED");
+    let spec = ColumnSpec {
+        include: None,
+        exclude: Some("priority"),
+    };
+    let out = capture_detail_spec(&bug, spec);
+    assert!(out.contains("Status"), "status retained:\n{out}");
+    assert!(!out.contains("Priority"), "priority excluded:\n{out}");
 }
 
 // ── write_json (pretty) ──────────────────────────────────────────
@@ -455,7 +574,7 @@ fn multi_bug_view_renders_success_blocks_with_dividers() {
         MultiBugRow::Ok(Box::new(sample_bug(3, "third"))),
     ];
     let mut buf = Vec::new();
-    write_multi_bug_view(&rows, &mut buf);
+    write_multi_bug_view(&rows, ColumnSpec::default(), &mut buf);
     let out = String::from_utf8(buf).unwrap();
     assert!(out.contains("Bug #1"));
     assert!(out.contains("Bug #2"));
@@ -472,7 +591,7 @@ fn multi_bug_view_renders_failure_block_with_unavailable_marker() {
         error: "bug not found: 999".into(),
     }];
     let mut buf = Vec::new();
-    write_multi_bug_view(&rows, &mut buf);
+    write_multi_bug_view(&rows, ColumnSpec::default(), &mut buf);
     let out = String::from_utf8(buf).unwrap();
     assert!(out.contains("Bug #999"));
     assert!(out.contains("UNAVAILABLE"));
@@ -484,7 +603,7 @@ fn multi_bug_view_single_row_emits_no_divider() {
     no_color();
     let rows = vec![MultiBugRow::Ok(Box::new(sample_bug(7, "only")))];
     let mut buf = Vec::new();
-    write_multi_bug_view(&rows, &mut buf);
+    write_multi_bug_view(&rows, ColumnSpec::default(), &mut buf);
     let out = String::from_utf8(buf).unwrap();
     let divider = "─".repeat(60);
     assert_eq!(out.matches(&divider).count(), 0);
@@ -502,10 +621,368 @@ fn multi_bug_view_interleaves_success_and_failure_in_order() {
         MultiBugRow::Ok(Box::new(sample_bug(12, "gamma"))),
     ];
     let mut buf = Vec::new();
-    write_multi_bug_view(&rows, &mut buf);
+    write_multi_bug_view(&rows, ColumnSpec::default(), &mut buf);
     let out = String::from_utf8(buf).unwrap();
     let pos_alpha = out.find("Bug #10").unwrap();
     let pos_unavail = out.find("Bug #11").unwrap();
     let pos_gamma = out.find("Bug #12").unwrap();
     assert!(pos_alpha < pos_unavail && pos_unavail < pos_gamma);
+}
+
+// ── validate_table_columns (F2/F3) ───────────────────────────────
+
+#[test]
+fn validate_table_columns_ok_for_default_spec() {
+    assert!(validate_table_columns(ColumnSpec::default()).is_ok());
+}
+
+#[test]
+fn validate_table_columns_ok_for_partial_unknown_include() {
+    let spec = ColumnSpec {
+        include: Some("id,cf_custom"),
+        exclude: None,
+    };
+    assert!(validate_table_columns(spec).is_ok());
+}
+
+#[test]
+fn validate_table_columns_errors_for_all_unknown_include() {
+    let spec = ColumnSpec {
+        include: Some("cf_custom"),
+        exclude: None,
+    };
+    let err = validate_table_columns(spec).unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+    assert!(
+        err.to_string().contains("cf_custom"),
+        "names the offending field: {err}"
+    );
+}
+
+#[test]
+fn validate_table_columns_errors_when_exclude_removes_all_defaults() {
+    let spec = ColumnSpec {
+        include: None,
+        exclude: Some("id,status,priority,assignee,summary"),
+    };
+    let err = validate_table_columns(spec).unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+}
+
+#[test]
+fn validate_table_columns_errors_when_exclude_removes_sole_include() {
+    let spec = ColumnSpec {
+        include: Some("id"),
+        exclude: Some("id"),
+    };
+    let err = validate_table_columns(spec).unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+}
+
+#[test]
+fn validate_table_columns_ok_for_all_blank_include() {
+    let spec = ColumnSpec {
+        include: Some(",,"),
+        exclude: None,
+    };
+    assert!(validate_table_columns(spec).is_ok());
+}
+
+// ── bug_to_json / bugs_to_json projection (#206) ─────────────────
+
+/// The serde key sequence of `Bug`, in struct-declaration order. Locks the
+/// `preserve_order` decision (Finding 4) and is the reference for the registry
+/// drift guard (Finding 3).
+const BUG_STRUCT_KEY_ORDER: [&str; 23] = [
+    "id",
+    "summary",
+    "status",
+    "resolution",
+    "dupe_of",
+    "deadline",
+    "product",
+    "component",
+    "version",
+    "assigned_to",
+    "priority",
+    "severity",
+    "creation_time",
+    "last_change_time",
+    "creator",
+    "url",
+    "whiteboard",
+    "keywords",
+    "blocks",
+    "depends_on",
+    "cc",
+    "op_sys",
+    "rep_platform",
+];
+
+fn keys_of(value: &serde_json::Value) -> Vec<String> {
+    value.as_object().unwrap().keys().cloned().collect()
+}
+
+#[test]
+fn bug_to_json_include_keeps_only_named_keys() {
+    let bug = make_bug(1, "s", "NEW");
+    let spec = ColumnSpec {
+        include: Some("summary,status"),
+        exclude: None,
+    };
+    assert_eq!(keys_of(&bug_to_json(&bug, spec)), vec!["summary", "status"]);
+}
+
+#[test]
+fn bug_to_json_include_alias_resolves_to_canonical_key() {
+    let bug = make_bug(1, "s", "NEW");
+    let spec = ColumnSpec {
+        include: Some("assignee"),
+        exclude: None,
+    };
+    let v = bug_to_json(&bug, spec);
+    assert_eq!(keys_of(&v), vec!["assigned_to"]);
+    assert_eq!(v["assigned_to"], "dev@example.com");
+}
+
+#[test]
+fn bug_to_json_exclude_id_drops_id() {
+    let bug = make_bug(1, "s", "NEW");
+    let spec = ColumnSpec {
+        include: None,
+        exclude: Some("id"),
+    };
+    let v = bug_to_json(&bug, spec);
+    let map = v.as_object().unwrap();
+    assert!(!map.contains_key("id"), "id dropped");
+    assert!(map.contains_key("summary"), "other keys retained");
+    assert_eq!(map.len(), BUG_STRUCT_KEY_ORDER.len() - 1);
+}
+
+#[test]
+fn bug_to_json_exclude_subset_drops_only_those() {
+    let bug = make_bug(1, "s", "NEW");
+    let spec = ColumnSpec {
+        include: None,
+        exclude: Some("cc,keywords"),
+    };
+    let v = bug_to_json(&bug, spec);
+    let map = v.as_object().unwrap();
+    assert!(!map.contains_key("cc"));
+    assert!(!map.contains_key("keywords"));
+    assert!(map.contains_key("id"));
+    assert_eq!(map.len(), BUG_STRUCT_KEY_ORDER.len() - 2);
+}
+
+#[test]
+fn bug_to_json_no_selection_is_full_object() {
+    let bug = make_bug(1, "s", "NEW");
+    for spec in [
+        ColumnSpec::default(),
+        ColumnSpec {
+            include: Some(""),
+            exclude: None,
+        },
+        ColumnSpec {
+            include: Some(",,"),
+            exclude: None,
+        },
+    ] {
+        let v = bug_to_json(&bug, spec);
+        assert_eq!(
+            v.as_object().unwrap().len(),
+            BUG_STRUCT_KEY_ORDER.len(),
+            "full object for {spec:?}"
+        );
+    }
+}
+
+#[test]
+fn bug_to_json_partial_unknown_keeps_known_only() {
+    let bug = make_bug(1, "s", "NEW");
+    let spec = ColumnSpec {
+        include: Some("summary,cf_x"),
+        exclude: None,
+    };
+    let v = bug_to_json(&bug, spec);
+    let map = v.as_object().unwrap();
+    assert!(map.contains_key("summary"));
+    assert!(!map.contains_key("cf_x"));
+    assert_eq!(map.len(), 1);
+}
+
+#[test]
+fn bug_to_json_full_object_preserves_struct_field_order() {
+    let bug = make_bug(1, "s", "NEW");
+    let v = bug_to_json(&bug, ColumnSpec::default());
+    assert_eq!(keys_of(&v), BUG_STRUCT_KEY_ORDER.to_vec());
+}
+
+#[test]
+fn bug_to_json_projection_preserves_struct_order_not_request_order() {
+    // Include given out of struct order; the projected object must still be in
+    // struct-declaration order (Finding 4: real ordering lock, not vacuous).
+    let bug = make_bug(1, "s", "NEW");
+    let spec = ColumnSpec {
+        include: Some("status,id,summary"),
+        exclude: None,
+    };
+    assert_eq!(
+        keys_of(&bug_to_json(&bug, spec)),
+        vec!["id", "summary", "status"]
+    );
+}
+
+#[test]
+fn bugs_to_json_projects_every_element() {
+    let bugs = vec![make_bug(1, "a", "NEW"), make_bug(2, "b", "RESOLVED")];
+    let spec = ColumnSpec {
+        include: Some("id"),
+        exclude: None,
+    };
+    let arr = bugs_to_json(&bugs, spec);
+    assert_eq!(arr.len(), 2);
+    for v in &arr {
+        assert_eq!(keys_of(v), vec!["id"]);
+    }
+    assert_eq!(arr[0]["id"], 1);
+    assert_eq!(arr[1]["id"], 2);
+}
+
+// ── Registry drift guard (Finding 3) ─────────────────────────────
+
+#[test]
+fn columns_registry_is_one_to_one_with_bug_serde_keys() {
+    let bug = make_bug(1, "s", "NEW");
+    let value = serde_json::to_value(&bug).unwrap();
+    let serde_keys: std::collections::HashSet<String> =
+        value.as_object().unwrap().keys().cloned().collect();
+    let registry_keys: std::collections::HashSet<String> =
+        COLUMNS.iter().map(|c| c.canonical().to_string()).collect();
+    assert_eq!(
+        serde_keys, registry_keys,
+        "COLUMNS canonical names must be 1:1 with Bug's serde keys"
+    );
+    assert_eq!(
+        registry_keys.len(),
+        COLUMNS.len(),
+        "no duplicate canonical names in COLUMNS"
+    );
+}
+
+// ── validate_json_field_selection (Finding 1) ────────────────────
+
+#[test]
+fn validate_json_default_spec_ok() {
+    assert!(validate_json_field_selection(ColumnSpec::default()).is_ok());
+}
+
+#[test]
+fn validate_json_all_unknown_include_errs() {
+    let spec = ColumnSpec {
+        include: Some("cf_x,cf_y"),
+        exclude: None,
+    };
+    let err = validate_json_field_selection(spec).unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+}
+
+#[test]
+fn validate_json_exclude_every_key_errs() {
+    let all = COLUMNS
+        .iter()
+        .map(BugColumn::canonical)
+        .collect::<Vec<_>>()
+        .join(",");
+    let spec = ColumnSpec {
+        include: None,
+        exclude: Some(all.as_str()),
+    };
+    let err = validate_json_field_selection(spec).unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+}
+
+#[test]
+fn validate_json_exclude_table_defaults_ok() {
+    // Excluding the five default *table* columns must NOT exit 7 under --json:
+    // 18 other fields remain. This is the regression the table validator would
+    // get wrong if reused verbatim (Finding 1).
+    let spec = ColumnSpec {
+        include: None,
+        exclude: Some("id,status,priority,assignee,summary"),
+    };
+    assert!(validate_json_field_selection(spec).is_ok());
+}
+
+#[test]
+fn validate_json_partial_unknown_include_ok() {
+    let spec = ColumnSpec {
+        include: Some("summary,cf_x"),
+        exclude: None,
+    };
+    assert!(validate_json_field_selection(spec).is_ok());
+}
+
+#[test]
+fn validate_json_blank_include_ok() {
+    for blank in ["", ",,"] {
+        let spec = ColumnSpec {
+            include: Some(blank),
+            exclude: None,
+        };
+        assert!(
+            validate_json_field_selection(spec).is_ok(),
+            "blank include {blank:?} is no selection"
+        );
+    }
+}
+
+// ── warn_unknown_fields ──────────────────────────────────────────
+
+fn capture_unknown_warning(spec: ColumnSpec<'_>) -> String {
+    let mut err = Vec::new();
+    warn_unknown_fields(spec, &mut err);
+    String::from_utf8(err).unwrap()
+}
+
+#[test]
+fn warn_unknown_fields_warns_for_unknown_include_token() {
+    let w = capture_unknown_warning(ColumnSpec {
+        include: Some("summary,cf_x"),
+        exclude: None,
+    });
+    assert!(w.contains("ignoring unknown field(s): cf_x"), "{w:?}");
+}
+
+#[test]
+fn warn_unknown_fields_silent_for_all_known() {
+    let w = capture_unknown_warning(ColumnSpec {
+        include: Some("summary,status"),
+        exclude: None,
+    });
+    assert!(w.is_empty(), "no warning when all known: {w:?}");
+}
+
+#[test]
+fn warn_unknown_fields_silent_without_include() {
+    let w = capture_unknown_warning(ColumnSpec {
+        include: None,
+        exclude: Some("cf_x"),
+    });
+    assert!(w.is_empty(), "exclude-only never warns: {w:?}");
+}
+
+#[test]
+fn write_bugs_partial_unknown_warns_with_new_wording_and_shows_known() {
+    let bugs = vec![make_bug(1, "summary text", "NEW")];
+    let spec = ColumnSpec {
+        include: Some("id,cf_x"),
+        exclude: None,
+    };
+    let (out, err) = capture_bugs_spec(OutputFormat::Table, &bugs, spec);
+    assert!(
+        err.contains("ignoring field(s) with no table column: cf_x"),
+        "new warning wording: {err:?}"
+    );
+    assert!(out.contains("ID"), "known column shown:\n{out}");
 }
