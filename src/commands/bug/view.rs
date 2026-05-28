@@ -81,15 +81,11 @@ pub(super) async fn handle(
     let exc_canonical = canonical_field_list(exc);
 
     if ids.len() == 1 {
-        return view_single(
-            client,
-            &ids[0],
-            inc_canonical.as_deref(),
-            exc_canonical.as_deref(),
-            format,
-            w,
-        )
-        .await;
+        let spec = ColumnSpec {
+            include: inc_canonical.as_deref(),
+            exclude: exc_canonical.as_deref(),
+        };
+        return view_single(client, &ids[0], spec, format, w).await;
     }
 
     let mode = if *permissive {
@@ -116,16 +112,11 @@ pub(super) async fn handle(
 async fn view_single(
     client: &BugzillaClient,
     id: &str,
-    include_fields: Option<&str>,
-    exclude_fields: Option<&str>,
+    spec: ColumnSpec<'_>,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let bug = client.get_bug(id, include_fields, exclude_fields).await?;
-    let spec = ColumnSpec {
-        include: include_fields,
-        exclude: exclude_fields,
-    };
+    let bug = client.get_bug(id, spec.include, spec.exclude).await?;
     write_bug_detail(&bug, spec, format, w.out);
     Ok(())
 }
