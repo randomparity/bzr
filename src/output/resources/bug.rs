@@ -5,7 +5,7 @@ use tabled::builder::Builder;
 
 use crate::output::formatting::{
     colorize_status, shorten_email, truncate, write_divider, write_field, write_formatted,
-    write_list_field, write_optional_field,
+    write_json, write_list_field, write_optional_field,
 };
 use crate::types::{Bug, HistoryEntry, OutputFormat};
 
@@ -303,42 +303,96 @@ pub fn validate_table_columns(spec: ColumnSpec<'_>) -> crate::error::Result<()> 
     Ok(())
 }
 
-/// Whether a `--json` field selection actually restricts which fields carry real values,
-/// mirroring `force_id_fields` in the client: an include narrows the fetched set, and an exclude
-/// matters only if it drops a field other than `id` (the client always re-adds `id`). Blank-only
-/// input (`""`, `,,`, `id`) restricts nothing.
-fn json_selection_restricts(spec: ColumnSpec<'_>) -> bool {
-    if canonical_field_list(spec.include).is_some() {
-        return true;
+/// The canonical exclude key set: each `--exclude-fields` token resolved to its
+/// canonical Bugzilla field name. Unknown tokens (e.g. custom `cf_*` fields)
+/// name no key in the serialized object and are dropped here, matching table
+/// mode's [`apply_exclude`].
+fn canonical_excludes(exclude: Option<&str>) -> Vec<&'static str> {
+    match exclude {
+        None => Vec::new(),
+        Some(list) => list
+            .split(',')
+            .filter_map(resolve_bug_column)
+            .map(BugColumn::canonical)
+            .collect(),
     }
-    spec.exclude.is_some_and(|list| {
-        list.split(',').any(|t| {
-            let t = t.trim();
-            !t.is_empty() && !t.eq_ignore_ascii_case("id")
-        })
-    })
 }
 
-/// Warn that under `--json` a `--fields`/`--exclude-fields` selection controls
-/// which fields are *fetched*, not which are shown: `id` is always present, but
-/// every other unselected field deserializes to null/empty rather than its real
-/// value. No-op unless `interactive` (stderr is a terminal) and a non-blank
-/// selection is active — matching `validate_table_columns`'s notion of "no
-/// selection" for all-blank input like `""` / `,,`.
-pub fn warn_json_field_selection<E: Write + ?Sized>(
-    spec: ColumnSpec<'_>,
-    interactive: bool,
-    err: &mut E,
-) {
-    if !interactive {
-        return;
+/// Project a serialized bug object to honor `spec` (gh-style trimming):
+/// a non-blank `include` retains exactly the named canonical keys; `exclude`
+/// drops the named canonical keys; neither (or a blank include) leaves the
+/// object untouched. Aliases resolve to canonical keys via the same primitives
+/// table mode uses. Unknown tokens are inert — they name no key in the object,
+/// so they neither add nor remove anything; the pre-network gate warns about
+/// them via [`warn_unknown_fields`].
+pub fn bug_to_json(bug: &Bug, spec: ColumnSpec<'_>) -> serde_json::Value {
+    let mut value = serde_json::to_value(bug).expect("Bug serializes to JSON");
+    if let serde_json::Value::Object(map) = &mut value {
+        if let Some(include) = canonical_field_list(spec.include) {
+            let keep: std::collections::HashSet<&str> = include.split(',').collect();
+            map.retain(|k, _| keep.contains(k.as_str()));
+        }
+        for canonical in canonical_excludes(spec.exclude) {
+            map.remove(canonical);
+        }
     }
-    if json_selection_restricts(spec) {
+    value
+}
+
+/// [`bug_to_json`] over a slice, for the array output paths.
+pub fn bugs_to_json(bugs: &[Bug], spec: ColumnSpec<'_>) -> Vec<serde_json::Value> {
+    bugs.iter().map(|bug| bug_to_json(bug, spec)).collect()
+}
+
+/// Validate that `spec` leaves at least one JSON key to emit, measured against
+/// the full bug-field universe (every [`COLUMNS`] canonical key), not table
+/// mode's five-column default. Call ONLY when output is JSON, before the
+/// network request. Errors (exit 7) when the effective projected key set is
+/// empty — i.e. an all-unknown `--fields` value, or an `--exclude-fields` that
+/// drops every key. A `--fields` that drops the table defaults but keeps other
+/// fields still passes. Partial-unknown (some valid, some not) is allowed and
+/// handled as a warning via [`warn_unknown_fields`].
+pub fn validate_json_field_selection(spec: ColumnSpec<'_>) -> crate::error::Result<()> {
+    let mut keys: std::collections::HashSet<&'static str> = match spec.include {
+        Some(list) => {
+            let (knowns, _unknowns) = partition_include(list);
+            if knowns.is_empty() && list.split(',').all(|t| t.trim().is_empty()) {
+                // Blank include like "" / ",," — treat as no selection.
+                COLUMNS.iter().map(BugColumn::canonical).collect()
+            } else {
+                knowns.iter().map(|c| c.canonical()).collect()
+            }
+        }
+        None => COLUMNS.iter().map(BugColumn::canonical).collect(),
+    };
+    for canonical in canonical_excludes(spec.exclude) {
+        keys.remove(canonical);
+    }
+    if keys.is_empty() {
+        return Err(crate::error::BzrError::InputValidation(
+            "the field selection leaves no fields to emit; \
+             adjust --fields / --exclude-fields"
+                .into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Warn once on stderr about `--fields` tokens that name no known bug field
+/// (e.g. a typo or a custom `cf_*` field). Genericized off "table column" so it
+/// reads correctly under both table and JSON output. Only inspects the include
+/// list — unknown `--exclude-fields` tokens are inert and silently ignored,
+/// matching table mode's [`apply_exclude`].
+pub fn warn_unknown_fields<E: Write + ?Sized>(spec: ColumnSpec<'_>, err: &mut E) {
+    let Some(list) = spec.include else {
+        return;
+    };
+    let (_knowns, unknowns) = partition_include(list);
+    if !unknowns.is_empty() {
         let _ = writeln!(
             err,
-            "warning: under --json, --fields/--exclude-fields controls which fields are fetched, \
-             not which are shown; id is always present, any other unselected field is returned \
-             as null/empty, not its real value"
+            "warning: ignoring unknown field(s): {}",
+            unknowns.join(", ")
         );
     }
 }
@@ -368,19 +422,22 @@ pub fn write_bugs<W: Write + ?Sized, E: Write + ?Sized>(
     out: &mut W,
     err: &mut E,
 ) {
-    write_formatted(bugs, format, out, |bugs, out| {
-        if bugs.is_empty() {
-            let _ = writeln!(out, "No bugs found.");
-            return;
+    match format {
+        OutputFormat::Json => write_json(&bugs_to_json(bugs, spec), out),
+        OutputFormat::Table => {
+            if bugs.is_empty() {
+                let _ = writeln!(out, "No bugs found.");
+                return;
+            }
+            let columns = resolve_columns(spec, err);
+            let mut builder = Builder::default();
+            builder.push_record(columns.iter().map(|c| c.header.to_string()));
+            for bug in bugs {
+                builder.push_record(columns.iter().map(|c| (c.render)(bug)));
+            }
+            let _ = writeln!(out, "{}", builder.build());
         }
-        let columns = resolve_columns(spec, err);
-        let mut builder = Builder::default();
-        builder.push_record(columns.iter().map(|c| c.header.to_string()));
-        for bug in bugs {
-            builder.push_record(columns.iter().map(|c| (c.render)(bug)));
-        }
-        let _ = writeln!(out, "{}", builder.build());
-    });
+    }
 }
 
 pub fn write_bug_detail<W: Write + ?Sized>(
@@ -389,9 +446,10 @@ pub fn write_bug_detail<W: Write + ?Sized>(
     format: OutputFormat,
     out: &mut W,
 ) {
-    write_formatted(bug, format, out, |bug, out| {
-        write_bug_detail_table(bug, spec, out);
-    });
+    match format {
+        OutputFormat::Json => write_json(&bug_to_json(bug, spec), out),
+        OutputFormat::Table => write_bug_detail_table(bug, spec, out),
+    }
 }
 
 fn write_bug_detail_table(bug: &Bug, spec: ColumnSpec<'_>, out: &mut (impl Write + ?Sized)) {
@@ -508,11 +566,12 @@ pub enum MultiBugRow {
 
 /// Render a multi-ID `bzr bug view` result.
 ///
-/// JSON mode is **not** handled here — the caller emits a
-/// `MultiBugViewResult` via `output::write_result`. This function only
-/// covers table mode: argument-order detail blocks for `Ok`, visually
-/// distinct `UNAVAILABLE` placeholder blocks for `Failed`, with a
-/// `─`-divider line between every pair of blocks (no trailing divider).
+/// JSON mode is **not** handled here — the caller builds the
+/// `{"bugs": [...], "failed": [...]}` wrapper itself (projecting each bug via
+/// [`bug_to_json`]). This function only covers table mode: argument-order
+/// detail blocks for `Ok`, visually distinct `UNAVAILABLE` placeholder blocks
+/// for `Failed`, with a `─`-divider line between every pair of blocks (no
+/// trailing divider).
 pub fn write_multi_bug_view<W: Write + ?Sized>(
     rows: &[MultiBugRow],
     spec: ColumnSpec<'_>,

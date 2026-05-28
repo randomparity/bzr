@@ -13,28 +13,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   selects which columns appear in table output (in the order given) and
   `--exclude-fields` removes columns, instead of always rendering a fixed
   five-column table. `bug view` honors an explicit field set for its detail
-  rows. Under `--json`, all keys are still emitted, but `--fields` /
-  `--exclude-fields` only control which fields are *fetched*: unselected
-  fields come back null/empty rather than their real values, and a stderr
-  warning now says so. (#206)
+  rows. (#206)
+- Under `--json`, `--fields` / `--exclude-fields` now trim the output object
+  to the selected fields, gh-style: `bzr bug list --fields summary --json`
+  returns `[{"summary": ...}]` rather than the full object with every other
+  field nulled. The selection is honored literally — `id` appears only when
+  requested, and `--exclude-fields id` drops it — while the client still
+  fetches `id` internally so every bug deserializes. With no field selection
+  the full object is returned, unchanged. Trimming happens client-side after
+  the fetch, so it applies on REST and XML-RPC alike. Single-ID `bug view`
+  emits a trimmed bare object; multi-ID `bug view` trims each entry in `bugs`
+  while leaving the `{"bugs": [...], "failed": [...]}` wrapper and the per-bug
+  failure metadata intact. (#206)
 - An id-less `--fields` (e.g. `--fields summary,status`) no longer fails to
   deserialize: `id` is always requested from the server so every bug parses,
   regardless of the field selection. (#206)
-- A `--fields` value with no displayable columns (e.g. only custom `cf_*`
-  fields) or an `--exclude-fields` that removes every column now exits 7 with
-  a clear message, instead of silently falling back to the default columns or
-  rendering a blank table. This validation now runs before any network I/O
-  for every bug subcommand (`bug list`, `bug my`, `bug search`, `query run`),
-  so the exit code is deterministic and independent of server reachability.
-  Partial-unknown selections still warn and show the valid columns. (#206)
-- Under `--json`, `id` is always fetched, so `--exclude-fields id` does not
-  drop it and it is never null; every other unselected field still comes back
-  null/empty. The stderr advisory discloses this `id` exception and now fires
-  only when the selection genuinely restricts which fields are fetched, so
-  `--exclude-fields id` (which the client transparently re-adds) stays silent.
-  It prints only when stderr is a terminal, so redirected-stderr and CI/cron
-  runs aren't spammed — an interactive `… --json | jq` still warns, since that
-  user is watching stderr. (#206)
+- A field selection that leaves nothing to emit now exits 7 with a clear
+  message, before any network I/O, for every bug subcommand (`bug list`,
+  `bug my`, `bug search`, `query run`) — an all-unknown `--fields` value, or
+  an `--exclude-fields` that removes every field. In table mode emptiness is
+  measured against the five default columns; under `--json` against the full
+  field set, so `--exclude-fields` of the five table defaults still succeeds
+  and keeps the other fields. `bug view` is exempt in both modes, since a
+  sparse or empty single-bug object is a coherent result. Unknown `--fields`
+  tokens (typos, custom `cf_*` fields) are reported once on stderr. (#206)
 
 ## [0.4.0] - 2026-05-09
 

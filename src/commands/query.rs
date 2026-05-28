@@ -3,13 +3,12 @@
 //! Query operations (save/list/show/delete) are pure local file I/O.
 //! Only `run` requires a network client.
 
-use std::io::IsTerminal;
-
 use crate::cli::QueryAction;
 use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::output::resources::bug::{
-    canonical_field_list, validate_table_columns, warn_json_field_selection, write_bugs, ColumnSpec,
+    canonical_field_list, validate_json_field_selection, validate_table_columns,
+    warn_unknown_fields, write_bugs, ColumnSpec,
 };
 use crate::output::resources::query::{write_query_detail, write_query_list, write_query_saved};
 use crate::output::writers::Writers;
@@ -254,7 +253,8 @@ async fn handle_run(
     match format {
         OutputFormat::Table => validate_table_columns(spec)?,
         OutputFormat::Json => {
-            warn_json_field_selection(spec, std::io::stderr().is_terminal(), w.err);
+            validate_json_field_selection(spec)?;
+            warn_unknown_fields(spec, w.err);
         }
     }
 

@@ -23,12 +23,12 @@ pub enum BugAction {
     /// large values may exceed the server's max-results setting and
     /// return a truncated list. `--fields` and `--exclude-fields` control
     /// which fields are requested from the server; in table output they
-    /// select and remove columns (in the given order). Under `--json` all
-    /// keys are still emitted, but only selected fields carry real values:
-    /// `id` is always populated and every other unselected field comes back
-    /// null/empty (an advisory prints when stderr is a terminal). Fields with
-    /// no table column (e.g. custom `cf_*` fields) are skipped with a warning
-    /// in table mode.
+    /// select and remove columns (in the given order). Under `--json` the
+    /// output object is trimmed to the selected fields (gh-style):
+    /// `--fields summary` returns `{"summary": ...}` with no `id` unless you
+    /// ask for it, and `--exclude-fields id` drops `id`. With no selection the
+    /// full object is returned. Unknown fields (typos, custom `cf_*` fields
+    /// that have no table column) are skipped with a warning.
     ///
     /// `--created-since` / `--changed-since` filter by Bugzilla's
     /// `creation_time` / `last_change_time` fields. Both accept ISO
@@ -91,13 +91,13 @@ pub enum BugAction {
         #[arg(long, default_value = "50")]
         limit: u32,
         /// Fields to request from the server (comma-separated). Table:
-        /// selects which columns to show. --json: all keys are emitted, but
-        /// unselected fields come back null/empty, not their real values.
+        /// selects which columns to show (in order). --json: the JSON object
+        /// contains only the selected fields (id is included only if requested).
         #[arg(long)]
         fields: Option<String>,
         /// Fields to drop from the server request (comma-separated). Table:
-        /// removes those columns. --json: all keys are still emitted, but
-        /// dropped fields come back null/empty, not their real values.
+        /// removes those columns. --json: the JSON object omits the dropped
+        /// fields (including id, if excluded).
         #[arg(long)]
         exclude_fields: Option<String>,
         /// Filter to bugs created at or after this date.
@@ -158,11 +158,12 @@ pub enum BugAction {
     /// Session-wide failures (transport, auth, security) still bail.
     ///
     /// Use `--fields` to fetch only specific fields (faster on large
-    /// bugs); `--exclude-fields` is the inverse. On XML-RPC servers,
-    /// single-bug `bug view` fetches the full bug regardless of the
-    /// field list (the selection still controls which detail rows or
-    /// table columns render, and under `--json` the returned object is
-    /// complete).
+    /// bugs over REST); `--exclude-fields` is the inverse. Under `--json`
+    /// the returned object is trimmed to the selected fields (gh-style) on
+    /// every transport, since trimming happens client-side after the fetch.
+    /// On XML-RPC servers the full bug is fetched regardless of the field
+    /// list, so there the selection only controls which detail rows (table)
+    /// or object keys (JSON) appear, not what is sent over the wire.
     ///
     /// Examples:
     ///
@@ -190,13 +191,13 @@ pub enum BugAction {
         #[arg(long)]
         permissive: bool,
         /// Fields to request from the server (comma-separated). Table:
-        /// selects which detail rows to show. --json: all keys are emitted,
-        /// but unselected fields come back null/empty, not their real values.
+        /// selects which detail rows to show. --json: the JSON object contains
+        /// only the selected fields (id is included only if requested).
         #[arg(long)]
         fields: Option<String>,
         /// Fields to drop from the server request (comma-separated). Table:
-        /// removes those detail rows. --json: all keys are still emitted, but
-        /// dropped fields come back null/empty, not their real values.
+        /// removes those detail rows. --json: the JSON object omits the
+        /// dropped fields (including id, if excluded).
         #[arg(long)]
         exclude_fields: Option<String>,
     },
@@ -267,13 +268,13 @@ pub enum BugAction {
         #[arg(long)]
         limit: Option<u32>,
         /// Fields to request from the server (comma-separated). Table:
-        /// selects which columns to show. --json: all keys are emitted, but
-        /// unselected fields come back null/empty, not their real values.
+        /// selects which columns to show (in order). --json: the JSON object
+        /// contains only the selected fields (id is included only if requested).
         #[arg(long)]
         fields: Option<String>,
         /// Fields to drop from the server request (comma-separated). Table:
-        /// removes those columns. --json: all keys are still emitted, but
-        /// dropped fields come back null/empty, not their real values.
+        /// removes those columns. --json: the JSON object omits the dropped
+        /// fields (including id, if excluded).
         #[arg(long)]
         exclude_fields: Option<String>,
     },
@@ -465,13 +466,13 @@ pub enum BugAction {
         #[arg(long, default_value = "50")]
         limit: u32,
         /// Fields to request from the server (comma-separated). Table:
-        /// selects which columns to show. --json: all keys are emitted, but
-        /// unselected fields come back null/empty, not their real values.
+        /// selects which columns to show (in order). --json: the JSON object
+        /// contains only the selected fields (id is included only if requested).
         #[arg(long)]
         fields: Option<String>,
         /// Fields to drop from the server request (comma-separated). Table:
-        /// removes those columns. --json: all keys are still emitted, but
-        /// dropped fields come back null/empty, not their real values.
+        /// removes those columns. --json: the JSON object omits the dropped
+        /// fields (including id, if excluded).
         #[arg(long)]
         exclude_fields: Option<String>,
     },

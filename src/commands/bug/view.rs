@@ -2,7 +2,8 @@ use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
 use crate::output::resources::bug::{
-    canonical_field_list, write_bug_detail, write_multi_bug_view, ColumnSpec, MultiBugRow,
+    bug_to_json, canonical_field_list, write_bug_detail, write_multi_bug_view, ColumnSpec,
+    MultiBugRow,
 };
 use crate::output::result_types::{write_result, BugViewFailure, MultiBugViewResult};
 use crate::output::writers::Writers;
@@ -164,8 +165,14 @@ fn write_batch(
             write_multi_bug_view(&rows, spec, w.out);
         }
         OutputFormat::Json => {
+            // Project each bug to the selected fields; the wrapper keys and the
+            // per-failure metadata (`id`, `error`) stay untrimmed so `jq`
+            // consumers can always rely on `.bugs[]` / `.failed[]`.
             let result = batch.into_json_result();
-            write_result(&result, "", format, w.out);
+            let bugs: Vec<serde_json::Value> =
+                result.bugs.iter().map(|b| bug_to_json(b, spec)).collect();
+            let value = serde_json::json!({ "bugs": bugs, "failed": result.failed });
+            write_result(&value, "", format, w.out);
         }
     }
 }

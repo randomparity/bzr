@@ -397,12 +397,10 @@ async fn bug_list_table_all_unknown_fields_exits_7_before_network() {
 }
 
 #[tokio::test]
-async fn bug_list_json_fields_does_not_block() {
-    // --json with a field selection still emits the full bug object — warn,
-    // don't block. The stderr advisory is TTY-gated (fd 2 is non-TTY under
-    // `cargo test`), so the content is locked by the unit test in
-    // bug_tests.rs; here we only assert the path succeeds and the full
-    // struct is emitted regardless of whether fd 2 is a terminal in CI.
+async fn bug_list_json_fields_trims_output() {
+    // --json with a field selection trims the output object to the selected
+    // fields (gh-style): `--fields summary` yields `{"summary": ...}` only,
+    // with id and every other unselected key dropped.
     let (_lock, mock, _tmp) = setup_test_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -422,18 +420,24 @@ async fn bug_list_json_fields_does_not_block() {
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
             .await;
-    assert!(result.is_ok(), "json path is not blocked: {result:?}");
+    assert!(result.is_ok(), "json path succeeds: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    let obj = parsed[0].as_object().unwrap();
     assert!(
-        parsed[0].get("status").is_some(),
-        "full struct keys still emitted:\n{}",
+        obj.contains_key("summary"),
+        "summary present:\n{}",
+        __io.out_str()
+    );
+    assert!(
+        !obj.contains_key("status") && !obj.contains_key("id"),
+        "unselected keys trimmed:\n{}",
         __io.out_str()
     );
 }
 
 #[tokio::test]
 async fn bug_list_json_without_fields_does_not_warn() {
-    // --json with no field selection: no value-blanking warning (F1).
+    // --json with no field selection: full object, no unknown-field warning.
     let (_lock, mock, _tmp) = setup_test_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -457,17 +461,11 @@ async fn bug_list_json_without_fields_does_not_warn() {
 }
 
 #[tokio::test]
-async fn bug_list_json_unknown_fields_is_not_validated() {
-    // Validation is table-only: --json with unknown fields proceeds and
-    // emits the full bug object (F2 gate is Table-only, F4 reality).
+async fn bug_list_json_all_unknown_fields_exits_7() {
+    // --json validation measures emptiness against the full field universe: an
+    // all-unknown --fields value exits 7 before any network I/O, mirroring
+    // table mode. (`bug view` stays exempt — covered in the integration suite.)
     let (_lock, mock, _tmp) = setup_test_env().await;
-    Mock::given(method("GET"))
-        .and(path("/rest/bug"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "bugs": [{"id": 1, "summary": "Test bug", "status": "NEW"}]
-        })))
-        .mount(&mock)
-        .await;
 
     let mut action = empty_list_action();
     let BugAction::List { fields, .. } = &mut action else {
@@ -479,7 +477,14 @@ async fn bug_list_json_unknown_fields_is_not_validated() {
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
             .await;
-    assert!(result.is_ok(), "json path is not validated: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
-    assert_eq!(parsed[0]["summary"], "Test bug");
+    let err = result.unwrap_err();
+    assert_eq!(
+        err.exit_code(),
+        7,
+        "all-unknown --fields under --json exits 7: {err}"
+    );
+    assert!(
+        mock.received_requests().await.unwrap().is_empty(),
+        "validation must run before any network I/O"
+    );
 }

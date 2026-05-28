@@ -219,18 +219,21 @@ fn write_bugs_unknown_field_warns_and_falls_back() {
 }
 
 #[test]
-fn write_bugs_json_ignores_columns() {
+fn write_bugs_json_trims_to_selected_fields() {
     let bugs = vec![make_bug(42, "x", "NEW")];
     let spec = ColumnSpec {
         include: Some("id"),
         exclude: None,
     };
     let (out, _err) = capture_bugs_spec(OutputFormat::Json, &bugs, spec);
-    // JSON path is unchanged: full serialized struct, not column-filtered.
-    assert!(
-        out.contains("\"summary\""),
-        "JSON still serializes summary:\n{out}"
-    );
+    let parsed: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
+    let keys: Vec<&str> = parsed[0]
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(keys, vec!["id"], "JSON array element trimmed to id:\n{out}");
 }
 
 #[test]
@@ -685,107 +688,288 @@ fn validate_table_columns_ok_for_all_blank_include() {
     assert!(validate_table_columns(spec).is_ok());
 }
 
-// ── warn_json_field_selection (F1) ───────────────────────────────
+// ── bug_to_json / bugs_to_json projection (#206) ─────────────────
 
-fn capture_json_warning(spec: ColumnSpec<'_>) -> String {
+/// The serde key sequence of `Bug`, in struct-declaration order. Locks the
+/// `preserve_order` decision (Finding 4) and is the reference for the registry
+/// drift guard (Finding 3).
+const BUG_STRUCT_KEY_ORDER: [&str; 23] = [
+    "id",
+    "summary",
+    "status",
+    "resolution",
+    "dupe_of",
+    "deadline",
+    "product",
+    "component",
+    "version",
+    "assigned_to",
+    "priority",
+    "severity",
+    "creation_time",
+    "last_change_time",
+    "creator",
+    "url",
+    "whiteboard",
+    "keywords",
+    "blocks",
+    "depends_on",
+    "cc",
+    "op_sys",
+    "rep_platform",
+];
+
+fn keys_of(value: &serde_json::Value) -> Vec<String> {
+    value.as_object().unwrap().keys().cloned().collect()
+}
+
+#[test]
+fn bug_to_json_include_keeps_only_named_keys() {
+    let bug = make_bug(1, "s", "NEW");
+    let spec = ColumnSpec {
+        include: Some("summary,status"),
+        exclude: None,
+    };
+    assert_eq!(keys_of(&bug_to_json(&bug, spec)), vec!["summary", "status"]);
+}
+
+#[test]
+fn bug_to_json_include_alias_resolves_to_canonical_key() {
+    let bug = make_bug(1, "s", "NEW");
+    let spec = ColumnSpec {
+        include: Some("assignee"),
+        exclude: None,
+    };
+    let v = bug_to_json(&bug, spec);
+    assert_eq!(keys_of(&v), vec!["assigned_to"]);
+    assert_eq!(v["assigned_to"], "dev@example.com");
+}
+
+#[test]
+fn bug_to_json_exclude_id_drops_id() {
+    let bug = make_bug(1, "s", "NEW");
+    let spec = ColumnSpec {
+        include: None,
+        exclude: Some("id"),
+    };
+    let v = bug_to_json(&bug, spec);
+    let map = v.as_object().unwrap();
+    assert!(!map.contains_key("id"), "id dropped");
+    assert!(map.contains_key("summary"), "other keys retained");
+    assert_eq!(map.len(), BUG_STRUCT_KEY_ORDER.len() - 1);
+}
+
+#[test]
+fn bug_to_json_exclude_subset_drops_only_those() {
+    let bug = make_bug(1, "s", "NEW");
+    let spec = ColumnSpec {
+        include: None,
+        exclude: Some("cc,keywords"),
+    };
+    let v = bug_to_json(&bug, spec);
+    let map = v.as_object().unwrap();
+    assert!(!map.contains_key("cc"));
+    assert!(!map.contains_key("keywords"));
+    assert!(map.contains_key("id"));
+    assert_eq!(map.len(), BUG_STRUCT_KEY_ORDER.len() - 2);
+}
+
+#[test]
+fn bug_to_json_no_selection_is_full_object() {
+    let bug = make_bug(1, "s", "NEW");
+    for spec in [
+        ColumnSpec::default(),
+        ColumnSpec {
+            include: Some(""),
+            exclude: None,
+        },
+        ColumnSpec {
+            include: Some(",,"),
+            exclude: None,
+        },
+    ] {
+        let v = bug_to_json(&bug, spec);
+        assert_eq!(
+            v.as_object().unwrap().len(),
+            BUG_STRUCT_KEY_ORDER.len(),
+            "full object for {spec:?}"
+        );
+    }
+}
+
+#[test]
+fn bug_to_json_partial_unknown_keeps_known_only() {
+    let bug = make_bug(1, "s", "NEW");
+    let spec = ColumnSpec {
+        include: Some("summary,cf_x"),
+        exclude: None,
+    };
+    let v = bug_to_json(&bug, spec);
+    let map = v.as_object().unwrap();
+    assert!(map.contains_key("summary"));
+    assert!(!map.contains_key("cf_x"));
+    assert_eq!(map.len(), 1);
+}
+
+#[test]
+fn bug_to_json_full_object_preserves_struct_field_order() {
+    let bug = make_bug(1, "s", "NEW");
+    let v = bug_to_json(&bug, ColumnSpec::default());
+    assert_eq!(keys_of(&v), BUG_STRUCT_KEY_ORDER.to_vec());
+}
+
+#[test]
+fn bug_to_json_projection_preserves_struct_order_not_request_order() {
+    // Include given out of struct order; the projected object must still be in
+    // struct-declaration order (Finding 4: real ordering lock, not vacuous).
+    let bug = make_bug(1, "s", "NEW");
+    let spec = ColumnSpec {
+        include: Some("status,id,summary"),
+        exclude: None,
+    };
+    assert_eq!(
+        keys_of(&bug_to_json(&bug, spec)),
+        vec!["id", "summary", "status"]
+    );
+}
+
+#[test]
+fn bugs_to_json_projects_every_element() {
+    let bugs = vec![make_bug(1, "a", "NEW"), make_bug(2, "b", "RESOLVED")];
+    let spec = ColumnSpec {
+        include: Some("id"),
+        exclude: None,
+    };
+    let arr = bugs_to_json(&bugs, spec);
+    assert_eq!(arr.len(), 2);
+    for v in &arr {
+        assert_eq!(keys_of(v), vec!["id"]);
+    }
+    assert_eq!(arr[0]["id"], 1);
+    assert_eq!(arr[1]["id"], 2);
+}
+
+// ── Registry drift guard (Finding 3) ─────────────────────────────
+
+#[test]
+fn columns_registry_is_one_to_one_with_bug_serde_keys() {
+    let bug = make_bug(1, "s", "NEW");
+    let value = serde_json::to_value(&bug).unwrap();
+    let serde_keys: std::collections::HashSet<String> =
+        value.as_object().unwrap().keys().cloned().collect();
+    let registry_keys: std::collections::HashSet<String> =
+        COLUMNS.iter().map(|c| c.canonical().to_string()).collect();
+    assert_eq!(
+        serde_keys, registry_keys,
+        "COLUMNS canonical names must be 1:1 with Bug's serde keys"
+    );
+    assert_eq!(
+        registry_keys.len(),
+        COLUMNS.len(),
+        "no duplicate canonical names in COLUMNS"
+    );
+}
+
+// ── validate_json_field_selection (Finding 1) ────────────────────
+
+#[test]
+fn validate_json_default_spec_ok() {
+    assert!(validate_json_field_selection(ColumnSpec::default()).is_ok());
+}
+
+#[test]
+fn validate_json_all_unknown_include_errs() {
+    let spec = ColumnSpec {
+        include: Some("cf_x,cf_y"),
+        exclude: None,
+    };
+    let err = validate_json_field_selection(spec).unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+}
+
+#[test]
+fn validate_json_exclude_every_key_errs() {
+    let all = COLUMNS
+        .iter()
+        .map(BugColumn::canonical)
+        .collect::<Vec<_>>()
+        .join(",");
+    let spec = ColumnSpec {
+        include: None,
+        exclude: Some(all.as_str()),
+    };
+    let err = validate_json_field_selection(spec).unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+}
+
+#[test]
+fn validate_json_exclude_table_defaults_ok() {
+    // Excluding the five default *table* columns must NOT exit 7 under --json:
+    // 18 other fields remain. This is the regression the table validator would
+    // get wrong if reused verbatim (Finding 1).
+    let spec = ColumnSpec {
+        include: None,
+        exclude: Some("id,status,priority,assignee,summary"),
+    };
+    assert!(validate_json_field_selection(spec).is_ok());
+}
+
+#[test]
+fn validate_json_partial_unknown_include_ok() {
+    let spec = ColumnSpec {
+        include: Some("summary,cf_x"),
+        exclude: None,
+    };
+    assert!(validate_json_field_selection(spec).is_ok());
+}
+
+#[test]
+fn validate_json_blank_include_ok() {
+    for blank in ["", ",,"] {
+        let spec = ColumnSpec {
+            include: Some(blank),
+            exclude: None,
+        };
+        assert!(
+            validate_json_field_selection(spec).is_ok(),
+            "blank include {blank:?} is no selection"
+        );
+    }
+}
+
+// ── warn_unknown_fields ──────────────────────────────────────────
+
+fn capture_unknown_warning(spec: ColumnSpec<'_>) -> String {
     let mut err = Vec::new();
-    warn_json_field_selection(spec, true, &mut err);
+    warn_unknown_fields(spec, &mut err);
     String::from_utf8(err).unwrap()
 }
 
 #[test]
-fn warn_json_field_selection_warns_for_include() {
-    let warning = capture_json_warning(ColumnSpec {
-        include: Some("summary"),
+fn warn_unknown_fields_warns_for_unknown_include_token() {
+    let w = capture_unknown_warning(ColumnSpec {
+        include: Some("summary,cf_x"),
         exclude: None,
     });
-    assert!(
-        warning.contains("null/empty"),
-        "warns about value-blanking: {warning:?}"
-    );
-    assert!(
-        warning.contains("id is always present"),
-        "discloses the id exception: {warning:?}"
-    );
+    assert!(w.contains("ignoring unknown field(s): cf_x"), "{w:?}");
 }
 
 #[test]
-fn warn_json_field_selection_silent_when_not_interactive() {
-    let mut err = Vec::new();
-    warn_json_field_selection(
-        ColumnSpec {
-            include: Some("summary"),
-            exclude: None,
-        },
-        false,
-        &mut err,
-    );
-    let warning = String::from_utf8(err).unwrap();
-    assert!(
-        warning.is_empty(),
-        "no warning when stderr is not a terminal: {warning:?}"
-    );
-}
-
-#[test]
-fn warn_json_field_selection_silent_for_blank_selection() {
-    for blank in ["", ",,"] {
-        let warning = capture_json_warning(ColumnSpec {
-            include: Some(blank),
-            exclude: None,
-        });
-        assert!(
-            warning.is_empty(),
-            "blank include {blank:?} is no selection: {warning:?}"
-        );
-    }
-}
-
-#[test]
-fn warn_json_field_selection_warns_for_exclude() {
-    let warning = capture_json_warning(ColumnSpec {
-        include: None,
-        exclude: Some("status"),
+fn warn_unknown_fields_silent_for_all_known() {
+    let w = capture_unknown_warning(ColumnSpec {
+        include: Some("summary,status"),
+        exclude: None,
     });
-    assert!(
-        warning.contains("null/empty"),
-        "warns about value-blanking: {warning:?}"
-    );
+    assert!(w.is_empty(), "no warning when all known: {w:?}");
 }
 
 #[test]
-fn warn_json_field_selection_silent_without_selection() {
-    let warning = capture_json_warning(ColumnSpec::default());
-    assert!(
-        warning.is_empty(),
-        "no warning when no field selection is active: {warning:?}"
-    );
-}
-
-#[test]
-fn warn_json_field_selection_silent_for_exclude_id_only() {
-    for excl in ["id", "ID", "id,"] {
-        let warning = capture_json_warning(ColumnSpec {
-            include: None,
-            exclude: Some(excl),
-        });
-        assert!(
-            warning.is_empty(),
-            "excluding only id restricts nothing (client re-adds id): {excl:?} -> {warning:?}"
-        );
-    }
-}
-
-#[test]
-fn warn_json_field_selection_warns_for_exclude_non_id() {
-    let warning = capture_json_warning(ColumnSpec {
+fn warn_unknown_fields_silent_without_include() {
+    let w = capture_unknown_warning(ColumnSpec {
         include: None,
-        exclude: Some("id,cc"),
+        exclude: Some("cf_x"),
     });
-    assert!(
-        warning.contains("null/empty"),
-        "a non-id field is genuinely dropped, so warn: {warning:?}"
-    );
+    assert!(w.is_empty(), "exclude-only never warns: {w:?}");
 }
 
 #[test]

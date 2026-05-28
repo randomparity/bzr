@@ -220,13 +220,13 @@ pub enum QueryAction {
         #[arg(long)]
         limit: Option<u32>,
         /// Fields to request from the server (comma-separated). Table:
-        /// selects which columns to show. --json: all keys are emitted, but
-        /// unselected fields come back null/empty, not their real values.
+        /// selects which columns to show (in order). --json: the JSON object
+        /// contains only the selected fields (id is included only if requested).
         #[arg(long)]
         fields: Option<String>,
         /// Fields to drop from the server request (comma-separated). Table:
-        /// removes those columns. --json: all keys are still emitted, but
-        /// dropped fields come back null/empty, not their real values.
+        /// removes those columns. --json: the JSON object omits the dropped
+        /// fields (including id, if excluded).
         #[arg(long)]
         exclude_fields: Option<String>,
         /// Override the server to run against

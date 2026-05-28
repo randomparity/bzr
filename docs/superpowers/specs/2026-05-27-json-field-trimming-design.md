@@ -28,14 +28,20 @@ nulled.
    The client still *fetches* `id` internally for deserialization (see
    Non-goals); output trimming is independent.
 2. **Unknown/unmodeled field tokens mirror table mode.** All-unknown
-   include → exit 7 with the existing message; partial-unknown → warn once
-   on stderr and project the known fields; an `--exclude-fields` that drops
-   every key → exit 7. The column registry is 1:1 with the `Bug` struct's
-   serde keys, so "unknown for a table column" and "unknown for a JSON key"
-   are the same set — JSON reuses table mode's validation verbatim.
+   include → exit 7; partial-unknown → warn once on stderr and project the
+   known fields; an `--exclude-fields` that drops every key → exit 7. The
+   column registry is 1:1 with the `Bug` struct's serde keys (23 each), so
+   "unknown for a table column" and "unknown for a JSON key" are the same
+   set. **Validation is *not* reused verbatim**, however: table mode measures
+   emptiness against its five-column `default_columns()` base, while JSON must
+   measure against the full 23-key universe (otherwise `--exclude-fields` of
+   the five table defaults would falsely exit 7 even though 18 keys remain).
+   A separate `validate_json_field_selection` does this — see Validation.
 3. **`bug view` is exempt from the zero-field error in JSON, as it already
    is in table mode.** A sparse or empty single-bug object (`{}`) is a
-   coherent result, matching the existing detail-view exemption.
+   coherent result, matching the existing detail-view exemption. To keep a
+   typo from silently yielding `{}`, `bug view --json` still **warns** about
+   unknown `--fields` tokens (it just doesn't exit 7).
 4. **`preserve_order` for `serde_json`.** Enable the feature so projected
    objects keep struct-declaration order rather than going alphabetical,
    keeping trimmed output consistent with the existing full-object output.
@@ -86,37 +92,48 @@ Projection operates only on keys already present in the serialized object,
 so unknown tokens are inert at this layer; the warn/error behavior for them
 is handled by validation (below), not here.
 
-### Validation becomes mode-agnostic
+### Validation is mode-specific
 
-`validate_table_columns` is renamed `validate_field_selection` and its doc
-updated (it is no longer table-only — the known set is identical for both
-output modes). Its error messages are genericized off "table column" so they
-read correctly in JSON mode too: all-unknown include → "none of the requested
-fields are valid bug fields: …"; exclude-everything → "--exclude-fields
-removed every field; nothing left to display". The pre-network gate in
-`src/commands/bug/mod.rs` and `src/commands/query.rs` collapses to one path:
+`validate_table_columns` is left **unchanged** — its five-column base is
+correct for table semantics. A new `validate_json_field_selection(spec)`
+validates against the full 23-key universe: it computes the effective
+projected key set (start from the include-knowns when a non-blank include is
+present, else all `COLUMNS` canonical names; subtract the exclude-knowns) and
+returns `InputValidation` (exit 7) iff that set is empty. This naturally
+covers both *all-unknown include* and *exclude-every-key*, while **passing**
+`--exclude-fields` of the five table defaults (18 keys remain). A blank
+include (`""` / `,,`) is treated as no selection.
+
+The pre-network gate in `src/commands/bug/mod.rs` and `src/commands/query.rs`
+branches on format, validating against the right base and warning in the same
+place (it has `w.err`, so the warning is implementable without threading an
+`err` sink through the pure projection helpers):
 
 ```rust
 if let Some(spec) = bug_column_spec(action) {
-    if !matches!(action, BugAction::View { .. }) {
-        validate_field_selection(spec)?;   // exit 7 on zero fields, both modes
+    let is_view = matches!(action, BugAction::View { .. });
+    match format {
+        OutputFormat::Table => { if !is_view { validate_table_columns(spec)?; } }
+        OutputFormat::Json => {
+            if !is_view { validate_json_field_selection(spec)?; } // view stays lenient
+            warn_unknown_fields(spec, w.err);                     // all actions incl. view
+        }
     }
 }
 ```
 
-The `format == Json` branch that called `warn_json_field_selection` is
-removed. `query run` mirrors this (no `match format` split for validation).
+`warn_json_field_selection` and `json_selection_restricts` are removed.
+`query run` mirrors the gate (it has no `view` case, so it always validates).
 
-### Partial-unknown warning for JSON
+### Partial-unknown warning lives in the gate
 
 Table mode warns about ignored unknown tokens at render time inside
-`resolve_columns`. For JSON, the projection path computes the unknown tokens
-once (via `partition_include`) and emits the warning on `err` a single time
-before projecting — not once per bug. The warning text is genericized to
-`"warning: ignoring unknown field(s): …"` (dropping the table-specific
-"no table column" phrasing) so it reads correctly in both modes; the existing
-table-mode tests that assert the old wording are updated accordingly. None of
-the new phrasings collide with the forbidden phrases checked by
+`resolve_columns` (unchanged). For JSON the gate calls `warn_unknown_fields`
+once — covering `list`/`my`/`search`/`query run` **and** `view` — before any
+network I/O, so the projection helpers (`bug_to_json` / `bugs_to_json`) stay
+pure and take no `err` sink. The warning text is genericized to
+`"warning: ignoring unknown field(s): …"` so it reads correctly in both
+modes; it does not collide with the forbidden phrases checked by
 `cli_and_docs_avoid_misleading_trim_phrasing`.
 
 ### JSON sinks
@@ -138,13 +155,14 @@ whole.
 ## Data flow
 
 ```
-CLI args ──> ColumnSpec ──> validate_field_selection (pre-network, exit 7 on zero fields; view exempt)
+CLI args ──> ColumnSpec ──> pre-network gate
+                              · validate_json_field_selection (exit 7 on zero fields; view exempt)
+                              · warn_unknown_fields on err (all actions incl. view)
                                   │
                           network fetch (client always includes id on the wire)
                                   │
-                       bug_to_json / bugs_to_json
+                       bug_to_json / bugs_to_json   (pure; no err sink)
                          · resolve aliases -> canonical keys (shared with table mode)
-                         · warn once on partial-unknown
                          · include: retain named keys | exclude: drop named keys | none: full
                                   │
                           serde_json -> stdout
@@ -174,21 +192,39 @@ CLI args ──> ColumnSpec ──> validate_field_selection (pre-network, exit 
 - `--exclude-fields id` drops `id`; `--exclude-fields cc,keywords` drops
   those, keeps the rest.
 - no selection (`None`/`""`/`,,`) → full object, all keys present.
-- partial-unknown (`summary,cf_x`) → object has `summary`, stderr has the
-  one ignore-warning, no `cf_x` key.
-- key order matches struct order (locks the `preserve_order` decision).
+- partial-unknown (`summary,cf_x`) → object has `summary`, no `cf_x` key.
 - `bugs_to_json` projects every element.
 
+**Finding 4 — real ordering lock (replaces the vacuous full-object test):**
+- projected object key order equals struct-declaration order, *even when the
+  include list is given out of order* (`status,id,summary` → `id, summary,
+  status`). The full-object struct path can't exercise `preserve_order`; a
+  projected object built from a `Value::Object` can, so this is the test that
+  actually fails if `preserve_order` is dropped.
+
+**Finding 3 — registry drift guard:**
+- serialize a `Bug`, assert its serde key set equals the `COLUMNS`
+  canonical-name set (both directions) and that `COLUMNS` has no duplicate
+  canonical names, so future field drift fails loudly.
+
+**Finding 1 — JSON validator regression:**
+- `validate_json_field_selection`: all-unknown include → `Err` (exit 7);
+  exclude all 23 keys → `Err`; **`--exclude-fields` of the five default
+  columns → `Ok`** (must not exit 7); blank / no selection → `Ok`.
+
 **Command/integration:**
-- all-unknown include under `--json` → exit 7 (mirrors table); reuse/extend
-  the existing zero-column tests now that validation is mode-agnostic.
+- `bug list --json` all-unknown → exit 7; partial-unknown → warning on
+  stderr + projected array.
+- `bug view --json` all-unknown → exit 0 + `{}` + stderr warning (lenient);
+  partial → warning + projected.
 - multi `bug view --json --fields summary` → each entry in `bugs` trimmed,
   `failed` untouched.
 - `cli_and_docs_avoid_misleading_trim_phrasing` stays green after the prose
   rewrites (no forbidden phrase reintroduced).
 
-**Dependency/build:** add `serde_json` `preserve_order`; confirm full-object
-output ordering is unchanged and `cargo test`/`clippy`/`fmt` clean.
+**Dependency/build:** add `serde_json` `preserve_order` (no new crate —
+`indexmap` is already in the tree via reqwest/h2); `cargo deny check` clean
+and `cargo test`/`clippy`/`fmt` clean.
 
 ## Blast radius
 

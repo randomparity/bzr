@@ -1,11 +1,9 @@
 //! Bug subcommand handlers, split per-action.
 
-use std::io::IsTerminal;
-
 use crate::cli::BugAction;
 use crate::error::Result;
 use crate::output::resources::bug::{
-    validate_table_columns, warn_json_field_selection, ColumnSpec,
+    validate_json_field_selection, validate_table_columns, warn_unknown_fields, ColumnSpec,
 };
 use crate::output::writers::Writers;
 use crate::types::{ApiMode, OutputFormat};
@@ -60,17 +58,30 @@ pub async fn execute(
 ) -> Result<()> {
     update::validate_action(action)?;
 
-    // Resolve the field selection before any network I/O. In JSON mode, warn
-    // that `--fields`/`--exclude-fields` restricts what is *fetched*, not what
-    // is shown (unselected fields come back null/empty). In table mode, a
-    // zero-column selection exits 7 deterministically, regardless of subcommand
-    // or server reachability. `bug view` is exempt from table validation: a
-    // header-only detail block is a coherent sparse result, not an error.
+    // Resolve the field selection before any network I/O. A selection that
+    // leaves nothing to show exits 7 deterministically — measured against the
+    // five-column default in table mode, against the full field universe in
+    // JSON mode (where output is trimmed gh-style to the selected keys). Either
+    // way the exit code is independent of subcommand or server reachability.
+    // `bug view` is exempt from this zero-field error in both modes: a sparse
+    // (or empty `{}`) single-bug result is coherent, not an error. Unknown
+    // `--fields` tokens (typos, custom `cf_*` fields) warn once on stderr;
+    // under JSON the warning fires for every action including `view`, since a
+    // typo would otherwise silently yield `{}`.
     if let Some(spec) = bug_column_spec(action) {
-        if format == OutputFormat::Json {
-            warn_json_field_selection(spec, std::io::stderr().is_terminal(), w.err);
-        } else if !matches!(action, BugAction::View { .. }) {
-            validate_table_columns(spec)?;
+        let is_view = matches!(action, BugAction::View { .. });
+        match format {
+            OutputFormat::Table => {
+                if !is_view {
+                    validate_table_columns(spec)?;
+                }
+            }
+            OutputFormat::Json => {
+                if !is_view {
+                    validate_json_field_selection(spec)?;
+                }
+                warn_unknown_fields(spec, w.err);
+            }
         }
     }
 
