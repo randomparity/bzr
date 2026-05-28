@@ -543,7 +543,10 @@ fn build_update_params_carries_private_comment() {
 
 #[test]
 fn build_update_params_omits_comment_when_unspecified() {
-    let action = make_update_action_with_comment(vec![1], None, None, false);
+    let mut action = make_update_action_with_comment(vec![1], None, None, false);
+    if let BugAction::Update { status, .. } = &mut action {
+        *status = Some("CONFIRMED".into());
+    }
     let (_ids, params) = super::build_update_params(&action).unwrap();
     assert!(params.comment.is_none());
 }
@@ -722,5 +725,27 @@ async fn bug_update_json_output_unchanged_with_comment() {
     assert!(
         parsed.get("comment").is_none() && parsed.get("with_comment").is_none(),
         "JSON schema should not gain a comment-related key: {parsed}"
+    );
+}
+
+fn make_empty_update_action(ids: Vec<u64>) -> BugAction {
+    let mut action = make_update_action(ids);
+    if let BugAction::Update {
+        status, resolution, ..
+    } = &mut action
+    {
+        *status = None;
+        *resolution = None;
+    }
+    action
+}
+
+#[test]
+fn build_update_params_rejects_update_with_no_fields() {
+    let action = make_empty_update_action(vec![42]);
+    let err = super::build_update_params(&action).unwrap_err();
+    assert!(
+        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("at least one")),
+        "expected an at-least-one-field validation error, got {err:?}"
     );
 }

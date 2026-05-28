@@ -236,9 +236,27 @@ impl BugzillaClient {
     }
 
     /// Send a PUT request with a JSON body to a REST resource path.
+    ///
+    /// Inspects the response body for a Bugzilla HTTP-200 error envelope
+    /// (`{"error":true,...}`) — some deployments report a rejected mutation
+    /// with a 200 status, which a status-only check would treat as success.
     pub(super) async fn put_json(&self, path: &str, body: &impl serde::Serialize) -> Result<()> {
         let req = self.apply_auth(self.http.put(self.url(path)).json(body));
-        self.send(req).await?;
+        let resp = self.send(req).await?;
+        self.check_mutation_response(resp).await
+    }
+
+    /// Validate a mutation (PUT) response body for a 200-status error
+    /// envelope. An empty body is treated as success; a non-empty body that
+    /// isn't valid JSON surfaces as a deserialization error, matching the
+    /// read path's strictness.
+    async fn check_mutation_response(&self, resp: reqwest::Response) -> Result<()> {
+        let safe_url = Self::safe_url(resp.url());
+        let body = resp.text().await?;
+        if body.trim().is_empty() {
+            return Ok(());
+        }
+        Self::parse_body_to_value(&body, &safe_url)?;
         Ok(())
     }
 

@@ -181,3 +181,18 @@ fn mask_api_key_exactly_8_chars_fully_masked() {
 fn mask_api_key_empty_string_fully_masked() {
     assert_eq!(mask_api_key(""), "***");
 }
+
+#[test]
+fn mask_api_key_multibyte_char_at_boundary_does_not_panic() {
+    // 'é' is two bytes spanning byte offset 7..9, so byte-slicing at 8
+    // lands mid-codepoint. Masking must count chars, not bytes.
+    let result = mask_api_key("1234567é9abcdef");
+    assert_eq!(result, "1234567é...");
+}
+
+#[test]
+fn truncate_max_chars_below_ellipsis_width_does_not_panic() {
+    // max_chars < 3 must not underflow `max_chars - 3`.
+    assert_eq!(truncate("abcdefg", 2), "...");
+    assert_eq!(truncate("abcdefg", 0), "...");
+}

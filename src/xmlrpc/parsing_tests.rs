@@ -400,3 +400,34 @@ fn parse_string_continues_past_unrelated_end_tag() {
         "should keep reading past </wrapper>; got {s:?}"
     );
 }
+
+// ── self-closing (Event::Empty) elements ────────────────────────────
+
+#[test]
+fn parse_self_closing_value_is_empty_string() {
+    let xml = r#"<?xml version="1.0"?>
+    <methodResponse><params><param><value/></param></params></methodResponse>"#;
+    assert_eq!(parse_response(xml).unwrap(), Value::String(String::new()));
+}
+
+#[test]
+fn parse_self_closing_struct_is_empty_struct() {
+    let xml = r#"<?xml version="1.0"?>
+    <methodResponse><params><param><value><struct/></value></param></params></methodResponse>"#;
+    let value = parse_response(xml).unwrap();
+    assert!(
+        matches!(value, Value::Struct(ref m) if m.is_empty()),
+        "expected empty struct, got {value:?}"
+    );
+}
+
+#[test]
+fn parse_self_closing_array_is_empty_array() {
+    let xml = r#"<?xml version="1.0"?>
+    <methodResponse><params><param><value><array/></value></param></params></methodResponse>"#;
+    let value = parse_response(xml).unwrap();
+    assert!(
+        matches!(value, Value::Array(ref v) if v.is_empty()),
+        "expected empty array, got {value:?}"
+    );
+}

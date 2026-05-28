@@ -90,7 +90,7 @@ pub(super) fn opt_yes_no(value: Option<bool>) -> &'static str {
 
 pub(super) fn truncate(s: &str, max_chars: usize) -> String {
     if s.chars().count() > max_chars {
-        let truncated: String = s.chars().take(max_chars - 3).collect();
+        let truncated: String = s.chars().take(max_chars.saturating_sub(3)).collect();
         format!("{truncated}...")
     } else {
         s.to_string()
@@ -115,8 +115,9 @@ pub(super) fn colorize_status(status: &str) -> String {
 }
 
 pub(super) fn mask_api_key(key: &str) -> String {
-    if key.len() > 8 {
-        format!("{}...", &key[..8])
+    if key.chars().count() > 8 {
+        let prefix: String = key.chars().take(8).collect();
+        format!("{prefix}...")
     } else {
         "***".into()
     }

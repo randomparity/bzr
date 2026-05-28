@@ -241,6 +241,32 @@ fn ensure_batch_complete(succeeded: usize, failed: usize) -> Result<()> {
     }
 }
 
+/// Reduce a server-supplied attachment file name to its final path
+/// component, rejecting names that carry no usable basename (`""`,
+/// `"."`, `".."`, `"foo/.."`). Bugzilla returns `file_name` verbatim from
+/// whoever uploaded the attachment, so it must never be trusted as a
+/// write path — `../../etc/foo` or `/etc/foo` would otherwise escape the
+/// target directory.
+fn safe_basename(name: &str) -> Result<String> {
+    match Path::new(name).file_name().and_then(|n| n.to_str()) {
+        Some(base) if base != "." && base != ".." && !base.is_empty() => Ok(base.to_string()),
+        _ => Err(crate::error::BzrError::InputValidation(format!(
+            "attachment file name {name:?} has no usable file component",
+        ))),
+    }
+}
+
+/// Resolve the destination for a single-attachment download. An explicit
+/// `--out` is the user's own choice and is honored verbatim; otherwise the
+/// untrusted server file name is reduced to a safe basename in the current
+/// directory.
+fn single_download_dest(out: Option<&str>, server_filename: &str) -> Result<std::path::PathBuf> {
+    match out {
+        Some(path) => Ok(std::path::PathBuf::from(path)),
+        None => Ok(std::path::PathBuf::from(safe_basename(server_filename)?)),
+    }
+}
+
 /// Single-attachment download: writes one decoded blob to `out` (if
 /// supplied) or to the attachment's stored `file_name` in the current
 /// directory. Paired with `download_batch` for bulk shapes; both paths
@@ -253,10 +279,11 @@ async fn download_single(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let (filename, data) = client.download_attachment(id).await?;
-    let dest = out.unwrap_or(&filename);
-    std::fs::write(dest, &data)?;
+    let dest = single_download_dest(out, &filename)?;
+    std::fs::write(&dest, &data)?;
+    let dest = dest.to_string_lossy().into_owned();
     write_result(
-        &DownloadResult::new(id, dest, data.len()),
+        &DownloadResult::new(id, dest.as_str(), data.len()),
         &format!(
             "Downloaded attachment #{id} to {dest} ({} bytes)",
             data.len(),
@@ -292,7 +319,7 @@ async fn write_one_attachment(
 
     let bug_subdir = Path::new(out_dir).join(att.bug_id.to_string());
     std::fs::create_dir_all(&bug_subdir)?;
-    let dest = bug_subdir.join(format!("{}.{}", att.id, att.file_name));
+    let dest = bug_subdir.join(format!("{}.{}", att.id, safe_basename(&att.file_name)?));
     let dest_str = dest.to_string_lossy().into_owned();
     std::fs::write(&dest, &bytes)?;
 

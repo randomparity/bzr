@@ -186,6 +186,11 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
         )?,
         comment_is_private: std::collections::HashMap::new(),
     };
+    if params.is_empty() {
+        return Err(crate::error::BzrError::InputValidation(
+            "no fields to update; specify at least one field to change".into(),
+        ));
+    }
     Ok((ids.clone(), params))
 }
 

@@ -46,6 +46,10 @@ fn decode_text(text: &BytesText<'_>) -> Result<String> {
 pub fn parse_response(xml: &str) -> Result<Value> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
+    // Emit self-closing tags (`<value/>`, `<struct/>`, `<array/>`, which
+    // Bugzilla returns for empty/null fields) as a Start+End pair so the
+    // Start/End-based parsers below handle them uniformly.
+    reader.config_mut().expand_empty_elements = true;
 
     loop {
         match next_event(&mut reader, "looking for methodResponse")? {
