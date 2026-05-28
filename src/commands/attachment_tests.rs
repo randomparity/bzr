@@ -1383,3 +1383,52 @@ async fn write_one_attachment_invalid_base64_returns_data_integrity() {
         "expected decode error message including att-id, got: {msg}",
     );
 }
+
+// ── filename sanitization (path traversal) ──────────────────────────
+
+#[test]
+fn safe_basename_strips_directory_components() {
+    assert_eq!(super::safe_basename("normal.txt").unwrap(), "normal.txt");
+    assert_eq!(super::safe_basename("../../etc/passwd").unwrap(), "passwd");
+    assert_eq!(super::safe_basename("/etc/passwd").unwrap(), "passwd");
+    assert_eq!(super::safe_basename("a/b/c.diff").unwrap(), "c.diff");
+}
+
+#[test]
+fn safe_basename_rejects_names_without_a_basename() {
+    assert!(super::safe_basename("").is_err());
+    assert!(super::safe_basename("..").is_err());
+    assert!(super::safe_basename(".").is_err());
+    assert!(super::safe_basename("foo/..").is_err());
+}
+
+#[test]
+fn single_download_dest_honors_explicit_out_verbatim() {
+    let dest = super::single_download_dest(Some("/tmp/user/chosen.bin"), "server.txt").unwrap();
+    assert_eq!(dest, std::path::Path::new("/tmp/user/chosen.bin"));
+}
+
+#[test]
+fn single_download_dest_sanitizes_server_filename_when_no_out() {
+    let dest = super::single_download_dest(None, "../../escape.txt").unwrap();
+    assert_eq!(dest, std::path::Path::new("escape.txt"));
+}
+
+#[tokio::test]
+async fn write_one_attachment_sanitizes_server_filename_with_separators() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let client = super::super::shared::connect_and_configure(None, None)
+        .await
+        .unwrap();
+
+    let att = make_attachment(7, 42, "sub/dir/escape.txt", "evil", Some(b64(b"data")));
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+
+    let file = super::write_one_attachment(&client, &att, &out_dir)
+        .await
+        .unwrap();
+
+    let expected = tmp.path().join("42").join("7.escape.txt");
+    assert_eq!(std::path::Path::new(&file.path), expected);
+    assert!(expected.exists(), "{expected:?} not found");
+}
