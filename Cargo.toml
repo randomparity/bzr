@@ -42,7 +42,7 @@ rustls-native-certs = "0.8"
 sha2 = "0.10"
 webpki-roots = "1.0"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
 tokio = { version = "1", features = ["macros", "rt", "sync"] }
 toml = "0.8"
 dirs = "6"
@@ -53,7 +53,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 percent-encoding = "2"
 url = "2"
-quick-xml = "0.39"
+quick-xml = "0.40"
 # Optional: used only by test-helpers feature
 wiremock = { version = ">=0.6, <0.6.5", optional = true }
 tempfile = { version = "3", optional = true }

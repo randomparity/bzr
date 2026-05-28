@@ -2,6 +2,9 @@
 
 use crate::cli::BugAction;
 use crate::error::Result;
+use crate::output::resources::bug::{
+    validate_json_field_selection, validate_table_columns, warn_unknown_fields, ColumnSpec,
+};
 use crate::output::writers::Writers;
 use crate::types::{ApiMode, OutputFormat};
 
@@ -14,6 +17,37 @@ mod search;
 mod update;
 mod view;
 
+/// The `--fields` / `--exclude-fields` column spec for the four field-bearing
+/// bug actions, or `None` for actions that take no field selection.
+fn bug_column_spec(action: &BugAction) -> Option<ColumnSpec<'_>> {
+    match action {
+        BugAction::List {
+            fields,
+            exclude_fields,
+            ..
+        }
+        | BugAction::My {
+            fields,
+            exclude_fields,
+            ..
+        }
+        | BugAction::Search {
+            fields,
+            exclude_fields,
+            ..
+        }
+        | BugAction::View {
+            fields,
+            exclude_fields,
+            ..
+        } => Some(ColumnSpec {
+            include: fields.as_deref(),
+            exclude: exclude_fields.as_deref(),
+        }),
+        _ => None,
+    }
+}
+
 /// Dispatch bug actions to their respective handlers.
 pub async fn execute(
     action: &BugAction,
@@ -23,6 +57,33 @@ pub async fn execute(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     update::validate_action(action)?;
+
+    // Resolve the field selection before any network I/O. A selection that
+    // leaves nothing to show exits 7 deterministically — measured against the
+    // five-column default in table mode, against the full field universe in
+    // JSON mode (where output is trimmed gh-style to the selected keys). Either
+    // way the exit code is independent of subcommand or server reachability.
+    // `bug view` is exempt from this zero-field error in both modes: a sparse
+    // (or empty `{}`) single-bug result is coherent, not an error. Unknown
+    // `--fields` tokens (typos, custom `cf_*` fields) warn once on stderr;
+    // under JSON the warning fires for every action including `view`, since a
+    // typo would otherwise silently yield `{}`.
+    if let Some(spec) = bug_column_spec(action) {
+        let is_view = matches!(action, BugAction::View { .. });
+        match format {
+            OutputFormat::Table => {
+                if !is_view {
+                    validate_table_columns(spec)?;
+                }
+            }
+            OutputFormat::Json => {
+                if !is_view {
+                    validate_json_field_selection(spec)?;
+                }
+                warn_unknown_fields(spec, w.err);
+            }
+        }
+    }
 
     // Search builds its own client because --from-url may resolve a different
     // server from the URL hostname. Skip the shared connect to avoid double
