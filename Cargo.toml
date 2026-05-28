@@ -53,7 +53,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 percent-encoding = "2"
 url = "2"
-quick-xml = "0.39"
+quick-xml = "0.40"
 # Optional: used only by test-helpers feature
 wiremock = { version = ">=0.6, <0.6.5", optional = true }
 tempfile = { version = "3", optional = true }
