@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+- `bzr attachment download`: the server-supplied attachment file name is now
+  reduced to its final path component before being used as a write
+  destination, so a malicious `file_name` such as `../../etc/foo` or an
+  absolute path can no longer escape the target directory. An explicit
+  `--out` path is still honored verbatim, as that is the user's own choice.
+
+### Fixed
+
+- `bzr bug update` / `bzr attachment update`: a Bugzilla error returned with an
+  HTTP 200 status (`{"error":true,...}`, as some deployments do) is now
+  surfaced as an error instead of being reported as a successful mutation.
+- `bzr bug update <id>` with no change flags now fails fast with exit 7 and a
+  clear message instead of issuing an empty PUT that touches the bug's
+  last-change time while reporting success.
+- XML-RPC responses that use self-closing tags for empty or null fields
+  (`<value/>`, `<struct/>`, `<array/>`) are now parsed correctly instead of
+  failing with an "unexpected EOF" or wrong-type error.
+- `bzr config show`: masking an API key that contains a multi-byte character
+  near the truncation point no longer panics; key masking and text truncation
+  now count characters rather than bytes.
+
 ## [0.4.1] - 2026-05-27
 
 ### Fixed
