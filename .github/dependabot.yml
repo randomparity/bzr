@@ -5,6 +5,14 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    ignore:
+      # `dbus-secret-service` (keyring default feature) pins sha2 0.10.x as a
+      # transitive dep, so bumping the direct dep to 0.11.x cannot collapse to
+      # a single version — it only adds a duplicate crypto stack
+      # (sha2/digest/crypto-common/block-buffer/cpufeatures all doubled).
+      # Revisit when the keyring chain moves to digest 0.11.  See #207, #184.
+      - dependency-name: "sha2"
+        versions: ["0.11.x"]
 
   - package-ecosystem: github-actions
     directory: /
