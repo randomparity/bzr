@@ -1249,3 +1249,44 @@ async fn xmlrpc_search_idless_include_fields_carries_id() {
     let bugs = client.search_bugs(&params).await.unwrap();
     assert_eq!(bugs.len(), 1);
 }
+
+#[tokio::test]
+async fn update_bug_surfaces_200_error_envelope() {
+    // Bugzilla deployments (e.g. IBM LTC) return HTTP 200 with an error
+    // envelope instead of a 4xx. A PUT that only checks the status code
+    // would report a rejected update as success.
+    let mock = MockServer::start().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/42"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "error": true,
+            "code": 115,
+            "message": "You are not allowed to edit this bug"
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = crate::types::UpdateBugParams::default();
+    let err = client.update_bug(42, &params).await.unwrap_err();
+    assert!(
+        matches!(err, crate::error::BzrError::Api { code: 115, .. }),
+        "expected Api error code 115, got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn update_bug_accepts_success_envelope() {
+    let mock = MockServer::start().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/42"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 42, "alias": [], "changes": {}}]
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = crate::types::UpdateBugParams::default();
+    client.update_bug(42, &params).await.unwrap();
+}
