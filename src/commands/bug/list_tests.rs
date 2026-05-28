@@ -364,3 +364,127 @@ async fn bug_list_mixed_positive_notequals_notsubstring() {
     .await;
     assert!(result.is_ok(), "bug list failed: {result:?}");
 }
+
+#[tokio::test]
+async fn bug_list_table_all_unknown_fields_exits_7_before_network() {
+    // No /rest/bug mock is mounted: the field selection must be rejected
+    // (exit 7) before any network I/O at all (F2). The validation is
+    // hoisted ahead of `connect_and_configure`, so not even the auth/TLS
+    // probe round-trip fires — the mock sees zero requests.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    let mut action = empty_list_action();
+    let BugAction::List { fields, .. } = &mut action else {
+        unreachable!()
+    };
+    *fields = Some("cf_custom".into());
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Table,
+        None,
+        &mut __io.writers(),
+    )
+    .await;
+    let err = result.unwrap_err();
+    assert_eq!(err.exit_code(), 7, "all-unknown --fields exits 7: {err}");
+    assert!(
+        mock.received_requests().await.unwrap().is_empty(),
+        "validation must run before any network I/O"
+    );
+}
+
+#[tokio::test]
+async fn bug_list_json_fields_trims_output() {
+    // --json with a field selection trims the output object to the selected
+    // fields (gh-style): `--fields summary` yields `{"summary": ...}` only,
+    // with id and every other unselected key dropped.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "summary": "Test bug", "status": "NEW"}]
+        })))
+        .mount(&mock)
+        .await;
+
+    let mut action = empty_list_action();
+    let BugAction::List { fields, .. } = &mut action else {
+        unreachable!()
+    };
+    *fields = Some("summary".into());
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+    assert!(result.is_ok(), "json path succeeds: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    let obj = parsed[0].as_object().unwrap();
+    assert!(
+        obj.contains_key("summary"),
+        "summary present:\n{}",
+        __io.out_str()
+    );
+    assert!(
+        !obj.contains_key("status") && !obj.contains_key("id"),
+        "unselected keys trimmed:\n{}",
+        __io.out_str()
+    );
+}
+
+#[tokio::test]
+async fn bug_list_json_without_fields_does_not_warn() {
+    // --json with no field selection: full object, no unknown-field warning.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "summary": "Test bug", "status": "NEW"}]
+        })))
+        .mount(&mock)
+        .await;
+
+    let action = empty_list_action();
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+    assert!(result.is_ok(), "json list succeeds: {result:?}");
+    assert!(
+        __io.err_str().is_empty(),
+        "no warning without a field selection: {:?}",
+        __io.err_str()
+    );
+}
+
+#[tokio::test]
+async fn bug_list_json_all_unknown_fields_exits_7() {
+    // --json validation measures emptiness against the full field universe: an
+    // all-unknown --fields value exits 7 before any network I/O, mirroring
+    // table mode. (`bug view` stays exempt — covered in the integration suite.)
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    let mut action = empty_list_action();
+    let BugAction::List { fields, .. } = &mut action else {
+        unreachable!()
+    };
+    *fields = Some("cf_custom".into());
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+    let err = result.unwrap_err();
+    assert_eq!(
+        err.exit_code(),
+        7,
+        "all-unknown --fields under --json exits 7: {err}"
+    );
+    assert!(
+        mock.received_requests().await.unwrap().is_empty(),
+        "validation must run before any network I/O"
+    );
+}

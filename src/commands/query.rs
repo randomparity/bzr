@@ -6,7 +6,10 @@
 use crate::cli::QueryAction;
 use crate::config::Config;
 use crate::error::{BzrError, Result};
-use crate::output::resources::bug::write_bugs;
+use crate::output::resources::bug::{
+    canonical_field_list, validate_json_field_selection, validate_table_columns,
+    warn_unknown_fields, write_bugs, ColumnSpec,
+};
 use crate::output::resources::query::{write_query_detail, write_query_list, write_query_saved};
 use crate::output::writers::Writers;
 use crate::types::{OutputFormat, QueryKind, SavedQuery};
@@ -238,10 +241,26 @@ async fn handle_run(
         qa_contact: slice_override(qa_contact),
         url: slice_override(url),
     });
+    params.include_fields = canonical_field_list(params.include_fields.as_deref());
+    params.exclude_fields = canonical_field_list(params.exclude_fields.as_deref());
+
+    // Source columns from the resolved params (saved-query fields + CLI
+    // overrides), not the raw flags, so a stored field selection is honored.
+    let spec = ColumnSpec {
+        include: params.include_fields.as_deref(),
+        exclude: params.exclude_fields.as_deref(),
+    };
+    match format {
+        OutputFormat::Table => validate_table_columns(spec)?,
+        OutputFormat::Json => {
+            validate_json_field_selection(spec)?;
+            warn_unknown_fields(spec, w.err);
+        }
+    }
 
     let client = super::shared::connect_and_configure(effective_server, api).await?;
     let bugs = client.search_bugs(&params).await?;
-    write_bugs(&bugs, format, w.out);
+    write_bugs(&bugs, spec, format, w.out, w.err);
     Ok(())
 }
 

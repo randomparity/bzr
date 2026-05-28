@@ -17,6 +17,43 @@ const BUG_DEFAULT_FIELDS: &str = "id,summary,status,resolution,dupe_of,product,c
     assigned_to,priority,severity,creation_time,last_change_time,creator,\
     url,whiteboard,keywords,blocks,depends_on,cc,op_sys,rep_platform,deadline";
 
+/// Ensure `id` is present in an include list and absent from an exclude list,
+/// so the non-defaulted `Bug.id` always deserializes. `None` include is left
+/// as-is (the REST sink injects `BUG_DEFAULT_FIELDS`, which leads with `id`;
+/// XML-RPC returns `id` by server default). Returns owned strings only when a
+/// change is needed.
+fn force_id_fields(
+    include: Option<&str>,
+    exclude: Option<&str>,
+) -> (Option<String>, Option<String>) {
+    let has_id = |list: &str| list.split(',').any(|t| t.trim().eq_ignore_ascii_case("id"));
+
+    let include = include.map(|list| {
+        if has_id(list) {
+            list.to_string()
+        } else {
+            format!("id,{list}")
+        }
+    });
+
+    let exclude = exclude.and_then(|list| {
+        if !has_id(list) {
+            return Some(list.to_string());
+        }
+        let kept: Vec<&str> = list
+            .split(',')
+            .filter(|t| !t.trim().eq_ignore_ascii_case("id"))
+            .collect();
+        if kept.is_empty() {
+            None
+        } else {
+            Some(kept.join(","))
+        }
+    });
+
+    (include, exclude)
+}
+
 #[derive(Deserialize)]
 struct BugListResponse {
     bugs: Vec<Bug>,
@@ -160,6 +197,21 @@ impl BugzillaClient {
 
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
         tracing::debug!(?params, %self.api_mode, "search parameters");
+        // Guarantee `id` is fetched so the non-defaulted `Bug.id` deserializes,
+        // even when the caller passed an id-less `--fields`. Only clone when
+        // normalization actually changed something, keeping the common
+        // no-`--fields` path allocation-free.
+        let (inc, exc) = force_id_fields(
+            params.include_fields.as_deref(),
+            params.exclude_fields.as_deref(),
+        );
+        let normalized =
+            (inc != params.include_fields || exc != params.exclude_fields).then(|| SearchParams {
+                include_fields: inc,
+                exclude_fields: exc,
+                ..params.clone()
+            });
+        let params = normalized.as_ref().unwrap_or(params);
         // Raw params (boolean charts from URLs) only work with REST.
         if !params.raw_params.is_empty() && self.api_mode != ApiMode::Rest {
             tracing::warn!(
@@ -265,6 +317,10 @@ impl BugzillaClient {
         include_fields: Option<&str>,
         exclude_fields: Option<&str>,
     ) -> Result<Bug> {
+        // Guarantee `id` is fetched so the non-defaulted `Bug.id` deserializes.
+        // XML-RPC ignores field lists, so this is a no-op there.
+        let (inc, exc) = force_id_fields(include_fields, exclude_fields);
+        let (include_fields, exclude_fields) = (inc.as_deref(), exc.as_deref());
         match self.api_mode {
             ApiMode::XmlRpc => self.xmlrpc_client()?.get_bug(id).await,
             ApiMode::Hybrid => {

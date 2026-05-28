@@ -1,7 +1,7 @@
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
-use crate::output::resources::bug::write_bugs;
+use crate::output::resources::bug::{canonical_field_list, write_bugs, ColumnSpec};
 use crate::output::writers::Writers;
 use crate::types::{OutputFormat, SearchParams};
 
@@ -24,6 +24,11 @@ pub(super) async fn handle(
         unreachable!()
     };
 
+    let spec = ColumnSpec {
+        include: fields.as_deref(),
+        exclude: exclude_fields.as_deref(),
+    };
+
     let whoami = client.whoami().await?;
     let email = whoami.name;
     let mut all_bugs: Vec<crate::types::Bug> = Vec::new();
@@ -33,8 +38,8 @@ pub(super) async fn handle(
     let base = SearchParams {
         status: status.clone(),
         limit: Some(*limit),
-        include_fields: fields.clone(),
-        exclude_fields: exclude_fields.clone(),
+        include_fields: canonical_field_list(fields.as_deref()),
+        exclude_fields: canonical_field_list(exclude_fields.as_deref()),
         ..Default::default()
     };
     let mut searches = Vec::new();
@@ -62,7 +67,7 @@ pub(super) async fn handle(
         }
     }
 
-    write_bugs(&all_bugs, format, w.out);
+    write_bugs(&all_bugs, spec, format, w.out, w.err);
     Ok(())
 }
 

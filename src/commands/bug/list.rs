@@ -1,7 +1,7 @@
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
-use crate::output::resources::bug::write_bugs;
+use crate::output::resources::bug::{canonical_field_list, write_bugs, ColumnSpec};
 use crate::output::writers::Writers;
 use crate::types::{OutputFormat, SearchParams};
 use crate::validation::parse_optional_date;
@@ -56,8 +56,8 @@ pub(super) async fn handle(
         alias: alias.clone(),
         summary: summary.clone(),
         limit: Some(*limit),
-        include_fields: fields.clone(),
-        exclude_fields: exclude_fields.clone(),
+        include_fields: canonical_field_list(fields.as_deref()),
+        exclude_fields: canonical_field_list(exclude_fields.as_deref()),
         creation_time,
         last_change_time,
         whiteboard: whiteboard.clone(),
@@ -70,8 +70,12 @@ pub(super) async fn handle(
         url: url.clone(),
         ..Default::default()
     };
+    let spec = ColumnSpec {
+        include: fields.as_deref(),
+        exclude: exclude_fields.as_deref(),
+    };
     let bugs = client.search_bugs(&params).await?;
-    write_bugs(&bugs, format, w.out);
+    write_bugs(&bugs, spec, format, w.out, w.err);
     Ok(())
 }
 
