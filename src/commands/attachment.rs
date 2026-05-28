@@ -43,7 +43,12 @@ pub async fn execute(
             if bug_ids.is_empty() && ids.len() == 1 {
                 download_single(&client, ids[0], out.as_deref(), format, w).await?;
             } else {
-                download_batch(&client, ids, bug_ids, out_dir, format, w).await?;
+                let targets = BatchTargets {
+                    ids,
+                    bug_ids,
+                    out_dir,
+                };
+                download_batch(&client, targets, format, w).await?;
             }
         }
         AttachmentAction::Upload {
@@ -306,6 +311,18 @@ async fn write_one_attachment(
     })
 }
 
+/// Targets for the multi-source `Download` batch path. `ids` are
+/// individual attachment IDs; `bug_ids` resolve to every attachment on
+/// the named bugs. Both lists may be non-empty (the two streams merge
+/// into one `AttachmentBatchResult`). `out_dir` is the shared
+/// destination directory.
+#[derive(Clone, Copy)]
+struct BatchTargets<'a> {
+    ids: &'a [u64],
+    bug_ids: &'a [u64],
+    out_dir: &'a str,
+}
+
 /// Bulk attachment download: walks every `--bug <ID>` then every
 /// positional attachment ID, recording successes and per-target
 /// failures. On any failure, returns `BatchPartialFailure` (exit 11).
@@ -315,28 +332,26 @@ async fn write_one_attachment(
 /// loop — better than burying the same error in N per-attachment rows.
 async fn download_batch(
     client: &BugzillaClient,
-    ids: &[u64],
-    bug_ids: &[u64],
-    out_dir: &str,
+    targets: BatchTargets<'_>,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    std::fs::create_dir_all(out_dir)?;
+    std::fs::create_dir_all(targets.out_dir)?;
 
     let mut bug_results: Vec<BugDownloadResult> = Vec::new();
     let mut attachment_results: Vec<AttachmentDownloadResult> = Vec::new();
 
-    for &bug_id in bug_ids {
-        bug_results.push(download_bug_target(client, bug_id, out_dir).await);
+    for &bug_id in targets.bug_ids {
+        bug_results.push(download_bug_target(client, bug_id, targets.out_dir).await);
     }
 
-    for &att_id in ids {
-        attachment_results.push(download_attachment_target(client, att_id, out_dir).await);
+    for &att_id in targets.ids {
+        attachment_results.push(download_attachment_target(client, att_id, targets.out_dir).await);
     }
 
     let summary = BatchSummary::from_results(&bug_results, &attachment_results);
     let result = AttachmentBatchResult {
-        out_dir: out_dir.to_string(),
+        out_dir: targets.out_dir.to_string(),
         bug_results,
         attachment_results,
         summary,

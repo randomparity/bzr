@@ -95,14 +95,14 @@ pub async fn execute(
             service,
             account,
             yes,
-        } => migrate_to_keyring(
-            name.as_str(),
-            service.as_deref(),
-            account.as_deref(),
-            *yes,
-            format,
-            w,
-        ),
+        } => {
+            let spec = MigrateSpec {
+                name: name.as_str(),
+                service: service.as_deref(),
+                account: account.as_deref(),
+            };
+            migrate_to_keyring(spec, *yes, format, w)
+        }
     }
 }
 
@@ -311,10 +311,20 @@ fn unset_keyring(name: &str, format: OutputFormat, w: &mut Writers<'_>) -> Resul
     Ok(())
 }
 
+/// `migrate-to-keyring` operands: which server to migrate and the
+/// optional `--service` / `--account` overrides for where the credential
+/// gets stored. Bundles together so `migrate_to_keyring` stays under
+/// the 5-positional-arg threshold; `Option<&str>` defaults
+/// (service="bzr", account=name) are resolved inside the function.
+#[derive(Clone, Copy)]
+struct MigrateSpec<'a> {
+    name: &'a str,
+    service: Option<&'a str>,
+    account: Option<&'a str>,
+}
+
 fn migrate_to_keyring(
-    name: &str,
-    service: Option<&str>,
-    account: Option<&str>,
+    spec: MigrateSpec<'_>,
     yes: bool,
     format: OutputFormat,
     w: &mut Writers<'_>,
@@ -324,6 +334,12 @@ fn migrate_to_keyring(
             "migrate-to-keyring requires --yes to confirm non-interactive migration".into(),
         ));
     }
+
+    let MigrateSpec {
+        name,
+        service,
+        account,
+    } = spec;
 
     let mut config = Config::load()?;
     let server = config
