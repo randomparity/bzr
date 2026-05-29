@@ -679,3 +679,44 @@ fn config_save_hardens_permissions_for_new_paths() {
     assert_eq!(dir_mode, 0o700);
     assert_eq!(file_mode, 0o600);
 }
+
+#[cfg(unix)]
+#[test]
+fn save_without_validation_hardens_recreated_file() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::tempdir().unwrap();
+    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
+    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    // A server left without any credential source (the unset-keyring state):
+    // Config::save() would reject this, so unset-keyring uses
+    // save_without_validation — which must still harden the file.
+    let mut servers = HashMap::new();
+    let mut srv = make_server_config("https://bugzilla.example.com");
+    srv.api_key = None;
+    servers.insert("myserver".to_string(), srv);
+    let config = Config {
+        default_server: Some("myserver".to_string()),
+        servers,
+        templates: HashMap::new(),
+        queries: HashMap::new(),
+    };
+
+    assert!(
+        config.save().is_err(),
+        "credential-less config must fail validation"
+    );
+
+    let config_path = tmp.path().join("bzr").join("config.toml");
+    // Force the recreation scenario: ensure no pre-hardened file exists.
+    let _ = fs::remove_file(&config_path);
+
+    config.save_without_validation().unwrap();
+
+    let file_mode = fs::metadata(&config_path).unwrap().permissions().mode();
+    assert_eq!(
+        file_mode & 0o077,
+        0,
+        "recreated config must not be group/other accessible: {file_mode:o}"
+    );
+}

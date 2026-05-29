@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- `bzr config unset-keyring`: the config file is now rewritten through the same
+  `0o600` (file) / `0o700` (directory) hardening as every other save. Previously
+  this path wrote the file directly, so a config recreated by `unset-keyring`
+  (e.g. after the file had been deleted) could be left world-readable.
 - `bzr attachment download`: the server-supplied attachment file name is now
   reduced to its final path component before being used as a write
   destination, so a malicious `file_name` such as `../../etc/foo` or an
