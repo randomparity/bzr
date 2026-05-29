@@ -253,6 +253,22 @@ impl Config {
 
     pub fn save(&self) -> Result<()> {
         self.validate()?;
+        self.write_to_disk()
+    }
+
+    /// Persist the config **without** running the credential-source validator.
+    ///
+    /// Used by `unset-keyring`, which intentionally leaves a server without a
+    /// credential source (the user re-credentials it afterward). Applies the
+    /// same `0o600`/`0o700` hardening as [`Self::save`] so a recreated config
+    /// file is never world-readable.
+    pub fn save_without_validation(&self) -> Result<()> {
+        self.write_to_disk()
+    }
+
+    /// Serialize and write the config to its on-disk path, hardening the
+    /// directory (`0o700`) and file (`0o600`) on first creation.
+    fn write_to_disk(&self) -> Result<()> {
         let path = Self::path()?;
         if let Some(parent) = path.parent() {
             let parent_exists = parent.exists();
