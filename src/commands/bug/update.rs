@@ -40,6 +40,28 @@ fn clean_string_list(field: &str, values: &[String]) -> Result<Vec<String>> {
     Ok(out)
 }
 
+/// Build an `IdListUpdate` from the raw `--*-add` / `--*-remove` ID lists.
+fn id_list_update(add: &[u64], remove: &[u64]) -> IdListUpdate {
+    IdListUpdate {
+        add: add.to_vec(),
+        remove: remove.to_vec(),
+    }
+}
+
+/// Build a `StringListUpdate`, validating each side via [`clean_string_list`].
+/// `add_flag` / `remove_flag` name the originating CLI flags for error context.
+fn string_list_update(
+    add_flag: &str,
+    add: &[String],
+    remove_flag: &str,
+    remove: &[String],
+) -> Result<StringListUpdate> {
+    Ok(StringListUpdate {
+        add: clean_string_list(add_flag, add)?,
+        remove: clean_string_list(remove_flag, remove)?,
+    })
+}
+
 fn resolve_comment(
     comment: Option<&str>,
     comment_file: Option<&std::path::Path>,
@@ -150,30 +172,27 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
         summary: summary.clone(),
         whiteboard: whiteboard.clone(),
         flags,
-        blocks: IdListUpdate {
-            add: blocks_add.clone(),
-            remove: blocks_remove.clone(),
-        },
-        depends_on: IdListUpdate {
-            add: depends_on_add.clone(),
-            remove: depends_on_remove.clone(),
-        },
-        keywords: StringListUpdate {
-            add: clean_string_list(FLAG_KEYWORDS_ADD, keywords_add)?,
-            remove: clean_string_list(FLAG_KEYWORDS_REMOVE, keywords_remove)?,
-        },
-        cc: StringListUpdate {
-            add: clean_string_list(FLAG_CC_ADD, cc_add)?,
-            remove: clean_string_list(FLAG_CC_REMOVE, cc_remove)?,
-        },
-        groups: StringListUpdate {
-            add: clean_string_list(FLAG_GROUPS_ADD, groups_add)?,
-            remove: clean_string_list(FLAG_GROUPS_REMOVE, groups_remove)?,
-        },
-        see_also: StringListUpdate {
-            add: clean_string_list(FLAG_SEE_ALSO_ADD, see_also_add)?,
-            remove: clean_string_list(FLAG_SEE_ALSO_REMOVE, see_also_remove)?,
-        },
+        blocks: id_list_update(blocks_add, blocks_remove),
+        depends_on: id_list_update(depends_on_add, depends_on_remove),
+        keywords: string_list_update(
+            FLAG_KEYWORDS_ADD,
+            keywords_add,
+            FLAG_KEYWORDS_REMOVE,
+            keywords_remove,
+        )?,
+        cc: string_list_update(FLAG_CC_ADD, cc_add, FLAG_CC_REMOVE, cc_remove)?,
+        groups: string_list_update(
+            FLAG_GROUPS_ADD,
+            groups_add,
+            FLAG_GROUPS_REMOVE,
+            groups_remove,
+        )?,
+        see_also: string_list_update(
+            FLAG_SEE_ALSO_ADD,
+            see_also_add,
+            FLAG_SEE_ALSO_REMOVE,
+            see_also_remove,
+        )?,
         comment: resolve_comment(
             comment.as_deref(),
             comment_file.as_deref(),
