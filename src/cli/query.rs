@@ -59,7 +59,7 @@ pub enum QueryAction {
         /// filter flags. Stores the query as a free-text search;
         /// `bzr query run <name>` then issues the same search
         /// against the configured server.
-        #[arg(long)]
+        #[arg(long, conflicts_with_all = ["product", "component", "status", "assignee", "creator", "priority", "severity", "whiteboard", "target_milestone", "version", "op_sys", "platform", "resolution", "qa_contact", "url"])]
         search: Option<String>,
         /// Filter by product (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
