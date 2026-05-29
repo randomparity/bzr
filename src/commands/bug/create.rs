@@ -8,15 +8,6 @@ use crate::output::result_types::{write_result, ActionResult, ResourceKind};
 use crate::output::writers::Writers;
 use crate::types::{CreateBugParams, OutputFormat};
 
-fn read_description_file(path: &std::path::Path) -> Result<String> {
-    std::fs::read_to_string(path).map_err(|e| {
-        crate::error::BzrError::InputValidation(format!(
-            "--description-file could not be read ({}): {e}",
-            path.display()
-        ))
-    })
-}
-
 const SENTINEL: &str = "# ------------------------ >8 ------------------------";
 
 /// CLI-over-template field merge, computed once and shared between
@@ -137,7 +128,10 @@ fn resolve_description(
         return Ok(Some(d.to_owned()));
     }
     if let Some(p) = description_file {
-        return Ok(Some(read_description_file(p)?));
+        return Ok(Some(crate::commands::shared::read_file_with_context(
+            p,
+            "--description-file",
+        )?));
     }
     if !std::io::stdin().is_terminal() {
         let mut buf = String::new();

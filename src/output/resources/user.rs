@@ -1,9 +1,11 @@
 use std::io::Write;
 
 use colored::Colorize;
-use tabled::{Table, Tabled};
+use tabled::Tabled;
 
-use crate::output::formatting::{opt_yes_no, write_field, write_formatted, write_optional_field};
+use crate::output::formatting::{
+    opt_yes_no, write_field, write_formatted, write_optional_field, write_table_or_empty,
+};
 use crate::types::{BugzillaUser, OutputFormat, WhoamiResponse};
 
 #[derive(Tabled)]
@@ -63,14 +65,7 @@ fn detailed_row(user: &BugzillaUser) -> DetailedUserRow {
 }
 
 pub fn write_users<W: Write + ?Sized>(users: &[BugzillaUser], format: OutputFormat, out: &mut W) {
-    write_formatted(users, format, out, |users, out| {
-        if users.is_empty() {
-            let _ = writeln!(out, "No users found.");
-            return;
-        }
-        let rows: Vec<UserRow> = users.iter().map(basic_row).collect();
-        let _ = writeln!(out, "{}", Table::new(rows));
-    });
+    write_table_or_empty(users, format, out, "No users found.", basic_row);
 }
 
 pub fn write_users_detailed<W: Write + ?Sized>(
@@ -78,14 +73,7 @@ pub fn write_users_detailed<W: Write + ?Sized>(
     format: OutputFormat,
     out: &mut W,
 ) {
-    write_formatted(users, format, out, |users, out| {
-        if users.is_empty() {
-            let _ = writeln!(out, "No users found.");
-            return;
-        }
-        let rows: Vec<DetailedUserRow> = users.iter().map(detailed_row).collect();
-        let _ = writeln!(out, "{}", Table::new(rows));
-    });
+    write_table_or_empty(users, format, out, "No users found.", detailed_row);
 }
 
 pub fn write_whoami<W: Write + ?Sized>(whoami: &WhoamiResponse, format: OutputFormat, out: &mut W) {

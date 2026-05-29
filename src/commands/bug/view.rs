@@ -81,10 +81,7 @@ pub(super) async fn handle(
     let exc_canonical = canonical_field_list(exc);
 
     if ids.len() == 1 {
-        let spec = ColumnSpec {
-            include: inc_canonical.as_deref(),
-            exclude: exc_canonical.as_deref(),
-        };
+        let spec = ColumnSpec::new(inc_canonical.as_deref(), exc_canonical.as_deref());
         return view_single(client, &ids[0], spec, format, w).await;
     }
 
@@ -101,10 +98,7 @@ pub(super) async fn handle(
         mode,
     )
     .await?;
-    let spec = ColumnSpec {
-        include: inc,
-        exclude: exc,
-    };
+    let spec = ColumnSpec::new(inc, exc);
     write_batch(batch, spec, format, w);
     Ok(())
 }

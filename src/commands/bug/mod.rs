@@ -40,10 +40,10 @@ fn bug_column_spec(action: &BugAction) -> Option<ColumnSpec<'_>> {
             fields,
             exclude_fields,
             ..
-        } => Some(ColumnSpec {
-            include: fields.as_deref(),
-            exclude: exclude_fields.as_deref(),
-        }),
+        } => Some(ColumnSpec::new(
+            fields.as_deref(),
+            exclude_fields.as_deref(),
+        )),
         _ => None,
     }
 }

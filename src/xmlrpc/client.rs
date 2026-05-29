@@ -9,6 +9,10 @@ use crate::xmlrpc::call::build_request;
 use crate::xmlrpc::parsing::parse_response;
 use crate::xmlrpc::value::Value;
 
+/// Error message used whenever an XML-RPC method expects a top-level struct
+/// in the response but receives a different value type.
+const EXPECTED_STRUCT_RESPONSE: &str = "expected struct response";
+
 const ATTACHMENT_LIST_FIELDS: &[&str] = &[
     "id",
     "bug_id",
@@ -171,7 +175,7 @@ impl XmlRpcClient {
         let result = self.call("Group.get", rpc_params).await?;
         let top = result
             .as_struct()
-            .ok_or_else(|| BzrError::XmlRpc("expected struct response".into()))?;
+            .ok_or_else(|| BzrError::XmlRpc(EXPECTED_STRUCT_RESPONSE.into()))?;
         let groups = top
             .get("groups")
             .and_then(Value::as_array)
@@ -233,7 +237,7 @@ impl XmlRpcClient {
 fn extract_id(response: &Value) -> Result<u64> {
     let m = response
         .as_struct()
-        .ok_or_else(|| BzrError::XmlRpc("expected struct response".into()))?;
+        .ok_or_else(|| BzrError::XmlRpc(EXPECTED_STRUCT_RESPONSE.into()))?;
 
     let id = m
         .get("id")
@@ -281,7 +285,7 @@ fn add_field_lists(rpc_params: &mut BTreeMap<String, Value>, params: &SearchPara
 fn extract_bugs(response: &Value) -> Result<Vec<Bug>> {
     let top = response
         .as_struct()
-        .ok_or_else(|| BzrError::XmlRpc("expected struct response".into()))?;
+        .ok_or_else(|| BzrError::XmlRpc(EXPECTED_STRUCT_RESPONSE.into()))?;
 
     let Some(bugs_val) = top.get("bugs") else {
         return Ok(Vec::new());
@@ -344,7 +348,7 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
 fn lookup_bug_entry(response: &Value, bug_id: u64) -> Result<Option<&Value>> {
     let top = response
         .as_struct()
-        .ok_or_else(|| BzrError::XmlRpc("expected struct response".into()))?;
+        .ok_or_else(|| BzrError::XmlRpc(EXPECTED_STRUCT_RESPONSE.into()))?;
 
     let Some(bugs_val) = top.get("bugs") else {
         return Ok(None);
@@ -438,7 +442,7 @@ fn extract_attachment_by_id(
 ) -> Result<crate::types::Attachment> {
     let top = response
         .as_struct()
-        .ok_or_else(|| BzrError::XmlRpc("expected struct response".into()))?;
+        .ok_or_else(|| BzrError::XmlRpc(EXPECTED_STRUCT_RESPONSE.into()))?;
 
     let attachments_struct = top
         .get("attachments")

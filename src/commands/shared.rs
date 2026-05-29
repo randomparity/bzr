@@ -395,6 +395,18 @@ pub async fn connect_and_configure(
     Ok(client)
 }
 
+/// Read a UTF-8 file, mapping any I/O error to an `InputValidation` error that
+/// names the originating CLI flag and the path. `flag` is the user-facing
+/// option name (e.g. `--description-file`) used to prefix the message.
+pub(crate) fn read_file_with_context(path: &std::path::Path, flag: &str) -> Result<String> {
+    std::fs::read_to_string(path).map_err(|e| {
+        BzrError::InputValidation(format!(
+            "{flag} could not be read ({}): {e}",
+            path.display()
+        ))
+    })
+}
+
 #[cfg(test)]
 #[path = "shared_tests.rs"]
 mod tests;
