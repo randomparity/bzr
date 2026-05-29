@@ -5,6 +5,11 @@ use crate::output::resources::query::write_query_saved;
 use crate::output::writers::Writers;
 use crate::types::{ApiMode, OutputFormat, Overrides, SavedQuery, SearchParams};
 
+/// Default cap on bugs returned by a search when neither the URL nor `--limit`
+/// specifies one. Keeps unbounded `bug search` invocations from pulling an
+/// entire installation's bug list.
+const DEFAULT_SEARCH_LIMIT: u32 = 50;
+
 /// Determine the `save_as` name + query to persist after a successful URL-based
 /// search. Returns None when --save-as wasn't passed; errors when --save-as=""
 /// is passed but the URL has no `known_name`/`query_based_on` to fall back on.
@@ -40,7 +45,7 @@ fn build_params_from_url(
 ) -> SearchParams {
     let mut params = parsed_query.into_search_params();
     if params.limit.is_none() && limit.is_none() {
-        params.limit = Some(50);
+        params.limit = Some(DEFAULT_SEARCH_LIMIT);
     }
     params.apply_overrides(Overrides {
         limit,
@@ -101,7 +106,7 @@ pub(super) async fn handle(
         let client = crate::commands::shared::connect_and_configure(server, api).await?;
         let params = SearchParams {
             quicksearch: Some(query_str.to_string()),
-            limit: Some(limit.unwrap_or(50)),
+            limit: Some(limit.unwrap_or(DEFAULT_SEARCH_LIMIT)),
             include_fields: canonical_field_list(fields.as_deref()),
             exclude_fields: canonical_field_list(exclude_fields.as_deref()),
             ..Default::default()

@@ -375,7 +375,7 @@ impl BugzillaClient {
     fn parse_body_to_value(body: &str, safe_url: &str) -> Result<serde_json::Value> {
         tracing::trace!(
             url = safe_url,
-            body = &body[..body.len().min(2048)],
+            body = &body[..body.len().min(BODY_TRACE_MAX_BYTES)],
             "response body"
         );
 
@@ -383,7 +383,7 @@ impl BugzillaClient {
             tracing::debug!(
                 url = safe_url,
                 error = %e,
-                body_preview = &body[..body.len().min(512)],
+                body_preview = &body[..body.len().min(BODY_PREVIEW_MAX_BYTES)],
                 "JSON deserialization failed"
             );
             BzrError::Deserialize(format!(
@@ -553,6 +553,11 @@ impl BugzillaClient {
 /// 512 bytes is enough to capture the top-level keys of any realistic
 /// Bugzilla envelope while keeping the error message human-scaled.
 const BODY_PREVIEW_MAX_BYTES: usize = 512;
+
+/// Maximum length of the response body logged at `trace` level. Larger than
+/// [`BODY_PREVIEW_MAX_BYTES`] because trace logs are opt-in diagnostics where
+/// seeing more of the payload outweighs message compactness.
+const BODY_TRACE_MAX_BYTES: usize = 2048;
 
 /// Format a response body for inclusion in a `BzrError::Deserialize` message.
 ///
