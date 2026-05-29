@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.2] - 2026-05-29
 
 ### Changed
 
@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Auth detection against a server with an untrusted or expired TLS certificate
+  now reports the actionable TLS hint instead of an opaque "network error". The
+  `valid_login` probe previously logged send failures generically and skipped
+  the certificate detection that the `whoami` probe performs; both probes now
+  share the same network-error handling.
 - HTTP error responses whose body cannot be read no longer report an empty
   body: the read failure is surfaced in the error message while the HTTP status
   is still reported, instead of being silently swallowed.
