@@ -3,7 +3,7 @@ use std::io::Write;
 
 use tabled::{Table, Tabled};
 
-use crate::output::formatting::{truncate, write_formatted};
+use crate::output::formatting::{truncate, write_formatted, DESCRIPTION_TRUNCATE_WIDTH};
 use crate::types::{OutputFormat, Product};
 
 fn format_named_list(heading: &str, items: &[(impl AsRef<str>, bool)]) -> String {
@@ -66,7 +66,7 @@ pub fn write_products<W: Write + ?Sized>(products: &[Product], format: OutputFor
         let rows: Vec<ProductRow> = products
             .iter()
             .map(|p| {
-                let description = truncate(&p.description, 60);
+                let description = truncate(&p.description, DESCRIPTION_TRUNCATE_WIDTH);
                 ProductRow {
                     id: p.id,
                     name: p.name.clone(),

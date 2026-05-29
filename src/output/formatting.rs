@@ -88,6 +88,14 @@ pub(super) fn opt_yes_no(value: Option<bool>) -> &'static str {
 
 // ── Text helpers ────────────────────────────────────────────────────
 
+/// Column width for bug summaries in table output. Wider than
+/// [`DESCRIPTION_TRUNCATE_WIDTH`] because summaries are the primary
+/// identifying text in `bug list`/`bug search` rows.
+pub(super) const SUMMARY_TRUNCATE_WIDTH: usize = 72;
+
+/// Column width for product/classification descriptions in table output.
+pub(super) const DESCRIPTION_TRUNCATE_WIDTH: usize = 60;
+
 pub(super) fn truncate(s: &str, max_chars: usize) -> String {
     if s.chars().count() > max_chars {
         let truncated: String = s.chars().take(max_chars.saturating_sub(3)).collect();

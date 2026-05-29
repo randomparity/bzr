@@ -5,7 +5,7 @@ use tabled::builder::Builder;
 
 use crate::output::formatting::{
     colorize_status, shorten_email, truncate, write_divider, write_field, write_formatted,
-    write_json, write_list_field, write_optional_field,
+    write_json, write_list_field, write_optional_field, SUMMARY_TRUNCATE_WIDTH,
 };
 use crate::types::{Bug, HistoryEntry, OutputFormat};
 
@@ -69,7 +69,7 @@ const COLUMNS: &[BugColumn] = &[
     BugColumn {
         aliases: &["summary"],
         header: "SUMMARY",
-        render: |b| truncate(&b.summary, 72),
+        render: |b| truncate(&b.summary, SUMMARY_TRUNCATE_WIDTH),
     },
     BugColumn {
         aliases: &["severity"],

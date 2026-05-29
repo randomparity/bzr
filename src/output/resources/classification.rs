@@ -2,7 +2,7 @@ use std::io::Write;
 
 use colored::Colorize;
 
-use crate::output::formatting::{truncate, write_formatted};
+use crate::output::formatting::{truncate, write_formatted, DESCRIPTION_TRUNCATE_WIDTH};
 use crate::types::{Classification, OutputFormat};
 
 pub fn write_classification<W: Write + ?Sized>(
@@ -21,7 +21,12 @@ pub fn write_classification<W: Write + ?Sized>(
         if !classification.products.is_empty() {
             let _ = writeln!(out, "{}:", "Products".bold());
             for p in &classification.products {
-                let _ = writeln!(out, "  {} - {}", p.name, truncate(&p.description, 60));
+                let _ = writeln!(
+                    out,
+                    "  {} - {}",
+                    p.name,
+                    truncate(&p.description, DESCRIPTION_TRUNCATE_WIDTH)
+                );
             }
         }
     });

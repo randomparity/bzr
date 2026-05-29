@@ -70,9 +70,9 @@ async fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Convert a `BzrError` exit code (1-12) to a `std::process::ExitCode`.
+/// Convert a `BzrError` exit code (1-13) to a `std::process::ExitCode`.
 fn exit_code(e: &BzrError) -> ExitCode {
-    // All BzrError exit codes are in the range 1..=12.
+    // All BzrError exit codes are in the range 1..=13.
     ExitCode::from(u8::try_from(e.exit_code()).unwrap_or(1))
 }
 

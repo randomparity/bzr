@@ -2,7 +2,7 @@ use std::io::Write;
 
 use colored::Colorize;
 
-use crate::output::formatting::write_formatted;
+use crate::output::formatting::{write_divider, write_formatted};
 use crate::types::{Comment, OutputFormat};
 
 pub fn write_comments<W: Write + ?Sized>(comments: &[Comment], format: OutputFormat, out: &mut W) {
@@ -28,7 +28,7 @@ pub fn write_comments<W: Write + ?Sized>(comments: &[Comment], format: OutputFor
                 let _ = writeln!(out, "  {line}");
             }
             let _ = writeln!(out);
-            let _ = writeln!(out, "{}", "─".repeat(60));
+            write_divider(out);
         }
     });
 }

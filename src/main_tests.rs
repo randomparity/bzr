@@ -192,6 +192,25 @@ fn exit_code_maps_other_variant() {
 }
 
 #[test]
+fn exit_code_maps_highest_tls_code() {
+    // Guards the upper bound documented on `exit_code`: the TLS variants
+    // return 13, the largest code, and must survive the `u8::try_from`
+    // conversion without collapsing to the `unwrap_or(1)` fallback.
+    let err = BzrError::PinMismatch {
+        server: "example.com".into(),
+        expected: "sha256//old".into(),
+        actual: "sha256//new".into(),
+    };
+    assert_eq!(err.exit_code(), 13);
+    let code = exit_code(&err);
+    let rendered = format!("{code:?}");
+    assert!(
+        rendered.contains("13"),
+        "expected ExitCode debug to include 13, got {rendered}"
+    );
+}
+
+#[test]
 fn format_dispatch_error_renders_json() {
     let err = BzrError::Config("bad config".into());
     let out = format_dispatch_error(&err, OutputFormat::Json);
