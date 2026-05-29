@@ -290,10 +290,10 @@ fn unset_keyring(name: &str, format: OutputFormat, w: &mut Writers<'_>) -> Resul
     // Idempotent: missing entry is not an error.
     crate::credentials::keyring::delete(&service_name, &account_name)?;
 
-    // Saving would fail validation (the server has no credential source
-    // now). Write TOML directly.
+    // Saving normally would fail validation (the server has no credential
+    // source now), but the on-disk hardening (0o600/0o700) must still apply.
+    config.save_without_validation()?;
     let path = Config::path()?;
-    save_config_without_validation(&config, &path)?;
 
     let human = format!(
         "Removed keychain entry for server '{name}' (service={service_name}, \
@@ -399,28 +399,6 @@ fn migrate_to_keyring(
         format,
         w.out,
     );
-    Ok(())
-}
-
-/// Save a config to disk without running the credential-source validator.
-///
-/// Used by `unset-keyring`, which intentionally leaves the server without
-/// a credential source so the user can re-credential it afterward with
-/// `set-server` or `set-keyring`.
-fn save_config_without_validation(config: &Config, path: &std::path::Path) -> Result<()> {
-    use std::fs;
-    use std::io::Write as IoWrite;
-
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let content = toml::to_string_pretty(config)?;
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(path)?;
-    file.write_all(content.as_bytes())?;
     Ok(())
 }
 
