@@ -2,6 +2,7 @@ use std::io::Write;
 
 use colored::Colorize;
 use serde::Serialize;
+use tabled::{Table, Tabled};
 
 use crate::types::OutputFormat;
 
@@ -28,6 +29,30 @@ pub(super) fn write_formatted<T, W>(
         OutputFormat::Json => write_json(value, out),
         OutputFormat::Table => table_fn(value, out),
     }
+}
+
+/// Render a slice as JSON or a `tabled` table, printing `empty_msg` instead of
+/// an empty table when there are no items. `to_row` maps each item to a
+/// `Tabled` row type.
+pub(super) fn write_table_or_empty<T, R, W>(
+    items: &[T],
+    format: OutputFormat,
+    out: &mut W,
+    empty_msg: &str,
+    to_row: impl Fn(&T) -> R,
+) where
+    T: Serialize,
+    R: Tabled,
+    W: Write + ?Sized,
+{
+    write_formatted(items, format, out, |items, out| {
+        if items.is_empty() {
+            let _ = writeln!(out, "{empty_msg}");
+            return;
+        }
+        let rows: Vec<R> = items.iter().map(to_row).collect();
+        let _ = writeln!(out, "{}", Table::new(rows));
+    });
 }
 
 // ── Detail-field helpers ────────────────────────────────────────────

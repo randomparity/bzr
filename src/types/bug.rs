@@ -178,6 +178,34 @@ pub struct Overrides<'a> {
     pub url: Option<&'a [String]>,
 }
 
+/// Map a [`FilterField`] to the matching multi-value `Vec<String>` on `$self`.
+///
+/// Shared by `SearchParams` and `SavedQuery`, which carry identical filter
+/// fields except for the assignee column (`assigned_to` vs `assignee`) — the
+/// caller passes its own field name as `$assignee`. Pass a trailing `mut` for
+/// a mutable borrow.
+macro_rules! filter_field_arm {
+    ($self:ident, $field:ident, $assignee:ident $(, $mutability:tt)?) => {
+        match $field {
+            FilterField::Product => & $($mutability)? $self.product,
+            FilterField::Component => & $($mutability)? $self.component,
+            FilterField::Status => & $($mutability)? $self.status,
+            FilterField::AssignedTo => & $($mutability)? $self.$assignee,
+            FilterField::Creator => & $($mutability)? $self.creator,
+            FilterField::Priority => & $($mutability)? $self.priority,
+            FilterField::Severity => & $($mutability)? $self.severity,
+            FilterField::Whiteboard => & $($mutability)? $self.whiteboard,
+            FilterField::TargetMilestone => & $($mutability)? $self.target_milestone,
+            FilterField::Version => & $($mutability)? $self.version,
+            FilterField::OpSys => & $($mutability)? $self.op_sys,
+            FilterField::Platform => & $($mutability)? $self.platform,
+            FilterField::Resolution => & $($mutability)? $self.resolution,
+            FilterField::QaContact => & $($mutability)? $self.qa_contact,
+            FilterField::Url => & $($mutability)? $self.url,
+        }
+    };
+}
+
 impl SearchParams {
     /// Apply optional per-invocation overrides. `Some(_)` replaces;
     /// `None` keeps the saved value.
@@ -235,44 +263,12 @@ impl SearchParams {
     }
 
     fn get_filter_field(&self, field: FilterField) -> &[String] {
-        match field {
-            FilterField::Product => &self.product,
-            FilterField::Component => &self.component,
-            FilterField::Status => &self.status,
-            FilterField::AssignedTo => &self.assigned_to,
-            FilterField::Creator => &self.creator,
-            FilterField::Priority => &self.priority,
-            FilterField::Severity => &self.severity,
-            FilterField::Whiteboard => &self.whiteboard,
-            FilterField::TargetMilestone => &self.target_milestone,
-            FilterField::Version => &self.version,
-            FilterField::OpSys => &self.op_sys,
-            FilterField::Platform => &self.platform,
-            FilterField::Resolution => &self.resolution,
-            FilterField::QaContact => &self.qa_contact,
-            FilterField::Url => &self.url,
-        }
+        filter_field_arm!(self, field, assigned_to)
     }
 
     #[cfg(test)]
     fn get_filter_field_mut(&mut self, field: FilterField) -> &mut Vec<String> {
-        match field {
-            FilterField::Product => &mut self.product,
-            FilterField::Component => &mut self.component,
-            FilterField::Status => &mut self.status,
-            FilterField::AssignedTo => &mut self.assigned_to,
-            FilterField::Creator => &mut self.creator,
-            FilterField::Priority => &mut self.priority,
-            FilterField::Severity => &mut self.severity,
-            FilterField::Whiteboard => &mut self.whiteboard,
-            FilterField::TargetMilestone => &mut self.target_milestone,
-            FilterField::Version => &mut self.version,
-            FilterField::OpSys => &mut self.op_sys,
-            FilterField::Platform => &mut self.platform,
-            FilterField::Resolution => &mut self.resolution,
-            FilterField::QaContact => &mut self.qa_contact,
-            FilterField::Url => &mut self.url,
-        }
+        filter_field_arm!(self, field, assigned_to, mut)
     }
 
     fn has_mapped_filters(&self) -> bool {
@@ -788,43 +784,11 @@ impl SavedQuery {
     }
 
     fn get_filter_field(&self, field: FilterField) -> &[String] {
-        match field {
-            FilterField::Product => &self.product,
-            FilterField::Component => &self.component,
-            FilterField::Status => &self.status,
-            FilterField::AssignedTo => &self.assignee,
-            FilterField::Creator => &self.creator,
-            FilterField::Priority => &self.priority,
-            FilterField::Severity => &self.severity,
-            FilterField::Whiteboard => &self.whiteboard,
-            FilterField::TargetMilestone => &self.target_milestone,
-            FilterField::Version => &self.version,
-            FilterField::OpSys => &self.op_sys,
-            FilterField::Platform => &self.platform,
-            FilterField::Resolution => &self.resolution,
-            FilterField::QaContact => &self.qa_contact,
-            FilterField::Url => &self.url,
-        }
+        filter_field_arm!(self, field, assignee)
     }
 
     fn get_filter_field_mut(&mut self, field: FilterField) -> &mut Vec<String> {
-        match field {
-            FilterField::Product => &mut self.product,
-            FilterField::Component => &mut self.component,
-            FilterField::Status => &mut self.status,
-            FilterField::AssignedTo => &mut self.assignee,
-            FilterField::Creator => &mut self.creator,
-            FilterField::Priority => &mut self.priority,
-            FilterField::Severity => &mut self.severity,
-            FilterField::Whiteboard => &mut self.whiteboard,
-            FilterField::TargetMilestone => &mut self.target_milestone,
-            FilterField::Version => &mut self.version,
-            FilterField::OpSys => &mut self.op_sys,
-            FilterField::Platform => &mut self.platform,
-            FilterField::Resolution => &mut self.resolution,
-            FilterField::QaContact => &mut self.qa_contact,
-            FilterField::Url => &mut self.url,
-        }
+        filter_field_arm!(self, field, assignee, mut)
     }
 
     fn has_mapped_filters(&self) -> bool {

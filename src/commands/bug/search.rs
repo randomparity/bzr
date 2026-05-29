@@ -77,10 +77,7 @@ pub(super) async fn handle(
         unreachable!()
     };
 
-    let spec = ColumnSpec {
-        include: fields.as_deref(),
-        exclude: exclude_fields.as_deref(),
-    };
+    let spec = ColumnSpec::new(fields.as_deref(), exclude_fields.as_deref());
 
     let (client, params, save_info) = if let Some(url_str) = from_url {
         let config = crate::config::Config::load()?;

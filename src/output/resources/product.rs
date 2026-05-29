@@ -1,9 +1,11 @@
 use std::fmt::Write as _;
 use std::io::Write;
 
-use tabled::{Table, Tabled};
+use tabled::Tabled;
 
-use crate::output::formatting::{truncate, write_formatted, DESCRIPTION_TRUNCATE_WIDTH};
+use crate::output::formatting::{
+    truncate, write_formatted, write_table_or_empty, DESCRIPTION_TRUNCATE_WIDTH,
+};
 use crate::types::{OutputFormat, Product};
 
 fn format_named_list(heading: &str, items: &[(impl AsRef<str>, bool)]) -> String {
@@ -57,26 +59,17 @@ struct ProductRow {
     components: usize,
 }
 
+fn product_row(p: &Product) -> ProductRow {
+    ProductRow {
+        id: p.id,
+        name: p.name.clone(),
+        description: truncate(&p.description, DESCRIPTION_TRUNCATE_WIDTH),
+        components: p.components.len(),
+    }
+}
+
 pub fn write_products<W: Write + ?Sized>(products: &[Product], format: OutputFormat, out: &mut W) {
-    write_formatted(products, format, out, |products, out| {
-        if products.is_empty() {
-            let _ = writeln!(out, "No products found.");
-            return;
-        }
-        let rows: Vec<ProductRow> = products
-            .iter()
-            .map(|p| {
-                let description = truncate(&p.description, DESCRIPTION_TRUNCATE_WIDTH);
-                ProductRow {
-                    id: p.id,
-                    name: p.name.clone(),
-                    description,
-                    components: p.components.len(),
-                }
-            })
-            .collect();
-        let _ = writeln!(out, "{}", Table::new(rows));
-    });
+    write_table_or_empty(products, format, out, "No products found.", product_row);
 }
 
 pub fn write_product_detail<W: Write + ?Sized>(

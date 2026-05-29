@@ -18,6 +18,15 @@ pub struct ColumnSpec<'a> {
     pub exclude: Option<&'a str>,
 }
 
+impl<'a> ColumnSpec<'a> {
+    /// Build a spec from the `--fields` / `--exclude-fields` values. Single
+    /// construction point so the struct can gain fields without updating every
+    /// call site.
+    pub fn new(include: Option<&'a str>, exclude: Option<&'a str>) -> Self {
+        ColumnSpec { include, exclude }
+    }
+}
+
 /// A selectable column in bug table output: the tokens that map to it,
 /// its header, and how to render one bug's cell.
 struct BugColumn {

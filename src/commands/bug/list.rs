@@ -70,10 +70,7 @@ pub(super) async fn handle(
         url: url.clone(),
         ..Default::default()
     };
-    let spec = ColumnSpec {
-        include: fields.as_deref(),
-        exclude: exclude_fields.as_deref(),
-    };
+    let spec = ColumnSpec::new(fields.as_deref(), exclude_fields.as_deref());
     let bugs = client.search_bugs(&params).await?;
     write_bugs(&bugs, spec, format, w.out, w.err);
     Ok(())

@@ -150,30 +150,38 @@ fn validate_action(action: &AttachmentAction) -> Result<()> {
     }
 }
 
+/// Maps file extensions (compared case-insensitively) to their MIME type.
+const CONTENT_TYPES: &[(&[&str], &str)] = &[
+    (
+        &[
+            "txt", "log", "c", "h", "cpp", "rs", "py", "sh", "pl", "rb", "js", "ts",
+        ],
+        "text/plain",
+    ),
+    (&["html", "htm"], "text/html"),
+    (&["json"], "application/json"),
+    (&["xml"], "application/xml"),
+    (&["pdf"], "application/pdf"),
+    (&["png"], "image/png"),
+    (&["jpg", "jpeg"], "image/jpeg"),
+    (&["gif"], "image/gif"),
+    (&["svg"], "image/svg+xml"),
+    (&["gz", "tgz"], "application/gzip"),
+    (&["zip"], "application/zip"),
+    (&["tar"], "application/x-tar"),
+    (&["patch", "diff"], "text/x-diff"),
+];
+
 fn guess_content_type(filename: &str) -> &'static str {
-    match filename
-        .rsplit('.')
-        .next()
-        .map(str::to_lowercase)
-        .as_deref()
-    {
-        Some(
-            "txt" | "log" | "c" | "h" | "cpp" | "rs" | "py" | "sh" | "pl" | "rb" | "js" | "ts",
-        ) => "text/plain",
-        Some("html" | "htm") => "text/html",
-        Some("json") => "application/json",
-        Some("xml") => "application/xml",
-        Some("pdf") => "application/pdf",
-        Some("png") => "image/png",
-        Some("jpg" | "jpeg") => "image/jpeg",
-        Some("gif") => "image/gif",
-        Some("svg") => "image/svg+xml",
-        Some("gz" | "tgz") => "application/gzip",
-        Some("zip") => "application/zip",
-        Some("tar") => "application/x-tar",
-        Some("patch" | "diff") => "text/x-diff",
-        _ => "application/octet-stream",
+    let Some(ext) = filename.rsplit('.').next() else {
+        return "application/octet-stream";
+    };
+    for (extensions, content_type) in CONTENT_TYPES {
+        if extensions.iter().any(|e| e.eq_ignore_ascii_case(ext)) {
+            return content_type;
+        }
     }
+    "application/octet-stream"
 }
 
 /// Flip the privacy of the comment that `Bug.add_attachment` just
