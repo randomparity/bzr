@@ -22,7 +22,7 @@ fn pinned_verifier_advertises_default_signature_schemes() {
     use rustls::client::danger::ServerCertVerifier;
     let der = gen_self_signed_cert();
     let fp = compute_fingerprint(&der);
-    let verifier = PinnedCertVerifier::new(&fp, None, None, "localhost").unwrap();
+    let verifier = PinnedCertVerifier::new(&fp, None, "localhost").unwrap();
     let schemes = verifier.supported_verify_schemes();
     assert!(
         !schemes.is_empty(),
@@ -35,7 +35,7 @@ fn pinned_verifier_accepts_matching_cert() {
     let der = gen_self_signed_cert();
     let fp = compute_fingerprint(&der);
 
-    let verifier = PinnedCertVerifier::new(&fp, None, None, "localhost").unwrap();
+    let verifier = PinnedCertVerifier::new(&fp, None, "localhost").unwrap();
 
     let cert = CertificateDer::from(der);
     let server_name = ServerName::try_from("localhost").unwrap();
@@ -56,7 +56,7 @@ fn pinned_verifier_rejects_mismatched_cert() {
 
     let der2 = gen_self_signed_cert();
 
-    let verifier = PinnedCertVerifier::new(&fp1, None, None, "localhost").unwrap();
+    let verifier = PinnedCertVerifier::new(&fp1, None, "localhost").unwrap();
 
     let cert = CertificateDer::from(der2);
     let server_name = ServerName::try_from("localhost").unwrap();
@@ -86,7 +86,7 @@ fn ca_cert_config_rejects_missing_file() {
 fn build_pinned_config_succeeds() {
     let der = gen_self_signed_cert();
     let fp = compute_fingerprint(&der);
-    let result = build_pinned_config(&fp, None, None, "localhost");
+    let result = build_pinned_config(&fp, None, "localhost");
     assert!(
         result.is_ok(),
         "build_pinned_config should succeed: {result:?}"
@@ -119,8 +119,7 @@ fn pinned_verifier_accepts_matching_pin_regardless_of_issuer() {
     let der = gen_self_signed_cert();
     let fp = compute_fingerprint(&der);
 
-    let verifier =
-        PinnedCertVerifier::new(&fp, Some("CN=SomeOtherCA".to_owned()), None, "localhost").unwrap();
+    let verifier = PinnedCertVerifier::new(&fp, None, "localhost").unwrap();
 
     let cert = CertificateDer::from(der);
     let server_name = ServerName::try_from("localhost").unwrap();
@@ -143,31 +142,6 @@ fn gen_cert_with_cn(cn: &str) -> Vec<u8> {
         .self_signed(&rcgen::KeyPair::generate().unwrap())
         .unwrap();
     cert.der().to_vec()
-}
-
-#[test]
-fn pinned_verifier_detects_issuer_change() {
-    // Pin mismatch + different issuer → ISSUER_CHANGED
-    let der1 = gen_cert_with_cn("OriginalCA");
-    let fp1 = compute_fingerprint(&der1);
-
-    // Pin to cert1 with cert1's issuer
-    let issuer1 = extract_issuer_dn(&der1);
-    let verifier = PinnedCertVerifier::new(&fp1, Some(issuer1), None, "localhost").unwrap();
-
-    // Present a cert with a different CN (different issuer)
-    let der2 = gen_cert_with_cn("EvilCA");
-    let cert2 = CertificateDer::from(der2);
-    let server_name = ServerName::try_from("localhost").unwrap();
-
-    let result = verifier.verify_server_cert(&cert2, &[], &server_name, &[], UnixTime::now());
-
-    assert!(result.is_err(), "issuer change should be rejected");
-    let err_msg = result.unwrap_err().to_string();
-    assert!(
-        err_msg.contains("ISSUER_CHANGED"),
-        "error should contain ISSUER_CHANGED: {err_msg}"
-    );
 }
 
 #[test]
@@ -201,7 +175,7 @@ fn pinned_verifier_detects_issuer_change_via_der() {
     let issuer_der_bytes = extract_issuer_der(&der1).unwrap();
     let issuer_der_b64 = base64::engine::general_purpose::STANDARD.encode(&issuer_der_bytes);
 
-    let verifier = PinnedCertVerifier::new(&fp1, None, Some(&issuer_der_b64), "localhost").unwrap();
+    let verifier = PinnedCertVerifier::new(&fp1, Some(&issuer_der_b64), "localhost").unwrap();
 
     // Present a cert with a different CN (different issuer DER)
     let der2 = gen_cert_with_cn("EvilCA");
@@ -226,7 +200,7 @@ fn pinned_verifier_allows_pin_mismatch_with_same_issuer_der() {
     let issuer_der_bytes = extract_issuer_der(&der1).unwrap();
     let issuer_der_b64 = base64::engine::general_purpose::STANDARD.encode(&issuer_der_bytes);
 
-    let verifier = PinnedCertVerifier::new(&fp1, None, Some(&issuer_der_b64), "localhost").unwrap();
+    let verifier = PinnedCertVerifier::new(&fp1, Some(&issuer_der_b64), "localhost").unwrap();
 
     // Both certs are self-signed with CN=localhost (same issuer)
     let der2 = gen_self_signed_cert();
@@ -248,7 +222,7 @@ fn pinned_verifier_rejects_invalid_base64_issuer_der() {
     // Invalid base64 → config error
     let der = gen_self_signed_cert();
     let fp = compute_fingerprint(&der);
-    let result = PinnedCertVerifier::new(&fp, None, Some("!!!not-valid-base64!!!"), "localhost");
+    let result = PinnedCertVerifier::new(&fp, Some("!!!not-valid-base64!!!"), "localhost");
     assert!(result.is_err(), "invalid base64 should be rejected");
     let err_msg = result.unwrap_err().to_string();
     assert!(

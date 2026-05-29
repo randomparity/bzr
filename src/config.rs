@@ -117,7 +117,6 @@ impl ServerConfig {
             insecure: self.tls_insecure,
             ca_cert_path: self.tls_ca_cert.clone(),
             pin_sha256: self.tls_pin_sha256.clone(),
-            pin_issuer: self.tls_pin_issuer.clone(),
             pin_issuer_der: self.tls_pin_issuer_der.clone(),
             server_name: Some(server_name.to_string()),
         }

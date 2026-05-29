@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- TLS issuer pinning: removed the legacy issuer-DN string-comparison fallback in
+  certificate-change detection. Issuer-change detection (`ISSUER_CHANGED`) now
+  relies solely on tamper-proof raw-DER comparison. Pins created before raw-DER
+  storage existed keep full certificate-fingerprint pinning but no longer emit
+  the secondary `ISSUER_CHANGED` signal (they fall back to `PIN_MISMATCH`) until
+  re-pinned. The human-readable issuer is still stored and shown by
+  `bzr config show`.
+
 ### Security
 
 - `bzr attachment download`: the server-supplied attachment file name is now
@@ -17,6 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `bzr bug update --deadline`: the deadline is now validated client-side and a
+  malformed value fails fast with exit 7, instead of being forwarded to the
+  server. Valid `YYYY-MM-DD` deadlines are unchanged.
+- `bzr bug search --from-url`: a non-numeric or out-of-range `limit=` in the URL
+  is now rejected with exit 7 instead of being silently dropped; `limit=0`
+  (Bugzilla "no limit") and an empty `limit=` are documented.
+- `bzr bug clone`: if the "Cloned from #N" comment fails to post after the bug
+  is created, the new bug ID is now reported with a warning instead of being
+  lost, so the clone is not accidentally repeated.
 - `bzr query save`: `--search` is now rejected when combined with a structured
   filter flag (`--product`, `--component`, `--whiteboard`, etc.), matching the
   documented mutual exclusivity. Previously only `--search` + `--from-url` was

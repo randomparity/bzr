@@ -21,11 +21,8 @@ pub(crate) struct PinnedCertVerifier {
     pin_hash: [u8; 32],
     /// The full `sha256//<base64>` pin string, kept for error messages.
     pin_str: String,
-    /// Optional expected issuer DN string for change detection
-    /// (legacy fallback for pins created before DER comparison).
-    pin_issuer: Option<String>,
     /// Raw DER bytes of the expected issuer SEQUENCE for tamper-proof
-    /// comparison. Takes precedence over `pin_issuer` string.
+    /// issuer-change detection.
     pin_issuer_der: Option<Vec<u8>>,
     /// The server name this verifier was created for (for errors).
     server_name: String,
@@ -38,11 +35,10 @@ impl PinnedCertVerifier {
     ///
     /// `pin_sha256` must be in `sha256//<base64>` format.
     /// `pin_issuer_der_b64` is the base64-encoded raw DER of the issuer
-    /// SEQUENCE, used for tamper-proof issuer comparison. Falls back to
-    /// `pin_issuer` string comparison when `None` (backward compat).
+    /// SEQUENCE, used for tamper-proof issuer-change detection. When `None`,
+    /// no issuer-change check is performed (only the cert fingerprint pin).
     pub(crate) fn new(
         pin_sha256: &str,
-        pin_issuer: Option<String>,
         pin_issuer_der_b64: Option<&str>,
         server_name: &str,
     ) -> Result<Self> {
@@ -72,52 +68,32 @@ impl PinnedCertVerifier {
         Ok(Self {
             pin_hash,
             pin_str: pin_sha256.to_owned(),
-            pin_issuer,
             pin_issuer_der,
             server_name: server_name.to_owned(),
             sig_verifier,
         })
     }
 
-    /// Check whether the leaf certificate's issuer matches the pinned issuer.
-    /// Returns `Err(TlsError::General(..))` with an `ISSUER_CHANGED` message
-    /// when the issuer differs; `Ok(Some(actual_issuer))` when the legacy
-    /// string-pin branch ran (so the caller can reuse the computed string in
-    /// a `PIN_MISMATCH` error message); `Ok(None)` when no issuer pin is
-    /// configured or the DER-preferred branch ran.
-    ///
-    /// Prefers raw DER comparison (tamper-proof). Falls back to string
-    /// comparison for legacy pins created before DER storage was added.
-    fn check_issuer_change(
-        &self,
-        leaf_der: &[u8],
-    ) -> std::result::Result<Option<String>, TlsError> {
-        if let Some(expected_der) = &self.pin_issuer_der {
-            if let Some(actual_der) = extract_issuer_der(leaf_der) {
-                if *expected_der != actual_der {
-                    return Err(TlsError::General(format!(
-                        "ISSUER_CHANGED for {}: issuer DER mismatch \
-                         (expected {} bytes, got {} bytes)",
-                        self.server_name,
-                        expected_der.len(),
-                        actual_der.len()
-                    )));
-                }
-            }
-            return Ok(None);
-        }
-        if let Some(expected_issuer) = &self.pin_issuer {
-            let actual_issuer = extract_issuer_dn(leaf_der);
-            if actual_issuer != *expected_issuer {
+    /// Check whether the leaf certificate's issuer matches the pinned issuer
+    /// via tamper-proof raw DER comparison. Returns `Err(TlsError::General(..))`
+    /// with an `ISSUER_CHANGED` message when the issuer DER differs; `Ok(())`
+    /// when it matches or no issuer DER is pinned.
+    fn check_issuer_change(&self, leaf_der: &[u8]) -> std::result::Result<(), TlsError> {
+        let Some(expected_der) = &self.pin_issuer_der else {
+            return Ok(());
+        };
+        if let Some(actual_der) = extract_issuer_der(leaf_der) {
+            if *expected_der != actual_der {
                 return Err(TlsError::General(format!(
-                    "ISSUER_CHANGED for {}: expected \"{}\", \
-                     got \"{}\"",
-                    self.server_name, expected_issuer, actual_issuer
+                    "ISSUER_CHANGED for {}: issuer DER mismatch \
+                     (expected {} bytes, got {} bytes)",
+                    self.server_name,
+                    expected_der.len(),
+                    actual_der.len()
                 )));
             }
-            return Ok(Some(actual_issuer));
         }
-        Ok(None)
+        Ok(())
     }
 }
 
@@ -136,10 +112,10 @@ impl ServerCertVerifier for PinnedCertVerifier {
             return Ok(ServerCertVerified::assertion());
         }
 
-        let cached_issuer = self.check_issuer_change(end_entity.as_ref())?;
+        self.check_issuer_change(end_entity.as_ref())?;
 
         let actual_fp = compute_fingerprint(end_entity.as_ref());
-        let actual_issuer = cached_issuer.unwrap_or_else(|| extract_issuer_dn(end_entity.as_ref()));
+        let actual_issuer = extract_issuer_dn(end_entity.as_ref());
         Err(TlsError::General(format!(
             "PIN_MISMATCH for {}: expected {}, got {}, issuer {}",
             self.server_name, self.pin_str, actual_fp, actual_issuer
@@ -224,11 +200,10 @@ pub(crate) fn build_ca_cert_config(ca_pem_path: &Path) -> Result<rustls::ClientC
 /// for certificate pinning instead of CA chain validation.
 pub(crate) fn build_pinned_config(
     pin_sha256: &str,
-    pin_issuer: Option<String>,
     pin_issuer_der: Option<&str>,
     server_name: &str,
 ) -> Result<rustls::ClientConfig> {
-    let verifier = PinnedCertVerifier::new(pin_sha256, pin_issuer, pin_issuer_der, server_name)?;
+    let verifier = PinnedCertVerifier::new(pin_sha256, pin_issuer_der, server_name)?;
 
     let config = super::base_tls_builder("protocol versions")?
         .dangerous()

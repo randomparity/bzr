@@ -142,7 +142,6 @@ async fn handle_tofu(ctx: &ConnectContext, config: &mut Config) -> Result<Bugzil
             }
             TlsConfig {
                 pin_sha256: Some(fingerprint),
-                pin_issuer: Some(issuer),
                 pin_issuer_der: issuer_der,
                 server_name: Some(ctx.server_name.clone()),
                 ..Default::default()
@@ -152,7 +151,6 @@ async fn handle_tofu(ctx: &ConnectContext, config: &mut Config) -> Result<Bugzil
             // "y" — trust this specific cert for this session only (no config change)
             TlsConfig {
                 pin_sha256: Some(fingerprint),
-                pin_issuer: Some(issuer),
                 pin_issuer_der: issuer_der,
                 server_name: Some(ctx.server_name.clone()),
                 ..Default::default()
@@ -216,7 +214,6 @@ async fn handle_pin_rotation(
 
     let tls_config = TlsConfig {
         pin_sha256: Some(new_fingerprint.to_owned()),
-        pin_issuer: Some(new_issuer.to_owned()),
         pin_issuer_der: existing_issuer_der,
         server_name: Some(ctx.server_name.clone()),
         ..Default::default()
