@@ -1987,6 +1987,54 @@ fn parse_query_save_search_alone_is_accepted() {
 }
 
 #[test]
+fn parse_query_save_rejects_from_url_with_filter_flag() {
+    let result = Cli::try_parse_from([
+        "bzr",
+        "query",
+        "save",
+        "saved",
+        "--from-url",
+        "https://bz/buglist.cgi?product=Firefox",
+        "--product",
+        "Firefox",
+    ]);
+
+    match result {
+        Ok(_) => panic!("expected ArgumentConflict, got Ok"),
+        Err(err) => assert!(
+            err.kind() == clap::error::ErrorKind::ArgumentConflict,
+            "expected ArgumentConflict, got {:?}",
+            err.kind()
+        ),
+    }
+}
+
+#[test]
+fn parse_query_save_rejects_from_url_with_bzl_parity_filter() {
+    // Exercises the centralized FILTER_FLAG_ARGS conflict list on the
+    // --from-url side via a bzl-parity filter (target_milestone).
+    let result = Cli::try_parse_from([
+        "bzr",
+        "query",
+        "save",
+        "saved",
+        "--from-url",
+        "https://bz/buglist.cgi?product=Firefox",
+        "--target-milestone",
+        "9.0",
+    ]);
+
+    match result {
+        Ok(_) => panic!("expected ArgumentConflict, got Ok"),
+        Err(err) => assert!(
+            err.kind() == clap::error::ErrorKind::ArgumentConflict,
+            "expected ArgumentConflict, got {:?}",
+            err.kind()
+        ),
+    }
+}
+
+#[test]
 fn parse_bug_update_see_also_add_repeated_flag() {
     let cli = Cli::try_parse_from([
         "bzr",

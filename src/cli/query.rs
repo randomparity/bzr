@@ -1,5 +1,27 @@
 use clap::Subcommand;
 
+/// Argument IDs of the structured filter flags on `query save`. Centralized so
+/// the mutual-exclusivity lists on `--from-url` / `--search` stay in sync when a
+/// filter flag is added or renamed (rather than hand-maintaining two literal
+/// lists). Keep in lockstep with the `Vec<String>` filter fields on `Save`.
+const FILTER_FLAG_ARGS: [&str; 15] = [
+    "product",
+    "component",
+    "status",
+    "assignee",
+    "creator",
+    "priority",
+    "severity",
+    "whiteboard",
+    "target_milestone",
+    "version",
+    "op_sys",
+    "platform",
+    "resolution",
+    "qa_contact",
+    "url",
+];
+
 #[derive(Subcommand)]
 #[expect(
     clippy::doc_markdown,
@@ -51,7 +73,7 @@ pub enum QueryAction {
         /// where possible; unrecognized parameters are stored
         /// verbatim and passed through at run time. Mutually
         /// exclusive with `--search` and every filter flag.
-        #[arg(long, conflicts_with_all = ["search", "product", "component", "status", "assignee", "creator", "priority", "severity", "whiteboard", "target_milestone", "version", "op_sys", "platform", "resolution", "qa_contact", "url"])]
+        #[arg(long, conflicts_with = "search", conflicts_with_all = FILTER_FLAG_ARGS)]
         from_url: Option<String>,
         /// Free-text search query (creates a `search`-kind saved query).
         ///
@@ -59,7 +81,7 @@ pub enum QueryAction {
         /// filter flags. Stores the query as a free-text search;
         /// `bzr query run <name>` then issues the same search
         /// against the configured server.
-        #[arg(long, conflicts_with_all = ["product", "component", "status", "assignee", "creator", "priority", "severity", "whiteboard", "target_milestone", "version", "op_sys", "platform", "resolution", "qa_contact", "url"])]
+        #[arg(long, conflicts_with_all = FILTER_FLAG_ARGS)]
         search: Option<String>,
         /// Filter by product (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
