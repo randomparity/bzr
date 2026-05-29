@@ -33,7 +33,6 @@ pub struct TlsConfig {
     pub insecure: bool,
     pub ca_cert_path: Option<PathBuf>,
     pub pin_sha256: Option<String>,
-    pub pin_issuer: Option<String>,
     /// Base64-encoded raw DER bytes of the pinned issuer SEQUENCE.
     pub pin_issuer_der: Option<String>,
     pub server_name: Option<String>,
@@ -58,7 +57,6 @@ fn apply_tls_verification(
     } else if let Some(pin) = &config.pin_sha256 {
         let tls_config = verifier::build_pinned_config(
             pin,
-            config.pin_issuer.clone(),
             config.pin_issuer_der.as_deref(),
             config.server_name.as_deref().unwrap_or("unknown"),
         )?;
