@@ -59,6 +59,21 @@ pub async fn detect_server_settings(
     })
 }
 
+/// Log a probe's `send()` error, surfacing TLS-certificate problems at `warn`
+/// with a [`crate::http::tls_hint`] and routing all other transport errors to
+/// `debug`. Shared by the `whoami` and `valid_login` probes so their
+/// network-error handling cannot drift apart (the cause of TD-002).
+fn log_probe_send_error(probe: &str, method: AuthMethod, e: &reqwest::Error) {
+    if crate::http::is_tls_cert_error(e) {
+        tracing::warn!(
+            "{}",
+            crate::http::tls_hint(&format!("{probe} {method} request failed: {e:#}"), e)
+        );
+    } else {
+        tracing::debug!("{probe} {method} request failed: {e:#}");
+    }
+}
+
 async fn detect_auth_method(
     http: &reqwest::Client,
     base_url: &str,
