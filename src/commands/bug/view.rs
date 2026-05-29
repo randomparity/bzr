@@ -1,4 +1,4 @@
-use crate::cli::BugAction;
+use crate::cli::{BugAction, FieldArgs};
 use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
 use crate::output::resources::bug::{
@@ -60,8 +60,10 @@ pub(super) async fn handle(
     let BugAction::View {
         ids,
         permissive,
-        fields,
-        exclude_fields,
+        field_args: FieldArgs {
+            fields,
+            exclude_fields,
+        },
     } = action
     else {
         unreachable!()

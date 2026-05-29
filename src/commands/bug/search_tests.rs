@@ -13,8 +13,10 @@ fn from_url_action(url: String, save_as: Option<String>) -> BugAction {
         from_url: Some(url),
         save_as,
         limit: None,
-        fields: None,
-        exclude_fields: None,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
     }
 }
 
@@ -109,8 +111,10 @@ async fn handle_search_quicksearch_passes_limit_and_field_filters() {
         from_url: None,
         save_as: None,
         limit: Some(5),
-        fields: Some("id,summary".into()),
-        exclude_fields: Some("comments".into()),
+        field_args: crate::cli::FieldArgs {
+            fields: Some("id,summary".into()),
+            exclude_fields: Some("comments".into()),
+        },
     };
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(

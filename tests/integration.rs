@@ -30,8 +30,10 @@ fn empty_list_action() -> bzr::cli::BugAction {
         alias: None,
         summary: None,
         limit: 50,
-        fields: None,
-        exclude_fields: None,
+        field_args: bzr::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
         created_since: None,
         changed_since: None,
         whiteboard: vec![],
@@ -143,8 +145,10 @@ async fn bug_view_integration() {
     let action = bzr::cli::BugAction::View {
         ids: vec!["42".to_string()],
         permissive: false,
-        fields: None,
-        exclude_fields: None,
+        field_args: bzr::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
     };
     let mut __io3 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
@@ -181,8 +185,10 @@ async fn bug_search_integration() {
         from_url: None,
         save_as: None,
         limit: None,
-        fields: None,
-        exclude_fields: None,
+        field_args: bzr::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
     };
     let mut __io4 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
@@ -713,8 +719,10 @@ async fn api_error_propagates() {
     let action = bzr::cli::BugAction::View {
         ids: vec!["99999".to_string()],
         permissive: false,
-        fields: None,
-        exclude_fields: None,
+        field_args: bzr::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
     };
     let result = bzr::commands::bug::execute(
         &action,

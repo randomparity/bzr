@@ -11,8 +11,10 @@ fn make_view_action(ids: &[&str], permissive: bool) -> BugAction {
     BugAction::View {
         ids: ids.iter().map(|s| (*s).to_string()).collect(),
         permissive,
-        fields: None,
-        exclude_fields: None,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
     }
 }
 

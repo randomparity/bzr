@@ -20,8 +20,10 @@ fn empty_list_action() -> BugAction {
         alias: None,
         summary: None,
         limit: 50,
-        fields: None,
-        exclude_fields: None,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
         created_since: None,
         changed_since: None,
         whiteboard: vec![],
@@ -123,8 +125,10 @@ async fn bug_list_passes_every_field_through_to_search_params() {
         alias: Some("my-alias".into()),
         summary: Some("kernel panic".into()),
         limit: 5,
-        fields: Some("id,summary".into()),
-        exclude_fields: Some("comments".into()),
+        field_args: crate::cli::FieldArgs {
+            fields: Some("id,summary".into()),
+            exclude_fields: Some("comments".into()),
+        },
         created_since: Some("2026-04-01".into()),
         changed_since: Some("2026-04-15T00:00:00Z".into()),
         whiteboard: vec!["needs-review".into()],
@@ -185,8 +189,10 @@ async fn bug_list_summary_only_sends_substring_filter() {
         alias: None,
         summary: Some("WARNING CPU default_machine_kexec".into()),
         limit: 50,
-        fields: None,
-        exclude_fields: None,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
         created_since: None,
         changed_since: None,
         whiteboard: vec![],
@@ -374,10 +380,10 @@ async fn bug_list_table_all_unknown_fields_exits_7_before_network() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     let mut action = empty_list_action();
-    let BugAction::List { fields, .. } = &mut action else {
+    let BugAction::List { field_args, .. } = &mut action else {
         unreachable!()
     };
-    *fields = Some("cf_custom".into());
+    field_args.fields = Some("cf_custom".into());
 
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -411,10 +417,10 @@ async fn bug_list_json_fields_trims_output() {
         .await;
 
     let mut action = empty_list_action();
-    let BugAction::List { fields, .. } = &mut action else {
+    let BugAction::List { field_args, .. } = &mut action else {
         unreachable!()
     };
-    *fields = Some("summary".into());
+    field_args.fields = Some("summary".into());
 
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result =
@@ -468,10 +474,10 @@ async fn bug_list_json_all_unknown_fields_exits_7() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     let mut action = empty_list_action();
-    let BugAction::List { fields, .. } = &mut action else {
+    let BugAction::List { field_args, .. } = &mut action else {
         unreachable!()
     };
-    *fields = Some("cf_custom".into());
+    field_args.fields = Some("cf_custom".into());
 
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result =

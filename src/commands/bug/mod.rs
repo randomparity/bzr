@@ -20,32 +20,17 @@ mod view;
 /// The `--fields` / `--exclude-fields` column spec for the four field-bearing
 /// bug actions, or `None` for actions that take no field selection.
 fn bug_column_spec(action: &BugAction) -> Option<ColumnSpec<'_>> {
-    match action {
-        BugAction::List {
-            fields,
-            exclude_fields,
-            ..
-        }
-        | BugAction::My {
-            fields,
-            exclude_fields,
-            ..
-        }
-        | BugAction::Search {
-            fields,
-            exclude_fields,
-            ..
-        }
-        | BugAction::View {
-            fields,
-            exclude_fields,
-            ..
-        } => Some(ColumnSpec::new(
-            fields.as_deref(),
-            exclude_fields.as_deref(),
-        )),
-        _ => None,
-    }
+    let (BugAction::List { field_args, .. }
+    | BugAction::My { field_args, .. }
+    | BugAction::Search { field_args, .. }
+    | BugAction::View { field_args, .. }) = action
+    else {
+        return None;
+    };
+    Some(ColumnSpec::new(
+        field_args.fields.as_deref(),
+        field_args.exclude_fields.as_deref(),
+    ))
 }
 
 /// Dispatch bug actions to their respective handlers.
