@@ -127,6 +127,17 @@ fn exit_code_data_integrity() {
 }
 
 #[test]
+fn exit_code_batch_partial_failure() {
+    let err = BzrError::BatchPartialFailure {
+        succeeded: 3,
+        failed: 2,
+    };
+    assert_eq!(err.exit_code(), 11);
+    assert_eq!(err.error_type(), "batch_partial_failure");
+    assert_eq!(err.to_string(), "batch update: 3 succeeded, 2 failed");
+}
+
+#[test]
 fn exit_code_keyring() {
     let err = BzrError::Keyring("keychain locked".into());
     assert_eq!(err.exit_code(), 12);
