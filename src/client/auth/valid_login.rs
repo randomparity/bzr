@@ -86,7 +86,7 @@ async fn probe_valid_login(
     let resp = match req.send().await {
         Ok(r) => r,
         Err(e) => {
-            tracing::warn!(error = %e, "valid_login probe network error");
+            super::log_probe_send_error("valid_login", method, &e);
             return ValidLoginOutcome::NetworkError;
         }
     };
