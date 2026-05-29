@@ -1896,6 +1896,97 @@ fn parse_bug_update_groups_remove_comma_list() {
 }
 
 #[test]
+fn parse_query_save_rejects_search_with_filter_flag() {
+    let result = Cli::try_parse_from([
+        "bzr",
+        "query",
+        "save",
+        "crashes",
+        "--search",
+        "crash in tab",
+        "--product",
+        "Firefox",
+    ]);
+
+    match result {
+        Ok(_) => panic!("expected ArgumentConflict, got Ok"),
+        Err(err) => assert!(
+            err.kind() == clap::error::ErrorKind::ArgumentConflict,
+            "expected ArgumentConflict, got {:?}",
+            err.kind()
+        ),
+    }
+}
+
+#[test]
+fn parse_query_save_rejects_search_with_bzl_parity_filter() {
+    let result = Cli::try_parse_from([
+        "bzr",
+        "query",
+        "save",
+        "crashes",
+        "--search",
+        "crash in tab",
+        "--whiteboard",
+        "needs-triage",
+    ]);
+
+    match result {
+        Ok(_) => panic!("expected ArgumentConflict, got Ok"),
+        Err(err) => assert!(
+            err.kind() == clap::error::ErrorKind::ArgumentConflict,
+            "expected ArgumentConflict, got {:?}",
+            err.kind()
+        ),
+    }
+}
+
+#[test]
+fn parse_query_save_rejects_search_with_from_url() {
+    let result = Cli::try_parse_from([
+        "bzr",
+        "query",
+        "save",
+        "crashes",
+        "--search",
+        "crash in tab",
+        "--from-url",
+        "https://bz/buglist.cgi?product=Firefox",
+    ]);
+
+    match result {
+        Ok(_) => panic!("expected ArgumentConflict, got Ok"),
+        Err(err) => assert!(
+            err.kind() == clap::error::ErrorKind::ArgumentConflict,
+            "expected ArgumentConflict, got {:?}",
+            err.kind()
+        ),
+    }
+}
+
+#[test]
+fn parse_query_save_search_alone_is_accepted() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "query",
+        "save",
+        "crashes",
+        "--search",
+        "crash in tab",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Query {
+            action: QueryAction::Save { name, search, .. },
+        } => {
+            assert_eq!(name, "crashes");
+            assert_eq!(search.as_deref(), Some("crash in tab"));
+        }
+        _ => panic!("expected Query Save"),
+    }
+}
+
+#[test]
 fn parse_bug_update_see_also_add_repeated_flag() {
     let cli = Cli::try_parse_from([
         "bzr",

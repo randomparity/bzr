@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `bzr query save`: `--search` is now rejected when combined with a structured
+  filter flag (`--product`, `--component`, `--whiteboard`, etc.), matching the
+  documented mutual exclusivity. Previously only `--search` + `--from-url` was
+  caught, so a `--search` plus filter-flag combination was silently accepted and
+  both were stored.
 - `bzr bug update` / `bzr attachment update`: a Bugzilla error returned with an
   HTTP 200 status (`{"error":true,...}`, as some deployments do) is now
   surfaced as an error instead of being reported as a successful mutation.
