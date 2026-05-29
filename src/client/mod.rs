@@ -523,10 +523,19 @@ impl BugzillaClient {
     ) -> Result<reqwest::Response> {
         if response.status().is_client_error() || response.status().is_server_error() {
             let status = response.status();
-            let body = response.text().await.unwrap_or_else(|e| {
-                tracing::warn!("failed to read error response body: {e}");
-                String::new()
-            });
+            let body = match response.text().await {
+                Ok(body) => body,
+                // The body is unreadable, but the HTTP status is still
+                // meaningful. Surface the read failure as the body text so the
+                // error is reported with a real diagnostic rather than being
+                // silently swallowed into an empty string.
+                Err(e) => {
+                    return Err(BzrError::HttpStatus {
+                        status: status.as_u16(),
+                        body: format!("<failed to read response body: {e}>"),
+                    });
+                }
+            };
             tracing::debug!(
                 %status,
                 body = &body[..body.len().min(512)],

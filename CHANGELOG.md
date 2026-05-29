@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- HTTP error responses whose body cannot be read no longer report an empty
+  body: the read failure is surfaced in the error message while the HTTP status
+  is still reported, instead of being silently swallowed.
 - `bzr bug update --deadline`: the deadline is now validated client-side and a
   malformed value fails fast with exit 7, instead of being forwarded to the
   server. Valid `YYYY-MM-DD` deadlines are unchanged.
