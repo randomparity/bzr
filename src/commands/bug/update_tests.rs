@@ -125,6 +125,13 @@ fn update_ids_mut(action: &mut BugAction) -> Option<&mut Vec<u64>> {
     Some(ids)
 }
 
+fn update_deadline_mut(action: &mut BugAction) -> Option<&mut Option<String>> {
+    let BugAction::Update { deadline, .. } = action else {
+        return None;
+    };
+    Some(deadline)
+}
+
 #[derive(Default)]
 struct UpdateLists<'a> {
     keywords_add: Vec<&'a str>,
@@ -355,6 +362,29 @@ fn build_update_params_populates_scalar_parity_fields() {
     assert_eq!(params.work_time, Some(0.5));
     assert!(params.reset_assigned_to);
     assert!(params.reset_qa_contact);
+}
+
+#[test]
+fn build_update_params_accepts_valid_deadline_verbatim() {
+    let mut action = make_update_action(vec![42]);
+    *update_deadline_mut(&mut action).expect("update action") = Some("2026-12-31".into());
+
+    let (_ids, params) = super::build_update_params(&action).unwrap();
+    // Date-only deadlines must reach the server unchanged (no datetime expansion).
+    assert_eq!(params.deadline.as_deref(), Some("2026-12-31"));
+}
+
+#[test]
+fn build_update_params_rejects_invalid_deadline() {
+    let mut action = make_update_action(vec![42]);
+    *update_deadline_mut(&mut action).expect("update action") = Some("garbage".into());
+
+    let err = super::build_update_params(&action).unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+    assert!(
+        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("--deadline")),
+        "expected --deadline validation error, got {err:?}"
+    );
 }
 
 #[test]

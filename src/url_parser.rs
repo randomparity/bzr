@@ -160,7 +160,20 @@ pub fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<ParsedUrl> {
                 }
             }
             ParamKind::Limit => {
-                if let Ok(n) = value.parse::<u32>() {
+                let trimmed = value.trim();
+                // An empty `limit=` carries no value; treat it as absent
+                // (consistent with the other trimmed params above).
+                if !trimmed.is_empty() {
+                    // `limit=0` is accepted verbatim: Bugzilla interprets 0 as
+                    // "no limit" (return all matches). Non-numeric or
+                    // out-of-range values (e.g. `abc`, `99999999999`) are
+                    // rejected here rather than silently dropped.
+                    let n = trimmed.parse::<u32>().map_err(|_| {
+                        BzrError::InputValidation(format!(
+                            "URL limit '{trimmed}' is not a valid integer in 0..={}",
+                            u32::MAX
+                        ))
+                    })?;
                     query.limit = Some(n);
                 }
             }

@@ -94,6 +94,45 @@ fn parse_simple_url_with_recognized_params() {
 }
 
 #[test]
+fn limit_zero_accepted_as_no_limit() {
+    // Bugzilla treats limit=0 as "no limit"; we pass it through verbatim.
+    let parsed = parse_test_url("product=Firefox&limit=0");
+    assert_eq!(parsed.query.limit, Some(0));
+}
+
+#[test]
+fn empty_limit_treated_as_absent() {
+    let parsed = parse_test_url("product=Firefox&limit=");
+    assert_eq!(parsed.query.limit, None);
+}
+
+#[test]
+fn non_numeric_limit_rejected() {
+    let config = make_config("https://bugzilla.example.com");
+    let err = parse_bugzilla_url(
+        "https://bugzilla.example.com/buglist.cgi?limit=abc",
+        &config,
+    )
+    .unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+    assert!(
+        matches!(err, BzrError::InputValidation(ref m) if m.contains("limit")),
+        "expected limit validation error, got {err:?}"
+    );
+}
+
+#[test]
+fn overflow_limit_rejected() {
+    let config = make_config("https://bugzilla.example.com");
+    let err = parse_bugzilla_url(
+        "https://bugzilla.example.com/buglist.cgi?limit=99999999999",
+        &config,
+    )
+    .unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+}
+
+#[test]
 fn parse_complex_boolean_chart_url() {
     let parsed = parse_test_url(
         "known_name=My+Query\
