@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used)]
 
-use super::parse_iso8601_or_date;
+use super::{parse_date_only, parse_iso8601_or_date};
 
 const FLAG: &str = "--created-since";
 
@@ -128,6 +128,29 @@ fn accepts_february_twenty_ninth_on_leap_year() {
 }
 
 #[test]
+fn rejects_february_twenty_ninth_on_century_non_leap_year() {
+    // 1900 is divisible by 100 but not 400, so it is NOT a leap year.
+    assert!(parse_iso8601_or_date("1900-02-29", FLAG).is_err());
+}
+
+#[test]
+fn accepts_february_twenty_ninth_on_quadricentennial_leap_year() {
+    // 2000 is divisible by 400, so it IS a leap year.
+    let canon = parse_iso8601_or_date("2000-02-29", FLAG).unwrap();
+    assert_eq!(canon, "2000-02-29T00:00:00Z");
+}
+
+#[test]
+fn accepts_year_zero() {
+    // Year 0000 is divisible by 400 (leap). The validator is purely
+    // structural — it does not impose a lower year bound — so 0000-01-01
+    // is accepted and canonicalized. Bugzilla itself rejects such dates;
+    // we fail fast only on malformed shapes, not implausible-but-valid ones.
+    let canon = parse_iso8601_or_date("0000-01-01", FLAG).unwrap();
+    assert_eq!(canon, "0000-01-01T00:00:00Z");
+}
+
+#[test]
 fn rejects_hour_above_twenty_three() {
     assert!(parse_iso8601_or_date("2026-04-01T25:00:00Z", FLAG).is_err());
 }
@@ -181,4 +204,30 @@ fn error_message_includes_expected_forms() {
     assert!(msg.contains("YYYY-MM-DDTHH:MM:SS"));
     assert!(msg.contains("YYYY-MM-DDTHH:MM:SSZ"));
     assert!(msg.contains("YYYY-MM-DDTHH:MM:SS±HH:MM"));
+}
+
+#[test]
+fn date_only_accepts_bare_date_verbatim() {
+    // Unlike parse_iso8601_or_date, no datetime expansion.
+    assert_eq!(
+        parse_date_only("2026-12-31", "--deadline").unwrap(),
+        "2026-12-31"
+    );
+}
+
+#[test]
+fn date_only_rejects_datetime() {
+    assert!(parse_date_only("2026-12-31T00:00:00Z", "--deadline").is_err());
+}
+
+#[test]
+fn date_only_rejects_garbage_and_names_flag() {
+    let err = parse_date_only("garbage", "--deadline").unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+    assert!(err.to_string().contains("--deadline"));
+}
+
+#[test]
+fn date_only_rejects_century_non_leap_feb_29() {
+    assert!(parse_date_only("1900-02-29", "--deadline").is_err());
 }

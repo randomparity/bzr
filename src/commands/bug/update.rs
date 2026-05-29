@@ -132,12 +132,13 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
     };
 
     let flags = crate::commands::flags::parse_flags(flag)?;
+    let deadline = crate::validation::parse_optional_date_only(deadline.as_deref(), "--deadline")?;
     let params = UpdateBugParams {
         status: status.clone(),
         resolution: resolution.clone(),
         dupe_of: *dupe_of,
         alias: alias.clone(),
-        deadline: deadline.clone(),
+        deadline,
         estimated_time: *estimated_time,
         remaining_time: *remaining_time,
         work_time: *work_time,

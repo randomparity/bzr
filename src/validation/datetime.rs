@@ -31,6 +31,22 @@ pub fn parse_iso8601_or_date(s: &str, flag: &str) -> Result<String> {
     }
 }
 
+/// Validate a bare `YYYY-MM-DD` date, returning it unchanged on success.
+///
+/// Unlike [`parse_iso8601_or_date`], this does **not** expand the value to a
+/// datetime — it is for date-only fields such as the bug deadline, which
+/// Bugzilla stores and echoes back as `YYYY-MM-DD`. `flag` is the CLI flag
+/// name included in the error message.
+pub fn parse_date_only(s: &str, flag: &str) -> Result<String> {
+    if s.is_ascii() && s.len() == 10 && parse_date(s).is_some() {
+        Ok(s.to_string())
+    } else {
+        Err(BzrError::InputValidation(format!(
+            "{flag}: '{s}' is not a valid date. Expected: YYYY-MM-DD"
+        )))
+    }
+}
+
 fn try_canonicalize(s: &str) -> Option<String> {
     // Length-check first; this also gates the byte-indexing below
     // (each branch knows the input is exactly that many bytes long).
