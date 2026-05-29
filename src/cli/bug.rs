@@ -1,4 +1,21 @@
-use clap::Subcommand;
+use clap::{Args, Subcommand};
+
+/// Shared `--fields` / `--exclude-fields` selection, flattened into the bug
+/// query subcommands (`list`, `view`, `search`, `my`) so the pair is defined
+/// once instead of repeated per variant.
+#[derive(Args, Debug, Clone)]
+pub struct FieldArgs {
+    /// Fields to request from the server (comma-separated). In table output,
+    /// selects which columns (or detail rows) to show, in order; under --json,
+    /// the object contains only the selected fields (id only if requested).
+    #[arg(long)]
+    pub fields: Option<String>,
+    /// Fields to drop from the server request (comma-separated). In table
+    /// output, removes those columns/rows; under --json, the object omits the
+    /// dropped fields (including id, if excluded).
+    #[arg(long)]
+    pub exclude_fields: Option<String>,
+}
 
 #[derive(Subcommand)]
 #[expect(
@@ -90,16 +107,8 @@ pub enum BugAction {
         /// Max number of results
         #[arg(long, default_value = "50")]
         limit: u32,
-        /// Fields to request from the server (comma-separated). Table:
-        /// selects which columns to show (in order). --json: the JSON object
-        /// contains only the selected fields (id is included only if requested).
-        #[arg(long)]
-        fields: Option<String>,
-        /// Fields to drop from the server request (comma-separated). Table:
-        /// removes those columns. --json: the JSON object omits the dropped
-        /// fields (including id, if excluded).
-        #[arg(long)]
-        exclude_fields: Option<String>,
+        #[command(flatten)]
+        field_args: FieldArgs,
         /// Filter to bugs created at or after this date.
         ///
         /// Accepts `YYYY-MM-DD` (interpreted as 00:00:00 UTC),
@@ -198,16 +207,8 @@ pub enum BugAction {
         /// security) — those always bail.
         #[arg(long)]
         permissive: bool,
-        /// Fields to request from the server (comma-separated). Table:
-        /// selects which detail rows to show. --json: the JSON object contains
-        /// only the selected fields (id is included only if requested).
-        #[arg(long)]
-        fields: Option<String>,
-        /// Fields to drop from the server request (comma-separated). Table:
-        /// removes those detail rows. --json: the JSON object omits the
-        /// dropped fields (including id, if excluded).
-        #[arg(long)]
-        exclude_fields: Option<String>,
+        #[command(flatten)]
+        field_args: FieldArgs,
     },
     /// Search bugs using Bugzilla quicksearch or by parsing a Bugzilla URL.
     ///
@@ -275,16 +276,8 @@ pub enum BugAction {
         /// Max number of results (default: 50)
         #[arg(long)]
         limit: Option<u32>,
-        /// Fields to request from the server (comma-separated). Table:
-        /// selects which columns to show (in order). --json: the JSON object
-        /// contains only the selected fields (id is included only if requested).
-        #[arg(long)]
-        fields: Option<String>,
-        /// Fields to drop from the server request (comma-separated). Table:
-        /// removes those columns. --json: the JSON object omits the dropped
-        /// fields (including id, if excluded).
-        #[arg(long)]
-        exclude_fields: Option<String>,
+        #[command(flatten)]
+        field_args: FieldArgs,
     },
     /// Show the change history for a single bug.
     ///
@@ -473,16 +466,8 @@ pub enum BugAction {
         /// the limit applies to the single active category.
         #[arg(long, default_value = "50")]
         limit: u32,
-        /// Fields to request from the server (comma-separated). Table:
-        /// selects which columns to show (in order). --json: the JSON object
-        /// contains only the selected fields (id is included only if requested).
-        #[arg(long)]
-        fields: Option<String>,
-        /// Fields to drop from the server request (comma-separated). Table:
-        /// removes those columns. --json: the JSON object omits the dropped
-        /// fields (including id, if excluded).
-        #[arg(long)]
-        exclude_fields: Option<String>,
+        #[command(flatten)]
+        field_args: FieldArgs,
     },
     /// Clone an existing bug, optionally overriding fields.
     ///

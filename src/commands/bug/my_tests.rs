@@ -47,8 +47,10 @@ async fn bug_my_returns_assigned_by_default() {
         all: false,
         status: vec![],
         limit: 50,
-        fields: None,
-        exclude_fields: None,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
     };
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result =
@@ -86,8 +88,10 @@ async fn bug_my_passes_status_limit_and_field_filters() {
         all: false,
         status: vec!["NEW".into()],
         limit: 7,
-        fields: Some("id,summary".into()),
-        exclude_fields: Some("comments".into()),
+        field_args: crate::cli::FieldArgs {
+            fields: Some("id,summary".into()),
+            exclude_fields: Some("comments".into()),
+        },
     };
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -123,8 +127,10 @@ async fn bug_my_created_only_runs_creator_search_not_assigned() {
         all: false,
         status: vec![],
         limit: 50,
-        fields: None,
-        exclude_fields: None,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
     };
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -159,8 +165,10 @@ async fn bug_my_cc_only_runs_cc_search_not_assigned_or_creator() {
         all: false,
         status: vec![],
         limit: 50,
-        fields: None,
-        exclude_fields: None,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
     };
     let mut __io4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -202,8 +210,10 @@ async fn bug_my_all_deduplicates() {
         all: true,
         status: vec![],
         limit: 50,
-        fields: None,
-        exclude_fields: None,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
     };
     let mut __io5 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(

@@ -1,4 +1,4 @@
-use crate::cli::BugAction;
+use crate::cli::{BugAction, FieldArgs};
 use crate::error::Result;
 use crate::output::resources::bug::{canonical_field_list, write_bugs, ColumnSpec};
 use crate::output::resources::query::write_query_saved;
@@ -70,8 +70,10 @@ pub(super) async fn handle(
         from_url,
         save_as,
         limit,
-        fields,
-        exclude_fields,
+        field_args: FieldArgs {
+            fields,
+            exclude_fields,
+        },
     } = action
     else {
         unreachable!()

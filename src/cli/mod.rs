@@ -14,7 +14,7 @@ mod user;
 mod whoami;
 
 pub use attachment::AttachmentAction;
-pub use bug::BugAction;
+pub use bug::{BugAction, FieldArgs};
 pub use classification::ClassificationAction;
 pub use comment::CommentAction;
 pub use component::ComponentAction;

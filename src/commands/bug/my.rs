@@ -1,4 +1,4 @@
-use crate::cli::BugAction;
+use crate::cli::{BugAction, FieldArgs};
 use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::resources::bug::{canonical_field_list, write_bugs, ColumnSpec};
@@ -17,8 +17,10 @@ pub(super) async fn handle(
         all,
         status,
         limit,
-        fields,
-        exclude_fields,
+        field_args: FieldArgs {
+            fields,
+            exclude_fields,
+        },
     } = action
     else {
         unreachable!()
