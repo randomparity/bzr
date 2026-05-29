@@ -112,6 +112,95 @@ async fn bug_clone_copies_fields() {
 }
 
 #[tokio::test]
+async fn bug_clone_reports_id_when_comment_post_fails() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/100"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{
+                "id": 100,
+                "summary": "Original bug",
+                "status": "NEW",
+                "product": "TestProduct",
+                "component": "General",
+                "version": "1.0",
+                "cc": [],
+                "keywords": []
+            }]
+        })))
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/100/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": { "100": { "comments": [{
+                "id": 1, "count": 0, "text": "Description",
+                "creator": "dev@test.com", "creation_time": "2025-01-01T00:00:00Z"
+            }] } }
+        })))
+        .mount(&mock)
+        .await;
+
+    // Bug creation succeeds.
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 202})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    // ...but the "Cloned from" comment POST fails with a 500.
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/202/comment"))
+        .respond_with(ResponseTemplate::new(500).set_body_string("boom"))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::Clone {
+        id: "100".to_string(),
+        summary: None,
+        product: None,
+        component: None,
+        version: None,
+        description: None,
+        priority: None,
+        severity: None,
+        assignee: None,
+        op_sys: None,
+        rep_platform: None,
+        no_comment: false,
+        add_depends_on: false,
+        add_blocks: false,
+        no_cc: false,
+        no_keywords: false,
+    };
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+
+    // The clone (bug creation) succeeded, so the command must succeed and the
+    // new bug ID must be reported — otherwise the user can't tell a bug was
+    // created and may re-clone, producing a duplicate.
+    assert!(
+        result.is_ok(),
+        "clone should succeed despite comment failure: {result:?}"
+    );
+    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    assert_eq!(parsed["id"], 202);
+    assert_eq!(parsed["action"], "created");
+    // The comment failure is surfaced as a stderr warning naming the new ID.
+    let err = __io.err_str();
+    assert!(
+        err.contains("202") && err.contains("warning"),
+        "expected warning naming bug #202, got: {err:?}"
+    );
+}
+
+#[tokio::test]
 async fn bug_clone_no_comment_skips_comment() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 

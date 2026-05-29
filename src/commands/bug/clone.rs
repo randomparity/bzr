@@ -86,10 +86,23 @@ pub(super) async fn handle(
 
     let new_id = client.create_bug(&params).await?;
 
+    // The bug was created successfully — that is the clone operation. The
+    // "Cloned from" back-reference comment is supplementary, so a failure
+    // posting it must not hide the new bug ID (otherwise the user can't tell
+    // the clone succeeded and may re-clone, creating a duplicate). Warn and
+    // continue rather than propagating.
     if !*no_comment {
-        client
+        if let Err(e) = client
             .add_comment(new_id, &format!("Cloned from bug #{}", source.id), false)
-            .await?;
+            .await
+        {
+            let _ = writeln!(
+                w.err,
+                "warning: created bug #{new_id} but failed to add the \
+                 \"Cloned from bug #{}\" comment: {e}",
+                source.id
+            );
+        }
     }
 
     write_result(
