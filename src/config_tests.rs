@@ -895,3 +895,47 @@ fn save_preserves_fresh_temp_files_of_concurrent_writers() {
         "a fresh concurrent-writer temp must NOT be reaped (would lose its write)"
     );
 }
+
+#[test]
+fn update_locked_preserves_disjoint_concurrent_edits() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::TempDir::new().unwrap();
+    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    // Seed a server with neither pin nor auth_method set.
+    let mut base = Config::default();
+    base.servers
+        .insert("s".to_string(), make_server_config("https://s.test"));
+    base.save().unwrap();
+
+    // "Process A": set the TLS pin under the lock.
+    Config::update_locked(|cfg| {
+        let srv = cfg.servers.get_mut("s").unwrap();
+        srv.tls_pin_sha256 =
+            Some("sha256//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=".to_string());
+        Ok(())
+    })
+    .unwrap();
+
+    // "Process B": set a DISJOINT field (auth_method) under the lock. Because
+    // update_locked reloads from disk first, it sees A's pin and must not drop it.
+    Config::update_locked(|cfg| {
+        let srv = cfg.servers.get_mut("s").unwrap();
+        srv.auth_method = Some(crate::types::AuthMethod::Header);
+        Ok(())
+    })
+    .unwrap();
+
+    let reloaded = Config::load().unwrap();
+    let srv = reloaded.servers.get("s").unwrap();
+    assert_eq!(
+        srv.tls_pin_sha256.as_deref(),
+        Some("sha256//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
+        "A's pin must survive B's disjoint edit (reload-under-lock)"
+    );
+    assert_eq!(
+        srv.auth_method,
+        Some(crate::types::AuthMethod::Header),
+        "B's auth_method must be applied"
+    );
+}

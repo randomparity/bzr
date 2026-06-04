@@ -1,7 +1,8 @@
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -237,23 +238,116 @@ impl Config {
         Ok(config_dir.join("bzr").join("config.toml"))
     }
 
-    pub fn load() -> Result<Config> {
+    /// Resolve the config directory (`<config>/bzr`), creating it `0700` on
+    /// first use, and return it. Shared by `write_to_disk` and `update_locked`.
+    fn ensure_config_dir() -> Result<PathBuf> {
+        let path = Self::path()?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| BzrError::config("config path has no parent directory"))?
+            .to_path_buf();
+        let parent_exists = parent.exists();
+        fs::create_dir_all(&parent)?;
+        if !parent_exists {
+            set_private_directory_permissions(&parent)?;
+        }
+        Ok(parent)
+    }
+
+    /// Read and parse the config from disk WITHOUT validating it or warning on
+    /// permissions. Maps a missing file to `Config::default()`. Used by
+    /// `update_locked` (which validates the post-mutation state) and by `load`.
+    fn read_unvalidated() -> Result<Config> {
         let path = Self::path()?;
         match fs::read_to_string(&path) {
-            Ok(content) => {
-                Self::warn_on_insecure_permissions(&path);
-                let config: Config = toml::from_str(&content)?;
-                config.validate()?;
-                Ok(config)
-            }
+            Ok(content) => Ok(toml::from_str(&content)?),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
             Err(e) => Err(e.into()),
         }
     }
 
+    pub fn load() -> Result<Config> {
+        // Warn on insecure permissions only on an explicit load (preserves today's
+        // behavior); `update_locked`'s internal reload uses `read_unvalidated`, so
+        // it warns once (from `write_to_disk`) rather than twice.
+        let path = Self::path()?;
+        if path.exists() {
+            Self::warn_on_insecure_permissions(&path);
+        }
+        let config = Self::read_unvalidated()?;
+        config.validate()?;
+        Ok(config)
+    }
+
     pub fn save(&self) -> Result<()> {
         self.validate()?;
         self.write_to_disk()
+    }
+
+    /// Apply `mutator` to the config under an exclusive advisory lock, with a
+    /// reload from disk *inside* the lock so concurrent processes editing
+    /// disjoint fields do not clobber each other.
+    ///
+    /// The lock (`config.lock`, sibling of `config.toml`) is held only across
+    /// the in-memory mutation and the atomic write — never across interactive
+    /// I/O. The closure must therefore be self-contained and non-interactive:
+    /// run any prompt, keyring, or network step *before* calling this. Because
+    /// the config is reloaded from disk first, the closure must not rely on
+    /// unpersisted in-memory state, and should upsert (create-if-absent) any
+    /// server it means to create.
+    ///
+    /// Returns the freshly-applied config so callers can use the post-write
+    /// state without a second read.
+    ///
+    /// Non-reentrant: a `mutator` that itself calls `update_locked` returns an
+    /// error rather than self-deadlocking.
+    pub fn update_locked(mutator: impl FnOnce(&mut Config) -> Result<()>) -> Result<Config> {
+        Self::update_locked_inner(true, mutator)
+    }
+
+    /// Like [`Self::update_locked`] but skips whole-config validation, for the
+    /// one caller (`unset-keyring`) that intentionally leaves a server without a
+    /// credential source.
+    pub fn update_locked_without_validation(
+        mutator: impl FnOnce(&mut Config) -> Result<()>,
+    ) -> Result<Config> {
+        Self::update_locked_inner(false, mutator)
+    }
+
+    fn update_locked_inner(
+        validate: bool,
+        mutator: impl FnOnce(&mut Config) -> Result<()>,
+    ) -> Result<Config> {
+        if LOCK_HELD.with(Cell::get) {
+            return Err(BzrError::config(
+                "internal error: Config::update_locked called re-entrantly \
+                 (a mutation closure must not write the config itself)",
+            ));
+        }
+
+        let dir = Self::ensure_config_dir()?;
+        let lock_path = dir.join("config.lock");
+        let file = open_lock_file(&lock_path)?;
+        file.lock().map_err(|e| {
+            BzrError::config(format!("could not lock {}: {e}", lock_path.display()))
+        })?;
+        LOCK_HELD.with(|held| held.set(true));
+        let _guard = LockGuard { file };
+
+        // Reload WITHOUT validation. `Config::load` validates unconditionally and
+        // rejects a credential-less server (the state `unset-keyring` deliberately
+        // leaves on disk). Validating the *reload* would make every later
+        // `update_locked` fail on such a config and would break re-credentialing.
+        // We validate the *post-mutation* state instead (when `validate` is true),
+        // which matches `save()`'s "validate the whole config before writing"
+        // semantics and lets `set-keyring` heal a credential-less server.
+        let mut config = Self::read_unvalidated()?;
+        mutator(&mut config)?;
+        if validate {
+            config.validate()?;
+        }
+        config.write_to_disk()?;
+        Ok(config)
     }
 
     /// Persist the config **without** running the credential-source validator.
@@ -272,14 +366,8 @@ impl Config {
     /// fsync'd (unix) so the rename survives a crash. A concurrent reader
     /// therefore always sees either the complete old or complete new file.
     fn write_to_disk(&self) -> Result<()> {
+        let _dir = Self::ensure_config_dir()?;
         let path = Self::path()?;
-        if let Some(parent) = path.parent() {
-            let parent_exists = parent.exists();
-            fs::create_dir_all(parent)?;
-            if !parent_exists {
-                set_private_directory_permissions(parent)?;
-            }
-        }
         reap_stale_temps(&path);
         let content = toml::to_string_pretty(self)?;
         atomic_write(&path, &content)?;
@@ -367,6 +455,57 @@ thread_local! {
 #[cfg(test)]
 pub(crate) fn set_fail_after_temp(on: bool) {
     FAIL_AFTER_TEMP.with(|f| f.set(on));
+}
+
+thread_local! {
+    /// True while this thread holds the config lock inside `update_locked`.
+    /// `File::lock` (flock) treats two descriptors in one process as
+    /// independent, so a nested `update_locked` would self-deadlock; we
+    /// reject re-entry instead.
+    static LOCK_HELD: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Releases the advisory lock and clears the re-entrancy flag on drop, so an
+/// early `?` return or a panic inside the critical section cannot leave the
+/// lock held or the flag stuck.
+struct LockGuard {
+    file: fs::File,
+}
+
+impl Drop for LockGuard {
+    fn drop(&mut self) {
+        let _ = self.file.unlock();
+        LOCK_HELD.with(|held| held.set(false));
+    }
+}
+
+/// Open (creating if absent) the `config.lock` file `0600`, ready for an
+/// advisory lock. The lock file's *contents* are irrelevant — only the
+/// kernel lock on the open description matters — so it is never written to.
+#[cfg(unix)]
+fn open_lock_file(lock_path: &Path) -> Result<fs::File> {
+    use std::fs::OpenOptions;
+    use std::os::unix::fs::OpenOptionsExt;
+
+    Ok(OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(lock_path)?)
+}
+
+#[cfg(not(unix))]
+fn open_lock_file(lock_path: &Path) -> Result<fs::File> {
+    use std::fs::OpenOptions;
+
+    Ok(OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(lock_path)?)
 }
 
 /// Max attempts to find an unused temp name. A collision only happens
