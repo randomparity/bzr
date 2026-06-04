@@ -720,3 +720,124 @@ fn save_without_validation_hardens_recreated_file() {
         "recreated config must not be group/other accessible: {file_mode:o}"
     );
 }
+
+#[test]
+fn failed_write_leaves_previous_config_intact() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::TempDir::new().unwrap();
+    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    // Seed v1.
+    let mut v1 = Config::default();
+    v1.servers
+        .insert("v1".to_string(), make_server_config("https://v1.test"));
+    v1.save().unwrap();
+    let before = std::fs::read(Config::path().unwrap()).unwrap();
+
+    // Arm the post-temp fault seam and attempt to write v2; it must fail.
+    set_fail_after_temp(true);
+    let mut v2 = Config::default();
+    v2.servers
+        .insert("v2".to_string(), make_server_config("https://v2.test"));
+    let result = v2.save();
+    set_fail_after_temp(false);
+    assert!(result.is_err(), "armed write must fail");
+
+    // The on-disk config must be byte-identical to v1, and no temp remains.
+    let after = std::fs::read(Config::path().unwrap()).unwrap();
+    assert_eq!(
+        before, after,
+        "failed write must leave the old config intact"
+    );
+    let dir = tmp.path().join("bzr");
+    let temps: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| {
+            std::path::Path::new(n)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("tmp"))
+        })
+        .collect();
+    assert!(
+        temps.is_empty(),
+        "failed write must clean up its temp: {temps:?}"
+    );
+}
+
+#[test]
+fn save_leaves_no_temp_files_and_writes_complete_content() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::TempDir::new().unwrap();
+    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    let mut config = Config::default();
+    config
+        .servers
+        .insert("a".to_string(), make_server_config("https://a.test"));
+    config.save().unwrap();
+
+    let dir = tmp.path().join("bzr");
+    let leftovers: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| {
+            std::path::Path::new(n)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("tmp"))
+        })
+        .collect();
+    assert!(
+        leftovers.is_empty(),
+        "no temp files should remain: {leftovers:?}"
+    );
+
+    let reloaded = Config::load().unwrap();
+    assert!(
+        reloaded.servers.contains_key("a"),
+        "content must be complete"
+    );
+}
+
+#[test]
+fn overwrite_replaces_content_wholesale() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::TempDir::new().unwrap();
+    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    let mut config = Config::default();
+    config
+        .servers
+        .insert("v1".to_string(), make_server_config("https://v1.test"));
+    config.save().unwrap();
+
+    let mut config2 = Config::default();
+    config2
+        .servers
+        .insert("v2".to_string(), make_server_config("https://v2.test"));
+    config2.save().unwrap();
+
+    let reloaded = Config::load().unwrap();
+    assert!(reloaded.servers.contains_key("v2"));
+    assert!(!reloaded.servers.contains_key("v1"));
+}
+
+#[cfg(unix)]
+#[test]
+fn saved_config_file_is_0600() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::TempDir::new().unwrap();
+    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    let mut config = Config::default();
+    config
+        .servers
+        .insert("a".to_string(), make_server_config("https://a.test"));
+    config.save().unwrap();
+
+    let path = Config::path().unwrap();
+    let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode, 0o600, "config file must be owner-only");
+}

@@ -365,10 +365,6 @@ thread_local! {
 
 /// Arm/disarm the [`atomic_write`] post-temp fault seam (test-only).
 #[cfg(test)]
-#[expect(
-    dead_code,
-    reason = "called from config_tests.rs; removed once Task 3 adds the caller"
-)]
 pub(crate) fn set_fail_after_temp(on: bool) {
     FAIL_AFTER_TEMP.with(|f| f.set(on));
 }
