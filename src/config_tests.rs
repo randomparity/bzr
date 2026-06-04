@@ -841,3 +841,57 @@ fn saved_config_file_is_0600() {
     let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
     assert_eq!(mode, 0o600, "config file must be owner-only");
 }
+
+#[test]
+fn save_reaps_old_crash_orphaned_temp_files() {
+    use std::time::{Duration, SystemTime};
+
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::TempDir::new().unwrap();
+    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    let dir = tmp.path().join("bzr");
+    std::fs::create_dir_all(&dir).unwrap();
+    // An orphan left by a crash long ago: backdate its mtime past the gate.
+    let orphan = dir.join("config.toml.99999.7.tmp");
+    std::fs::write(&orphan, "stale").unwrap();
+    let old = SystemTime::now() - Duration::from_secs(7200);
+    std::fs::File::options()
+        .write(true)
+        .open(&orphan)
+        .unwrap()
+        .set_modified(old)
+        .unwrap();
+
+    let mut config = Config::default();
+    config
+        .servers
+        .insert("a".to_string(), make_server_config("https://a.test"));
+    config.save().unwrap();
+
+    assert!(!orphan.exists(), "an hour-old orphan temp must be reaped");
+}
+
+#[test]
+fn save_preserves_fresh_temp_files_of_concurrent_writers() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::TempDir::new().unwrap();
+    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    let dir = tmp.path().join("bzr");
+    std::fs::create_dir_all(&dir).unwrap();
+    // A *fresh* sibling temp, as another bzr process would have mid-write.
+    let live = dir.join("config.toml.12345.0.tmp");
+    std::fs::write(&live, "in-flight").unwrap();
+
+    let mut config = Config::default();
+    config
+        .servers
+        .insert("a".to_string(), make_server_config("https://a.test"));
+    config.save().unwrap();
+
+    assert!(
+        live.exists(),
+        "a fresh concurrent-writer temp must NOT be reaped (would lose its write)"
+    );
+}
