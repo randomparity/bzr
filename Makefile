@@ -2,7 +2,7 @@ CARGO ?= cargo
 RUST_MIN_VERSION := 1.88.0
 
 .PHONY: setup check-rust ensure-components ensure-coverage-prereqs ensure-mutants-prereq install-hooks \
-        build release test coverage fmt clippy lint check-test-layout clean help man \
+        build release test coverage fmt clippy lint check-test-layout check-no-spawn clean help man \
         mutants mutants-fast mutants-list audit-mutant-skips \
         functional-build functional-start functional-test functional-stop \
         functional-test-bz52 functional-test-bz53 functional-test-all functional-stop-all \
@@ -88,7 +88,7 @@ fmt: ## Format source code
 clippy: ## Run clippy lints
 	$(CARGO) clippy -- -D warnings
 
-lint: fmt clippy check-test-layout ## Run all linters (fmt + clippy + test-layout)
+lint: fmt clippy check-test-layout check-no-spawn ## Run all linters (fmt + clippy + test-layout + no-spawn)
 
 check-test-layout: ## Verify all test code lives in sibling *_tests.rs files
 	@if rg -l '^mod tests \{' src/ 2>/dev/null; then \
@@ -96,6 +96,19 @@ check-test-layout: ## Verify all test code lives in sibling *_tests.rs files
 	  echo "Move tests to a sibling <name>_tests.rs file linked via"; \
 	  echo "  #[cfg(test)] #[path = \"<name>_tests.rs\"] mod tests;"; \
 	  echo "See docs/superpowers/specs/2026-05-05-test-sibling-migration-design.md"; \
+	  exit 1; \
+	fi
+
+check-no-spawn: ## Guard the single-threaded-runtime assumption (CONC-3)
+	@if ! rg -q 'flavor = "current_thread"' src/main.rs; then \
+	  echo "ERROR: src/main.rs no longer declares the current_thread runtime."; \
+	  echo "The concurrency engagement assumes no in-process parallelism."; \
+	  echo "Re-evaluate the CONC-* invariants before changing the runtime flavor."; \
+	  exit 1; \
+	fi
+	@if rg -n 'tokio::spawn|tokio::task::spawn|join!|try_join!|select!|FuturesUnordered|buffer_unordered' src/; then \
+	  echo "ERROR: task fan-out found in src/ — in-process data races become possible."; \
+	  echo "Re-evaluate the CONC-* invariants (config writes, shared state)."; \
 	  exit 1; \
 	fi
 
