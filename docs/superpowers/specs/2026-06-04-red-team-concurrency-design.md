@@ -173,18 +173,20 @@ window.
    is a **probabilistic race-hammer**, not deterministic: on a fast
    machine/filesystem the truncate→write window may rarely or never be sampled,
    so it can both fail to reproduce pre-fix (false green) and pass a future
-   regression by luck. Instead, reproduce deterministically via a **test-only
-   seam**: a write hook (e.g., a `#[cfg(test)]` callback invoked between the
-   `truncate` and the `write_all` in the current code path) lets a reader observe
-   the file *guaranteed* mid-write; assert on **content survival** — the read
-   returns a config *missing the known server* (a zero-byte read parses to an
-   empty default `Config`; see CONC-1), never a parse error. The **permanent
-   guard** is also deterministic and does *not* depend on the seam: after the
-   atomic-write fix, assert (a) a partially-written temp file never appears at the
-   real `config.toml` path, and (b) a simulated mid-write failure (injected write
-   error before the rename) leaves the prior `config.toml` byte-identical.
-   *Expected: the seam reproduces the corruption on current code → confirms the
-   defect; the atomic-write guard passes only after the fix.*
+   regression by luck. Instead, reproduce deterministically via a **throwaway
+   test-only seam** (an *optional reproduction aid*, not a lasting test — the fix
+   replaces the truncate+`write_all` path with temp+rename, deleting the seam):
+   a `#[cfg(test)]` callback invoked between the `truncate` and the `write_all` in
+   the current code path lets a reader observe the file *guaranteed* mid-write;
+   assert on **content survival** — the read returns a config *missing the known
+   server* (a zero-byte read parses to an empty default `Config`; see CONC-1),
+   never a parse error. The **permanent guard** carries the regression value and
+   does *not* depend on the seam: after the atomic-write fix, assert (a) a
+   partially-written temp file never appears at the real `config.toml` path, and
+   (b) a simulated mid-write failure (injected write error before the rename)
+   leaves the prior `config.toml` byte-identical. *Expected: the seam reproduces
+   the corruption on current code → confirms the defect; the atomic-write guard
+   passes only after the fix.*
 2. **CONC-2 probe (two parts).** (a) *Logic:* explicitly interleave two stale
    load→modify→save sequences (load A; load B; A sets a pin and saves; B sets
    `auth_method` and saves) and assert A's pin survives — this exercises the
@@ -251,7 +253,17 @@ TDD locally; the user confirms before each push.
     CONC-1 guarantees concurrent-reader atomicity (no empty/partial read) but not
     crash-durability. This platform difference is stated, not hand-waved.
   - A failed write aborts before the replace, leaving the original intact; the
-    temp file is cleaned up on failure.
+    temp is removed on the graceful `Err` path.
+  - *Crash-orphaned temps (challenge finding).* A crash / `SIGKILL` / power loss
+    between temp-create and rename — the threat model's headline adversary — kills
+    the process before any graceful cleanup, and because the temp name is unique
+    (required so concurrent *unlocked* CONC-1 writers don't clobber a shared temp
+    before the CONC-2 lock exists) every such crash leaves a new orphan that
+    accumulates forever. The design therefore **reaps stale temps**: each write
+    sweeps `config.toml.*.tmp` siblings older than a threshold before writing
+    (and, once CONC-2 lands, the sweep runs under the lock so it cannot race a
+    live writer's temp). Orphaned temps may contain a full config including an
+    inline API key, so they are created `0600` and reaped, not left in place.
 - **Advisory lock + reload (CONC-2).** `Config::update_locked(mutator: impl
   FnOnce(&mut Config) -> Result<()>)` becomes the **single write path** (bare
   `save()` is made private to `config`, so no caller can bypass the lock — the
@@ -337,6 +349,17 @@ TDD locally; the user confirms before each push.
    "reports contention," not a hard-coded `WouldBlock`; pin the version and verify
    the API before writing the test (added to Open decisions).
 
+**Round 4** found one defect + one note; both addressed above:
+
+1. **Crash-orphaned temp files were never reaped.** "Cleaned up on failure"
+   covered only the graceful `Err` path; a crash/power-loss (the threat model's
+   headline adversary) between temp-create and rename leaves a unique-named orphan
+   that accumulates forever. The design now reaps stale `config.toml.*.tmp`
+   siblings (under the CONC-2 lock once it lands); added to Open decisions.
+2. **CONC-1 seam demoted.** The truncate/`write_all` seam is now labeled an
+   optional throwaway reproduction aid (the fix deletes that code path); the
+   deterministic permanent guards carry the regression value.
+
 ## Delivery
 
 - New tests land as permanent regression guards even where the invariant holds.
@@ -361,6 +384,10 @@ TDD locally; the user confirms before each push.
 - **Lockfile staleness / cleanup** — whether the lockfile is ever removed, and
   how a stale lock (holder crashed) is handled (`fs4` advisory locks release on
   process exit, so a crashed holder does not leak the lock; confirm).
+- **Temp-file reaping policy** — the age threshold / trigger for sweeping
+  crash-orphaned `config.toml.*.tmp` files (per-write sweep vs. startup sweep),
+  and confirming the sweep is race-safe relative to a concurrent writer's
+  in-flight temp (trivially so once the CONC-2 lock gates writes).
 - **Windows atomic-replace mechanism** — the Design section scopes this
   (`ReplaceFileW` or `rename`-with-retry, durability scoped to POSIX); confirm the
   exact API and error/retry behavior during implementation.
