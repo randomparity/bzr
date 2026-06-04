@@ -167,3 +167,19 @@ fn cert_capture_verify_tls13_signature_returns_ok() {
     let result = capture.verify_tls13_signature(b"msg", &cert, &dss);
     assert!(result.is_ok(), "tls13 signature should be accepted");
 }
+
+#[test]
+fn cert_capture_keeps_the_first_value_set() {
+    // CONC-5: the captured cell is set-once ("first cert wins") even if
+    // the verifier callback fires more than once on a handshake.
+    let capture = CertCapture {
+        captured: OnceLock::new(),
+        provider: crate::tls::default_provider(),
+    };
+    let _ = capture.captured.set((vec![1, 2, 3], "first".to_string()));
+    let _ = capture.captured.set((vec![4, 5, 6], "second".to_string()));
+
+    let (der, issuer) = capture.captured.get().unwrap();
+    assert_eq!(der.as_slice(), &[1, 2, 3], "first DER must win");
+    assert_eq!(issuer.as_str(), "first", "first issuer must win");
+}
