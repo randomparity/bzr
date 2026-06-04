@@ -101,12 +101,13 @@ single-threaded-runtime paths land as regression guards.
   model concedes the malicious server does not control the filesystem and cannot
   force or time a second concurrent invocation, so this is a **robustness /
   data-integrity** defect, not an attacker-exploitable vulnerability — and it is
-  the heaviest lift in the engagement (new `fs4` dependency + sole-write-path
-  refactor across five files + two-process test). It is therefore gated on an
+  the heaviest lift in the engagement (sole-write-path refactor across five
+  files + two-process test; the originally-planned `fs4` dependency was dropped in
+  favor of std locking — see Design). It is therefore gated on an
   explicit cost/benefit check at execution time, and ships **separately** from
   and **after** CONC-1 (see Delivery). Fix via a `Config::update_locked(|cfg| …)`
   API: acquire an exclusive advisory lock
-  (`fs4`) on a lockfile in the **resolved config directory** (`config.lock`,
+  (std `File::lock`) on a lockfile in the **resolved config directory** (`config.lock`,
   sibling of `config.toml` — *not* a hardcoded `~/.config/bzr` path, so an
   `XDG_CONFIG_HOME` override still shares one lock) → **reload the latest config
   from disk** → apply the mutation closure → atomically write (CONC-1) → release.
@@ -135,10 +136,10 @@ single-threaded-runtime paths land as regression guards.
   persist; the `update_locked` closure is non-interactive and applies the delta
   to a freshly-loaded config. This prevents a process parked at a `[y/N/always]`
   prompt from wedging every other `bzr` invocation.
-  (b) *Re-entrancy:* `update_locked` is **explicitly non-reentrant** — `fs4`
-  `flock` treats two `open()` descriptions in the same process as independent, so
-  a nested `update_locked` (a closure that itself calls `update_locked`) would
-  self-deadlock. The design forbids nesting: closures perform only in-memory
+  (b) *Re-entrancy:* `update_locked` is **explicitly non-reentrant** — `flock`
+  (which std `File::lock` uses on Unix) treats two `open()` descriptions in the
+  same process as independent, so a nested `update_locked` (a closure that itself
+  calls `update_locked`) would self-deadlock. The design forbids nesting: closures perform only in-memory
   mutation. A debug assertion / test guards against a re-entrant call. (The
   earlier draft asserted re-entrancy was *safe*; that was wrong and is corrected
   here.)
@@ -197,11 +198,11 @@ window.
    closes a pipe) and waits for a go-ahead before releasing. The parent, once it
    sees readiness, performs a **try-lock and asserts it reports contention**
    *while the child holds the lock*, then signals the child to release and asserts
-   the lock now succeeds. (The exact contention signal is `fs4`-version-specific —
-   `try_lock_exclusive` has returned both `Result<()>` with a `lock_contended_error()`
-   sentinel and `Result<bool>` across releases — so the test asserts "reports
-   contention," not a hard-coded `ErrorKind::WouldBlock`; the precise API is pinned
-   and verified at implementation time, see Open decisions.) **No `sleep`-based
+   the lock now succeeds. (Contention signal — resolved at implementation time:
+   std `File::try_lock()` returns `Err(std::fs::TryLockError::WouldBlock)` while the
+   lock is held, and the test matches that variant. The earlier `fs4`-version
+   concern about `try_lock_exclusive`'s return shape is moot now that std locking
+   is used.) **No `sleep`-based
    timing assertions** — readiness and release are explicit signals, so the test is
    deterministic, not a timing race. *Expected: (a) reproduces lost-update on
    current code; (b) becomes the regression test for the lock itself.*
@@ -269,13 +270,13 @@ TDD locally; the user confirms before each push.
   `save()` is made private to `config`, so no caller can bypass the lock — the
   compiler enforces it):
   1. open/create `config.lock` *in the resolved config directory* (`0600`) and
-     take an exclusive `fs4` lock;
+     take an exclusive lock (std `File::lock`);
   2. reload the current config from disk;
   3. run `mutator` on it (non-interactive; nesting forbidden — a re-entrant call
      is rejected with an error rather than allowed to self-deadlock);
   4. atomic-write (CONC-1);
   5. drop the lock (released on guard drop, and on process exit if the holder
-     crashes — `fs4` advisory locks do not leak).
+     crashes — OS advisory locks do not leak).
   Call sites that currently do load→(prompt)→mutate→save are refactored so the
   prompt stays outside and the mutation becomes the closure body.
   **Closure precondition (challenge finding).** Because step 2 reloads from disk,
@@ -285,10 +286,23 @@ TDD locally; the user confirms before each push.
   they touch rather than `get_mut`-and-assume-present — otherwise a "set field on
   server X" closure silently no-ops when X is not yet on disk. A test covers the
   "configure a server not yet persisted" case to lock this in.
-- **Dependency.** Add `fs4` (the actively-maintained successor to `fs2`) for
-  cross-platform advisory locking, pinned to its current stable version (looked
-  up at implementation time). Justification: hand-rolling `flock`/`LockFileEx`
-  across Unix and Windows is error-prone; `fs4` is a small, focused crate.
+- **Locking primitive (revised at implementation time — no new dependency).**
+  The original design proposed adding `fs4` for cross-platform advisory locking.
+  Implementation-time verification found the standard library now provides exactly
+  this natively: `File::lock()` (exclusive, blocking), `File::try_lock()`
+  (non-blocking, returns `Result<(), std::fs::TryLockError>` with
+  `TryLockError::WouldBlock` reporting contention), and `File::unlock()` — all
+  stabilized in **Rust 1.89.0**, backed by `flock` on Unix and `LockFileEx` on
+  Windows. A throwaway probe confirmed exclusive contention and release behave
+  correctly on this platform. CONC-2 therefore uses **std locking and adds no
+  dependency**, at the cost of raising the MSRV from 1.88 to **1.89** (Cargo.toml
+  `rust-version`, `Makefile` `RUST_MIN_VERSION`, and the MSRV CI job updated; a
+  `CHANGELOG` note records the bump). This eliminates the heaviest stated cost of
+  CONC-2. Note: on any toolchain ≥1.89 a third-party `FileExt::lock` trait method
+  would be *shadowed* by the inherent `File::lock`, so a crate dependency would be
+  dead on every modern build anyway. The lock API shape is identical to the
+  originally-planned `fs4` surface, so the `update_locked` design and the
+  two-process mutual-exclusion test are unchanged except for the import.
 
 ## Challenge-review fixes
 
@@ -367,7 +381,8 @@ TDD locally; the user confirms before each push.
   - **CONC-1** — the crash/concurrent-read corruption fix — is the genuine
     data-loss/security deliverable; labeled `security` + `red-team`, threat model
     in the body, `CHANGELOG.md` **Security** entry. Ships first and independently.
-  - **CONC-2** — the lost-update lock (`fs4` + sole-write-path refactor) — ships
+  - **CONC-2** — the lost-update lock (std `File::lock` + sole-write-path
+    refactor; MSRV→1.89) — ships
     second, only after the cost/benefit gate, labeled `red-team` (and *not*
     `security`, since it is a robustness/data-integrity fix, not an exploitable
     vuln); `CHANGELOG.md` **Fixed** entry. Honest labeling avoids overstating it.
@@ -382,8 +397,9 @@ TDD locally; the user confirms before each push.
   for subsequent client construction goes stale relative to disk; decide whether
   to re-read or to keep using the known-applied values).
 - **Lockfile staleness / cleanup** — whether the lockfile is ever removed, and
-  how a stale lock (holder crashed) is handled (`fs4` advisory locks release on
-  process exit, so a crashed holder does not leak the lock; confirm).
+  how a stale lock (holder crashed) is handled (OS advisory locks — `flock` /
+  `LockFileEx`, which std `File::lock` uses — release on process exit, so a
+  crashed holder does not leak the lock; confirm).
 - **Temp-file reaping policy** — the age threshold / trigger for sweeping
   crash-orphaned `config.toml.*.tmp` files (per-write sweep vs. startup sweep),
   and confirming the sweep is race-safe relative to a concurrent writer's
@@ -391,11 +407,11 @@ TDD locally; the user confirms before each push.
 - **Windows atomic-replace mechanism** — the Design section scopes this
   (`ReplaceFileW` or `rename`-with-retry, durability scoped to POSIX); confirm the
   exact API and error/retry behavior during implementation.
-- **`fs4` try-lock contention API** — pin the `fs4` version and verify the exact
-  shape of `try_lock_exclusive` (return type and how contention is reported —
-  `lock_contended_error()` sentinel vs a boolean vs `ErrorKind::WouldBlock`)
-  *before* writing the CONC-2 mutual-exclusion test, which asserts "reports
-  contention while held."
+- **Try-lock contention API (RESOLVED).** Verified at implementation time: the
+  design uses std locking (not `fs4`). `File::try_lock()` returns
+  `Result<(), std::fs::TryLockError>`; contention while held is
+  `Err(std::fs::TryLockError::WouldBlock)`, which the mutual-exclusion test
+  matches directly. (Stabilized in Rust 1.89; drives the MSRV bump — see Design.)
 
 ## Out of scope (this engagement)
 
