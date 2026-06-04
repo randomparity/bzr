@@ -54,8 +54,11 @@ async races) to regression guards and latent-footgun notes.
      config intact. The power-loss case (the previous config must survive a
      crash *after* the rename) additionally requires a directory `fsync`; see
      the Design section.
-  2. **Config edit durability** — a concurrent process's committed change must
-     not be silently overwritten by another process's stale write (lost update).
+  2. **Config edit durability (disjoint fields)** — concurrent edits to
+     *different* fields must both survive; a process must not clobber an unrelated
+     field it never intended to touch by writing back a stale whole-file copy.
+     (Two edits to the *same* field necessarily resolve last-writer-wins; that is
+     correct, not a defect — see CONC-2.)
   3. **Liveness** — the persistence mechanism must not be able to wedge other
      `bzr` invocations (e.g., by holding a lock across an interactive prompt).
 
@@ -82,8 +85,19 @@ single-threaded-runtime paths land as regression guards.
   `0700` (dir) hardening. Anchor: `src/config.rs` `save` / `write_to_disk` /
   `write_private_file`.
 - **CONC-2 (real defect; data-integrity, not exploitable security) — no lost
-  updates.** Concurrent `bzr` processes that mutate config do not silently drop
-  each other's edits. *Severity calibration (challenge finding):* the threat
+  updates to disjoint fields.** Concurrent `bzr` processes that mutate
+  *different* config fields do not clobber each other by writing back a stale
+  whole-file copy. **Scope of the guarantee (challenge finding — the earlier
+  absolute phrasing over-claimed):** this closes the *write-write* race for
+  disjoint fields via reload-under-lock. It does **not** make two concurrent edits
+  to the *same* field both survive — that necessarily resolves last-writer-wins
+  (correct and unavoidable). Nor does it close the **read-decide-write TOCTOU**:
+  `connect_and_configure` reads config *without* the lock to make decisions
+  (resolve server, decide TOFU/rotation), so an intent formed on a stale read can
+  still re-assert a value a concurrent process just changed. The lock guarantees
+  *atomic, non-corrupting, disjoint-field-preserving* writes — not serializability
+  of the read-decide-write span. *Severity calibration (challenge finding):* the
+  threat
   model concedes the malicious server does not control the filesystem and cannot
   force or time a second concurrent invocation, so this is a **robustness /
   data-integrity** defect, not an attacker-exploitable vulnerability — and it is
@@ -149,17 +163,28 @@ single-threaded-runtime paths land as regression guards.
 
 ## Empirical pre-checks (before committing the workflow)
 
-Run these as throwaway tests, record results in the spec's Method section. Both
-are deterministic (they use real OS threads / explicit interleaving in the test,
-independent of the app's single-threaded runtime).
+Run these as throwaway tests, record results in the spec's Method section. The
+CONC-2 lock probe is deterministic (explicit readiness/release signals); the
+CONC-1 probe is *not* a pure race-hammer — see below for why it must use a
+test-only seam to be deterministic rather than relying on hitting a timing
+window.
 
-1. **CONC-1 probe.** Spawn one `std::thread` that repeatedly reads the config via
-   `Config::load()` while the main thread performs many `save()` calls. Assert on
-   **content survival**, not parse success: a read that succeeds but returns a
-   config *missing the known server* is the corruption signal (a zero-byte read
-   parses to an empty default `Config` — see CONC-1). Under the current
-   truncate-then-write path, some reads return the empty/default config.
-   *Expected: reproduces → confirms the corruption defect.*
+1. **CONC-1 probe.** A naive "thread reads in a loop while the main thread saves"
+   is a **probabilistic race-hammer**, not deterministic: on a fast
+   machine/filesystem the truncate→write window may rarely or never be sampled,
+   so it can both fail to reproduce pre-fix (false green) and pass a future
+   regression by luck. Instead, reproduce deterministically via a **test-only
+   seam**: a write hook (e.g., a `#[cfg(test)]` callback invoked between the
+   `truncate` and the `write_all` in the current code path) lets a reader observe
+   the file *guaranteed* mid-write; assert on **content survival** — the read
+   returns a config *missing the known server* (a zero-byte read parses to an
+   empty default `Config`; see CONC-1), never a parse error. The **permanent
+   guard** is also deterministic and does *not* depend on the seam: after the
+   atomic-write fix, assert (a) a partially-written temp file never appears at the
+   real `config.toml` path, and (b) a simulated mid-write failure (injected write
+   error before the rename) leaves the prior `config.toml` byte-identical.
+   *Expected: the seam reproduces the corruption on current code → confirms the
+   defect; the atomic-write guard passes only after the fix.*
 2. **CONC-2 probe (two parts).** (a) *Logic:* explicitly interleave two stale
    load→modify→save sequences (load A; load B; A sets a pin and saves; B sets
    `auth_method` and saves) and assert A's pin survives — this exercises the
@@ -168,10 +193,14 @@ independent of the app's single-threaded runtime).
    two-fd `flock` test self-deadlocks):* a **second OS process** (a small test
    helper binary) acquires the lock and signals readiness (writes a ready-file /
    closes a pipe) and waits for a go-ahead before releasing. The parent, once it
-   sees readiness, calls `try_lock_exclusive()` and asserts it returns
-   `WouldBlock` *while the child holds the lock*, then signals the child to
-   release and asserts the lock now succeeds. **No `sleep`-based timing
-   assertions** — readiness and release are explicit signals, so the test is
+   sees readiness, performs a **try-lock and asserts it reports contention**
+   *while the child holds the lock*, then signals the child to release and asserts
+   the lock now succeeds. (The exact contention signal is `fs4`-version-specific —
+   `try_lock_exclusive` has returned both `Result<()>` with a `lock_contended_error()`
+   sentinel and `Result<bool>` across releases — so the test asserts "reports
+   contention," not a hard-coded `ErrorKind::WouldBlock`; the precise API is pinned
+   and verified at implementation time, see Open decisions.) **No `sleep`-based
+   timing assertions** — readiness and release are explicit signals, so the test is
    deterministic, not a timing race. *Expected: (a) reproduces lost-update on
    current code; (b) becomes the regression test for the lock itself.*
 
@@ -275,7 +304,8 @@ TDD locally; the user confirms before each push.
 
 1. **Flaky lock test.** The mandated two-process test was specified as a sleep
    race ("holds briefly / blocks until release"); rewritten to use a readiness
-   signal + `try_lock_exclusive() == WouldBlock` with no timing assertions.
+   signal + a try-lock contention assertion with no timing assertions. (Round 3
+   refined the contention check to be `fs4`-API-agnostic.)
 2. **Fragile grep guard.** The `check-no-direct-save` grep was binding-name-fragile
    and test-noisy; replaced by **compiler-enforced** privacy (`save()` is private
    to `config`, so bypass fails to compile).
@@ -290,6 +320,22 @@ TDD locally; the user confirms before each push.
    cost/benefit gate, shipping after CONC-1.
 6. **Failing-first contradiction.** Scoped the failing-first rule to CONC-1/CONC-2;
    CONC-4/5 are characterization guards, CONC-3 is a CI check.
+
+**Round 3** found three remaining defects; all addressed above:
+
+1. **CONC-1 probe was a probabilistic race-hammer mislabeled "deterministic."** A
+   read-while-writing loop can miss the truncate→write window (false green) and is
+   not a reliable permanent guard. Reproduce via a `#[cfg(test)]` seam between
+   `truncate` and `write_all`; make the permanent guard deterministic (temp never
+   appears at the real path; injected mid-write failure leaves the old file
+   byte-identical). Dropped the "both deterministic" claim.
+2. **CONC-2 over-claimed its guarantee.** Reload-under-lock preserves *disjoint*
+   field edits only; same-field edits resolve last-writer-wins, and the unlocked
+   read-decide-write span remains a TOCTOU the lock does not close. Narrowed the
+   asset, the invariant, and the stated scope accordingly.
+3. **`fs4` try-lock contention API is version-specific.** The test asserts
+   "reports contention," not a hard-coded `WouldBlock`; pin the version and verify
+   the API before writing the test (added to Open decisions).
 
 ## Delivery
 
@@ -318,6 +364,11 @@ TDD locally; the user confirms before each push.
 - **Windows atomic-replace mechanism** — the Design section scopes this
   (`ReplaceFileW` or `rename`-with-retry, durability scoped to POSIX); confirm the
   exact API and error/retry behavior during implementation.
+- **`fs4` try-lock contention API** — pin the `fs4` version and verify the exact
+  shape of `try_lock_exclusive` (return type and how contention is reported —
+  `lock_contended_error()` sentinel vs a boolean vs `ErrorKind::WouldBlock`)
+  *before* writing the CONC-2 mutual-exclusion test, which asserts "reports
+  contention while held."
 
 ## Out of scope (this engagement)
 
