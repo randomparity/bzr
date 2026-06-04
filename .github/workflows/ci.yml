@@ -24,7 +24,7 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
         with:
           key: msrv-1.89.0
-      - run: cargo test --locked
+      - run: cargo test --locked --features test-helpers
 
   fmt:
     name: Format

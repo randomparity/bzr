@@ -337,11 +337,15 @@ impl Config {
 
         // Reload WITHOUT validation. `Config::load` validates unconditionally and
         // rejects a credential-less server (the state `unset-keyring` deliberately
-        // leaves on disk). Validating the *reload* would make every later
-        // `update_locked` fail on such a config and would break re-credentialing.
-        // We validate the *post-mutation* state instead (when `validate` is true),
-        // which matches `save()`'s "validate the whole config before writing"
-        // semantics and lets `set-keyring` heal a credential-less server.
+        // leaves on disk). Validating the *reload* would make `update_locked`
+        // itself fail just from reading such a config — in particular it would
+        // break `update_locked_without_validation` (which must operate on, and
+        // leave, a credential-less server). We validate the *post-mutation* state
+        // instead (when `validate` is true), matching `save()`'s "validate the
+        // whole config before writing" semantics. (Note: the whole-config
+        // validation still rejects a write while *any* server is credential-less;
+        // that pre-existing rule — also enforced by `Config::load` in every
+        // command — is unchanged here and is a separate concern from locking.)
         let mut config = Self::read_unvalidated()?;
         mutator(&mut config)?;
         if validate {
