@@ -939,3 +939,87 @@ fn update_locked_preserves_disjoint_concurrent_edits() {
         "B's auth_method must be applied"
     );
 }
+
+#[test]
+fn update_locked_rejects_reentrant_call() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::TempDir::new().unwrap();
+    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
+    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    let result = Config::update_locked(|_outer| {
+        // A nested write from inside a closure must be rejected, not deadlock.
+        Config::update_locked(|_inner| Ok(()))?;
+        Ok(())
+    });
+
+    assert!(result.is_err(), "nested update_locked must error");
+    let err = result.unwrap_err();
+    assert!(
+        err.to_string().contains("re-entrantly"),
+        "expected a re-entrancy error, got: {err}"
+    );
+}
+
+#[test]
+fn update_locked_can_create_a_server_not_yet_persisted() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::TempDir::new().unwrap();
+    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
+    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    // No prior save — disk has no config at all.
+    Config::update_locked(|config| {
+        config.servers.insert(
+            "fresh".to_string(),
+            make_server_config("https://fresh.test"),
+        );
+        Ok(())
+    })
+    .unwrap();
+
+    let reloaded = Config::load().unwrap();
+    assert!(
+        reloaded.servers.contains_key("fresh"),
+        "an upserting closure must create a server from an empty on-disk config"
+    );
+}
+
+#[test]
+fn update_locked_reloads_a_credential_less_config_and_can_heal_it() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::TempDir::new().unwrap();
+    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
+    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    // Seed a server, then strip its only credential source WITHOUT validation
+    // (mirrors `bzr config unset-keyring`).
+    let mut base = Config::default();
+    base.servers
+        .insert("s".to_string(), make_server_config("https://s.test"));
+    base.save().unwrap();
+    Config::update_locked_without_validation(|cfg| {
+        let srv = cfg.servers.get_mut("s").unwrap();
+        srv.api_key = None;
+        srv.api_key_env = None;
+        srv.api_key_keyring = None;
+        Ok(())
+    })
+    .unwrap();
+
+    // A validating `update_locked` that re-credentials the server must SUCCEED:
+    // the reload is unvalidated, the mutation restores a credential, and the
+    // post-mutation validation then passes.
+    Config::update_locked(|cfg| {
+        let srv = cfg.servers.get_mut("s").unwrap();
+        srv.api_key_env = Some("BZR_KEY".to_string());
+        Ok(())
+    })
+    .unwrap();
+
+    let reloaded = Config::load().unwrap();
+    assert_eq!(
+        reloaded.servers.get("s").unwrap().api_key_env.as_deref(),
+        Some("BZR_KEY")
+    );
+}
