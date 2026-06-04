@@ -91,6 +91,7 @@ clippy: ## Run clippy lints
 lint: fmt clippy check-test-layout check-no-spawn ## Run all linters (fmt + clippy + test-layout + no-spawn)
 
 check-test-layout: ## Verify all test code lives in sibling *_tests.rs files
+	@command -v rg >/dev/null || { echo "ERROR: ripgrep (rg) is required for this guard"; exit 1; }
 	@if rg -l '^mod tests \{' src/ 2>/dev/null; then \
 	  echo "ERROR: inline 'mod tests { ... }' blocks found in src/."; \
 	  echo "Move tests to a sibling <name>_tests.rs file linked via"; \
@@ -100,6 +101,7 @@ check-test-layout: ## Verify all test code lives in sibling *_tests.rs files
 	fi
 
 check-no-spawn: ## Guard the single-threaded-runtime assumption (CONC-3)
+	@command -v rg >/dev/null || { echo "ERROR: ripgrep (rg) is required for this guard"; exit 1; }
 	@if ! rg -q 'flavor = "current_thread"' src/main.rs; then \
 	  echo "ERROR: src/main.rs no longer declares the current_thread runtime."; \
 	  echo "The concurrency engagement assumes no in-process parallelism."; \
