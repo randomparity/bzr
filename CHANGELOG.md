@@ -32,6 +32,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   library's native file locking, stabilized in 1.89, for config write
   serialization — no third-party locking dependency).
 
+### Fixed
+
+- Concurrent `bzr` processes editing different config fields no longer clobber
+  each other. All config writes now take an exclusive advisory lock on
+  `config.lock` and reload the latest config from disk before applying their
+  change, so a write that touches one field preserves a concurrent write to a
+  different field. (Two edits to the *same* field still resolve
+  last-writer-wins, which is expected.)
+
 ## [0.4.2] - 2026-05-29
 
 ### Changed
