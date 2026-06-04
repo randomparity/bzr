@@ -279,7 +279,8 @@ impl Config {
         Ok(config)
     }
 
-    pub fn save(&self) -> Result<()> {
+    #[cfg(test)]
+    fn save(&self) -> Result<()> {
         self.validate()?;
         self.write_to_disk()
     }
@@ -352,11 +353,11 @@ impl Config {
 
     /// Persist the config **without** running the credential-source validator.
     ///
-    /// Used by `unset-keyring`, which intentionally leaves a server without a
-    /// credential source (the user re-credentials it afterward). Applies the
-    /// same `0o600`/`0o700` hardening as [`Self::save`] so a recreated config
-    /// file is never world-readable.
-    pub fn save_without_validation(&self) -> Result<()> {
+    /// Used only in tests: seeds a credential-less server to exercise
+    /// `update_locked_without_validation`. Applies the same `0o600`/`0o700`
+    /// hardening as `save` so a recreated config file is never world-readable.
+    #[cfg(test)]
+    fn save_without_validation(&self) -> Result<()> {
         self.write_to_disk()
     }
 

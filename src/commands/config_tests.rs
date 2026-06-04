@@ -69,8 +69,11 @@ async fn seed_keyring_secret(server_name: &str, secret: &str) {
 async fn set_default_on_empty_config_returns_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _tmp) = setup_config_env().await;
-    let config = Config::default();
-    config.save().unwrap();
+    Config::update_locked(|c| {
+        *c = Config::default();
+        Ok(())
+    })
+    .unwrap();
     let result = execute(
         &ConfigAction::SetDefault {
             name: "nonexistent".into(),

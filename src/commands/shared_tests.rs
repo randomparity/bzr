@@ -128,7 +128,7 @@ async fn uncached_auth_detects_and_persists() {
         .mount(&server)
         .await;
 
-    // Set up a real config file so config.save() works
+    // Set up a real config file so update_locked works
     let tmp = tempfile::TempDir::new().unwrap();
     let config_dir = tmp.path().join("bzr");
     std::fs::create_dir_all(&config_dir).unwrap();
