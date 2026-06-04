@@ -65,12 +65,44 @@ fn apply_tls_verification(
     Ok(builder)
 }
 
+/// Maximum redirect hops followed by the API client, matching reqwest's
+/// default limit.
+const MAX_REDIRECTS: usize = 10;
+
+/// A redirect policy that follows redirects only while the target host
+/// matches the host of the original request, refusing any cross-host hop.
+///
+/// reqwest strips its own known-sensitive headers (`Authorization`, `Cookie`,
+/// …) on a cross-host redirect but not custom ones, so without this the
+/// `X-BUGZILLA-API-KEY` header would be forwarded to a redirect-target host
+/// and leak the API key. Same-host redirects are still followed, up to
+/// [`MAX_REDIRECTS`].
+fn same_host_redirect_policy() -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(|attempt| {
+        let origin_host = attempt.previous().first().and_then(|u| u.host_str());
+        let cross_host = origin_host != attempt.url().host_str();
+        let target = attempt.url().clone();
+        if cross_host {
+            return attempt.error(format!(
+                "refusing to follow cross-host redirect to {target} (would leak credentials)"
+            ));
+        }
+        if attempt.previous().len() >= MAX_REDIRECTS {
+            return attempt.error(format!("exceeded {MAX_REDIRECTS} redirects"));
+        }
+        attempt.follow()
+    })
+}
+
 /// Build a `reqwest::Client` with the configured TLS verification mode.
-/// Used for real API calls; follows redirects per reqwest defaults.
+/// Used for real API calls; follows only same-host redirects so the API
+/// key header cannot leak to a redirect-target host (see
+/// [`same_host_redirect_policy`]).
 pub fn build_tls_client(config: &TlsConfig) -> crate::error::Result<reqwest::Client> {
     let builder = reqwest::Client::builder()
         .connect_timeout(crate::http::CONNECT_TIMEOUT)
-        .timeout(crate::http::REQUEST_TIMEOUT);
+        .timeout(crate::http::REQUEST_TIMEOUT)
+        .redirect(same_host_redirect_policy());
     apply_tls_verification(builder, config)?
         .build()
         .map_err(crate::error::BzrError::Http)

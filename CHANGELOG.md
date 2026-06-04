@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+- API client redirects are now confined to the configured host. The client
+  attaches the API key as the custom header `X-BUGZILLA-API-KEY`, which reqwest
+  does not strip on a cross-host redirect (it only strips its own known-sensitive
+  headers). A malicious or compromised server could therefore return a redirect
+  to an attacker-controlled host and receive the forwarded API key. The client
+  now refuses to follow any cross-host redirect; same-host redirects are still
+  followed. The query-parameter auth variant was already unaffected.
+
 ## [0.4.2] - 2026-05-29
 
 ### Changed
