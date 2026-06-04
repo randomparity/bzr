@@ -117,10 +117,12 @@ pub(super) async fn handle(
     write_bugs(&bugs, spec, format, w.out, w.err);
 
     if let Some((name, query)) = save_info {
-        let mut config = crate::config::Config::load()?;
-        let is_update = config.queries.contains_key(name.as_str());
-        config.queries.insert(name.clone(), query);
-        config.save()?;
+        let mut is_update = false;
+        crate::config::Config::update_locked(|config| {
+            is_update = config.queries.contains_key(name.as_str());
+            config.queries.insert(name.clone(), query);
+            Ok(())
+        })?;
         let verb = if is_update { "Updated" } else { "Saved" };
         write_query_saved(&name, verb, format, w.out);
     }

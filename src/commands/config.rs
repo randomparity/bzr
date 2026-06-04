@@ -56,15 +56,16 @@ pub async fn execute(
             .await
         }
         ConfigAction::SetDefault { name } => {
-            let mut config = Config::load()?;
-            if !config.servers.contains_key(name) {
-                return Err(crate::error::BzrError::config(format!(
-                    "server '{name}' not found"
-                )));
-            }
-            config.default_server = Some(name.clone());
+            Config::update_locked(|config| {
+                if !config.servers.contains_key(name) {
+                    return Err(crate::error::BzrError::config(format!(
+                        "server '{name}' not found"
+                    )));
+                }
+                config.default_server = Some(name.clone());
+                Ok(())
+            })?;
             let path = Config::path()?;
-            config.save()?;
 
             write_result(
                 &ConfigResult::default_set(name.as_str(), path.to_string_lossy()),
