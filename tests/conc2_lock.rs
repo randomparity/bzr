@@ -5,6 +5,13 @@
 use std::fs::{File, OpenOptions, TryLockError};
 use std::path::Path;
 use std::process::Command;
+use std::sync::Mutex;
+
+/// Serializes the tests in this binary. One test mutates the process
+/// environment (`set_var`) while the other spawns a child that inherits
+/// (reads) the environment — running them concurrently would be a data race
+/// on `environ`. Both tests hold this for their whole body.
+static SERIAL: Mutex<()> = Mutex::new(());
 
 fn wait_for(path: &Path) {
     for _ in 0..500 {
@@ -18,6 +25,9 @@ fn wait_for(path: &Path) {
 
 #[test]
 fn second_process_holding_the_lock_blocks_try_lock() {
+    let _serial = SERIAL
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let dir = tempfile::TempDir::new().unwrap();
     let lock_path = dir.path().join("config.lock");
     let ready = dir.path().join("ready");
@@ -61,6 +71,9 @@ fn update_locked_waits_for_a_held_lock_then_completes() {
     use std::sync::mpsc;
     use std::time::Duration;
 
+    let _serial = SERIAL
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let dir = tempfile::TempDir::new().unwrap();
     // Point Config at this dir; pre-create the `bzr` subdir so the helper can
     // create `config.lock` there before any `update_locked` call resolves it.
