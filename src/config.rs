@@ -266,8 +266,11 @@ impl Config {
         self.write_to_disk()
     }
 
-    /// Serialize and write the config to its on-disk path, hardening the
-    /// directory (`0o700`) and file (`0o600`) on first creation.
+    /// Serialize and write the config to its on-disk path atomically:
+    /// a uniquely-named sibling temp is written `0o600`, fsync'd (unix),
+    /// renamed over the target (atomic replace), and the directory is
+    /// fsync'd (unix) so the rename survives a crash. A concurrent reader
+    /// therefore always sees either the complete old or complete new file.
     fn write_to_disk(&self) -> Result<()> {
         let path = Self::path()?;
         if let Some(parent) = path.parent() {
@@ -276,13 +279,10 @@ impl Config {
             if !parent_exists {
                 set_private_directory_permissions(parent)?;
             }
+            reap_stale_temps(parent);
         }
         let content = toml::to_string_pretty(self)?;
-        let file_exists = path.exists();
-        write_private_file(&path, &content)?;
-        if !file_exists {
-            set_private_file_permissions(&path)?;
-        }
+        atomic_write(&path, &content)?;
         Self::warn_on_insecure_permissions(&path);
         Ok(())
     }
@@ -329,25 +329,162 @@ impl Config {
     }
 }
 
-#[cfg(unix)]
-fn write_private_file(path: &std::path::Path, content: &str) -> Result<()> {
-    use std::fs::OpenOptions;
-    use std::os::unix::fs::OpenOptionsExt;
-
-    let mut file = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .mode(0o600)
-        .open(path)?;
-    file.write_all(content.as_bytes())?;
+/// Atomically write `content` to `path`: write a uniquely-named sibling
+/// temp file, durably flush it (unix), then rename it over `path`.
+/// `rename` replaces the destination atomically on POSIX and on Windows
+/// (`MoveFileExW`). The directory is fsync'd on unix so the rename is
+/// durable across a crash; on non-unix the concurrent-reader atomicity
+/// holds but crash-durability is best-effort.
+fn atomic_write(path: &std::path::Path, content: &str) -> Result<()> {
+    // Create + write the temp. `create_new` is collision-tolerant: a stale
+    // same-pid crash-orphan younger than the reaper's age gate could share
+    // the first candidate name, so retry with fresh names before failing.
+    let tmp = write_unique_temp(path, content)?;
+    // Test-only fault seam: simulate a crash/failure *after* the temp is
+    // written but *before* the rename, to deterministically verify that a
+    // failed write leaves the previous config intact (CONC-1 atomicity).
+    #[cfg(test)]
+    if FAIL_AFTER_TEMP.with(std::cell::Cell::get) {
+        let _ = fs::remove_file(&tmp);
+        return Err(BzrError::config("injected post-temp failure (test)"));
+    }
+    if let Err(e) = fs::rename(&tmp, path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e.into());
+    }
+    fsync_parent_dir(path);
     Ok(())
 }
 
+#[cfg(test)]
+thread_local! {
+    /// When set, [`atomic_write`] fails after writing the temp but before the
+    /// rename. Lets a test prove a failed write does not destroy the old file.
+    static FAIL_AFTER_TEMP: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Arm/disarm the [`atomic_write`] post-temp fault seam (test-only).
+#[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "called from config_tests.rs; removed once Task 3 adds the caller"
+)]
+pub(crate) fn set_fail_after_temp(on: bool) {
+    FAIL_AFTER_TEMP.with(|f| f.set(on));
+}
+
+/// Max attempts to find an unused temp name. A collision only happens
+/// against a stale same-pid orphan younger than the reaper's age gate, so
+/// a few retries with fresh counter values is always enough.
+const TEMP_CREATE_ATTEMPTS: u32 = 16;
+
+/// A candidate sibling temp path: `config.toml.<pid>.<counter>.tmp`. The
+/// counter is process-global and monotonic, so each call yields a fresh
+/// name; combined with the pid this is unique across concurrent writers.
+fn candidate_temp_path(path: &std::path::Path) -> PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let pid = std::process::id();
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(format!(".{pid}.{n}.tmp"));
+    match path.parent() {
+        Some(dir) => dir.join(name),
+        None => PathBuf::from(name),
+    }
+}
+
+/// Create a fresh `0600` sibling temp (collision-tolerant) and write
+/// `content` to it durably. Returns the temp path on success. On an
+/// `AlreadyExists` collision with a stale orphan, retries with a fresh
+/// name; on a write/flush failure, removes the temp it created and
+/// propagates the error.
+fn write_unique_temp(path: &std::path::Path, content: &str) -> Result<PathBuf> {
+    for _ in 0..TEMP_CREATE_ATTEMPTS {
+        let tmp = candidate_temp_path(path);
+        let mut file = match create_new_private(&tmp) {
+            Ok(file) => file,
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e.into()),
+        };
+        if let Err(e) = file
+            .write_all(content.as_bytes())
+            .and_then(|()| file.sync_all())
+        {
+            let _ = fs::remove_file(&tmp);
+            return Err(e.into());
+        }
+        return Ok(tmp);
+    }
+    Err(BzrError::config(
+        "could not create a unique config temp file after repeated attempts",
+    ))
+}
+
+#[cfg(unix)]
+fn create_new_private(tmp: &std::path::Path) -> std::io::Result<fs::File> {
+    use std::fs::OpenOptions;
+    use std::os::unix::fs::OpenOptionsExt;
+
+    OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(tmp)
+}
+
 #[cfg(not(unix))]
-fn write_private_file(path: &std::path::Path, content: &str) -> Result<()> {
-    fs::write(path, content)?;
-    Ok(())
+fn create_new_private(tmp: &std::path::Path) -> std::io::Result<fs::File> {
+    use std::fs::OpenOptions;
+
+    OpenOptions::new().create_new(true).write(true).open(tmp)
+}
+
+#[cfg(unix)]
+fn fsync_parent_dir(path: &std::path::Path) {
+    if let Some(dir) = path.parent() {
+        if let Ok(handle) = fs::File::open(dir) {
+            let _ = handle.sync_all();
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn fsync_parent_dir(_path: &std::path::Path) {}
+
+/// How old a temp sibling must be before the reaper treats it as a
+/// crash orphan. Comfortably longer than any single atomic write, so a
+/// *live* temp belonging to a concurrent `bzr` process is never reaped.
+const STALE_TEMP_AGE: std::time::Duration = std::time::Duration::from_secs(3600);
+
+/// Remove crash-orphaned `config.toml.*.tmp` siblings **older than
+/// [`STALE_TEMP_AGE`]**. A crash between temp-create and rename leaves a
+/// unique-named orphan that no graceful cleanup reaps; sweep old ones so
+/// they do not accumulate. The age gate is essential: CONC-1 ships before
+/// the CONC-2 lock, so two concurrent processes can each have a fresh
+/// in-flight temp — reaping unconditionally would delete the other's live
+/// temp and make its `rename` fail (lost write). Only temps untouched for
+/// an hour — which no live write produces — are removed.
+fn reap_stale_temps(dir: &std::path::Path) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if !(name.starts_with("config.toml.") && name.ends_with(".tmp")) {
+            continue;
+        }
+        let is_old = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|mtime| mtime.elapsed().ok())
+            .is_some_and(|age| age >= STALE_TEMP_AGE);
+        if is_old {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
 }
 
 #[cfg(unix)]
@@ -360,19 +497,6 @@ fn set_private_directory_permissions(path: &std::path::Path) -> Result<()> {
 
 #[cfg(not(unix))]
 fn set_private_directory_permissions(_path: &std::path::Path) -> Result<()> {
-    Ok(())
-}
-
-#[cfg(unix)]
-fn set_private_file_permissions(path: &std::path::Path) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
-    fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn set_private_file_permissions(_path: &std::path::Path) -> Result<()> {
     Ok(())
 }
 

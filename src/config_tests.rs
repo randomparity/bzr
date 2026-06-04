@@ -64,15 +64,15 @@ fn config_file_io_operations() {
     assert_eq!(srv.url, "https://bugzilla.example.com");
     assert_eq!(srv.api_key.as_deref(), Some("test-key"));
 
-    // 3. Re-saving an existing config preserves the file's current
-    // permissions; perms are only set on first save.
+    // 3. Re-saving an existing config always produces a 0o600 file because
+    // atomic_write creates the temp with 0o600 and rename replaces the
+    // destination inode entirely (the old inode's permissions are not kept).
     #[cfg(unix)]
     {
         let path = Config::path().unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
         original.save().unwrap();
         let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
-        assert_eq!(mode, 0o644);
+        assert_eq!(mode, 0o600);
     }
 
     // 4. Loading a non-NotFound IO error (e.g. the path is a
