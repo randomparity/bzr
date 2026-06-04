@@ -316,24 +316,30 @@ api_key = "test-key"
         .mount(&server)
         .await;
 
-    let mut config = crate::config::Config::load().unwrap();
     let tls_config = TlsConfig::default();
     let ctx = connect_context("test", &server.uri(), None);
-    let result = super::detect_with_tofu_fallback(&ctx, &tls_config, &mut config).await;
+    let result = super::detect_with_tofu_fallback(&ctx, &tls_config).await;
     assert!(result.is_ok(), "normal path should succeed");
 }
 
-#[test]
-fn persist_detected_settings_skips_unknown_server() {
-    // If the server name doesn't exist in config, persist is a no-op
-    let mut config = crate::config::Config::default();
+#[tokio::test]
+async fn persist_detected_settings_skips_unknown_server() {
+    // If the server name doesn't exist in config, persist is a no-op.
+    let _lock = ENV_LOCK.lock().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    write_config(&tmp, "https://example.test", "");
+
     let settings = crate::client::DetectedServerSettings {
         auth_method: crate::types::AuthMethod::Header,
         api_mode: crate::types::ApiMode::Rest,
         server_version: Some("5.1".into()),
     };
-    let result = super::persist_detected_settings(&mut config, "nonexistent", &settings, true);
+    let result = super::persist_detected_settings("nonexistent", &settings, true);
     assert!(result.is_ok());
+
+    // The known server is untouched and no "nonexistent" server is created.
+    let reloaded = crate::config::Config::load().unwrap();
+    assert!(!reloaded.servers.contains_key("nonexistent"));
 }
 
 /// Build a config TOML with the given extra fields injected into the
@@ -490,10 +496,9 @@ async fn detect_and_build_client_persists_and_returns_client() {
     write_config(&tmp, &server.uri(), "");
     mount_detection_mocks(&server).await;
 
-    let mut config = crate::config::Config::load().unwrap();
     let tls_config = TlsConfig::default();
     let ctx = connect_context("test", &server.uri(), None);
-    let result = super::detect_and_build_client(&ctx, &tls_config, &mut config).await;
+    let result = super::detect_and_build_client(&ctx, &tls_config).await;
     assert!(result.is_ok(), "detect_and_build_client should succeed");
 
     // Verify the settings were persisted.
@@ -513,10 +518,9 @@ async fn detect_and_build_client_respects_api_override() {
     write_config(&tmp, &server.uri(), "");
     mount_detection_mocks(&server).await;
 
-    let mut config = crate::config::Config::load().unwrap();
     let tls_config = TlsConfig::default();
     let ctx = connect_context("test", &server.uri(), Some(crate::types::ApiMode::XmlRpc));
-    let result = super::detect_and_build_client(&ctx, &tls_config, &mut config).await;
+    let result = super::detect_and_build_client(&ctx, &tls_config).await;
     assert!(result.is_ok(), "api_override should still produce a client");
 }
 
@@ -531,9 +535,8 @@ async fn handle_tofu_returns_error_when_probe_fails() {
     // Use an unreachable HTTPS URL so probe_server_cert fails fast.
     write_config(&tmp, "https://127.0.0.1:1", "");
 
-    let mut config = crate::config::Config::load().unwrap();
     let ctx = connect_context("test", "https://127.0.0.1:1", None);
-    let result = super::handle_tofu(&ctx, &mut config).await;
+    let result = super::handle_tofu(&ctx).await;
     assert!(
         result.is_err(),
         "handle_tofu should propagate probe failure"
@@ -554,14 +557,12 @@ async fn handle_pin_rotation_rejects_in_noninteractive() {
          tls_pin_issuer = \"CN=Old\"",
     );
 
-    let mut config = crate::config::Config::load().unwrap();
     let ctx = connect_context("test", "https://example.test", None);
     let result = super::handle_pin_rotation(
         &ctx,
         "sha256//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
         "sha256//BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=",
         "CN=New",
-        &mut config,
     )
     .await;
     match result {
@@ -588,10 +589,9 @@ async fn detect_with_tofu_fallback_propagates_auth_errors() {
     // No mocks mounted -> wiremock returns 404 for every request.
     // detect_auth_method will exhaust whoami + valid_login (no email)
     // and return BzrError::Auth, which is not a TLS error -> propagates.
-    let mut config = crate::config::Config::load().unwrap();
     let tls_config = TlsConfig::default();
     let ctx = connect_context("test", &server.uri(), None);
-    let result = super::detect_with_tofu_fallback(&ctx, &tls_config, &mut config).await;
+    let result = super::detect_with_tofu_fallback(&ctx, &tls_config).await;
     assert!(result.is_err(), "auth failure should propagate");
 }
 
@@ -773,11 +773,9 @@ async fn classify_and_handle_tls_failure_returns_none_for_non_tls_error() {
         .unwrap_err();
     let bzr_err = BzrError::Http(err);
 
-    let mut config = crate::config::Config::default();
     let tls_config = TlsConfig::default();
     let ctx = connect_context("test", "http://127.0.0.1:1/unreachable", None);
-    let result =
-        super::classify_and_handle_tls_failure(&bzr_err, &ctx, &tls_config, &mut config).await;
+    let result = super::classify_and_handle_tls_failure(&bzr_err, &ctx, &tls_config).await;
     match result {
         Ok(None) => {}
         Ok(Some(_)) => panic!("expected Ok(None) for non-TLS error, got Some(client)"),
