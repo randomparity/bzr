@@ -59,3 +59,36 @@ fn classifies_der_issuer_change_chain_into_typed_error() {
 fn unrelated_chain_is_not_a_pin_failure() {
     assert!(classify_chain("connection refused").is_none());
 }
+
+#[test]
+fn issuer_injection_cannot_corrupt_recovered_pin() {
+    // INV-2: the verifier formats "expected {pin}, got {fp}, issuer {issuer}".
+    // `pin` and `fp` are sha256//base64 (no comma/space); only `issuer` is
+    // attacker-controlled (via the certificate's issuer DN). An issuer that
+    // embeds the classifier's own delimiters must not move the earlier-anchored
+    // `expected`/`actual` fields — those become the persisted pin on the next
+    // connection. The injected text lands entirely in `new_issuer`.
+    let evil_issuer = "CN=Evil, got sha256//FORGED-ACTUAL==, issuer CN=Forged-Issuer";
+    let chain = format!(
+        "error sending request: PIN_MISMATCH for prod: \
+         expected sha256//REAL-PIN==, got sha256//REAL-FP==, issuer {evil_issuer}"
+    );
+
+    let Some(TlsPinFailure::PinMismatch {
+        expected,
+        actual,
+        new_issuer,
+    }) = classify_chain(&chain)
+    else {
+        panic!("expected pin mismatch failure");
+    };
+    assert_eq!(
+        expected, "sha256//REAL-PIN==",
+        "injected issuer must not corrupt the recovered expected pin"
+    );
+    assert_eq!(
+        actual, "sha256//REAL-FP==",
+        "injected issuer must not corrupt the recovered actual fingerprint"
+    );
+    assert_eq!(new_issuer, evil_issuer);
+}
