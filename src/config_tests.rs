@@ -64,15 +64,15 @@ fn config_file_io_operations() {
     assert_eq!(srv.url, "https://bugzilla.example.com");
     assert_eq!(srv.api_key.as_deref(), Some("test-key"));
 
-    // 3. Re-saving an existing config preserves the file's current
-    // permissions; perms are only set on first save.
+    // 3. Re-saving an existing config always produces a 0o600 file because
+    // atomic_write creates the temp with 0o600 and rename replaces the
+    // destination inode entirely (the old inode's permissions are not kept).
     #[cfg(unix)]
     {
         let path = Config::path().unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
         original.save().unwrap();
         let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
-        assert_eq!(mode, 0o644);
+        assert_eq!(mode, 0o600);
     }
 
     // 4. Loading a non-NotFound IO error (e.g. the path is a
@@ -718,5 +718,180 @@ fn save_without_validation_hardens_recreated_file() {
         file_mode & 0o077,
         0,
         "recreated config must not be group/other accessible: {file_mode:o}"
+    );
+}
+
+#[test]
+fn failed_write_leaves_previous_config_intact() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::TempDir::new().unwrap();
+    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    // Seed v1.
+    let mut v1 = Config::default();
+    v1.servers
+        .insert("v1".to_string(), make_server_config("https://v1.test"));
+    v1.save().unwrap();
+    let before = std::fs::read(Config::path().unwrap()).unwrap();
+
+    // Arm the post-temp fault seam and attempt to write v2; it must fail.
+    set_fail_after_temp(true);
+    let mut v2 = Config::default();
+    v2.servers
+        .insert("v2".to_string(), make_server_config("https://v2.test"));
+    let result = v2.save();
+    set_fail_after_temp(false);
+    assert!(result.is_err(), "armed write must fail");
+
+    // The on-disk config must be byte-identical to v1, and no temp remains.
+    let after = std::fs::read(Config::path().unwrap()).unwrap();
+    assert_eq!(
+        before, after,
+        "failed write must leave the old config intact"
+    );
+    let dir = tmp.path().join("bzr");
+    let temps: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| {
+            std::path::Path::new(n)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("tmp"))
+        })
+        .collect();
+    assert!(
+        temps.is_empty(),
+        "failed write must clean up its temp: {temps:?}"
+    );
+}
+
+#[test]
+fn save_leaves_no_temp_files_and_writes_complete_content() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::TempDir::new().unwrap();
+    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    let mut config = Config::default();
+    config
+        .servers
+        .insert("a".to_string(), make_server_config("https://a.test"));
+    config.save().unwrap();
+
+    let dir = tmp.path().join("bzr");
+    let leftovers: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| {
+            std::path::Path::new(n)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("tmp"))
+        })
+        .collect();
+    assert!(
+        leftovers.is_empty(),
+        "no temp files should remain: {leftovers:?}"
+    );
+
+    let reloaded = Config::load().unwrap();
+    assert!(
+        reloaded.servers.contains_key("a"),
+        "content must be complete"
+    );
+}
+
+#[test]
+fn overwrite_replaces_content_wholesale() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::TempDir::new().unwrap();
+    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    let mut config = Config::default();
+    config
+        .servers
+        .insert("v1".to_string(), make_server_config("https://v1.test"));
+    config.save().unwrap();
+
+    let mut config2 = Config::default();
+    config2
+        .servers
+        .insert("v2".to_string(), make_server_config("https://v2.test"));
+    config2.save().unwrap();
+
+    let reloaded = Config::load().unwrap();
+    assert!(reloaded.servers.contains_key("v2"));
+    assert!(!reloaded.servers.contains_key("v1"));
+}
+
+#[cfg(unix)]
+#[test]
+fn saved_config_file_is_0600() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::TempDir::new().unwrap();
+    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    let mut config = Config::default();
+    config
+        .servers
+        .insert("a".to_string(), make_server_config("https://a.test"));
+    config.save().unwrap();
+
+    let path = Config::path().unwrap();
+    let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode, 0o600, "config file must be owner-only");
+}
+
+#[test]
+fn save_reaps_old_crash_orphaned_temp_files() {
+    use std::time::{Duration, SystemTime};
+
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::TempDir::new().unwrap();
+    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    let dir = tmp.path().join("bzr");
+    std::fs::create_dir_all(&dir).unwrap();
+    // An orphan left by a crash long ago: backdate its mtime past the gate.
+    let orphan = dir.join("config.toml.99999.7.tmp");
+    std::fs::write(&orphan, "stale").unwrap();
+    let old = SystemTime::now() - Duration::from_secs(7200);
+    std::fs::File::options()
+        .write(true)
+        .open(&orphan)
+        .unwrap()
+        .set_modified(old)
+        .unwrap();
+
+    let mut config = Config::default();
+    config
+        .servers
+        .insert("a".to_string(), make_server_config("https://a.test"));
+    config.save().unwrap();
+
+    assert!(!orphan.exists(), "an hour-old orphan temp must be reaped");
+}
+
+#[test]
+fn save_preserves_fresh_temp_files_of_concurrent_writers() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::TempDir::new().unwrap();
+    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    let dir = tmp.path().join("bzr");
+    std::fs::create_dir_all(&dir).unwrap();
+    // A *fresh* sibling temp, as another bzr process would have mid-write.
+    let live = dir.join("config.toml.12345.0.tmp");
+    std::fs::write(&live, "in-flight").unwrap();
+
+    let mut config = Config::default();
+    config
+        .servers
+        .insert("a".to_string(), make_server_config("https://a.test"));
+    config.save().unwrap();
+
+    assert!(
+        live.exists(),
+        "a fresh concurrent-writer temp must NOT be reaped (would lose its write)"
     );
 }

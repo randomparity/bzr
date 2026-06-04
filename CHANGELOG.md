@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   to an attacker-controlled host and receive the forwarded API key. The client
   now refuses to follow any cross-host redirect; same-host redirects are still
   followed. The query-parameter auth variant was already unaffected.
+- Config writes are now atomic. The previous in-place truncate-then-write
+  could leave the config file empty or partial if a concurrent `bzr` process
+  read it mid-write, or if the process crashed between truncate and write —
+  silently dropping all configured servers. The config is now written to a
+  sibling temp file and atomically renamed into place (with a directory fsync
+  on Unix for crash durability), and crash-orphaned temp files are reaped on
+  the next save. This fixes torn reads, not lost updates: two `bzr` processes
+  editing the config simultaneously still resolve last-writer-wins, so one
+  process's change can be silently overwritten until file locking lands.
 
 ## [0.4.2] - 2026-05-29
 

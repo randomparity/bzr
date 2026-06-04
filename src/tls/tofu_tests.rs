@@ -167,3 +167,41 @@ fn cert_capture_verify_tls13_signature_returns_ok() {
     let result = capture.verify_tls13_signature(b"msg", &cert, &dss);
     assert!(result.is_ok(), "tls13 signature should be accepted");
 }
+
+#[test]
+fn cert_capture_keeps_the_first_value_set() {
+    // CONC-5: the captured cell is set-once ("first cert wins") even if
+    // the verifier callback fires more than once on a handshake. Drive the
+    // real capture path (`verify_server_cert`) with two distinct certs and
+    // assert the first one is the one retained.
+    let capture = CertCapture {
+        captured: OnceLock::new(),
+        provider: crate::tls::default_provider(),
+    };
+
+    let der_a = rcgen::CertificateParams::new(vec!["localhost".to_owned()])
+        .unwrap()
+        .self_signed(&rcgen::KeyPair::generate().unwrap())
+        .unwrap()
+        .der()
+        .to_vec();
+    let der_b = rcgen::CertificateParams::new(vec!["localhost".to_owned()])
+        .unwrap()
+        .self_signed(&rcgen::KeyPair::generate().unwrap())
+        .unwrap()
+        .der()
+        .to_vec();
+    assert_ne!(der_a, der_b, "the two certs must be distinct");
+
+    let cert_a = CertificateDer::from(der_a.clone());
+    let cert_b = CertificateDer::from(der_b);
+    let server_name = ServerName::try_from("localhost").unwrap();
+
+    let first = capture.verify_server_cert(&cert_a, &[], &server_name, &[], UnixTime::now());
+    assert!(first.is_ok(), "first verify must accept the cert");
+    let second = capture.verify_server_cert(&cert_b, &[], &server_name, &[], UnixTime::now());
+    assert!(second.is_ok(), "second verify must accept the cert");
+
+    let (der, _issuer) = capture.captured.get().unwrap();
+    assert_eq!(der, &der_a, "the first cert's DER must win");
+}

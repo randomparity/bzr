@@ -32,3 +32,16 @@ fn delete_missing_entry_is_ok() {
     // the wrapper maps to Ok.
     delete("bzr-test-delete", "never-existed").unwrap();
 }
+
+#[test]
+fn install_test_store_is_idempotent_across_repeated_calls() {
+    // CONC-4: the default-store init is check-then-act; under the
+    // current_thread runtime it is benign and idempotent. Calling it
+    // repeatedly must remain safe and leave a usable default store.
+    install_test_store();
+    install_test_store();
+    assert!(
+        keyring_core::get_default_store().is_some(),
+        "a default store must be installed after repeated init"
+    );
+}
