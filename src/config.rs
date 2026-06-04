@@ -329,9 +329,7 @@ impl Config {
         let dir = Self::ensure_config_dir()?;
         let lock_path = dir.join("config.lock");
         let file = open_lock_file(&lock_path)?;
-        file.lock().map_err(|e| {
-            BzrError::config(format!("could not lock {}: {e}", lock_path.display()))
-        })?;
+        acquire_exclusive_lock(&file, &lock_path)?;
         LOCK_HELD.with(|held| held.set(true));
         let _guard = LockGuard { file };
 
@@ -511,6 +509,28 @@ fn open_lock_file(lock_path: &Path) -> Result<fs::File> {
         .create(true)
         .truncate(false)
         .open(lock_path)?)
+}
+
+/// Take the exclusive advisory lock, giving the user feedback if another
+/// `bzr` process already holds it. A bare blocking `lock()` would hang the
+/// CLI with no output under contention; instead we `try_lock` first and only
+/// fall back to blocking after printing a one-line notice to stderr, so the
+/// wait is visible rather than a silent freeze.
+fn acquire_exclusive_lock(file: &fs::File, lock_path: &Path) -> Result<()> {
+    let lock_err = |e: std::io::Error| {
+        BzrError::config(format!("could not lock {}: {e}", lock_path.display()))
+    };
+    match file.try_lock() {
+        Ok(()) => Ok(()),
+        Err(std::fs::TryLockError::WouldBlock) => {
+            let _ = writeln!(
+                std::io::stderr(),
+                "waiting for another bzr process to finish writing the config…"
+            );
+            file.lock().map_err(lock_err)
+        }
+        Err(std::fs::TryLockError::Error(e)) => Err(lock_err(e)),
+    }
 }
 
 /// Max attempts to find an unused temp name. A collision only happens

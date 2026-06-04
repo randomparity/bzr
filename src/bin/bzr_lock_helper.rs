@@ -23,8 +23,17 @@ fn main() {
 
     File::create(ready_path).expect("write ready file");
 
+    // Bounded wait: if the parent test aborts before creating the release file
+    // (e.g. a panic, or CI cancellation), self-terminate instead of spinning
+    // forever holding the lock. The happy path releases in milliseconds.
+    let step = std::time::Duration::from_millis(10);
+    let mut remaining = std::time::Duration::from_secs(30);
     while !Path::new(release_path).exists() {
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        if remaining.is_zero() {
+            return;
+        }
+        std::thread::sleep(step);
+        remaining = remaining.saturating_sub(step);
     }
     // Lock released on drop / process exit.
 }
