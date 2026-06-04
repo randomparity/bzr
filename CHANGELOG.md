@@ -22,7 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   silently dropping all configured servers. The config is now written to a
   sibling temp file and atomically renamed into place (with a directory fsync
   on Unix for crash durability), and crash-orphaned temp files are reaped on
-  the next save.
+  the next save. This fixes torn reads, not lost updates: two `bzr` processes
+  editing the config simultaneously still resolve last-writer-wins, so one
+  process's change can be silently overwritten until file locking lands.
 
 ## [0.4.2] - 2026-05-29
 

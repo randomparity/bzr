@@ -279,8 +279,8 @@ impl Config {
             if !parent_exists {
                 set_private_directory_permissions(parent)?;
             }
-            reap_stale_temps(parent);
         }
+        reap_stale_temps(&path);
         let content = toml::to_string_pretty(self)?;
         atomic_write(&path, &content)?;
         Self::warn_on_insecure_permissions(&path);
@@ -374,6 +374,16 @@ pub(crate) fn set_fail_after_temp(on: bool) {
 /// a few retries with fresh counter values is always enough.
 const TEMP_CREATE_ATTEMPTS: u32 = 16;
 
+/// The shared filename prefix for this config's sibling temp files:
+/// `<config-file-name>.` (e.g. `config.toml.`). Both the temp **creator**
+/// ([`candidate_temp_path`]) and the temp **reaper** ([`reap_stale_temps`])
+/// derive their match from this one helper, so the two sides cannot drift:
+/// every name the creator can produce is one the reaper will recognize.
+fn temp_prefix(path: &std::path::Path) -> String {
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
+    format!("{name}.")
+}
+
 /// A candidate sibling temp path: `config.toml.<pid>.<counter>.tmp`. The
 /// counter is process-global and monotonic, so each call yields a fresh
 /// name; combined with the pid this is unique across concurrent writers.
@@ -382,8 +392,7 @@ fn candidate_temp_path(path: &std::path::Path) -> PathBuf {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
     let pid = std::process::id();
-    let mut name = path.file_name().unwrap_or_default().to_os_string();
-    name.push(format!(".{pid}.{n}.tmp"));
+    let name = format!("{}{pid}.{n}.tmp", temp_prefix(path));
     match path.parent() {
         Some(dir) => dir.join(name),
         None => PathBuf::from(name),
@@ -460,15 +469,20 @@ const STALE_TEMP_AGE: std::time::Duration = std::time::Duration::from_secs(3600)
 /// the CONC-2 lock, so two concurrent processes can each have a fresh
 /// in-flight temp — reaping unconditionally would delete the other's live
 /// temp and make its `rename` fail (lost write). Only temps untouched for
-/// an hour — which no live write produces — are removed.
-fn reap_stale_temps(dir: &std::path::Path) {
+/// an hour — which no live write produces — are removed. The match prefix
+/// comes from [`temp_prefix`], the same source [`candidate_temp_path`] uses.
+fn reap_stale_temps(path: &std::path::Path) {
+    let Some(dir) = path.parent() else {
+        return;
+    };
+    let prefix = temp_prefix(path);
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
     for entry in entries.flatten() {
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        if !(name.starts_with("config.toml.") && name.ends_with(".tmp")) {
+        if !(name.starts_with(prefix.as_str()) && name.ends_with(".tmp")) {
             continue;
         }
         let is_old = entry
