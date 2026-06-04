@@ -41,3 +41,10 @@ path = "fuzz_targets/fuzz_flag_parser.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_tls_der"
+path = "fuzz_targets/fuzz_tls_der.rs"
+test = false
+doc = false
+bench = false

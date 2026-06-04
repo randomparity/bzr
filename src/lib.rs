@@ -25,6 +25,19 @@ pub mod url_parser;
 pub mod validation;
 pub mod xmlrpc;
 
+/// Fuzz-only entry points. Gated behind `cfg(fuzzing)` so they expose the
+/// otherwise crate-private DER walkers to the `fuzz/` harness without
+/// widening the public API in normal builds.
+#[cfg(fuzzing)]
+pub mod fuzz {
+    /// Drive the best-effort issuer DER walkers on arbitrary bytes. Must
+    /// terminate without panicking for any input.
+    pub fn extract_issuer(data: &[u8]) {
+        let _ = crate::tls::verifier::extract_issuer_der(data);
+        let _ = crate::tls::verifier::extract_issuer_dn(data);
+    }
+}
+
 /// Dispatch a parsed CLI to the appropriate command handler.
 ///
 /// This is the shared dispatch logic used by both the binary (`main.rs`)
