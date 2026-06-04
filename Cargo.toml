@@ -80,6 +80,11 @@ bzr = { path = ".", features = ["test-helpers"], default-features = false }
 # `delete field` operator on struct expressions).
 mutants = "0.0.4"
 
+[[bin]]
+name = "bzr_lock_helper"
+path = "src/bin/bzr_lock_helper.rs"
+required-features = ["test-helpers"]
+
 [package.metadata.deb]
 maintainer = "David Christensen <randomparity@gmail.com>"
 copyright = "2025-2026 David Christensen <randomparity@gmail.com>"

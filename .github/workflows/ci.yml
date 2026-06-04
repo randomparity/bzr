@@ -57,7 +57,7 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
-      - run: cargo clippy --locked -- -D warnings
+      - run: cargo clippy --locked --features test-helpers -- -D warnings
 
   test:
     name: Test
@@ -68,7 +68,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
       - uses: dtolnay/rust-toolchain@98e1b82157cd469e843cb7f524c1313b4ad9492c  # stable
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
-      - run: cargo test --locked
+      - run: cargo test --locked --features test-helpers
 
   build:
     name: Build
