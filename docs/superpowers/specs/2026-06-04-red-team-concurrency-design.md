@@ -2,7 +2,8 @@
 
 **Date:** 2026-06-04
 **Branch:** `security/red-team-concurrency`
-**Status:** approved design
+**Status:** approved design (revised after a hostile `/challenge` review — see
+"Challenge-review fixes")
 
 ## Goal
 
@@ -50,7 +51,9 @@ async races) to regression guards and latent-footgun notes.
 - **Assets under attack:**
   1. **Config file integrity** — a reader must never observe an empty or
      truncated/partial TOML, and an interrupted write must leave the previous
-     config intact.
+     config intact. The power-loss case (the previous config must survive a
+     crash *after* the rename) additionally requires a directory `fsync`; see
+     the Design section.
   2. **Config edit durability** — a concurrent process's committed change must
      not be silently overwritten by another process's stale write (lost update).
   3. **Liveness** — the persistence mechanism must not be able to wedge other
@@ -62,37 +65,68 @@ The tests assert these. Each is written failing-first. Priority reflects the
 reconnaissance: the real on-disk sinks (CONC-1, CONC-2) lead; the
 single-threaded-runtime paths land as regression guards.
 
-- **CONC-1 (flagship, real defect) — write atomicity.** `Config` persistence is
-  atomic: a concurrent reader never observes an empty or partial config, and an
-  interrupted/failed write leaves the previous config bytes intact. *Current
-  code (`src/config.rs`, `write_private_file`) opens the live file with
-  `truncate(true)` and then writes, so a crash or a concurrent read between
-  truncate and write yields an empty or garbled TOML.* Fix: write to a temp file
-  in the same directory → `fsync` → atomic `rename` over the target, preserving
-  `0600` (file) / `0700` (dir) hardening. Anchor: `src/config.rs` `save` /
-  `write_to_disk` / `write_private_file`.
+- **CONC-1 (flagship, real defect) — write atomicity.** A concurrent reader
+  always observes either the complete old config or the complete new config,
+  never an empty/partial one. *Current code (`src/config.rs`,
+  `write_private_file`) opens the live file with `truncate(true)` then `write_all`
+  (`src/config.rs:337-343`), so a read between truncate and write observes a
+  zero-byte file.* **Observable correction (challenge finding):** a zero-byte
+  TOML does **not** fail to parse — `servers` is `#[serde(default)]`, `Option`
+  fields default to `None`, and `Config::load` even maps a missing file to
+  `Ok(Config::default())` (`src/config.rs:249`). So the corruption manifests as a
+  reader silently getting a config with **no servers / missing fields**, *not* a
+  parse error. The invariant and its test therefore assert *content survival* —
+  "a read taken during writes still contains the known server" — never "parsing
+  fails." Fix: write to a temp file in the same directory → `fsync(temp)` →
+  atomic `rename` over the target → `fsync(dir)`, preserving `0600` (file) /
+  `0700` (dir) hardening. Anchor: `src/config.rs` `save` / `write_to_disk` /
+  `write_private_file`.
 - **CONC-2 (real defect) — no lost updates.** Concurrent `bzr` processes that
   mutate config do not silently drop each other's edits. Fix via a
   `Config::update_locked(|cfg| …)` API: acquire an exclusive advisory lock
-  (`fs4`) on `~/.config/bzr/config.lock` → **reload the latest config from
-  disk** → apply the mutation closure → atomically write (CONC-1) → release.
+  (`fs4`) on a lockfile in the **resolved config directory** (`config.lock`,
+  sibling of `config.toml` — *not* a hardcoded `~/.config/bzr` path, so an
+  `XDG_CONFIG_HOME` override still shares one lock) → **reload the latest config
+  from disk** → apply the mutation closure → atomically write (CONC-1) → release.
   Reloading *under the lock* is what actually closes the race: a plain lock
   around only the write still lets two processes load stale state and serialize
-  last-writer-wins. Anchors: load→modify→save sites in
-  `src/commands/shared.rs` (`persist_detected_settings`, `handle_tofu`,
-  `handle_pin_rotation`) and `src/commands/config.rs` (`set-server`,
-  `set-default`, `set-keyring`, `unset-keyring`, `tls_pin_clear`).
-- **CONC-2b — lock liveness.** The advisory lock is never held across
-  interactive I/O. The TOFU / pin-rotation prompts run *outside* the lock and
-  only produce the values to persist; the `update_locked` closure is
-  non-interactive and applies the delta to a freshly-loaded config. This
-  prevents a process parked at a `[y/N/always]` prompt from wedging every other
-  `bzr` invocation, and avoids self-deadlock on re-entry.
+  last-writer-wins.
+  **Complete writer set (challenge finding — the original anchor list was
+  incomplete).** Every `config.save()` / `save_without_validation()` caller must
+  route through `update_locked`, or the guarantee leaks at the omitted site. The
+  full set (verified by grep, 14 sites across five files): `src/commands/shared.rs`
+  (`persist_detected_settings`, `handle_tofu`, `handle_pin_rotation`),
+  `src/commands/config.rs` (`set-default`, `set-server`, `set-keyring`,
+  `unset-keyring`, `tls_pin_clear`, `set-default`-path), `src/commands/template.rs`
+  (template add/remove), `src/commands/query.rs` (saved-query add/remove), and
+  `src/commands/bug/search.rs` (`--save` query). To make bypass impossible rather
+  than relying on enumeration staying correct, the **lock + reload + atomic write
+  become the only write path**: `save()`/`save_without_validation()` are removed
+  (or made private to `config`), all callers migrate to `update_locked`, and a CI
+  guard (`check-no-direct-save`, a grep) fails the build if a `config.save()`
+  reappears outside `config.rs`.
+- **CONC-2b — lock liveness & re-entrancy.** Two distinct properties:
+  (a) *Liveness:* the lock is never held across interactive I/O — the TOFU /
+  pin-rotation prompts run *outside* the lock and only produce the values to
+  persist; the `update_locked` closure is non-interactive and applies the delta
+  to a freshly-loaded config. This prevents a process parked at a `[y/N/always]`
+  prompt from wedging every other `bzr` invocation.
+  (b) *Re-entrancy:* `update_locked` is **explicitly non-reentrant** — `fs4`
+  `flock` treats two `open()` descriptions in the same process as independent, so
+  a nested `update_locked` (a closure that itself calls `update_locked`) would
+  self-deadlock. The design forbids nesting: closures perform only in-memory
+  mutation. A debug assertion / test guards against a re-entrant call. (The
+  earlier draft asserted re-entrancy was *safe*; that was wrong and is corrected
+  here.)
 - **CONC-3 (demoted) — runtime confinement.** The runtime is current-thread with
-  no task fan-out, so in-process data races cannot occur. Guard: a test/assertion
-  documenting the runtime flavor and the absence of `spawn`/`join` fan-out, so a
-  future change to `multi_thread` or an added `tokio::spawn` is flagged for
-  re-evaluation. *Expected: holds — regression guard.*
+  no task fan-out, so in-process data races cannot occur. *Guard (challenge
+  finding — this is not unit-testable: `#[tokio::test]` is current-thread
+  regardless of `main.rs`, and "no `spawn`" is a static property):* a CI grep
+  (`check-no-spawn`, a `make` target / shell check) fails the build if
+  `src/main.rs` stops declaring `flavor = "current_thread"` or if a
+  `tokio::spawn`/`join!`/`select!` fan-out appears in `src/`, forcing a
+  re-evaluation of the in-process-safety assumption. Not a `#[test]`.
+  *Expected: holds — regression guard.*
 - **CONC-4 (demoted) — keyring init idempotence.** `ensure_default_store`
   (`src/credentials/keyring.rs`) uses an unguarded check-then-act, but it is
   idempotent and benign under the current-thread runtime. Guard test that a
@@ -109,22 +143,34 @@ Run these as throwaway tests, record results in the spec's Method section. Both
 are deterministic (they use real OS threads / explicit interleaving in the test,
 independent of the app's single-threaded runtime).
 
-1. **CONC-1 probe.** Spawn one `std::thread` that repeatedly reads and parses the
-   config file while the main thread performs many `Config::save()` calls. Under
-   the current truncate-then-write path, some reads observe an empty/partial file
-   and fail to parse. *Expected: reproduces → confirms the corruption defect.*
-2. **CONC-2 probe.** Explicitly interleave two stale load→modify→save sequences:
-   load A; load B; A sets a pin and saves; B sets `auth_method` and saves. Assert
-   A's pin survives. Under the current code B's stale in-memory write overwrites
-   the file and A's pin is lost. *Expected: reproduces → confirms lost-update.*
+1. **CONC-1 probe.** Spawn one `std::thread` that repeatedly reads the config via
+   `Config::load()` while the main thread performs many `save()` calls. Assert on
+   **content survival**, not parse success: a read that succeeds but returns a
+   config *missing the known server* is the corruption signal (a zero-byte read
+   parses to an empty default `Config` — see CONC-1). Under the current
+   truncate-then-write path, some reads return the empty/default config.
+   *Expected: reproduces → confirms the corruption defect.*
+2. **CONC-2 probe (two parts).** (a) *Logic:* explicitly interleave two stale
+   load→modify→save sequences (load A; load B; A sets a pin and saves; B sets
+   `auth_method` and saves) and assert A's pin survives — this exercises the
+   reload-merge logic but **not** the lock. (b) *Mutual exclusion (challenge
+   finding — a single-process interleave never tests the lock, and an in-process
+   two-fd `flock` test self-deadlocks):* spawn a **second OS process** (a small
+   test helper binary, or a forked `Command`) that takes the lock and holds it
+   briefly, and assert the parent's `update_locked` blocks until release rather
+   than interleaving. *Expected: (a) reproduces lost-update on current code; (b)
+   becomes the regression test for the lock itself.*
 
 ## Method
 
-- **Adversarial / property tests** for CONC-1 and CONC-2 — the hardened versions
-  of the two pre-checks above, kept as permanent regression guards.
-- **Targeted unit tests** for CONC-2b (lock not held across prompts), CONC-3
-  (runtime flavor / no fan-out), CONC-4 (double-init safe), CONC-5 (second
-  `set()` ignored).
+- **Adversarial tests** for CONC-1 (content-survival under concurrent reads) and
+  CONC-2 (reload-merge logic + the two-process mutual-exclusion test), kept as
+  permanent regression guards.
+- **Targeted unit tests** for CONC-2b (closure is non-interactive; a re-entrant
+  `update_locked` is rejected, not deadlocked), CONC-4 (double-init safe), CONC-5
+  (second `set()` ignored).
+- **CI grep** for CONC-3 (`check-no-spawn`) and the `check-no-direct-save` guard
+  — build-time checks, not `#[test]`s.
 - Every test is written failing-first against current code. A test that
   reproduces a real break drives a TDD fix (red → green); the fix diff carries
   that test. Per the pre-checks, CONC-1 and CONC-2 are expected to reproduce
@@ -144,25 +190,55 @@ TDD locally; the user confirms before each push.
 
 - **Atomic write (CONC-1).** Replace the in-place truncate-write in
   `write_private_file` with: create `config.toml.<unique>.tmp` in the same
-  directory with `0600`, write the full serialized content, `fsync`, then
-  `rename` over `config.toml`. `rename` within a directory is atomic on POSIX and
-  on Windows (via replace semantics — to be confirmed during implementation). A
-  failed write aborts before the rename, leaving the original intact; the temp
-  file is cleaned up on failure.
+  directory with `0600`, write the full serialized content, `fsync(temp)`,
+  `rename` over `config.toml`, then **`fsync` the containing directory** so the
+  rename survives a crash/power-loss (the temp-file fsync alone does not make the
+  directory entry durable). `rename` within a directory is atomic on POSIX; on
+  Windows plain `rename` over an existing file is *not* guaranteed and may need
+  `ReplaceFileW` or a retry loop (tracked as an open decision). A failed write
+  aborts before the rename, leaving the original intact; the temp file is cleaned
+  up on failure.
 - **Advisory lock + reload (CONC-2).** `Config::update_locked(mutator: impl
-  FnOnce(&mut Config) -> Result<()>)`:
-  1. open/create `~/.config/bzr/config.lock` (`0600`) and take an exclusive
-     `fs4` lock;
+  FnOnce(&mut Config) -> Result<()>)` becomes the **single write path** (bare
+  `save()` is removed/privatised so no caller can bypass the lock):
+  1. open/create `config.lock` *in the resolved config directory* (`0600`) and
+     take an exclusive `fs4` lock;
   2. reload the current config from disk;
-  3. run `mutator` on it (non-interactive);
+  3. run `mutator` on it (non-interactive; nesting forbidden — a re-entrant call
+     is rejected with an error rather than allowed to self-deadlock);
   4. atomic-write (CONC-1);
-  5. drop the lock (released on guard drop).
+  5. drop the lock (released on guard drop, and on process exit if the holder
+     crashes — `fs4` advisory locks do not leak).
   Call sites that currently do load→(prompt)→mutate→save are refactored so the
   prompt stays outside and the mutation becomes the closure body.
 - **Dependency.** Add `fs4` (the actively-maintained successor to `fs2`) for
   cross-platform advisory locking, pinned to its current stable version (looked
   up at implementation time). Justification: hand-rolling `flock`/`LockFileEx`
   across Unix and Windows is error-prone; `fs4` is a small, focused crate.
+
+## Challenge-review fixes
+
+A hostile `/challenge` review found six material defects in the first draft; all
+are addressed above:
+
+1. **CONC-1 probe tested the wrong signal.** An empty/zero-byte TOML parses to a
+   default `Config` (`servers` is `#[serde(default)]`; `Config::load` maps a
+   missing file to `Ok(default)`), so "reads fail to parse" was a false-negative.
+   The probe/invariant now assert *content survival* (known server present).
+2. **CONC-2 lock was untested / re-entrancy claim was wrong.** A single-process
+   interleave never exercises the lock, and an in-process two-fd `flock` test
+   self-deadlocks. Added a real **two-process** mutual-exclusion test; made
+   `update_locked` explicitly non-reentrant (rejected, not deadlocked).
+3. **CONC-2 writer set was incomplete.** Five files / 14 `save()` sites write
+   config (not the two originally named). `update_locked` is now the sole write
+   path, `save()` is removed/privatised, and a `check-no-direct-save` CI guard
+   prevents regressions.
+4. **Power-loss gap.** The atomic write now `fsync`s the directory after the
+   rename (temp-file fsync alone is insufficient for crash durability).
+5. **CONC-3 was unfalsifiable as a test.** Reclassified as a `check-no-spawn` CI
+   grep, not a `#[test]`.
+6. **Lockfile path was hardcoded.** Now derived from the resolved config
+   directory so an `XDG_CONFIG_HOME` override still shares one lock.
 
 ## Delivery
 
