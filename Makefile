@@ -1,5 +1,5 @@
 CARGO ?= cargo
-RUST_MIN_VERSION := 1.88.0
+RUST_MIN_VERSION := 1.89.0
 
 .PHONY: setup check-rust ensure-components ensure-coverage-prereqs ensure-mutants-prereq install-hooks \
         build release test coverage fmt clippy lint check-test-layout check-no-spawn clean help man \

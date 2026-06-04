@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   editing the config simultaneously still resolve last-writer-wins, so one
   process's change can be silently overwritten until file locking lands.
 
+### Changed
+
+- Minimum supported Rust version raised from 1.88 to 1.89 (uses the standard
+  library's native file locking, stabilized in 1.89, for config write
+  serialization — no third-party locking dependency).
+
 ## [0.4.2] - 2026-05-29
 
 ### Changed
