@@ -428,3 +428,85 @@ fn hex_encode_produces_lowercase_pairs() {
     assert_eq!(hex::encode(&[0x00, 0x0f, 0xff, 0xab]), "000fffab");
     assert_eq!(hex::encode(&[]), "");
 }
+
+// --- INV-1: accept-decision branches ---
+
+#[test]
+fn one_bit_flipped_pin_is_rejected() {
+    // A pin that differs from the genuine fingerprint by a single bit must
+    // never be accepted.
+    let der = gen_self_signed_cert();
+    let mut hash: [u8; 32] = Sha256::digest(&der).into();
+    hash[0] ^= 0x01;
+    let pin = format!(
+        "sha256//{}",
+        base64::engine::general_purpose::STANDARD.encode(hash)
+    );
+
+    let verifier = PinnedCertVerifier::new(&pin, None, "localhost").unwrap();
+    let cert = CertificateDer::from(der);
+    let server_name = ServerName::try_from("localhost").unwrap();
+
+    let result = verifier.verify_server_cert(&cert, &[], &server_name, &[], UnixTime::now());
+    assert!(result.is_err(), "one-bit-flipped pin must be rejected");
+}
+
+#[test]
+fn pin_match_short_circuits_issuer_check() {
+    // The matching-pin branch must return Ok before `check_issuer_change`
+    // runs: pin a cert but store a *different* issuer DER, then present the
+    // pinned cert. If the issuer check ran first this would be ISSUER_CHANGED;
+    // because the pin matches, it is accepted.
+    let der = gen_cert_with_cn("RealCA");
+    let fp = compute_fingerprint(&der);
+
+    let wrong_issuer_der = extract_issuer_der(&gen_cert_with_cn("OtherCA")).unwrap();
+    let wrong_issuer_b64 = base64::engine::general_purpose::STANDARD.encode(&wrong_issuer_der);
+
+    let verifier = PinnedCertVerifier::new(&fp, Some(&wrong_issuer_b64), "localhost").unwrap();
+    let cert = CertificateDer::from(der);
+    let server_name = ServerName::try_from("localhost").unwrap();
+
+    let result = verifier.verify_server_cert(&cert, &[], &server_name, &[], UnixTime::now());
+    assert!(
+        result.is_ok(),
+        "matching pin must short-circuit the issuer check: {result:?}"
+    );
+}
+
+// --- INV-4: issuer-change soundness ---
+
+#[test]
+fn unparseable_leaf_degrades_to_reject() {
+    // A leaf whose issuer DER cannot be extracted (parse failure) must never
+    // be accepted. With a pin that does not match, `check_issuer_change`
+    // returns Ok(()) on the unparseable leaf but the pin mismatch still
+    // yields Err — the failure degrades to *reject*, never *accept*.
+    let der1 = gen_self_signed_cert();
+    let fp1 = compute_fingerprint(&der1);
+    let issuer_der = extract_issuer_der(&der1).unwrap();
+    let issuer_b64 = base64::engine::general_purpose::STANDARD.encode(&issuer_der);
+
+    let verifier = PinnedCertVerifier::new(&fp1, Some(&issuer_b64), "localhost").unwrap();
+    let cert = CertificateDer::from(b"not a certificate".to_vec());
+    let server_name = ServerName::try_from("localhost").unwrap();
+
+    let result = verifier.verify_server_cert(&cert, &[], &server_name, &[], UnixTime::now());
+    assert!(
+        result.is_err(),
+        "unparseable leaf must be rejected, never accepted"
+    );
+}
+
+// --- INV-3: parser totality (property guard) ---
+
+proptest::proptest! {
+    #[test]
+    fn der_walkers_never_panic_on_arbitrary_bytes(data: Vec<u8>) {
+        // The best-effort DER walkers must terminate without panicking on any
+        // input. `extract_issuer_dn` always returns a String; `extract_issuer_der`
+        // returns an Option. Neither may panic.
+        let _ = extract_issuer_der(&data);
+        let _ = extract_issuer_dn(&data);
+    }
+}
