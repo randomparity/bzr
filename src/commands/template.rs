@@ -64,10 +64,12 @@ pub async fn execute(
                 ));
             }
 
-            let mut config = Config::load()?;
-            let is_update = config.templates.contains_key(name.as_str());
-            config.templates.insert(name.clone(), template);
-            config.save()?;
+            let mut is_update = false;
+            Config::update_locked(|config| {
+                is_update = config.templates.contains_key(name.as_str());
+                config.templates.insert(name.clone(), template);
+                Ok(())
+            })?;
 
             let verb = if is_update { "Updated" } else { "Saved" };
             write_template_saved(name, verb, format, w.out);
@@ -85,11 +87,12 @@ pub async fn execute(
             write_template_detail(name, template, format, w.out);
         }
         TemplateAction::Delete { name } => {
-            let mut config = Config::load()?;
-            if config.templates.remove(name.as_str()).is_none() {
-                return Err(BzrError::config(format!("template '{name}' not found")));
-            }
-            config.save()?;
+            Config::update_locked(|config| {
+                if config.templates.remove(name.as_str()).is_none() {
+                    return Err(BzrError::config(format!("template '{name}' not found")));
+                }
+                Ok(())
+            })?;
 
             write_template_saved(name, "Deleted", format, w.out);
         }

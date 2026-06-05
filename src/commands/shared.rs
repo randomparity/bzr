@@ -5,26 +5,33 @@ use crate::error::{BzrError, Result};
 use crate::tls::TlsConfig;
 use crate::types::{ApiMode, AuthMethod};
 
-/// Persist detected server settings to config.
-/// Always persists `auth_method` when `persist_auth` is true.
-/// Only persists `api_mode` and `server_version` when version detection
-/// succeeded (`server_version` is `Some`).
+/// Persist detected server settings to config under the lock.
+/// Always persists `auth_method` when `persist_auth` is true. Only persists
+/// `api_mode`/`server_version` when version detection succeeded.
+///
+/// If the server was concurrently removed from disk, this is a no-op (we do
+/// not resurrect a deleted server with detected settings) — logged, not silent.
 fn persist_detected_settings(
-    config: &mut Config,
     server_name: &str,
     settings: &DetectedServerSettings,
     persist_auth: bool,
 ) -> Result<()> {
-    if let Some(srv_mut) = config.servers.get_mut(server_name) {
+    Config::update_locked(|config| {
+        let Some(srv) = config.servers.get_mut(server_name) else {
+            tracing::debug!(
+                "server '{server_name}' no longer in config; skipping settings persist"
+            );
+            return Ok(());
+        };
         if persist_auth {
-            srv_mut.auth_method = Some(settings.auth_method);
+            srv.auth_method = Some(settings.auth_method);
         }
         if settings.server_version.is_some() {
-            srv_mut.api_mode = Some(settings.api_mode);
-            srv_mut.server_version.clone_from(&settings.server_version);
+            srv.api_mode = Some(settings.api_mode);
+            srv.server_version.clone_from(&settings.server_version);
         }
-        config.save()?;
-    }
+        Ok(())
+    })?;
     Ok(())
 }
 
@@ -124,7 +131,7 @@ impl ConnectContext {
 // exclude_re does not reliably match `delete field` mutations on struct
 // expressions, so the function-level attribute is required.
 #[cfg_attr(test, mutants::skip)]
-async fn handle_tofu(ctx: &ConnectContext, config: &mut Config) -> Result<BugzillaClient> {
+async fn handle_tofu(ctx: &ConnectContext) -> Result<BugzillaClient> {
     let hostname = ctx.hostname();
     let (fingerprint, issuer, issuer_der) = crate::tls::tofu::probe_server_cert(&ctx.url).await?;
 
@@ -133,13 +140,21 @@ async fn handle_tofu(ctx: &ConnectContext, config: &mut Config) -> Result<Bugzil
 
     let tls_config = match decision {
         Some(true) => {
-            // "always" — persist pin to config
-            if let Some(srv) = config.servers.get_mut(&ctx.server_name) {
-                srv.tls_pin_sha256 = Some(fingerprint.clone());
-                srv.tls_pin_issuer = Some(issuer.clone());
-                srv.tls_pin_issuer_der.clone_from(&issuer_der);
-                config.save()?;
-            }
+            // "always" — persist pin to config under the lock. `issuer_der` is
+            // Option<String>; clone the values the closure needs before it (the
+            // bare `fingerprint`/`issuer_der` are still used to build TlsConfig below).
+            let fingerprint_c = fingerprint.clone();
+            let issuer_c = issuer.clone();
+            let issuer_der_c = issuer_der.clone();
+            let server_name = ctx.server_name.clone();
+            Config::update_locked(move |config| {
+                if let Some(srv) = config.servers.get_mut(&server_name) {
+                    srv.tls_pin_sha256 = Some(fingerprint_c);
+                    srv.tls_pin_issuer = Some(issuer_c);
+                    srv.tls_pin_issuer_der = issuer_der_c;
+                }
+                Ok(())
+            })?;
             TlsConfig {
                 pin_sha256: Some(fingerprint),
                 pin_issuer_der: issuer_der,
@@ -165,7 +180,7 @@ async fn handle_tofu(ctx: &ConnectContext, config: &mut Config) -> Result<Bugzil
         }
     };
 
-    detect_and_build_client(ctx, &tls_config, config).await
+    detect_and_build_client(ctx, &tls_config).await
 }
 
 /// Handle pin mismatch (certificate rotated but issuer unchanged):
@@ -178,7 +193,6 @@ async fn handle_pin_rotation(
     old_pin: &str,
     new_fingerprint: &str,
     new_issuer: &str,
-    config: &mut Config,
 ) -> Result<BugzillaClient> {
     let hostname = ctx.hostname();
 
@@ -202,15 +216,24 @@ async fn handle_pin_rotation(
     // Update pin in config. Keep the existing pin_issuer_der: since
     // PIN_MISMATCH only fires when the issuer DER matched (otherwise
     // ISSUER_CHANGED would have fired), the DER bytes are still valid.
-    let existing_issuer_der = config
-        .servers
-        .get(&ctx.server_name)
-        .and_then(|s| s.tls_pin_issuer_der.clone());
-    if let Some(srv) = config.servers.get_mut(&ctx.server_name) {
-        srv.tls_pin_sha256 = Some(new_fingerprint.to_owned());
-        srv.tls_pin_issuer = Some(new_issuer.to_owned());
-        config.save()?;
-    }
+    // Read existing issuer DER for the returned TlsConfig (PIN_MISMATCH implies
+    // the issuer DER still matches, so it stays valid).
+    let existing_issuer_der = Config::load().ok().and_then(|c| {
+        c.servers
+            .get(&ctx.server_name)
+            .and_then(|s| s.tls_pin_issuer_der.clone())
+    });
+
+    let new_fp = new_fingerprint.to_owned();
+    let new_iss = new_issuer.to_owned();
+    let server_name = ctx.server_name.clone();
+    Config::update_locked(move |config| {
+        if let Some(srv) = config.servers.get_mut(&server_name) {
+            srv.tls_pin_sha256 = Some(new_fp);
+            srv.tls_pin_issuer = Some(new_iss);
+        }
+        Ok(())
+    })?;
 
     let tls_config = TlsConfig {
         pin_sha256: Some(new_fingerprint.to_owned()),
@@ -219,7 +242,7 @@ async fn handle_pin_rotation(
         ..Default::default()
     };
 
-    detect_and_build_client(ctx, &tls_config, config).await
+    detect_and_build_client(ctx, &tls_config).await
 }
 
 /// Detect server settings and build a client, persisting the detected
@@ -227,12 +250,11 @@ async fn handle_pin_rotation(
 async fn detect_and_build_client(
     ctx: &ConnectContext,
     tls_config: &TlsConfig,
-    config: &mut Config,
 ) -> Result<BugzillaClient> {
     let settings =
         crate::client::detect_server_settings(&ctx.url, &ctx.api_key, ctx.email_hint(), tls_config)
             .await?;
-    persist_detected_settings(config, &ctx.server_name, &settings, true)?;
+    persist_detected_settings(&ctx.server_name, &settings, true)?;
     let api_mode = ctx.api_override.unwrap_or(settings.api_mode);
     ctx.build_client(settings.auth_method, api_mode, tls_config)
 }
@@ -250,10 +272,9 @@ async fn classify_and_handle_tls_failure(
     err: &BzrError,
     ctx: &ConnectContext,
     tls_config: &TlsConfig,
-    config: &mut Config,
 ) -> Result<Option<BugzillaClient>> {
     if should_offer_tofu(err, tls_config) {
-        let client = handle_tofu(ctx, config).await?;
+        let client = handle_tofu(ctx).await?;
         return Ok(Some(client));
     }
     if let Some(pin_failure) = crate::tls::pin_failure::classify(err) {
@@ -263,8 +284,7 @@ async fn classify_and_handle_tls_failure(
                 actual,
                 new_issuer,
             } => {
-                let client =
-                    handle_pin_rotation(ctx, &expected, &actual, &new_issuer, config).await?;
+                let client = handle_pin_rotation(ctx, &expected, &actual, &new_issuer).await?;
                 return Ok(Some(client));
             }
             crate::tls::pin_failure::TlsPinFailure::IssuerChanged {
@@ -287,7 +307,6 @@ async fn classify_and_handle_tls_failure(
 async fn detect_with_tofu_fallback(
     ctx: &ConnectContext,
     tls_config: &TlsConfig,
-    config: &mut Config,
 ) -> Result<DetectOrClient> {
     let err = match crate::client::detect_server_settings(
         &ctx.url,
@@ -300,7 +319,7 @@ async fn detect_with_tofu_fallback(
         Ok(settings) => return Ok(DetectOrClient::Settings(settings)),
         Err(e) => e,
     };
-    match classify_and_handle_tls_failure(&err, ctx, tls_config, config).await? {
+    match classify_and_handle_tls_failure(&err, ctx, tls_config).await? {
         Some(client) => Ok(DetectOrClient::Client(client)),
         None => Err(err),
     }
@@ -327,7 +346,7 @@ pub async fn connect_and_configure(
     server: Option<&str>,
     api_override: Option<ApiMode>,
 ) -> Result<BugzillaClient> {
-    let mut config = Config::load()?;
+    let config = Config::load()?;
     let (server_name, srv) = config.resolve_server(server)?;
     let tls_config = srv.tls_config(server_name);
     let ctx = ConnectContext {
@@ -357,7 +376,7 @@ pub async fn connect_and_configure(
             if !tls_config.insecure {
                 if let Err(e) = probe_tls(&ctx.url, &tls_config).await {
                     if let Some(client) =
-                        classify_and_handle_tls_failure(&e, &ctx, &tls_config, &mut config).await?
+                        classify_and_handle_tls_failure(&e, &ctx, &tls_config).await?
                     {
                         return Ok(client);
                     }
@@ -370,18 +389,18 @@ pub async fn connect_and_configure(
         }
         (Some(method), None) => {
             tracing::debug!("auth_method cached but api_mode missing; re-detecting");
-            match detect_with_tofu_fallback(&ctx, &tls_config, &mut config).await? {
+            match detect_with_tofu_fallback(&ctx, &tls_config).await? {
                 DetectOrClient::Client(client) => return Ok(client),
                 DetectOrClient::Settings(settings) => {
-                    persist_detected_settings(&mut config, &ctx.server_name, &settings, false)?;
+                    persist_detected_settings(&ctx.server_name, &settings, false)?;
                     (method, settings.api_mode)
                 }
             }
         }
-        _ => match detect_with_tofu_fallback(&ctx, &tls_config, &mut config).await? {
+        _ => match detect_with_tofu_fallback(&ctx, &tls_config).await? {
             DetectOrClient::Client(client) => return Ok(client),
             DetectOrClient::Settings(settings) => {
-                persist_detected_settings(&mut config, &ctx.server_name, &settings, true)?;
+                persist_detected_settings(&ctx.server_name, &settings, true)?;
                 (settings.auth_method, settings.api_mode)
             }
         },

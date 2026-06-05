@@ -806,10 +806,12 @@ async fn query_run_with_server_override() {
     assert!(result.is_ok());
 
     // Patch the saved query to have a different server
-    let mut config = Config::load().unwrap();
-    let query = config.queries.get_mut("server-test").unwrap();
-    query.server = Some("other-server".into());
-    config.save().unwrap();
+    Config::update_locked(|config| {
+        let query = config.queries.get_mut("server-test").unwrap();
+        query.server = Some("other-server".into());
+        Ok(())
+    })
+    .unwrap();
 
     // Mount a mock that expects exactly 1 request
     let mock_guard = Mock::given(method("GET"))
@@ -1028,15 +1030,17 @@ async fn query_run_rejects_malformed_created_since_override() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     // Pre-seed a saved query so the not-found branch doesn't fire first.
-    let mut cfg = Config::load().unwrap();
-    cfg.queries.insert(
-        "recent".into(),
-        crate::types::SavedQuery {
-            product: vec!["Firefox".into()],
-            ..crate::types::SavedQuery::default()
-        },
-    );
-    cfg.save().unwrap();
+    Config::update_locked(move |c| {
+        c.queries.insert(
+            "recent".into(),
+            crate::types::SavedQuery {
+                product: vec!["Firefox".into()],
+                ..crate::types::SavedQuery::default()
+            },
+        );
+        Ok(())
+    })
+    .unwrap();
 
     let action = QueryAction::Run {
         name: "recent".into(),

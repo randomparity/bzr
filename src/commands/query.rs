@@ -76,7 +76,7 @@ fn handle_save(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) 
     let last_change_time =
         crate::validation::parse_optional_date(changed_since.as_deref(), "--changed-since")?;
 
-    let (query, preloaded_config) = if let Some(url_str) = from_url {
+    let query = if let Some(url_str) = from_url {
         let config = Config::load()?;
         let parsed = crate::url_parser::parse_bugzilla_url(url_str, &config)?;
         let mut query = parsed.query;
@@ -95,14 +95,14 @@ fn handle_save(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) 
         if last_change_time.is_some() {
             query.last_change_time = last_change_time;
         }
-        (query, Some(config))
+        query
     } else {
         let kind = if search.is_some() {
             QueryKind::Search
         } else {
             QueryKind::List
         };
-        let query = SavedQuery {
+        SavedQuery {
             kind,
             product: product.clone(),
             component: component.clone(),
@@ -126,8 +126,7 @@ fn handle_save(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) 
             qa_contact: qa_contact.clone(),
             url: url.clone(),
             ..SavedQuery::default()
-        };
-        (query, None)
+        }
     };
 
     if !query.has_filters() {
@@ -136,13 +135,12 @@ fn handle_save(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) 
         ));
     }
 
-    let mut config = match preloaded_config {
-        Some(c) => c,
-        None => Config::load()?,
-    };
-    let is_update = config.queries.contains_key(name.as_str());
-    config.queries.insert(name.clone(), query);
-    config.save()?;
+    let mut is_update = false;
+    Config::update_locked(|config| {
+        is_update = config.queries.contains_key(name.as_str());
+        config.queries.insert(name.clone(), query);
+        Ok(())
+    })?;
 
     let verb = if is_update { "Updated" } else { "Saved" };
     write_query_saved(name, verb, format, w.out);
@@ -172,11 +170,12 @@ fn handle_delete(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>
     let QueryAction::Delete { name } = action else {
         unreachable!()
     };
-    let mut config = Config::load()?;
-    if config.queries.remove(name.as_str()).is_none() {
-        return Err(BzrError::config(format!("query '{name}' not found")));
-    }
-    config.save()?;
+    Config::update_locked(|config| {
+        if config.queries.remove(name.as_str()).is_none() {
+            return Err(BzrError::config(format!("query '{name}' not found")));
+        }
+        Ok(())
+    })?;
 
     write_query_saved(name, "Deleted", format, w.out);
     Ok(())

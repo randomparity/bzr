@@ -11,7 +11,7 @@ version = "0.4.3-dev"
 edition = "2021"
 description = "A CLI for Bugzilla, inspired by gh"
 license = "MIT"
-rust-version = "1.88"
+rust-version = "1.89"
 repository = "https://github.com/randomparity/bzr"
 homepage = "https://github.com/randomparity/bzr"
 keywords = ["bugzilla", "cli", "bug-tracker"]
@@ -79,6 +79,11 @@ bzr = { path = ".", features = ["test-helpers"], default-features = false }
 # `exclude_re` in .cargo/mutants.toml cannot reach (e.g. cargo-mutants's
 # `delete field` operator on struct expressions).
 mutants = "0.0.4"
+
+[[bin]]
+name = "bzr_lock_helper"
+path = "src/bin/bzr_lock_helper.rs"
+required-features = ["test-helpers"]
 
 [package.metadata.deb]
 maintainer = "David Christensen <randomparity@gmail.com>"

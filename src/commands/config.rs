@@ -56,15 +56,16 @@ pub async fn execute(
             .await
         }
         ConfigAction::SetDefault { name } => {
-            let mut config = Config::load()?;
-            if !config.servers.contains_key(name) {
-                return Err(crate::error::BzrError::config(format!(
-                    "server '{name}' not found"
-                )));
-            }
-            config.default_server = Some(name.clone());
+            Config::update_locked(|config| {
+                if !config.servers.contains_key(name) {
+                    return Err(crate::error::BzrError::config(format!(
+                        "server '{name}' not found"
+                    )));
+                }
+                config.default_server = Some(name.clone());
+                Ok(())
+            })?;
             let path = Config::path()?;
-            config.save()?;
 
             write_result(
                 &ConfigResult::default_set(name.as_str(), path.to_string_lossy()),
@@ -141,18 +142,19 @@ async fn set_server(
 
     // Handle --tls-pin-clear: clear pinning fields on an existing server.
     if tls_pin_clear {
-        let mut config = Config::load()?;
-        if let Some(server) = config.servers.get_mut(name) {
+        Config::update_locked(|config| {
+            let server = config.servers.get_mut(name).ok_or_else(|| {
+                crate::error::BzrError::config(format!(
+                    "server '{name}' not found — nothing to clear"
+                ))
+            })?;
             server.tls_pin_sha256 = None;
             server.tls_pin_issuer = None;
             server.tls_pin_issuer_der = None;
-            config.save()?;
-            let _ = writeln!(w.err, "Certificate pin cleared for server '{name}'.");
-            return Ok(());
-        }
-        return Err(crate::error::BzrError::config(format!(
-            "server '{name}' not found — nothing to clear"
-        )));
+            Ok(())
+        })?;
+        let _ = writeln!(w.err, "Certificate pin cleared for server '{name}'.");
+        return Ok(());
     }
 
     if api_key.is_some() == api_key_env.is_some() {
@@ -160,8 +162,7 @@ async fn set_server(
             "provide exactly one of --api-key or --api-key-env".into(),
         ));
     }
-    let mut config = Config::load()?;
-    let is_update = config.servers.contains_key(name);
+    let is_update = Config::load()?.servers.contains_key(name);
     let mut server_config = ServerConfig {
         url: url.to_owned(),
         api_key: api_key.map(str::to_owned),
@@ -196,13 +197,15 @@ async fn set_server(
         }
     }
 
-    config.servers.insert(name.to_owned(), server_config);
-    if config.default_server.is_none() {
-        config.default_server = Some(name.to_owned());
-    }
-    let is_default = config.default_server.as_deref() == Some(name);
+    let updated = Config::update_locked(move |config| {
+        config.servers.insert(name.to_owned(), server_config);
+        if config.default_server.is_none() {
+            config.default_server = Some(name.to_owned());
+        }
+        Ok(())
+    })?;
+    let is_default = updated.default_server.as_deref() == Some(name);
     let path = Config::path()?;
-    config.save()?;
 
     let verb = if is_update { "updated" } else { "configured" };
     let mut human = format!("Server '{name}' {verb} at {url}");
@@ -232,7 +235,9 @@ fn set_keyring(
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let mut config = Config::load()?;
+    // Advisory existence check FIRST — lockless, so a nonexistent server is
+    // rejected before prompting / writing to the keychain.
+    let config = Config::load()?;
     if !config.servers.contains_key(name) {
         return Err(crate::error::BzrError::config(format!(
             "server '{name}' not found; create it first with `bzr config set-server`"
@@ -245,19 +250,27 @@ fn set_keyring(
     let secret = read_secret_from_prompt_or_env(&service_name, &account_name)?;
     crate::credentials::keyring::store(&service_name, &account_name, &secret)?;
 
-    let server = config
+    // Capture raw optional args before the closure (preserve None=default).
+    let service_persist = service.map(str::to_owned);
+    let account_persist = account.map(str::to_owned);
+    let updated = Config::update_locked(move |config| {
+        let server = config.servers.get_mut(name).ok_or_else(|| {
+            crate::error::BzrError::config(format!("server '{name}' disappeared"))
+        })?;
+        server.api_key = None;
+        server.api_key_env = None;
+        server.api_key_keyring = Some(crate::config::KeyringRef {
+            service: service_persist,
+            account: account_persist,
+        });
+        Ok(())
+    })?;
+    let server_url = updated
         .servers
-        .get_mut(name)
-        .ok_or_else(|| crate::error::BzrError::config(format!("server '{name}' disappeared")))?;
-    let server_url = server.url.clone();
-    server.api_key = None;
-    server.api_key_env = None;
-    server.api_key_keyring = Some(crate::config::KeyringRef {
-        service: service.map(str::to_owned),
-        account: account.map(str::to_owned),
-    });
+        .get(name)
+        .map(|s| s.url.clone())
+        .unwrap_or_default();
     let path = Config::path()?;
-    config.save()?;
 
     let human = format!(
         "Stored API key for server '{name}' in OS keychain \
@@ -274,13 +287,13 @@ fn set_keyring(
 }
 
 fn unset_keyring(name: &str, format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
-    let mut config = Config::load()?;
+    let config = Config::load()?;
     let server = config
         .servers
-        .get_mut(name)
+        .get(name)
         .ok_or_else(|| crate::error::BzrError::config(format!("server '{name}' not found")))?;
     let server_url = server.url.clone();
-    let keyring_ref = server.api_key_keyring.take().ok_or_else(|| {
+    let keyring_ref = server.api_key_keyring.as_ref().ok_or_else(|| {
         crate::error::BzrError::config(format!(
             "server '{name}' has no keyring credential to unset"
         ))
@@ -292,7 +305,14 @@ fn unset_keyring(name: &str, format: OutputFormat, w: &mut Writers<'_>) -> Resul
 
     // Saving normally would fail validation (the server has no credential
     // source now), but the on-disk hardening (0o600/0o700) must still apply.
-    config.save_without_validation()?;
+    Config::update_locked_without_validation(|config| {
+        let server = config
+            .servers
+            .get_mut(name)
+            .ok_or_else(|| crate::error::BzrError::config(format!("server '{name}' not found")))?;
+        server.api_key_keyring = None;
+        Ok(())
+    })?;
     let path = Config::path()?;
 
     let human = format!(
@@ -341,7 +361,7 @@ fn migrate_to_keyring(
         account,
     } = spec;
 
-    let mut config = Config::load()?;
+    let config = Config::load()?;
     let server = config
         .servers
         .get(name)
@@ -367,15 +387,19 @@ fn migrate_to_keyring(
 
     let path = Config::path()?;
     let human = if source_kind == crate::config::CredentialSourceKind::Inline {
-        let server = config.servers.get_mut(name).ok_or_else(|| {
-            crate::error::BzrError::config(format!("server '{name}' disappeared"))
+        let service_persist = service.map(str::to_owned);
+        let account_persist = account.map(str::to_owned);
+        Config::update_locked(move |config| {
+            let server = config.servers.get_mut(name).ok_or_else(|| {
+                crate::error::BzrError::config(format!("server '{name}' disappeared"))
+            })?;
+            server.api_key = None;
+            server.api_key_keyring = Some(crate::config::KeyringRef {
+                service: service_persist,
+                account: account_persist,
+            });
+            Ok(())
         })?;
-        server.api_key = None;
-        server.api_key_keyring = Some(crate::config::KeyringRef {
-            service: service.map(str::to_owned),
-            account: account.map(str::to_owned),
-        });
-        config.save()?;
         format!(
             "Migrated server '{name}' from inline API key to OS keychain \
              (service={service_name}, account={account_name}).\nConfig file: {}",
