@@ -243,7 +243,7 @@ jobs:
         continue-on-error: true
         run: |
           sudo apt-get update && sudo apt-get install -y lintian
-          lintian --no-tag-display-limit *.deb || true
+          lintian --no-tag-display-limit ./*.deb || true
         shell: bash
 
       - name: Lint .rpm (warn-only)
@@ -251,7 +251,7 @@ jobs:
         continue-on-error: true
         run: |
           sudo apt-get update && sudo apt-get install -y rpmlint
-          rpmlint *.rpm || true
+          rpmlint ./*.rpm || true
         shell: bash
 
       - name: Install-test .deb (x86_64 only)
