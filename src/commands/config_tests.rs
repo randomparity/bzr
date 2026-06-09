@@ -573,11 +573,10 @@ async fn unset_keyring_removes_secret_and_clears_config() {
     .await
     .unwrap();
 
-    // Reload config directly (bypass Config::load's validator — the
-    // server intentionally has no credential source).
-    let path = Config::path().unwrap();
-    let content = std::fs::read_to_string(&path).unwrap();
-    let config: Config = toml::from_str(&content).unwrap();
+    // Reload config. A credential-less server is now accepted by Config::load
+    // (missing credentials are only an error at authentication time, not at
+    // load/write time), so we can use Config::load directly.
+    let config = Config::load().unwrap();
     let server = &config.servers["unset-test"];
     assert!(server.api_key_keyring.is_none());
     assert!(server.api_key.is_none());
@@ -585,4 +584,153 @@ async fn unset_keyring_removes_secret_and_clears_config() {
 
     // Keychain entry is gone (idempotent delete returns Ok).
     crate::credentials::keyring::delete("bzr", "unset-test").unwrap();
+}
+
+// ── Round-trip tests: set-keyring → unset-keyring → re-credential (issue #278) ──
+
+/// After `unset-keyring`, `set-keyring` on the same server must succeed.
+/// Previously this was broken because both commands call `Config::load()` which
+/// rejects a credential-less server.
+#[cfg(feature = "keyring")]
+#[tokio::test]
+async fn unset_keyring_then_set_keyring_round_trips() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
+    crate::credentials::keyring::install_test_store();
+    let (_lock, _tmp) = setup_config_env().await;
+
+    seed_inline_server("roundtrip", "https://roundtrip.example.com", "init").await;
+    seed_keyring_secret("roundtrip", "first-secret").await;
+
+    // Unset — leaves server credential-less.
+    execute(
+        &ConfigAction::UnsetKeyring {
+            name: "roundtrip".into(),
+        },
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await
+    .unwrap();
+
+    // Re-credential with set-keyring — must NOT fail with a Config error.
+    seed_keyring_secret("roundtrip", "second-secret").await;
+
+    // Verify the credential is back.
+    let config = Config::load().unwrap();
+    let server = &config.servers["roundtrip"];
+    assert!(
+        server.api_key_keyring.is_some(),
+        "keyring ref should be restored"
+    );
+    assert_eq!(
+        server.resolve_api_key("roundtrip").unwrap(),
+        "second-secret"
+    );
+
+    crate::credentials::keyring::delete("bzr", "roundtrip").unwrap();
+}
+
+/// After `unset-keyring`, `set-default` on the same server must succeed (issue #278).
+/// `set-default` calls `Config::update_locked` which validates the full config
+/// post-mutation, rejecting any credential-less server.
+#[cfg(feature = "keyring")]
+#[tokio::test]
+async fn unset_keyring_then_set_default_succeeds() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
+    crate::credentials::keyring::install_test_store();
+    let (_lock, _tmp) = setup_config_env().await;
+
+    seed_inline_server("alpha", "https://alpha.example.com", "alpha-key").await;
+    seed_inline_server("beta", "https://beta.example.com", "beta-tmp").await;
+    seed_keyring_secret("beta", "beta-secret").await;
+
+    // Unset beta's keyring — beta is now credential-less.
+    execute(
+        &ConfigAction::UnsetKeyring {
+            name: "beta".into(),
+        },
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await
+    .unwrap();
+
+    // set-default for alpha must succeed even though beta has no credentials.
+    let result = execute(
+        &ConfigAction::SetDefault {
+            name: "alpha".into(),
+        },
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "set-default must succeed after unset-keyring: {:?}",
+        result.unwrap_err()
+    );
+
+    crate::credentials::keyring::delete("bzr", "beta").unwrap();
+}
+
+/// After `unset-keyring`, `set-server` on the same server must succeed (issue #278).
+#[cfg(feature = "keyring")]
+#[tokio::test]
+async fn unset_keyring_then_set_server_recredentials_successfully() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
+    crate::credentials::keyring::install_test_store();
+    let (_lock, _tmp) = setup_config_env().await;
+
+    seed_inline_server("recred", "https://recred.example.com", "init").await;
+    seed_keyring_secret("recred", "kr-secret").await;
+
+    execute(
+        &ConfigAction::UnsetKeyring {
+            name: "recred".into(),
+        },
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await
+    .unwrap();
+
+    // set-server with a new api-key-env — must NOT fail.
+    let result = execute(
+        &ConfigAction::SetServer {
+            name: "recred".into(),
+            url: "https://recred.example.com".into(),
+            api_key: None,
+            api_key_env: Some("RECRED_API_KEY".into()),
+            email: None,
+            auth_method: None,
+            tls_insecure: false,
+            tls_ca_cert: None,
+            tls_pin_sha256: None,
+            tls_pin_now: false,
+            tls_pin_clear: false,
+        },
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "set-server must succeed after unset-keyring: {:?}",
+        result.unwrap_err()
+    );
+    let config = Config::load().unwrap();
+    assert_eq!(
+        config.servers["recred"].api_key_env.as_deref(),
+        Some("RECRED_API_KEY")
+    );
 }

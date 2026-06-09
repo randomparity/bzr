@@ -303,9 +303,7 @@ fn unset_keyring(name: &str, format: OutputFormat, w: &mut Writers<'_>) -> Resul
     // Idempotent: missing entry is not an error.
     crate::credentials::keyring::delete(&service_name, &account_name)?;
 
-    // Saving normally would fail validation (the server has no credential
-    // source now), but the on-disk hardening (0o600/0o700) must still apply.
-    Config::update_locked_without_validation(|config| {
+    Config::update_locked(|config| {
         let server = config
             .servers
             .get_mut(name)

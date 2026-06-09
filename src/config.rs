@@ -123,10 +123,23 @@ impl ServerConfig {
         }
     }
 
+    /// Validate structural consistency: reject conflicting (multiple) credential
+    /// sources and invalid TLS options. A server with *zero* credential sources
+    /// passes — that incomplete state is accepted at load/write time and is only
+    /// an error when a command actually needs to authenticate (see
+    /// [`Self::resolve_api_key`]).
     pub fn validate(&self, server_name: &str) -> Result<()> {
-        self.credential_source()
-            .map(|_| ())
-            .map_err(|err| BzrError::config(format!("server '{server_name}': {err}")))?;
+        // Only reject if multiple credential sources are set; zero is allowed
+        // (incomplete config left by `unset-keyring`).
+        let count = usize::from(self.api_key.is_some())
+            + usize::from(self.api_key_env.is_some())
+            + usize::from(self.api_key_keyring.is_some());
+        if count > 1 {
+            return Err(BzrError::config(format!(
+                "server '{server_name}': server config cannot define multiple API key sources \
+                 (api_key, api_key_env, api_key_keyring)"
+            )));
+        }
         self.validate_tls(server_name)
     }
 
@@ -303,22 +316,10 @@ impl Config {
     /// Non-reentrant: a `mutator` that itself calls `update_locked` returns an
     /// error rather than self-deadlocking.
     pub fn update_locked(mutator: impl FnOnce(&mut Config) -> Result<()>) -> Result<Config> {
-        Self::update_locked_inner(true, mutator)
+        Self::update_locked_inner(mutator)
     }
 
-    /// Like [`Self::update_locked`] but skips whole-config validation, for the
-    /// one caller (`unset-keyring`) that intentionally leaves a server without a
-    /// credential source.
-    pub fn update_locked_without_validation(
-        mutator: impl FnOnce(&mut Config) -> Result<()>,
-    ) -> Result<Config> {
-        Self::update_locked_inner(false, mutator)
-    }
-
-    fn update_locked_inner(
-        validate: bool,
-        mutator: impl FnOnce(&mut Config) -> Result<()>,
-    ) -> Result<Config> {
+    fn update_locked_inner(mutator: impl FnOnce(&mut Config) -> Result<()>) -> Result<Config> {
         if LOCK_HELD.with(Cell::get) {
             return Err(BzrError::config(
                 "internal error: Config::update_locked called re-entrantly \
@@ -333,34 +334,17 @@ impl Config {
         LOCK_HELD.with(|held| held.set(true));
         let _guard = LockGuard { file };
 
-        // Reload WITHOUT validation. `Config::load` validates unconditionally and
-        // rejects a credential-less server (the state `unset-keyring` deliberately
-        // leaves on disk). Validating the *reload* would make `update_locked`
-        // itself fail just from reading such a config — in particular it would
-        // break `update_locked_without_validation` (which must operate on, and
-        // leave, a credential-less server). We validate the *post-mutation* state
-        // instead (when `validate` is true), matching `save()`'s "validate the
-        // whole config before writing" semantics. (Note: the whole-config
-        // validation still rejects a write while *any* server is credential-less;
-        // that pre-existing rule — also enforced by `Config::load` in every
-        // command — is unchanged here and is a separate concern from locking.)
+        // Reload without validation so that a credential-less server on disk
+        // (the state `unset-keyring` deliberately leaves) does not block
+        // subsequent config mutations. Structural validation (conflict checks,
+        // TLS consistency) still runs on the *post-mutation* state before the
+        // write, catching newly introduced errors without wedging existing
+        // incomplete-but-valid-on-disk configs.
         let mut config = Self::read_unvalidated()?;
         mutator(&mut config)?;
-        if validate {
-            config.validate()?;
-        }
+        config.validate()?;
         config.write_to_disk()?;
         Ok(config)
-    }
-
-    /// Persist the config **without** running the credential-source validator.
-    ///
-    /// Used only in tests: seeds a credential-less server to exercise
-    /// `update_locked_without_validation`. Applies the same `0o600`/`0o700`
-    /// hardening as `save` so a recreated config file is never world-readable.
-    #[cfg(test)]
-    fn save_without_validation(&self) -> Result<()> {
-        self.write_to_disk()
     }
 
     /// Serialize and write the config to its on-disk path atomically:

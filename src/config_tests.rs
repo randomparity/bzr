@@ -682,15 +682,15 @@ fn config_save_hardens_permissions_for_new_paths() {
 
 #[cfg(unix)]
 #[test]
-fn save_without_validation_hardens_recreated_file() {
+fn save_credential_less_server_hardens_recreated_file() {
     let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::tempdir().unwrap();
     // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
     unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     // A server left without any credential source (the unset-keyring state):
-    // Config::save() would reject this, so unset-keyring uses
-    // save_without_validation — which must still harden the file.
+    // Config::save() accepts this incomplete state — missing credentials are
+    // only an error at authentication time, not at config write time.
     let mut servers = HashMap::new();
     let mut srv = make_server_config("https://bugzilla.example.com");
     srv.api_key = None;
@@ -702,16 +702,11 @@ fn save_without_validation_hardens_recreated_file() {
         queries: HashMap::new(),
     };
 
-    assert!(
-        config.save().is_err(),
-        "credential-less config must fail validation"
-    );
-
     let config_path = tmp.path().join("bzr").join("config.toml");
     // Force the recreation scenario: ensure no pre-hardened file exists.
     let _ = fs::remove_file(&config_path);
 
-    config.save_without_validation().unwrap();
+    config.save().unwrap();
 
     let file_mode = fs::metadata(&config_path).unwrap().permissions().mode();
     assert_eq!(
@@ -992,13 +987,14 @@ fn update_locked_reloads_a_credential_less_config_and_can_heal_it() {
     // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
     unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
-    // Seed a server, then strip its only credential source WITHOUT validation
-    // (mirrors `bzr config unset-keyring`).
+    // Seed a server, then strip its credential source (mirrors `bzr config unset-keyring`).
+    // update_locked now accepts this incomplete state (credential-less is not a
+    // structural error — it is only invalid at authentication time).
     let mut base = Config::default();
     base.servers
         .insert("s".to_string(), make_server_config("https://s.test"));
     base.save().unwrap();
-    Config::update_locked_without_validation(|cfg| {
+    Config::update_locked(|cfg| {
         let srv = cfg.servers.get_mut("s").unwrap();
         srv.api_key = None;
         srv.api_key_env = None;
@@ -1007,9 +1003,9 @@ fn update_locked_reloads_a_credential_less_config_and_can_heal_it() {
     })
     .unwrap();
 
-    // A validating `update_locked` that re-credentials the server must SUCCEED:
+    // A subsequent update_locked that re-credentials the server must SUCCEED:
     // the reload is unvalidated, the mutation restores a credential, and the
-    // post-mutation validation then passes.
+    // post-mutation structural validation passes.
     Config::update_locked(|cfg| {
         let srv = cfg.servers.get_mut("s").unwrap();
         srv.api_key_env = Some("BZR_KEY".to_string());
