@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use super::{
     add_vec_filters, extract_bugs, extract_id, get_datetime_str, get_int_array, get_nonempty_str,
-    get_str_array, value_to_comment, value_to_group_info, XmlRpcClient,
+    get_str_array, value_to_bug, value_to_comment, value_to_group_info, XmlRpcClient,
 };
 use crate::error::BzrError;
 use crate::test_helpers::xmlrpc_bug_response;
@@ -353,6 +353,55 @@ fn extract_bugs_rejects_non_array_payload() {
     payload.insert("bugs".into(), Value::String("wrong".into()));
     let err = extract_bugs(&Value::Struct(payload)).unwrap_err();
     assert!(err.to_string().contains("expected bugs array"));
+}
+
+#[test]
+fn value_to_bug_captures_custom_fields() {
+    let mut payload = BTreeMap::new();
+    payload.insert("id".into(), Value::Int(42));
+    payload.insert("summary".into(), Value::String("custom".into()));
+    payload.insert("cf_release".into(), Value::String("9.6".into()));
+    payload.insert("x_extension".into(), Value::String("ignored".into()));
+
+    let bug = value_to_bug(&Value::Struct(payload)).unwrap();
+
+    assert_eq!(bug.custom_fields["cf_release"], serde_json::json!("9.6"));
+    assert!(!bug.custom_fields.contains_key("x_extension"));
+}
+
+#[test]
+fn value_to_bug_converts_custom_field_arrays() {
+    let mut payload = BTreeMap::new();
+    payload.insert("id".into(), Value::Int(42));
+    payload.insert(
+        "cf_targets".into(),
+        Value::Array(vec![
+            Value::String("9.6".into()),
+            Value::String("9.7".into()),
+        ]),
+    );
+
+    let bug = value_to_bug(&Value::Struct(payload)).unwrap();
+
+    assert_eq!(
+        bug.custom_fields["cf_targets"],
+        serde_json::json!(["9.6", "9.7"])
+    );
+}
+
+#[test]
+fn value_to_bug_converts_custom_field_scalars_without_failing() {
+    let mut payload = BTreeMap::new();
+    payload.insert("id".into(), Value::Int(42));
+    payload.insert("cf_score".into(), Value::Double(12.5));
+    payload.insert("cf_bad_score".into(), Value::Double(f64::INFINITY));
+    payload.insert("cf_data".into(), Value::Base64(vec![1, 2, 3]));
+
+    let bug = value_to_bug(&Value::Struct(payload)).unwrap();
+
+    assert_eq!(bug.custom_fields["cf_score"], serde_json::json!(12.5));
+    assert_eq!(bug.custom_fields["cf_bad_score"], serde_json::json!("inf"));
+    assert_eq!(bug.custom_fields["cf_data"], serde_json::json!("AQID"));
 }
 
 #[test]

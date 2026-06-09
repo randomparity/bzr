@@ -9,6 +9,7 @@ fn bug_deserializes_minimal() {
     assert_eq!(bug.id, 42);
     assert!(bug.summary.is_empty());
     assert!(bug.keywords.is_empty());
+    assert!(bug.custom_fields.is_empty());
 }
 
 #[test]
@@ -28,6 +29,81 @@ fn bug_deserializes_deadline() {
     let serialized = serde_json::to_value(&bug).unwrap();
 
     assert_eq!(serialized["deadline"], "2026-12-31");
+}
+
+#[test]
+fn bug_deserializes_custom_fields() {
+    let json = r#"{"id": 42, "summary": "s", "cf_release": "9.6"}"#;
+    let bug: Bug = serde_json::from_str(json).unwrap();
+
+    assert_eq!(bug.custom_fields["cf_release"], "9.6");
+}
+
+#[test]
+fn bug_deserializes_sparse_custom_fields_with_defaults() {
+    let json = r#"{"id": 42, "cf_release": "9.6"}"#;
+    let bug: Bug = serde_json::from_str(json).unwrap();
+
+    assert_eq!(bug.id, 42);
+    assert!(bug.summary.is_empty());
+    assert!(bug.status.is_empty());
+    assert!(bug.keywords.is_empty());
+    assert_eq!(bug.custom_fields["cf_release"], "9.6");
+}
+
+#[test]
+fn bug_deserialization_drops_non_custom_extension_keys() {
+    let json = r#"{"id": 42, "x_extension": "ignored", "cf_release": "9.6"}"#;
+    let bug: Bug = serde_json::from_str(json).unwrap();
+
+    assert!(!bug.custom_fields.contains_key("x_extension"));
+    assert!(bug.custom_fields.contains_key("cf_release"));
+}
+
+#[test]
+fn bug_serializes_custom_fields_as_top_level_keys() {
+    let mut bug: Bug = serde_json::from_str(r#"{"id": 42}"#).unwrap();
+    bug.custom_fields
+        .insert("cf_release".into(), serde_json::json!("9.6"));
+
+    let serialized = serde_json::to_value(&bug).unwrap();
+
+    assert_eq!(serialized["cf_release"], "9.6");
+    assert!(serialized.get("custom_fields").is_none());
+}
+
+#[test]
+fn bug_serialization_drops_non_custom_entries_from_public_map() {
+    let mut bug: Bug = serde_json::from_str(r#"{"id": 42}"#).unwrap();
+    bug.custom_fields
+        .insert("cf_release".into(), serde_json::json!("9.6"));
+    bug.custom_fields
+        .insert("x_extension".into(), serde_json::json!("ignored"));
+
+    let serialized = serde_json::to_value(&bug).unwrap();
+
+    assert_eq!(serialized["cf_release"], "9.6");
+    assert!(serialized.get("x_extension").is_none());
+}
+
+#[test]
+fn bug_serializes_custom_fields_after_built_ins_sorted_by_name() {
+    let mut bug: Bug = serde_json::from_str(r#"{"id": 42, "summary": "s"}"#).unwrap();
+    bug.custom_fields
+        .insert("cf_zeta".into(), serde_json::json!("z"));
+    bug.custom_fields
+        .insert("cf_alpha".into(), serde_json::json!("a"));
+
+    let serialized = serde_json::to_value(&bug).unwrap();
+    let keys: Vec<&str> = serialized
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+
+    assert_eq!(&keys[0..3], ["id", "summary", "status"]);
+    assert_eq!(&keys[keys.len() - 2..], ["cf_alpha", "cf_zeta"]);
 }
 
 #[test]

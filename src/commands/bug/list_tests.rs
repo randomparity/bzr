@@ -383,7 +383,7 @@ async fn bug_list_table_all_unknown_fields_exits_7_before_network() {
     let BugAction::List { field_args, .. } = &mut action else {
         unreachable!()
     };
-    field_args.fields = Some("cf_custom".into());
+    field_args.fields = Some("not_a_field".into());
 
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -442,6 +442,114 @@ async fn bug_list_json_fields_trims_output() {
 }
 
 #[tokio::test]
+async fn bug_list_json_custom_field_is_requested_and_emitted() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("include_fields", "id,cf_release"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "summary": "Test bug", "cf_release": "9.6"}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let mut action = empty_list_action();
+    let BugAction::List { field_args, .. } = &mut action else {
+        unreachable!()
+    };
+    field_args.fields = Some("id,cf_release".into());
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+
+    assert!(
+        result.is_ok(),
+        "json custom field path succeeds: {result:?}"
+    );
+    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    assert_eq!(parsed[0]["id"], 1);
+    assert_eq!(parsed[0]["cf_release"], "9.6");
+    assert!(parsed[0].get("summary").is_none());
+}
+
+#[tokio::test]
+async fn bug_list_json_custom_only_field_does_not_emit_forced_id() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("include_fields", "id,cf_release"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "cf_release": "9.6"}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let mut action = empty_list_action();
+    let BugAction::List { field_args, .. } = &mut action else {
+        unreachable!()
+    };
+    field_args.fields = Some("cf_release".into());
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+
+    assert!(result.is_ok(), "json custom-only path succeeds: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    let obj = parsed[0].as_object().unwrap();
+    assert_eq!(
+        obj.keys().map(String::as_str).collect::<Vec<_>>(),
+        vec!["cf_release"]
+    );
+    assert_eq!(obj["cf_release"], "9.6");
+}
+
+#[tokio::test]
+async fn bug_list_table_renders_custom_field_column() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("include_fields", "id,cf_release"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "cf_release": "9.6"}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let mut action = empty_list_action();
+    let BugAction::List { field_args, .. } = &mut action else {
+        unreachable!()
+    };
+    field_args.fields = Some("id,cf_release".into());
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Table,
+        None,
+        &mut __io.writers(),
+    )
+    .await;
+
+    assert!(
+        result.is_ok(),
+        "table custom field path succeeds: {result:?}"
+    );
+    assert!(
+        __io.out_str().contains("CF_RELEASE") && __io.out_str().contains("9.6"),
+        "custom field table output:\n{}",
+        __io.out_str()
+    );
+}
+
+#[tokio::test]
 async fn bug_list_json_without_fields_does_not_warn() {
     // --json with no field selection: full object, no unknown-field warning.
     let (_lock, mock, _tmp) = setup_test_env().await;
@@ -477,7 +585,7 @@ async fn bug_list_json_all_unknown_fields_exits_7() {
     let BugAction::List { field_args, .. } = &mut action else {
         unreachable!()
     };
-    field_args.fields = Some("cf_custom".into());
+    field_args.fields = Some("not_a_field".into());
 
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result =
