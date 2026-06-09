@@ -4,7 +4,13 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
+    groups:
+      cargo-dependencies:
+        patterns:
+          - "*"
     ignore:
       # `dbus-secret-service` (keyring default feature) pins sha2 0.10.x as a
       # transitive dep, so bumping the direct dep to 0.11.x cannot collapse to
@@ -18,4 +24,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
+    groups:
+      github-actions-dependencies:
+        patterns:
+          - "*"
