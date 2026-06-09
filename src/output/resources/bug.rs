@@ -1,6 +1,8 @@
+use std::collections::HashSet;
 use std::io::Write;
 
 use colored::Colorize;
+use serde_json::Value;
 use tabled::builder::Builder;
 
 use crate::output::formatting::{
@@ -51,9 +53,9 @@ impl BugColumn {
 /// the historical fixed table.
 const DEFAULT_COLUMNS: &[&str] = &["id", "status", "priority", "assignee", "summary"];
 
-/// The full set of fields renderable as table columns. Tokens are matched
-/// case-insensitively against `aliases`. Fields absent here (e.g. custom
-/// `cf_*` fields) have no table representation.
+/// The full set of built-in fields renderable as table columns. Tokens are
+/// matched case-insensitively against `aliases`; custom `cf_*` fields are
+/// dynamic columns resolved outside this registry.
 const COLUMNS: &[BugColumn] = &[
     BugColumn {
         aliases: &["id"],
@@ -172,6 +174,41 @@ const COLUMNS: &[BugColumn] = &[
     },
 ];
 
+#[derive(Clone, Copy)]
+enum SelectedBugField<'a> {
+    BuiltIn(&'static BugColumn),
+    Custom(&'a str),
+}
+
+impl<'a> SelectedBugField<'a> {
+    fn key(self) -> &'a str {
+        match self {
+            SelectedBugField::BuiltIn(column) => column.canonical(),
+            SelectedBugField::Custom(name) => name,
+        }
+    }
+
+    fn header(self) -> String {
+        match self {
+            SelectedBugField::BuiltIn(column) => column.header.to_string(),
+            SelectedBugField::Custom(name) => name.to_ascii_uppercase(),
+        }
+    }
+
+    fn render(self, bug: &Bug) -> String {
+        match self {
+            SelectedBugField::BuiltIn(column) => (column.render)(bug),
+            SelectedBugField::Custom(name) => render_custom_value(bug.custom_fields.get(name)),
+        }
+    }
+}
+
+struct FieldPartition<'a> {
+    ordered: Vec<SelectedBugField<'a>>,
+    custom: Vec<&'a str>,
+    unknown: Vec<&'a str>,
+}
+
 fn join_ids(ids: &[u64]) -> String {
     ids.iter()
         .map(std::string::ToString::to_string)
@@ -217,32 +254,71 @@ fn default_columns() -> Vec<&'static BugColumn> {
         .collect()
 }
 
-/// Split a comma list into (resolved columns, unknown tokens), trimming and
-/// skipping blanks. Shared by `resolve_columns` and `validate_table_columns`
-/// so the renderer and the pre-flight validator can't drift.
-fn partition_include(list: &str) -> (Vec<&'static BugColumn>, Vec<&str>) {
-    let mut knowns = Vec::new();
-    let mut unknowns = Vec::new();
+fn default_selected_columns() -> Vec<SelectedBugField<'static>> {
+    default_columns()
+        .into_iter()
+        .map(SelectedBugField::BuiltIn)
+        .collect()
+}
+
+fn is_custom_field(token: &str) -> bool {
+    token.starts_with("cf_")
+}
+
+/// Split a comma list into built-in fields, custom fields, and unknown tokens,
+/// trimming and skipping blanks. Shared by renderers and pre-flight validators
+/// so output and validation use the same field taxonomy.
+fn partition_include(list: &str) -> FieldPartition<'_> {
+    let mut partition = FieldPartition {
+        ordered: Vec::new(),
+        custom: Vec::new(),
+        unknown: Vec::new(),
+    };
+    let mut seen = HashSet::new();
     for token in list.split(',') {
         let token = token.trim();
         if token.is_empty() {
             continue;
         }
         match resolve_bug_column(token) {
-            Some(col) => knowns.push(col),
-            None => unknowns.push(token),
+            Some(column) => {
+                if seen.insert(column.canonical()) {
+                    partition.ordered.push(SelectedBugField::BuiltIn(column));
+                }
+            }
+            None if is_custom_field(token) => {
+                if seen.insert(token) {
+                    partition.ordered.push(SelectedBugField::Custom(token));
+                    partition.custom.push(token);
+                }
+            }
+            None => partition.unknown.push(token),
         }
     }
-    (knowns, unknowns)
+    partition
 }
 
-/// Apply `spec.exclude` to `columns` in place, dropping any column whose
-/// header matches an excluded token.
-fn apply_exclude(columns: &mut Vec<&'static BugColumn>, exclude: Option<&str>) {
+fn selected_keys<'a>(fields: &[SelectedBugField<'a>]) -> HashSet<&'a str> {
+    fields.iter().map(|field| (*field).key()).collect()
+}
+
+fn excluded_keys(exclude: Option<&str>) -> HashSet<&str> {
+    let Some(list) = exclude else {
+        return HashSet::new();
+    };
+    partition_include(list)
+        .ordered
+        .iter()
+        .map(|field| (*field).key())
+        .collect()
+}
+
+/// Apply `spec.exclude` to `fields` in place, dropping matching built-in or
+/// custom selections.
+fn apply_exclude(fields: &mut Vec<SelectedBugField<'_>>, exclude: Option<&str>) {
     if let Some(list) = exclude {
-        let excluded: Vec<&'static BugColumn> =
-            list.split(',').filter_map(resolve_bug_column).collect();
-        columns.retain(|c| !excluded.iter().any(|e| e.header == c.header));
+        let excluded = excluded_keys(Some(list));
+        fields.retain(|field| !excluded.contains((*field).key()));
     }
 }
 
@@ -251,25 +327,25 @@ fn apply_exclude(columns: &mut Vec<&'static BugColumn>, exclude: Option<&str>) {
 /// token is unknown, falls back to the default column set so output stays
 /// useful. Infallible by design — the fully-degenerate cases (zero columns)
 /// are rejected up front by [`validate_table_columns`].
-fn resolve_columns<E: Write + ?Sized>(
-    spec: ColumnSpec<'_>,
+fn resolve_columns<'a, E: Write + ?Sized>(
+    spec: ColumnSpec<'a>,
     err: &mut E,
-) -> Vec<&'static BugColumn> {
+) -> Vec<SelectedBugField<'a>> {
     let mut columns = match spec.include {
-        None => default_columns(),
+        None => default_selected_columns(),
         Some(list) => {
-            let (knowns, unknowns) = partition_include(list);
-            if !unknowns.is_empty() {
+            let partition = partition_include(list);
+            if !partition.unknown.is_empty() {
                 let _ = writeln!(
                     err,
-                    "warning: ignoring field(s) with no table column: {}",
-                    unknowns.join(", ")
+                    "warning: ignoring unknown field(s): {}",
+                    partition.unknown.join(", ")
                 );
             }
-            if knowns.is_empty() {
-                default_columns()
+            if partition.ordered.is_empty() {
+                default_selected_columns()
             } else {
-                knowns
+                partition.ordered
             }
         }
     };
@@ -284,22 +360,21 @@ fn resolve_columns<E: Write + ?Sized>(
 /// some not) is allowed and handled as a warning at render time.
 pub fn validate_table_columns(spec: ColumnSpec<'_>) -> crate::error::Result<()> {
     let mut columns = match spec.include {
-        None => default_columns(),
+        None => default_selected_columns(),
         Some(list) => {
-            let (knowns, unknowns) = partition_include(list);
-            if knowns.is_empty() {
-                if unknowns.is_empty() {
+            let partition = partition_include(list);
+            if partition.ordered.is_empty() {
+                if partition.unknown.is_empty() {
                     // All-blank like ",," — treat as no selection, not an error.
-                    default_columns()
+                    default_selected_columns()
                 } else {
                     return Err(crate::error::BzrError::InputValidation(format!(
-                        "none of the requested fields can be shown as table columns: {}; \
-                         these fields have no table representation",
-                        unknowns.join(", ")
+                        "none of the requested fields are known bug fields: {}",
+                        partition.unknown.join(", ")
                     )));
                 }
             } else {
-                knowns
+                partition.ordered
             }
         }
     };
@@ -313,16 +388,15 @@ pub fn validate_table_columns(spec: ColumnSpec<'_>) -> crate::error::Result<()> 
 }
 
 /// The canonical exclude key set: each `--exclude-fields` token resolved to its
-/// canonical Bugzilla field name. Unknown tokens (e.g. custom `cf_*` fields)
-/// name no key in the serialized object and are dropped here, matching table
-/// mode's [`apply_exclude`].
-fn canonical_excludes(exclude: Option<&str>) -> Vec<&'static str> {
+/// serialized key. Unknown non-custom tokens name no key and are dropped here,
+/// matching table mode's [`apply_exclude`].
+fn canonical_excludes(exclude: Option<&str>) -> Vec<&str> {
     match exclude {
         None => Vec::new(),
-        Some(list) => list
-            .split(',')
-            .filter_map(resolve_bug_column)
-            .map(BugColumn::canonical)
+        Some(list) => partition_include(list)
+            .ordered
+            .iter()
+            .map(|field| (*field).key())
             .collect(),
     }
 }
@@ -362,14 +436,14 @@ pub fn bugs_to_json(bugs: &[Bug], spec: ColumnSpec<'_>) -> Vec<serde_json::Value
 /// fields still passes. Partial-unknown (some valid, some not) is allowed and
 /// handled as a warning via [`warn_unknown_fields`].
 pub fn validate_json_field_selection(spec: ColumnSpec<'_>) -> crate::error::Result<()> {
-    let mut keys: std::collections::HashSet<&'static str> = match spec.include {
+    let mut keys: HashSet<&str> = match spec.include {
         Some(list) => {
-            let (knowns, _unknowns) = partition_include(list);
-            if knowns.is_empty() && list.split(',').all(|t| t.trim().is_empty()) {
+            let partition = partition_include(list);
+            if partition.ordered.is_empty() && list.split(',').all(|t| t.trim().is_empty()) {
                 // Blank include like "" / ",," — treat as no selection.
                 COLUMNS.iter().map(BugColumn::canonical).collect()
             } else {
-                knowns.iter().map(|c| c.canonical()).collect()
+                selected_keys(&partition.ordered)
             }
         }
         None => COLUMNS.iter().map(BugColumn::canonical).collect(),
@@ -387,21 +461,21 @@ pub fn validate_json_field_selection(spec: ColumnSpec<'_>) -> crate::error::Resu
     Ok(())
 }
 
-/// Warn once on stderr about `--fields` tokens that name no known bug field
-/// (e.g. a typo or a custom `cf_*` field). Genericized off "table column" so it
-/// reads correctly under both table and JSON output. Only inspects the include
-/// list — unknown `--exclude-fields` tokens are inert and silently ignored,
-/// matching table mode's [`apply_exclude`].
+/// Warn once on stderr about `--fields` tokens that name no known bug field.
+/// Custom `cf_*` fields are dynamic known fields, so only non-custom unknowns
+/// reach this warning. Only inspects the include list; unknown
+/// `--exclude-fields` tokens are inert and silently ignored, matching table
+/// mode's [`apply_exclude`].
 pub fn warn_unknown_fields<E: Write + ?Sized>(spec: ColumnSpec<'_>, err: &mut E) {
     let Some(list) = spec.include else {
         return;
     };
-    let (_knowns, unknowns) = partition_include(list);
-    if !unknowns.is_empty() {
+    let partition = partition_include(list);
+    if !partition.unknown.is_empty() {
         let _ = writeln!(
             err,
             "warning: ignoring unknown field(s): {}",
-            unknowns.join(", ")
+            partition.unknown.join(", ")
         );
     }
 }
@@ -424,6 +498,28 @@ fn field_selected(spec: ColumnSpec<'_>, field: &str) -> bool {
     included && !excluded
 }
 
+fn render_custom_value(value: Option<&Value>) -> String {
+    match value {
+        Some(Value::String(s)) => s.clone(),
+        Some(Value::Number(n)) => n.to_string(),
+        Some(Value::Bool(b)) => b.to_string(),
+        Some(value @ (Value::Array(_) | Value::Object(_))) => value.to_string(),
+        Some(Value::Null) | None => String::new(),
+    }
+}
+
+fn selected_custom_detail_fields(spec: ColumnSpec<'_>) -> Vec<&str> {
+    let Some(include) = spec.include else {
+        return Vec::new();
+    };
+    let excluded = excluded_keys(spec.exclude);
+    partition_include(include)
+        .custom
+        .into_iter()
+        .filter(|name| !excluded.contains(name))
+        .collect()
+}
+
 pub fn write_bugs<W: Write + ?Sized, E: Write + ?Sized>(
     bugs: &[Bug],
     spec: ColumnSpec<'_>,
@@ -440,9 +536,9 @@ pub fn write_bugs<W: Write + ?Sized, E: Write + ?Sized>(
             }
             let columns = resolve_columns(spec, err);
             let mut builder = Builder::default();
-            builder.push_record(columns.iter().map(|c| c.header.to_string()));
+            builder.push_record(columns.iter().map(|field| (*field).header()));
             for bug in bugs {
-                builder.push_record(columns.iter().map(|c| (c.render)(bug)));
+                builder.push_record(columns.iter().map(|field| (*field).render(bug)));
             }
             let _ = writeln!(out, "{}", builder.build());
         }
@@ -516,6 +612,9 @@ fn write_bug_detail_table(bug: &Bug, spec: ColumnSpec<'_>, out: &mut (impl Write
     }
     if field_selected(spec, "depends_on") {
         write_id_list_field(out, "Depends on", &bug.depends_on);
+    }
+    for name in selected_custom_detail_fields(spec) {
+        write_field(out, name, &render_custom_value(bug.custom_fields.get(name)));
     }
 }
 

@@ -53,6 +53,78 @@ async fn handle_search_from_url_executes() {
 }
 
 #[tokio::test]
+async fn handle_search_from_url_with_custom_fields_emits_custom_field() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("product", "TestProduct"))
+        .and(query_param("include_fields", "id,cf_release"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "summary": "Test bug", "cf_release": "9.6"}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let server_url = mock.uri();
+    let url = format!("{server_url}/buglist.cgi?product=TestProduct");
+    let mut action = from_url_action(url, None);
+    let BugAction::Search { field_args, .. } = &mut action else {
+        unreachable!()
+    };
+    field_args.fields = Some("id,cf_release".into());
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+
+    assert!(result.is_ok(), "from-url custom search failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    assert_eq!(parsed[0]["id"], 1);
+    assert_eq!(parsed[0]["cf_release"], "9.6");
+    assert!(parsed[0].get("summary").is_none());
+}
+
+#[tokio::test]
+async fn handle_search_from_url_does_not_infer_custom_fields_from_columnlist() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    let default_fields = concat!(
+        "id,summary,status,resolution,dupe_of,product,component,version,",
+        "assigned_to,priority,severity,creation_time,last_change_time,creator,",
+        "url,whiteboard,keywords,blocks,depends_on,cc,op_sys,rep_platform,deadline"
+    );
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("product", "TestProduct"))
+        .and(query_param("include_fields", default_fields))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "summary": "Test bug", "status": "NEW"}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let server_url = mock.uri();
+    let url = format!(
+        "{server_url}/buglist.cgi?product=TestProduct&columnlist=bug_id,short_desc,cf_release"
+    );
+    let action = from_url_action(url, None);
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+
+    assert!(
+        result.is_ok(),
+        "from-url columnlist search failed: {result:?}"
+    );
+}
+
+#[tokio::test]
 async fn handle_search_from_url_preserves_url_limit_when_cli_unset() {
     // URL specifies limit=10 and CLI passes nothing — the URL limit
     // must reach the server unchanged, not be overwritten by the

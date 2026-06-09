@@ -46,7 +46,7 @@ serde_json = { version = "1", features = ["preserve_order"] }
 tokio = { version = "1", features = ["macros", "rt", "sync"] }
 toml = "1"
 dirs = "6"
-tabled = "0.21"
+tabled = { version = "0.21", default-features = false, features = ["std"] }
 thiserror = "2"
 colored = "3"
 tracing = "0.1"
@@ -55,7 +55,7 @@ percent-encoding = "2"
 url = "2"
 quick-xml = "0.40"
 # Optional: used only by test-helpers feature
-wiremock = { version = ">=0.6, <0.6.5", optional = true }
+wiremock = { version = ">=0.6, <0.6.6", optional = true }
 tempfile = { version = "3", optional = true }
 keyring-core = { version = "1", optional = true }
 rpassword = { version = "7", optional = true }
@@ -73,7 +73,7 @@ windows-native-keyring-store = { version = "1", optional = true }
 proptest = "1"
 rcgen = "0.14"
 tempfile = "3"
-wiremock = ">=0.6, <0.6.5"
+wiremock = ">=0.6, <0.6.6"
 bzr = { path = ".", features = ["test-helpers"], default-features = false }
 # No-op proc-macro for `#[mutants::skip]`. Used in a few places where
 # `exclude_re` in .cargo/mutants.toml cannot reach (e.g. cargo-mutants's

@@ -1,19 +1,30 @@
 use std::io::Write;
 
 use serde::Serialize;
-use tabled::{Table, Tabled};
 
-use crate::output::formatting::{write_formatted, yes_no};
+use crate::output::formatting::{write_formatted, write_table_records, yes_no};
 use crate::types::{FieldValue, OutputFormat};
 
-#[derive(Tabled)]
-struct FieldValueRow {
-    #[tabled(rename = "NAME")]
-    name: String,
-    #[tabled(rename = "ACTIVE")]
-    active: String,
-    #[tabled(rename = "CAN CHANGE TO")]
-    can_change_to: String,
+const FIELD_VALUE_HEADERS: &[&str] = &["NAME", "ACTIVE", "CAN CHANGE TO"];
+const FIELD_ALIAS_HEADERS: &[&str] = &["ALIAS", "API FIELD NAME"];
+
+fn field_value_record(value: &FieldValue) -> Vec<String> {
+    let transitions = value
+        .can_change_to
+        .as_ref()
+        .map(|transitions| {
+            transitions
+                .iter()
+                .map(|transition| transition.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+    vec![
+        value.name.clone(),
+        yes_no(value.is_active).into(),
+        transitions,
+    ]
 }
 
 pub fn write_field_values<W: Write + ?Sized>(
@@ -22,35 +33,17 @@ pub fn write_field_values<W: Write + ?Sized>(
     out: &mut W,
 ) {
     write_formatted(values, format, out, |values, out| {
-        let rows: Vec<FieldValueRow> = values
-            .iter()
-            .map(|v| {
-                let transitions = v
-                    .can_change_to
-                    .as_ref()
-                    .map(|t| {
-                        t.iter()
-                            .map(|s| s.name.as_str())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    })
-                    .unwrap_or_default();
-                FieldValueRow {
-                    name: v.name.clone(),
-                    active: yes_no(v.is_active).into(),
-                    can_change_to: transitions,
-                }
-            })
-            .collect();
-        let _ = writeln!(out, "{}", Table::new(rows));
+        write_table_records(
+            FIELD_VALUE_HEADERS,
+            values.iter().map(field_value_record),
+            out,
+        );
     });
 }
 
-#[derive(Serialize, Tabled)]
+#[derive(Serialize)]
 struct FieldAliasRow {
-    #[tabled(rename = "ALIAS")]
     alias: &'static str,
-    #[tabled(rename = "API FIELD NAME")]
     api_name: &'static str,
 }
 
@@ -64,7 +57,12 @@ pub fn write_field_aliases<W: Write + ?Sized>(
         .map(|&(alias, api_name)| FieldAliasRow { alias, api_name })
         .collect();
     write_formatted(&rows, format, out, |rows, out| {
-        let _ = writeln!(out, "{}", Table::new(rows));
+        write_table_records(
+            FIELD_ALIAS_HEADERS,
+            rows.iter()
+                .map(|row| vec![row.alias.to_string(), row.api_name.to_string()]),
+            out,
+        );
     });
 }
 

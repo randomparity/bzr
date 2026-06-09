@@ -337,7 +337,40 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         cc: get_str_array(m, "cc"),
         op_sys: get_nonempty_str(m, "op_sys"),
         rep_platform: get_nonempty_str(m, "rep_platform"),
+        custom_fields: custom_fields_from_xmlrpc(m),
     })
+}
+
+fn custom_fields_from_xmlrpc(m: &BTreeMap<String, Value>) -> BTreeMap<String, serde_json::Value> {
+    m.iter()
+        .filter(|(name, _)| name.starts_with("cf_"))
+        .map(|(name, value)| (name.clone(), xmlrpc_value_to_json(value)))
+        .collect()
+}
+
+fn xmlrpc_value_to_json(value: &Value) -> serde_json::Value {
+    match value {
+        Value::String(s) | Value::DateTime(s) => serde_json::Value::String(s.clone()),
+        Value::Int(n) => serde_json::Value::Number(serde_json::Number::from(*n)),
+        Value::Bool(b) => serde_json::Value::Bool(*b),
+        Value::Double(n) => serde_json::Number::from_f64(*n).map_or_else(
+            || serde_json::Value::String(n.to_string()),
+            serde_json::Value::Number,
+        ),
+        Value::Base64(bytes) => serde_json::Value::String(base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD,
+            bytes,
+        )),
+        Value::Array(values) => {
+            serde_json::Value::Array(values.iter().map(xmlrpc_value_to_json).collect())
+        }
+        Value::Struct(values) => serde_json::Value::Object(
+            values
+                .iter()
+                .map(|(name, value)| (name.clone(), xmlrpc_value_to_json(value)))
+                .collect(),
+        ),
+    }
 }
 
 /// Navigate a `Bug.*` XML-RPC response from `top -> bugs -> {bug_id_str}`.

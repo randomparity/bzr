@@ -107,10 +107,12 @@ pub enum QueryAction {
         /// Max number of results
         #[arg(long)]
         limit: Option<u32>,
-        /// Only return these fields (comma-separated)
+        /// Only return these fields (comma-separated). Built-in fields and
+        /// Bugzilla custom fields named `cf_*` are valid.
         #[arg(long)]
         fields: Option<String>,
-        /// Exclude these fields (comma-separated)
+        /// Exclude these fields (comma-separated), including custom `cf_*`
+        /// fields when requested.
         #[arg(long)]
         exclude_fields: Option<String>,
         /// Filter to bugs created at or after this date (saved into the query).
@@ -244,11 +246,12 @@ pub enum QueryAction {
         /// Fields to request from the server (comma-separated). Table:
         /// selects which columns to show (in order). --json: the JSON object
         /// contains only the selected fields (id is included only if requested).
+        /// Built-in fields and Bugzilla custom fields named `cf_*` are valid.
         #[arg(long)]
         fields: Option<String>,
         /// Fields to drop from the server request (comma-separated). Table:
         /// removes those columns. --json: the JSON object omits the dropped
-        /// fields (including id, if excluded).
+        /// fields (including custom `cf_*` fields and id, if excluded).
         #[arg(long)]
         exclude_fields: Option<String>,
         /// Override the server to run against

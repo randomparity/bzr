@@ -8,6 +8,7 @@ pub struct FieldArgs {
     /// Fields to request from the server (comma-separated). In table output,
     /// selects which columns (or detail rows) to show, in order; under --json,
     /// the object contains only the selected fields (id only if requested).
+    /// Built-in fields and Bugzilla custom fields named `cf_*` are valid.
     #[arg(long)]
     pub fields: Option<String>,
     /// Fields to drop from the server request (comma-separated). In table
@@ -43,9 +44,10 @@ pub enum BugAction {
     /// select and remove columns (in the given order). Under `--json` the
     /// output object is trimmed to the selected fields (gh-style):
     /// `--fields summary` returns `{"summary": ...}` with no `id` unless you
-    /// ask for it, and `--exclude-fields id` drops `id`. With no selection the
-    /// full object is returned. Unknown fields (typos, custom `cf_*` fields
-    /// that have no table column) are skipped with a warning.
+    /// ask for it, and `--exclude-fields id` drops `id`. Built-in fields and
+    /// Bugzilla custom fields named `cf_*` are valid; custom fields are shown
+    /// when requested and returned by the server. Unknown non-custom fields
+    /// are skipped with a warning, or rejected if nothing known remains.
     ///
     /// `--created-since` / `--changed-since` filter by Bugzilla's
     /// `creation_time` / `last_change_time` fields. Both accept ISO
@@ -170,6 +172,7 @@ pub enum BugAction {
     /// bugs over REST); `--exclude-fields` is the inverse. Under `--json`
     /// the returned object is trimmed to the selected fields (gh-style) on
     /// every transport, since trimming happens client-side after the fetch.
+    /// Built-in fields and Bugzilla custom fields named `cf_*` are valid.
     /// On XML-RPC servers the full bug is fetched regardless of the field
     /// list, so there the selection only controls which detail rows (table)
     /// or object keys (JSON) appear, not what is sent over the wire.

@@ -34,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `bzr bug list`, `bug search`, `bug my`, `bug view`, and `query run` now
+  preserve Bugzilla custom fields named `cf_*` when requested through
+  `--fields`. Custom field values are emitted as top-level JSON keys and as
+  dynamic table columns/detail rows instead of being dropped during bug
+  deserialization.
 - Concurrent `bzr` processes editing different config fields no longer clobber
   each other. All config writes now take an exclusive advisory lock on
   `config.lock` and reload the latest config from disk before applying their
