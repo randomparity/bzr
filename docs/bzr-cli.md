@@ -185,6 +185,7 @@ List bugs matching filter criteria.
 bzr bug list --product Fedora --status ASSIGNED --limit 20
 bzr bug list --assignee user@example.com
 bzr bug list --product Fedora --fields id,summary,status
+bzr bug list --product Fedora --fields id,summary,cf_release
 # Select table columns
 bzr bug list --product Fedora --fields id,priority,severity,status,summary
 bzr bug list --id 100 --id 200 --id 300
@@ -212,14 +213,22 @@ Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`,
 | `--alias <A>` | No | | Filter by bug alias |
 | `--summary <S>` | No | | Substring match on the Summary field (matches all bug states) |
 | `--limit <N>` | No | 50 | Max results |
-| `--fields <F>` | No | | Comma-separated fields requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). A selection that resolves to no known fields is rejected with exit code 7 rather than emitting an empty object. |
-| `--exclude-fields <F>` | No | | Comma-separated fields dropped from the server request; in table output, removes those columns. Under `--json`, the object omits the dropped fields (including `id`, when excluded). Excluding every field is rejected with exit code 7 rather than emitting `{}`. |
+| `--fields <F>` | No | | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). A selection that resolves to no known fields is rejected with exit code 7 rather than emitting an empty object. |
+| `--exclude-fields <F>` | No | | Comma-separated fields dropped from the server request; in table output, removes those columns. Under `--json`, the object omits the dropped fields (including custom `cf_*` fields and `id`, when excluded). Excluding every field is rejected with exit code 7 rather than emitting `{}`. |
 | `--created-since <DATE>` | No | | Filter to bugs whose `creation_time` is `>= DATE`. See [Date format](#date-format) below. |
 | `--changed-since <DATE>` | No | | Filter to bugs whose `last_change_time` is `>= DATE`. See [Date format](#date-format) below. |
 
 #### Date format
 
 `--created-since` and `--changed-since` accept ISO 8601 datetimes (`YYYY-MM-DDTHH:MM:SS`, `YYYY-MM-DDTHH:MM:SSZ`, or `YYYY-MM-DDTHH:MM:SS±HH:MM`) or a bare `YYYY-MM-DD`. Bare dates are treated as `00:00:00 UTC`. Fractional seconds, week dates, and ordinal dates are rejected with exit code 7. The same validator is used by `bzr bug history --since` and `bzr comment list --since`.
+
+#### Field selection and custom fields
+
+`--fields` accepts built-in bug fields and Bugzilla custom fields whose names
+start with `cf_`. Custom fields are not fetched by default; request them
+explicitly, for example `--fields id,summary,cf_release`. If Bugzilla omits a
+requested custom field, it is omitted from JSON output and rendered as an empty
+table cell. Unknown non-custom field names warn or fail as described above.
 
 #### Additional field filters (issue #158)
 
@@ -275,8 +284,8 @@ bzr bug view my-alias --fields id,summary,assigned_to
 |--------|----------|-------------|
 | `<IDS>...` | Yes | One or more bug IDs or aliases. Aliases and numeric IDs may be mixed. |
 | `--permissive` | No | Multi-ID only. Continue past per-bug failures, surfacing them as `Bug #N — UNAVAILABLE` placeholder rows (table) or entries in `failed` (JSON). Exit 0 even if some bugs fail. Has no effect on session-wide failures (transport, auth, security) — those still bail. Setting `--permissive` with a single ID returns input-validation error (exit 7). |
-| `--fields <F>` | No | Comma-separated fields requested from the server; in table output, selects which detail rows to show. Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). |
-| `--exclude-fields <F>` | No | Comma-separated fields dropped from the server request; in table output, removes those detail rows. Under `--json`, the object omits the dropped fields (including `id`, when excluded). |
+| `--fields <F>` | No | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which detail rows to show. Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). |
+| `--exclude-fields <F>` | No | Comma-separated fields dropped from the server request; in table output, removes those detail rows. Under `--json`, the object omits the dropped fields (including custom `cf_*` fields and `id`, when excluded). |
 
 **Output shapes:**
 
@@ -302,6 +311,7 @@ bzr bug search "kernel panic"
 bzr bug search "ALL kernel panic"                      # include closed/resolved bugs
 bzr bug search "component:NetworkManager priority:high" --limit 10
 bzr bug search "memory leak" --fields id,summary
+bzr bug search "memory leak" --fields id,summary,cf_release
 bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?product=Firefox&bug_status=NEW"
 bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?product=Firefox&bug_status=NEW" --save-as "my-query"
 bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?known_name=my%20search&product=Firefox" --save-as
@@ -317,8 +327,8 @@ bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?known_name=m
 | `--from-url <URL>` | No* | | Execute a search from a Bugzilla buglist.cgi URL. Recognized parameters (product, component, status, etc.) are mapped to structured fields; unrecognized parameters (boolean charts, field-change filters) are passed through to the REST API verbatim. |
 | `--save-as [NAME]` | No | | Save this URL query for future reuse. If `NAME` is omitted, uses the URL's `known_name` parameter as the query name. Requires `--from-url`. |
 | `--limit <N>` | No | 50 | Max results. When `--from-url` is used, the URL's own limit parameter takes precedence unless overridden here. |
-| `--fields <F>` | No | | Comma-separated fields requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). A selection that resolves to no known fields is rejected with exit code 7 rather than emitting an empty object. |
-| `--exclude-fields <F>` | No | | Comma-separated fields dropped from the server request; in table output, removes those columns. Under `--json`, the object omits the dropped fields (including `id`, when excluded). Excluding every field is rejected with exit code 7 rather than emitting `{}`. |
+| `--fields <F>` | No | | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). A selection that resolves to no known fields is rejected with exit code 7 rather than emitting an empty object. |
+| `--exclude-fields <F>` | No | | Comma-separated fields dropped from the server request; in table output, removes those columns. Under `--json`, the object omits the dropped fields (including custom `cf_*` fields and `id`, when excluded). Excluding every field is rejected with exit code 7 rather than emitting `{}`. |
 
 *One of `<QUERY>` or `--from-url` must be provided.
 
@@ -359,8 +369,8 @@ bzr bug my --status NEW --status '!RESOLVED'  # mixed positive and negated
 | `--all` | No | | Show all bugs related to me (assigned + created + CC'd) |
 | `--status <S>` | No | | Filter by status (repeatable; `!` prefix to exclude) |
 | `--limit <N>` | No | 50 | Max results per category. With `--all`, each of the three categories (assigned, created, CC'd) is queried separately up to this limit; duplicates across categories are removed. |
-| `--fields <F>` | No | | Comma-separated fields requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). A selection that resolves to no known fields is rejected with exit code 7 rather than emitting an empty object. |
-| `--exclude-fields <F>` | No | | Comma-separated fields dropped from the server request; in table output, removes those columns. Under `--json`, the object omits the dropped fields (including `id`, when excluded). Excluding every field is rejected with exit code 7 rather than emitting `{}`. |
+| `--fields <F>` | No | | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). A selection that resolves to no known fields is rejected with exit code 7 rather than emitting an empty object. |
+| `--exclude-fields <F>` | No | | Comma-separated fields dropped from the server request; in table output, removes those columns. Under `--json`, the object omits the dropped fields (including custom `cf_*` fields and `id`, when excluded). Excluding every field is rejected with exit code 7 rather than emitting `{}`. |
 
 ### `bzr bug create`
 
@@ -1286,8 +1296,8 @@ bzr query save recent-firefox --product Firefox --changed-since 2026-04-01
 | `--severity <S>` | No* | Filter by severity (repeatable; prefix with `!` to exclude) |
 | `--search <Q>` | No* | Free-text search query |
 | `--limit <N>` | No | Max results |
-| `--fields <F>` | No | Stored with the query (comma-separated); at run time sets the fields requested from the server and selects table columns. Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). |
-| `--exclude-fields <F>` | No | Stored with the query (comma-separated); at run time drops those fields from the server request and removes table columns. Under `--json`, the object omits the dropped fields (including `id`, when excluded). |
+| `--fields <F>` | No | Stored with the query (comma-separated built-in fields or Bugzilla custom fields named `cf_*`); at run time sets the fields requested from the server and selects table columns. Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). |
+| `--exclude-fields <F>` | No | Stored with the query (comma-separated); at run time drops those fields from the server request and removes table columns. Under `--json`, the object omits the dropped fields (including custom `cf_*` fields and `id`, when excluded). |
 | `--created-since <DATE>` | No | Save a `creation_time >= DATE` filter into the query. Same accepted forms as [`bzr bug list --created-since`](#date-format). |
 | `--changed-since <DATE>` | No | Save a `last_change_time >= DATE` filter into the query. Same accepted forms as [`bzr bug list --changed-since`](#date-format). |
 
@@ -1344,6 +1354,7 @@ bzr query run firefox-new --limit 10
 
 # Run with field selection
 bzr query run firefox-new --fields id,summary,status
+bzr query run firefox-new --fields id,summary,cf_release
 
 # Run against a different server
 bzr query run my-query --server other-server --limit 50
@@ -1356,8 +1367,8 @@ bzr query run recent-firefox --changed-since 2026-05-01
 |--------|----------|-------------|
 | `<NAME>` | Yes | Query name |
 | `--limit <N>` | No | Override the saved limit |
-| `--fields <F>` | No | Comma-separated fields requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). |
-| `--exclude-fields <F>` | No | Comma-separated fields dropped from the server request; in table output, removes those columns. Under `--json`, the object omits the dropped fields (including `id`, when excluded). |
+| `--fields <F>` | No | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). |
+| `--exclude-fields <F>` | No | Comma-separated fields dropped from the server request; in table output, removes those columns. Under `--json`, the object omits the dropped fields (including custom `cf_*` fields and `id`, when excluded). |
 | `--server <NAME>` | No | Override the server to run the query against. Takes precedence over the server stored in the saved query. The global `--server` flag takes precedence over this flag. |
 | `--created-since <DATE>` | No | Override the saved `creation_time` filter for this run. Same accepted forms as [`bzr bug list --created-since`](#date-format). |
 | `--changed-since <DATE>` | No | Override the saved `last_change_time` filter for this run. Same accepted forms as [`bzr bug list --changed-since`](#date-format). |

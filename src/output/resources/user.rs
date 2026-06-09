@@ -1,38 +1,28 @@
 use std::io::Write;
 
 use colored::Colorize;
-use tabled::Tabled;
 
 use crate::output::formatting::{
-    opt_yes_no, write_field, write_formatted, write_optional_field, write_table_or_empty,
+    opt_yes_no, write_field, write_formatted, write_optional_field, write_table_or_empty, TableSpec,
 };
 use crate::types::{BugzillaUser, OutputFormat, WhoamiResponse};
 
-#[derive(Tabled)]
+const USER_HEADERS: &[&str] = &["ID", "NAME", "REAL NAME", "EMAIL"];
+const DETAILED_USER_HEADERS: &[&str] = &["ID", "NAME", "REAL NAME", "EMAIL", "CAN LOGIN", "GROUPS"];
+
 struct UserRow {
-    #[tabled(rename = "ID")]
     id: u64,
-    #[tabled(rename = "NAME")]
     name: String,
-    #[tabled(rename = "REAL NAME")]
     real_name: String,
-    #[tabled(rename = "EMAIL")]
     email: String,
 }
 
-#[derive(Tabled)]
 struct DetailedUserRow {
-    #[tabled(rename = "ID")]
     id: u64,
-    #[tabled(rename = "NAME")]
     name: String,
-    #[tabled(rename = "REAL NAME")]
     real_name: String,
-    #[tabled(rename = "EMAIL")]
     email: String,
-    #[tabled(rename = "CAN LOGIN")]
     can_login: String,
-    #[tabled(rename = "GROUPS")]
     groups: String,
 }
 
@@ -64,8 +54,34 @@ fn detailed_row(user: &BugzillaUser) -> DetailedUserRow {
     }
 }
 
+fn basic_record(user: &BugzillaUser) -> Vec<String> {
+    let row = basic_row(user);
+    vec![row.id.to_string(), row.name, row.real_name, row.email]
+}
+
+fn detailed_record(user: &BugzillaUser) -> Vec<String> {
+    let row = detailed_row(user);
+    vec![
+        row.id.to_string(),
+        row.name,
+        row.real_name,
+        row.email,
+        row.can_login,
+        row.groups,
+    ]
+}
+
 pub fn write_users<W: Write + ?Sized>(users: &[BugzillaUser], format: OutputFormat, out: &mut W) {
-    write_table_or_empty(users, format, out, "No users found.", basic_row);
+    write_table_or_empty(
+        users,
+        format,
+        out,
+        TableSpec {
+            empty_msg: "No users found.",
+            headers: USER_HEADERS,
+        },
+        basic_record,
+    );
 }
 
 pub fn write_users_detailed<W: Write + ?Sized>(
@@ -73,7 +89,16 @@ pub fn write_users_detailed<W: Write + ?Sized>(
     format: OutputFormat,
     out: &mut W,
 ) {
-    write_table_or_empty(users, format, out, "No users found.", detailed_row);
+    write_table_or_empty(
+        users,
+        format,
+        out,
+        TableSpec {
+            empty_msg: "No users found.",
+            headers: DETAILED_USER_HEADERS,
+        },
+        detailed_record,
+    );
 }
 
 pub fn write_whoami<W: Write + ?Sized>(whoami: &WhoamiResponse, format: OutputFormat, out: &mut W) {

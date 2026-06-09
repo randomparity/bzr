@@ -2428,11 +2428,8 @@ async fn bug_list_issue_158_mixed_positive_and_negation_reaches_wire() {
 }
 
 /// Guards the #206 `--json` prose against misleading phrasings. `--json` now
-/// trims output to the selected fields, but a few specific phrases stay
-/// forbidden: the older marketing-style "trims the payload" wordings, and any
-/// claim that custom `cf_*` fields become visible via `--json` ("to see them")
-/// — they can't, since `Bug` is a fixed struct with no `#[serde(flatten)]`.
-/// None of these may reappear in the CLI help or the manual.
+/// trims output to the selected fields, but the older marketing-style
+/// "trims the payload" wordings should not reappear in the CLI help or manual.
 #[test]
 fn cli_and_docs_avoid_misleading_trim_phrasing() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -2440,7 +2437,6 @@ fn cli_and_docs_avoid_misleading_trim_phrasing() {
         "trims the payload",
         "trim the response payload",
         "trims JSON output",
-        "to see them",
         "JSON: fields to return",
         "JSON: fields to exclude",
     ];
@@ -2492,7 +2488,7 @@ async fn e2e_bug_list_json_all_unknown_fields_exits_7() {
         "--product",
         "Firefox",
         "--fields",
-        "cf_nope,cf_alsonope",
+        "not_a_field,also_not_a_field",
     ])
     .await;
 
@@ -2529,13 +2525,13 @@ async fn e2e_bug_list_json_partial_unknown_warns_and_projects() {
         "--product",
         "Firefox",
         "--fields",
-        "summary,cf_x",
+        "summary,not_a_field",
     ])
     .await;
 
     assert!(result.is_ok(), "partial-unknown should succeed: {result:?}");
     assert!(
-        err.contains("ignoring unknown field(s): cf_x"),
+        err.contains("ignoring unknown field(s): not_a_field"),
         "stderr warning: {err:?}"
     );
     let parsed = serde_json::from_str::<serde_json::Value>(out.trim()).unwrap();
@@ -2544,6 +2540,46 @@ async fn e2e_bug_list_json_partial_unknown_warns_and_projects() {
         vec!["summary"],
         "projected to summary only:\n{out}"
     );
+}
+
+/// A custom `cf_*` field is a valid dynamic selection: it is requested from the
+/// server and emitted when Bugzilla returns it.
+#[tokio::test]
+async fn e2e_bug_list_json_custom_field_is_emitted() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("include_fields", "id,cf_release"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 7, "summary": "boom", "cf_release": "9.6"}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let (result, out, err) = dispatch_cli_with_io(&[
+        "bzr",
+        "--server",
+        "test",
+        "--json",
+        "bug",
+        "list",
+        "--product",
+        "Firefox",
+        "--fields",
+        "cf_release",
+    ])
+    .await;
+
+    assert!(
+        result.is_ok(),
+        "custom field selection should succeed: {result:?}"
+    );
+    assert!(err.is_empty(), "custom field should not warn: {err:?}");
+    let parsed = serde_json::from_str::<serde_json::Value>(out.trim()).unwrap();
+    assert_eq!(json_keys(&parsed[0]), vec!["cf_release"]);
+    assert_eq!(parsed[0]["cf_release"], "9.6");
 }
 
 /// `bug view --json` with an all-unknown field stays lenient: exit 0, an empty

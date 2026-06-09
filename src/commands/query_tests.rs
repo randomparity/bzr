@@ -434,6 +434,55 @@ async fn query_run_executes_saved_query() {
 }
 
 #[tokio::test]
+async fn query_run_honors_saved_custom_fields() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    let mut save_action = product_save_action("custom-fields-test", "TestProduct", 10);
+    let QueryAction::Save { fields, .. } = &mut save_action else {
+        unreachable!()
+    };
+    *fields = Some("id,cf_release".into());
+
+    let mut save_io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &save_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut save_io.writers(),
+    )
+    .await;
+    assert!(result.is_ok(), "query save failed: {result:?}");
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("include_fields", "id,cf_release"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "summary": "Test bug", "cf_release": "9.6"}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let run_action = run_action("custom-fields-test");
+    let mut run_io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &run_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut run_io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "query run failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(run_io.out_str().trim()).unwrap();
+    assert_eq!(parsed[0]["id"], 1);
+    assert_eq!(parsed[0]["cf_release"], "9.6");
+    assert!(parsed[0].get("summary").is_none());
+}
+
+#[tokio::test]
 async fn query_run_with_limit_override() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 

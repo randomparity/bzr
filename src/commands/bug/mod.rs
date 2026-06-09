@@ -49,15 +49,17 @@ pub async fn execute(
     // JSON mode (where output is trimmed gh-style to the selected keys). Either
     // way the exit code is independent of subcommand or server reachability.
     // `bug view` is exempt from this zero-field error in both modes: a sparse
-    // (or empty `{}`) single-bug result is coherent, not an error. Unknown
-    // `--fields` tokens (typos, custom `cf_*` fields) warn once on stderr;
-    // under JSON the warning fires for every action including `view`, since a
-    // typo would otherwise silently yield `{}`.
+    // (or empty `{}`) single-bug result is coherent, not an error. Custom
+    // `cf_*` fields are recognized dynamic fields. Other unknown `--fields`
+    // tokens warn once on stderr for JSON output and for `bug view` table
+    // output, since those lenient paths would otherwise hide a typo.
     if let Some(spec) = bug_column_spec(action) {
         let is_view = matches!(action, BugAction::View { .. });
         match format {
             OutputFormat::Table => {
-                if !is_view {
+                if is_view {
+                    warn_unknown_fields(spec, w.err);
+                } else {
                     validate_table_columns(spec)?;
                 }
             }

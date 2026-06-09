@@ -28,7 +28,17 @@ fn make_bug(id: u64, summary: &str, status: &str) -> Bug {
         cc: vec!["watcher@example.com".into()],
         op_sys: None,
         rep_platform: None,
+        custom_fields: std::collections::BTreeMap::new(),
     }
+}
+
+fn make_bug_with_custom(id: u64, summary: &str, status: &str) -> Bug {
+    let mut bug = make_bug(id, summary, status);
+    bug.custom_fields
+        .insert("cf_release".into(), serde_json::json!("9.6"));
+    bug.custom_fields
+        .insert("cf_score".into(), serde_json::json!(12));
+    bug
 }
 
 fn make_history_entry() -> HistoryEntry {
@@ -203,12 +213,12 @@ fn write_bugs_exclude_fields_drops_default_column() {
 fn write_bugs_unknown_field_warns_and_falls_back() {
     let bugs = vec![make_bug(1, "summary text", "NEW")];
     let spec = ColumnSpec {
-        include: Some("cf_custom_thing"),
+        include: Some("not_a_field"),
         exclude: None,
     };
     let (out, err) = capture_bugs_spec(OutputFormat::Table, &bugs, spec);
     assert!(
-        err.contains("cf_custom_thing"),
+        err.contains("not_a_field"),
         "warns about unknown field: {err:?}"
     );
     // All requested columns were unknown -> fall back to the default set.
@@ -246,6 +256,58 @@ fn write_bugs_assignee_alias_still_selects_column() {
     let (out, err) = capture_bugs_spec(OutputFormat::Table, &bugs, spec);
     assert!(out.contains("ASSIGNEE"), "alias resolves column:\n{out}");
     assert!(err.is_empty(), "no warning: {err:?}");
+}
+
+#[test]
+fn write_bugs_table_renders_requested_custom_column() {
+    let bugs = vec![make_bug_with_custom(1, "summary text", "NEW")];
+    let spec = ColumnSpec {
+        include: Some("id,cf_release"),
+        exclude: None,
+    };
+    let (out, err) = capture_bugs_spec(OutputFormat::Table, &bugs, spec);
+
+    assert!(err.is_empty(), "custom fields are known: {err:?}");
+    assert!(out.contains("CF_RELEASE"), "custom header rendered:\n{out}");
+    assert!(out.contains("9.6"), "custom value rendered:\n{out}");
+}
+
+#[test]
+fn write_bugs_table_preserves_mixed_custom_order() {
+    let bugs = vec![make_bug_with_custom(1, "summary text", "NEW")];
+    let spec = ColumnSpec {
+        include: Some("cf_release,id,summary"),
+        exclude: None,
+    };
+    let (out, _err) = capture_bugs_spec(OutputFormat::Table, &bugs, spec);
+    let header = out
+        .lines()
+        .find(|line| line.contains("CF_RELEASE"))
+        .unwrap();
+
+    let custom_pos = header.find("CF_RELEASE").unwrap();
+    let id_pos = header.find("ID").unwrap();
+    let summary_pos = header.find("SUMMARY").unwrap();
+    assert!(
+        custom_pos < id_pos && id_pos < summary_pos,
+        "header order follows --fields:\n{out}"
+    );
+}
+
+#[test]
+fn write_bugs_table_deduplicates_repeated_custom_fields() {
+    let bugs = vec![make_bug_with_custom(1, "summary text", "NEW")];
+    let spec = ColumnSpec {
+        include: Some("id,cf_release,cf_release,summary"),
+        exclude: None,
+    };
+    let (out, _err) = capture_bugs_spec(OutputFormat::Table, &bugs, spec);
+    let header = out
+        .lines()
+        .find(|line| line.contains("CF_RELEASE"))
+        .unwrap();
+
+    assert_eq!(header.matches("CF_RELEASE").count(), 1, "{out}");
 }
 
 // ── canonical_field_list ─────────────────────────────────────────
@@ -359,6 +421,7 @@ fn write_bug_detail_table_shows_dupe_of() {
         cc: vec![],
         op_sys: None,
         rep_platform: None,
+        custom_fields: std::collections::BTreeMap::new(),
     };
     let mut out = Vec::new();
 
@@ -400,6 +463,7 @@ fn write_bug_detail_table_handles_minimal_bug() {
         cc: vec![],
         op_sys: None,
         rep_platform: None,
+        custom_fields: std::collections::BTreeMap::new(),
     };
     let output = capture_bug_detail(OutputFormat::Table, &bug);
     assert!(output.contains("Unicode summary — déjà vu"));
@@ -453,6 +517,38 @@ fn detail_exclude_drops_row() {
     let out = capture_detail_spec(&bug, spec);
     assert!(out.contains("Status"), "status retained:\n{out}");
     assert!(!out.contains("Priority"), "priority excluded:\n{out}");
+}
+
+#[test]
+fn detail_include_renders_requested_custom_row() {
+    let bug = make_bug_with_custom(7, "boom", "ASSIGNED");
+    let spec = ColumnSpec {
+        include: Some("status,cf_release"),
+        exclude: None,
+    };
+    let out = capture_detail_spec(&bug, spec);
+
+    assert!(out.contains("Status"), "built-in row retained:\n{out}");
+    assert!(
+        out.contains("cf_release"),
+        "custom row label rendered:\n{out}"
+    );
+    assert!(out.contains("9.6"), "custom row value rendered:\n{out}");
+}
+
+#[test]
+fn detail_default_does_not_render_captured_custom_fields() {
+    let bug = make_bug_with_custom(7, "boom", "ASSIGNED");
+    let out = capture_detail_spec(&bug, ColumnSpec::default());
+
+    assert!(
+        !out.contains("cf_release"),
+        "custom label hidden by default:\n{out}"
+    );
+    assert!(
+        !out.contains("9.6"),
+        "custom value hidden by default:\n{out}"
+    );
 }
 
 // ── write_json (pretty) ──────────────────────────────────────────
@@ -562,6 +658,7 @@ fn sample_bug(id: u64, summary: &str) -> Bug {
         cc: vec![],
         op_sys: None,
         rep_platform: None,
+        custom_fields: std::collections::BTreeMap::new(),
     }
 }
 
@@ -639,7 +736,16 @@ fn validate_table_columns_ok_for_default_spec() {
 #[test]
 fn validate_table_columns_ok_for_partial_unknown_include() {
     let spec = ColumnSpec {
-        include: Some("id,cf_custom"),
+        include: Some("id,not_a_field"),
+        exclude: None,
+    };
+    assert!(validate_table_columns(spec).is_ok());
+}
+
+#[test]
+fn validate_table_columns_ok_for_all_custom_include() {
+    let spec = ColumnSpec {
+        include: Some("cf_custom"),
         exclude: None,
     };
     assert!(validate_table_columns(spec).is_ok());
@@ -648,13 +754,13 @@ fn validate_table_columns_ok_for_partial_unknown_include() {
 #[test]
 fn validate_table_columns_errors_for_all_unknown_include() {
     let spec = ColumnSpec {
-        include: Some("cf_custom"),
+        include: Some("not_a_field"),
         exclude: None,
     };
     let err = validate_table_columns(spec).unwrap_err();
     assert_eq!(err.exit_code(), 7);
     assert!(
-        err.to_string().contains("cf_custom"),
+        err.to_string().contains("not_a_field"),
         "names the offending field: {err}"
     );
 }
@@ -674,6 +780,16 @@ fn validate_table_columns_errors_when_exclude_removes_sole_include() {
     let spec = ColumnSpec {
         include: Some("id"),
         exclude: Some("id"),
+    };
+    let err = validate_table_columns(spec).unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+}
+
+#[test]
+fn validate_table_columns_errors_when_exclude_removes_sole_custom_include() {
+    let spec = ColumnSpec {
+        include: Some("cf_release"),
+        exclude: Some("cf_release"),
     };
     let err = validate_table_columns(spec).unwrap_err();
     assert_eq!(err.exit_code(), 7);
@@ -801,14 +917,55 @@ fn bug_to_json_no_selection_is_full_object() {
 fn bug_to_json_partial_unknown_keeps_known_only() {
     let bug = make_bug(1, "s", "NEW");
     let spec = ColumnSpec {
-        include: Some("summary,cf_x"),
+        include: Some("summary,not_a_field"),
         exclude: None,
     };
     let v = bug_to_json(&bug, spec);
     let map = v.as_object().unwrap();
     assert!(map.contains_key("summary"));
-    assert!(!map.contains_key("cf_x"));
+    assert!(!map.contains_key("not_a_field"));
     assert_eq!(map.len(), 1);
+}
+
+#[test]
+fn bug_to_json_include_keeps_selected_custom_field() {
+    let bug = make_bug_with_custom(1, "s", "NEW");
+    let spec = ColumnSpec {
+        include: Some("cf_release"),
+        exclude: None,
+    };
+    let v = bug_to_json(&bug, spec);
+
+    assert_eq!(keys_of(&v), vec!["cf_release"]);
+    assert_eq!(v["cf_release"], "9.6");
+}
+
+#[test]
+fn bug_to_json_include_keeps_builtin_and_custom_fields() {
+    let bug = make_bug_with_custom(1, "s", "NEW");
+    let spec = ColumnSpec {
+        include: Some("summary,cf_release"),
+        exclude: None,
+    };
+    let v = bug_to_json(&bug, spec);
+
+    assert_eq!(keys_of(&v), vec!["summary", "cf_release"]);
+    assert_eq!(v["summary"], "s");
+    assert_eq!(v["cf_release"], "9.6");
+}
+
+#[test]
+fn bug_to_json_exclude_drops_selected_custom_field() {
+    let bug = make_bug_with_custom(1, "s", "NEW");
+    let spec = ColumnSpec {
+        include: None,
+        exclude: Some("cf_release"),
+    };
+    let v = bug_to_json(&bug, spec);
+    let map = v.as_object().unwrap();
+
+    assert!(!map.contains_key("cf_release"));
+    assert!(map.contains_key("cf_score"));
 }
 
 #[test]
@@ -830,6 +987,18 @@ fn bug_to_json_projection_preserves_struct_order_not_request_order() {
     assert_eq!(
         keys_of(&bug_to_json(&bug, spec)),
         vec!["id", "summary", "status"]
+    );
+}
+
+#[test]
+fn bug_to_json_full_object_places_custom_fields_after_built_ins() {
+    let bug = make_bug_with_custom(1, "s", "NEW");
+    let keys = keys_of(&bug_to_json(&bug, ColumnSpec::default()));
+
+    assert_eq!(&keys[..BUG_STRUCT_KEY_ORDER.len()], BUG_STRUCT_KEY_ORDER);
+    assert_eq!(
+        &keys[BUG_STRUCT_KEY_ORDER.len()..],
+        ["cf_release", "cf_score"]
     );
 }
 
@@ -880,11 +1049,20 @@ fn validate_json_default_spec_ok() {
 #[test]
 fn validate_json_all_unknown_include_errs() {
     let spec = ColumnSpec {
-        include: Some("cf_x,cf_y"),
+        include: Some("not_a_field,also_not_a_field"),
         exclude: None,
     };
     let err = validate_json_field_selection(spec).unwrap_err();
     assert_eq!(err.exit_code(), 7);
+}
+
+#[test]
+fn validate_json_all_custom_include_ok() {
+    let spec = ColumnSpec {
+        include: Some("cf_x,cf_y"),
+        exclude: None,
+    };
+    assert!(validate_json_field_selection(spec).is_ok());
 }
 
 #[test]
@@ -897,6 +1075,16 @@ fn validate_json_exclude_every_key_errs() {
     let spec = ColumnSpec {
         include: None,
         exclude: Some(all.as_str()),
+    };
+    let err = validate_json_field_selection(spec).unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+}
+
+#[test]
+fn validate_json_errors_when_exclude_removes_sole_custom_include() {
+    let spec = ColumnSpec {
+        include: Some("cf_release"),
+        exclude: Some("cf_release"),
     };
     let err = validate_json_field_selection(spec).unwrap_err();
     assert_eq!(err.exit_code(), 7);
@@ -917,7 +1105,7 @@ fn validate_json_exclude_table_defaults_ok() {
 #[test]
 fn validate_json_partial_unknown_include_ok() {
     let spec = ColumnSpec {
-        include: Some("summary,cf_x"),
+        include: Some("summary,not_a_field"),
         exclude: None,
     };
     assert!(validate_json_field_selection(spec).is_ok());
@@ -948,16 +1136,19 @@ fn capture_unknown_warning(spec: ColumnSpec<'_>) -> String {
 #[test]
 fn warn_unknown_fields_warns_for_unknown_include_token() {
     let w = capture_unknown_warning(ColumnSpec {
-        include: Some("summary,cf_x"),
+        include: Some("summary,not_a_field"),
         exclude: None,
     });
-    assert!(w.contains("ignoring unknown field(s): cf_x"), "{w:?}");
+    assert!(
+        w.contains("ignoring unknown field(s): not_a_field"),
+        "{w:?}"
+    );
 }
 
 #[test]
 fn warn_unknown_fields_silent_for_all_known() {
     let w = capture_unknown_warning(ColumnSpec {
-        include: Some("summary,status"),
+        include: Some("summary,status,cf_x"),
         exclude: None,
     });
     assert!(w.is_empty(), "no warning when all known: {w:?}");
@@ -976,12 +1167,12 @@ fn warn_unknown_fields_silent_without_include() {
 fn write_bugs_partial_unknown_warns_with_new_wording_and_shows_known() {
     let bugs = vec![make_bug(1, "summary text", "NEW")];
     let spec = ColumnSpec {
-        include: Some("id,cf_x"),
+        include: Some("id,not_a_field"),
         exclude: None,
     };
     let (out, err) = capture_bugs_spec(OutputFormat::Table, &bugs, spec);
     assert!(
-        err.contains("ignoring field(s) with no table column: cf_x"),
+        err.contains("ignoring unknown field(s): not_a_field"),
         "new warning wording: {err:?}"
     );
     assert!(out.contains("ID"), "known column shown:\n{out}");

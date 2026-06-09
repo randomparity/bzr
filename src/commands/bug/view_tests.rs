@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used)]
 
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::BugAction;
@@ -32,6 +32,17 @@ fn ok_bug_body(id: u64, summary: &str) -> serde_json::Value {
             "component": "General",
             "creation_time": "2025-01-01T00:00:00Z",
             "last_change_time": "2025-01-01T00:00:00Z"
+        }]
+    })
+}
+
+fn ok_bug_body_with_custom(id: u64, summary: &str) -> serde_json::Value {
+    serde_json::json!({
+        "bugs": [{
+            "id": id,
+            "summary": summary,
+            "status": "NEW",
+            "cf_release": "9.6"
         }]
     })
 }
@@ -98,6 +109,115 @@ async fn view_single_unchanged_json() {
     assert_eq!(parsed["id"], 42);
     assert!(parsed.get("bugs").is_none());
     assert!(parsed.get("failed").is_none());
+}
+
+#[tokio::test]
+async fn view_single_json_custom_only_field_omits_forced_id() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42"))
+        .and(query_param("include_fields", "id,cf_release"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(ok_bug_body_with_custom(42, "Test bug")),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let mut action = make_view_action(&["42"], false);
+    let BugAction::View { field_args, .. } = &mut action else {
+        unreachable!()
+    };
+    field_args.fields = Some("cf_release".into());
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+
+    assert!(result.is_ok(), "single view custom JSON failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    let obj = parsed.as_object().unwrap();
+    assert_eq!(
+        obj.keys().map(String::as_str).collect::<Vec<_>>(),
+        vec!["cf_release"]
+    );
+    assert_eq!(obj["cf_release"], "9.6");
+}
+
+#[tokio::test]
+async fn view_single_table_renders_requested_custom_row() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42"))
+        .and(query_param("include_fields", "id,cf_release"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(ok_bug_body_with_custom(42, "Test bug")),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let mut action = make_view_action(&["42"], false);
+    let BugAction::View { field_args, .. } = &mut action else {
+        unreachable!()
+    };
+    field_args.fields = Some("cf_release".into());
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Table,
+        None,
+        &mut __io.writers(),
+    )
+    .await;
+
+    assert!(
+        result.is_ok(),
+        "single view custom table failed: {result:?}"
+    );
+    assert!(
+        __io.out_str().contains("cf_release") && __io.out_str().contains("9.6"),
+        "custom detail row:\n{}",
+        __io.out_str()
+    );
+}
+
+#[tokio::test]
+async fn view_single_table_warns_for_unknown_field() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42"))
+        .and(query_param("include_fields", "id,sumary"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(ok_bug_body(42, "Test bug")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let mut action = make_view_action(&["42"], false);
+    let BugAction::View { field_args, .. } = &mut action else {
+        unreachable!()
+    };
+    field_args.fields = Some("sumary".into());
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        None,
+        OutputFormat::Table,
+        None,
+        &mut __io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "single view typo table failed: {result:?}");
+    assert!(
+        __io.err_str().contains("ignoring unknown field(s): sumary"),
+        "unknown field warning:\n{}",
+        __io.err_str()
+    );
 }
 
 #[tokio::test]
@@ -228,6 +348,47 @@ async fn view_multi_strict_json_all_succeed_emits_wrapped_shape() {
     assert_eq!(parsed["failed"].as_array().unwrap().len(), 0);
     assert_eq!(parsed["bugs"][0]["id"], 1);
     assert_eq!(parsed["bugs"][1]["id"], 2);
+}
+
+#[tokio::test]
+async fn view_multi_strict_json_projects_custom_fields_inside_wrapper() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    for (id, summary, release) in [(1, "first", "9.6"), (2, "second", "9.7")] {
+        Mock::given(method("GET"))
+            .and(path(format!("/rest/bug/{id}")))
+            .and(query_param("include_fields", "id,cf_release"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{
+                    "id": id,
+                    "summary": summary,
+                    "status": "NEW",
+                    "cf_release": release
+                }]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+    }
+
+    let mut action = make_view_action(&["1", "2"], false);
+    let BugAction::View { field_args, .. } = &mut action else {
+        unreachable!()
+    };
+    field_args.fields = Some("id,cf_release".into());
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+
+    assert!(result.is_ok(), "multi view custom JSON failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    assert_eq!(parsed["bugs"][0]["id"], 1);
+    assert_eq!(parsed["bugs"][0]["cf_release"], "9.6");
+    assert!(parsed["bugs"][0].get("summary").is_none());
+    assert_eq!(parsed["bugs"][1]["id"], 2);
+    assert_eq!(parsed["bugs"][1]["cf_release"], "9.7");
+    assert_eq!(parsed["failed"].as_array().unwrap().len(), 0);
 }
 
 #[tokio::test]

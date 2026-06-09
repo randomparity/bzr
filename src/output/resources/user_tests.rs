@@ -2,7 +2,6 @@
 
 use super::*;
 use crate::types::{BugzillaUser, UserGroup, WhoamiResponse};
-use tabled::Table;
 
 fn make_user(id: u64, name: &str, can_login: Option<bool>, groups: Vec<&str>) -> BugzillaUser {
     BugzillaUser {
@@ -35,14 +34,8 @@ fn make_whoami() -> WhoamiResponse {
 
 #[test]
 fn user_row_excludes_detail_columns() {
-    let user = make_user(1, "alice", Some(true), vec!["admin"]);
-    let row = UserRow {
-        id: user.id,
-        name: user.name.clone(),
-        real_name: user.real_name.clone().unwrap_or_default(),
-        email: user.email.clone().unwrap_or_default(),
-    };
-    let table = Table::new(vec![row]).to_string();
+    let users = [make_user(1, "alice", Some(true), vec!["admin"])];
+    let table = capture_users(OutputFormat::Table, &users);
     assert!(table.contains("ID"));
     assert!(table.contains("NAME"));
     assert!(table.contains("EMAIL"));
@@ -57,8 +50,7 @@ fn detailed_user_row_includes_groups_and_login() {
         make_user(2, "bob", Some(false), vec![]),
         make_user(3, "carol", None, vec!["testers"]),
     ];
-    let rows: Vec<DetailedUserRow> = users.iter().map(detailed_row).collect();
-    let table = Table::new(rows).to_string();
+    let table = capture_users_detailed(OutputFormat::Table, &users);
     assert!(table.contains("CAN LOGIN"));
     assert!(table.contains("GROUPS"));
     assert!(table.contains("Yes"));

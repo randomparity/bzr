@@ -2,7 +2,6 @@
 
 use super::*;
 use crate::types::Product;
-use tabled::Table;
 
 fn make_product(id: u64, name: &str) -> Product {
     Product {
@@ -54,16 +53,11 @@ fn write_products_json_one_product() {
 #[test]
 fn product_row_conversion() {
     let product = make_product(5, "Gadget");
-    let row = ProductRow {
-        id: product.id,
-        name: product.name.clone(),
-        description: truncate(&product.description, 60),
-        components: product.components.len(),
-    };
-    let table = Table::new(vec![row]).to_string();
-    assert!(table.contains('5'));
-    assert!(table.contains("Gadget"));
-    assert!(table.contains('1')); // 1 component
+    let row = product_row(&product);
+    assert_eq!(row.id, 5);
+    assert_eq!(row.name, "Gadget");
+    assert_eq!(row.description, truncate(&product.description, 60));
+    assert_eq!(row.components, 1);
 }
 
 // ── write_product_detail ─────────────────────────────────────────
