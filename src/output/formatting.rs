@@ -2,7 +2,7 @@ use std::io::Write;
 
 use colored::Colorize;
 use serde::Serialize;
-use tabled::{Table, Tabled};
+use tabled::builder::Builder;
 
 use crate::types::OutputFormat;
 
@@ -31,27 +31,44 @@ pub(super) fn write_formatted<T, W>(
     }
 }
 
+pub(super) fn write_table_records<W: Write + ?Sized>(
+    headers: &[&str],
+    rows: impl IntoIterator<Item = Vec<String>>,
+    out: &mut W,
+) {
+    let mut builder = Builder::default();
+    builder.push_record(headers.iter().copied());
+    for row in rows {
+        builder.push_record(row);
+    }
+    let _ = writeln!(out, "{}", builder.build());
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct TableSpec<'a> {
+    pub empty_msg: &'a str,
+    pub headers: &'a [&'a str],
+}
+
 /// Render a slice as JSON or a `tabled` table, printing `empty_msg` instead of
-/// an empty table when there are no items. `to_row` maps each item to a
-/// `Tabled` row type.
-pub(super) fn write_table_or_empty<T, R, W>(
+/// an empty table when there are no items. `to_record` maps each item to one
+/// display row.
+pub(super) fn write_table_or_empty<T, W>(
     items: &[T],
     format: OutputFormat,
     out: &mut W,
-    empty_msg: &str,
-    to_row: impl Fn(&T) -> R,
+    table: TableSpec<'_>,
+    to_record: impl Fn(&T) -> Vec<String>,
 ) where
     T: Serialize,
-    R: Tabled,
     W: Write + ?Sized,
 {
     write_formatted(items, format, out, |items, out| {
         if items.is_empty() {
-            let _ = writeln!(out, "{empty_msg}");
+            let _ = writeln!(out, "{}", table.empty_msg);
             return;
         }
-        let rows: Vec<R> = items.iter().map(to_row).collect();
-        let _ = writeln!(out, "{}", Table::new(rows));
+        write_table_records(table.headers, items.iter().map(to_record), out);
     });
 }
 
