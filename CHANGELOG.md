@@ -34,6 +34,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `bzr config unset-keyring` no longer wedges subsequent config commands. After
+  `unset-keyring` removed a server's keyring credential, every command that
+  called `Config::load()` (`set-server`, `set-keyring`, `set-default`,
+  `template save/delete`, `query save/delete`) would fail with "server config
+  must define one of 'api_key', ..." — blocking the user from re-credentialing
+  until the server entry was manually removed and recreated. A credential-less
+  server is now treated as *incomplete* rather than *invalid*: `Config::load()`
+  and `update_locked` accept it without error; the missing-credential error
+  surfaces only when a command actually needs to authenticate.
 - `bzr bug list`, `bug search`, `bug my`, `bug view`, and `query run` now
   preserve Bugzilla custom fields named `cf_*` when requested through
   `--fields`. Custom field values are emitted as top-level JSON keys and as
