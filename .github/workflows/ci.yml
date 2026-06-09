@@ -166,7 +166,9 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
         with:
           key: sonarqube
-      - uses: taiki-e/install-action@49ba71bf46962339e6e5c0a7a4ec3ed4c8af28ac  # cargo-llvm-cov
+      - uses: taiki-e/install-action@0631aa6515c7d545823c67cfae7ef4fc7f490154  # v2.81.8
+        with:
+          tool: cargo-llvm-cov
       - name: Generate coverage report
         run: cargo llvm-cov --locked --workspace --all-features --lcov --output-path lcov.info
       - name: SonarQube Scan
