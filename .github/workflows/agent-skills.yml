@@ -26,20 +26,23 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
-      - name: Install shell tooling
+      - name: Install tooling
+        # libdbus-1-dev + pkg-config are required to build with default features
+        # (the keyring backend links libdbus on Linux). Per CLAUDE.md, the build
+        # environment is made correct rather than dodging the dep by disabling
+        # default features, so the drift check validates the surface users run.
         run: |
           set -eux
           sudo apt-get update
-          sudo apt-get install -y shellcheck
+          sudo apt-get install -y shellcheck libdbus-1-dev pkg-config
           go install mvdan.cc/sh/v3/cmd/shfmt@v3.13.1
           echo "$HOME/go/bin" >> "$GITHUB_PATH"
       - name: Assert pwsh is present
         run: command -v pwsh
       - name: Build bzr
-        # --no-default-features drops the keyring backend (and its libdbus link
-        # dependency on Linux) while keeping the full command surface the drift
-        # check inspects — the config keyring subcommands are not feature-gated.
-        # --locked matches the repo convention and pins the dependency set.
-        run: cargo build --no-default-features --locked
+        # Default features (keyring on) match the shipped binary, so the drift
+        # check inspects the command surface users actually have. --locked pins
+        # the dependency set per repo convention.
+        run: cargo build --locked
       - name: Run agent-skills checks
         run: BZR_BIN="$PWD/target/debug/bzr" sh agent-skills/tests/run.sh
