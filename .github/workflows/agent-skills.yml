@@ -36,6 +36,10 @@ jobs:
       - name: Assert pwsh is present
         run: command -v pwsh
       - name: Build bzr
-        run: cargo build
+        # --no-default-features drops the keyring backend (and its libdbus link
+        # dependency on Linux) while keeping the full command surface the drift
+        # check inspects — the config keyring subcommands are not feature-gated.
+        # --locked matches the repo convention and pins the dependency set.
+        run: cargo build --no-default-features --locked
       - name: Run agent-skills checks
         run: BZR_BIN="$PWD/target/debug/bzr" sh agent-skills/tests/run.sh
