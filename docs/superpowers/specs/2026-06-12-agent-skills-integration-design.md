@@ -19,8 +19,16 @@ installable model.
 
 The standalone repo drifts: when `bzr`'s command surface changes, nothing forces
 the skills to follow. Co-locating the skills with the source — and running their
-drift check against the **locally built** binary in CI — turns surface drift into
-a build failure on the same PR that changes the surface.
+drift check against the **locally built** binary in CI — catches drift on the same
+PR that changes the surface.
+
+Be precise about *which* drift fails the build, because the inherited check is
+asymmetric (see "Drift Gate Coverage"): a **removed or renamed** documented verb
+fails CI (the manifest references a verb the binary no longer has), but an
+**added** verb only warns, and a brand-new top-level command group is not examined
+at all. So this gate's hard guarantee is "the skills never document a verb that no
+longer exists." Keeping the skills current as the surface *grows* is a softer,
+warning-driven, periodic task — not enforced by a red build.
 
 ## Goals
 
@@ -89,9 +97,13 @@ bzr/
 └── docs/                           # docs/skills.md + docs/bob-skills.md DELETED
 ```
 
-The installer, tests, and the five skill folders are copied **verbatim** from
-`bzr-skill` — they are already complete and CI-green in the standalone repo. The
-only content edits are the version re-pin (below) and the README path fixes.
+The installer and the five skill folders are copied **verbatim** from
+`bzr-skill` — they are already complete and CI-green in the standalone repo. Three
+kinds of edits are made on top of the copy: the version re-pin (below), the
+README path fixes, and the drift-gate fail-closed change — which touches
+`drift-check.sh`, its self-test `drift-check-test.sh`, and `run.sh` (see "Drift
+Gate Must Fail Closed"). `install.sh`, `install.ps1`, and every `SKILL.md` except
+the re-pinned strings are unchanged.
 
 ## Versioning Model
 
@@ -112,6 +124,72 @@ Re-pin work:
   check produces **no ERROR lines** (a listed verb the binary lacks is an error;
   a binary verb not listed is an acceptable warning). Build with `cargo build`
   and run `BZR_BIN="$PWD/target/debug/bzr" sh agent-skills/tests/drift-check.sh`.
+
+## Drift Gate Must Fail Closed
+
+The integration's core promise — surface drift becomes a build failure — only
+holds if the drift check cannot pass by *skipping*. As copied from `bzr-skill`,
+`drift-check.sh` runs `command -v "$BZR"` and, on miss, prints `skip` and exits
+`0`; `run.sh` invokes it with no `BZR_BIN`, falling back to whatever `bzr` is on
+`PATH` (or skipping entirely). That makes the gate silently bypassable: on a dev
+box without `bzr` on `PATH`, or in CI if the build step is reordered or `BZR_BIN`
+is mistyped, the suite reports green with the drift check never run.
+
+This integration changes that behavior so the gate is enforced, not optional:
+
+- **Strict mode in `drift-check.sh`.** When `BZR_BIN` is set but does not resolve
+  to an executable, the check **errors (exit non-zero)** instead of skipping. The
+  bare skip-on-missing path remains only for the case where `BZR_BIN` is unset
+  *and* no `bzr` is on `PATH` (e.g. an unrelated contributor running the suite by
+  hand) — and even that prints a visible `SKIPPED (no binary)` line, not a silent
+  pass.
+- **`drift-check-test.sh` is updated to the new contract.** The copied self-test
+  currently asserts `BZR_BIN=<nonexistent>` → exit 0 + "skip". That assertion is
+  **replaced**, not retained, because it now encodes the bypass this section
+  removes. The strict mode needs two test arms: (a) `BZR_BIN=<nonexistent>` →
+  exit **non-zero** (fail-closed); (b) `BZR_BIN` unset with a stripped `PATH` →
+  exit 0 with a visible `SKIPPED` line. Both arms must be covered so neither the
+  fail nor the legitimate-skip path regresses. This is why `drift-check-test.sh`
+  appears in the edit list above.
+- **`BZR_BIN` is wired through both entry points.** The `make skills-test` target
+  (below) first builds the binary (`cargo build`) and exports
+  `BZR_BIN=$PWD/target/debug/bzr`; the CI job does the same. Local and CI runs are
+  therefore identical, and the drift check runs for real in both — the skip path
+  is reachable only when the binary genuinely cannot be built.
+
+The skip arm is deliberately narrow but not airtight: if `BZR_BIN` is unset *and*
+a stray, different-version `bzr` happens to be on `PATH` (e.g. a system install),
+the check runs against that binary and may emit spurious ERRORs or mask real
+drift. The canonical entry points (`make skills-test`, CI) avoid this entirely by
+always pinning `BZR_BIN` to the freshly built binary — so those are the
+authoritative runs, and a bare `sh run.sh` with no `BZR_BIN` is best-effort only.
+
+Acceptance for this change: with `BZR_BIN` pointing at a path that does not exist,
+`sh agent-skills/tests/drift-check.sh` exits non-zero (not 0); with it pointing at
+the freshly built binary, it exits 0 with no ERROR lines; and `drift-check-test.sh`
+covers both the fail-closed and legitimate-skip arms.
+
+### Drift Gate Coverage
+
+The inherited `drift-check.sh` is asymmetric, and this integration does **not**
+change that (the drift mechanism is carried over as-is; only its skip/fail
+behavior is hardened above):
+
+- **Fails the build (exit 1):** a verb listed in `commands.yml` that the binary no
+  longer reports — i.e. a removed or renamed command. This is the enforced
+  guarantee.
+- **Warns only (exit 0):** a real verb the binary reports that the manifest does
+  not list — i.e. a newly added verb under an existing group.
+- **Not detected at all:** an entirely new top-level group, because the check
+  iterates only the groups present in `commands.yml` and never enumerates the
+  binary's full group list.
+
+Consequence: the gate guarantees the skills never document a command that has
+disappeared, but it does **not** guarantee the skills keep pace with *additions*.
+Catching new commands/groups stays a manual, warning-driven, periodic task.
+"Detect added commands and new top-level groups (enumerate the binary's group
+list and diff against the manifest)" is recorded under Out of Scope as a known
+limitation, not an implied capability of this integration.
 
 ## Installer Behavior (unchanged from bzr-skill)
 
@@ -141,21 +219,60 @@ bash.
 
 ## CI Integration
 
-A dedicated workflow `.github/workflows/agent-skills.yml`, **path-filtered** to
-`agent-skills/**` and the workflow file itself, so it never slows the Rust
-`ci.yml` and only runs when the skills change.
+A dedicated workflow `.github/workflows/agent-skills.yml`, separate from the Rust
+`ci.yml` (so it never slows it) but **path-filtered to both the skills and the
+source that defines the command surface**:
+
+```
+on:
+  push: { paths: [ "agent-skills/**", "src/**", "Cargo.toml", "Cargo.lock", ".github/workflows/agent-skills.yml" ] }
+  pull_request: { paths: [ same as above ] }
+```
+
+The surface-source paths are load-bearing, not incidental. The command surface
+lives in `src/cli/**` (and the rest of `src/**`), **not** in `agent-skills/`. A
+filter of `agent-skills/**` alone would mean a PR that renames or removes a `bzr`
+verb — the exact drift this gate exists to catch — never triggers the workflow,
+and the drift would surface only later on some unrelated PR that happens to touch
+`agent-skills/`, bisecting to the wrong change. Including `src/**` and the cargo
+manifests makes the Motivation true: surface drift fails CI on the PR that
+introduces it. Pure-docs PRs (e.g. editing `README.md` only) still skip the
+workflow, so unrelated work is not slowed. The only added cost is one debug
+`cargo build` on code PRs, in a workflow that runs alongside — not in front of —
+`ci.yml`.
 
 Steps:
 1. `actions/checkout` (SHA-pinned, `persist-credentials: false`).
-2. Install `shellcheck` and `shfmt`.
+2. Install `shellcheck` and `shfmt`. The `ubuntu-latest` runner ships `pwsh`,
+   which the `install.ps1` smoke test needs (see Testing); the workflow asserts
+   `command -v pwsh` up front so a runner image that ever drops PowerShell fails
+   loudly instead of silently skipping the only `install.ps1` coverage.
 3. `cargo build` to produce `target/debug/bzr` (the drift check needs a real
    binary; building locally is the point of co-location).
 4. `BZR_BIN="$PWD/target/debug/bzr" sh agent-skills/tests/run.sh` — runs
-   frontmatter validation, the drift check against the local binary, the
-   installer + ps1 self-tests, and `shellcheck`/`shfmt` lint.
+   frontmatter validation, the drift check against the local binary (fail-closed
+   per "Drift Gate Must Fail Closed"), the installer + ps1 self-tests, and
+   `shellcheck`/`shfmt` lint.
 
 This **replaces** `bzr-skill`'s own `ci.yml`, which installed a pinned `bzr` from
 crates.io; in-repo we build the binary under test instead.
+
+### Branch-protection stance
+
+`main` enforces strict required status checks. A path-filtered workflow that does
+**not** trigger never reports a status, so GitHub leaves it "Expected — waiting"
+forever. The widened trigger above still does **not** fire on every PR — a
+pure-docs PR (README-only, say) skips it — so the deadlock hazard is real.
+Therefore `agent-skills.yml` is **not** added to the repo's required status
+checks: it gates merges only via the normal PR-checks UI on PRs whose paths match
+the trigger. This stays correct precisely *because* the trigger is selective; do
+not "fix" the selectivity by making the check required, which would hang every
+PR that doesn't match the filter. If a future maintainer genuinely wants it
+required for *all* PRs, the correct implementation is an always-triggered job with
+an internal path-change gate (e.g. `dorny/paths-filter`) that reports success on a
+no-op — **not** a top-level `on.*.paths` filter plus a required-check setting.
+This decision is recorded here so it is not re-litigated by whoever next edits
+branch protection.
 
 ## Repo Touch-Ups
 
@@ -163,8 +280,11 @@ crates.io; in-repo we build the binary under test instead.
   `agent-skills/` directory and its installer. Drop the inline `~/.claude/skills/`
   example tree and the `docs/bob-skills.md` link. Point Claude Code, Bob, Codex,
   and standard-agent users at `agent-skills/install.sh`.
-- **Makefile**: add a `skills-test` target running `sh agent-skills/tests/run.sh`
-  for local parity with CI.
+- **Makefile**: add a `skills-test` target that builds the binary and runs the
+  suite with `BZR_BIN` wired to it, for true parity with CI:
+  `cargo build && BZR_BIN="$$PWD/target/debug/bzr" sh agent-skills/tests/run.sh`.
+  Running the suite *without* a resolvable `BZR_BIN` must not silently skip the
+  drift check (see "Drift Gate Must Fail Closed").
 - **CHANGELOG.md**: add an entry under the existing `0.4.5-dev` section noting the
   bundled agent skills + installer (changelog written as the work lands, per repo
   convention).
@@ -182,9 +302,17 @@ crates.io; in-repo we build the binary under test instead.
   the bidirectional drift check, and every installer guard (foreign-folder,
   symlink, idempotency, lock, uninstall, list-staleness) hermetically via
   `BZR_SKILL_DEST_ROOT`.
-- Acceptance: `make skills-test` exits 0 with **no drift ERROR lines** against the
-  locally built `bzr`, and `shellcheck`/`shfmt -i 2 -d` are clean on all shell
-  sources under `agent-skills/`.
+- `install.ps1` is exercised only by `installer-ps1-test.sh`, which requires
+  `pwsh`. The CI workflow asserts `pwsh` is present (step 2) so this coverage
+  cannot vanish silently; a contributor running the suite locally without `pwsh`
+  sees an explicit `pwsh not found; skipping` line. The accepted gap: outside CI,
+  `install.ps1` is unverified when `pwsh` is absent.
+- Acceptance:
+  - `make skills-test` exits 0 with **no drift ERROR lines** against the locally
+    built `bzr`, and `shellcheck`/`shfmt -i 2 -d` are clean on all shell sources
+    under `agent-skills/`.
+  - **Fail-closed proof:** running `drift-check.sh` with `BZR_BIN` set to a
+    non-existent path exits **non-zero** (the gate cannot be passed by skipping).
 
 ## Risks & Mitigations
 
@@ -202,3 +330,8 @@ crates.io; in-repo we build the binary under test instead.
 - A verified `curl … | sh` bootstrap for the skill installer.
 - A `bzr skills install` subcommand or MCP server.
 - Re-adding the dropped prose-only skills as installable folders.
+- Detecting *added* commands and new top-level groups in the drift check
+  (enumerate the binary's full group list and diff it against `commands.yml`,
+  escalating new-group/new-verb from warning to a stronger signal). Today the gate
+  only fails on removed/renamed documented verbs; closing the addition side is a
+  known limitation deferred here (see "Drift Gate Coverage").
