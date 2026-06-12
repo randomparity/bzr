@@ -68,6 +68,10 @@ fn colorize_status_known_statuses_emit_ansi_escapes() {
     // Force color output: cargo test pipes stdout, so colored auto-disables
     // and the catch-all arm produces output identical to the colored arms,
     // hiding `delete match arm` mutations.
+    //
+    // Hold COLOR_LOCK for the entire test so no other test can observe the
+    // forced-on override while this test runs.
+    let _color_lock = crate::COLOR_LOCK.lock().unwrap();
     struct ColorOverride;
     impl Drop for ColorOverride {
         fn drop(&mut self) {

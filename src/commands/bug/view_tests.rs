@@ -57,6 +57,7 @@ fn api_error_body(code: i64, message: &str) -> serde_json::Value {
 
 #[tokio::test]
 async fn view_single_unchanged_table() {
+    let _color_lock = crate::COLOR_LOCK.lock().unwrap();
     let (_lock, mock, _tmp) = setup_test_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/42"))
@@ -252,6 +253,7 @@ async fn view_single_failure_propagates() {
 
 #[tokio::test]
 async fn view_multi_strict_all_succeed_table() {
+    let _color_lock = crate::COLOR_LOCK.lock().unwrap();
     let (_lock, mock, _tmp) = setup_test_env().await;
     for (id, summary) in [(1, "first"), (2, "second"), (3, "third")] {
         Mock::given(method("GET"))
@@ -430,6 +432,7 @@ async fn view_multi_strict_json_failure_emits_no_partial_json() {
 
 #[tokio::test]
 async fn view_multi_permissive_partial_table() {
+    let _color_lock = crate::COLOR_LOCK.lock().unwrap();
     let (_lock, mock, _tmp) = setup_test_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))

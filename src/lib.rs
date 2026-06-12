@@ -102,6 +102,12 @@ pub async fn dispatch(
 #[cfg(any(test, feature = "test-helpers"))]
 pub static ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+/// Shared mutex for tests that call `colored::control::set_override`.
+/// Any test that forces or asserts a specific color state must hold this lock
+/// to prevent races with `colorize_status_known_statuses_emit_ansi_escapes`.
+#[cfg(any(test, feature = "test-helpers"))]
+pub static COLOR_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Shared test helpers used by both unit tests and integration tests.
 #[cfg(any(test, feature = "test-helpers"))]
 pub mod test_helpers;

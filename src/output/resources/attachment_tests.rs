@@ -173,6 +173,7 @@ fn write_attachments_json_one_via_write() {
 
 #[test]
 fn write_attachments_does_not_emit_ansi_when_writing_to_buffer() {
+    let _color_lock = crate::COLOR_LOCK.lock().unwrap();
     let output = capture(OutputFormat::Table, &[output_attachment(1, "p")]);
     assert!(
         !output.contains('\x1b'),
@@ -287,6 +288,7 @@ fn sample_batch_result() -> AttachmentBatchResult {
 
 #[test]
 fn write_attachment_batch_table_includes_summary() {
+    let _color_lock = crate::COLOR_LOCK.lock().unwrap();
     let result = sample_batch_result();
     let (out, _err) = capture_batch(OutputFormat::Table, &result);
     assert!(out.contains("Bug #12345"), "missing bug header: {out}");
