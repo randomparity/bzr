@@ -57,6 +57,6 @@ Two surface facts agents get wrong:
   `bzr-triage-bug` skill walks this through.
 - **Keep writes explicit and minimal.** Change only the fields you intend to.
 
-This reference is authored against **bzr 0.4.2**. If `bzr --version` is much
+This reference is authored against **bzr 0.4.4**. If `bzr --version` is much
 newer and a command here is rejected, the surface may have moved; check
 `bzr <group> --help`.
