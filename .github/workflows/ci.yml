@@ -80,6 +80,19 @@ jobs:
       - uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6e  # stable
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
       - run: cargo build --release --locked
+      - name: Verify vendored-keyring drops the libdbus dependency
+        run: |
+          set -euo pipefail
+          # The release workflow builds the x86_64/aarch64 Linux artifacts with
+          # --features vendored-keyring so the Homebrew bottle binary is
+          # self-contained. Prove here, on native Linux, that the feature both
+          # builds and statically links libdbus (no NEEDED libdbus-1.so entry).
+          cargo build --release --locked --features vendored-keyring
+          if readelf -d target/release/bzr | grep -i 'NEEDED.*dbus'; then
+            echo "::error::vendored-keyring binary still links libdbus dynamically; vendoring did not take effect"
+            exit 1
+          fi
+          echo "vendored-keyring: no libdbus NEEDED entry — OK"
 
   manpages:
     name: Manpages
@@ -130,7 +143,16 @@ jobs:
       - name: Check
         env:
           PKG_CONFIG_ALLOW_CROSS: "1"
-        run: cross check --locked --target ${{ matrix.target }}
+        run: |
+          # aarch64 ships its release binary with vendored libdbus (it feeds a
+          # Homebrew bottle), so check that target the same way -- this also
+          # exercises the vendored libdbus C cross-compile that only otherwise
+          # runs at release time.
+          FEATURES=()
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            FEATURES=(--features vendored-keyring)
+          fi
+          cross check --locked --target ${{ matrix.target }} "${FEATURES[@]}"
 
   windows-cross-check:
     name: Cross-check aarch64-pc-windows-msvc

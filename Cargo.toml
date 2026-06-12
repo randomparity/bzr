@@ -29,6 +29,14 @@ keyring = [
     "dep:rpassword",
     "dep:windows-native-keyring-store",
 ]
+# Statically link libdbus into the binary so it carries no runtime
+# libdbus-1.so dependency. Off by default (local Linux builds keep using the
+# faster system libdbus). Enabled in CI only for the prebuilt x86_64/aarch64
+# Linux release artifacts that feed Homebrew bottles: a bottle is poured as-is
+# and, unlike the .deb/.rpm packages, cannot declare a system-library
+# dependency, so the binary must be self-contained. The weak `?` keeps this a
+# no-op on macOS/Windows, where the Secret Service store is not compiled.
+vendored-keyring = ["dbus-secret-service-keyring-store?/vendored"]
 # Exposes test helpers from the library for integration tests.
 # Activated automatically via dev-dependency below.
 test-helpers = ["dep:wiremock", "dep:tempfile"]
