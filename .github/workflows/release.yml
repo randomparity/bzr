@@ -76,12 +76,16 @@ jobs:
             archive: tar.gz
             pkg_deb: true
             pkg_rpm: true
+            # Statically link libdbus: this binary feeds the Homebrew bottle,
+            # which cannot declare a system-library dependency.
+            vendored_keyring: true
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             use_cross: true
             archive: tar.gz
             pkg_deb: true
             pkg_rpm: true
+            vendored_keyring: true
           - target: powerpc64le-unknown-linux-gnu
             os: ubuntu-latest
             use_cross: false
@@ -144,6 +148,14 @@ jobs:
           # target `.pc` files.
           PKG_CONFIG_ALLOW_CROSS: "1"
         run: |
+          # Self-contained libdbus for the targets that feed Homebrew bottles
+          # (x86_64/aarch64 Linux); other targets keep dynamic linking and the
+          # .deb/.rpm declare libdbus as a package dependency. ppc64le (qemu)
+          # carries no bottle, so it is not vendored.
+          FEATURES=()
+          if [ "${{ matrix.vendored_keyring }}" = "true" ]; then
+            FEATURES=(--features vendored-keyring)
+          fi
           if [ "${{ matrix.use_qemu }}" = "true" ]; then
             # Use the latest stable Rust image so the container's rustc tracks
             # `dtolnay/rust-toolchain@stable` used by the rest of the matrix.
@@ -159,9 +171,9 @@ jobs:
             # otherwise hit "Permission denied" on target/.
             sudo chown -R "$(id -u):$(id -g)" target
           elif [ "${{ matrix.use_cross }}" = "true" ]; then
-            cross build --release --locked --target ${{ matrix.target }}
+            cross build --release --locked --target ${{ matrix.target }} "${FEATURES[@]}"
           else
-            cargo build --release --locked --target ${{ matrix.target }}
+            cargo build --release --locked --target ${{ matrix.target }} "${FEATURES[@]}"
           fi
         shell: bash
 

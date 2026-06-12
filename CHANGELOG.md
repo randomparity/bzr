@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   is published, uploads them to the GitHub release, and adds the `bottle do`
   block to the tap formula. Intel macOS still builds from source (no prebuilt
   Intel binary is produced).
+- The x86_64 and arm64 Linux release binaries now statically link libdbus
+  (new opt-in `vendored-keyring` Cargo feature, enabled only for these targets
+  in CI). A Homebrew bottle is poured as-is and cannot declare a system-library
+  dependency, so the binary that feeds the Linux bottles must carry no runtime
+  `libdbus-1.so` requirement. Local builds and the `.deb`/`.rpm` packages are
+  unchanged — they keep dynamic linking, with the system dependency declared in
+  package metadata as before.
 
 ## [0.4.3] - 2026-06-10
 
