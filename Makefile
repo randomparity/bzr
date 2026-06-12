@@ -79,7 +79,7 @@ test: ## Run tests
 	$(CARGO) test
 
 skills-test: ## Build bzr and run the agent-skills shell suite (drift, installer, lint)
-	$(CARGO) build
+	$(CARGO) build --no-default-features --locked
 	BZR_BIN="$$PWD/target/debug/bzr" sh agent-skills/tests/run.sh
 
 coverage: ## Run tests with coverage via cargo-llvm-cov
