@@ -356,32 +356,27 @@ See [docs/bzr-cli.md](docs/bzr-cli.md) for the full command reference covering a
 
 ## Agent Integration
 
-### Claude Code
+`bzr` ships a set of installable agent skills under [`agent-skills/`](agent-skills/)
+that teach AI coding agents to use the CLI correctly — the `--json` contract,
+the authentication model, the read-before-write rule, and the real command
+surface. They live in this repo so they track the CLI as it changes (CI runs a
+command-surface drift check against the built binary).
 
-`bzr` works well with Claude Code skills because the CLI has stable subcommands, global `--json` output, and clear exit codes. See [docs/skills.md](docs/skills.md) for reusable skill definitions such as bug triage, investigation, patch review, and saved-query workflows.
+Install them from a clone:
 
-Typical setup:
-
-```text
-~/.claude/skills/
-  bzr-investigate/SKILL.md
-  bzr-bug-summary/SKILL.md
-  bzr-review/SKILL.md
+```bash
+cd agent-skills
+./install.sh --agent all     # ~/.agents/skills and ~/.claude/skills
 ```
 
-Once installed, invoke them directly from Claude Code, for example `/bzr-investigate 12345`.
+`standard`/`bob`/`codex` install to `~/.agents/skills`; `claude` installs to
+`~/.claude/skills`; `all` does both. Windows users run `install.ps1`. See
+[`agent-skills/README.md`](agent-skills/README.md) for the full skill list,
+flags (`--dry-run`, `--list`, `--uninstall`, `--force`), and development notes.
 
-### IBM Bob
-
-IBM Bob uses its own `SKILL.md` conventions under `.bob/skills/` or `~/.bob/skills/`. See [docs/bob-skills.md](docs/bob-skills.md) for Bob-specific examples and guidance tuned for `bzr`.
-
-The same workflow design carries over cleanly:
-
-- Prefer `bzr --json ...` so Bob receives structured data it can parse.
-- Keep write operations explicit, for example `bzr bug update`, `bzr comment add --body`, and `bzr attachment upload`.
-- Encode repeatable workflows such as "summarize bug", "review patch attachments", or "run saved query and report results" as Bob prompt templates.
-
-The important compatibility point is that `bzr` is agent-friendly by default: global flags are consistent, machine-readable output is built in, and saved templates and queries let agents reuse local workflows without custom wrappers.
+The skills shell out to the real `bzr` binary and are agent-agnostic: global
+flags are consistent, machine-readable output is built in, and saved templates
+and queries let agents reuse local workflows without custom wrappers.
 
 ## JSON Output
 
