@@ -10,6 +10,8 @@ run() {
   sh "$HERE/$1" || rc=1
 }
 
+printf 'run: drift check uses BZR_BIN=%s\n' "${BZR_BIN:-<unset; will try PATH>}"
+
 # Content checks
 sh "$HERE/validate-skills.sh" || rc=1
 sh "$HERE/drift-check.sh" || rc=1

@@ -41,9 +41,24 @@ out=$(BZR_BIN="$WORK/bzr" "$DRIFT" "$WORK/commands.yml" 2>&1) && rc=0 || rc=$?
 assert_eq "missing-from-docs still exits 0" "0" "$rc"
 assert_contains "missing-from-docs warns" "$out" "view"
 
-# no bzr available -> skip gracefully, exit 0
+# BZR_BIN set but unresolvable -> fail closed (non-zero), names BZR_BIN.
 out=$(BZR_BIN="$WORK/nope" "$DRIFT" "$WORK/commands.yml" 2>&1) && rc=0 || rc=$?
-assert_eq "absent bzr skips" "0" "$rc"
-assert_contains "absent bzr message" "$out" "skip"
+assert_eq "set-but-missing BZR_BIN fails closed" "1" "$rc"
+assert_contains "fail-closed names BZR_BIN" "$out" "BZR_BIN"
+
+# BZR_BIN unset and bzr not on PATH -> legitimate skip, exit 0, visible notice.
+# Build a tool dir with the coreutils drift-check needs but no bzr, then run with
+# only that on PATH. Explicitly unset BZR_BIN in the subshell so the arm is
+# deterministic even when the suite is run with BZR_BIN exported (CI / run.sh).
+mkdir -p "$WORK/toolbin"
+for t in dirname awk tr cat sh; do
+  p=$(command -v "$t" 2>/dev/null) && ln -sf "$p" "$WORK/toolbin/$t"
+done
+out=$(
+  unset BZR_BIN
+  PATH="$WORK/toolbin" "$DRIFT" "$WORK/commands.yml" 2>&1
+) && rc=0 || rc=$?
+assert_eq "unset BZR_BIN + no PATH bzr skips" "0" "$rc"
+assert_contains "skip notice printed" "$out" "SKIPPED"
 
 report "drift-check-test"

@@ -11,7 +11,11 @@ BZR="${BZR_BIN:-bzr}"
 fail=0
 
 if ! command -v "$BZR" >/dev/null 2>&1; then
-  printf 'drift-check: bzr not found (%s); skip.\n' "$BZR"
+  if [ -n "${BZR_BIN:-}" ]; then
+    printf 'drift-check: ERROR BZR_BIN set to "%s" but it is not an executable\n' "$BZR" >&2
+    exit 1
+  fi
+  printf 'drift-check: SKIPPED (no binary): BZR_BIN unset and bzr not on PATH\n'
   exit 0
 fi
 
