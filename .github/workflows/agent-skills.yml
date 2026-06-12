@@ -1,0 +1,41 @@
+name: agent-skills
+
+on:
+  push:
+    paths:
+      - "agent-skills/**"
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/agent-skills.yml"
+  pull_request:
+    paths:
+      - "agent-skills/**"
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/agent-skills.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Install shell tooling
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          go install mvdan.cc/sh/v3/cmd/shfmt@v3.13.1
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+      - name: Assert pwsh is present
+        run: command -v pwsh
+      - name: Build bzr
+        run: cargo build
+      - name: Run agent-skills checks
+        run: BZR_BIN="$PWD/target/debug/bzr" sh agent-skills/tests/run.sh
