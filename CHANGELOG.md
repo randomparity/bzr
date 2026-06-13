@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Bundled agent skills for driving `bzr` from AI coding agents, with a
+  runtime-free installer. Five skills (`bzr-reference`, `bzr-setup`,
+  `bzr-file-bug`, `bzr-triage-bug`, `bzr-search-report`) live under
+  `agent-skills/`; `agent-skills/install.sh` (POSIX) and `install.ps1` (Windows)
+  copy selected skills into agent skill directories (`~/.agents/skills`,
+  `~/.claude/skills`) with a `.bzr-skill-managed` ownership sentinel. CI runs a
+  command-surface drift check against the built binary. Replaces the previous
+  `docs/skills.md` and `docs/bob-skills.md` guides.
+
 ## [0.4.4] - 2026-06-12
 
 ### Packaging

@@ -3,6 +3,7 @@ RUST_MIN_VERSION := 1.89.0
 
 .PHONY: setup check-rust ensure-components ensure-coverage-prereqs ensure-mutants-prereq install-hooks \
         build release test coverage fmt clippy lint check-test-layout check-no-spawn clean help man \
+        skills-test \
         mutants mutants-fast mutants-list audit-mutant-skips \
         functional-build functional-start functional-test functional-stop \
         functional-test-bz52 functional-test-bz53 functional-test-all functional-stop-all \
@@ -76,6 +77,10 @@ release: ## Build in release mode
 
 test: ## Run tests
 	$(CARGO) test
+
+skills-test: ## Build bzr and run the agent-skills shell suite (drift, installer, lint)
+	$(CARGO) build --locked
+	BZR_BIN="$$PWD/target/debug/bzr" sh agent-skills/tests/run.sh
 
 coverage: ## Run tests with coverage via cargo-llvm-cov
 	@command -v cargo-llvm-cov >/dev/null 2>&1 || { echo "cargo-llvm-cov not installed"; echo "  Run: cargo install cargo-llvm-cov"; exit 1; }
