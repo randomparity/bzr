@@ -4,7 +4,7 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=randomparity_bzr&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=randomparity_bzr)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/randomparity/bzr/badge)](https://scorecard.dev/viewer/?uri=github.com/randomparity/bzr)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.89](https://img.shields.io/badge/MSRV-1.88-blue.svg)](https://blog.rust-lang.org/2025/06/26/Rust-1.89.0/)
+[![MSRV: 1.89](https://img.shields.io/badge/MSRV-1.89-blue.svg)](https://blog.rust-lang.org/2025/06/26/Rust-1.89.0/)
 [![crates.io](https://img.shields.io/crates/v/bzr.svg)](https://crates.io/crates/bzr)
 
 A command-line interface for Bugzilla servers, written in Rust. Inspired by the GitHub CLI (`gh`), `bzr` lets you search, view, create, and update bugs, manage comments and attachments, and switch between multiple Bugzilla instances — all from your terminal.
@@ -183,7 +183,7 @@ and fail to build.
 cargo install --path . --locked
 ```
 
-Requires Rust 1.88+. Same manpage caveat as `cargo install bzr` — see
+Requires Rust 1.89+. Same manpage caveat as `cargo install bzr` — see
 [Manual pages](#manual-pages).
 
 ### OS keychain support (`keyring` feature)
@@ -356,32 +356,27 @@ See [docs/bzr-cli.md](docs/bzr-cli.md) for the full command reference covering a
 
 ## Agent Integration
 
-### Claude Code
+`bzr` ships a set of installable agent skills under [`agent-skills/`](agent-skills/)
+that teach AI coding agents to use the CLI correctly — the `--json` contract,
+the authentication model, the read-before-write rule, and the real command
+surface. They live in this repo so they track the CLI as it changes (CI runs a
+command-surface drift check against the built binary).
 
-`bzr` works well with Claude Code skills because the CLI has stable subcommands, global `--json` output, and clear exit codes. See [docs/skills.md](docs/skills.md) for reusable skill definitions such as bug triage, investigation, patch review, and saved-query workflows.
+Install them from a clone:
 
-Typical setup:
-
-```text
-~/.claude/skills/
-  bzr-investigate/SKILL.md
-  bzr-bug-summary/SKILL.md
-  bzr-review/SKILL.md
+```bash
+cd agent-skills
+./install.sh --agent all     # ~/.agents/skills and ~/.claude/skills
 ```
 
-Once installed, invoke them directly from Claude Code, for example `/bzr-investigate 12345`.
+`standard`/`bob`/`codex` install to `~/.agents/skills`; `claude` installs to
+`~/.claude/skills`; `all` does both. Windows users run `install.ps1`. See
+[`agent-skills/README.md`](agent-skills/README.md) for the full skill list,
+flags (`--dry-run`, `--list`, `--uninstall`, `--force`), and development notes.
 
-### IBM Bob
-
-IBM Bob uses its own `SKILL.md` conventions under `.bob/skills/` or `~/.bob/skills/`. See [docs/bob-skills.md](docs/bob-skills.md) for Bob-specific examples and guidance tuned for `bzr`.
-
-The same workflow design carries over cleanly:
-
-- Prefer `bzr --json ...` so Bob receives structured data it can parse.
-- Keep write operations explicit, for example `bzr bug update`, `bzr comment add --body`, and `bzr attachment upload`.
-- Encode repeatable workflows such as "summarize bug", "review patch attachments", or "run saved query and report results" as Bob prompt templates.
-
-The important compatibility point is that `bzr` is agent-friendly by default: global flags are consistent, machine-readable output is built in, and saved templates and queries let agents reuse local workflows without custom wrappers.
+The skills shell out to the real `bzr` binary and are agent-agnostic: global
+flags are consistent, machine-readable output is built in, and saved templates
+and queries let agents reuse local workflows without custom wrappers.
 
 ## JSON Output
 

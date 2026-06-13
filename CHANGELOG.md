@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Bundled agent skills for driving `bzr` from AI coding agents, with a
+  runtime-free installer. Five skills (`bzr-reference`, `bzr-setup`,
+  `bzr-file-bug`, `bzr-triage-bug`, `bzr-search-report`) live under
+  `agent-skills/`; `agent-skills/install.sh` (POSIX) and `install.ps1` (Windows)
+  copy selected skills into agent skill directories (`~/.agents/skills`,
+  `~/.claude/skills`) with a `.bzr-skill-managed` ownership sentinel. CI runs a
+  command-surface drift check against the built binary. Replaces the previous
+  `docs/skills.md` and `docs/bob-skills.md` guides.
+
+## [0.4.4] - 2026-06-12
+
+### Packaging
+
+- The Homebrew formula now ships real bottles (precompiled, poured binaries)
+  for Apple Silicon macOS, x86_64 Linux, and arm64 Linux. Homebrew pours a
+  bottle straight into the Cellar instead of running the formula's build
+  phase, so `brew install`/`brew upgrade` no longer enters Homebrew's build
+  sandbox. This sidesteps a recent Homebrew change (build-phase
+  `deny_read_home`, which raises on any `$HOME` entry containing characters
+  like `(`/`)`) that broke source installs for some users, and makes installs
+  faster. `release.yml` builds the bottles on per-OS runners after the formula
+  is published, uploads them to the GitHub release, and adds the `bottle do`
+  block to the tap formula. Intel macOS still builds from source (no prebuilt
+  Intel binary is produced).
+- The x86_64 and arm64 Linux release binaries now statically link libdbus
+  (new opt-in `vendored-keyring` Cargo feature, enabled only for these targets
+  in CI). A Homebrew bottle is poured as-is and cannot declare a system-library
+  dependency, so the binary that feeds the Linux bottles must carry no runtime
+  `libdbus-1.so` requirement. Local builds and the `.deb`/`.rpm` packages are
+  unchanged — they keep dynamic linking, with the system dependency declared in
+  package metadata as before.
+
+## [0.4.3] - 2026-06-10
+
 ### Security
 
 - API client redirects are now confined to the configured host. The client

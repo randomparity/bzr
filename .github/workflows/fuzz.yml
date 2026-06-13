@@ -30,12 +30,22 @@ jobs:
         with:
           persist-credentials: false
 
-      # Pinned to the last nightly that compiled cargo-fuzz 0.13.1's
+      # This MUST pin dtolnay/rust-toolchain's `master` branch, NOT a
+      # channel branch. Only `master`'s action.yml declares an explicit
+      # `toolchain` input; the channel branches (`stable`, `1.89.0`, ...)
+      # hardcode their version and silently ignore `toolchain:`, installing
+      # stable instead of the nightly pinned below. Dependabot bumps the
+      # SHA-pinned action across every workflow at once, so do NOT let it
+      # collapse this onto the stable-channel SHA that ci.yml/release.yml
+      # use -- that swap is what broke this job (it installed 1.89.0 and
+      # `cargo +nightly fuzz run` then had no nightly toolchain).
+      #
+      # nightly-2026-05-02 is the last nightly that compiles cargo-fuzz's
       # transitive `rustix v0.36.5` dep. Newer nightlies dropped the
       # unstable `rustc_layout_scalar_valid_range_{start,end}` attribute
-      # form rustix 0.36.5 uses. Bump this once cargo-fuzz pulls a
-      # rustix release that compiles on current nightly.
-      - uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6e  # nightly
+      # form rustix 0.36.5 uses. Bump this once cargo-fuzz pulls a rustix
+      # release that compiles on current nightly.
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # master
         with:
           toolchain: nightly-2026-05-02
 
