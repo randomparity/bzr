@@ -308,4 +308,53 @@ pub enum ConfigAction {
         #[arg(long)]
         yes: bool,
     },
+
+    /// Remove a named server from the local config.
+    ///
+    /// Deletes the `[servers.<name>]` block and, if the server stored
+    /// its API key in the OS keychain, removes that keychain entry too
+    /// (idempotently — a missing entry is not an error). The server
+    /// must exist.
+    ///
+    /// Removing the current default server is refused while other
+    /// servers remain: set a new default first with
+    /// `bzr config set-default <other>`. Removing the only configured
+    /// server is allowed and leaves the config with no default.
+    ///
+    /// Examples:
+    ///
+    ///   bzr config remove-server staging
+    ///   bzr --json config remove-server throwaway
+    ///
+    /// See bzr-config-set-default(1) to reassign the default before
+    /// removing it and bzr-config-rename-server(1) to rename instead.
+    #[command(verbatim_doc_comment)]
+    RemoveServer {
+        /// Server alias name (must exist).
+        name: String,
+    },
+
+    /// Rename a server alias, preserving its credentials.
+    ///
+    /// Moves the `[servers.<old>]` block to `[servers.<new>]` with every
+    /// field intact. If the server's API key lives in the OS keychain
+    /// under the default account (the server name), the stored secret is
+    /// moved to the new account so credentials keep working. If
+    /// `default_server` pointed at `<old>`, it is updated to `<new>`.
+    ///
+    /// `<old>` must exist and `<new>` must not already exist.
+    ///
+    /// Examples:
+    ///
+    ///   bzr config rename-server stage staging
+    ///   bzr --json config rename-server old-name new-name
+    ///
+    /// See bzr-config-remove-server(1) to delete a server instead.
+    #[command(verbatim_doc_comment)]
+    RenameServer {
+        /// Current server alias (must exist).
+        old: String,
+        /// New server alias (must not already exist).
+        new: String,
+    },
 }

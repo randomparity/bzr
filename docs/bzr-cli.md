@@ -154,6 +154,8 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   ├── unset-keyring <NAME>
 │   ├── migrate-to-keyring <NAME> [--yes]
 │   ├── set-default <NAME>
+│   ├── remove-server <NAME>
+│   ├── rename-server <OLD> <NEW>
 │   └── show
 ├── template
 │   ├── save <NAME> [--product <P>] [--component <C>] [--version <V>] [--priority <P>]
@@ -1098,6 +1100,39 @@ Change which server is used when `--server` is not specified.
 bzr config set-default mozilla
 ```
 
+### `bzr config remove-server <NAME>`
+
+Remove a server alias from the config. Deletes the `[servers.<NAME>]` block
+and, if the server stored its API key in the OS keychain, removes that
+keychain entry too (idempotently — a missing entry is not an error). The
+server must exist.
+
+Removing the current **default** server is refused while other servers
+remain — set a new default first with `bzr config set-default <other>`.
+Removing the **only** configured server is allowed and leaves the config
+with no default. Emits the standard mutation JSON (`"action": "removed"`)
+under `--json`.
+
+```bash
+bzr config remove-server staging
+bzr --json config remove-server throwaway
+```
+
+### `bzr config rename-server <OLD> <NEW>`
+
+Rename a server alias, preserving all of its fields. `<OLD>` must exist and
+`<NEW>` must not. If the API key lives in the OS keychain under the default
+account (the server name), the stored secret is moved to the new account so
+credentials keep working; an explicitly configured `--account` is left as-is.
+If `default_server` pointed at `<OLD>`, it is updated to `<NEW>`. Emits the
+standard mutation JSON (`"action": "renamed"`, with `previous_name`) under
+`--json`.
+
+```bash
+bzr config rename-server stage staging
+bzr --json config rename-server old-name new-name
+```
+
 ### `bzr config show`
 
 Display the current configuration (API keys are masked). Supports `--json` for structured output.
@@ -1496,7 +1531,14 @@ Template mutations use `name` instead of `id`:
 {"name":"security-bug","action":"deleted"}
 ```
 
-All mutation responses include `resource` and `action` fields. Most include `id` for the created/updated resource. Note: `comment tag` responses use `comment_id`, not `id`. Membership responses (`group_membership`) have no `id` field. Template responses use `name` instead of `id`.
+Server config mutations key on `name` and carry `config_file`; `rename-server` also includes `previous_name`:
+
+```json
+{"name":"staging","config_file":"~/.config/bzr/config.toml","resource":"server","action":"removed"}
+{"name":"new-name","previous_name":"old-name","config_file":"~/.config/bzr/config.toml","resource":"server","action":"renamed"}
+```
+
+All mutation responses include `resource` and `action` fields. Most include `id` for the created/updated resource. Note: `comment tag` responses use `comment_id`, not `id`. Membership responses (`group_membership`) have no `id` field. Template responses use `name` instead of `id`. Server config responses (`remove-server`/`rename-server`) key on `name` (and `previous_name` for renames) with no `id`.
 
 ### Error output
 

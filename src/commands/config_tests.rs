@@ -586,3 +586,327 @@ async fn unset_keyring_removes_secret_and_clears_config() {
     // Keychain entry is gone (idempotent delete returns Ok).
     crate::credentials::keyring::delete("bzr", "unset-test").unwrap();
 }
+
+// ── remove-server (#300) ──────────────────────────────────────────────
+
+/// Run a `ConfigAction` capturing stdout, returning the parsed JSON.
+async fn run_action_json(action: ConfigAction) -> serde_json::Value {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
+    execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await
+    .unwrap();
+    let out = __cap_io.out_str().to_string();
+    serde_json::from_str(out.trim()).unwrap()
+}
+
+fn load_config_unvalidated() -> Config {
+    let path = Config::path().unwrap();
+    let content = std::fs::read_to_string(&path).unwrap();
+    toml::from_str(&content).unwrap()
+}
+
+#[tokio::test]
+async fn remove_server_deletes_non_default_entry() {
+    let (_lock, _tmp) = setup_config_env().await;
+    seed_inline_server("keep", "https://keep.example.com", "k").await;
+    seed_inline_server("drop", "https://drop.example.com", "d").await;
+    // "keep" became default (first added); set it explicitly to be safe.
+    execute(
+        &ConfigAction::SetDefault {
+            name: "keep".into(),
+        },
+        None,
+        OutputFormat::Json,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
+
+    let json = run_action_json(ConfigAction::RemoveServer {
+        name: "drop".into(),
+    })
+    .await;
+    assert_eq!(json["action"], "removed");
+    assert_eq!(json["name"], "drop");
+    assert_eq!(json["resource"], "server");
+
+    let config = load_config_unvalidated();
+    assert!(!config.servers.contains_key("drop"));
+    assert!(config.servers.contains_key("keep"));
+    assert_eq!(config.default_server.as_deref(), Some("keep"));
+}
+
+#[tokio::test]
+async fn remove_server_missing_errors() {
+    let (_lock, _tmp) = setup_config_env().await;
+    seed_inline_server("only", "https://only.example.com", "x").await;
+
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
+    let result = execute(
+        &ConfigAction::RemoveServer {
+            name: "ghost".into(),
+        },
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
+    assert!(matches!(result, Err(BzrError::Config(_))));
+}
+
+#[tokio::test]
+async fn remove_server_default_with_others_refuses() {
+    let (_lock, _tmp) = setup_config_env().await;
+    seed_inline_server("a", "https://a.example.com", "x").await;
+    seed_inline_server("b", "https://b.example.com", "y").await;
+    // "a" is the default (first added).
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
+    let result = execute(
+        &ConfigAction::RemoveServer { name: "a".into() },
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
+    assert!(matches!(result, Err(BzrError::Config(_))));
+    // Nothing was removed.
+    let config = load_config_unvalidated();
+    assert!(config.servers.contains_key("a"));
+}
+
+#[tokio::test]
+async fn remove_server_only_server_clears_default() {
+    let (_lock, _tmp) = setup_config_env().await;
+    seed_inline_server("solo", "https://solo.example.com", "x").await;
+
+    let json = run_action_json(ConfigAction::RemoveServer {
+        name: "solo".into(),
+    })
+    .await;
+    assert_eq!(json["action"], "removed");
+
+    let config = load_config_unvalidated();
+    assert!(config.servers.is_empty());
+    assert!(config.default_server.is_none());
+}
+
+#[tokio::test]
+async fn remove_server_deletes_keyring_entry() {
+    let (_lock, _tmp) = setup_config_env().await;
+    crate::credentials::keyring::install_test_store();
+    seed_inline_server("kr", "https://kr.example.com", "inline").await;
+    seed_keyring_secret("kr", "kr-secret").await;
+    // Confirm the secret is present before removal.
+    assert_eq!(
+        crate::credentials::keyring::retrieve("bzr", "kr").unwrap(),
+        "kr-secret"
+    );
+
+    run_action_json(ConfigAction::RemoveServer { name: "kr".into() }).await;
+
+    let config = load_config_unvalidated();
+    assert!(!config.servers.contains_key("kr"));
+    // Keychain entry is gone — retrieve now fails.
+    assert!(crate::credentials::keyring::retrieve("bzr", "kr").is_err());
+}
+
+// ── rename-server (#300) ──────────────────────────────────────────────
+
+#[tokio::test]
+async fn rename_server_preserves_inline_credentials() {
+    let (_lock, _tmp) = setup_config_env().await;
+    seed_inline_server("stage", "https://stage.example.com", "secret-key").await;
+
+    let json = run_action_json(ConfigAction::RenameServer {
+        old: "stage".into(),
+        new: "staging".into(),
+    })
+    .await;
+    assert_eq!(json["action"], "renamed");
+    assert_eq!(json["name"], "staging");
+    assert_eq!(json["previous_name"], "stage");
+
+    let config = load_config_unvalidated();
+    assert!(!config.servers.contains_key("stage"));
+    let server = &config.servers["staging"];
+    assert_eq!(server.url, "https://stage.example.com");
+    assert_eq!(server.api_key.as_deref(), Some("secret-key"));
+    // Renamed server was the only one, so it stays the default.
+    assert_eq!(config.default_server.as_deref(), Some("staging"));
+}
+
+#[tokio::test]
+async fn rename_server_updates_default_pointer() {
+    let (_lock, _tmp) = setup_config_env().await;
+    seed_inline_server("a", "https://a.example.com", "x").await;
+    seed_inline_server("b", "https://b.example.com", "y").await;
+    // "a" is default; rename it and confirm the pointer follows.
+    run_action_json(ConfigAction::RenameServer {
+        old: "a".into(),
+        new: "a2".into(),
+    })
+    .await;
+    let config = load_config_unvalidated();
+    assert_eq!(config.default_server.as_deref(), Some("a2"));
+    assert!(config.servers.contains_key("a2"));
+    assert!(config.servers.contains_key("b"));
+}
+
+#[tokio::test]
+async fn rename_server_old_missing_errors() {
+    let (_lock, _tmp) = setup_config_env().await;
+    seed_inline_server("real", "https://real.example.com", "x").await;
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
+    let result = execute(
+        &ConfigAction::RenameServer {
+            old: "ghost".into(),
+            new: "new".into(),
+        },
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
+    assert!(matches!(result, Err(BzrError::Config(_))));
+}
+
+#[tokio::test]
+async fn rename_server_new_exists_errors() {
+    let (_lock, _tmp) = setup_config_env().await;
+    seed_inline_server("a", "https://a.example.com", "x").await;
+    seed_inline_server("b", "https://b.example.com", "y").await;
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
+    let result = execute(
+        &ConfigAction::RenameServer {
+            old: "a".into(),
+            new: "b".into(),
+        },
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
+    assert!(matches!(result, Err(BzrError::Config(_))));
+}
+
+#[tokio::test]
+async fn rename_server_moves_keyring_secret() {
+    let (_lock, _tmp) = setup_config_env().await;
+    crate::credentials::keyring::install_test_store();
+    seed_inline_server("oldname", "https://kr.example.com", "inline").await;
+    seed_keyring_secret("oldname", "kr-secret").await;
+
+    run_action_json(ConfigAction::RenameServer {
+        old: "oldname".into(),
+        new: "newname".into(),
+    })
+    .await;
+
+    let config = load_config_unvalidated();
+    assert!(config.servers.contains_key("newname"));
+    assert!(config.servers["newname"].api_key_keyring.is_some());
+    // Secret reachable under the new default account, gone under the old.
+    assert_eq!(
+        crate::credentials::keyring::retrieve("bzr", "newname").unwrap(),
+        "kr-secret"
+    );
+    assert!(crate::credentials::keyring::retrieve("bzr", "oldname").is_err());
+}
+
+/// Regression (#300): managing one server must succeed even when an
+/// unrelated server is credential-less on disk (the state `unset-keyring`
+/// leaves behind). `update_locked`'s whole-config validation would reject
+/// the write; remove/rename must use the non-validating path.
+#[tokio::test]
+async fn remove_server_succeeds_with_other_credential_less_server() {
+    let (_lock, _tmp) = setup_config_env().await;
+    crate::credentials::keyring::install_test_store();
+    seed_inline_server("keepme", "https://keep.example.com", "k").await;
+    seed_inline_server("dropme", "https://drop.example.com", "d").await;
+    // Make "keepme" credential-less via unset-keyring after moving it to keyring.
+    seed_keyring_secret("keepme", "s").await;
+    execute(
+        &ConfigAction::UnsetKeyring {
+            name: "keepme".into(),
+        },
+        None,
+        OutputFormat::Json,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
+    // "dropme" is the default? No — "keepme" added first is default. Remove dropme.
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
+    let result = execute(
+        &ConfigAction::RemoveServer {
+            name: "dropme".into(),
+        },
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "remove must not fail because an unrelated server is credential-less: {result:?}"
+    );
+    let config = load_config_unvalidated();
+    assert!(!config.servers.contains_key("dropme"));
+    assert!(config.servers.contains_key("keepme"));
+}
+
+/// Regression (#300): rename must also succeed when an unrelated server is
+/// credential-less on disk (same `read_unvalidated` + non-validating write
+/// path as remove).
+#[tokio::test]
+async fn rename_server_succeeds_with_other_credential_less_server() {
+    let (_lock, _tmp) = setup_config_env().await;
+    crate::credentials::keyring::install_test_store();
+    seed_inline_server("keepme", "https://keep.example.com", "k").await;
+    seed_inline_server("rename-me", "https://r.example.com", "r").await;
+    seed_keyring_secret("keepme", "s").await;
+    execute(
+        &ConfigAction::UnsetKeyring {
+            name: "keepme".into(),
+        },
+        None,
+        OutputFormat::Json,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
+
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
+    let result = execute(
+        &ConfigAction::RenameServer {
+            old: "rename-me".into(),
+            new: "renamed".into(),
+        },
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "rename must not fail because an unrelated server is credential-less: {result:?}"
+    );
+    let config = load_config_unvalidated();
+    assert!(config.servers.contains_key("renamed"));
+    assert!(!config.servers.contains_key("rename-me"));
+}

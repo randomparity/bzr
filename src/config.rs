@@ -257,7 +257,12 @@ impl Config {
     /// Read and parse the config from disk WITHOUT validating it or warning on
     /// permissions. Maps a missing file to `Config::default()`. Used by
     /// `update_locked` (which validates the post-mutation state) and by `load`.
-    fn read_unvalidated() -> Result<Config> {
+    ///
+    /// `pub(crate)` so `config remove-server`/`rename-server` can take an
+    /// advisory snapshot (existence, default pointer, keyring ref) without
+    /// `load`'s credential validator rejecting an unrelated credential-less
+    /// server — the legitimate state `unset-keyring` leaves on disk.
+    pub(crate) fn read_unvalidated() -> Result<Config> {
         let path = Self::path()?;
         match fs::read_to_string(&path) {
             Ok(content) => Ok(toml::from_str(&content)?),
