@@ -30,6 +30,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 
+- The command tree in `docs/bzr-cli.md` is now drift-checked against the binary
+  in CI. A new `agent-skills/tests/flag-drift-check.sh` (run alongside the
+  existing verb-level `drift-check.sh`) compares every command-specific long
+  flag the binary exposes against that command's block in the tree, both
+  directions, and fails the build on a mismatch. Fixed the existing drift it
+  surfaced — the tree was missing flags such as `bug view --web`/`--permissive`,
+  `bug update --dupe-of`/`--comment`/`--cc-add`/`--keywords-add`/`--groups-add`/
+  `--see-also-add` (and `*-remove`), `bug list`/`query` search filters
+  (`--resolution`, `--version`, `--op-sys`, `--platform`, `--whiteboard`,
+  `--target-milestone`, `--qa-contact`, `--url`), `bug create --description-file`,
+  `comment add --private`, `attachment download --bug`/`--out`/`--out-dir`,
+  `attachment upload --comment`/`--comment-private`, and `config set-keyring`/
+  `migrate-to-keyring --service`/`--account`. (#306)
 - Recorded the decision to keep `bzr` as the command name despite the
   historical collision with GNU Bazaar (retired in 2025; its successor Breezy
   uses `brz`), with rationale in `docs/decisions/0001-bzr-command-name.md` and

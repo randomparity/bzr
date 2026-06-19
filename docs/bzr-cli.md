@@ -86,16 +86,18 @@ bzr [--server <NAME>] [--output table|json] [--json] [--config <PATH>] [--no-col
 ├── bug
 │   ├── list [--product <P>...] [--component <C>...] [--status <S>...] [--assignee <A>...]
 │   │        [--creator <C>...] [--priority <P>...] [--severity <S>...] [--id <ID>...]
-│   │        [--alias <A>] [--summary <S>] [--limit <N>] [--count] [--fields <F>] [--exclude-fields <F>]
+│   │        [--alias <A>] [--summary <S>] [--resolution <R>...] [--version <V>...] [--op-sys <OS>...]
+│   │        [--platform <P>...] [--whiteboard <W>] [--target-milestone <M>...] [--qa-contact <Q>...] [--url <U>]
+│   │        [--limit <N>] [--count] [--fields <F>] [--exclude-fields <F>]
 │   │        [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
-│   ├── view <ID> [--fields <F>] [--exclude-fields <F>]
+│   ├── view <ID> [--fields <F>] [--exclude-fields <F>] [--permissive] [--web]
 │   ├── search [<QUERY>] [--from-url <URL>] [--save-as [NAME]] [--limit <N>] [--count] [--fields <F>] [--exclude-fields <F>]
 │   │          [--sort <FIELD>] [--order asc|desc]
 │   ├── history <ID> [--since <DATE>]
 │   ├── my [--created] [--cc] [--all] [--status <S>...] [--limit <N>] [--count]
 │   │       [--fields <F>] [--exclude-fields <F>] [--sort <FIELD>] [--order asc|desc]
 │   ├── create [--template <T>] [--product <P>] [--component <C>] --summary <S>
-│   │          [--version <V>] [--description <D>] [--priority <P>] [--severity <S>]
+│   │          [--version <V>] [--description <D>] [--description-file <PATH>] [--priority <P>] [--severity <S>]
 │   │          [--assignee <A>] [--op-sys <OS>] [--rep-platform <PLAT>]
 │   │          [--blocks <IDs>] [--depends-on <IDs>] [--alias <A>] [--url <U>]
 │   │          [--whiteboard <W>] [--target-milestone <T>] [--deadline <DATE>]
@@ -104,29 +106,32 @@ bzr [--server <NAME>] [--output table|json] [--json] [--config <PATH>] [--no-col
 │   │              [--description <D>] [--priority <P>] [--severity <S>] [--assignee <A>]
 │   │              [--op-sys <OS>] [--rep-platform <PLAT>]
 │   │              [--no-comment] [--add-depends-on] [--add-blocks] [--no-cc] [--no-keywords]
-│   ├── update <ID...> [--status <S>] [--resolution <R>] [--assignee <A>]
+│   ├── update <ID...> [--status <S>] [--resolution <R>] [--dupe-of <ID>] [--assignee <A>]
 │   │                   [--priority <P>] [--severity <S>] [--summary <S>]
 │   │                   [--alias <A>] [--deadline <DATE>] [--estimated-time <HOURS>]
 │   │                   [--remaining-time <HOURS>] [--work-time <HOURS>]
 │   │                   [--whiteboard <W>] [--reset-assigned-to] [--reset-qa-contact]
 │   │                   [--flag <F>...] [--blocks-add <IDs>]
 │   │                   [--blocks-remove <IDs>] [--depends-on-add <IDs>]
-│   │                   [--depends-on-remove <IDs>]
+│   │                   [--depends-on-remove <IDs>] [--keywords-add <K>] [--keywords-remove <K>]
+│   │                   [--cc-add <C>] [--cc-remove <C>] [--groups-add <G>] [--groups-remove <G>]
+│   │                   [--see-also-add <URL>] [--see-also-remove <URL>]
+│   │                   [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 │   ├── resolve <ID...> [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 │   ├── close <ID...> [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 │   ├── reopen <ID...> [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 │   └── dup <ID> <TARGET> [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 ├── comment
 │   ├── list <BUG_ID> [--since <DATE>]
-│   ├── add <BUG_ID> [--body <TEXT>] [--body-file <PATH>]
+│   ├── add <BUG_ID> [--body <TEXT>] [--body-file <PATH>] [--private]
 │   ├── tag <COMMENT_ID> [--add <TAG>...] [--remove <TAG>...]
 │   └── search-tags <QUERY>
 ├── attachment
 │   ├── list <BUG_ID>
 │   ├── view <ATTACHMENT_ID>
-│   ├── download <ATTACHMENT_ID> [-o <FILE>]
-│   ├── upload <BUG_ID> <FILE> [--summary <S>] [--content-type <MIME>]
-│   │                          [--private|--no-private] [--patch|--no-patch] [--flag <F>...]
+│   ├── download <ATTACHMENT_ID> [--bug <ID>] [-o|--out <FILE>] [--out-dir <DIR>]
+│   ├── upload <BUG_ID> <FILE> [--summary <S>] [--content-type <MIME>] [--comment <BODY>]
+│   │                          [--comment-private] [--private|--no-private] [--patch|--no-patch] [--flag <F>...]
 │   └── update <ATTACHMENT_ID> [--summary <S>] [--file-name <N>] [--content-type <MIME>]
 │                               [--obsolete|--no-obsolete] [--patch|--no-patch]
 │                               [--private|--no-private] [--flag <F>...]
@@ -164,9 +169,9 @@ bzr [--server <NAME>] [--output table|json] [--json] [--config <PATH>] [--no-col
 ├── config
 │   ├── set-server <NAME> --url <URL> (--api-key <KEY> | --api-key-env <ENV_VAR>) [--email <EMAIL>] [--auth-method <METHOD>]
 │   │                     [--tls-insecure] [--tls-ca-cert <PATH>] [--tls-pin-sha256 <HEX>] [--tls-pin-now] [--tls-pin-clear]
-│   ├── set-keyring <NAME>
+│   ├── set-keyring <NAME> [--service <S>] [--account <A>]
 │   ├── unset-keyring <NAME>
-│   ├── migrate-to-keyring <NAME> [--yes]
+│   ├── migrate-to-keyring <NAME> [--service <S>] [--account <A>] [--yes]
 │   ├── set-default <NAME>
 │   ├── remove-server <NAME>
 │   ├── rename-server <OLD> <NEW>
@@ -181,12 +186,16 @@ bzr [--server <NAME>] [--output table|json] [--json] [--config <PATH>] [--no-col
 ├── query
 │   ├── save <NAME> (--from-url <URL> | [--product <P>...] [--component <C>...] [--status <S>...]
 │   │               [--assignee <A>...] [--creator <C>...] [--priority <P>...] [--severity <S>...]
+│   │               [--resolution <R>...] [--version <V>...] [--op-sys <OS>...] [--platform <P>...]
+│   │               [--whiteboard <W>] [--target-milestone <M>...] [--qa-contact <Q>...] [--url <U>]
 │   │               [--search <Q>]) [--limit <N>] [--fields <F>] [--exclude-fields <F>]
 │   │               [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
 │   ├── list
 │   ├── show <NAME>
 │   ├── delete <NAME>
 │   └── run <NAME> [--limit <N>] [--fields <F>] [--exclude-fields <F>] [--server <NAME>]
+│                  [--resolution <R>...] [--version <V>...] [--op-sys <OS>...] [--platform <P>...]
+│                  [--whiteboard <W>] [--target-milestone <M>...] [--qa-contact <Q>...] [--url <U>]
 │                  [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
 └── completion <bash|zsh|fish|powershell>
 ```
