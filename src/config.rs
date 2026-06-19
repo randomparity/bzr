@@ -3,11 +3,17 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::sync::RwLock;
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::{BzrError, Result};
 use crate::types::{ApiMode, AuthMethod, BugTemplate, SavedQuery};
+
+/// Process-wide override for the config file path, set from the global
+/// `--config <PATH>` flag. Takes precedence over `BZR_CONFIG` and the default
+/// config directory. `RwLock` (not `OnceLock`) so tests can set and clear it.
+static CONFIG_PATH_OVERRIDE: RwLock<Option<PathBuf>> = RwLock::new(None);
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 #[non_exhaustive]
@@ -229,13 +235,42 @@ impl ServerConfig {
 }
 
 impl Config {
+    /// Resolve the path to the config file.
+    ///
+    /// Precedence: the `--config <PATH>` override (set via
+    /// [`Self::set_path_override`]) > the `BZR_CONFIG` environment variable
+    /// (a full path to the config file) > `$XDG_CONFIG_HOME/bzr/config.toml` >
+    /// the platform default config dir. The first two point directly at the
+    /// file; the last two name a directory under which `bzr/config.toml` is
+    /// used.
     pub fn path() -> Result<PathBuf> {
+        if let Ok(guard) = CONFIG_PATH_OVERRIDE.read() {
+            if let Some(path) = guard.as_ref() {
+                return Ok(path.clone());
+            }
+        }
+        if let Some(env_path) = std::env::var_os("BZR_CONFIG") {
+            if !env_path.is_empty() {
+                return Ok(PathBuf::from(env_path));
+            }
+        }
         let config_dir = std::env::var_os("XDG_CONFIG_HOME")
             .map(PathBuf::from)
             .filter(|p| p.is_absolute())
             .or_else(dirs::config_dir)
             .ok_or_else(|| BzrError::config("cannot determine config directory"))?;
         Ok(config_dir.join("bzr").join("config.toml"))
+    }
+
+    /// Install (or clear) the `--config <PATH>` override that takes precedence
+    /// over `BZR_CONFIG` and the default config directory.
+    ///
+    /// Called once from `main` after argument parsing. Passing `None` clears
+    /// the override (used by tests to restore the default resolution).
+    pub fn set_path_override(path: Option<PathBuf>) {
+        if let Ok(mut guard) = CONFIG_PATH_OVERRIDE.write() {
+            *guard = path;
+        }
     }
 
     /// Resolve the config directory (`<config>/bzr`), creating it `0700` on

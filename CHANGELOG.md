@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Global `--config <PATH>` flag and `BZR_CONFIG` environment variable select an
+  alternate `config.toml` for reads and writes. Precedence: `--config` >
+  `BZR_CONFIG` > `$XDG_CONFIG_HOME/bzr/config.toml` (or the platform config
+  dir). Sandboxes CI, throwaway agent runs, and per-profile configs without
+  manipulating `$HOME`/`$XDG_CONFIG_HOME`. (#304)
 - `bzr component list --product <P>` and `bzr component view <product> <component>`
   make components directly discoverable (ID, name, description, default
   assignee, active flag) instead of only via `product view`. Both read the

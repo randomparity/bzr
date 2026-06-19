@@ -34,6 +34,7 @@ fn base_cli(command: Commands) -> Cli {
         server: None,
         output: None,
         json: false,
+        config: None,
         no_color: false,
         quiet: false,
         api: None,

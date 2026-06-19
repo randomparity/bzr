@@ -1023,3 +1023,56 @@ fn update_locked_reloads_a_credential_less_config_and_can_heal_it() {
         Some("BZR_KEY")
     );
 }
+
+/// `Config::path()` precedence (#304): `--config` override > `BZR_CONFIG`
+/// env > `$XDG_CONFIG_HOME/bzr/config.toml`. Combined into one test under
+/// `ENV_LOCK` to avoid env races, and cleans up the override + env so later
+/// tests see default resolution.
+#[test]
+fn config_path_resolution_precedence() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    Config::set_path_override(None);
+    // SAFETY: serialized via ENV_LOCK; no other thread reads these concurrently.
+    unsafe {
+        env::remove_var("BZR_CONFIG");
+        env::set_var("XDG_CONFIG_HOME", "/tmp/bzr-xdg-test-home");
+    }
+
+    // Default: XDG dir + bzr/config.toml.
+    assert_eq!(
+        Config::path().unwrap(),
+        PathBuf::from("/tmp/bzr-xdg-test-home/bzr/config.toml")
+    );
+
+    // BZR_CONFIG (full file path) overrides the default dir.
+    unsafe { env::set_var("BZR_CONFIG", "/tmp/bzr-env-config.toml") };
+    assert_eq!(
+        Config::path().unwrap(),
+        PathBuf::from("/tmp/bzr-env-config.toml")
+    );
+
+    // The --config override beats BZR_CONFIG.
+    Config::set_path_override(Some(PathBuf::from("/tmp/bzr-flag-config.toml")));
+    assert_eq!(
+        Config::path().unwrap(),
+        PathBuf::from("/tmp/bzr-flag-config.toml")
+    );
+
+    // Clearing the override falls back to BZR_CONFIG.
+    Config::set_path_override(None);
+    assert_eq!(
+        Config::path().unwrap(),
+        PathBuf::from("/tmp/bzr-env-config.toml")
+    );
+
+    // An empty BZR_CONFIG is ignored (falls through to the default dir).
+    unsafe { env::set_var("BZR_CONFIG", "") };
+    assert_eq!(
+        Config::path().unwrap(),
+        PathBuf::from("/tmp/bzr-xdg-test-home/bzr/config.toml")
+    );
+
+    // Cleanup: restore default resolution for subsequent tests.
+    unsafe { env::remove_var("BZR_CONFIG") };
+    Config::set_path_override(None);
+}

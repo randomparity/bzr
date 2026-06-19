@@ -37,6 +37,7 @@ For installation and quick start, see [README.md](../README.md).
 | `--server <NAME>` | Use a specific server from config instead of the default |
 | `--output <FORMAT>` | Output format: `table` or `json`. Defaults to table at a TTY; auto-selects json when stdout is not a TTY. |
 | `--json` | Shorthand for `--output json` |
+| `--config <PATH>` | Use an alternate `config.toml` for reads and writes. Takes precedence over `BZR_CONFIG`; both override the default config directory. |
 | `--no-color` | Disable colored output. Color is also suppressed automatically when stdout is not a TTY. |
 | `--quiet` | Suppress stdout and tracing logs (exit code confirms success) |
 | `--api <MODE>` | Override API transport: `rest`, `xmlrpc`, or `hybrid`. Auto-detected from server version if not set. |
@@ -51,6 +52,7 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 | Variable | Description |
 |----------|-------------|
 | `BZR_OUTPUT` | Default output format (`table` or `json`). Overridden by `--output` or `--json`. |
+| `BZR_CONFIG` | Full path to an alternate `config.toml`. Overrides the default config directory; overridden by `--config`. |
 | `NO_COLOR` | Disable colored output (any value). Supported natively by the `colored` crate. |
 | `CLICOLOR` | Set to `0` to disable colored output (standard convention respected by the `colored` crate). |
 | `CLICOLOR_FORCE` | Set to `1` to force colored output even when stdout is not a TTY. |
@@ -80,7 +82,7 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 ## Command Tree
 
 ```
-bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--api rest|xmlrpc|hybrid] [-v...]
+bzr [--server <NAME>] [--output table|json] [--json] [--config <PATH>] [--no-color] [--quiet] [--api rest|xmlrpc|hybrid] [-v...]
 ├── bug
 │   ├── list [--product <P>...] [--component <C>...] [--status <S>...] [--assignee <A>...]
 │   │        [--creator <C>...] [--priority <P>...] [--severity <S>...] [--id <ID>...]
