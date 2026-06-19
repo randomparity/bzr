@@ -25,29 +25,8 @@ pub async fn execute(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     match action {
-        TemplateAction::Save {
-            name,
-            product,
-            component,
-            version,
-            priority,
-            severity,
-            assignee,
-            op_sys,
-            rep_platform,
-            description,
-        } => {
-            let template = BugTemplate {
-                product: product.clone(),
-                component: component.clone(),
-                version: version.clone(),
-                priority: priority.clone(),
-                severity: severity.clone(),
-                assignee: assignee.clone(),
-                op_sys: op_sys.clone(),
-                rep_platform: rep_platform.clone(),
-                description: description.clone(),
-            };
+        TemplateAction::Save { name, fields } => {
+            let template = fields.to_template();
 
             // Require at least one field to be set
             if template_is_empty(&template) {
@@ -134,15 +113,7 @@ fn clear_template_field(t: &mut BugTemplate, field: &str) -> Result<()> {
 fn handle_update(action: &TemplateAction, format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
     let TemplateAction::Update {
         name,
-        product,
-        component,
-        version,
-        priority,
-        severity,
-        assignee,
-        op_sys,
-        rep_platform,
-        description,
+        fields,
         clear,
     } = action
     else {
@@ -150,15 +121,15 @@ fn handle_update(action: &TemplateAction, format: OutputFormat, w: &mut Writers<
     };
 
     let sets = [
-        product,
-        component,
-        version,
-        priority,
-        severity,
-        assignee,
-        op_sys,
-        rep_platform,
-        description,
+        &fields.product,
+        &fields.component,
+        &fields.version,
+        &fields.priority,
+        &fields.severity,
+        &fields.assignee,
+        &fields.op_sys,
+        &fields.rep_platform,
+        &fields.description,
     ];
     if sets.iter().all(|f| f.is_none()) && clear.is_empty() {
         return Err(BzrError::InputValidation(
@@ -170,15 +141,15 @@ fn handle_update(action: &TemplateAction, format: OutputFormat, w: &mut Writers<
         let Some(t) = config.templates.get_mut(name.as_str()) else {
             return Err(BzrError::config(format!("template '{name}' not found")));
         };
-        merge_set(&mut t.product, product.as_deref());
-        merge_set(&mut t.component, component.as_deref());
-        merge_set(&mut t.version, version.as_deref());
-        merge_set(&mut t.priority, priority.as_deref());
-        merge_set(&mut t.severity, severity.as_deref());
-        merge_set(&mut t.assignee, assignee.as_deref());
-        merge_set(&mut t.op_sys, op_sys.as_deref());
-        merge_set(&mut t.rep_platform, rep_platform.as_deref());
-        merge_set(&mut t.description, description.as_deref());
+        merge_set(&mut t.product, fields.product.as_deref());
+        merge_set(&mut t.component, fields.component.as_deref());
+        merge_set(&mut t.version, fields.version.as_deref());
+        merge_set(&mut t.priority, fields.priority.as_deref());
+        merge_set(&mut t.severity, fields.severity.as_deref());
+        merge_set(&mut t.assignee, fields.assignee.as_deref());
+        merge_set(&mut t.op_sys, fields.op_sys.as_deref());
+        merge_set(&mut t.rep_platform, fields.rep_platform.as_deref());
+        merge_set(&mut t.description, fields.description.as_deref());
         for field in clear {
             clear_template_field(t, field)?;
         }

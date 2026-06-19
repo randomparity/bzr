@@ -1105,19 +1105,12 @@ fn parse_template_save_with_fields() {
     .unwrap();
     match cli.command {
         Commands::Template {
-            action:
-                TemplateAction::Save {
-                    name,
-                    product,
-                    component,
-                    severity,
-                    ..
-                },
+            action: TemplateAction::Save { name, fields },
         } => {
             assert_eq!(name, "security-bug");
-            assert_eq!(product.as_deref(), Some("Security"));
-            assert_eq!(component.as_deref(), Some("Vulnerabilities"));
-            assert_eq!(severity.as_deref(), Some("critical"));
+            assert_eq!(fields.product.as_deref(), Some("Security"));
+            assert_eq!(fields.component.as_deref(), Some("Vulnerabilities"));
+            assert_eq!(fields.severity.as_deref(), Some("critical"));
         }
         _ => panic!("expected Template Save"),
     }

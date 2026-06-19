@@ -23,7 +23,7 @@ pub use group::GroupAction;
 pub use product::ProductAction;
 pub use query::QueryAction;
 pub use server::ServerAction;
-pub use template::TemplateAction;
+pub use template::{TemplateAction, TemplateFields};
 pub use user::UserAction;
 
 use clap::{Parser, Subcommand};

@@ -5,7 +5,7 @@ use std::io::Write;
 use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
-use crate::cli::{BugAction, TemplateAction};
+use crate::cli::{BugAction, TemplateAction, TemplateFields};
 use crate::error::BzrError;
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
@@ -283,15 +283,14 @@ async fn bug_create_with_template_fills_missing_fields() {
     // bug create command can resolve them from the template.
     let save = TemplateAction::Save {
         name: "tpl".into(),
-        product: Some("TplProduct".into()),
-        component: Some("TplComponent".into()),
-        version: Some("9.9".into()),
-        priority: Some("P2".into()),
-        severity: None,
-        assignee: None,
-        op_sys: None,
-        rep_platform: None,
-        description: Some("from template".into()),
+        fields: TemplateFields {
+            product: Some("TplProduct".into()),
+            component: Some("TplComponent".into()),
+            version: Some("9.9".into()),
+            priority: Some("P2".into()),
+            description: Some("from template".into()),
+            ..Default::default()
+        },
     };
     let mut __io5 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
@@ -824,15 +823,12 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
     // Pre-populate a template that has a description body.
     let save = TemplateAction::Save {
         name: "tpl-with-desc".into(),
-        product: Some("TestProduct".into()),
-        component: Some("General".into()),
-        version: None,
-        priority: None,
-        severity: None,
-        assignee: None,
-        op_sys: None,
-        rep_platform: None,
-        description: Some("template body".into()),
+        fields: TemplateFields {
+            product: Some("TestProduct".into()),
+            component: Some("General".into()),
+            description: Some("template body".into()),
+            ..Default::default()
+        },
     };
     let mut __io13 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(

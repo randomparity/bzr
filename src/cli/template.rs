@@ -1,4 +1,57 @@
-use clap::Subcommand;
+use crate::types::BugTemplate;
+use clap::{Args, Subcommand};
+
+/// The default-field flags shared by `template save` and `template update`.
+/// Grouped into one flattened struct so the set is defined once and the two
+/// variants cannot drift apart.
+#[derive(Args, Debug, Clone, Default)]
+pub struct TemplateFields {
+    /// Default product
+    #[arg(long)]
+    pub product: Option<String>,
+    /// Default component
+    #[arg(long)]
+    pub component: Option<String>,
+    /// Default version
+    #[arg(long)]
+    pub version: Option<String>,
+    /// Default priority
+    #[arg(long)]
+    pub priority: Option<String>,
+    /// Default severity
+    #[arg(long)]
+    pub severity: Option<String>,
+    /// Default assignee
+    #[arg(long)]
+    pub assignee: Option<String>,
+    /// Default operating system
+    #[arg(long)]
+    pub op_sys: Option<String>,
+    /// Default hardware platform
+    #[arg(long)]
+    pub rep_platform: Option<String>,
+    /// Default description
+    #[arg(long)]
+    pub description: Option<String>,
+}
+
+impl TemplateFields {
+    /// Build a `BugTemplate` from these flags (used by `template save`).
+    #[must_use]
+    pub fn to_template(&self) -> BugTemplate {
+        BugTemplate {
+            product: self.product.clone(),
+            component: self.component.clone(),
+            version: self.version.clone(),
+            priority: self.priority.clone(),
+            severity: self.severity.clone(),
+            assignee: self.assignee.clone(),
+            op_sys: self.op_sys.clone(),
+            rep_platform: self.rep_platform.clone(),
+            description: self.description.clone(),
+        }
+    }
+}
 
 #[derive(Subcommand)]
 pub enum TemplateAction {
@@ -29,33 +82,8 @@ pub enum TemplateAction {
     Save {
         /// Template name
         name: String,
-        /// Default product
-        #[arg(long)]
-        product: Option<String>,
-        /// Default component
-        #[arg(long)]
-        component: Option<String>,
-        /// Default version
-        #[arg(long)]
-        version: Option<String>,
-        /// Default priority
-        #[arg(long)]
-        priority: Option<String>,
-        /// Default severity
-        #[arg(long)]
-        severity: Option<String>,
-        /// Default assignee
-        #[arg(long)]
-        assignee: Option<String>,
-        /// Default operating system
-        #[arg(long)]
-        op_sys: Option<String>,
-        /// Default hardware platform
-        #[arg(long)]
-        rep_platform: Option<String>,
-        /// Default description
-        #[arg(long)]
-        description: Option<String>,
+        #[command(flatten)]
+        fields: TemplateFields,
     },
 
     /// Update fields of an existing template in place.
@@ -82,33 +110,8 @@ pub enum TemplateAction {
     Update {
         /// Template name
         name: String,
-        /// Set the default product
-        #[arg(long)]
-        product: Option<String>,
-        /// Set the default component
-        #[arg(long)]
-        component: Option<String>,
-        /// Set the default version
-        #[arg(long)]
-        version: Option<String>,
-        /// Set the default priority
-        #[arg(long)]
-        priority: Option<String>,
-        /// Set the default severity
-        #[arg(long)]
-        severity: Option<String>,
-        /// Set the default assignee
-        #[arg(long)]
-        assignee: Option<String>,
-        /// Set the default operating system
-        #[arg(long)]
-        op_sys: Option<String>,
-        /// Set the default hardware platform
-        #[arg(long)]
-        rep_platform: Option<String>,
-        /// Set the default description
-        #[arg(long)]
-        description: Option<String>,
+        #[command(flatten)]
+        fields: TemplateFields,
         /// Reset a field to unset (repeatable). Names match the long flags.
         #[arg(long, value_name = "FIELD")]
         clear: Vec<String>,
