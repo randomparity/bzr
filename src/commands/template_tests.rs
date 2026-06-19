@@ -546,3 +546,32 @@ async fn template_update_clear_wins_over_set() {
     run(&a).await.unwrap();
     assert!(Config::load().unwrap().templates["t"].severity.is_none());
 }
+
+#[test]
+fn clear_template_field_handles_every_name() {
+    let mut t = crate::types::BugTemplate {
+        product: Some("p".into()),
+        component: Some("c".into()),
+        version: Some("v".into()),
+        priority: Some("pr".into()),
+        severity: Some("s".into()),
+        assignee: Some("a".into()),
+        op_sys: Some("o".into()),
+        rep_platform: Some("rp".into()),
+        description: Some("d".into()),
+    };
+    for name in [
+        "product",
+        "component",
+        "version",
+        "priority",
+        "severity",
+        "assignee",
+        "op-sys",
+        "rep-platform",
+        "description",
+    ] {
+        super::clear_template_field(&mut t, name).unwrap();
+    }
+    assert!(super::template_is_empty(&t));
+}

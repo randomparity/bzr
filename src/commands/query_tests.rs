@@ -1636,3 +1636,87 @@ async fn query_update_clear_wins_over_set() {
     // status was both set and cleared -> cleared.
     assert!(Config::load().unwrap().queries["q"].status.is_empty());
 }
+
+#[test]
+fn clear_query_field_handles_every_name() {
+    let mut q = crate::types::SavedQuery {
+        product: vec!["p".into()],
+        component: vec!["c".into()],
+        status: vec!["s".into()],
+        assignee: vec!["a".into()],
+        creator: vec!["cr".into()],
+        priority: vec!["pr".into()],
+        severity: vec!["se".into()],
+        whiteboard: vec!["w".into()],
+        target_milestone: vec!["t".into()],
+        version: vec!["v".into()],
+        op_sys: vec!["o".into()],
+        platform: vec!["pl".into()],
+        resolution: vec!["r".into()],
+        qa_contact: vec!["q".into()],
+        url: vec!["u".into()],
+        quicksearch: Some("x".into()),
+        limit: Some(5),
+        fields: Some("f".into()),
+        exclude_fields: Some("e".into()),
+        creation_time: Some("2026-01-01".into()),
+        last_change_time: Some("2026-02-01".into()),
+        order: Some("bug_id".into()),
+        ..Default::default()
+    };
+    for name in [
+        "product",
+        "component",
+        "status",
+        "assignee",
+        "creator",
+        "priority",
+        "severity",
+        "whiteboard",
+        "target-milestone",
+        "version",
+        "op-sys",
+        "platform",
+        "resolution",
+        "qa-contact",
+        "url",
+        "search",
+        "limit",
+        "fields",
+        "exclude-fields",
+        "created-since",
+        "changed-since",
+        "sort",
+        "order",
+    ] {
+        super::clear_query_field(&mut q, name).unwrap();
+    }
+    assert!(!q.has_filters(), "every filter cleared");
+    assert!(q.limit.is_none() && q.fields.is_none() && q.order.is_none());
+}
+
+#[tokio::test]
+async fn query_update_sets_dates_and_sort() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run_q(&save_action("q")).await.unwrap();
+
+    let mut a = empty_update("q");
+    if let QueryAction::Update {
+        created_since,
+        changed_since,
+        sort_args,
+        ..
+    } = &mut a
+    {
+        *created_since = Some("2026-03-01".into());
+        *changed_since = Some("2026-03-02".into());
+        sort_args.sort = Some("priority".into());
+    }
+    run_q(&a).await.unwrap();
+
+    let config = Config::load().unwrap();
+    let q = &config.queries["q"];
+    assert!(q.creation_time.is_some());
+    assert!(q.last_change_time.is_some());
+    assert!(q.order.is_some());
+}
