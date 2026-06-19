@@ -1537,38 +1537,71 @@ fn parse_attachment_upload_without_comment_defaults_to_none() {
 }
 
 #[test]
-fn parse_attachment_upload_with_is_patch_flag() {
-    let cli = Cli::try_parse_from([
-        "bzr",
-        "attachment",
-        "upload",
-        "42",
-        "fix.patch",
-        "--is-patch",
-    ])
-    .unwrap();
+fn parse_attachment_upload_with_patch_flag() {
+    let cli =
+        Cli::try_parse_from(["bzr", "attachment", "upload", "42", "fix.patch", "--patch"]).unwrap();
     match cli.command {
         Commands::Attachment {
-            action: AttachmentAction::Upload {
-                bug_id, is_patch, ..
-            },
+            action:
+                AttachmentAction::Upload {
+                    bug_id,
+                    patch,
+                    no_patch,
+                    ..
+                },
         } => {
             assert_eq!(bug_id, 42);
-            assert!(is_patch, "--is-patch should set the flag to true");
+            assert!(patch, "--patch should set the flag to true");
+            assert!(!no_patch);
         }
         _ => panic!("expected Attachment Upload"),
     }
 }
 
 #[test]
-fn parse_attachment_upload_without_is_patch_defaults_to_false() {
+fn parse_attachment_upload_without_patch_defaults_to_false() {
     let cli = Cli::try_parse_from(["bzr", "attachment", "upload", "42", "f.txt"]).unwrap();
     match cli.command {
         Commands::Attachment {
-            action: AttachmentAction::Upload { is_patch, .. },
-        } => assert!(!is_patch, "--is-patch absent should default to false"),
+            action: AttachmentAction::Upload {
+                patch, no_patch, ..
+            },
+        } => {
+            assert!(!patch, "--patch absent should default to false");
+            assert!(!no_patch);
+        }
         _ => panic!("expected Attachment Upload"),
     }
+}
+
+#[test]
+fn parse_attachment_no_patch_overrides_patch() {
+    // overrides_with: the later flag wins, so --no-patch after --patch yields
+    // patch=false / no_patch=true (resolves to Some(false)).
+    let cli =
+        Cli::try_parse_from(["bzr", "attachment", "update", "9", "--patch", "--no-patch"]).unwrap();
+    match cli.command {
+        Commands::Attachment {
+            action: AttachmentAction::Update {
+                patch, no_patch, ..
+            },
+        } => {
+            assert!(!patch, "--no-patch should override the earlier --patch");
+            assert!(no_patch);
+        }
+        _ => panic!("expected Attachment Update"),
+    }
+}
+
+#[test]
+fn parse_attachment_update_old_value_boolean_is_rejected() {
+    // The old `--is-patch true` value grammar is gone; clap now treats `true`
+    // as an unexpected positional and errors.
+    let err = Cli::try_parse_from(["bzr", "attachment", "update", "9", "--is-patch", "true"]);
+    assert!(
+        err.is_err(),
+        "old --is-patch <BOOL> form must no longer parse"
+    );
 }
 
 #[test]

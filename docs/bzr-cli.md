@@ -125,10 +125,11 @@ bzr [--server <NAME>] [--output table|json] [--json] [--config <PATH>] [--no-col
 │   ├── list <BUG_ID>
 │   ├── view <ATTACHMENT_ID>
 │   ├── download <ATTACHMENT_ID> [-o <FILE>]
-│   ├── upload <BUG_ID> <FILE> [--summary <S>] [--content-type <MIME>] [--private] [--flag <F>...]
+│   ├── upload <BUG_ID> <FILE> [--summary <S>] [--content-type <MIME>]
+│   │                          [--private|--no-private] [--patch|--no-patch] [--flag <F>...]
 │   └── update <ATTACHMENT_ID> [--summary <S>] [--file-name <N>] [--content-type <MIME>]
-│                               [--obsolete <BOOL>] [--is-patch <BOOL>]
-│                               [--is-private <BOOL>] [--flag <F>...]
+│                               [--obsolete|--no-obsolete] [--patch|--no-patch]
+│                               [--private|--no-private] [--flag <F>...]
 ├── product
 │   ├── list [--type <TYPE>]
 │   ├── view <NAME>
@@ -773,7 +774,7 @@ bzr attachment upload 12345 patch.diff --flag "review?(alice@example.com)"
 bzr attachment upload 12345 secret.bin --summary "internal trace" --private
 bzr attachment upload 12345 fix.patch --comment "see #6789 for context"
 bzr attachment upload 12345 patch.diff --comment "sensitive context" --comment-private
-bzr attachment upload 12345 fix.patch --is-patch
+bzr attachment upload 12345 fix.patch --patch
 ```
 
 | Option | Required | Description |
@@ -781,9 +782,9 @@ bzr attachment upload 12345 fix.patch --is-patch
 | `<BUG_ID>` | Yes | Bug ID |
 | `<FILE>` | Yes | File to upload |
 | `--summary <S>` | No | Description of the attachment (default: filename) |
-| `--content-type <MIME>` | No | MIME type (auto-detected if omitted; defaults to `text/plain` when `--is-patch` is set without an explicit type) |
-| `--private` | No | Mark the attachment as private (visible only to users with elevated permissions) |
-| `--is-patch` | No | Mark the attachment as a patch; defaults `--content-type` to `text/plain` |
+| `--content-type <MIME>` | No | MIME type (auto-detected if omitted; defaults to `text/plain` when `--patch` is set without an explicit type) |
+| `--private` / `--no-private` | No | Mark the attachment private (or explicitly public; default public) |
+| `--patch` / `--no-patch` | No | Mark the attachment a patch (or non-patch; default non-patch); `--patch` defaults `--content-type` to `text/plain` |
 | `--comment <BODY>` | No | Post a comment alongside the attachment in the same API call |
 | `--comment-private` | No | Mark the comment posted via `--comment` private. Issues a follow-up `Bug.update` call (two API round-trips). Requires `--comment`. |
 | `--flag <F>` | No | Set flags (repeatable; see [Flag Syntax](#flag-syntax)) |
@@ -796,9 +797,14 @@ Update metadata on an existing attachment.
 
 ```bash
 bzr attachment update 67890 --summary "Updated patch"
-bzr attachment update 67890 --obsolete true
+bzr attachment update 67890 --obsolete
+bzr attachment update 67890 --no-private
 bzr attachment update 67890 --flag "review+(alice@example.com)"
 ```
+
+Each boolean property is a `--x` / `--no-x` pair: pass `--x` to set it true,
+`--no-x` to set it false, or neither to leave it unchanged. (If both are given,
+the last one on the command line wins.)
 
 | Option | Required | Description |
 |--------|----------|-------------|
@@ -806,9 +812,9 @@ bzr attachment update 67890 --flag "review+(alice@example.com)"
 | `--summary <S>` | No | New summary |
 | `--file-name <N>` | No | New file name |
 | `--content-type <MIME>` | No | New content type |
-| `--obsolete <BOOL>` | No | Mark as obsolete |
-| `--is-patch <BOOL>` | No | Mark as patch |
-| `--is-private <BOOL>` | No | Mark as private |
+| `--obsolete` / `--no-obsolete` | No | Mark obsolete / un-obsolete (unset = unchanged) |
+| `--patch` / `--no-patch` | No | Mark as patch / non-patch (unset = unchanged) |
+| `--private` / `--no-private` | No | Mark private / public (unset = unchanged) |
 | `--flag <F>` | No | Set flags (repeatable; see [Flag Syntax](#flag-syntax)) |
 
 ---

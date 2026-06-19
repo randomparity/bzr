@@ -1161,7 +1161,7 @@ fi
 
 test_begin "99. attachment update"
 if [[ -n "${ATTACH_ID:-}" ]] && [[ "$ATTACH_ID" != "null" ]]; then
-    run_bzr attachment update "$ATTACH_ID" --summary "Updated summary" --obsolete true
+    run_bzr attachment update "$ATTACH_ID" --summary "Updated summary" --obsolete
     if assert_success; then test_pass; fi
 else
     test_skip "no attachment ID"
@@ -1197,10 +1197,10 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "100g. attachment upload --is-patch marks attachment as a patch"
+test_begin "100g. attachment upload --patch marks attachment as a patch"
 if [[ -n "$BUG1" ]]; then
     run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
-        --summary "patch test" --is-patch
+        --summary "patch test" --patch
     if assert_success; then
         run_bzr attachment list "$BUG1"
         if assert_success \
