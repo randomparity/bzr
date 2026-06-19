@@ -235,6 +235,7 @@ async fn bug_create_integration() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        create_fields: bzr::cli::CreateFieldArgs::default(),
     };
     let mut __io5 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(

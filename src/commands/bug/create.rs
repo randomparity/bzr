@@ -29,21 +29,16 @@ impl MergedFields {
         CreateBugParams {
             product: self.product.clone(),
             component: self.component.clone(),
-            summary: String::new(),
             version: self
                 .version
                 .clone()
                 .unwrap_or_else(|| "unspecified".to_string()),
-            description: None,
             priority: self.priority.clone(),
             severity: self.severity.clone(),
             assigned_to: self.assigned_to.clone(),
             op_sys: self.op_sys.clone(),
             rep_platform: self.rep_platform.clone(),
-            blocks: vec![],
-            depends_on: vec![],
-            cc: vec![],
-            keywords: vec![],
+            ..Default::default()
         }
     }
 }
@@ -244,11 +239,18 @@ pub(super) async fn handle(
         description_file,
         blocks,
         depends_on,
+        create_fields,
         ..
     } = action
     else {
         unreachable!()
     };
+
+    let flags = crate::commands::flags::parse_flags(&create_fields.flag)?;
+    let deadline = crate::validation::parse_optional_date_only(
+        create_fields.deadline.as_deref(),
+        "--deadline",
+    )?;
 
     let resolved_description =
         resolve_description(description.as_deref(), description_file.as_deref())?;
@@ -282,10 +284,17 @@ pub(super) async fn handle(
         assigned_to: merged.assigned_to,
         op_sys: merged.op_sys,
         rep_platform: merged.rep_platform,
+        alias: create_fields.alias.clone(),
+        url: create_fields.url.clone(),
+        whiteboard: create_fields.whiteboard.clone(),
+        target_milestone: create_fields.target_milestone.clone(),
+        deadline,
         blocks: blocks.clone(),
         depends_on: depends_on.clone(),
-        cc: vec![],
-        keywords: vec![],
+        cc: create_fields.cc.clone(),
+        keywords: create_fields.keywords.clone(),
+        groups: create_fields.groups.clone(),
+        flags,
     };
     let id = client.create_bug(&params).await?;
     write_result(

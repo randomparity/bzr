@@ -19,6 +19,44 @@ pub struct SortArgs {
     pub order: SortDirection,
 }
 
+/// Create-time field flags shared into `bug create`, giving it parity with
+/// `bug update` for the subset Bugzilla's `Bug.create` accepts in one call.
+/// Grouped into one flattened struct so the `Create` variant stays readable
+/// and the set is defined once.
+#[derive(Args, Debug, Clone, Default)]
+pub struct CreateFieldArgs {
+    /// Set an alias for the new bug.
+    #[arg(long)]
+    pub alias: Option<String>,
+    /// Set the URL field.
+    #[arg(long)]
+    pub url: Option<String>,
+    /// Set the Status Whiteboard.
+    #[arg(long)]
+    pub whiteboard: Option<String>,
+    /// Set the Target Milestone.
+    #[arg(long)]
+    pub target_milestone: Option<String>,
+    /// Set the deadline date (`YYYY-MM-DD`).
+    #[arg(long, value_name = "DATE")]
+    pub deadline: Option<String>,
+    /// Add CC entries (comma-separated, repeatable).
+    #[arg(long, value_delimiter = ',')]
+    pub cc: Vec<String>,
+    /// Add keywords (comma-separated, repeatable).
+    #[arg(long, value_delimiter = ',')]
+    pub keywords: Vec<String>,
+    /// Add the new bug to these groups (comma-separated, repeatable).
+    #[arg(long, value_delimiter = ',')]
+    pub groups: Vec<String>,
+    /// Set or request a flag using Bugzilla flag syntax (repeatable).
+    ///
+    /// Accepted forms: `name+` (granted), `name-` (denied), `name?`
+    /// (request), or `name?(user@example.com)` (request a specific user).
+    #[arg(long)]
+    pub flag: Vec<String>,
+}
+
 /// Shared `--fields` / `--exclude-fields` selection, flattened into the bug
 /// query subcommands (`list`, `view`, `search`, `my`) so the pair is defined
 /// once instead of repeated per variant.
@@ -381,10 +419,23 @@ pub enum BugAction {
     ///     # becomes the summary
     ///   bzr bug create --template security-bug --summary "XSS in login"
     ///
+    /// Field flags shared with `bug update` set the new bug's metadata
+    /// in the same `Bug.create` call (no follow-up update): `--alias`,
+    /// `--url`, `--whiteboard`, `--target-milestone`, `--deadline`,
+    /// `--cc`, `--keywords`, `--groups`, and `--flag`. The list flags
+    /// (`--cc`, `--keywords`, `--groups`) accept comma-separated values
+    /// and repeat; `--flag` uses Bugzilla flag syntax (`name+`, `name-`,
+    /// `name?`, `name?(user@example.com)`) and repeats. `--deadline`
+    /// takes a `YYYY-MM-DD` date.
+    ///
+    ///   bzr bug create --product P --component C --summary S \
+    ///     --description D --keywords regression,crash \
+    ///     --cc qa@example.com --flag review? --target-milestone 9.0
+    ///
     /// Exit codes: 0 on success, 4 on Bugzilla API error, 7 on
     /// input validation (missing --summary outside the editor flow,
     /// empty editor buffer, missing or non-UTF-8 --description-file,
-    /// $EDITOR exited non-zero), 9 on auth failure.
+    /// malformed --deadline, $EDITOR exited non-zero), 9 on auth failure.
     ///
     /// See bzr-bug-clone(1) for cloning an existing bug,
     /// bzr-template(1) for managing templates, and bzr-field(1) for
@@ -454,6 +505,8 @@ pub enum BugAction {
         /// Bug IDs that this bug depends on (comma-separated)
         #[arg(long, value_delimiter = ',')]
         depends_on: Vec<u64>,
+        #[command(flatten)]
+        create_fields: CreateFieldArgs,
     },
     /// Show bugs related to the authenticated user.
     ///

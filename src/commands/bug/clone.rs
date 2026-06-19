@@ -82,6 +82,7 @@ pub(super) async fn handle(
         } else {
             source.keywords
         },
+        ..Default::default()
     };
 
     let new_id = client.create_bug(&params).await?;
