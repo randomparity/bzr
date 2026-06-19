@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `bzr config remove-server <NAME>` deletes a server alias (and its OS-keychain
+  entry, if any). Removing the current default is refused while other servers
+  remain; removing the only server clears the default. `bzr config
+  rename-server <OLD> <NEW>` renames an alias, preserving credentials —
+  including moving the keychain secret when it is stored under the default
+  (server-name) account — and updates `default_server` if it pointed at the old
+  name. Both emit the standard mutation JSON (`removed` / `renamed`). (#300)
 - `bzr completion <bash|zsh|fish|powershell|elvish>` prints a shell completion
   script to stdout, generated from bzr's live clap command tree so it always
   matches the installed binary's subcommands and flags. README and

@@ -55,6 +55,8 @@ pub enum ActionKind {
     Added,
     #[serde(rename = "removed")]
     Removed,
+    #[serde(rename = "renamed")]
+    Renamed,
     #[serde(rename = "downloaded")]
     Downloaded,
 }
@@ -161,6 +163,9 @@ impl TagResult {
 #[non_exhaustive]
 pub struct ConfigResult {
     pub name: String,
+    /// Prior alias for a `rename-server` operation; omitted otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -180,6 +185,7 @@ impl ConfigResult {
     ) -> Self {
         Self {
             name: name.into(),
+            previous_name: None,
             url: Some(url.into()),
             is_default: Some(is_default),
             config_file: config_file.into(),
@@ -195,11 +201,43 @@ impl ConfigResult {
     pub fn default_set(name: impl Into<String>, config_file: impl Into<String>) -> Self {
         Self {
             name: name.into(),
+            previous_name: None,
             url: None,
             is_default: None,
             config_file: config_file.into(),
             resource: ResourceKind::Server,
             action: ActionKind::Updated,
+        }
+    }
+
+    /// Result for `config remove-server`: the server alias that was removed.
+    pub fn removed(name: impl Into<String>, config_file: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            previous_name: None,
+            url: None,
+            is_default: None,
+            config_file: config_file.into(),
+            resource: ResourceKind::Server,
+            action: ActionKind::Removed,
+        }
+    }
+
+    /// Result for `config rename-server`: `name` is the new alias and
+    /// `previous_name` carries the old one.
+    pub fn renamed(
+        old_name: impl Into<String>,
+        new_name: impl Into<String>,
+        config_file: impl Into<String>,
+    ) -> Self {
+        Self {
+            name: new_name.into(),
+            previous_name: Some(old_name.into()),
+            url: None,
+            is_default: None,
+            config_file: config_file.into(),
+            resource: ResourceKind::Server,
+            action: ActionKind::Renamed,
         }
     }
 }
