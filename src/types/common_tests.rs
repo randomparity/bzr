@@ -138,3 +138,25 @@ fn api_mode_from_str() {
     assert_eq!("hybrid".parse::<ApiMode>().unwrap(), ApiMode::Hybrid);
     assert!("grpc".parse::<ApiMode>().is_err());
 }
+
+#[test]
+fn sort_direction_from_str_and_keyword() {
+    assert_eq!("asc".parse::<SortDirection>().unwrap(), SortDirection::Asc);
+    assert_eq!("ASC".parse::<SortDirection>().unwrap(), SortDirection::Asc);
+    assert_eq!(
+        "ascending".parse::<SortDirection>().unwrap(),
+        SortDirection::Asc
+    );
+    assert_eq!(
+        "desc".parse::<SortDirection>().unwrap(),
+        SortDirection::Desc
+    );
+    assert_eq!(
+        "DESCENDING".parse::<SortDirection>().unwrap(),
+        SortDirection::Desc
+    );
+    assert!("sideways".parse::<SortDirection>().is_err());
+    assert_eq!(SortDirection::Asc.keyword(), "ASC");
+    assert_eq!(SortDirection::Desc.keyword(), "DESC");
+    assert_eq!(SortDirection::default(), SortDirection::Asc);
+}
