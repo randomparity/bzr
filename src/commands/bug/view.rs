@@ -1,5 +1,10 @@
+use std::io::IsTerminal;
+
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+
 use crate::cli::{BugAction, FieldArgs};
 use crate::client::BugzillaClient;
+use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::output::resources::bug::{
     bug_to_json, canonical_field_list, write_bug_detail, write_multi_bug_view, ColumnSpec,
@@ -60,6 +65,7 @@ pub(super) async fn handle(
     let BugAction::View {
         ids,
         permissive,
+        web: _,
         field_args: FieldArgs {
             fields,
             exclude_fields,
@@ -103,6 +109,61 @@ pub(super) async fn handle(
     let spec = ColumnSpec::new(inc, exc);
     write_batch(batch, spec, format, w);
     Ok(())
+}
+
+/// Handle `bug view --web`: resolve each ID's web page URL from local config
+/// and open it in the browser, or print it when running headless / non-TTY.
+pub(super) fn handle_web(ids: &[String], server: Option<&str>, w: &mut Writers<'_>) -> Result<()> {
+    let urls = resolve_bug_urls(ids, server)?;
+    // Open a browser only with both a terminal stdout and a display; anything
+    // else (pipe, redirect, headless) prints the URL instead.
+    let interactive = std::io::stdout().is_terminal() && has_display();
+    emit_web(&urls, interactive, w);
+    Ok(())
+}
+
+/// Build the `show_bug.cgi?id=<ID>` URL for each ID against the active server's
+/// base URL. Pure local config read — no network, no auth. Uses the
+/// unvalidated config so opening a bug page never depends on credentials being
+/// set (here or on any other server entry); only the server's URL is needed.
+fn resolve_bug_urls(ids: &[String], server: Option<&str>) -> Result<Vec<String>> {
+    let config = Config::read_unvalidated()?;
+    let (_name, srv) = config.resolve_server(server)?;
+    Ok(ids.iter().map(|id| bug_web_url(&srv.url, id)).collect())
+}
+
+/// Construct a bug's web page URL. Trailing slashes on `base` are trimmed so
+/// the result has exactly one separator; the ID is percent-encoded so an alias
+/// with reserved characters stays a valid query value.
+fn bug_web_url(base: &str, id: &str) -> String {
+    let base = base.trim_end_matches('/');
+    let encoded = utf8_percent_encode(id, NON_ALPHANUMERIC);
+    format!("{base}/show_bug.cgi?id={encoded}")
+}
+
+/// Whether a graphical display is available to open a browser. GUI platforms
+/// (macOS, Windows) always qualify; elsewhere a display requires `DISPLAY` or
+/// `WAYLAND_DISPLAY` to be set.
+fn has_display() -> bool {
+    if cfg!(any(target_os = "macos", target_os = "windows")) {
+        return true;
+    }
+    std::env::var_os("DISPLAY").is_some() || std::env::var_os("WAYLAND_DISPLAY").is_some()
+}
+
+/// Open each URL in the browser when interactive, else print it. A failed
+/// `open` falls back to printing so the URL is never lost.
+fn emit_web(urls: &[String], interactive: bool, w: &mut Writers<'_>) {
+    for url in urls {
+        if interactive {
+            if let Err(e) = open::that(url) {
+                let _ = writeln!(w.err, "warning: failed to open browser: {e}");
+                let _ = writeln!(w.out, "{url}");
+            }
+        } else {
+            let _ = writeln!(w.out, "{url}");
+        }
+    }
 }
 
 async fn view_single(

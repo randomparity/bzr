@@ -231,6 +231,18 @@ pub enum BugAction {
         /// security) — those always bail.
         #[arg(long)]
         permissive: bool,
+        /// Open the bug's web page in the default browser instead of
+        /// printing its record.
+        ///
+        /// Resolves the active server's base URL and opens
+        /// `show_bug.cgi?id=<ID>` for each ID given. No network call
+        /// or authentication is needed. When stdout is not a terminal,
+        /// or there is no display (headless / SSH without X), the URL is
+        /// printed to stdout and the command exits 0 instead of opening
+        /// a browser — which keeps it safe for scripts and pipes.
+        /// `--fields` and `--permissive` are ignored with `--web`.
+        #[arg(long)]
+        web: bool,
         #[command(flatten)]
         field_args: FieldArgs,
     },

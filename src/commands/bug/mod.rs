@@ -43,6 +43,13 @@ pub async fn execute(
 ) -> Result<()> {
     update::validate_action(action)?;
 
+    // `--web` resolves the bug's URL from local config and opens (or prints)
+    // it — no auth, no network, no field selection. Short-circuit before any
+    // of the connect/validate machinery below.
+    if let BugAction::View { ids, web: true, .. } = action {
+        return view::handle_web(ids, server, w);
+    }
+
     // Resolve the field selection before any network I/O. A selection that
     // leaves nothing to show exits 7 deterministically — measured against the
     // five-column default in table mode, against the full field universe in

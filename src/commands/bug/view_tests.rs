@@ -11,6 +11,7 @@ fn make_view_action(ids: &[&str], permissive: bool) -> BugAction {
     BugAction::View {
         ids: ids.iter().map(|s| (*s).to_string()).collect(),
         permissive,
+        web: false,
         field_args: crate::cli::FieldArgs {
             fields: None,
             exclude_fields: None,
@@ -760,4 +761,122 @@ async fn view_multi_permissive_api_410_bails() {
         "auth-flavored Api code must bail despite --permissive"
     );
     assert!(!result.unwrap_err().is_bug_get_per_resource());
+}
+
+#[test]
+fn web_url_numeric_id() {
+    assert_eq!(
+        super::bug_web_url("https://bz.example.com", "12345"),
+        "https://bz.example.com/show_bug.cgi?id=12345"
+    );
+}
+
+#[test]
+fn web_url_trims_trailing_slash() {
+    assert_eq!(
+        super::bug_web_url("https://bz.example.com/", "42"),
+        "https://bz.example.com/show_bug.cgi?id=42"
+    );
+}
+
+#[test]
+fn web_url_percent_encodes_alias() {
+    // Reserved characters in an alias must be encoded so the query value
+    // stays well-formed; plain alphanumerics pass through untouched.
+    assert_eq!(
+        super::bug_web_url("https://bz.example.com", "my alias/v2"),
+        "https://bz.example.com/show_bug.cgi?id=my%20alias%2Fv2"
+    );
+}
+
+#[test]
+fn emit_web_non_interactive_prints_every_url() {
+    let urls = vec![
+        "https://bz.example.com/show_bug.cgi?id=1".to_string(),
+        "https://bz.example.com/show_bug.cgi?id=2".to_string(),
+    ];
+    let mut io = crate::test_helpers::CapturedIo::new();
+    super::emit_web(&urls, false, &mut io.writers());
+    let out = io.out_str();
+    assert!(
+        out.contains("show_bug.cgi?id=1"),
+        "missing first url:\n{out}"
+    );
+    assert!(
+        out.contains("show_bug.cgi?id=2"),
+        "missing second url:\n{out}"
+    );
+    // Non-interactive must not touch stderr.
+    assert!(io.err_str().is_empty());
+}
+
+#[tokio::test]
+async fn resolve_bug_urls_uses_configured_server() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    let ids = vec!["42".to_string(), "99".to_string()];
+    let urls = super::resolve_bug_urls(&ids, None).unwrap();
+    assert_eq!(urls.len(), 2);
+    assert!(urls[0].starts_with(&mock.uri()));
+    assert!(urls[0].ends_with("/show_bug.cgi?id=42"));
+    assert!(urls[1].ends_with("/show_bug.cgi?id=99"));
+}
+
+#[tokio::test]
+async fn resolve_bug_urls_works_without_credentials() {
+    // A server with a URL but no api_key/env/keyring fails Config::load()
+    // validation; `--web` only needs the URL, so it must still resolve.
+    let _lock = crate::ENV_LOCK.lock().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_dir = tmp.path().join("bzr");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    std::fs::write(
+        config_dir.join("config.toml"),
+        "default_server = \"nocreds\"\n\n[servers.nocreds]\nurl = \"https://bz.example.com\"\n",
+    )
+    .unwrap();
+    // SAFETY: ENV_LOCK serializes env access across tests.
+    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    let ids = vec!["7".to_string()];
+    let urls = super::resolve_bug_urls(&ids, None).unwrap();
+    assert_eq!(urls, vec!["https://bz.example.com/show_bug.cgi?id=7"]);
+}
+
+#[tokio::test]
+async fn has_display_respects_display_env() {
+    let _lock = crate::ENV_LOCK.lock().await;
+    let saved_display = std::env::var_os("DISPLAY");
+    let saved_wayland = std::env::var_os("WAYLAND_DISPLAY");
+
+    // SAFETY: ENV_LOCK serializes env access across tests.
+    unsafe {
+        std::env::set_var("DISPLAY", ":0");
+        std::env::remove_var("WAYLAND_DISPLAY");
+    }
+    assert!(super::has_display(), "DISPLAY set should report a display");
+
+    unsafe { std::env::remove_var("DISPLAY") };
+    if cfg!(any(target_os = "macos", target_os = "windows")) {
+        assert!(
+            super::has_display(),
+            "GUI platforms always report a display"
+        );
+    } else {
+        assert!(
+            !super::has_display(),
+            "no DISPLAY/WAYLAND_DISPLAY should report headless"
+        );
+    }
+
+    // SAFETY: restore prior environment under the same lock.
+    unsafe {
+        match saved_display {
+            Some(v) => std::env::set_var("DISPLAY", v),
+            None => std::env::remove_var("DISPLAY"),
+        }
+        match saved_wayland {
+            Some(v) => std::env::set_var("WAYLAND_DISPLAY", v),
+            None => std::env::remove_var("WAYLAND_DISPLAY"),
+        }
+    }
 }
