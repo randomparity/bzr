@@ -796,7 +796,9 @@ fn emit_web_non_interactive_prints_every_url() {
         "https://bz.example.com/show_bug.cgi?id=2".to_string(),
     ];
     let mut io = crate::test_helpers::CapturedIo::new();
-    super::emit_web(&urls, false, &mut io.writers());
+    // Opener must never be called on the non-interactive path.
+    let opener = |_: &str| -> std::io::Result<()> { panic!("opener called when non-interactive") };
+    super::emit_web(&urls, false, opener, &mut io.writers());
     let out = io.out_str();
     assert!(
         out.contains("show_bug.cgi?id=1"),
@@ -808,6 +810,42 @@ fn emit_web_non_interactive_prints_every_url() {
     );
     // Non-interactive must not touch stderr.
     assert!(io.err_str().is_empty());
+}
+
+#[test]
+fn emit_web_interactive_success_is_silent() {
+    let urls = vec!["https://bz.example.com/show_bug.cgi?id=1".to_string()];
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let opener = |_: &str| -> std::io::Result<()> { Ok(()) };
+    super::emit_web(&urls, true, opener, &mut io.writers());
+    // A successful open prints nothing on either stream.
+    assert!(io.out_str().is_empty(), "stdout:\n{}", io.out_str());
+    assert!(io.err_str().is_empty(), "stderr:\n{}", io.err_str());
+}
+
+#[test]
+fn emit_web_interactive_failure_falls_back_to_print() {
+    let urls = vec!["https://bz.example.com/show_bug.cgi?id=9".to_string()];
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let opener = |_: &str| -> std::io::Result<()> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "no browser",
+        ))
+    };
+    super::emit_web(&urls, true, opener, &mut io.writers());
+    // On open failure the URL is still printed (so it is never lost) and a
+    // warning naming the cause goes to stderr.
+    assert!(
+        io.out_str().contains("show_bug.cgi?id=9"),
+        "{}",
+        io.out_str()
+    );
+    assert!(
+        io.err_str().contains("failed to open browser") && io.err_str().contains("no browser"),
+        "{}",
+        io.err_str()
+    );
 }
 
 #[tokio::test]
@@ -879,4 +917,53 @@ async fn has_display_respects_display_env() {
             None => std::env::remove_var("WAYLAND_DISPLAY"),
         }
     }
+}
+
+/// End-to-end through `bug::execute` with `--web`. fd 1 is redirected to a temp
+/// file so `is_terminal()` reports non-interactive, forcing the print path —
+/// no real browser is ever launched, and the URL goes to the captured Writers.
+#[cfg(unix)]
+#[tokio::test]
+async fn execute_web_prints_url_when_fd1_not_a_tty() {
+    use std::os::unix::io::AsRawFd;
+
+    extern "C" {
+        fn dup(fd: std::ffi::c_int) -> std::ffi::c_int;
+        fn dup2(oldfd: std::ffi::c_int, newfd: std::ffi::c_int) -> std::ffi::c_int;
+        fn close(fd: std::ffi::c_int) -> std::ffi::c_int;
+    }
+
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    let action = BugAction::View {
+        ids: vec!["55".to_string()],
+        permissive: false,
+        web: true,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
+    };
+
+    let redirect = tempfile::NamedTempFile::new().unwrap();
+    // SAFETY: save fd 1, then point it at the temp file so is_terminal() is
+    // false. fd 1 is restored before any assertion or further test runs.
+    let saved = unsafe { dup(1) };
+    assert!(saved >= 0, "dup(1) failed");
+    unsafe { dup2(redirect.as_file().as_raw_fd(), 1) };
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Table, None, &mut io.writers())
+            .await;
+
+    // SAFETY: restore fd 1 before reading results / yielding to other tests.
+    unsafe {
+        dup2(saved, 1);
+        close(saved);
+    }
+
+    assert!(result.is_ok(), "{:?}", result.err());
+    let out = io.out_str();
+    assert!(out.starts_with(&mock.uri()), "url targets server:\n{out}");
+    assert!(out.contains("/show_bug.cgi?id=55"), "{out}");
 }
