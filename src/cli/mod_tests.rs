@@ -568,11 +568,13 @@ fn parse_comment_add_with_body() {
                 CommentAction::Add {
                     bug_id,
                     body,
+                    body_file,
                     private,
                 },
         } => {
             assert_eq!(bug_id, 42);
             assert_eq!(body.as_deref(), Some("This is a comment"));
+            assert!(body_file.is_none());
             assert!(!private);
         }
         _ => panic!("expected Comment Add"),
@@ -597,11 +599,13 @@ fn parse_comment_add_with_private() {
                 CommentAction::Add {
                     bug_id,
                     body,
+                    body_file,
                     private,
                 },
         } => {
             assert_eq!(bug_id, 42);
             assert_eq!(body.as_deref(), Some("secret note"));
+            assert!(body_file.is_none());
             assert!(private);
         }
         _ => panic!("expected Comment Add"),

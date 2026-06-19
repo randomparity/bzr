@@ -1,4 +1,4 @@
-use std::io::{IsTerminal, Read};
+use std::io::IsTerminal;
 
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
@@ -124,18 +124,20 @@ fn resolve_description(
     description: Option<&str>,
     description_file: Option<&std::path::Path>,
 ) -> Result<Option<String>> {
-    if let Some(d) = description {
-        return Ok(Some(d.to_owned()));
-    }
-    if let Some(p) = description_file {
-        return Ok(Some(crate::commands::shared::read_file_with_context(
-            p,
+    let explicit = crate::commands::shared::materialize_body_source(
+        crate::commands::shared::classify_body_source(
+            description,
+            description_file,
+            "--description",
             "--description-file",
-        )?));
+        )?,
+        "--description-file",
+    )?;
+    if explicit.is_some() {
+        return Ok(explicit);
     }
     if !std::io::stdin().is_terminal() {
-        let mut buf = String::new();
-        std::io::stdin().lock().read_to_string(&mut buf)?;
+        let buf = crate::commands::shared::read_stdin_to_string()?;
         if buf.trim().is_empty() {
             return Err(crate::error::BzrError::InputValidation(
                 "no description supplied (piped stdin is empty)".into(),

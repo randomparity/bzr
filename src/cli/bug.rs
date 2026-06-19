@@ -321,7 +321,9 @@ pub enum BugAction {
     ///   3. piped stdin (when stdin is not a TTY)
     ///   4. `$EDITOR` (when stdin is a TTY and none of the above)
     ///
-    /// `--description` and `--description-file` are mutually
+    /// A value of `-` for `--description` or `--description-file`
+    /// reads the description from stdin. `--description` and
+    /// `--description-file` are mutually
     /// exclusive. When the editor flow is active, `--summary` is
     /// optional: the first non-empty line of the buffer becomes
     /// the summary and the rest becomes the description. A
@@ -385,14 +387,15 @@ pub enum BugAction {
         /// Version
         #[arg(long)]
         version: Option<String>,
-        /// Bug description
+        /// Bug description (a value of `-` reads from stdin)
         #[arg(long, conflicts_with = "description_file")]
         description: Option<String>,
         /// Read the bug description from a UTF-8 file.
         ///
-        /// Mutually exclusive with `--description`. The file path
-        /// must exist and be readable; non-existent paths or
-        /// non-UTF-8 contents fail with exit code 7.
+        /// A path of `-` reads from stdin. Mutually exclusive with
+        /// `--description`. The file path must exist and be readable;
+        /// non-existent paths or non-UTF-8 contents fail with exit
+        /// code 7.
         #[arg(long, value_name = "PATH", conflicts_with = "description")]
         description_file: Option<std::path::PathBuf>,
         /// Priority
@@ -563,7 +566,8 @@ pub enum BugAction {
     ///
     /// `--comment <BODY>` (or `--comment-file <PATH>`) posts a comment
     /// atomically with the field changes — a single `Bug.update`
-    /// round-trip rather than a separate `bzr comment add` call.
+    /// round-trip rather than a separate `bzr comment add` call. A
+    /// value of `-` for either flag reads the comment from stdin.
     /// `--comment-private` marks it private. Empty / whitespace-only
     /// bodies are rejected (exit 7).
     ///
@@ -666,17 +670,19 @@ pub enum BugAction {
         whiteboard: Option<String>,
         /// Post a comment atomically with the field changes.
         ///
-        /// Mutually exclusive with `--comment-file`. Use
-        /// `--comment-private` to mark the comment private. Empty /
-        /// whitespace-only bodies are rejected (exit 7).
+        /// A value of `-` reads the comment from stdin. Mutually
+        /// exclusive with `--comment-file`. Use `--comment-private`
+        /// to mark the comment private. Empty / whitespace-only
+        /// bodies are rejected (exit 7).
         #[arg(long, value_name = "BODY", conflicts_with = "comment_file")]
         comment: Option<String>,
         /// Read the comment body from a UTF-8 file.
         ///
-        /// Mutually exclusive with `--comment`. The file must exist
-        /// and be readable; non-existent paths or non-UTF-8 contents
-        /// fail with exit code 7. Empty / whitespace-only contents
-        /// are also rejected.
+        /// A path of `-` reads from stdin. Mutually exclusive with
+        /// `--comment`. The file must exist and be readable;
+        /// non-existent paths or non-UTF-8 contents fail with exit
+        /// code 7. Empty / whitespace-only contents are also
+        /// rejected.
         #[arg(long, value_name = "PATH", conflicts_with = "comment")]
         comment_file: Option<std::path::PathBuf>,
         /// Mark the comment private (visible only to users with

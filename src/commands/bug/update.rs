@@ -67,19 +67,15 @@ fn resolve_comment(
     comment_file: Option<&std::path::Path>,
     comment_private: bool,
 ) -> Result<Option<crate::types::CommentUpdate>> {
-    let body = match (comment, comment_file) {
-        (Some(_), Some(_)) => {
-            return Err(crate::error::BzrError::InputValidation(
-                "--comment and --comment-file are mutually exclusive".into(),
-            ));
-        }
-        (Some(s), None) => Some(s.to_string()),
-        (None, Some(path)) => Some(crate::commands::shared::read_file_with_context(
-            path,
+    let body = crate::commands::shared::materialize_body_source(
+        crate::commands::shared::classify_body_source(
+            comment,
+            comment_file,
+            "--comment",
             "--comment-file",
-        )?),
-        (None, None) => None,
-    };
+        )?,
+        "--comment-file",
+    )?;
     if body.is_none() && comment_private {
         return Err(crate::error::BzrError::InputValidation(
             "--comment-private requires --comment or --comment-file".into(),

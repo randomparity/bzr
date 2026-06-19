@@ -849,3 +849,103 @@ async fn cached_path_skips_probe_when_insecure() {
         "cached path with insecure flag should skip probe"
     );
 }
+
+use super::{classify_body_source, materialize_body_source, BodySource};
+
+#[test]
+fn classify_inline_literal() {
+    let got = classify_body_source(Some("hello"), None, "--body", "--body-file").unwrap();
+    assert_eq!(got, BodySource::Literal("hello".to_string()));
+}
+
+#[test]
+fn classify_inline_dash_is_stdin() {
+    let got = classify_body_source(Some("-"), None, "--body", "--body-file").unwrap();
+    assert_eq!(got, BodySource::Stdin);
+}
+
+#[test]
+fn classify_file_path() {
+    let got = classify_body_source(
+        None,
+        Some(std::path::Path::new("/tmp/x")),
+        "--body",
+        "--body-file",
+    )
+    .unwrap();
+    assert_eq!(got, BodySource::File(std::path::PathBuf::from("/tmp/x")));
+}
+
+#[test]
+fn classify_file_dash_is_stdin() {
+    let got = classify_body_source(
+        None,
+        Some(std::path::Path::new("-")),
+        "--body",
+        "--body-file",
+    )
+    .unwrap();
+    assert_eq!(got, BodySource::Stdin);
+}
+
+#[test]
+fn classify_none() {
+    let got = classify_body_source(None, None, "--body", "--body-file").unwrap();
+    assert_eq!(got, BodySource::None);
+}
+
+#[test]
+fn classify_both_is_mutually_exclusive_error() {
+    let err = classify_body_source(
+        Some("x"),
+        Some(std::path::Path::new("/tmp/x")),
+        "--comment",
+        "--comment-file",
+    )
+    .unwrap_err();
+    match err {
+        BzrError::InputValidation(msg) => {
+            assert!(msg.contains("--comment"), "names inline flag: {msg}");
+            assert!(msg.contains("--comment-file"), "names file flag: {msg}");
+        }
+        other => panic!("expected InputValidation, got {other:?}"),
+    }
+}
+
+#[test]
+fn read_to_string_from_reads_bytes() {
+    let mut src = &b"piped body\n"[..];
+    let got = super::read_to_string_from(&mut src).unwrap();
+    assert_eq!(got, "piped body\n");
+}
+
+#[test]
+fn read_to_string_from_rejects_non_utf8() {
+    let mut src = &[0xff, 0xfe][..];
+    assert!(super::read_to_string_from(&mut src).is_err());
+}
+
+#[test]
+fn materialize_literal_passes_through() {
+    let got = materialize_body_source(BodySource::Literal("hi".into()), "--body-file").unwrap();
+    assert_eq!(got, Some("hi".to_string()));
+}
+
+#[test]
+fn materialize_none_is_none() {
+    let got = materialize_body_source(BodySource::None, "--body-file").unwrap();
+    assert_eq!(got, None);
+}
+
+#[test]
+fn materialize_missing_file_is_input_validation() {
+    let err = materialize_body_source(
+        BodySource::File(std::path::PathBuf::from("/no/such/file/here")),
+        "--body-file",
+    )
+    .unwrap_err();
+    match err {
+        BzrError::InputValidation(msg) => assert!(msg.contains("--body-file"), "{msg}"),
+        other => panic!("expected InputValidation, got {other:?}"),
+    }
+}

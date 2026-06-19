@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `bzr comment add` now accepts `--body-file <PATH>` to read the comment body
+  from a UTF-8 file, matching `bug create --description-file` and
+  `bug update --comment-file`. A path of `-` reads from stdin. `--body` and
+  `--body-file` are mutually exclusive.
 - Bundled agent skills for driving `bzr` from AI coding agents, with a
   runtime-free installer. Five skills (`bzr-reference`, `bzr-setup`,
   `bzr-file-bug`, `bzr-triage-bug`, `bzr-search-report`) live under
@@ -17,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `~/.claude/skills`) with a `.bzr-skill-managed` ownership sentinel. CI runs a
   command-surface drift check against the built binary. Replaces the previous
   `docs/skills.md` and `docs/bob-skills.md` guides.
+
+### Fixed
+
+- `--body`, `--description`, and `--comment` (and their `--*-file` companions)
+  now honour the `-` convention, reading the body from stdin instead of posting
+  or sending a literal `-`. Previously `bzr comment add <id> --body -` posted a
+  literal `-`. (#295)
 
 ## [0.4.4] - 2026-06-12
 

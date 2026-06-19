@@ -757,3 +757,16 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
         "expected InputValidation (template body should not auto-fill outside the editor flow), got {err:?}"
     );
 }
+
+#[test]
+fn resolve_description_conflict_errors() {
+    let err =
+        super::resolve_description(Some("x"), Some(std::path::Path::new("/tmp/x"))).unwrap_err();
+    match err {
+        BzrError::InputValidation(msg) => {
+            assert!(msg.contains("--description"), "names inline flag: {msg}");
+            assert!(msg.contains("--description-file"), "names file flag: {msg}");
+        }
+        other => panic!("expected InputValidation, got {other:?}"),
+    }
+}

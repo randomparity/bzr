@@ -29,11 +29,13 @@ pub enum CommentAction {
 
     /// Add a comment to a bug.
     ///
-    /// The comment body is read from one of three sources, in order
-    /// of precedence: `--body "..."` if provided, stdin when piped,
-    /// or `$EDITOR` when stdin is a terminal and `--body` is not
-    /// set. Empty bodies are rejected with exit code 7 (input
-    /// validation).
+    /// The comment body is resolved in this order of precedence:
+    /// `--body "..."`, `--body-file PATH`, piped stdin, then
+    /// `$EDITOR` (when stdin is a terminal and no flag is set). A
+    /// value of `-` for `--body` or `--body-file` reads the body
+    /// from stdin (`echo text | bzr comment add 1 --body -`).
+    /// `--body` and `--body-file` are mutually exclusive. Empty
+    /// bodies are rejected with exit code 7 (input validation).
     ///
     /// Comments are immutable once posted -- subsequent edits or
     /// retractions are not possible via the REST API. To flag a
@@ -42,7 +44,8 @@ pub enum CommentAction {
     /// Examples:
     ///
     ///   bzr comment add 12345 --body "Reproduced on RHEL 9.4"
-    ///   echo "see also #6789" | bzr comment add 12345
+    ///   echo "see also #6789" | bzr comment add 12345 --body -
+    ///   bzr comment add 12345 --body-file notes.txt
     ///   bzr comment add 12345     # opens $EDITOR
     ///
     /// See bzr-comment-list(1) for the existing thread and
@@ -53,12 +56,19 @@ pub enum CommentAction {
         bug_id: u64,
         /// Comment text.
         ///
-        /// When omitted, bzr reads the body from stdin if it's
-        /// piped, otherwise it opens `$EDITOR` (or `vi` if
-        /// `$EDITOR` is unset) for interactive composition.
-        /// Empty bodies are rejected with exit code 7.
-        #[arg(long)]
+        /// A value of `-` reads the body from stdin. Mutually
+        /// exclusive with `--body-file`. When both are omitted, bzr
+        /// reads from stdin if it's piped, otherwise it opens
+        /// `$EDITOR` (or `vi` if `$EDITOR` is unset). Empty bodies
+        /// are rejected with exit code 7.
+        #[arg(long, conflicts_with = "body_file")]
         body: Option<String>,
+        /// Read the comment body from a UTF-8 file.
+        ///
+        /// A path of `-` reads from stdin. Mutually exclusive with
+        /// `--body`; missing or non-UTF-8 paths exit 7.
+        #[arg(long, value_name = "PATH", conflicts_with = "body")]
+        body_file: Option<std::path::PathBuf>,
         /// Mark the comment as private (visible only to users with
         /// elevated permissions on the server).
         #[arg(long = "private")]
