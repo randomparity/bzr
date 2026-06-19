@@ -46,6 +46,22 @@ pub(super) fn count_search_params(
     params
 }
 
+/// Whether a bug action is a mutation that supports `--dry-run` (the create-,
+/// update-, and clone-shaped writes). Read actions and `--web` are excluded.
+#[must_use]
+pub fn is_dry_runnable(action: &BugAction) -> bool {
+    matches!(
+        action,
+        BugAction::Create { .. }
+            | BugAction::Update { .. }
+            | BugAction::Clone { .. }
+            | BugAction::Resolve { .. }
+            | BugAction::Close { .. }
+            | BugAction::Reopen { .. }
+            | BugAction::Dup { .. }
+    )
+}
+
 /// Dispatch bug actions to their respective handlers.
 pub async fn execute(
     action: &BugAction,

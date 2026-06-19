@@ -56,3 +56,53 @@ async fn dispatch_routes_local_query_commands() {
     assert_eq!(parsed["name"], "firefox-new");
     assert_eq!(parsed["action"], "saved");
 }
+
+#[tokio::test]
+async fn dispatch_rejects_dry_run_on_unsupported_command() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    // --dry-run on a non-mutation command is rejected before any network I/O,
+    // so a silently-ignored preview can never turn into a real write.
+    let cli = cli::Cli::try_parse_from(["bzr", "--server", "test", "--dry-run", "whoami"]).unwrap();
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
+
+    assert!(matches!(
+        result,
+        Err(error::BzrError::InputValidation(ref msg)) if msg.contains("--dry-run")
+    ));
+    // The reject must not leak dry-run state into a later command.
+    assert!(!commands::dry_run::enabled());
+}
+
+#[tokio::test]
+async fn dispatch_allows_dry_run_on_bug_update() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("PUT"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let cli = cli::Cli::try_parse_from([
+        "bzr",
+        "--server",
+        "test",
+        "--json",
+        "--dry-run",
+        "bug",
+        "update",
+        "5",
+        "--status",
+        "RESOLVED",
+    ])
+    .unwrap();
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
+    let output = io.out_str().to_string();
+
+    assert!(result.is_ok(), "dry-run dispatch failed: {result:?}");
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    assert_eq!(parsed["action"], "dry-run");
+    assert_eq!(parsed["ids"], serde_json::json!([5]));
+}

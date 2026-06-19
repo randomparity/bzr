@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Global `--dry-run` flag for bug mutations. Previews `bug create`, `update`,
+  `clone`, `resolve`, `close`, `reopen`, and `dup` without writing: it resolves
+  and validates the request, then prints the would-be payload and affected bug
+  IDs as `{"resource":"bug","action":"dry-run","ids":[...],"changes":{...}}`
+  instead of calling the write API, exiting 0 on a valid request. Useful as a
+  safety net for humans and a pre-flight validation step for agents before an
+  irreversible batch `update`. `clone` still reads the source bug to build the
+  preview. Using `--dry-run` on any non-mutation command exits 7. (#308)
+
 ### Changed
 
 - **Breaking:** attachment boolean flags now use a uniform `--x` / `--no-x`

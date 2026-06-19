@@ -1,7 +1,7 @@
 use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
-use crate::output::result_types::{write_result, ActionResult, ResourceKind};
+use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
 use crate::types::{CreateBugParams, OutputFormat};
 
@@ -85,6 +85,11 @@ pub(super) async fn handle(
         ..Default::default()
     };
 
+    if crate::commands::dry_run::enabled() {
+        write_clone_dry_run(source.id, &params, format, w);
+        return Ok(());
+    }
+
     let new_id = client.create_bug(&params).await?;
 
     // The bug was created successfully — that is the clone operation. The
@@ -113,6 +118,23 @@ pub(super) async fn handle(
         w.out,
     );
     Ok(())
+}
+
+/// Emit the would-be clone payload without writing, marked `"action":"dry-run"`.
+/// The clone creates a new bug, so `ids` is empty; `changes` carries the
+/// resolved `CreateBugParams` (built from the fetched source bug).
+fn write_clone_dry_run(
+    source_id: u64,
+    params: &CreateBugParams,
+    format: OutputFormat,
+    w: &mut Writers<'_>,
+) {
+    write_result(
+        &DryRunResult::new(ResourceKind::Bug, &[], params),
+        &format!("Dry run: would clone bug #{source_id} (no bug created)"),
+        format,
+        w.out,
+    );
 }
 
 #[cfg(test)]

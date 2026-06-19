@@ -2,7 +2,7 @@ use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::result_types::{
-    write_result, ActionResult, BatchFailure, BatchResult, ResourceKind,
+    write_result, ActionResult, BatchFailure, BatchResult, DryRunResult, ResourceKind,
 };
 use crate::output::writers::Writers;
 use crate::types::{IdListUpdate, OutputFormat, StringListUpdate, UpdateBugParams};
@@ -294,9 +294,32 @@ pub(super) async fn handle(
     apply(client, ids, params, format, w).await
 }
 
+/// Emit the would-be update without writing: the affected IDs and the payload
+/// that would be sent, marked `"action":"dry-run"`. Shared by `bug update` and
+/// the convenience verbs.
+fn write_update_dry_run(
+    ids: &[u64],
+    params: &UpdateBugParams,
+    format: OutputFormat,
+    w: &mut Writers<'_>,
+) {
+    let ids_str: Vec<String> = ids.iter().map(|id| format!("#{id}")).collect();
+    let suffix = comment_suffix(params.comment.is_some());
+    write_result(
+        &DryRunResult::new(ResourceKind::Bug, ids, params),
+        &format!(
+            "Dry run: would update bug(s) {}{suffix} (no changes made)",
+            ids_str.join(", ")
+        ),
+        format,
+        w.out,
+    );
+}
+
 /// Apply an already-built `UpdateBugParams` to one or more bug IDs, dispatching
 /// to the single- or batch-update path. Shared by `bug update` and the
-/// convenience verbs (`resolve`/`close`/`reopen`/`dup`).
+/// convenience verbs (`resolve`/`close`/`reopen`/`dup`). Under `--dry-run`,
+/// previews the change without calling the write API.
 pub(super) async fn apply(
     client: &BugzillaClient,
     ids: Vec<u64>,
@@ -304,6 +327,10 @@ pub(super) async fn apply(
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    if crate::commands::dry_run::enabled() {
+        write_update_dry_run(&ids, &params, format, w);
+        return Ok(());
+    }
     if ids.len() == 1 {
         update_single(client, ids[0], &params, format, w).await
     } else {
