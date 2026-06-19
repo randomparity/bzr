@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   difference?" confusion. Use `bzr whoami` (the form the docs already
   promote). `whoami` now takes no subcommand. (#323)
 
+### Documentation
+
+- Recorded the decision to keep `bzr` as the command name despite the
+  historical collision with GNU Bazaar (retired in 2025; its successor Breezy
+  uses `brz`), with rationale in `docs/decisions/0001-bzr-command-name.md` and
+  a README note plus shell-alias workaround. (#322)
+
 ### Added
 
 - `bzr component list --product <P>` and `bzr component view <product> <component>`

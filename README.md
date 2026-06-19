@@ -9,6 +9,8 @@
 
 A command-line interface for Bugzilla servers, written in Rust. Inspired by the GitHub CLI (`gh`), `bzr` lets you search, view, create, and update bugs, manage comments and attachments, and switch between multiple Bugzilla instances — all from your terminal.
 
+> **A note on the name.** `bzr` was historically the command for [GNU Bazaar](https://en.wikipedia.org/wiki/GNU_Bazaar), a version-control system. Bazaar's last release was in 2016, Canonical [announced its retirement in 2025](https://blog.launchpad.net/general/phasing-out-bazaar-code-hosting), and its maintained successor **Breezy renamed its command to `brz`** — so the `bzr` name is effectively being vacated by the VCS world. This project keeps `bzr` (it reads as "Bugzilla" the way `gh` reads as "GitHub"). If you also have GNU Bazaar/Breezy installed and want to keep using `bzr` for it, alias this tool instead, e.g. `alias bz=bzr`. See [the decision record](docs/decisions/0001-bzr-command-name.md) for the full rationale.
+
 ## Features
 
 - **Bug management** — list, search, view, create, clone, update, and batch-update bugs; view change history
