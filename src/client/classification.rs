@@ -23,6 +23,30 @@ impl BugzillaClient {
                 id: name.to_string(),
             })
     }
+
+    /// Enumerate the server's classifications.
+    ///
+    /// Bugzilla has no bulk "list classifications" REST endpoint, so the
+    /// names are read from the `classification` bug field's legal values and
+    /// each is then fetched for its full detail (id, description, products).
+    /// Results are ordered by the field's `sort_key`, then name. On servers
+    /// with classifications disabled the field exposes only `Unclassified`.
+    pub async fn list_classifications(&self) -> Result<Vec<Classification>> {
+        let values = self.get_field_values("classification").await?;
+        let mut classifications = Vec::with_capacity(values.len());
+        for value in values {
+            if value.name.is_empty() {
+                continue;
+            }
+            classifications.push(self.get_classification(&value.name).await?);
+        }
+        classifications.sort_by(|a, b| {
+            a.sort_key
+                .cmp(&b.sort_key)
+                .then_with(|| a.name.cmp(&b.name))
+        });
+        Ok(classifications)
+    }
 }
 
 #[cfg(test)]

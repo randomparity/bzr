@@ -2,8 +2,40 @@ use std::io::Write;
 
 use colored::Colorize;
 
-use crate::output::formatting::{truncate, write_formatted, DESCRIPTION_TRUNCATE_WIDTH};
+use crate::output::formatting::{
+    truncate, write_formatted, write_table_or_empty, TableSpec, DESCRIPTION_TRUNCATE_WIDTH,
+};
 use crate::types::{Classification, OutputFormat};
+
+const CLASSIFICATION_HEADERS: &[&str] = &["ID", "NAME", "DESCRIPTION", "PRODUCTS"];
+
+fn classification_record(c: &Classification) -> Vec<String> {
+    vec![
+        c.id.to_string(),
+        c.name.clone(),
+        truncate(&c.description, DESCRIPTION_TRUNCATE_WIDTH),
+        c.products.len().to_string(),
+    ]
+}
+
+/// Render a flat list of classifications (id, name, description, product
+/// count). JSON output is the full `Classification` array.
+pub fn write_classifications<W: Write + ?Sized>(
+    items: &[Classification],
+    format: OutputFormat,
+    out: &mut W,
+) {
+    write_table_or_empty(
+        items,
+        format,
+        out,
+        TableSpec {
+            empty_msg: "No classifications found.",
+            headers: CLASSIFICATION_HEADERS,
+        },
+        classification_record,
+    );
+}
 
 pub fn write_classification<W: Write + ?Sized>(
     classification: &Classification,

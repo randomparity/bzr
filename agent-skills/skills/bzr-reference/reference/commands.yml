@@ -10,7 +10,7 @@ user: search create update
 group: add-user remove-user list-users view create update
 whoami:
 server: info
-classification: view
+classification: list view
 component: create update
 template: save list show delete
 query: save list show delete run
