@@ -146,6 +146,7 @@ async fn bug_view_integration() {
     let action = bzr::cli::BugAction::View {
         ids: vec!["42".to_string()],
         permissive: false,
+        web: false,
         field_args: bzr::cli::FieldArgs {
             fields: None,
             exclude_fields: None,
@@ -776,6 +777,7 @@ async fn api_error_propagates() {
     let action = bzr::cli::BugAction::View {
         ids: vec!["99999".to_string()],
         permissive: false,
+        web: false,
         field_args: bzr::cli::FieldArgs {
             fields: None,
             exclude_fields: None,

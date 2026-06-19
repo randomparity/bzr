@@ -300,6 +300,7 @@ what is sent over the wire.
 bzr bug view 12345
 bzr bug view 12345 12346 12347
 bzr bug view 12345 my-alias 12347 --permissive
+bzr bug view 12345 --web
 bzr --json bug view 12345
 bzr --json bug view 12345 12346 | jq '.bugs[].summary'
 bzr bug view my-alias --fields id,summary,assigned_to
@@ -308,6 +309,7 @@ bzr bug view my-alias --fields id,summary,assigned_to
 | Option | Required | Description |
 |--------|----------|-------------|
 | `<IDS>...` | Yes | One or more bug IDs or aliases. Aliases and numeric IDs may be mixed. |
+| `--web` | No | Open each bug's web page (`show_bug.cgi?id=<ID>`) on the active server in the default browser instead of printing its record. Resolves the URL from local config — no network call or authentication, so it works before credentials are set. When stdout is not a terminal or no display is available (headless / SSH without X), the URL is printed to stdout and the command exits 0 instead of opening a browser. `--fields` and `--permissive` are ignored with `--web`. |
 | `--permissive` | No | Multi-ID only. Continue past per-bug failures, surfacing them as `Bug #N — UNAVAILABLE` placeholder rows (table) or entries in `failed` (JSON). Exit 0 even if some bugs fail. Has no effect on session-wide failures (transport, auth, security) — those still bail. Setting `--permissive` with a single ID returns input-validation error (exit 7). |
 | `--fields <F>` | No | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which detail rows to show. Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). |
 | `--exclude-fields <F>` | No | Comma-separated fields dropped from the server request; in table output, removes those detail rows. Under `--json`, the object omits the dropped fields (including custom `cf_*` fields and `id`, when excluded). |

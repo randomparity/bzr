@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `bzr bug view <ID> --web` opens the bug's page (`show_bug.cgi?id=<ID>`) on the
+  active server in the default browser, the `gh issue view --web` affordance.
+  Resolves the URL from local config with no network call or authentication, so
+  it works even before credentials are set. When stdout is not a terminal or no
+  display is available (headless / SSH without X), it prints the URL and exits 0
+  instead of opening a browser, which keeps it safe for scripts, pipes, and
+  agents. Multiple IDs open (or print) one page each. (#310)
 - `--sort <FIELD>` / `--order asc|desc` on `bug list`, `bug search`, `bug my`,
   and `query run` control result ordering (mapped to Bugzilla's `order`), with
   a `bug_id` tiebreaker for deterministic ties. Absent `--sort`, results now
