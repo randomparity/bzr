@@ -22,6 +22,18 @@ struct AttachmentByIdResponse {
     attachments: std::collections::HashMap<String, Attachment>,
 }
 
+/// Pull the single attachment out of a by-ID response, mapping an empty map
+/// to `NotFound`. Shared by the full and metadata-only REST fetches.
+fn single_attachment(data: AttachmentByIdResponse, attachment_id: u64) -> Result<Attachment> {
+    data.attachments
+        .into_values()
+        .next()
+        .ok_or_else(|| BzrError::NotFound {
+            resource: "attachment",
+            id: attachment_id.to_string(),
+        })
+}
+
 #[derive(Deserialize)]
 struct AttachmentCreateResponse {
     ids: Vec<u64>,
@@ -118,13 +130,7 @@ impl BugzillaClient {
         let data: AttachmentByIdResponse = self
             .get_json(&format!("bug/attachment/{attachment_id}"))
             .await?;
-        data.attachments
-            .into_values()
-            .next()
-            .ok_or_else(|| BzrError::NotFound {
-                resource: "attachment",
-                id: attachment_id.to_string(),
-            })
+        single_attachment(data, attachment_id)
     }
 
     /// Fetch a single attachment's metadata without its (base64) bytes.
@@ -150,13 +156,7 @@ impl BugzillaClient {
                 &[("exclude_fields", "data")],
             )
             .await?;
-        data.attachments
-            .into_values()
-            .next()
-            .ok_or_else(|| BzrError::NotFound {
-                resource: "attachment",
-                id: attachment_id.to_string(),
-            })
+        single_attachment(data, attachment_id)
     }
 
     pub async fn download_attachment(&self, attachment_id: u64) -> Result<(String, Vec<u8>)> {
