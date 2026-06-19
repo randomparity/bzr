@@ -143,6 +143,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 ├── server
 │   └── info
 ├── classification
+│   ├── list
 │   └── view <NAME>
 ├── component
 │   ├── create --product <P> --name <N> --description <D> --default-assignee <E>
@@ -999,6 +1000,21 @@ bzr --json server info
 ---
 
 ## `bzr classification` -- Classification Operations
+
+### `bzr classification list`
+
+List the server's classifications with their ID, name, description, and
+product count. JSON output is the full classification array.
+
+Bugzilla has no bulk classification endpoint, so bzr reads the names from the
+`classification` field's legal values and fetches each one's detail.
+Classifications are an optional feature; when they are disabled the only
+entry is `Unclassified`, and bzr prints a note to stderr.
+
+```bash
+bzr classification list
+bzr --json classification list | jq '.[].name'
+```
 
 ### `bzr classification view`
 

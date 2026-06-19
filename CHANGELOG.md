@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `bzr classification list` enumerates the server's classifications (ID, name,
+  description, product count; full objects under `--json`). Bugzilla has no
+  bulk classification endpoint, so names come from the `classification` field's
+  legal values and each is fetched for detail. When classifications are
+  disabled (only `Unclassified` exists) bzr prints a note to stderr. (#319)
 - `bzr config remove-server <NAME>` deletes a server alias (and its OS-keychain
   entry, if any). Removing the current default is refused while other servers
   remain; removing the only server clears the default. `bzr config

@@ -2,6 +2,26 @@ use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub enum ClassificationAction {
+    /// List the server's classifications.
+    ///
+    /// Enumerates every classification with its ID, name, description, and
+    /// product count. Bugzilla has no bulk classification endpoint, so bzr
+    /// reads the names from the `classification` field's legal values and
+    /// fetches each one's detail.
+    ///
+    /// Classifications are an optional Bugzilla feature. On servers where
+    /// they are disabled, the only entry is "Unclassified"; bzr prints a
+    /// note to stderr in that case.
+    ///
+    /// Examples:
+    ///
+    ///   bzr classification list
+    ///   bzr classification list --json | jq '.[].name'
+    ///
+    /// See bzr-classification-view(1) for one classification's full detail.
+    #[command(verbatim_doc_comment)]
+    List,
+
     /// View a classification by name or ID.
     ///
     /// Prints the classification's description and the products it
