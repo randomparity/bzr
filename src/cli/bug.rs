@@ -1,5 +1,24 @@
 use clap::{Args, Subcommand};
 
+use crate::types::SortDirection;
+
+/// Shared `--sort` / `--order` result ordering, flattened into the bug query
+/// subcommands (`list`, `search`, `my`) and `query run`. Absent `--sort`,
+/// results default to a stable `bug_id` order so identical runs are
+/// reproducible.
+#[derive(Args, Debug, Clone, Default)]
+pub struct SortArgs {
+    /// Sort results by this field (e.g. `last_change_time`, `priority`,
+    /// `bug_id`). Field-name aliases (`id`, `severity`, `status`, ...) are
+    /// accepted. Absent, results are ordered by `bug_id` for determinism.
+    #[arg(long, value_name = "FIELD")]
+    pub sort: Option<String>,
+    /// Sort direction: `asc` (default) or `desc`. Only meaningful with
+    /// `--sort`.
+    #[arg(long, default_value = "asc", value_name = "DIR")]
+    pub order: SortDirection,
+}
+
 /// Shared `--fields` / `--exclude-fields` selection, flattened into the bug
 /// query subcommands (`list`, `view`, `search`, `my`) so the pair is defined
 /// once instead of repeated per variant.
@@ -111,6 +130,8 @@ pub enum BugAction {
         limit: u32,
         #[command(flatten)]
         field_args: FieldArgs,
+        #[command(flatten)]
+        sort_args: SortArgs,
         /// Filter to bugs created at or after this date.
         ///
         /// Accepts `YYYY-MM-DD` (interpreted as 00:00:00 UTC),
@@ -281,6 +302,8 @@ pub enum BugAction {
         limit: Option<u32>,
         #[command(flatten)]
         field_args: FieldArgs,
+        #[command(flatten)]
+        sort_args: SortArgs,
     },
     /// Show the change history for a single bug.
     ///
@@ -474,6 +497,8 @@ pub enum BugAction {
         limit: u32,
         #[command(flatten)]
         field_args: FieldArgs,
+        #[command(flatten)]
+        sort_args: SortArgs,
     },
     /// Clone an existing bug, optionally overriding fields.
     ///

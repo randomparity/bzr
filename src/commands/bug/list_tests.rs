@@ -34,6 +34,7 @@ fn empty_list_action() -> BugAction {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     }
 }
 
@@ -139,6 +140,7 @@ async fn bug_list_passes_every_field_through_to_search_params() {
         resolution: vec!["FIXED".into()],
         qa_contact: vec!["qa@test.com".into()],
         url: vec!["github.com/foo".into()],
+        sort_args: crate::cli::SortArgs::default(),
     };
     let result = crate::commands::bug::execute(
         &action,
@@ -203,6 +205,7 @@ async fn bug_list_summary_only_sends_substring_filter() {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     };
     let result = crate::commands::bug::execute(
         &action,
@@ -600,5 +603,53 @@ async fn bug_list_json_all_unknown_fields_exits_7() {
     assert!(
         mock.received_requests().await.unwrap().is_empty(),
         "validation must run before any network I/O"
+    );
+}
+
+#[tokio::test]
+async fn bug_list_sends_default_bug_id_order() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("order", "bug_id"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({ "bugs": [] })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = empty_list_action();
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+    assert!(
+        result.is_ok(),
+        "default-order list should succeed: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn bug_list_sends_explicit_sort_and_order() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("order", "last_change_time DESC, bug_id"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({ "bugs": [] })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let mut action = empty_list_action();
+    if let BugAction::List { sort_args, .. } = &mut action {
+        sort_args.sort = Some("last_change_time".to_string());
+        sort_args.order = crate::types::SortDirection::Desc;
+    }
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+    assert!(
+        result.is_ok(),
+        "explicit-sort list should succeed: {result:?}"
     );
 }

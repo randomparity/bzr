@@ -74,6 +74,7 @@ pub(super) async fn handle(
             fields,
             exclude_fields,
         },
+        sort_args,
     } = action
     else {
         unreachable!()
@@ -89,12 +90,20 @@ pub(super) async fn handle(
         let save_info = resolve_save_info(save_as.as_ref(), parsed.suggested_name, &parsed.query)?;
         let canonical_fields = canonical_field_list(fields.as_deref());
         let canonical_exclude = canonical_field_list(exclude_fields.as_deref());
-        let params = build_params_from_url(
+        let mut params = build_params_from_url(
             parsed.query,
             *limit,
             canonical_fields.as_deref(),
             canonical_exclude.as_deref(),
         );
+        // `--sort` overrides the URL's own ordering; otherwise the parsed URL
+        // order (if any) is preserved verbatim.
+        if sort_args.sort.is_some() {
+            params.order = Some(crate::validation::build_order(
+                sort_args.sort.as_deref(),
+                sort_args.order,
+            ));
+        }
         (client, params, save_info)
     } else {
         let query_str = query.as_deref().ok_or_else(|| {
@@ -108,6 +117,10 @@ pub(super) async fn handle(
             limit: Some(limit.unwrap_or(DEFAULT_SEARCH_LIMIT)),
             include_fields: canonical_field_list(fields.as_deref()),
             exclude_fields: canonical_field_list(exclude_fields.as_deref()),
+            order: Some(crate::validation::build_order(
+                sort_args.sort.as_deref(),
+                sort_args.order,
+            )),
             ..Default::default()
         };
         (client, params, None)

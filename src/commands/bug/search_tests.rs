@@ -17,6 +17,7 @@ fn from_url_action(url: String, save_as: Option<String>) -> BugAction {
             fields: None,
             exclude_fields: None,
         },
+        sort_args: crate::cli::SortArgs::default(),
     }
 }
 
@@ -187,6 +188,7 @@ async fn handle_search_quicksearch_passes_limit_and_field_filters() {
             fields: Some("id,summary".into()),
             exclude_fields: Some("comments".into()),
         },
+        sort_args: crate::cli::SortArgs::default(),
     };
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -338,5 +340,61 @@ async fn handle_search_save_as_no_name_no_known_name_errors() {
     assert!(
         err.contains("no name provided for --save-as"),
         "unexpected error: {err}"
+    );
+}
+
+#[tokio::test]
+async fn bug_search_quicksearch_sends_default_order() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("order", "bug_id"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({ "bugs": [] })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::Search {
+        query: Some("crash".to_string()),
+        from_url: None,
+        save_as: None,
+        limit: None,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
+        sort_args: crate::cli::SortArgs::default(),
+    };
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+    assert!(result.is_ok(), "quicksearch should succeed: {result:?}");
+}
+
+#[tokio::test]
+async fn bug_search_from_url_sort_overrides_url_order() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("order", "priority DESC, bug_id"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({ "bugs": [] })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let url = format!("{}/buglist.cgi?product=TestProduct", mock.uri());
+    let mut action = from_url_action(url, None);
+    if let BugAction::Search { sort_args, .. } = &mut action {
+        sort_args.sort = Some("priority".to_string());
+        sort_args.order = crate::types::SortDirection::Desc;
+    }
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+    assert!(
+        result.is_ok(),
+        "from-url with --sort should succeed: {result:?}"
     );
 }

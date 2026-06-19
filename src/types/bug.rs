@@ -281,6 +281,10 @@ pub struct SearchParams {
     /// Filter by URL field substring (repeatable). Negated values
     /// use `notsubstring`.
     pub url: Vec<String>,
+    /// Bugzilla `order` clause (e.g. `last_change_time DESC, bug_id`).
+    /// Built from `--sort`/`--order`; defaults to a stable `bug_id` so
+    /// identical runs return rows in a deterministic order.
+    pub order: Option<String>,
 }
 
 /// Optional per-invocation overrides applied to a `SearchParams`
@@ -866,6 +870,10 @@ pub struct SavedQuery {
     /// Filter by URL field substring (repeatable).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub url: Vec<String>,
+    /// Persisted Bugzilla `order` clause (from `query save --sort/--order`).
+    /// Overridden per-run by `query run --sort`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub order: Option<String>,
 }
 
 impl SavedQuery {
@@ -899,6 +907,7 @@ impl SavedQuery {
             resolution: self.resolution,
             qa_contact: self.qa_contact,
             url: self.url,
+            order: self.order,
             ..Default::default()
         }
     }
