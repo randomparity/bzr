@@ -73,6 +73,10 @@ use crate::types::{ApiMode, OutputFormat};
     clippy::doc_markdown,
     reason = "doc examples are literal shell commands; wrapping URLs in <> or identifiers in backticks would degrade copy-paste UX"
 )]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent global on/off CLI switches (--json, --no-color, --quiet, --dry-run); a state machine does not model unrelated flags"
+)]
 pub struct Cli {
     /// Server name from config (uses default if not set).
     #[arg(long, global = true)]
@@ -155,6 +159,16 @@ pub struct Cli {
     /// 10. Exhausted retries surface the usual network error (exit code 5).
     #[arg(long, value_name = "N", global = true, value_parser = clap::value_parser!(u32).range(0..=10))]
     pub retry: Option<u32>,
+
+    /// Preview a bug mutation without writing (no API call).
+    ///
+    /// Resolves and validates the request, then prints the would-be payload
+    /// and affected bug IDs with `"action":"dry-run"` instead of calling the
+    /// write API. Exits 0 on a valid request. Only valid for the bug
+    /// mutations (`create`, `update`, `clone`, `resolve`, `close`, `reopen`,
+    /// `dup`); used on any other command it exits 7.
+    #[arg(long, global = true)]
+    pub dry_run: bool,
 
     /// Set log verbosity (default: warnings only, -v=info, -vv=debug, -vvv=trace; `RUST_LOG` overrides)
     #[arg(short, long, action = clap::ArgAction::Count, global = true)]

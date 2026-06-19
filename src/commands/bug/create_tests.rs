@@ -61,6 +61,41 @@ async fn bug_create_sends_post() {
 }
 
 #[tokio::test]
+async fn bug_create_dry_run_makes_no_write_and_marks_payload() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    // A create POST must never fire under --dry-run. The connect-time TLS
+    // probe is a HEAD, so it won't match this mock.
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
+        .expect(0)
+        .mount(&mock)
+        .await;
+    crate::commands::dry_run::set(true);
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &create_action(),
+        None,
+        OutputFormat::Json,
+        None,
+        &mut io.writers(),
+    )
+    .await;
+    let output = io.out_str().to_string();
+    crate::commands::dry_run::set(false);
+
+    assert!(result.is_ok(), "dry-run create failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    assert_eq!(parsed["action"], "dry-run");
+    assert_eq!(parsed["resource"], "bug");
+    assert_eq!(parsed["ids"], serde_json::json!([]));
+    assert_eq!(parsed["changes"]["product"], "TestProduct");
+    assert_eq!(parsed["changes"]["component"], "General");
+    assert_eq!(parsed["changes"]["summary"], "New bug");
+}
+
+#[tokio::test]
 async fn bug_create_sends_parity_fields_in_body() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 

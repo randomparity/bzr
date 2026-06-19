@@ -40,6 +40,7 @@ fn base_cli(command: Commands) -> Cli {
         api: None,
         timeout: None,
         retry: None,
+        dry_run: false,
         verbose: 0,
         command,
     }

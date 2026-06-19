@@ -32,6 +32,37 @@ async fn run_verb_expecting_body(action: BugAction, id: u64, body: serde_json::V
 }
 
 #[tokio::test]
+async fn resolve_dry_run_makes_no_write() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    // A verb PUT must never fire under --dry-run; the connect probe is a HEAD.
+    Mock::given(method("PUT"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+    crate::commands::dry_run::set(true);
+
+    let action = BugAction::Resolve {
+        ids: vec![5],
+        as_resolution: "FIXED".into(),
+        comment: CommentArgs::default(),
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+    let output = io.out_str().to_string();
+    crate::commands::dry_run::set(false);
+
+    assert!(result.is_ok(), "dry-run resolve failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    assert_eq!(parsed["action"], "dry-run");
+    assert_eq!(parsed["ids"], serde_json::json!([5]));
+    assert_eq!(parsed["changes"]["status"], "RESOLVED");
+    assert_eq!(parsed["changes"]["resolution"], "FIXED");
+}
+
+#[tokio::test]
 async fn resolve_defaults_to_fixed() {
     let action = BugAction::Resolve {
         ids: vec![5],

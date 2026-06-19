@@ -4,7 +4,7 @@ use crate::cli::BugAction;
 use crate::client::BugzillaClient;
 use crate::commands::editor;
 use crate::error::Result;
-use crate::output::result_types::{write_result, ActionResult, ResourceKind};
+use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
 use crate::types::{CreateBugParams, OutputFormat};
 
@@ -296,6 +296,11 @@ pub(super) async fn handle(
         groups: create_fields.groups.clone(),
         flags,
     };
+    if crate::commands::dry_run::enabled() {
+        write_create_dry_run(&params, format, w);
+        return Ok(());
+    }
+
     let id = client.create_bug(&params).await?;
     write_result(
         &ActionResult::created(id, ResourceKind::Bug),
@@ -304,6 +309,21 @@ pub(super) async fn handle(
         w.out,
     );
     Ok(())
+}
+
+/// Emit the would-be create payload without writing, marked `"action":"dry-run"`.
+/// No bug exists yet, so `ids` is empty; `changes` carries the resolved
+/// `CreateBugParams`.
+fn write_create_dry_run(params: &CreateBugParams, format: OutputFormat, w: &mut Writers<'_>) {
+    write_result(
+        &DryRunResult::new(ResourceKind::Bug, &[], params),
+        &format!(
+            "Dry run: would create a bug in {}/{} (no bug created)",
+            params.product, params.component
+        ),
+        format,
+        w.out,
+    );
 }
 
 #[cfg(test)]

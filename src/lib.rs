@@ -48,6 +48,8 @@ pub async fn dispatch(
     w: &mut output::writers::Writers<'_>,
 ) -> error::Result<()> {
     apply_network_tuning(cli);
+    ensure_dry_run_supported(cli)?;
+    commands::dry_run::set(cli.dry_run);
 
     let api = cli.api;
     let server = cli.server.as_deref();
@@ -122,6 +124,27 @@ fn apply_network_tuning(cli: &cli::Cli) {
         env_timeout.as_deref(),
     ));
     http::set_retry_max(cli.retry.unwrap_or(0));
+}
+
+/// Reject `--dry-run` on commands that don't honor it.
+///
+/// `--dry-run` is a global flag (so it can appear after any subcommand), but
+/// only the bug mutations preview without writing. Allowing it elsewhere would
+/// silently ignore it — e.g. `bzr comment add --dry-run` would still post the
+/// comment. Fail fast (exit 7) instead of writing when a preview was asked for.
+fn ensure_dry_run_supported(cli: &cli::Cli) -> error::Result<()> {
+    if !cli.dry_run {
+        return Ok(());
+    }
+    if let cli::Commands::Bug { action } = &cli.command {
+        if commands::bug::is_dry_runnable(action) {
+            return Ok(());
+        }
+    }
+    Err(error::BzrError::InputValidation(
+        "--dry-run is only supported for bug create, update, clone, resolve, close, reopen, and dup"
+            .into(),
+    ))
 }
 
 /// Shared mutex for tests that modify the process-global `XDG_CONFIG_HOME` env var.

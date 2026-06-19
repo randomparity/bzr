@@ -795,3 +795,98 @@ fn build_update_params_rejects_update_with_no_fields() {
         "expected an at-least-one-field validation error, got {err:?}"
     );
 }
+
+// ── Dry run (#308) ──────────────────────────────────────────────────
+
+/// Mount a method-only PUT mock that must never fire — proves a dry run
+/// performs no write. The connect-time TLS probe is a HEAD, so it won't match.
+async fn forbid_put(mock: &wiremock::MockServer) {
+    Mock::given(method("PUT"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(mock)
+        .await;
+}
+
+#[tokio::test]
+async fn bug_update_dry_run_makes_no_write_and_marks_payload() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    forbid_put(&mock).await;
+    crate::commands::dry_run::set(true);
+
+    let action = make_update_action(vec![42]);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+    let output = io.out_str().to_string();
+    crate::commands::dry_run::set(false);
+
+    assert!(result.is_ok(), "dry-run update failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    assert_eq!(parsed["action"], "dry-run");
+    assert_eq!(parsed["resource"], "bug");
+    assert_eq!(parsed["ids"], serde_json::json!([42]));
+    assert_eq!(parsed["changes"]["status"], "RESOLVED");
+    assert_eq!(parsed["changes"]["resolution"], "FIXED");
+}
+
+#[tokio::test]
+async fn bug_update_dry_run_batch_lists_all_ids() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    forbid_put(&mock).await;
+    crate::commands::dry_run::set(true);
+
+    let action = make_update_action(vec![1, 2, 3]);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+    let output = io.out_str().to_string();
+    crate::commands::dry_run::set(false);
+
+    assert!(result.is_ok());
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    assert_eq!(parsed["action"], "dry-run");
+    assert_eq!(parsed["ids"], serde_json::json!([1, 2, 3]));
+}
+
+#[tokio::test]
+async fn bug_update_dry_run_table_prints_human_preview() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    forbid_put(&mock).await;
+    crate::commands::dry_run::set(true);
+
+    let action = make_update_action(vec![7, 8]);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Table, None, &mut io.writers())
+            .await;
+    let output = io.out_str().to_string();
+    crate::commands::dry_run::set(false);
+
+    assert!(result.is_ok(), "dry-run update (table) failed: {result:?}");
+    assert!(
+        output.contains("Dry run") && output.contains("#7") && output.contains("#8"),
+        "expected a human preview naming both bugs, got: {output:?}"
+    );
+}
+
+#[tokio::test]
+async fn bug_update_dry_run_still_validates_empty_update() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    forbid_put(&mock).await;
+    crate::commands::dry_run::set(true);
+
+    let action = make_empty_update_action(vec![42]);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+    crate::commands::dry_run::set(false);
+
+    assert!(matches!(
+        result,
+        Err(crate::error::BzrError::InputValidation(_))
+    ));
+}
