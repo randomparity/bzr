@@ -23,6 +23,7 @@ For installation and quick start, see [README.md](../README.md).
 - [Credential storage](#credential-storage)
 - [template](#bzr-template----bug-template-management)
 - [query](#bzr-query----saved-query-management)
+- [completion](#bzr-completion----shell-completion)
 - [Flag Syntax](#flag-syntax)
 - [JSON Output](#json-output)
 - [Configuration File Format](#configuration-file-format)
@@ -161,16 +162,17 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   ├── list
 │   ├── show <NAME>
 │   └── delete <NAME>
-└── query
-    ├── save <NAME> (--from-url <URL> | [--product <P>...] [--component <C>...] [--status <S>...]
-    │               [--assignee <A>...] [--creator <C>...] [--priority <P>...] [--severity <S>...]
-    │               [--search <Q>]) [--limit <N>] [--fields <F>] [--exclude-fields <F>]
-    │               [--created-since <D>] [--changed-since <D>]
-    ├── list
-    ├── show <NAME>
-    ├── delete <NAME>
-    └── run <NAME> [--limit <N>] [--fields <F>] [--exclude-fields <F>] [--server <NAME>]
-                   [--created-since <D>] [--changed-since <D>]
+├── query
+│   ├── save <NAME> (--from-url <URL> | [--product <P>...] [--component <C>...] [--status <S>...]
+│   │               [--assignee <A>...] [--creator <C>...] [--priority <P>...] [--severity <S>...]
+│   │               [--search <Q>]) [--limit <N>] [--fields <F>] [--exclude-fields <F>]
+│   │               [--created-since <D>] [--changed-since <D>]
+│   ├── list
+│   ├── show <NAME>
+│   ├── delete <NAME>
+│   └── run <NAME> [--limit <N>] [--fields <F>] [--exclude-fields <F>] [--server <NAME>]
+│                  [--created-since <D>] [--changed-since <D>]
+└── completion <bash|zsh|fish|powershell>
 ```
 
 ---
@@ -1383,6 +1385,38 @@ as overrides. Passing a flag replaces the saved value for that
 field; omitting it keeps the saved value. There is no clear
 sentinel — to clear a saved field, edit the config or re-save the
 query.
+
+---
+
+## `bzr completion` -- Shell Completion
+
+Generate a shell completion script and print it to stdout. The script is
+produced from bzr's live clap command tree, so it always matches the
+installed binary's subcommands and flags. This command is local: it makes
+no network calls and needs no configured server.
+
+```
+bzr completion <SHELL>
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<SHELL>` | Yes | One of `bash`, `zsh`, `fish`, `powershell`, or `elvish`. |
+
+An unrecognized shell name exits 2 with the list of accepted values.
+
+### Install
+
+| Shell | One-line install |
+|-------|------------------|
+| bash | `bzr completion bash > ~/.local/share/bash-completion/completions/bzr` |
+| zsh | `bzr completion zsh > ~/.zfunc/_bzr` (ensure `~/.zfunc` is on `$fpath`, then restart the shell) |
+| fish | `bzr completion fish > ~/.config/fish/completions/bzr.fish` |
+| powershell | `bzr completion powershell >> $PROFILE` |
+
+For bash, the target directory must exist and `bash-completion` must be
+installed and sourced by your shell startup. For zsh, the file name must be
+`_bzr` and live in a directory listed in `$fpath` before `compinit` runs.
 
 ---
 

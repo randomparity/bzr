@@ -2,6 +2,7 @@ pub mod attachment;
 pub mod bug;
 pub mod classification;
 pub mod comment;
+pub mod completion;
 pub mod component;
 pub mod config;
 mod editor;

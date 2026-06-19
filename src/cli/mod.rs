@@ -479,6 +479,34 @@ pub enum Commands {
         #[command(subcommand)]
         action: QueryAction,
     },
+
+    /// Generate a shell completion script.
+    ///
+    /// Emits a completion script for the named shell to stdout. The script
+    /// is generated from bzr's live command tree, so it always matches the
+    /// installed binary's subcommands and flags. This command is local: it
+    /// makes no network calls and needs no configured server.
+    ///
+    /// Install (pick your shell):
+    ///
+    ///   # bash (current user)
+    ///   bzr completion bash > ~/.local/share/bash-completion/completions/bzr
+    ///
+    ///   # zsh (ensure the dir is on $fpath, then restart the shell)
+    ///   bzr completion zsh > ~/.zfunc/_bzr
+    ///
+    ///   # fish
+    ///   bzr completion fish > ~/.config/fish/completions/bzr.fish
+    ///
+    ///   # powershell (add to your $PROFILE)
+    ///   bzr completion powershell >> $PROFILE
+    ///
+    /// See bzr-completion(1) for per-shell install detail.
+    #[command(verbatim_doc_comment)]
+    Completion {
+        /// Shell to generate completions for.
+        shell: clap_complete::Shell,
+    },
 }
 
 #[cfg(test)]

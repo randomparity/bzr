@@ -231,6 +231,27 @@ To regenerate them from a source checkout:
 make man          # writes to man/man1/
 ```
 
+### Shell completion
+
+`bzr completion <SHELL>` prints a completion script to stdout for `bash`,
+`zsh`, `fish`, `powershell`, or `elvish`. The script is generated from bzr's
+live command tree, so it always matches the installed binary. Install with one
+line per shell:
+
+```bash
+# bash (the directory must exist and bash-completion must be active)
+bzr completion bash > ~/.local/share/bash-completion/completions/bzr
+
+# zsh (~/.zfunc must be on $fpath before compinit; restart the shell after)
+bzr completion zsh > ~/.zfunc/_bzr
+
+# fish
+bzr completion fish > ~/.config/fish/completions/bzr.fish
+
+# powershell (append to your profile)
+bzr completion powershell >> $PROFILE
+```
+
 ### See also
 
 - [`RELEASING.md`](RELEASING.md) — what each release artifact is, how it gets built, and how to verify SHA256 sums and SLSA attestations.
