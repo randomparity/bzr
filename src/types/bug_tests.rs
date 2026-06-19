@@ -182,6 +182,7 @@ fn saved_query_list_roundtrips_json() {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        order: None,
     };
     let json = serde_json::to_string(&query).unwrap();
     let roundtripped: SavedQuery = serde_json::from_str(&json).unwrap();

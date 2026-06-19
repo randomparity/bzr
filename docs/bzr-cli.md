@@ -87,12 +87,13 @@ bzr [--server <NAME>] [--output table|json] [--json] [--config <PATH>] [--no-col
 │   ├── list [--product <P>...] [--component <C>...] [--status <S>...] [--assignee <A>...]
 │   │        [--creator <C>...] [--priority <P>...] [--severity <S>...] [--id <ID>...]
 │   │        [--alias <A>] [--summary <S>] [--limit <N>] [--fields <F>] [--exclude-fields <F>]
-│   │        [--created-since <D>] [--changed-since <D>]
+│   │        [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
 │   ├── view <ID> [--fields <F>] [--exclude-fields <F>]
 │   ├── search [<QUERY>] [--from-url <URL>] [--save-as [NAME]] [--limit <N>] [--fields <F>] [--exclude-fields <F>]
+│   │          [--sort <FIELD>] [--order asc|desc]
 │   ├── history <ID> [--since <DATE>]
 │   ├── my [--created] [--cc] [--all] [--status <S>...] [--limit <N>]
-│   │       [--fields <F>] [--exclude-fields <F>]
+│   │       [--fields <F>] [--exclude-fields <F>] [--sort <FIELD>] [--order asc|desc]
 │   ├── create [--template <T>] [--product <P>] [--component <C>] --summary <S>
 │   │          [--version <V>] [--description <D>] [--priority <P>] [--severity <S>]
 │   │          [--assignee <A>] [--op-sys <OS>] [--rep-platform <PLAT>]
@@ -174,12 +175,12 @@ bzr [--server <NAME>] [--output table|json] [--json] [--config <PATH>] [--no-col
 │   ├── save <NAME> (--from-url <URL> | [--product <P>...] [--component <C>...] [--status <S>...]
 │   │               [--assignee <A>...] [--creator <C>...] [--priority <P>...] [--severity <S>...]
 │   │               [--search <Q>]) [--limit <N>] [--fields <F>] [--exclude-fields <F>]
-│   │               [--created-since <D>] [--changed-since <D>]
+│   │               [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
 │   ├── list
 │   ├── show <NAME>
 │   ├── delete <NAME>
 │   └── run <NAME> [--limit <N>] [--fields <F>] [--exclude-fields <F>] [--server <NAME>]
-│                  [--created-since <D>] [--changed-since <D>]
+│                  [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
 └── completion <bash|zsh|fish|powershell>
 ```
 
@@ -227,6 +228,20 @@ Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`,
 | `--exclude-fields <F>` | No | | Comma-separated fields dropped from the server request; in table output, removes those columns. Under `--json`, the object omits the dropped fields (including custom `cf_*` fields and `id`, when excluded). Excluding every field is rejected with exit code 7 rather than emitting `{}`. |
 | `--created-since <DATE>` | No | | Filter to bugs whose `creation_time` is `>= DATE`. See [Date format](#date-format) below. |
 | `--changed-since <DATE>` | No | | Filter to bugs whose `last_change_time` is `>= DATE`. See [Date format](#date-format) below. |
+| `--sort <FIELD>` | No | | Sort results by `FIELD` (e.g. `last_change_time`, `priority`, `bug_id`). Field-name aliases (`id`, `severity`, `status`, ...) are accepted. See [Result ordering](#result-ordering) below. |
+| `--order asc\|desc` | No | `asc` | Sort direction; only meaningful with `--sort`. |
+
+#### Result ordering
+
+`--sort`/`--order` map to Bugzilla's `order` parameter and apply to `bug list`,
+`bug search`, `bug my`, and `query run`. A `bug_id` tiebreaker is always
+appended so ties resolve deterministically. **Absent `--sort`, results default
+to a stable `bug_id` order** so identical runs return rows in the same order —
+this means `bug search` no longer relies on Bugzilla's relevance ranking by
+default; pass `--sort` to choose a different order. For `bug search --from-url`
+and `query run`, an explicit `--sort` overrides any ordering carried by the URL
+or saved query; otherwise the saved/URL order is preserved. `query save --sort`
+persists an order into the saved query.
 
 #### Date format
 

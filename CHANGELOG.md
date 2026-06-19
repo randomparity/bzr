@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `--sort <FIELD>` / `--order asc|desc` on `bug list`, `bug search`, `bug my`,
+  and `query run` control result ordering (mapped to Bugzilla's `order`), with
+  a `bug_id` tiebreaker for deterministic ties. Absent `--sort`, results now
+  default to a stable `bug_id` order so identical runs are reproducible — note
+  this means `bug search` no longer defaults to relevance ranking; pass `--sort`
+  to choose another order. `query save --sort` persists an order into the saved
+  query; `query run --sort` overrides it. (#303)
 - Global `--config <PATH>` flag and `BZR_CONFIG` environment variable select an
   alternate `config.toml` for reads and writes. Precedence: `--config` >
   `BZR_CONFIG` > `$XDG_CONFIG_HOME/bzr/config.toml` (or the platform config

@@ -21,6 +21,7 @@ pub(super) async fn handle(
             fields,
             exclude_fields,
         },
+        sort_args,
     } = action
     else {
         unreachable!()
@@ -39,6 +40,10 @@ pub(super) async fn handle(
         limit: Some(*limit),
         include_fields: canonical_field_list(fields.as_deref()),
         exclude_fields: canonical_field_list(exclude_fields.as_deref()),
+        order: Some(crate::validation::build_order(
+            sort_args.sort.as_deref(),
+            sort_args.order,
+        )),
         ..Default::default()
     };
     let mut searches = Vec::new();

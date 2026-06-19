@@ -10,6 +10,8 @@ pub mod datetime;
 pub use datetime::{parse_date_only, parse_iso8601_or_date};
 
 use crate::error::Result;
+use crate::field_aliases::resolve_field_alias;
+use crate::types::SortDirection;
 
 /// Validate an optional date string for use as a Bugzilla search filter.
 ///
@@ -28,3 +30,30 @@ pub fn parse_optional_date(opt: Option<&str>, flag: &str) -> Result<Option<Strin
 pub fn parse_optional_date_only(opt: Option<&str>, flag: &str) -> Result<Option<String>> {
     opt.map(|s| parse_date_only(s, flag)).transpose()
 }
+
+/// Build the Bugzilla `order` clause from `--sort`/`--order`.
+///
+/// With a sort field, returns `<resolved-field> <DIR>` plus a `bug_id`
+/// tiebreaker (omitted when the field already is `bug_id`) so ties resolve
+/// deterministically. Without a sort field, returns the stable default
+/// `bug_id`, so identical runs return rows in the same order even with no
+/// `--sort`. The field name is normalized through the same alias table as
+/// the filter flags (e.g. `assignee` -> `assigned_to`).
+#[must_use]
+pub fn build_order(sort: Option<&str>, direction: SortDirection) -> String {
+    match sort {
+        Some(field) => {
+            let resolved = resolve_field_alias(field);
+            if resolved == "bug_id" {
+                format!("bug_id {}", direction.keyword())
+            } else {
+                format!("{} {}, bug_id", resolved, direction.keyword())
+            }
+        }
+        None => "bug_id".to_string(),
+    }
+}
+
+#[cfg(test)]
+#[path = "validation_tests.rs"]
+mod tests;

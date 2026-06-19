@@ -38,6 +38,7 @@ pub(super) async fn handle(
         resolution,
         qa_contact,
         url,
+        sort_args,
     } = action
     else {
         unreachable!()
@@ -70,6 +71,10 @@ pub(super) async fn handle(
         resolution: resolution.clone(),
         qa_contact: qa_contact.clone(),
         url: url.clone(),
+        order: Some(crate::validation::build_order(
+            sort_args.sort.as_deref(),
+            sort_args.order,
+        )),
         ..Default::default()
     };
     let spec = ColumnSpec::new(fields.as_deref(), exclude_fields.as_deref());

@@ -132,6 +132,7 @@ fn append_option_params(
         ("exclude_fields", &params.exclude_fields),
         ("creation_time", &params.creation_time),
         ("last_change_time", &params.last_change_time),
+        ("order", &params.order),
     ];
     for &(key, value) in option_fields {
         if let Some(v) = value {

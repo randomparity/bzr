@@ -44,6 +44,7 @@ fn empty_list_action() -> bzr::cli::BugAction {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: bzr::cli::SortArgs::default(),
     }
 }
 
@@ -189,6 +190,7 @@ async fn bug_search_integration() {
             fields: None,
             exclude_fields: None,
         },
+        sort_args: bzr::cli::SortArgs::default(),
     };
     let mut __io4 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(

@@ -149,6 +149,8 @@ pub enum QueryAction {
         /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude)
         #[arg(long)]
         url: Vec<String>,
+        #[command(flatten)]
+        sort_args: crate::cli::SortArgs,
     },
     /// List all saved queries.
     ///
@@ -291,5 +293,7 @@ pub enum QueryAction {
         /// Override the saved URL filter.
         #[arg(long)]
         url: Vec<String>,
+        #[command(flatten)]
+        sort_args: crate::cli::SortArgs,
     },
 }

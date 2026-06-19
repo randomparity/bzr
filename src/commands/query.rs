@@ -41,6 +41,15 @@ pub async fn execute(
     }
 }
 
+/// The `order` clause to persist for a saved query: `Some` only when `--sort`
+/// is given, so `query run` applies its own stable default otherwise.
+fn explicit_sort_order(sort_args: &crate::cli::SortArgs) -> Option<String> {
+    sort_args
+        .sort
+        .as_ref()
+        .map(|_| crate::validation::build_order(sort_args.sort.as_deref(), sort_args.order))
+}
+
 fn handle_save(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
     let QueryAction::Save {
         name,
@@ -66,6 +75,7 @@ fn handle_save(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) 
         resolution,
         qa_contact,
         url,
+        sort_args,
     } = action
     else {
         unreachable!()
@@ -80,21 +90,14 @@ fn handle_save(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) 
         let config = Config::load()?;
         let parsed = crate::url_parser::parse_bugzilla_url(url_str, &config)?;
         let mut query = parsed.query;
-        if let Some(limit) = limit {
-            query.limit = Some(*limit);
-        }
-        if let Some(f) = fields {
-            query.fields = Some(f.clone());
-        }
-        if let Some(ef) = exclude_fields {
-            query.exclude_fields = Some(ef.clone());
-        }
-        if creation_time.is_some() {
-            query.creation_time = creation_time;
-        }
-        if last_change_time.is_some() {
-            query.last_change_time = last_change_time;
-        }
+        // A flag value overrides the URL-parsed value; otherwise the parsed
+        // value is kept.
+        query.limit = (*limit).or(query.limit);
+        query.fields = fields.clone().or(query.fields);
+        query.exclude_fields = exclude_fields.clone().or(query.exclude_fields);
+        query.creation_time = creation_time.or(query.creation_time);
+        query.last_change_time = last_change_time.or(query.last_change_time);
+        query.order = explicit_sort_order(sort_args);
         query
     } else {
         let kind = if search.is_some() {
@@ -125,6 +128,7 @@ fn handle_save(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) 
             resolution: resolution.clone(),
             qa_contact: qa_contact.clone(),
             url: url.clone(),
+            order: explicit_sort_order(sort_args),
             ..SavedQuery::default()
         }
     };
@@ -204,6 +208,7 @@ async fn handle_run(
         resolution,
         qa_contact,
         url,
+        sort_args,
     } = action
     else {
         unreachable!()
@@ -242,6 +247,17 @@ async fn handle_run(
     });
     params.include_fields = canonical_field_list(params.include_fields.as_deref());
     params.exclude_fields = canonical_field_list(params.exclude_fields.as_deref());
+    // Result ordering: an explicit `--sort` overrides the saved order; absent
+    // both, default to a stable `bug_id` so runs are deterministic — unless the
+    // saved query (e.g. from a URL) already carries an `order` raw param.
+    if sort_args.sort.is_some() {
+        params.order = Some(crate::validation::build_order(
+            sort_args.sort.as_deref(),
+            sort_args.order,
+        ));
+    } else if params.order.is_none() && !params.raw_params.iter().any(|(k, _)| k == "order") {
+        params.order = Some(crate::validation::build_order(None, sort_args.order));
+    }
 
     // Source columns from the resolved params (saved-query fields + CLI
     // overrides), not the raw flags, so a stored field selection is honored.

@@ -32,6 +32,7 @@ fn save_action(name: &str) -> QueryAction {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     }
 }
 
@@ -61,6 +62,7 @@ fn product_save_action(name: &str, product: &str, limit: u32) -> QueryAction {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     }
 }
 
@@ -89,6 +91,7 @@ fn empty_save_action(name: &str, search: Option<String>) -> QueryAction {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     }
 }
 
@@ -117,6 +120,7 @@ fn url_save_action(name: &str, url: String) -> QueryAction {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     }
 }
 
@@ -137,6 +141,7 @@ fn run_action(name: &str) -> QueryAction {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     }
 }
 
@@ -208,6 +213,7 @@ async fn query_save_persists_every_field() {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     };
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(&action, None, OutputFormat::Json, None, &mut __io.writers()).await;
@@ -523,6 +529,7 @@ async fn query_run_with_limit_override() {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     };
     let mut __io_a10 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
@@ -565,6 +572,7 @@ async fn query_save_existing_entry_reports_updated() {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     };
     let mut __io_a11 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
@@ -602,6 +610,7 @@ async fn query_save_existing_entry_reports_updated() {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     };
     let mut __io4 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
@@ -704,6 +713,7 @@ async fn query_run_applies_field_overrides() {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     };
     let mut __io_a13 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
@@ -742,6 +752,7 @@ async fn query_run_applies_field_overrides() {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     };
     let mut __io_a14 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
@@ -887,6 +898,7 @@ async fn query_run_with_server_override() {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     };
     let mut __io_a16 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
@@ -965,6 +977,7 @@ async fn query_save_rejects_malformed_created_since() {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     };
 
     let result = super::execute(
@@ -1008,6 +1021,7 @@ async fn query_save_stores_canonical_date_forms() {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     };
     let mut __io8 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
@@ -1057,6 +1071,7 @@ async fn query_save_accepts_date_only_query() {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     };
     let mut __io9 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
@@ -1107,6 +1122,7 @@ async fn query_run_rejects_malformed_created_since_override() {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     };
     let result = super::execute(
         &action,
@@ -1149,6 +1165,7 @@ async fn query_save_persists_158_field_filters() {
         resolution: vec!["FIXED".into()],
         qa_contact: vec!["qa@example.com".into()],
         url: vec!["github.com/foo".into()],
+        sort_args: crate::cli::SortArgs::default(),
     };
     let mut __io_a18 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
@@ -1206,6 +1223,7 @@ async fn query_save_accepts_whiteboard_only_filter() {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     };
     let mut __io_a19 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
@@ -1252,6 +1270,7 @@ async fn query_run_overrides_replace_saved_field_filters() {
         resolution: vec!["FIXED".into()],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     };
     let mut __io_a20 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
@@ -1291,6 +1310,7 @@ async fn query_run_overrides_replace_saved_field_filters() {
         resolution: vec!["WONTFIX".into()],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     };
     let mut __io_a21 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
@@ -1333,6 +1353,7 @@ async fn query_run_empty_override_keeps_saved_field_filter() {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        sort_args: crate::cli::SortArgs::default(),
     };
     let mut __io_a22 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
@@ -1367,4 +1388,95 @@ async fn query_run_empty_override_keeps_saved_field_filter() {
     .await;
     let _ = __io_a23.out_str().to_string();
     assert!(result.is_ok(), "run failed: {result:?}");
+}
+
+#[tokio::test]
+async fn query_run_sends_default_bug_id_order() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    let save = product_save_action("order-default", "TestProduct", 10);
+    super::execute(
+        &save,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("order", "bug_id"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({ "bugs": [] })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let run = run_action("order-default");
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&run, None, OutputFormat::Json, None, &mut __io.writers()).await;
+    assert!(
+        result.is_ok(),
+        "run with default order should succeed: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn query_run_sort_override_takes_precedence() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    let save = product_save_action("order-override", "TestProduct", 10);
+    super::execute(
+        &save,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("order", "priority ASC, bug_id"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({ "bugs": [] })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let mut run = run_action("order-override");
+    if let QueryAction::Run { sort_args, .. } = &mut run {
+        sort_args.sort = Some("priority".to_string());
+    }
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&run, None, OutputFormat::Json, None, &mut __io.writers()).await;
+    assert!(
+        result.is_ok(),
+        "run with --sort override should succeed: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn query_save_persists_explicit_sort() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let mut save = product_save_action("order-persist", "TestProduct", 10);
+    if let QueryAction::Save { sort_args, .. } = &mut save {
+        sort_args.sort = Some("last_change_time".to_string());
+        sort_args.order = crate::types::SortDirection::Desc;
+    }
+    super::execute(
+        &save,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
+
+    let config = crate::config::Config::load().unwrap();
+    let saved = config.queries.get("order-persist").unwrap();
+    assert_eq!(
+        saved.order.as_deref(),
+        Some("last_change_time DESC, bug_id")
+    );
 }

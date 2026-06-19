@@ -88,6 +88,36 @@ impl std::str::FromStr for OutputFormat {
     }
 }
 
+/// Sort direction for the `--order` flag on listing commands.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SortDirection {
+    #[default]
+    Asc,
+    Desc,
+}
+
+impl SortDirection {
+    /// The Bugzilla `order` keyword for this direction.
+    #[must_use]
+    pub fn keyword(self) -> &'static str {
+        match self {
+            SortDirection::Asc => "ASC",
+            SortDirection::Desc => "DESC",
+        }
+    }
+}
+
+impl std::str::FromStr for SortDirection {
+    type Err = String;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "asc" | "ascending" => Ok(SortDirection::Asc),
+            "desc" | "descending" => Ok(SortDirection::Desc),
+            _ => Err(format!("invalid order '{s}': expected 'asc' or 'desc'")),
+        }
+    }
+}
+
 /// Represents the four valid flag status values in Bugzilla.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FlagStatus {
