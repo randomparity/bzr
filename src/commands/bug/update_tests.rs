@@ -604,6 +604,22 @@ fn build_update_params_rejects_whitespace_only_comment() {
 }
 
 #[test]
+fn build_update_params_rejects_comment_and_comment_file_together() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("body.txt");
+    std::fs::write(&path, "from a file").unwrap();
+    let action = make_update_action_with_comment(vec![1], Some("inline"), Some(&path), false);
+    let err = super::build_update_params(&action).unwrap_err();
+    match err {
+        crate::error::BzrError::InputValidation(msg) => {
+            assert!(msg.contains("--comment"), "names inline flag: {msg}");
+            assert!(msg.contains("--comment-file"), "names file flag: {msg}");
+        }
+        other => panic!("expected InputValidation, got {other:?}"),
+    }
+}
+
+#[test]
 fn build_update_params_reads_comment_file() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("body.txt");
