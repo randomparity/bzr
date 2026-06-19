@@ -11,7 +11,6 @@ mod query;
 mod server;
 mod template;
 mod user;
-mod whoami;
 
 pub use attachment::AttachmentAction;
 pub use bug::{BugAction, FieldArgs};
@@ -26,7 +25,6 @@ pub use query::QueryAction;
 pub use server::ServerAction;
 pub use template::TemplateAction;
 pub use user::UserAction;
-pub use whoami::WhoamiAction;
 
 use clap::{Parser, Subcommand};
 
@@ -343,21 +341,18 @@ pub enum Commands {
     ///
     /// Useful as a quick auth smoke test: prints the login name,
     /// real name, and email of the user the configured API key
-    /// resolves to. Both `bzr whoami` and `bzr whoami show` are
-    /// equivalent -- `show` is the only action and may be omitted.
+    /// resolves to.
     ///
     /// Examples:
     ///
     ///   bzr whoami
-    ///   bzr whoami show --json
+    ///   bzr whoami --json
     ///   bzr --server staging whoami
     ///
-    /// See bzr-whoami-show(1) for action detail.
+    /// Exit codes: 0 on success, 9 on auth failure (key invalid or
+    /// missing), 13 on TLS pin mismatch.
     #[command(verbatim_doc_comment)]
-    Whoami {
-        #[command(subcommand)]
-        action: Option<WhoamiAction>,
-    },
+    Whoami,
 
     /// Inspect the configured Bugzilla server: version, extensions, capabilities.
     ///

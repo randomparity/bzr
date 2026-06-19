@@ -139,7 +139,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   ├── view <GROUP>
 │   ├── create --name <N> --description <D> [--is-active <BOOL>]
 │   └── update <GROUP> [--description <D>] [--is-active <BOOL>]
-├── whoami [show]
+├── whoami
 ├── server
 │   └── info
 ├── classification
@@ -980,7 +980,8 @@ bzr whoami
 bzr --json whoami
 ```
 
-`bzr whoami show` is accepted as a synonym for `bzr whoami`.
+`whoami` takes no subcommand. (The former no-op `whoami show` alias was
+removed in favor of the single bare form.)
 
 ---
 

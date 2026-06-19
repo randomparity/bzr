@@ -43,9 +43,7 @@ fn base_cli(command: Commands) -> Cli {
 }
 
 fn dummy_command() -> Commands {
-    Commands::Whoami {
-        action: Some(bzr::cli::WhoamiAction::Show),
-    }
+    Commands::Whoami
 }
 
 #[test]

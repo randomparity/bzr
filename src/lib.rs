@@ -75,10 +75,7 @@ pub async fn dispatch(
         cli::Commands::Group { action } => {
             commands::group::execute(action, server, format, api, w).await
         }
-        cli::Commands::Whoami { action } => {
-            let whoami_action = action.as_ref().unwrap_or(&cli::WhoamiAction::Show);
-            commands::whoami::execute(whoami_action, server, format, api, w).await
-        }
+        cli::Commands::Whoami => commands::whoami::execute(server, format, api, w).await,
         cli::Commands::Server { action } => {
             commands::server::execute(action, server, format, api, w).await
         }
