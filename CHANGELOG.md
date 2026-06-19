@@ -50,6 +50,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Global `--timeout <SECS>` (and `BZR_TIMEOUT`) overrides the per-request
+  timeout (default 30s) for slow or distant servers; the 10s connect timeout is
+  unchanged. Global `--retry <N>` (default 0, max 10) retries transient failures
+  with exponential backoff that honors a `Retry-After` header. To avoid
+  duplicate writes, 429 and connect failures are retried for any operation while
+  5xx responses and read timeouts are retried only for safe reads (GET/HEAD),
+  never for writes (create, update, comment). Retries are off by default;
+  exhausted retries surface the usual network error (exit code 5). (#311)
 - `--count` on `bzr bug list`, `bzr bug search`, and `bzr bug my` prints only the
   number of matching bugs — an integer (table) or `{"count": N}` (JSON) — for
   dashboards, triage gates, and agent branching. It fetches ids only and lifts

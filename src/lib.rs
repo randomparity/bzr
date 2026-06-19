@@ -47,6 +47,8 @@ pub async fn dispatch(
     format: types::OutputFormat,
     w: &mut output::writers::Writers<'_>,
 ) -> error::Result<()> {
+    apply_network_tuning(cli);
+
     let api = cli.api;
     let server = cli.server.as_deref();
 
@@ -93,6 +95,33 @@ pub async fn dispatch(
         }
         cli::Commands::Completion { shell } => commands::completion::execute(*shell, w),
     }
+}
+
+/// Install process-wide network tuning from the global flags before any client
+/// is built: the request timeout (`--timeout`, falling back to `BZR_TIMEOUT`)
+/// and the transient-retry budget (`--retry`). An invalid `BZR_TIMEOUT` is
+/// ignored with a warning so the built-in default stands.
+///
+/// This mutates process-global state, so `dispatch` is not safe to call
+/// concurrently from one process with differing `--timeout`/`--retry` values
+/// (the CLI runs a single dispatch per process, so this is not a concern in
+/// practice; tests exercise per-client retry overrides instead).
+fn apply_network_tuning(cli: &cli::Cli) {
+    let env_timeout = std::env::var("BZR_TIMEOUT").ok();
+    if cli.timeout.is_none() {
+        if let Some(raw) = &env_timeout {
+            if http::resolve_timeout_secs(None, Some(raw)).is_none() {
+                tracing::warn!(
+                    "ignoring invalid BZR_TIMEOUT={raw:?} (expected a positive integer)"
+                );
+            }
+        }
+    }
+    http::set_request_timeout_secs(http::resolve_timeout_secs(
+        cli.timeout,
+        env_timeout.as_deref(),
+    ));
+    http::set_retry_max(cli.retry.unwrap_or(0));
 }
 
 /// Shared mutex for tests that modify the process-global `XDG_CONFIG_HOME` env var.

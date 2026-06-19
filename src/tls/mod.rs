@@ -101,7 +101,7 @@ fn same_host_redirect_policy() -> reqwest::redirect::Policy {
 pub fn build_tls_client(config: &TlsConfig) -> crate::error::Result<reqwest::Client> {
     let builder = reqwest::Client::builder()
         .connect_timeout(crate::http::CONNECT_TIMEOUT)
-        .timeout(crate::http::REQUEST_TIMEOUT)
+        .timeout(crate::http::request_timeout())
         .redirect(same_host_redirect_policy());
     apply_tls_verification(builder, config)?
         .build()
@@ -119,7 +119,7 @@ pub fn build_tls_client(config: &TlsConfig) -> crate::error::Result<reqwest::Cli
 pub(crate) fn build_probe_client(config: &TlsConfig) -> crate::error::Result<reqwest::Client> {
     let builder = reqwest::Client::builder()
         .connect_timeout(crate::http::CONNECT_TIMEOUT)
-        .timeout(crate::http::REQUEST_TIMEOUT)
+        .timeout(crate::http::request_timeout())
         .redirect(reqwest::redirect::Policy::none());
     apply_tls_verification(builder, config)?
         .build()

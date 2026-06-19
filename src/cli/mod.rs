@@ -137,6 +137,25 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub api: Option<ApiMode>,
 
+    /// Per-request timeout in seconds (default: 30).
+    ///
+    /// Overrides the built-in request timeout for slow or distant servers.
+    /// Takes precedence over the `BZR_TIMEOUT` environment variable. The
+    /// connect timeout (10s) is unaffected. Must be at least 1.
+    #[arg(long, value_name = "SECS", global = true, value_parser = clap::value_parser!(u64).range(1..))]
+    pub timeout: Option<u64>,
+
+    /// Retry transient failures up to N times (default: 0, disabled).
+    ///
+    /// Uses exponential backoff that honors a `Retry-After` header. 429 and
+    /// connect failures (request provably not processed) are retried for any
+    /// operation; 5xx responses and read timeouts are retried only for safe
+    /// reads (GET/HEAD), never for writes (create, update, comment) where a
+    /// replay could duplicate the effect. Off by default; bounded to at most
+    /// 10. Exhausted retries surface the usual network error (exit code 5).
+    #[arg(long, value_name = "N", global = true, value_parser = clap::value_parser!(u32).range(0..=10))]
+    pub retry: Option<u32>,
+
     /// Set log verbosity (default: warnings only, -v=info, -vv=debug, -vvv=trace; `RUST_LOG` overrides)
     #[arg(short, long, action = clap::ArgAction::Count, global = true)]
     pub verbose: u8,
