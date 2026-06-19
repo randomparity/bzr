@@ -1480,3 +1480,159 @@ async fn query_save_persists_explicit_sort() {
         Some("last_change_time DESC, bug_id")
     );
 }
+
+// ── Update (#315) ───────────────────────────────────────────────────
+
+fn empty_update(name: &str) -> QueryAction {
+    QueryAction::Update {
+        name: name.into(),
+        search: None,
+        product: vec![],
+        component: vec![],
+        status: vec![],
+        assignee: vec![],
+        creator: vec![],
+        priority: vec![],
+        severity: vec![],
+        limit: None,
+        fields: None,
+        exclude_fields: None,
+        created_since: None,
+        changed_since: None,
+        whiteboard: vec![],
+        target_milestone: vec![],
+        version: vec![],
+        op_sys: vec![],
+        platform: vec![],
+        resolution: vec![],
+        qa_contact: vec![],
+        url: vec![],
+        clear: vec![],
+        sort_args: crate::cli::SortArgs::default(),
+    }
+}
+
+async fn run_q(action: &QueryAction) -> crate::error::Result<()> {
+    let mut io = crate::test_helpers::CapturedIo::new();
+    super::execute(action, None, OutputFormat::Json, None, &mut io.writers()).await
+}
+
+#[tokio::test]
+async fn query_update_replaces_filter_keeps_rest() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run_q(&save_action("q")).await.unwrap(); // product=Firefox, status=NEW, limit=25
+
+    let mut a = empty_update("q");
+    if let QueryAction::Update { status, .. } = &mut a {
+        *status = vec!["ASSIGNED".into()];
+    }
+    run_q(&a).await.unwrap();
+
+    let config = Config::load().unwrap();
+    let q = &config.queries["q"];
+    assert_eq!(q.status, vec!["ASSIGNED".to_string()]);
+    assert_eq!(q.product, vec!["Firefox".to_string()]); // untouched
+    assert_eq!(q.limit, Some(25)); // untouched
+}
+
+#[tokio::test]
+async fn query_update_replaces_limit() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run_q(&save_action("q")).await.unwrap();
+
+    let mut a = empty_update("q");
+    if let QueryAction::Update { limit, .. } = &mut a {
+        *limit = Some(100);
+    }
+    run_q(&a).await.unwrap();
+
+    assert_eq!(Config::load().unwrap().queries["q"].limit, Some(100));
+}
+
+#[tokio::test]
+async fn query_update_clear_resets_filter() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run_q(&save_action("q")).await.unwrap();
+
+    let mut a = empty_update("q");
+    if let QueryAction::Update { clear, .. } = &mut a {
+        *clear = vec!["status".into()];
+    }
+    run_q(&a).await.unwrap();
+
+    let config = Config::load().unwrap();
+    assert!(config.queries["q"].status.is_empty());
+    assert_eq!(config.queries["q"].product, vec!["Firefox".to_string()]);
+}
+
+#[tokio::test]
+async fn query_update_unknown_query_errors() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let mut a = empty_update("missing");
+    if let QueryAction::Update { status, .. } = &mut a {
+        *status = vec!["NEW".into()];
+    }
+    let err = run_q(&a).await.unwrap_err();
+    assert!(err.to_string().contains("query 'missing' not found"));
+}
+
+#[tokio::test]
+async fn query_update_requires_a_change() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run_q(&save_action("q")).await.unwrap();
+    let err = run_q(&empty_update("q")).await.unwrap_err();
+    assert!(err.to_string().contains("no changes"));
+}
+
+#[tokio::test]
+async fn query_update_unknown_clear_field_errors() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run_q(&save_action("q")).await.unwrap();
+    let mut a = empty_update("q");
+    if let QueryAction::Update { clear, .. } = &mut a {
+        *clear = vec!["bogus".into()];
+    }
+    let err = run_q(&a).await.unwrap_err();
+    assert!(err.to_string().contains("unknown --clear field"));
+}
+
+#[tokio::test]
+async fn query_update_clearing_all_filters_rejected() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run_q(&product_save_action("q", "Firefox", 10))
+        .await
+        .unwrap(); // only product
+
+    let mut a = empty_update("q");
+    if let QueryAction::Update { clear, .. } = &mut a {
+        *clear = vec!["product".into()];
+    }
+    let err = run_q(&a).await.unwrap_err();
+    assert!(err.to_string().contains("at least one filter"));
+}
+
+#[tokio::test]
+async fn query_update_bad_date_errors() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run_q(&save_action("q")).await.unwrap();
+    let mut a = empty_update("q");
+    if let QueryAction::Update { created_since, .. } = &mut a {
+        *created_since = Some("not-a-date".into());
+    }
+    assert!(run_q(&a).await.is_err());
+}
+
+#[tokio::test]
+async fn query_update_clear_wins_over_set() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run_q(&save_action("q")).await.unwrap(); // product=Firefox, status=NEW
+
+    let mut a = empty_update("q");
+    if let QueryAction::Update { status, clear, .. } = &mut a {
+        *status = vec!["ASSIGNED".into()];
+        *clear = vec!["status".into()];
+    }
+    run_q(&a).await.unwrap();
+    // status was both set and cleared -> cleared.
+    assert!(Config::load().unwrap().queries["q"].status.is_empty());
+}

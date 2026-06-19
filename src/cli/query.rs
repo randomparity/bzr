@@ -204,6 +204,102 @@ pub enum QueryAction {
         name: String,
     },
 
+    /// Update fields of an existing saved query in place.
+    ///
+    /// Merges the supplied flags into the named query without
+    /// re-specifying the rest: a filter flag (repeatable) replaces
+    /// that field's saved list, a scalar flag (`--limit`,
+    /// `--fields`, `--search`, `--created-since`, ...) replaces that
+    /// value, and an omitted flag leaves it unchanged. Use
+    /// `--clear <field>` (repeatable) to reset a saved field; valid
+    /// names are the long flag names (`product`, `status`, `limit`,
+    /// `fields`, `search`, `created-since`, `sort`, ...). At least
+    /// one change is required, and the result must keep at least one
+    /// filter set (exit 7 otherwise). URL pass-through params from a
+    /// `--from-url` query are preserved. If a field is both set and
+    /// cleared in one call, `--clear` wins.
+    ///
+    /// Examples:
+    ///
+    ///   bzr query update firefox-new --status ASSIGNED
+    ///   bzr query update firefox-new --limit 100 --clear severity
+    ///
+    /// See bzr-query-save(1) to create one and bzr-query-show(1) to
+    /// inspect the result.
+    #[command(verbatim_doc_comment)]
+    Update {
+        /// Query name
+        name: String,
+        /// Replace the free-text search
+        #[arg(long)]
+        search: Option<String>,
+        /// Replace the product filter (repeatable)
+        #[arg(long)]
+        product: Vec<String>,
+        /// Replace the component filter (repeatable)
+        #[arg(long)]
+        component: Vec<String>,
+        /// Replace the status filter (repeatable)
+        #[arg(long)]
+        status: Vec<String>,
+        /// Replace the assignee filter (repeatable)
+        #[arg(long)]
+        assignee: Vec<String>,
+        /// Replace the creator filter (repeatable)
+        #[arg(long)]
+        creator: Vec<String>,
+        /// Replace the priority filter (repeatable)
+        #[arg(long)]
+        priority: Vec<String>,
+        /// Replace the severity filter (repeatable)
+        #[arg(long)]
+        severity: Vec<String>,
+        /// Replace the saved limit
+        #[arg(long)]
+        limit: Option<u32>,
+        /// Replace the saved field selection (comma-separated)
+        #[arg(long)]
+        fields: Option<String>,
+        /// Replace the saved field exclusion (comma-separated)
+        #[arg(long)]
+        exclude_fields: Option<String>,
+        /// Replace the saved `creation_time` filter (same forms as `bzr bug list`)
+        #[arg(long, value_name = "DATE")]
+        created_since: Option<String>,
+        /// Replace the saved `last_change_time` filter
+        #[arg(long, value_name = "DATE")]
+        changed_since: Option<String>,
+        /// Replace the Status Whiteboard filter (repeatable)
+        #[arg(long)]
+        whiteboard: Vec<String>,
+        /// Replace the Target Milestone filter (repeatable)
+        #[arg(long)]
+        target_milestone: Vec<String>,
+        /// Replace the Version filter (repeatable)
+        #[arg(long)]
+        version: Vec<String>,
+        /// Replace the Operating System filter (repeatable)
+        #[arg(long)]
+        op_sys: Vec<String>,
+        /// Replace the Platform filter (repeatable)
+        #[arg(long)]
+        platform: Vec<String>,
+        /// Replace the Resolution filter (repeatable)
+        #[arg(long)]
+        resolution: Vec<String>,
+        /// Replace the QA Contact filter (repeatable)
+        #[arg(long)]
+        qa_contact: Vec<String>,
+        /// Replace the URL filter (repeatable)
+        #[arg(long)]
+        url: Vec<String>,
+        /// Reset a field to unset (repeatable). Names match the long flags.
+        #[arg(long, value_name = "FIELD")]
+        clear: Vec<String>,
+        #[command(flatten)]
+        sort_args: crate::cli::SortArgs,
+    },
+
     /// Run a saved query against a Bugzilla server.
     ///
     /// Reads the query's stored parameters (filter flags, free-text
@@ -225,8 +321,9 @@ pub enum QueryAction {
     /// All eight bzl-parity field filters from `bzr bug list` are
     /// also overrideable here. Passing a flag replaces the saved
     /// list for that field; omitting it keeps the saved value.
-    /// There is no clear sentinel — to clear a saved field, edit
-    /// the config or re-save the query.
+    /// These overrides apply to this run only — to change a saved
+    /// field permanently use `bzr query update <NAME>` (with
+    /// `--clear <FIELD>` to reset one).
     ///
     /// Examples:
     ///

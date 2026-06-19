@@ -185,6 +185,9 @@ bzr [--server <NAME>] [--output table|json] [--json] [--config <PATH>] [--no-col
 │   │               [--description <D>]
 │   ├── list
 │   ├── show <NAME>
+│   ├── update <NAME> [--product <P>] [--component <C>] [--version <V>] [--priority <P>]
+│   │                 [--severity <S>] [--assignee <A>] [--op-sys <OS>] [--rep-platform <PLAT>]
+│   │                 [--description <D>] [--clear <FIELD>]
 │   └── delete <NAME>
 ├── query
 │   ├── save <NAME> (--from-url <URL> | [--product <P>...] [--component <C>...] [--status <S>...]
@@ -195,6 +198,12 @@ bzr [--server <NAME>] [--output table|json] [--json] [--config <PATH>] [--no-col
 │   │               [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
 │   ├── list
 │   ├── show <NAME>
+│   ├── update <NAME> [--search <Q>] [--product <P>...] [--component <C>...] [--status <S>...]
+│   │                 [--assignee <A>...] [--creator <C>...] [--priority <P>...] [--severity <S>...]
+│   │                 [--resolution <R>...] [--version <V>...] [--op-sys <OS>...] [--platform <P>...]
+│   │                 [--whiteboard <W>...] [--target-milestone <M>...] [--qa-contact <Q>...] [--url <U>...]
+│   │                 [--limit <N>] [--fields <F>] [--exclude-fields <F>] [--created-since <D>]
+│   │                 [--changed-since <D>] [--clear <FIELD>] [--sort <FIELD>] [--order asc|desc]
 │   ├── delete <NAME>
 │   └── run <NAME> [--limit <N>] [--fields <F>] [--exclude-fields <F>] [--server <NAME>]
 │                  [--resolution <R>...] [--version <V>...] [--op-sys <OS>...] [--platform <P>...]
@@ -1428,6 +1437,20 @@ bzr template show security-bug
 bzr --json template show security-bug
 ```
 
+### `bzr template update`
+
+Edit an existing template in place. A supplied field flag replaces that field;
+an omitted flag leaves it unchanged. `--clear <FIELD>` (repeatable; names match
+the long flags: `product`, `component`, `version`, `priority`, `severity`,
+`assignee`, `op-sys`, `rep-platform`, `description`) resets a field. At least one
+change is required, and a fully-cleared template is rejected (exit 7). If a field
+is both set and cleared in one call, `--clear` wins.
+
+```bash
+bzr template update security-bug --severity blocker
+bzr template update security-bug --clear assignee
+```
+
 ### `bzr template delete`
 
 Delete a saved template.
@@ -1515,6 +1538,23 @@ For URL-sourced queries (saved with `--from-url`), the output also includes the
 original source URL, the associated server name, and a count of raw passthrough
 parameters. In JSON format, the full list of raw parameters is included.
 
+### `bzr query update`
+
+Edit an existing saved query in place. A supplied filter flag (repeatable)
+replaces that field's saved list; a scalar flag (`--limit`, `--fields`,
+`--search`, `--created-since`, ...) replaces that value; an omitted flag leaves
+it unchanged. `--clear <FIELD>` (repeatable; names match the long flags, e.g.
+`status`, `limit`, `search`, `created-since`, `sort`) resets a saved field. At
+least one change is required, and an update that would leave the query with no
+filters is rejected (exit 7). Raw passthrough params from a `--from-url` query
+are preserved. `--sort` / `--order` set the persisted ordering. If a field is
+both set and cleared in one call, `--clear` wins.
+
+```bash
+bzr query update firefox-new --status ASSIGNED
+bzr query update firefox-new --limit 100 --clear severity
+```
+
 ### `bzr query delete`
 
 Delete a saved query.
@@ -1557,9 +1597,10 @@ bzr query run recent-firefox --changed-since 2026-05-01
 
 All eight `bzr bug list` field filters from #158 are also accepted
 as overrides. Passing a flag replaces the saved value for that
-field; omitting it keeps the saved value. There is no clear
-sentinel — to clear a saved field, edit the config or re-save the
-query.
+field; omitting it keeps the saved value. These overrides apply to
+this run only — to change a saved field permanently use
+[`bzr query update`](#bzr-query-update) (with `--clear <FIELD>` to
+reset one).
 
 ---
 

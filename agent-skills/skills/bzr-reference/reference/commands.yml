@@ -12,5 +12,5 @@ whoami:
 server: info
 classification: list view
 component: list view create update
-template: save list show delete
-query: save list show delete run
+template: save list show update delete
+query: save list show update delete run
