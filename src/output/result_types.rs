@@ -21,6 +21,27 @@ pub fn write_result<W: Write + ?Sized>(
     }
 }
 
+/// Count-only result for `--count`: serializes as `{"count": N}` under JSON;
+/// the table form prints just the integer.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct CountResult {
+    pub count: usize,
+}
+
+impl CountResult {
+    #[must_use]
+    pub fn new(count: usize) -> Self {
+        Self { count }
+    }
+}
+
+/// Write a count-only result: `{"count": N}` under JSON, a bare integer for
+/// the table form. Shared by the `--count` paths of `bug list`/`search`/`my`.
+pub fn write_count<W: Write + ?Sized>(count: usize, format: OutputFormat, out: &mut W) {
+    write_result(&CountResult::new(count), &count.to_string(), format, out);
+}
+
 // ── Action result types ─────────────────────────────────────────────
 
 /// Resource type for mutation result payloads.

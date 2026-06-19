@@ -37,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `--count` on `bzr bug list`, `bzr bug search`, and `bzr bug my` prints only the
+  number of matching bugs — an integer (table) or `{"count": N}` (JSON) — for
+  dashboards, triage gates, and agent branching. It fetches ids only and lifts
+  the row limit (`limit=0`), so the count reflects all matches (bounded by the
+  server's max-results setting) rather than a single page; `bug my` reports the
+  distinct total deduped across the active categories. (#317)
 - Convenience verbs over `bzr bug update` for the common state transitions:
   `bzr bug resolve <ID...> [--as <RESOLUTION>]` (defaults to `FIXED`),
   `bzr bug close <ID...> [--as <RESOLUTION>]`, `bzr bug reopen <ID...>`, and

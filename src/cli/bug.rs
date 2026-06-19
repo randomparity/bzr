@@ -188,6 +188,14 @@ pub enum BugAction {
         /// Max number of results
         #[arg(long, default_value = "50")]
         limit: u32,
+        /// Print only the number of matching bugs, not the rows.
+        ///
+        /// Counts all matches (bounded by the server's max-results setting)
+        /// and prints just the integer (table) or `{"count": N}` (JSON).
+        /// `--limit` and `--sort` are ignored, and `--fields` does not affect
+        /// the count (though an invalid `--fields` value is still rejected).
+        #[arg(long)]
+        count: bool,
         #[command(flatten)]
         field_args: FieldArgs,
         #[command(flatten)]
@@ -372,6 +380,12 @@ pub enum BugAction {
         /// Max number of results (default: 50)
         #[arg(long)]
         limit: Option<u32>,
+        /// Print only the number of matching bugs, not the rows.
+        ///
+        /// Counts all matches (bounded by the server's max-results setting)
+        /// and prints just the integer (table) or `{"count": N}` (JSON).
+        #[arg(long)]
+        count: bool,
         #[command(flatten)]
         field_args: FieldArgs,
         #[command(flatten)]
@@ -582,6 +596,13 @@ pub enum BugAction {
         /// the limit applies to the single active category.
         #[arg(long, default_value = "50")]
         limit: u32,
+        /// Print only the number of matching bugs, not the rows.
+        ///
+        /// Counts the distinct bugs across the active categories (deduped),
+        /// bounded by the server's max-results setting, and prints just the
+        /// integer (table) or `{"count": N}` (JSON).
+        #[arg(long)]
+        count: bool,
         #[command(flatten)]
         field_args: FieldArgs,
         #[command(flatten)]
