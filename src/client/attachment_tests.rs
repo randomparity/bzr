@@ -843,3 +843,33 @@ async fn get_attachment_metadata_strips_data_even_if_server_returns_it() {
         "data must be stripped even when the server returns it"
     );
 }
+
+#[tokio::test]
+async fn get_attachment_metadata_xmlrpc_uses_xmlrpc_and_strips_data() {
+    let mock = MockServer::start().await;
+    // REST must not be touched in xmlrpc mode.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/2004"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(xmlrpc_attachment_by_id_response(2004, true)),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_xmlrpc(&mock.uri());
+    let att = client.get_attachment_metadata(2004).await.unwrap();
+    assert_eq!(att.id, 2004);
+    assert!(att.is_private);
+    assert!(
+        att.data.is_none(),
+        "metadata path must strip bytes in xmlrpc mode"
+    );
+}
