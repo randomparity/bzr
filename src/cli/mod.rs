@@ -93,6 +93,17 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub json: bool,
 
+    /// Use an alternate config file instead of the default.
+    ///
+    /// Points bzr at a specific `config.toml` for both reads and writes,
+    /// sandboxing the invocation from the user's normal config. Takes
+    /// precedence over the `BZR_CONFIG` environment variable, which in turn
+    /// overrides the default `$XDG_CONFIG_HOME/bzr/config.toml` (or the
+    /// platform config directory). Useful for CI, throwaway agent runs, and
+    /// per-profile configs.
+    #[arg(long, value_name = "PATH", global = true)]
+    pub config: Option<std::path::PathBuf>,
+
     /// Disable colored output.
     ///
     /// bzr also honors the `NO_COLOR` and `CLICOLOR=0` environment

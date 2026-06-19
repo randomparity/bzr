@@ -424,7 +424,7 @@ bzr --output json field list status | jq '.[] | select(.name == "NEW") | .can_ch
 
 ## Configuration & Authentication
 
-Configuration is stored in `~/.config/bzr/config.toml` with support for multiple named servers. See [docs/bzr-cli.md](docs/bzr-cli.md#configuration-file-format) for the full file format.
+Configuration is stored in `~/.config/bzr/config.toml` with support for multiple named servers. Point bzr at a different file with the global `--config <PATH>` flag or the `BZR_CONFIG` environment variable (the flag wins) — handy for CI, throwaway agent runs, and per-profile configs. See [docs/bzr-cli.md](docs/bzr-cli.md#configuration-file-format) for the full file format.
 
 ## Authentication
 

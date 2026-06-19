@@ -926,6 +926,18 @@ fn parse_quiet_flag() {
 }
 
 #[test]
+fn parse_config_path_flag() {
+    let cli = Cli::try_parse_from(["bzr", "--config", "/tmp/agent.toml", "whoami"]).unwrap();
+    assert_eq!(
+        cli.config.as_deref(),
+        Some(std::path::Path::new("/tmp/agent.toml"))
+    );
+    // Absent by default.
+    let none = Cli::try_parse_from(["bzr", "whoami"]).unwrap();
+    assert!(none.config.is_none());
+}
+
+#[test]
 fn quiet_help_mentions_tracing_is_suppressed() {
     let help = Cli::command().render_long_help().to_string();
     assert!(help.contains("tracing logs are also suppressed"), "{help}");
