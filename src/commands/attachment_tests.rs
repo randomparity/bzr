@@ -1,7 +1,7 @@
 #![expect(clippy::unwrap_used)]
 
 use super::*;
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::AttachmentAction;
@@ -1431,4 +1431,46 @@ async fn write_one_attachment_sanitizes_server_filename_with_separators() {
     let expected = tmp.path().join("42").join("7.escape.txt");
     assert_eq!(std::path::Path::new(&file.path), expected);
     assert!(expected.exists(), "{expected:?} not found");
+}
+
+#[tokio::test]
+async fn attachment_view_returns_metadata_without_data() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/9876"))
+        .and(query_param("exclude_fields", "data"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "attachments": {
+                "9876": {
+                    "id": 9876,
+                    "bug_id": 42,
+                    "file_name": "patch.diff",
+                    "summary": "Fix patch",
+                    "content_type": "text/x-diff",
+                    "creator": "dev@test.com",
+                    "creation_time": "2025-01-01T00:00:00Z",
+                    "is_patch": true,
+                    "is_private": false,
+                    "size": 1024
+                }
+            }
+        })))
+        .mount(&mock)
+        .await;
+
+    let action = AttachmentAction::View {
+        attachment_id: 9876,
+    };
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut __io.writers()).await;
+    assert!(result.is_ok(), "view should succeed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    assert_eq!(parsed["id"], 9876);
+    assert_eq!(parsed["file_name"], "patch.diff");
+    assert_eq!(parsed["size"], 1024);
+    assert!(
+        parsed.get("data").is_none(),
+        "metadata JSON must omit the data field, got: {parsed}"
+    );
 }

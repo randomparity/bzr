@@ -22,6 +22,26 @@ pub enum AttachmentAction {
         bug_id: u64,
     },
 
+    /// View a single attachment's metadata by attachment ID.
+    ///
+    /// Prints the summary, bug, file name, content type, size, flags
+    /// (patch/obsolete/private), creator, and timestamps -- without
+    /// downloading the attachment's bytes. On REST the `data` field is
+    /// excluded server-side, so large attachments are cheap to inspect.
+    ///
+    /// Examples:
+    ///
+    ///   bzr attachment view 9876
+    ///   bzr --json attachment view 9876 | jq '.summary, .size'
+    ///
+    /// See bzr-attachment-list(1) to discover attachment IDs for a bug and
+    /// bzr-attachment-download(1) to fetch the bytes.
+    #[command(verbatim_doc_comment)]
+    View {
+        /// Attachment ID
+        attachment_id: u64,
+    },
+
     /// Download attachments to disk.
     ///
     /// Three argument shapes are accepted:

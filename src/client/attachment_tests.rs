@@ -781,3 +781,65 @@ async fn get_attachments_returns_empty_when_bug_acknowledged_with_no_attachments
         "no attachments expected: {attachments:?}"
     );
 }
+
+#[tokio::test]
+async fn get_attachment_metadata_excludes_data_field() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/9876"))
+        .and(wiremock::matchers::query_param("exclude_fields", "data"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "attachments": {
+                "9876": {
+                    "id": 9876,
+                    "bug_id": 42,
+                    "file_name": "patch.diff",
+                    "summary": "a patch",
+                    "content_type": "text/plain",
+                    "size": 1234,
+                    "is_patch": 1
+                }
+            }
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let att = client.get_attachment_metadata(9876).await.unwrap();
+    assert_eq!(att.id, 9876);
+    assert_eq!(att.file_name, "patch.diff");
+    assert!(att.is_patch);
+    assert!(att.data.is_none(), "metadata fetch must not carry bytes");
+}
+
+#[tokio::test]
+async fn get_attachment_metadata_strips_data_even_if_server_returns_it() {
+    // Defense in depth: a server that ignores `exclude_fields` and returns the
+    // bytes anyway must still not leak them through the metadata path.
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/9876"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "attachments": {
+                "9876": {
+                    "id": 9876,
+                    "bug_id": 42,
+                    "file_name": "patch.diff",
+                    "summary": "a patch",
+                    "content_type": "text/plain",
+                    "size": 5,
+                    "data": "aGVsbG8="
+                }
+            }
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let att = client.get_attachment_metadata(9876).await.unwrap();
+    assert!(
+        att.data.is_none(),
+        "data must be stripped even when the server returns it"
+    );
+}
