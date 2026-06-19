@@ -2783,3 +2783,45 @@ async fn e2e_bug_list_json_exclude_id_drops_key_but_parses() {
     assert!(!keys.contains(&"id"), "id dropped from output:\n{out}");
     assert_eq!(parsed[0]["summary"], "keep me", "summary retained:\n{out}");
 }
+
+// ── Completion command ────────────────────────────────────────────────
+
+/// `bzr completion <shell>` must parse and dispatch end-to-end (not just
+/// the `commands::completion::execute` helper) and emit a non-empty script
+/// naming the binary. Guards the `Commands::Completion` variant and the
+/// `dispatch()` arm against silent removal/misrouting. Local-only: no
+/// server, config, or env mutation, so it needs no `ENV_LOCK`.
+#[tokio::test]
+async fn completion_bash_parses_and_dispatches() {
+    let cli = bzr::cli::Cli::try_parse_from(["bzr", "completion", "bash"])
+        .expect("completion bash should parse");
+
+    let mut __io = bzr::test_helpers::CapturedIo::new();
+    let result = bzr::dispatch(&cli, bzr::types::OutputFormat::Table, &mut __io.writers()).await;
+    assert!(
+        result.is_ok(),
+        "completion dispatch should succeed: {result:?}"
+    );
+
+    let script = __io.out_str();
+    assert!(
+        !script.is_empty(),
+        "bash completion script should not be empty"
+    );
+    assert!(
+        script.contains("bzr"),
+        "bash completion script should name the bzr binary:\n{script}"
+    );
+    assert!(
+        script.contains("complete"),
+        "bash completion script should register a completion function:\n{script}"
+    );
+}
+
+/// An unknown shell name is rejected at parse time (clap value enum),
+/// before any dispatch happens.
+#[tokio::test]
+async fn completion_rejects_unknown_shell() {
+    let parsed = bzr::cli::Cli::try_parse_from(["bzr", "completion", "klingon"]);
+    assert!(parsed.is_err(), "clap should reject an unknown shell name");
+}

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `bzr completion <bash|zsh|fish|powershell|elvish>` prints a shell completion
+  script to stdout, generated from bzr's live clap command tree so it always
+  matches the installed binary's subcommands and flags. README and
+  `docs/bzr-cli.md` document a one-line install per shell. (#299)
 - `bzr comment add` now accepts `--body-file <PATH>` to read the comment body
   from a UTF-8 file, matching `bug create --description-file` and
   `bug update --comment-file`. A path of `-` reads from stdin. `--body` and
