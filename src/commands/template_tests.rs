@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used)]
 
-use crate::cli::TemplateAction;
+use crate::cli::{TemplateAction, TemplateFields};
 use crate::config::Config;
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
@@ -8,15 +8,12 @@ use crate::types::OutputFormat;
 fn save_action(name: &str) -> TemplateAction {
     TemplateAction::Save {
         name: name.into(),
-        product: Some("TestProduct".into()),
-        component: Some("General".into()),
-        version: None,
-        priority: Some("P1".into()),
-        severity: None,
-        assignee: None,
-        op_sys: None,
-        rep_platform: None,
-        description: None,
+        fields: TemplateFields {
+            product: Some("TestProduct".into()),
+            component: Some("General".into()),
+            priority: Some("P1".into()),
+            ..Default::default()
+        },
     }
 }
 
@@ -67,15 +64,7 @@ async fn template_save_requires_field() {
 
     let action = TemplateAction::Save {
         name: "empty-tmpl".into(),
-        product: None,
-        component: None,
-        version: None,
-        priority: None,
-        severity: None,
-        assignee: None,
-        op_sys: None,
-        rep_platform: None,
-        description: None,
+        fields: TemplateFields::default(),
     };
     let result = super::execute(
         &action,
@@ -101,15 +90,10 @@ async fn template_save_with_single_field_succeeds() {
 
     let action = TemplateAction::Save {
         name: "version-only".into(),
-        product: None,
-        component: None,
-        version: Some("1.2.3".into()),
-        priority: None,
-        severity: None,
-        assignee: None,
-        op_sys: None,
-        rep_platform: None,
-        description: None,
+        fields: TemplateFields {
+            version: Some("1.2.3".into()),
+            ..Default::default()
+        },
     };
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(&action, None, OutputFormat::Json, None, &mut __io.writers()).await;
@@ -182,15 +166,13 @@ async fn template_save_existing_entry_reports_updated_and_replaces_fields() {
 
     let update = TemplateAction::Save {
         name: "existing".into(),
-        product: None,
-        component: Some("Updated".into()),
-        version: Some("123".into()),
-        priority: None,
-        severity: Some("major".into()),
-        assignee: None,
-        op_sys: None,
-        rep_platform: None,
-        description: Some("updated".into()),
+        fields: TemplateFields {
+            component: Some("Updated".into()),
+            version: Some("123".into()),
+            severity: Some("major".into()),
+            description: Some("updated".into()),
+            ..Default::default()
+        },
     };
     let mut __io_a4 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
@@ -404,15 +386,14 @@ fn update_action(
 ) -> TemplateAction {
     TemplateAction::Update {
         name: name.into(),
-        product: product.map(Into::into),
-        component: component.map(Into::into),
-        version: version.map(Into::into),
-        priority: priority.map(Into::into),
-        severity: severity.map(Into::into),
-        assignee: None,
-        op_sys: None,
-        rep_platform: None,
-        description: None,
+        fields: TemplateFields {
+            product: product.map(Into::into),
+            component: component.map(Into::into),
+            version: version.map(Into::into),
+            priority: priority.map(Into::into),
+            severity: severity.map(Into::into),
+            ..Default::default()
+        },
         clear: clear.iter().map(|s| (*s).to_string()).collect(),
     }
 }
