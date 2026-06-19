@@ -108,7 +108,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │                       [--depends-on-remove <IDs>]
 ├── comment
 │   ├── list <BUG_ID> [--since <DATE>]
-│   ├── add <BUG_ID> [--body <TEXT>]
+│   ├── add <BUG_ID> [--body <TEXT>] [--body-file <PATH>]
 │   ├── tag <COMMENT_ID> [--add <TAG>...] [--remove <TAG>...]
 │   └── search-tags <QUERY>
 ├── attachment
@@ -426,6 +426,8 @@ Highest priority first:
 3. Piped stdin — when stdin is not a TTY (e.g. `echo body | bzr bug create ...`).
 4. `$EDITOR` — when stdin is a TTY and no explicit source is supplied. The buffer is pre-filled with `--summary` (if given) and any saved-template `description` body, followed by a `git commit -v`-style sentinel divider with informational field reminders.
 
+A value of `-` for `--description` or `--description-file` reads the description from stdin (e.g. `... --description -`).
+
 `--description` and `--description-file` are mutually exclusive (clap rejects with exit code 2). An empty piped stdin (when no other source is supplied) aborts with exit code 7.
 
 #### Exit codes (this command)
@@ -476,7 +478,7 @@ Agent note: cloning without overrides copies metadata from the source bug, which
 
 Modify fields on an existing bug. Supports multiple IDs for batch updates.
 
-A comment may be posted atomically with the update via `--comment` or `--comment-file`; this avoids the need for a separate `bzr comment add` call.
+A comment may be posted atomically with the update via `--comment` or `--comment-file`; this avoids the need for a separate `bzr comment add` call. A value of `-` for either flag reads the comment from stdin.
 
 ```bash
 bzr bug update 12345 --status ASSIGNED --assignee dev@example.com
@@ -527,8 +529,8 @@ bzr bug update 100 200 300 --status RESOLVED --resolution WONTFIX
 | `--groups-remove <G>` | No | Remove groups (comma-separated; requires permission) |
 | `--see-also-add <URL>` | No | Add a see-also URL (repeat for multiple; no comma-list) |
 | `--see-also-remove <URL>` | No | Remove a see-also URL (repeat for multiple) |
-| `--comment <BODY>` | No | Post a comment atomically with the field changes (mutually exclusive with `--comment-file`) |
-| `--comment-file <PATH>` | No | Read the comment body from a UTF-8 file (mutually exclusive with `--comment`; missing or non-UTF-8 paths exit 7) |
+| `--comment <BODY>` | No | Post a comment atomically with the field changes; `-` reads stdin (mutually exclusive with `--comment-file`) |
+| `--comment-file <PATH>` | No | Read the comment body from a UTF-8 file; `-` reads stdin (mutually exclusive with `--comment`; missing or non-UTF-8 paths exit 7) |
 | `--comment-private` | No | Mark the comment private (requires `--comment` or `--comment-file`) |
 
 When updating multiple bugs, failures on individual bugs do not abort the batch. A summary is printed showing which bugs succeeded and which failed.
@@ -556,22 +558,25 @@ bzr --json comment list 12345
 
 ### `bzr comment add`
 
-Add a comment to a bug. If `--body` is omitted: reads from stdin when piped (`echo "text" | bzr comment add 12345`), or opens `$EDITOR` (falls back to `vi`) at a TTY. Add `--private` to mark the comment as visible only to users with elevated permissions on the server.
+Add a comment to a bug. The body is resolved in this order: `--body <TEXT>`, `--body-file <PATH>`, piped stdin, then `$EDITOR` (falls back to `vi`) at a TTY. A value of `-` for `--body` or `--body-file` reads from stdin. `--body` and `--body-file` are mutually exclusive (clap rejects with exit code 2). Add `--private` to mark the comment as visible only to users with elevated permissions on the server.
 
 ```bash
 bzr comment add 12345 --body "Confirmed on Fedora 42"
 bzr comment add 12345                                 # opens editor
 echo "Automated comment" | bzr comment add 12345      # reads stdin
+echo "Automated comment" | bzr comment add 12345 --body -   # explicit stdin
+bzr comment add 12345 --body-file notes.txt           # reads a file
 bzr comment add 12345 --body "internal note" --private  # private
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
 | `<BUG_ID>` | Yes | Bug ID |
-| `--body <TEXT>` | No | Comment text (reads stdin or opens `$EDITOR` if omitted) |
+| `--body <TEXT>` | No | Comment text; `-` reads stdin. Reads piped stdin or opens `$EDITOR` if both body flags omitted |
+| `--body-file <PATH>` | No | Read the comment body from a UTF-8 file; `-` reads stdin (mutually exclusive with `--body`; missing or non-UTF-8 paths exit 7) |
 | `--private` | No | Mark the comment as private (visible only to users with elevated permissions) |
 
-Agent note: `bzr comment add <BUG_ID>` without `--body` is not agent-friendly at a TTY because it opens `$EDITOR`. Prefer `bzr comment add <BUG_ID> --body "text"`. If you already have generated text on stdin, `echo "text" | bzr comment add <BUG_ID>` is also safe.
+Agent note: `bzr comment add <BUG_ID>` without `--body` is not agent-friendly at a TTY because it opens `$EDITOR`. Prefer `bzr comment add <BUG_ID> --body "text"`. If you already have generated text on stdin, `echo "text" | bzr comment add <BUG_ID>` (or `--body -`) is also safe.
 
 ### `bzr comment tag`
 
