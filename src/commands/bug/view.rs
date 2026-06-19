@@ -118,7 +118,7 @@ pub(super) fn handle_web(ids: &[String], server: Option<&str>, w: &mut Writers<'
     // Open a browser only with both a terminal stdout and a display; anything
     // else (pipe, redirect, headless) prints the URL instead.
     let interactive = std::io::stdout().is_terminal() && has_display();
-    emit_web(&urls, interactive, w);
+    emit_web(&urls, interactive, |url| open::that(url), w);
     Ok(())
 }
 
@@ -142,21 +142,29 @@ fn bug_web_url(base: &str, id: &str) -> String {
 }
 
 /// Whether a graphical display is available to open a browser. GUI platforms
-/// (macOS, Windows) always qualify; elsewhere a display requires `DISPLAY` or
-/// `WAYLAND_DISPLAY` to be set.
+/// (macOS, Windows) always qualify.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn has_display() -> bool {
-    if cfg!(any(target_os = "macos", target_os = "windows")) {
-        return true;
-    }
+    true
+}
+
+/// Whether a graphical display is available to open a browser. On non-GUI
+/// platforms this requires `DISPLAY` or `WAYLAND_DISPLAY` to be set.
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn has_display() -> bool {
     std::env::var_os("DISPLAY").is_some() || std::env::var_os("WAYLAND_DISPLAY").is_some()
 }
 
-/// Open each URL in the browser when interactive, else print it. A failed
-/// `open` falls back to printing so the URL is never lost.
-fn emit_web(urls: &[String], interactive: bool, w: &mut Writers<'_>) {
+/// Open each URL with `open_fn` when interactive, else print it. A failed open
+/// falls back to printing (with a stderr warning) so the URL is never lost.
+/// `open_fn` is injected so the open path is testable without a real browser.
+fn emit_web<F>(urls: &[String], interactive: bool, open_fn: F, w: &mut Writers<'_>)
+where
+    F: Fn(&str) -> std::io::Result<()>,
+{
     for url in urls {
         if interactive {
-            if let Err(e) = open::that(url) {
+            if let Err(e) = open_fn(url) {
                 let _ = writeln!(w.err, "warning: failed to open browser: {e}");
                 let _ = writeln!(w.out, "{url}");
             }
