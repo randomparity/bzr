@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+
+- The redundant `bzr whoami show` subcommand. `show` was the only action and
+  was exactly equivalent to bare `bzr whoami`, which invited "what's the
+  difference?" confusion. Use `bzr whoami` (the form the docs already
+  promote). `whoami` now takes no subcommand. (#323)
+
 ### Added
 
 - `bzr config remove-server <NAME>` deletes a server alias (and its OS-keychain

@@ -3,12 +3,12 @@
 bug: list view search create clone update history my
 comment: list add tag search-tags
 attachment: list download upload update
-config: set-server show set-default set-keyring unset-keyring migrate-to-keyring
+config: set-server show set-default set-keyring unset-keyring migrate-to-keyring remove-server rename-server
 product: list view create update
 field: list aliases
 user: search create update
 group: add-user remove-user list-users view create update
-whoami: show
+whoami:
 server: info
 classification: view
 component: create update

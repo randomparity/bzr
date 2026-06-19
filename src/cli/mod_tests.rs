@@ -87,7 +87,6 @@ const COVERED_PATHS: &[&[&str]] = &[
     &["component", "create"],
     &["component", "update"],
     // Phase 2c: trivial files
-    &["whoami", "show"],
     &["server", "info"],
     &["classification", "view"],
     &["field", "aliases"],
@@ -201,8 +200,10 @@ fn parse_unknown_command_fails() {
 
 #[test]
 fn parse_whoami() {
-    let cli = Cli::try_parse_from(["bzr", "whoami", "show"]).unwrap();
-    assert!(matches!(cli.command, Commands::Whoami { action: _ }));
+    let cli = Cli::try_parse_from(["bzr", "whoami"]).unwrap();
+    assert!(matches!(cli.command, Commands::Whoami));
+    // The redundant `show` subcommand was removed (#323).
+    assert!(Cli::try_parse_from(["bzr", "whoami", "show"]).is_err());
 }
 
 #[test]
@@ -908,19 +909,19 @@ fn parse_component_create() {
 
 #[test]
 fn parse_verbose_flag() {
-    let cli = Cli::try_parse_from(["bzr", "-vvv", "whoami", "show"]).unwrap();
+    let cli = Cli::try_parse_from(["bzr", "-vvv", "whoami"]).unwrap();
     assert_eq!(cli.verbose, 3);
 }
 
 #[test]
 fn parse_no_color_flag() {
-    let cli = Cli::try_parse_from(["bzr", "--no-color", "whoami", "show"]).unwrap();
+    let cli = Cli::try_parse_from(["bzr", "--no-color", "whoami"]).unwrap();
     assert!(cli.no_color);
 }
 
 #[test]
 fn parse_quiet_flag() {
-    let cli = Cli::try_parse_from(["bzr", "--quiet", "whoami", "show"]).unwrap();
+    let cli = Cli::try_parse_from(["bzr", "--quiet", "whoami"]).unwrap();
     assert!(cli.quiet);
 }
 
@@ -932,7 +933,7 @@ fn quiet_help_mentions_tracing_is_suppressed() {
 
 #[test]
 fn parse_api_override() {
-    let cli = Cli::try_parse_from(["bzr", "--api", "xmlrpc", "whoami", "show"]).unwrap();
+    let cli = Cli::try_parse_from(["bzr", "--api", "xmlrpc", "whoami"]).unwrap();
     assert_eq!(cli.api, Some(ApiMode::XmlRpc));
 }
 
@@ -1414,10 +1415,7 @@ fn parse_set_server_tls_pin_clear_conflicts_with_tls_pin_now() {
 #[test]
 fn parse_whoami_without_subcommand() {
     let cli = Cli::try_parse_from(["bzr", "whoami"]).unwrap();
-    match cli.command {
-        Commands::Whoami { action } => assert!(action.is_none()),
-        _ => panic!("expected Whoami"),
-    }
+    assert!(matches!(cli.command, Commands::Whoami));
 }
 
 #[test]

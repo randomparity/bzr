@@ -365,7 +365,6 @@ async fn whoami_integration() {
     let mut __io7 = bzr::test_helpers::CapturedIo::new();
 
     let result = bzr::commands::whoami::execute(
-        &bzr::cli::WhoamiAction::Show,
         Some("test"),
         bzr::types::OutputFormat::Json,
         None,
@@ -2824,4 +2823,15 @@ async fn completion_bash_parses_and_dispatches() {
 async fn completion_rejects_unknown_shell() {
     let parsed = bzr::cli::Cli::try_parse_from(["bzr", "completion", "klingon"]);
     assert!(parsed.is_err(), "clap should reject an unknown shell name");
+}
+
+/// #323: the redundant `show` subcommand was removed. Bare `whoami` parses
+/// to the unit `Commands::Whoami`, and `whoami show` is now rejected.
+#[tokio::test]
+async fn whoami_bare_parses_and_show_subcommand_removed() {
+    let parsed = bzr::cli::Cli::try_parse_from(["bzr", "whoami"]).expect("bare whoami parses");
+    assert!(matches!(parsed.command, bzr::cli::Commands::Whoami));
+
+    let show = bzr::cli::Cli::try_parse_from(["bzr", "whoami", "show"]);
+    assert!(show.is_err(), "`whoami show` should no longer be accepted");
 }
