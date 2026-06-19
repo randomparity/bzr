@@ -596,7 +596,7 @@ pub const FIELD_MAPPINGS: &[FieldMapping] = &[
     },
 ];
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 #[non_exhaustive]
 pub struct CreateBugParams {
     pub product: String,
@@ -615,6 +615,16 @@ pub struct CreateBugParams {
     pub op_sys: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rep_platform: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alias: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub whiteboard: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_milestone: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deadline: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub blocks: Vec<u64>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -623,6 +633,10 @@ pub struct CreateBugParams {
     pub cc: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub keywords: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub flags: Vec<FlagUpdate>,
 }
 
 /// Represents an incremental update to a list field (blocks, `depends_on`).

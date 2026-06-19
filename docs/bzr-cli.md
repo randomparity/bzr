@@ -97,7 +97,9 @@ bzr [--server <NAME>] [--output table|json] [--json] [--config <PATH>] [--no-col
 │   ├── create [--template <T>] [--product <P>] [--component <C>] --summary <S>
 │   │          [--version <V>] [--description <D>] [--priority <P>] [--severity <S>]
 │   │          [--assignee <A>] [--op-sys <OS>] [--rep-platform <PLAT>]
-│   │          [--blocks <IDs>] [--depends-on <IDs>]
+│   │          [--blocks <IDs>] [--depends-on <IDs>] [--alias <A>] [--url <U>]
+│   │          [--whiteboard <W>] [--target-milestone <T>] [--deadline <DATE>]
+│   │          [--cc <C>...] [--keywords <K>...] [--groups <G>...] [--flag <F>...]
 │   ├── clone <ID> [--summary <S>] [--product <P>] [--component <C>] [--version <V>]
 │   │              [--description <D>] [--priority <P>] [--severity <S>] [--assignee <A>]
 │   │              [--op-sys <OS>] [--rep-platform <PLAT>]
@@ -439,7 +441,18 @@ bzr bug create --template security-bug --summary "XSS in login form"
 | `--rep-platform <PLAT>` | No | | Hardware platform (required by some Bugzilla installations) |
 | `--blocks <IDs>` | No | | Bug IDs this bug blocks (comma-separated) |
 | `--depends-on <IDs>` | No | | Bug IDs this bug depends on (comma-separated) |
+| `--alias <A>` | No | | Set an alias for the new bug |
+| `--url <U>` | No | | Set the URL field |
+| `--whiteboard <W>` | No | | Set the Status Whiteboard |
+| `--target-milestone <T>` | No | | Set the Target Milestone |
+| `--deadline <DATE>` | No | | Set the deadline (`YYYY-MM-DD`); malformed input exits 7 |
+| `--cc <C>` | No | | Add CC entries (comma-separated, repeatable) |
+| `--keywords <K>` | No | | Add keywords (comma-separated, repeatable) |
+| `--groups <G>` | No | | Add the bug to these groups (comma-separated, repeatable) |
+| `--flag <F>` | No | | Set/request a flag using Bugzilla flag syntax (repeatable): `name+`, `name-`, `name?`, `name?(user@example.com)` |
 | `--template <T>` | No | | Name of a saved template to use for default field values |
+
+These field flags give `bzr bug create` parity with `bzr bug update` for the subset Bugzilla's `Bug.create` accepts, so a bug and its metadata are filed in a single API call instead of a create-then-update two-step.
 
 *Required unless a template provides the value.
 **`--summary` is required unless the editor flow is active. The editor flow opens `$EDITOR` (or `vi` fallback) with a templated buffer when stdin is a TTY and no description source is supplied; the first non-empty line above the buffer's `# ------------------------ >8 ------------------------` sentinel divider becomes the summary, the rest becomes the description.

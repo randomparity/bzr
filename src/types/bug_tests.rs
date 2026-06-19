@@ -1155,3 +1155,70 @@ fn update_bug_params_serializes_comment_is_private_map() {
         serde_json::Value::Bool(true)
     );
 }
+
+/// Minimal create params (only the required fields) must not emit any of the
+/// optional parity fields, so the server applies its own defaults.
+fn minimal_create_params() -> CreateBugParams {
+    CreateBugParams {
+        product: "Prod".into(),
+        component: "Comp".into(),
+        summary: "Sum".into(),
+        version: "1.0".into(),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn create_params_omit_unset_parity_fields() {
+    let json = serde_json::to_value(minimal_create_params()).unwrap();
+    let obj = json.as_object().unwrap();
+    for key in [
+        "alias",
+        "url",
+        "whiteboard",
+        "target_milestone",
+        "deadline",
+        "cc",
+        "keywords",
+        "groups",
+        "flags",
+    ] {
+        assert!(
+            !obj.contains_key(key),
+            "unset field '{key}' must be omitted"
+        );
+    }
+}
+
+#[test]
+fn create_params_serialize_parity_fields() {
+    let params = CreateBugParams {
+        alias: Some("my-alias".into()),
+        url: Some("https://example.com/repro".into()),
+        whiteboard: Some("needs-triage".into()),
+        target_milestone: Some("M1".into()),
+        deadline: Some("2026-12-31".into()),
+        cc: vec!["a@example.com".into(), "b@example.com".into()],
+        keywords: vec!["regression".into()],
+        groups: vec!["security".into()],
+        flags: vec![FlagUpdate {
+            name: "review".into(),
+            status: crate::types::FlagStatus::Grant,
+            requestee: None,
+        }],
+        ..minimal_create_params()
+    };
+    let json = serde_json::to_value(&params).unwrap();
+    assert_eq!(json["alias"], "my-alias");
+    assert_eq!(json["url"], "https://example.com/repro");
+    assert_eq!(json["whiteboard"], "needs-triage");
+    assert_eq!(json["target_milestone"], "M1");
+    assert_eq!(json["deadline"], "2026-12-31");
+    assert_eq!(json["cc"][0], "a@example.com");
+    assert_eq!(json["cc"][1], "b@example.com");
+    assert_eq!(json["keywords"][0], "regression");
+    assert_eq!(json["groups"][0], "security");
+    // Flags serialize as the Bug.create array shape: {name, status}.
+    assert_eq!(json["flags"][0]["name"], "review");
+    assert_eq!(json["flags"][0]["status"], "+");
+}

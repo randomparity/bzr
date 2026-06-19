@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `bzr bug create` gains field flags shared with `bug update`: `--alias`,
+  `--url`, `--whiteboard`, `--target-milestone`, `--deadline`, `--cc`,
+  `--keywords`, `--groups`, and `--flag`. They are sent in the same
+  `Bug.create` call, so a bug and its metadata are filed in one API round-trip
+  instead of a create-then-update two-step. The list flags accept
+  comma-separated, repeatable values; `--flag` uses Bugzilla flag syntax;
+  `--deadline` takes `YYYY-MM-DD` and rejects malformed input with exit 7. (#301)
 - `bzr bug view <ID> --web` opens the bug's page (`show_bug.cgi?id=<ID>`) on the
   active server in the default browser, the `gh issue view --web` affordance.
   Resolves the URL from local config with no network call or authentication, so

@@ -26,6 +26,7 @@ fn create_action() -> BugAction {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        create_fields: crate::cli::CreateFieldArgs::default(),
     }
 }
 
@@ -60,6 +61,107 @@ async fn bug_create_sends_post() {
 }
 
 #[tokio::test]
+async fn bug_create_sends_parity_fields_in_body() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    // Every parity field must appear in the POST body. A request missing any
+    // of these matchers won't match the mock, so the call would 404 and fail.
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .and(body_string_contains("\"alias\":\"a-1\""))
+        .and(body_string_contains(
+            "\"url\":\"https://example.com/repro\"",
+        ))
+        .and(body_string_contains("\"whiteboard\":\"needs-triage\""))
+        .and(body_string_contains("\"target_milestone\":\"M1\""))
+        .and(body_string_contains("\"deadline\":\"2026-12-31\""))
+        .and(body_string_contains("\"cc\":[\"cc@example.com\"]"))
+        .and(body_string_contains("\"keywords\":[\"regression\"]"))
+        .and(body_string_contains("\"groups\":[\"security\"]"))
+        .and(body_string_contains(
+            "\"flags\":[{\"name\":\"review\",\"status\":\"+\"}]",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 123})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::Create {
+        template: None,
+        product: Some("TestProduct".into()),
+        component: Some("General".into()),
+        summary: Some("New bug".into()),
+        version: Some("unspecified".into()),
+        description: Some("body".into()),
+        description_file: None,
+        priority: None,
+        severity: None,
+        assignee: None,
+        op_sys: None,
+        rep_platform: None,
+        blocks: vec![],
+        depends_on: vec![],
+        create_fields: crate::cli::CreateFieldArgs {
+            alias: Some("a-1".into()),
+            url: Some("https://example.com/repro".into()),
+            whiteboard: Some("needs-triage".into()),
+            target_milestone: Some("M1".into()),
+            deadline: Some("2026-12-31".into()),
+            cc: vec!["cc@example.com".into()],
+            keywords: vec!["regression".into()],
+            groups: vec!["security".into()],
+            flag: vec!["review+".into()],
+        },
+    };
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+    assert!(
+        result.is_ok(),
+        "create with parity fields failed: {result:?}"
+    );
+    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    assert_eq!(parsed["id"], 123);
+}
+
+#[tokio::test]
+async fn bug_create_rejects_malformed_deadline() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let action = BugAction::Create {
+        template: None,
+        product: Some("TestProduct".into()),
+        component: Some("General".into()),
+        summary: Some("New bug".into()),
+        version: Some("unspecified".into()),
+        description: Some("body".into()),
+        description_file: None,
+        priority: None,
+        severity: None,
+        assignee: None,
+        op_sys: None,
+        rep_platform: None,
+        blocks: vec![],
+        depends_on: vec![],
+        create_fields: crate::cli::CreateFieldArgs {
+            deadline: Some("not-a-date".into()),
+            ..Default::default()
+        },
+    };
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+    let err = result.unwrap_err();
+    assert!(
+        matches!(&err, BzrError::InputValidation(msg) if msg.contains("--deadline")),
+        "got {err:?}"
+    );
+}
+
+#[tokio::test]
 async fn bug_create_missing_product_returns_input_validation() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
@@ -78,6 +180,7 @@ async fn bug_create_missing_product_returns_input_validation() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        create_fields: crate::cli::CreateFieldArgs::default(),
     };
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -115,6 +218,7 @@ async fn bug_create_missing_component_returns_input_validation() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        create_fields: crate::cli::CreateFieldArgs::default(),
     };
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -152,6 +256,7 @@ async fn bug_create_with_unknown_template_errors() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        create_fields: crate::cli::CreateFieldArgs::default(),
     };
     let mut __io4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -227,6 +332,7 @@ async fn bug_create_with_template_fills_missing_fields() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        create_fields: crate::cli::CreateFieldArgs::default(),
     };
     let mut __io6 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -279,6 +385,7 @@ async fn bug_create_reads_description_from_file() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        create_fields: crate::cli::CreateFieldArgs::default(),
     };
     let mut __io7 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -313,6 +420,7 @@ async fn bug_create_description_file_missing_returns_input_validation() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        create_fields: crate::cli::CreateFieldArgs::default(),
     };
     let mut __io8 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -354,6 +462,7 @@ async fn bug_create_description_file_non_utf8_returns_input_validation() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        create_fields: crate::cli::CreateFieldArgs::default(),
     };
     let mut __io9 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -392,6 +501,7 @@ async fn bug_create_missing_summary_without_editor_flow_is_rejected() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        create_fields: crate::cli::CreateFieldArgs::default(),
     };
     let mut __io10 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -503,6 +613,13 @@ fn build_editor_template_includes_summary_and_field_reminder() {
         depends_on: vec![],
         cc: vec![],
         keywords: vec![],
+        alias: None,
+        url: None,
+        whiteboard: None,
+        target_milestone: None,
+        deadline: None,
+        groups: vec![],
+        flags: vec![],
     };
     let buf = super::build_editor_template(Some("Pre-filled summary"), None, &params);
     assert!(buf.starts_with("Pre-filled summary\n"));
@@ -531,6 +648,13 @@ fn build_editor_template_includes_template_description_body() {
         depends_on: vec![],
         cc: vec![],
         keywords: vec![],
+        alias: None,
+        url: None,
+        whiteboard: None,
+        target_milestone: None,
+        deadline: None,
+        groups: vec![],
+        flags: vec![],
     };
     let buf = super::build_editor_template(None, Some("## Steps\n\n## Expected"), &params);
     assert!(buf.contains("## Steps"));
@@ -569,6 +693,7 @@ fn editor_action_no_summary_no_description() -> BugAction {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        create_fields: crate::cli::CreateFieldArgs::default(),
     }
 }
 
@@ -740,6 +865,7 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        create_fields: crate::cli::CreateFieldArgs::default(),
     };
     let mut __io14 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(

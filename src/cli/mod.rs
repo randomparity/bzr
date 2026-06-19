@@ -13,7 +13,7 @@ mod template;
 mod user;
 
 pub use attachment::AttachmentAction;
-pub use bug::{BugAction, FieldArgs, SortArgs};
+pub use bug::{BugAction, CreateFieldArgs, FieldArgs, SortArgs};
 pub use classification::ClassificationAction;
 pub use comment::CommentAction;
 pub use component::ComponentAction;
