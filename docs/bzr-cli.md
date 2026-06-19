@@ -147,6 +147,8 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   ├── list
 │   └── view <NAME>
 ├── component
+│   ├── list --product <P>
+│   ├── view <PRODUCT> <COMPONENT>
 │   ├── create --product <P> --name <N> --description <D> --default-assignee <E>
 │   └── update <ID> [--name <N>] [--description <D>] [--default-assignee <E>]
 ├── config
@@ -1042,6 +1044,27 @@ bzr --json classification view "Unclassified"
 ---
 
 ## `bzr component` -- Component Operations
+
+### `bzr component list`
+
+List a product's components with their ID, name, description, default
+assignee, and active flag. Reads the same data as `bzr product view
+<product>`; JSON output is the full component array.
+
+```bash
+bzr component list --product Fedora
+bzr --json component list --product Fedora | jq '.[].name'
+```
+
+### `bzr component view`
+
+View a single component by exact name within a product. JSON output is the
+`Component` object. Errors if the product has no component with that name.
+
+```bash
+bzr component view Fedora kernel
+bzr --json component view Fedora kernel
+```
 
 ### `bzr component create`
 

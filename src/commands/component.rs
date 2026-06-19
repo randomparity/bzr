@@ -1,5 +1,6 @@
 use crate::cli::ComponentAction;
-use crate::error::Result;
+use crate::error::{BzrError, Result};
+use crate::output::resources::component::{write_component, write_components};
 use crate::output::result_types::{write_result, ActionResult, ResourceKind};
 use crate::output::writers::Writers;
 use crate::types::ApiMode;
@@ -16,6 +17,22 @@ pub async fn execute(
     let client = super::shared::connect_and_configure(server, api).await?;
 
     match action {
+        ComponentAction::List { product } => {
+            let product = client.get_product(product).await?;
+            write_components(&product.components, format, w.out);
+        }
+        ComponentAction::View { product, name } => {
+            let product = client.get_product(product).await?;
+            let component = product
+                .components
+                .iter()
+                .find(|c| c.name == *name)
+                .ok_or_else(|| BzrError::NotFound {
+                    resource: "component",
+                    id: name.clone(),
+                })?;
+            write_component(component, format, w.out);
+        }
         ComponentAction::Create {
             product,
             name,

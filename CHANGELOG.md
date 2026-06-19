@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `bzr component list --product <P>` and `bzr component view <product> <component>`
+  make components directly discoverable (ID, name, description, default
+  assignee, active flag) instead of only via `product view`. Both read the
+  product's component set; `--json` emits the component array / object. (#316)
 - `bzr attachment view <ATTACHMENT_ID>` shows a single attachment's metadata
   (summary, bug, file name, content type, size, flags, creator, timestamps)
   without downloading its bytes. On REST the `data` field is excluded
