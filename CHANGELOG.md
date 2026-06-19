@@ -50,6 +50,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `bzr query update <NAME>` and `bzr template update <NAME>` edit a saved query
+  or template in place: a supplied flag replaces that field, an omitted flag
+  leaves it unchanged, and `--clear <FIELD>` (repeatable, names matching the long
+  flags) resets a field. Previously the only way to change one field was delete +
+  re-create (re-specifying everything). A no-op call is rejected, as is an update
+  that would leave a template with no fields or a query with no filters (exit 7).
+  (#315)
 - Global `--timeout <SECS>` (and `BZR_TIMEOUT`) overrides the per-request
   timeout (default 30s) for slow or distant servers; the 10s connect timeout is
   unchanged. Global `--retry <N>` (default 0, max 10) retries transient failures

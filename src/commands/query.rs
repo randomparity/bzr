@@ -4,6 +4,7 @@
 //! Only `run` requires a network client.
 
 use crate::cli::QueryAction;
+use crate::commands::shared::{merge_set, merge_vec};
 use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::output::resources::bug::{
@@ -36,6 +37,7 @@ pub async fn execute(
         QueryAction::Save { .. } => handle_save(action, format, w),
         QueryAction::List => handle_list(format, w),
         QueryAction::Show { .. } => handle_show(action, format, w),
+        QueryAction::Update { .. } => handle_update(action, format, w),
         QueryAction::Delete { .. } => handle_delete(action, format, w),
         QueryAction::Run { .. } => handle_run(action, server, format, api, w).await,
     }
@@ -182,6 +184,169 @@ fn handle_delete(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>
     })?;
 
     write_query_saved(name, "Deleted", format, w.out);
+    Ok(())
+}
+
+/// Reset the named field of a saved query to its empty/unset state. The name
+/// matches the long flag (kebab-case).
+fn clear_query_field(q: &mut SavedQuery, field: &str) -> Result<()> {
+    match field {
+        "product" => q.product.clear(),
+        "component" => q.component.clear(),
+        "status" => q.status.clear(),
+        "assignee" => q.assignee.clear(),
+        "creator" => q.creator.clear(),
+        "priority" => q.priority.clear(),
+        "severity" => q.severity.clear(),
+        "whiteboard" => q.whiteboard.clear(),
+        "target-milestone" => q.target_milestone.clear(),
+        "version" => q.version.clear(),
+        "op-sys" => q.op_sys.clear(),
+        "platform" => q.platform.clear(),
+        "resolution" => q.resolution.clear(),
+        "qa-contact" => q.qa_contact.clear(),
+        "url" => q.url.clear(),
+        "search" => q.quicksearch = None,
+        "limit" => q.limit = None,
+        "fields" => q.fields = None,
+        "exclude-fields" => q.exclude_fields = None,
+        "created-since" => q.creation_time = None,
+        "changed-since" => q.last_change_time = None,
+        "sort" | "order" => q.order = None,
+        other => {
+            return Err(BzrError::InputValidation(format!(
+                "unknown --clear field '{other}'; see `bzr query update --help` for valid names"
+            )))
+        }
+    }
+    Ok(())
+}
+
+/// Merge a `query update` action's supplied flags into `q` in place: filter
+/// flags replace lists, scalars replace values, `--clear` resets fields.
+/// `creation_time`/`last_change_time` are the pre-validated canonical dates.
+/// Returns `true` if any change was requested (so the caller can reject a
+/// no-op call).
+fn apply_query_updates(
+    q: &mut SavedQuery,
+    action: &QueryAction,
+    creation_time: Option<&str>,
+    last_change_time: Option<&str>,
+) -> Result<bool> {
+    let QueryAction::Update {
+        search,
+        product,
+        component,
+        status,
+        assignee,
+        creator,
+        priority,
+        severity,
+        limit,
+        fields,
+        exclude_fields,
+        created_since,
+        changed_since,
+        whiteboard,
+        target_milestone,
+        version,
+        op_sys,
+        platform,
+        resolution,
+        qa_contact,
+        url,
+        clear,
+        sort_args,
+        ..
+    } = action
+    else {
+        unreachable!()
+    };
+    let mut changed = false;
+    changed |= merge_vec(&mut q.product, product);
+    changed |= merge_vec(&mut q.component, component);
+    changed |= merge_vec(&mut q.status, status);
+    changed |= merge_vec(&mut q.assignee, assignee);
+    changed |= merge_vec(&mut q.creator, creator);
+    changed |= merge_vec(&mut q.priority, priority);
+    changed |= merge_vec(&mut q.severity, severity);
+    changed |= merge_vec(&mut q.whiteboard, whiteboard);
+    changed |= merge_vec(&mut q.target_milestone, target_milestone);
+    changed |= merge_vec(&mut q.version, version);
+    changed |= merge_vec(&mut q.op_sys, op_sys);
+    changed |= merge_vec(&mut q.platform, platform);
+    changed |= merge_vec(&mut q.resolution, resolution);
+    changed |= merge_vec(&mut q.qa_contact, qa_contact);
+    changed |= merge_vec(&mut q.url, url);
+    changed |= merge_set(&mut q.quicksearch, search.as_deref());
+    changed |= merge_set(&mut q.fields, fields.as_deref());
+    changed |= merge_set(&mut q.exclude_fields, exclude_fields.as_deref());
+    if let Some(l) = limit {
+        q.limit = Some(*l);
+        changed = true;
+    }
+    if created_since.is_some() {
+        q.creation_time = creation_time.map(ToOwned::to_owned);
+        changed = true;
+    }
+    if changed_since.is_some() {
+        q.last_change_time = last_change_time.map(ToOwned::to_owned);
+        changed = true;
+    }
+    if sort_args.sort.is_some() {
+        q.order = explicit_sort_order(sort_args);
+        changed = true;
+    }
+    for field in clear {
+        clear_query_field(q, field)?;
+        changed = true;
+    }
+    Ok(changed)
+}
+
+fn handle_update(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
+    let QueryAction::Update {
+        name,
+        created_since,
+        changed_since,
+        ..
+    } = action
+    else {
+        unreachable!()
+    };
+
+    // Validate dates before acquiring the lock so a bad value exits cleanly.
+    let creation_time =
+        crate::validation::parse_optional_date(created_since.as_deref(), "--created-since")?;
+    let last_change_time =
+        crate::validation::parse_optional_date(changed_since.as_deref(), "--changed-since")?;
+
+    Config::update_locked(|config| {
+        let Some(q) = config.queries.get_mut(name.as_str()) else {
+            return Err(BzrError::config(format!("query '{name}' not found")));
+        };
+        let changed = apply_query_updates(
+            q,
+            action,
+            creation_time.as_deref(),
+            last_change_time.as_deref(),
+        )?;
+        if !changed {
+            return Err(BzrError::InputValidation(
+                "no changes specified: provide a filter/field flag or --clear <field>".into(),
+            ));
+        }
+        if !q.has_filters() {
+            return Err(BzrError::InputValidation(
+                "update would leave the query with no filters; a saved query must keep at \
+                 least one filter set"
+                    .into(),
+            ));
+        }
+        Ok(())
+    })?;
+
+    write_query_saved(name, "Updated", format, w.out);
     Ok(())
 }
 

@@ -1,10 +1,6 @@
 use clap::Subcommand;
 
 #[derive(Subcommand)]
-#[expect(
-    clippy::large_enum_variant,
-    reason = "only constructed once from CLI args"
-)]
 pub enum TemplateAction {
     /// Save (or replace) a named bug-creation template.
     ///
@@ -60,6 +56,62 @@ pub enum TemplateAction {
         /// Default description
         #[arg(long)]
         description: Option<String>,
+    },
+
+    /// Update fields of an existing template in place.
+    ///
+    /// Merges the supplied flags into the named template without
+    /// re-specifying the rest: a flag replaces that field, an
+    /// omitted flag leaves it unchanged. Use `--clear <field>`
+    /// (repeatable) to reset a field to unset; valid names are the
+    /// long flag names (`product`, `component`, `version`,
+    /// `priority`, `severity`, `assignee`, `op-sys`, `rep-platform`,
+    /// `description`). At least one change (a field flag or
+    /// `--clear`) is required, and the result must keep at least one
+    /// field set (a fully-cleared template is rejected, exit 7). If a
+    /// field is both set and cleared in one call, `--clear` wins.
+    ///
+    /// Examples:
+    ///
+    ///   bzr template update security-bug --severity blocker
+    ///   bzr template update security-bug --clear assignee
+    ///
+    /// See bzr-template-save(1) to create one and
+    /// bzr-template-show(1) to inspect the result.
+    #[command(verbatim_doc_comment)]
+    Update {
+        /// Template name
+        name: String,
+        /// Set the default product
+        #[arg(long)]
+        product: Option<String>,
+        /// Set the default component
+        #[arg(long)]
+        component: Option<String>,
+        /// Set the default version
+        #[arg(long)]
+        version: Option<String>,
+        /// Set the default priority
+        #[arg(long)]
+        priority: Option<String>,
+        /// Set the default severity
+        #[arg(long)]
+        severity: Option<String>,
+        /// Set the default assignee
+        #[arg(long)]
+        assignee: Option<String>,
+        /// Set the default operating system
+        #[arg(long)]
+        op_sys: Option<String>,
+        /// Set the default hardware platform
+        #[arg(long)]
+        rep_platform: Option<String>,
+        /// Set the default description
+        #[arg(long)]
+        description: Option<String>,
+        /// Reset a field to unset (repeatable). Names match the long flags.
+        #[arg(long, value_name = "FIELD")]
+        clear: Vec<String>,
     },
 
     /// List all saved templates.

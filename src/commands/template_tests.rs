@@ -389,3 +389,160 @@ async fn template_show_unknown_errors() {
 
     assert!(err.to_string().contains("template 'missing' not found"));
 }
+
+// ── Update (#315) ───────────────────────────────────────────────────
+
+#[expect(clippy::too_many_arguments)]
+fn update_action(
+    name: &str,
+    product: Option<&str>,
+    component: Option<&str>,
+    version: Option<&str>,
+    priority: Option<&str>,
+    severity: Option<&str>,
+    clear: &[&str],
+) -> TemplateAction {
+    TemplateAction::Update {
+        name: name.into(),
+        product: product.map(Into::into),
+        component: component.map(Into::into),
+        version: version.map(Into::into),
+        priority: priority.map(Into::into),
+        severity: severity.map(Into::into),
+        assignee: None,
+        op_sys: None,
+        rep_platform: None,
+        description: None,
+        clear: clear.iter().map(|s| (*s).to_string()).collect(),
+    }
+}
+
+async fn run(action: &TemplateAction) -> crate::error::Result<String> {
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    result.map(|()| io.out_str().to_string())
+}
+
+#[tokio::test]
+async fn template_update_merges_field() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run(&save_action("t")).await.unwrap(); // product + component + priority
+
+    run(&update_action(
+        "t",
+        None,
+        None,
+        None,
+        None,
+        Some("blocker"),
+        &[],
+    ))
+    .await
+    .unwrap();
+
+    let config = Config::load().unwrap();
+    let t = &config.templates["t"];
+    assert_eq!(t.severity.as_deref(), Some("blocker"));
+    // Untouched fields are preserved.
+    assert_eq!(t.product.as_deref(), Some("TestProduct"));
+    assert_eq!(t.priority.as_deref(), Some("P1"));
+}
+
+#[tokio::test]
+async fn template_update_clear_resets_field() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run(&save_action("t")).await.unwrap();
+
+    run(&update_action(
+        "t",
+        None,
+        None,
+        None,
+        None,
+        None,
+        &["priority"],
+    ))
+    .await
+    .unwrap();
+
+    let config = Config::load().unwrap();
+    assert!(config.templates["t"].priority.is_none());
+    assert_eq!(
+        config.templates["t"].product.as_deref(),
+        Some("TestProduct")
+    );
+}
+
+#[tokio::test]
+async fn template_update_unknown_template_errors() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let err = run(&update_action(
+        "missing",
+        Some("X"),
+        None,
+        None,
+        None,
+        None,
+        &[],
+    ))
+    .await
+    .unwrap_err();
+    assert!(err.to_string().contains("template 'missing' not found"));
+}
+
+#[tokio::test]
+async fn template_update_requires_a_change() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run(&save_action("t")).await.unwrap();
+    let err = run(&update_action("t", None, None, None, None, None, &[]))
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("no changes"));
+}
+
+#[tokio::test]
+async fn template_update_unknown_clear_field_errors() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run(&save_action("t")).await.unwrap();
+    let err = run(&update_action(
+        "t",
+        None,
+        None,
+        None,
+        None,
+        None,
+        &["bogus"],
+    ))
+    .await
+    .unwrap_err();
+    assert!(err.to_string().contains("unknown --clear field"));
+}
+
+#[tokio::test]
+async fn template_update_clearing_all_fields_rejected() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run(&save_action("t")).await.unwrap(); // product, component, priority set
+    let err = run(&update_action(
+        "t",
+        None,
+        None,
+        None,
+        None,
+        None,
+        &["product", "component", "priority"],
+    ))
+    .await
+    .unwrap_err();
+    assert!(err.to_string().contains("at least one field"));
+}
+
+#[tokio::test]
+async fn template_update_clear_wins_over_set() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run(&save_action("t")).await.unwrap(); // product + component + priority
+
+    // Set and clear the same field in one call: clear wins.
+    let a = update_action("t", None, None, None, None, Some("blocker"), &["severity"]);
+    run(&a).await.unwrap();
+    assert!(Config::load().unwrap().templates["t"].severity.is_none());
+}
