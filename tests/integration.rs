@@ -289,6 +289,62 @@ async fn comment_list_integration() {
     assert_eq!(parsed[0]["text"], "First comment");
 }
 
+#[tokio::test]
+async fn comment_add_body_file_posts_file_contents() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/7/comment"))
+        .and(wiremock::matchers::body_string_contains("from a file"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 99})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("body.txt");
+    std::fs::write(&file, "comment from a file\n").unwrap();
+
+    let action = bzr::cli::CommentAction::Add {
+        bug_id: 7,
+        body: None,
+        body_file: Some(file),
+        private: false,
+    };
+    let mut __io_bf = bzr::test_helpers::CapturedIo::new();
+    let result = bzr::commands::comment::execute(
+        &action,
+        Some("test"),
+        bzr::types::OutputFormat::Json,
+        None,
+        &mut __io_bf.writers(),
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "comment add --body-file should succeed: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn comment_add_body_and_body_file_conflict() {
+    // clap conflicts_with surfaces as a parse error — no server needed.
+    let parsed = bzr::cli::Cli::try_parse_from([
+        "bzr",
+        "comment",
+        "add",
+        "7",
+        "--body",
+        "x",
+        "--body-file",
+        "/tmp/x",
+    ]);
+    assert!(
+        parsed.is_err(),
+        "clap should reject --body with --body-file"
+    );
+}
+
 // ── Whoami command ────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -1015,6 +1071,7 @@ async fn comment_add_integration() {
     let action = bzr::cli::CommentAction::Add {
         bug_id: 42,
         body: Some("This is a test comment".to_string()),
+        body_file: None,
         private: false,
     };
     let mut __io19 = bzr::test_helpers::CapturedIo::new();

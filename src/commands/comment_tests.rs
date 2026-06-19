@@ -67,6 +67,7 @@ async fn comment_add_with_body() {
     let action = CommentAction::Add {
         bug_id: 42,
         body: Some("Test comment".to_string()),
+        body_file: None,
         private: false,
     };
     let result = super::execute(
@@ -89,6 +90,7 @@ async fn comment_add_empty_body_is_rejected() {
     let action = CommentAction::Add {
         bug_id: 42,
         body: Some("   ".to_string()),
+        body_file: None,
         private: false,
     };
     let result = super::execute(
@@ -173,6 +175,7 @@ async fn comment_add_api_error_returns_error() {
     let action = CommentAction::Add {
         bug_id: 42,
         body: Some("Test comment".to_string()),
+        body_file: None,
         private: false,
     };
     let result = super::execute(

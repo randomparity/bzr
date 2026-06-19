@@ -411,6 +411,78 @@ pub async fn connect_and_configure(
     Ok(client)
 }
 
+/// Where a body string comes from. Pure result of classifying the
+/// inline + file flag pair; carries no I/O.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum BodySource {
+    /// A literal inline value (`--body "text"`).
+    Literal(String),
+    /// Read all of stdin (`--body -` or `--*-file -`).
+    Stdin,
+    /// Read a UTF-8 file (`--*-file PATH`, PATH != "-").
+    File(std::path::PathBuf),
+    /// Neither source supplied; the caller applies its own fallback.
+    None,
+}
+
+/// Classify an inline flag value and/or a `--*-file` path into a
+/// [`BodySource`], honouring the `-` = stdin convention for both. The two
+/// sources are mutually exclusive; clap `conflicts_with` makes the
+/// both-present case unreachable in normal use, but this guards regardless so
+/// correctness does not depend on the CLI layer. `inline_flag` / `file_flag`
+/// name the originating options for the mutual-exclusion error message.
+pub(crate) fn classify_body_source(
+    inline: Option<&str>,
+    file: Option<&std::path::Path>,
+    inline_flag: &str,
+    file_flag: &str,
+) -> Result<BodySource> {
+    match (inline, file) {
+        (Some(_), Some(_)) => Err(BzrError::InputValidation(format!(
+            "{inline_flag} and {file_flag} are mutually exclusive"
+        ))),
+        (Some("-"), None) => Ok(BodySource::Stdin),
+        (Some(s), None) => Ok(BodySource::Literal(s.to_string())),
+        (None, Some(path)) => {
+            if path == std::path::Path::new("-") {
+                Ok(BodySource::Stdin)
+            } else {
+                Ok(BodySource::File(path.to_path_buf()))
+            }
+        }
+        (None, None) => Ok(BodySource::None),
+    }
+}
+
+/// Read everything from `reader` into a `String`, mapping I/O failures
+/// (including non-UTF-8 input) to a `BzrError`.
+fn read_to_string_from(reader: &mut impl std::io::Read) -> Result<String> {
+    let mut buf = String::new();
+    reader.read_to_string(&mut buf)?;
+    Ok(buf)
+}
+
+/// Read all of stdin to a `String`. Shared by the `-` (dash) convention and
+/// the flag-omitted auto-stdin paths.
+pub(crate) fn read_stdin_to_string() -> Result<String> {
+    read_to_string_from(&mut std::io::stdin().lock())
+}
+
+/// Turn a classified [`BodySource`] into the actual body, or `Ok(None)` for
+/// [`BodySource::None`] so the caller applies its own fallback. This is the
+/// only place that performs stdin/file I/O for the explicit body flags.
+pub(crate) fn materialize_body_source(
+    source: BodySource,
+    file_flag: &str,
+) -> Result<Option<String>> {
+    match source {
+        BodySource::Literal(s) => Ok(Some(s)),
+        BodySource::Stdin => Ok(Some(read_stdin_to_string()?)),
+        BodySource::File(path) => Ok(Some(read_file_with_context(&path, file_flag)?)),
+        BodySource::None => Ok(None),
+    }
+}
+
 /// Read a UTF-8 file, mapping any I/O error to an `InputValidation` error that
 /// names the originating CLI flag and the path. `flag` is the user-facing
 /// option name (e.g. `--description-file`) used to prefix the message.

@@ -1,4 +1,4 @@
-use std::io::{IsTerminal, Read};
+use std::io::IsTerminal;
 
 use crate::cli::CommentAction;
 use crate::commands::editor;
@@ -32,10 +32,20 @@ pub async fn execute(
         CommentAction::Add {
             bug_id,
             body,
+            body_file,
             private,
         } => {
-            let text = match body {
-                Some(t) => t.clone(),
+            let resolved = super::shared::materialize_body_source(
+                super::shared::classify_body_source(
+                    body.as_deref(),
+                    body_file.as_deref(),
+                    "--body",
+                    "--body-file",
+                )?,
+                "--body-file",
+            )?;
+            let text = match resolved {
+                Some(t) => t,
                 None => read_comment_body()?,
             };
             if text.trim().is_empty() {
@@ -93,11 +103,8 @@ pub async fn execute(
 
 /// Read comment body from stdin (pipe) or $EDITOR (TTY).
 fn read_comment_body() -> Result<String> {
-    let stdin = std::io::stdin();
-    if !stdin.is_terminal() {
-        let mut buf = String::new();
-        stdin.lock().read_to_string(&mut buf)?;
-        return Ok(buf);
+    if !std::io::stdin().is_terminal() {
+        return super::shared::read_stdin_to_string();
     }
     let raw = editor::launch("<!-- Enter your comment above this line -->\n", "comment")?;
     Ok(filter_comment_body(&raw))
