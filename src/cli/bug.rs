@@ -321,7 +321,9 @@ pub enum BugAction {
     ///   3. piped stdin (when stdin is not a TTY)
     ///   4. `$EDITOR` (when stdin is a TTY and none of the above)
     ///
-    /// `--description` and `--description-file` are mutually
+    /// A value of `-` for `--description` or `--description-file`
+    /// reads the description from stdin. `--description` and
+    /// `--description-file` are mutually
     /// exclusive. When the editor flow is active, `--summary` is
     /// optional: the first non-empty line of the buffer becomes
     /// the summary and the rest becomes the description. A
@@ -385,14 +387,15 @@ pub enum BugAction {
         /// Version
         #[arg(long)]
         version: Option<String>,
-        /// Bug description
+        /// Bug description (a value of `-` reads from stdin)
         #[arg(long, conflicts_with = "description_file")]
         description: Option<String>,
         /// Read the bug description from a UTF-8 file.
         ///
-        /// Mutually exclusive with `--description`. The file path
-        /// must exist and be readable; non-existent paths or
-        /// non-UTF-8 contents fail with exit code 7.
+        /// A path of `-` reads from stdin. Mutually exclusive with
+        /// `--description`. The file path must exist and be readable;
+        /// non-existent paths or non-UTF-8 contents fail with exit
+        /// code 7.
         #[arg(long, value_name = "PATH", conflicts_with = "description")]
         description_file: Option<std::path::PathBuf>,
         /// Priority
