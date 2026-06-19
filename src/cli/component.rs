@@ -6,6 +6,47 @@ use clap::Subcommand;
     reason = "doc examples are literal shell commands; wrapping URLs in <> or identifiers in backticks would degrade copy-paste UX"
 )]
 pub enum ComponentAction {
+    /// List a product's components.
+    ///
+    /// Reads the product's component set (the same data shown by
+    /// `bzr product view <product>`) and prints each component's ID,
+    /// name, description, default assignee, and active flag. JSON output
+    /// is the full component array.
+    ///
+    /// Examples:
+    ///
+    ///   bzr component list --product MyApp
+    ///   bzr --json component list --product MyApp | jq '.[].name'
+    ///
+    /// See bzr-component-view(1) for a single component's detail.
+    #[command(verbatim_doc_comment)]
+    List {
+        /// Product name
+        #[arg(long)]
+        product: String,
+    },
+
+    /// View a single component within a product.
+    ///
+    /// Looks the component up by exact name within the given product and
+    /// prints its ID, description, default assignee, and active flag. JSON
+    /// output is the `Component` object. Errors if the product has no
+    /// component with that name.
+    ///
+    /// Examples:
+    ///
+    ///   bzr component view MyApp Backend
+    ///   bzr --json component view MyApp Backend
+    ///
+    /// See bzr-component-list(1) to enumerate a product's components.
+    #[command(verbatim_doc_comment)]
+    View {
+        /// Product name
+        product: String,
+        /// Component name (exact match)
+        name: String,
+    },
+
     /// Create a new component within a product (admin only).
     ///
     /// Requires Bugzilla admin permissions on the target product.

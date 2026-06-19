@@ -2,6 +2,7 @@ pub(crate) mod attachment;
 pub(crate) mod bug;
 pub(crate) mod classification;
 pub(crate) mod comment;
+pub(crate) mod component;
 pub(crate) mod config;
 pub(crate) mod field;
 pub(crate) mod group;

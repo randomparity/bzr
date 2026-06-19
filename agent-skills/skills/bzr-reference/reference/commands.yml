@@ -11,6 +11,6 @@ group: add-user remove-user list-users view create update
 whoami:
 server: info
 classification: list view
-component: create update
+component: list view create update
 template: save list show delete
 query: save list show delete run
