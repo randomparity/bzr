@@ -62,7 +62,7 @@ fn string_list_update(
     })
 }
 
-fn resolve_comment(
+pub(super) fn resolve_comment(
     comment: Option<&str>,
     comment_file: Option<&std::path::Path>,
     comment_private: bool,
@@ -291,6 +291,19 @@ pub(super) async fn handle(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let (ids, params) = build_update_params(action)?;
+    apply(client, ids, params, format, w).await
+}
+
+/// Apply an already-built `UpdateBugParams` to one or more bug IDs, dispatching
+/// to the single- or batch-update path. Shared by `bug update` and the
+/// convenience verbs (`resolve`/`close`/`reopen`/`dup`).
+pub(super) async fn apply(
+    client: &BugzillaClient,
+    ids: Vec<u64>,
+    params: UpdateBugParams,
+    format: OutputFormat,
+    w: &mut Writers<'_>,
+) -> Result<()> {
     if ids.len() == 1 {
         update_single(client, ids[0], &params, format, w).await
     } else {

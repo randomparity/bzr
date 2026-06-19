@@ -15,6 +15,7 @@ mod list;
 mod my;
 mod search;
 mod update;
+mod verbs;
 mod view;
 
 /// The `--fields` / `--exclude-fields` column spec for the four field-bearing
@@ -96,6 +97,10 @@ pub async fn execute(
         BugAction::Create { .. } => create::handle(&client, action, format, w).await,
         BugAction::Clone { .. } => clone::handle(&client, action, format, w).await,
         BugAction::Update { .. } => update::handle(&client, action, format, w).await,
+        BugAction::Resolve { .. }
+        | BugAction::Close { .. }
+        | BugAction::Reopen { .. }
+        | BugAction::Dup { .. } => verbs::handle(&client, action, format, w).await,
         BugAction::Search { .. } => unreachable!("handled above"),
     }
 }
