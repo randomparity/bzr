@@ -38,6 +38,8 @@ fn base_cli(command: Commands) -> Cli {
         no_color: false,
         quiet: false,
         api: None,
+        timeout: None,
+        retry: None,
         verbose: 0,
         command,
     }

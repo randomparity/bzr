@@ -41,6 +41,8 @@ For installation and quick start, see [README.md](../README.md).
 | `--no-color` | Disable colored output. Color is also suppressed automatically when stdout is not a TTY. |
 | `--quiet` | Suppress stdout and tracing logs (exit code confirms success) |
 | `--api <MODE>` | Override API transport: `rest`, `xmlrpc`, or `hybrid`. Auto-detected from server version if not set. |
+| `--timeout <SECS>` | Per-request timeout in seconds (default 30). Takes precedence over `BZR_TIMEOUT`. The 10s connect timeout is unaffected. |
+| `--retry <N>` | Retry transient failures up to N times with exponential backoff honoring `Retry-After`. 429 and connect failures are retried for any operation; 5xx and read timeouts only for safe reads (GET/HEAD), never for writes (create, update, comment) where a replay could duplicate the effect. Default 0 (disabled); max 10. Exhausted retries exit 5. |
 | `-v, --verbose` | Increase log verbosity (`-v`=info, `-vv`=debug, `-vvv`=trace; `RUST_LOG` overrides) |
 | `-h, --help` | Print help |
 | `-V, --version` | Print version |
@@ -53,6 +55,7 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 |----------|-------------|
 | `BZR_OUTPUT` | Default output format (`table` or `json`). Overridden by `--output` or `--json`. |
 | `BZR_CONFIG` | Full path to an alternate `config.toml`. Overrides the default config directory; overridden by `--config`. |
+| `BZR_TIMEOUT` | Per-request timeout in seconds. Overridden by `--timeout`; invalid values are ignored with a warning. |
 | `NO_COLOR` | Disable colored output (any value). Supported natively by the `colored` crate. |
 | `CLICOLOR` | Set to `0` to disable colored output (standard convention respected by the `colored` crate). |
 | `CLICOLOR_FORCE` | Set to `1` to force colored output even when stdout is not a TTY. |
@@ -82,7 +85,7 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 ## Command Tree
 
 ```
-bzr [--server <NAME>] [--output table|json] [--json] [--config <PATH>] [--no-color] [--quiet] [--api rest|xmlrpc|hybrid] [-v...]
+bzr [--server <NAME>] [--output table|json] [--json] [--config <PATH>] [--no-color] [--quiet] [--api rest|xmlrpc|hybrid] [--timeout <SECS>] [--retry <N>] [-v...]
 ├── bug
 │   ├── list [--product <P>...] [--component <C>...] [--status <S>...] [--assignee <A>...]
 │   │        [--creator <C>...] [--priority <P>...] [--severity <S>...] [--id <ID>...]

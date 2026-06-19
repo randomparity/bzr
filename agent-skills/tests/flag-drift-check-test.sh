@@ -65,7 +65,7 @@ matching_doc() {
 ## Command Tree
 
 ```
-bzr [--server <NAME>] [--output table|json] [--json] [--config <PATH>] [--no-color] [--quiet] [--api rest|xmlrpc|hybrid] [-v...]
+bzr [--server <NAME>] [--output table|json] [--json] [--config <PATH>] [--no-color] [--quiet] [--api rest|xmlrpc|hybrid] [--timeout <SECS>] [--retry <N>] [-v...]
 ├── demo
 │   ├── alpha [--foo <X>] [--bar <Y>]
 │   ├── beta [--baz <Z>]

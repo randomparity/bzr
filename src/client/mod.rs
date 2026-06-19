@@ -56,6 +56,9 @@ pub struct BugzillaClient {
     pub(super) xmlrpc: Option<XmlRpcClient>,
     /// Email hint for Bugzilla 5.0 compatibility (whoami fallback via user lookup).
     email_hint: Option<String>,
+    /// Transient-retry budget (429 / 5xx / timeout). Captured from the global
+    /// `--retry` setting at construction; 0 disables retries.
+    retry_max: u32,
 }
 
 /// Configuration needed to construct a [`BugzillaClient`].
@@ -190,7 +193,16 @@ impl BugzillaClient {
             api_mode,
             xmlrpc,
             email_hint: email_hint.map(String::from),
+            retry_max: crate::http::retry_max(),
         })
+    }
+
+    /// Override the transient-retry budget. Used by tests to exercise the
+    /// retry path without mutating the process-wide `--retry` global (which
+    /// would race other tests).
+    #[cfg(test)]
+    pub(crate) fn set_retry_max(&mut self, n: u32) {
+        self.retry_max = n;
     }
 
     pub(super) fn url(&self, path: &str) -> String {
@@ -285,7 +297,83 @@ impl BugzillaClient {
         }
     }
 
+    /// Send a request, applying transient-failure retries (429 / 5xx / connect
+    /// timeout) with exponential backoff when `--retry` is enabled. Each attempt
+    /// also performs the 401 alternate-auth fallback (see [`Self::send_raw`]).
+    /// The status of the final attempt is checked normally, so exhausted retries
+    /// surface the usual `HttpStatus`/`Http` error (exit code 5).
     pub(super) async fn send(&self, builder: RequestBuilder) -> Result<reqwest::Response> {
+        // A write must not be replayed after a 5xx or read timeout: the server
+        // may have already applied it, so a retry would duplicate the effect.
+        // We gate on `is_safe()` (GET/HEAD), not `is_idempotent()`, because
+        // bzr's PUT `Bug.update` is not effect-idempotent — `--work-time` is
+        // additive and `--comment` posts atomically, so a replayed PUT could
+        // double-count work or duplicate a comment. 429s and connect failures
+        // are provably un-processed and stay retryable for any method; an
+        // undeterminable method is treated as unsafe.
+        let safe = builder
+            .try_clone()
+            .and_then(|b| b.build().ok())
+            .is_some_and(|r| r.method().is_safe());
+        let mut attempt: u32 = 0;
+        loop {
+            // Clone for a possible retry; a non-cloneable body (streaming) can't
+            // be replayed, so send it once without retry.
+            let Some(this) = builder.try_clone() else {
+                return self
+                    .check_response_status(self.send_raw(builder).await?)
+                    .await;
+            };
+            match self.send_raw(this).await {
+                Ok(resp)
+                    if attempt < self.retry_max
+                        && crate::http::should_retry_status(resp.status().as_u16(), safe) =>
+                {
+                    let status = resp.status().as_u16();
+                    let retry_after = resp
+                        .headers()
+                        .get(reqwest::header::RETRY_AFTER)
+                        .and_then(|v| v.to_str().ok())
+                        .and_then(crate::http::parse_retry_after);
+                    Self::sleep_before_retry(attempt, retry_after, &format!("HTTP {status}")).await;
+                    attempt += 1;
+                }
+                Ok(resp) => return self.check_response_status(resp).await,
+                Err(e) if attempt < self.retry_max && Self::is_transient(&e, safe) => {
+                    Self::sleep_before_retry(attempt, None, &e.to_string()).await;
+                    attempt += 1;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    /// Whether an error is a transient transport failure worth retrying for a
+    /// request with the given safety (GET/HEAD).
+    fn is_transient(err: &BzrError, safe: bool) -> bool {
+        matches!(err, BzrError::Http(e) if crate::http::should_retry_transport(e, safe))
+    }
+
+    /// Sleep for the backoff interval before the next retry, logging the reason.
+    async fn sleep_before_retry(
+        attempt: u32,
+        retry_after: Option<std::time::Duration>,
+        reason: &str,
+    ) {
+        let delay = crate::http::backoff_delay(attempt, retry_after);
+        tracing::warn!(
+            attempt = attempt + 1,
+            delay_ms = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX),
+            reason,
+            "transient failure; retrying after backoff"
+        );
+        tokio::time::sleep(delay).await;
+    }
+
+    /// One request attempt: send, log, and perform the 401 alternate-auth
+    /// fallback. Returns the raw response without status-checking so the caller
+    /// ([`Self::send`]) can decide whether a retryable status warrants a retry.
+    async fn send_raw(&self, builder: RequestBuilder) -> Result<reqwest::Response> {
         let retry_builder = builder.try_clone();
         let resp = builder.send().await?;
         tracing::debug!(
@@ -298,7 +386,7 @@ impl BugzillaClient {
                 return Ok(retried);
             }
         }
-        self.check_response_status(resp).await
+        Ok(resp)
     }
 
     /// On 401, retry the request with the alternate auth method (header ↔ query param).

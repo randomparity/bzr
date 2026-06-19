@@ -633,3 +633,147 @@ async fn parse_json_redacts_api_key_in_body_preview() {
         "redaction marker should be present: {msg}"
     );
 }
+
+// ── Transient retry (#311) ──────────────────────────────────────────
+
+fn bug_ok_body() -> serde_json::Value {
+    serde_json::json!({ "bugs": [{ "id": 1, "summary": "ok", "status": "NEW" }] })
+}
+
+#[tokio::test]
+async fn retry_recovers_after_transient_503() {
+    let mock = MockServer::start().await;
+    // First attempt 503, then a healthy 200. Higher priority (lower number)
+    // and up_to_n_times(1) makes the 503 serve exactly once.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(503).set_body_string("busy"))
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(bug_ok_body()))
+        .with_priority(2)
+        .mount(&mock)
+        .await;
+
+    let mut client = test_client(&mock.uri());
+    client.set_retry_max(1);
+    let bug = client.get_bug("1", None, None).await.unwrap();
+    assert_eq!(bug.id, 1);
+}
+
+#[tokio::test]
+async fn retry_recovers_after_429_with_retry_after() {
+    let mock = MockServer::start().await;
+    // Retry-After: 0 keeps the test fast while still exercising header parsing.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(
+            ResponseTemplate::new(429)
+                .insert_header("Retry-After", "0")
+                .set_body_string("slow down"),
+        )
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(bug_ok_body()))
+        .with_priority(2)
+        .mount(&mock)
+        .await;
+
+    let mut client = test_client(&mock.uri());
+    client.set_retry_max(1);
+    assert_eq!(client.get_bug("1", None, None).await.unwrap().id, 1);
+}
+
+#[tokio::test]
+async fn retry_exhausted_surfaces_http_error() {
+    let mock = MockServer::start().await;
+    // Always 500; with retry_max=1 the endpoint is hit exactly twice
+    // (initial + one retry) and the final error is returned.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(500).set_body_string("boom"))
+        .expect(2)
+        .mount(&mock)
+        .await;
+
+    let mut client = test_client(&mock.uri());
+    client.set_retry_max(1);
+    let err = client.get_bug("1", None, None).await.unwrap_err();
+    assert_eq!(err.exit_code(), 5, "exhausted retries keep HTTP exit code");
+}
+
+#[tokio::test]
+async fn no_retry_on_client_error_404() {
+    let mock = MockServer::start().await;
+    // 404 is a caller error: it must be hit exactly once even with a budget.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(404).set_body_string("missing"))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let mut client = test_client(&mock.uri());
+    client.set_retry_max(3);
+    assert!(client.get_bug("1", None, None).await.is_err());
+}
+
+#[tokio::test]
+async fn no_retry_on_post_5xx_mutation() {
+    let mock = MockServer::start().await;
+    // A POST Bug.create returning 503 must NOT be retried even with a budget:
+    // the create may already have been applied, so a replay could duplicate it.
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(503).set_body_string("busy"))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let mut client = test_client(&mock.uri());
+    client.set_retry_max(3);
+    let params = crate::types::CreateBugParams::default();
+    assert!(client.create_bug(&params).await.is_err());
+}
+
+#[tokio::test]
+async fn no_retry_on_put_update_5xx() {
+    let mock = MockServer::start().await;
+    // PUT Bug.update is HTTP-idempotent but not effect-idempotent in bzr
+    // (`--work-time` accumulates, `--comment` posts atomically), so a 5xx must
+    // not be retried: the endpoint is hit exactly once despite the budget.
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(503).set_body_string("busy"))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let mut client = test_client(&mock.uri());
+    client.set_retry_max(3);
+    let params = crate::types::UpdateBugParams::default();
+    assert!(client.update_bug(1, &params).await.is_err());
+}
+
+#[tokio::test]
+async fn no_retry_when_budget_zero() {
+    let mock = MockServer::start().await;
+    // Default budget is 0: a 503 is not retried (hit exactly once).
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(503).set_body_string("busy"))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    assert!(client.get_bug("1", None, None).await.is_err());
+}
