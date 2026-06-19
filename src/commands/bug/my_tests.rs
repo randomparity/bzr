@@ -52,6 +52,7 @@ async fn bug_my_returns_assigned_by_default() {
             exclude_fields: None,
         },
         sort_args: crate::cli::SortArgs::default(),
+        count: false,
     };
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result =
@@ -94,6 +95,7 @@ async fn bug_my_passes_status_limit_and_field_filters() {
             exclude_fields: Some("comments".into()),
         },
         sort_args: crate::cli::SortArgs::default(),
+        count: false,
     };
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -134,6 +136,7 @@ async fn bug_my_created_only_runs_creator_search_not_assigned() {
             exclude_fields: None,
         },
         sort_args: crate::cli::SortArgs::default(),
+        count: false,
     };
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -173,6 +176,7 @@ async fn bug_my_cc_only_runs_cc_search_not_assigned_or_creator() {
             exclude_fields: None,
         },
         sort_args: crate::cli::SortArgs::default(),
+        count: false,
     };
     let mut __io4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -219,6 +223,7 @@ async fn bug_my_all_deduplicates() {
             exclude_fields: None,
         },
         sort_args: crate::cli::SortArgs::default(),
+        count: false,
     };
     let mut __io5 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -236,4 +241,44 @@ async fn bug_my_all_deduplicates() {
     let bugs = parsed.as_array().expect("expected JSON array");
     assert_eq!(bugs.len(), 1, "duplicate bug should be deduplicated");
     assert_eq!(bugs[0]["id"], 42);
+}
+
+#[tokio::test]
+async fn bug_my_all_count_reports_distinct_total() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_whoami(&mock).await;
+    // All three category searches return the same ids {1,2}; --count must
+    // report the distinct total (2), not the sum (6), and must request
+    // id-only fields with limit=0.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("include_fields", "id"))
+        .and(query_param("limit", "0"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1}, {"id": 2}]
+        })))
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::My {
+        created: false,
+        cc: false,
+        all: true,
+        status: vec![],
+        limit: 50,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
+        sort_args: crate::cli::SortArgs::default(),
+        count: true,
+    };
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+    assert!(result.is_ok(), "my --all --count failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    // Three searches each return ids {1,2}; deduped distinct count is 2.
+    assert_eq!(parsed["count"], 2);
 }

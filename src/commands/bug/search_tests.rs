@@ -18,6 +18,7 @@ fn from_url_action(url: String, save_as: Option<String>) -> BugAction {
             exclude_fields: None,
         },
         sort_args: crate::cli::SortArgs::default(),
+        count: false,
     }
 }
 
@@ -189,6 +190,7 @@ async fn handle_search_quicksearch_passes_limit_and_field_filters() {
             exclude_fields: Some("comments".into()),
         },
         sort_args: crate::cli::SortArgs::default(),
+        count: false,
     };
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -364,6 +366,7 @@ async fn bug_search_quicksearch_sends_default_order() {
             exclude_fields: None,
         },
         sort_args: crate::cli::SortArgs::default(),
+        count: false,
     };
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result =
@@ -397,4 +400,41 @@ async fn bug_search_from_url_sort_overrides_url_order() {
         result.is_ok(),
         "from-url with --sort should succeed: {result:?}"
     );
+}
+
+#[tokio::test]
+async fn handle_search_count_emits_count_object() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    // Quicksearch + --count: requests id-only fields and limit=0, reports count.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("quicksearch", "crash"))
+        .and(query_param("include_fields", "id"))
+        .and(query_param("limit", "0"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::Search {
+        query: Some("crash".to_string()),
+        from_url: None,
+        save_as: None,
+        limit: None,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
+        sort_args: crate::cli::SortArgs::default(),
+        count: true,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+    assert!(result.is_ok(), "search --count failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["count"], 4);
 }

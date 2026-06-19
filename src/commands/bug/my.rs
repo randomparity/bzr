@@ -22,6 +22,7 @@ pub(super) async fn handle(
             exclude_fields,
         },
         sort_args,
+        count,
     } = action
     else {
         unreachable!()
@@ -35,7 +36,7 @@ pub(super) async fn handle(
     let mut seen_ids = std::collections::HashSet::new();
 
     // Build search params for each enabled filter, varying one field.
-    let base = SearchParams {
+    let mut base = SearchParams {
         status: status.clone(),
         limit: Some(*limit),
         include_fields: canonical_field_list(fields.as_deref()),
@@ -46,6 +47,11 @@ pub(super) async fn handle(
         )),
         ..Default::default()
     };
+    // `--count` needs every distinct match, so fetch IDs only and lift the
+    // per-category limit; the dedup below then yields the true distinct count.
+    if *count {
+        base = super::count_search_params(base);
+    }
     let mut searches = Vec::new();
     if *all || (!created && !cc) {
         let mut p = base.clone();
@@ -65,10 +71,16 @@ pub(super) async fn handle(
 
     for params in &searches {
         for bug in client.search_bugs(params).await? {
-            if seen_ids.insert(bug.id) {
+            // When counting, only the deduped id set matters — don't retain rows.
+            if seen_ids.insert(bug.id) && !*count {
                 all_bugs.push(bug);
             }
         }
+    }
+
+    if *count {
+        crate::output::result_types::write_count(seen_ids.len(), format, w.out);
+        return Ok(());
     }
 
     write_bugs(&all_bugs, spec, format, w.out, w.err);

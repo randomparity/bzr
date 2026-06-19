@@ -39,6 +39,7 @@ pub(super) async fn handle(
         qa_contact,
         url,
         sort_args,
+        count,
     } = action
     else {
         unreachable!()
@@ -77,6 +78,14 @@ pub(super) async fn handle(
         )),
         ..Default::default()
     };
+    if *count {
+        let bugs = client
+            .search_bugs(&super::count_search_params(params))
+            .await?;
+        crate::output::result_types::write_count(bugs.len(), format, w.out);
+        return Ok(());
+    }
+
     let spec = ColumnSpec::new(fields.as_deref(), exclude_fields.as_deref());
     let bugs = client.search_bugs(&params).await?;
     write_bugs(&bugs, spec, format, w.out, w.err);

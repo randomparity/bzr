@@ -35,6 +35,7 @@ fn empty_list_action() -> BugAction {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
+        count: false,
     }
 }
 
@@ -141,6 +142,7 @@ async fn bug_list_passes_every_field_through_to_search_params() {
         qa_contact: vec!["qa@test.com".into()],
         url: vec!["github.com/foo".into()],
         sort_args: crate::cli::SortArgs::default(),
+        count: false,
     };
     let result = crate::commands::bug::execute(
         &action,
@@ -206,6 +208,7 @@ async fn bug_list_summary_only_sends_substring_filter() {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
+        count: false,
     };
     let result = crate::commands::bug::execute(
         &action,
@@ -652,4 +655,66 @@ async fn bug_list_sends_explicit_sort_and_order() {
         result.is_ok(),
         "explicit-sort list should succeed: {result:?}"
     );
+}
+
+fn count_list_action() -> BugAction {
+    let mut action = empty_list_action();
+    if let BugAction::List { count, .. } = &mut action {
+        *count = true;
+    }
+    action
+}
+
+#[tokio::test]
+async fn bug_list_count_json_emits_count_object() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    // --count must request id-only fields and lift the limit (limit=0), then
+    // report the number of returned ids.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("include_fields", "id"))
+        .and(query_param("limit", "0"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1}, {"id": 2}, {"id": 3}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &count_list_action(),
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __io.writers(),
+    )
+    .await;
+    assert!(result.is_ok(), "count list failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    assert_eq!(parsed["count"], 3);
+}
+
+#[tokio::test]
+async fn bug_list_count_table_prints_integer_only() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 10}, {"id": 11}]
+        })))
+        .mount(&mock)
+        .await;
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &count_list_action(),
+        None,
+        OutputFormat::Table,
+        None,
+        &mut __io.writers(),
+    )
+    .await;
+    assert!(result.is_ok());
+    assert_eq!(__io.out_str().trim(), "2");
 }

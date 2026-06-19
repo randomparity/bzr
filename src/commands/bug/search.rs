@@ -70,6 +70,7 @@ pub(super) async fn handle(
         from_url,
         save_as,
         limit,
+        count,
         field_args: FieldArgs {
             fields,
             exclude_fields,
@@ -126,8 +127,15 @@ pub(super) async fn handle(
         (client, params, None)
     };
 
-    let bugs = client.search_bugs(&params).await?;
-    write_bugs(&bugs, spec, format, w.out, w.err);
+    if *count {
+        let bugs = client
+            .search_bugs(&super::count_search_params(params))
+            .await?;
+        crate::output::result_types::write_count(bugs.len(), format, w.out);
+    } else {
+        let bugs = client.search_bugs(&params).await?;
+        write_bugs(&bugs, spec, format, w.out, w.err);
+    }
 
     if let Some((name, query)) = save_info {
         let mut is_update = false;

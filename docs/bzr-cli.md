@@ -86,13 +86,13 @@ bzr [--server <NAME>] [--output table|json] [--json] [--config <PATH>] [--no-col
 ├── bug
 │   ├── list [--product <P>...] [--component <C>...] [--status <S>...] [--assignee <A>...]
 │   │        [--creator <C>...] [--priority <P>...] [--severity <S>...] [--id <ID>...]
-│   │        [--alias <A>] [--summary <S>] [--limit <N>] [--fields <F>] [--exclude-fields <F>]
+│   │        [--alias <A>] [--summary <S>] [--limit <N>] [--count] [--fields <F>] [--exclude-fields <F>]
 │   │        [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
 │   ├── view <ID> [--fields <F>] [--exclude-fields <F>]
-│   ├── search [<QUERY>] [--from-url <URL>] [--save-as [NAME]] [--limit <N>] [--fields <F>] [--exclude-fields <F>]
+│   ├── search [<QUERY>] [--from-url <URL>] [--save-as [NAME]] [--limit <N>] [--count] [--fields <F>] [--exclude-fields <F>]
 │   │          [--sort <FIELD>] [--order asc|desc]
 │   ├── history <ID> [--since <DATE>]
-│   ├── my [--created] [--cc] [--all] [--status <S>...] [--limit <N>]
+│   ├── my [--created] [--cc] [--all] [--status <S>...] [--limit <N>] [--count]
 │   │       [--fields <F>] [--exclude-fields <F>] [--sort <FIELD>] [--order asc|desc]
 │   ├── create [--template <T>] [--product <P>] [--component <C>] --summary <S>
 │   │          [--version <V>] [--description <D>] [--priority <P>] [--severity <S>]
@@ -231,6 +231,7 @@ Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`,
 | `--alias <A>` | No | | Filter by bug alias |
 | `--summary <S>` | No | | Substring match on the Summary field (matches all bug states) |
 | `--limit <N>` | No | 50 | Max results |
+| `--count` | No | | Print only the count of matching bugs — an integer (table) or `{"count": N}` (JSON). Fetches ids only and lifts the row limit, so the count reflects all matches (bounded by the server's max-results setting). Ignores `--fields`, `--limit`, and `--sort`. |
 | `--fields <F>` | No | | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). A selection that resolves to no known fields is rejected with exit code 7 rather than emitting an empty object. |
 | `--exclude-fields <F>` | No | | Comma-separated fields dropped from the server request; in table output, removes those columns. Under `--json`, the object omits the dropped fields (including custom `cf_*` fields and `id`, when excluded). Excluding every field is rejected with exit code 7 rather than emitting `{}`. |
 | `--created-since <DATE>` | No | | Filter to bugs whose `creation_time` is `>= DATE`. See [Date format](#date-format) below. |
@@ -361,6 +362,7 @@ bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?known_name=m
 | `--from-url <URL>` | No* | | Execute a search from a Bugzilla buglist.cgi URL. Recognized parameters (product, component, status, etc.) are mapped to structured fields; unrecognized parameters (boolean charts, field-change filters) are passed through to the REST API verbatim. |
 | `--save-as [NAME]` | No | | Save this URL query for future reuse. If `NAME` is omitted, uses the URL's `known_name` parameter as the query name. Requires `--from-url`. |
 | `--limit <N>` | No | 50 | Max results. When `--from-url` is used, the URL's own limit parameter takes precedence unless overridden here. |
+| `--count` | No | | Print only the count of matching bugs — an integer (table) or `{"count": N}` (JSON). Counts all matches (bounded by the server's max-results setting). |
 | `--fields <F>` | No | | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). A selection that resolves to no known fields is rejected with exit code 7 rather than emitting an empty object. |
 | `--exclude-fields <F>` | No | | Comma-separated fields dropped from the server request; in table output, removes those columns. Under `--json`, the object omits the dropped fields (including custom `cf_*` fields and `id`, when excluded). Excluding every field is rejected with exit code 7 rather than emitting `{}`. |
 
@@ -403,6 +405,7 @@ bzr bug my --status NEW --status '!RESOLVED'  # mixed positive and negated
 | `--all` | No | | Show all bugs related to me (assigned + created + CC'd) |
 | `--status <S>` | No | | Filter by status (repeatable; `!` prefix to exclude) |
 | `--limit <N>` | No | 50 | Max results per category. With `--all`, each of the three categories (assigned, created, CC'd) is queried separately up to this limit; duplicates across categories are removed. |
+| `--count` | No | | Print only the count of distinct matching bugs (deduped across the active categories) — an integer (table) or `{"count": N}` (JSON). |
 | `--fields <F>` | No | | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). A selection that resolves to no known fields is rejected with exit code 7 rather than emitting an empty object. |
 | `--exclude-fields <F>` | No | | Comma-separated fields dropped from the server request; in table output, removes those columns. Under `--json`, the object omits the dropped fields (including custom `cf_*` fields and `id`, when excluded). Excluding every field is rejected with exit code 7 rather than emitting `{}`. |
 
