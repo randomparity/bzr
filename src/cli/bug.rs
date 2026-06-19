@@ -57,6 +57,28 @@ pub struct CreateFieldArgs {
     pub flag: Vec<String>,
 }
 
+/// Shared comment flags for the convenience verbs (`resolve`, `close`,
+/// `reopen`, `dup`), which post a comment atomically with the state change —
+/// the same `--comment` / `--comment-file` / `--comment-private` set `bug
+/// update` accepts.
+#[derive(Args, Debug, Clone, Default)]
+pub struct CommentArgs {
+    /// Post a comment atomically with the change.
+    ///
+    /// A value of `-` reads the comment from stdin. Mutually exclusive
+    /// with `--comment-file`. Empty / whitespace-only bodies exit 7.
+    #[arg(long, value_name = "BODY", conflicts_with = "comment_file")]
+    pub comment: Option<String>,
+    /// Read the comment body from a UTF-8 file.
+    ///
+    /// A path of `-` reads from stdin. Mutually exclusive with `--comment`.
+    #[arg(long, value_name = "PATH", conflicts_with = "comment")]
+    pub comment_file: Option<std::path::PathBuf>,
+    /// Mark the comment private (requires `--comment` or `--comment-file`).
+    #[arg(long)]
+    pub comment_private: bool,
+}
+
 /// Shared `--fields` / `--exclude-fields` selection, flattened into the bug
 /// query subcommands (`list`, `view`, `search`, `my`) so the pair is defined
 /// once instead of repeated per variant.
@@ -846,5 +868,88 @@ pub enum BugAction {
         /// Repeat the flag to remove multiple URLs.
         #[arg(long)]
         see_also_remove: Vec<String>,
+    },
+    /// Resolve one or more bugs (sets status RESOLVED + a resolution).
+    ///
+    /// Sugar for `bug update <IDs> --status RESOLVED --resolution <AS>`.
+    /// `--as` defaults to `FIXED`; pass another resolution (`WONTFIX`,
+    /// `INVALID`, `WORKSFORME`, `DUPLICATE`, ...) to override. Accepts
+    /// multiple IDs (batch) and the same `--comment` flags as `bug update`.
+    ///
+    /// Examples:
+    ///
+    ///   bzr bug resolve 12345
+    ///   bzr bug resolve 12345 12346 --as WONTFIX
+    ///   bzr bug resolve 12345 --comment "Fixed in 9.1"
+    #[command(verbatim_doc_comment)]
+    Resolve {
+        /// Bug ID(s) to resolve.
+        #[arg(required = true, num_args = 1..)]
+        ids: Vec<u64>,
+        /// Resolution to set (default `FIXED`).
+        #[arg(long = "as", value_name = "RESOLUTION", default_value = "FIXED")]
+        as_resolution: String,
+        #[command(flatten)]
+        comment: CommentArgs,
+    },
+    /// Close one or more bugs (sets status CLOSED).
+    ///
+    /// Sugar for `bug update <IDs> --status CLOSED`. By default the bug's
+    /// existing resolution is preserved (so close an already-resolved bug);
+    /// pass `--as <RESOLUTION>` to set one when closing directly. Accepts
+    /// multiple IDs (batch) and the same `--comment` flags as `bug update`.
+    ///
+    /// Examples:
+    ///
+    ///   bzr bug close 12345
+    ///   bzr bug close 12345 12346 --as WONTFIX --comment "Out of scope"
+    #[command(verbatim_doc_comment)]
+    Close {
+        /// Bug ID(s) to close.
+        #[arg(required = true, num_args = 1..)]
+        ids: Vec<u64>,
+        /// Resolution to set when closing an unresolved bug. Omit to
+        /// preserve any existing resolution.
+        #[arg(long = "as", value_name = "RESOLUTION")]
+        as_resolution: Option<String>,
+        #[command(flatten)]
+        comment: CommentArgs,
+    },
+    /// Reopen one or more bugs (sets status REOPENED).
+    ///
+    /// Sugar for `bug update <IDs> --status REOPENED`. Bugzilla clears the
+    /// resolution automatically on reopen. Accepts multiple IDs (batch) and
+    /// the same `--comment` flags as `bug update`.
+    ///
+    /// Examples:
+    ///
+    ///   bzr bug reopen 12345
+    ///   bzr bug reopen 12345 --comment "Regressed in 9.2"
+    #[command(verbatim_doc_comment)]
+    Reopen {
+        /// Bug ID(s) to reopen.
+        #[arg(required = true, num_args = 1..)]
+        ids: Vec<u64>,
+        #[command(flatten)]
+        comment: CommentArgs,
+    },
+    /// Mark a bug as a duplicate of another bug.
+    ///
+    /// Sugar for `bug update <ID> --dupe-of <TARGET>`. Bugzilla sets the
+    /// status/resolution transition (RESOLVED/DUPLICATE) automatically.
+    /// Supports the same `--comment` flags as `bug update`.
+    ///
+    /// Examples:
+    ///
+    ///   bzr bug dup 12345 100
+    ///   bzr bug dup 12345 100 --comment "Same root cause"
+    #[command(verbatim_doc_comment)]
+    Dup {
+        /// The duplicate bug.
+        id: u64,
+        /// The canonical bug this one duplicates.
+        target: u64,
+        #[command(flatten)]
+        comment: CommentArgs,
     },
 }

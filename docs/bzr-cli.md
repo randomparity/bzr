@@ -104,14 +104,18 @@ bzr [--server <NAME>] [--output table|json] [--json] [--config <PATH>] [--no-col
 │   │              [--description <D>] [--priority <P>] [--severity <S>] [--assignee <A>]
 │   │              [--op-sys <OS>] [--rep-platform <PLAT>]
 │   │              [--no-comment] [--add-depends-on] [--add-blocks] [--no-cc] [--no-keywords]
-│   └── update <ID...> [--status <S>] [--resolution <R>] [--assignee <A>]
-│                       [--priority <P>] [--severity <S>] [--summary <S>]
-│                       [--alias <A>] [--deadline <DATE>] [--estimated-time <HOURS>]
-│                       [--remaining-time <HOURS>] [--work-time <HOURS>]
-│                       [--whiteboard <W>] [--reset-assigned-to] [--reset-qa-contact]
-│                       [--flag <F>...] [--blocks-add <IDs>]
-│                       [--blocks-remove <IDs>] [--depends-on-add <IDs>]
-│                       [--depends-on-remove <IDs>]
+│   ├── update <ID...> [--status <S>] [--resolution <R>] [--assignee <A>]
+│   │                   [--priority <P>] [--severity <S>] [--summary <S>]
+│   │                   [--alias <A>] [--deadline <DATE>] [--estimated-time <HOURS>]
+│   │                   [--remaining-time <HOURS>] [--work-time <HOURS>]
+│   │                   [--whiteboard <W>] [--reset-assigned-to] [--reset-qa-contact]
+│   │                   [--flag <F>...] [--blocks-add <IDs>]
+│   │                   [--blocks-remove <IDs>] [--depends-on-add <IDs>]
+│   │                   [--depends-on-remove <IDs>]
+│   ├── resolve <ID...> [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
+│   ├── close <ID...> [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
+│   ├── reopen <ID...> [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
+│   └── dup <ID> <TARGET> [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 ├── comment
 │   ├── list <BUG_ID> [--since <DATE>]
 │   ├── add <BUG_ID> [--body <TEXT>] [--body-file <PATH>]
@@ -576,6 +580,35 @@ bzr bug update 100 200 300 --status RESOLVED --resolution WONTFIX
 When updating multiple bugs, failures on individual bugs do not abort the batch. A summary is printed showing which bugs succeeded and which failed.
 
 Agent note: before automated status, priority, severity, or resolution changes, validate allowed values with `bzr field list <field>`, for example `bzr field list status` or `bzr field list resolution`.
+
+### `bzr bug resolve` / `close` / `reopen` / `dup`
+
+Convenience verbs — thin sugar over `bzr bug update` for the common state
+transitions, so you don't have to spell out `--status`/`--resolution` each
+time. Each accepts multiple IDs (batch, except `dup`) and the same
+`--comment` / `--comment-file` / `--comment-private` flags as `bug update`,
+posting the comment atomically with the change. Batch behavior (per-bug
+partial-failure reporting, exit code 11) is inherited from `bug update`.
+
+```bash
+bzr bug resolve 12345                       # → update --status RESOLVED --resolution FIXED
+bzr bug resolve 12345 12346 --as WONTFIX    # batch, custom resolution
+bzr bug close 12345 --comment "Shipped"     # → update --status CLOSED (resolution preserved)
+bzr bug close 12345 --as INVALID            # close an open bug with a resolution
+bzr bug reopen 12345                         # → update --status REOPENED
+bzr bug dup 12345 100                        # → update --dupe-of 100
+```
+
+| Verb | Equivalent `update` | Notes |
+|------|---------------------|-------|
+| `resolve <ID...> [--as <R>]` | `--status RESOLVED --resolution <R>` | `--as` defaults to `FIXED` |
+| `close <ID...> [--as <R>]` | `--status CLOSED [--resolution <R>]` | resolution set only when `--as` is given, otherwise the existing one is preserved |
+| `reopen <ID...>` | `--status REOPENED` | Bugzilla clears the resolution automatically |
+| `dup <ID> <TARGET>` | `--dupe-of <TARGET>` | Bugzilla sets RESOLVED/DUPLICATE automatically |
+
+The status strings (`RESOLVED`, `CLOSED`, `REOPENED`) follow the conventional
+Bugzilla workflow; on a server with a customized workflow, an unsupported
+transition fails with the same server error `bug update` would return.
 
 ---
 

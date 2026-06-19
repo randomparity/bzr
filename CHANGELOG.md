@@ -23,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Convenience verbs over `bzr bug update` for the common state transitions:
+  `bzr bug resolve <ID...> [--as <RESOLUTION>]` (defaults to `FIXED`),
+  `bzr bug close <ID...> [--as <RESOLUTION>]`, `bzr bug reopen <ID...>`, and
+  `bzr bug dup <ID> <TARGET>`. Each is thin sugar that builds the equivalent
+  `Bug.update` and inherits its batch (multi-ID, partial-failure exit 11) and
+  `--comment` / `--comment-file` / `--comment-private` behavior. (#309)
 - `bzr bug create` gains field flags shared with `bug update`: `--alias`,
   `--url`, `--whiteboard`, `--target-milestone`, `--deadline`, `--cc`,
   `--keywords`, `--groups`, and `--flag`. They are sent in the same

@@ -10,6 +10,7 @@ Operate on bugs.
 - `bzr bug create --product Foo --component bar --summary "..." --description "..."`
 - `bzr bug clone 12345`
 - `bzr bug update 12345 --status RESOLVED --resolution FIXED --flag "review+(a@b.com)"`
+- `bzr bug resolve 12345 [--as WONTFIX]` / `close` / `reopen` / `dup 12345 100` (sugar over `update`)
 - `bzr bug history 12345 [--since 2025-01-01]`
 - `bzr bug my [--status \!CLOSED]`
 
