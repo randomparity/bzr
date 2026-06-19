@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** attachment boolean flags now use a uniform `--x` / `--no-x`
+  presence grammar across `attachment upload` and `attachment update`, so the
+  same concept uses the same flag everywhere. `attachment upload` keeps
+  `--private` and renames `--is-patch` to `--patch` (each gaining a `--no-*`
+  form). `attachment update` replaces the value-taking `--obsolete <BOOL>` /
+  `--is-patch <BOOL>` / `--is-private <BOOL>` with `--obsolete` / `--no-obsolete`,
+  `--patch` / `--no-patch`, and `--private` / `--no-private`; passing neither
+  leaves the property unchanged. The old value-boolean forms (e.g.
+  `--obsolete true`) and the `--is-*` names no longer parse. Per the project's
+  replace-don't-deprecate policy no compatibility aliases are kept; update any
+  scripts to the new flags. (#312)
+
 ### Removed
 
 - The redundant `bzr whoami show` subcommand. `show` was the only action and

@@ -141,20 +141,27 @@ pub enum AttachmentAction {
         /// MIME type (auto-detected if not provided)
         #[arg(long)]
         content_type: Option<String>,
-        /// Mark the new attachment as private.
+        /// Mark the new attachment as private (`--no-private` for public).
         ///
         /// Private attachments are visible only to users in the bug's
-        /// `insider` group (server-configured). Use carefully.
-        #[arg(long)]
+        /// `insider` group (server-configured). Use carefully. Absent
+        /// both flags, the attachment is public.
+        #[arg(long, overrides_with = "no_private")]
         private: bool,
-        /// Mark the new attachment as a patch.
+        /// Mark the new attachment as public (the default).
+        #[arg(long = "no-private", overrides_with = "private")]
+        no_private: bool,
+        /// Mark the new attachment as a patch (`--no-patch` for non-patch).
         ///
         /// Patches render as side-by-side diffs in the Bugzilla web UI
         /// and default `--content-type` to `text/plain` when no explicit
         /// content type is supplied. Use this for `.diff` / `.patch`
-        /// files instead of a follow-up `bzr attachment update --is-patch true`.
-        #[arg(long)]
-        is_patch: bool,
+        /// files instead of a follow-up `bzr attachment update --patch`.
+        #[arg(long, overrides_with = "no_patch")]
+        patch: bool,
+        /// Mark the new attachment as a non-patch (the default).
+        #[arg(long = "no-patch", overrides_with = "patch")]
+        no_patch: bool,
         /// Post a comment alongside the attachment in the same request.
         ///
         /// Folded into the underlying `Bug.add_attachment` API call so
@@ -194,17 +201,19 @@ pub enum AttachmentAction {
     /// Modifies metadata only -- the attachment's file content
     /// itself cannot be replaced via the REST API. Pass any of the
     /// flags to change that property: `--summary`, `--file-name`,
-    /// `--content-type`, `--obsolete`, `--is-patch`, `--is-private`,
-    /// or `--flag`. Boolean flags accept `true` or `false` and are
-    /// only applied when explicitly supplied.
+    /// `--content-type`, or `--flag`. The boolean properties use a
+    /// `--x` / `--no-x` pair -- `--obsolete`/`--no-obsolete`,
+    /// `--patch`/`--no-patch`, `--private`/`--no-private`: pass the
+    /// positive form to set it, the negative to clear it, or neither
+    /// to leave it unchanged. If both are given, the last one wins.
     ///
     /// `--flag` uses Bugzilla flag syntax (see bzr-attachment-upload(1));
     /// pass `name?,!` to clear an existing flag.
     ///
     /// Examples:
     ///
-    ///   bzr attachment update 9876 --obsolete true
-    ///   bzr attachment update 9876 --summary "Updated patch v2"
+    ///   bzr attachment update 9876 --obsolete
+    ///   bzr attachment update 9876 --no-private --summary "Updated patch v2"
     ///   bzr attachment update 9876 --flag 'review+'
     ///
     /// See bzr-attachment-upload(1) to attach a new file in place
@@ -222,28 +231,36 @@ pub enum AttachmentAction {
         /// New content type
         #[arg(long)]
         content_type: Option<String>,
-        /// Mark as obsolete (`true`) or un-obsolete (`false`).
+        /// Mark as obsolete (`--no-obsolete` to un-obsolete).
         ///
-        /// Only applied when explicitly supplied; an unset value
-        /// leaves the flag unchanged. Mark a patch obsolete when
-        /// uploading a replacement to keep the bug's attachment
-        /// list tidy.
-        #[arg(long)]
-        obsolete: Option<bool>,
-        /// Mark as a patch (`true`) or non-patch (`false`).
+        /// Absent both flags, the obsolete state is left unchanged.
+        /// Mark a patch obsolete when uploading a replacement to keep
+        /// the bug's attachment list tidy.
+        #[arg(long, overrides_with = "no_obsolete")]
+        obsolete: bool,
+        /// Clear the obsolete flag (un-obsolete the attachment).
+        #[arg(long = "no-obsolete", overrides_with = "obsolete")]
+        no_obsolete: bool,
+        /// Mark as a patch (`--no-patch` for non-patch).
         ///
-        /// Only applied when explicitly supplied. The patch flag
-        /// affects diff rendering in the Bugzilla web UI but is
-        /// otherwise informational.
-        #[arg(long)]
-        is_patch: Option<bool>,
-        /// Mark as private (`true`) or public (`false`).
+        /// Absent both flags, the patch state is left unchanged. The
+        /// patch flag affects diff rendering in the Bugzilla web UI but
+        /// is otherwise informational.
+        #[arg(long, overrides_with = "no_patch")]
+        patch: bool,
+        /// Mark as a non-patch.
+        #[arg(long = "no-patch", overrides_with = "patch")]
+        no_patch: bool,
+        /// Mark as private (`--no-private` to make public).
         ///
-        /// Only applied when explicitly supplied. Private
+        /// Absent both flags, the privacy is left unchanged. Private
         /// attachments are visible only to users in the bug's
         /// `insider` group (server-configured); use carefully.
-        #[arg(long)]
-        is_private: Option<bool>,
+        #[arg(long, overrides_with = "no_private")]
+        private: bool,
+        /// Mark as public.
+        #[arg(long = "no-private", overrides_with = "private")]
+        no_private: bool,
         /// Set, request, or clear a flag using Bugzilla flag syntax.
         ///
         /// Repeatable. Accepted forms:

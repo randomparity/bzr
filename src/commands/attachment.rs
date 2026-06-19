@@ -19,6 +19,22 @@ use crate::types::Attachment;
 use crate::types::OutputFormat;
 use crate::types::{UpdateAttachmentParams, UploadAttachmentParams};
 
+/// Collapse a `--flag` / `--no-flag` presence pair into a tri-state.
+///
+/// Returns `Some(true)` for the positive flag, `Some(false)` for the negative,
+/// and `None` when neither is given (caller decides the unset meaning). clap's
+/// `overrides_with` guarantees the two are never both `true`, so the order of
+/// the checks is irrelevant.
+fn resolve_bool_flag(yes: bool, no: bool) -> Option<bool> {
+    if yes {
+        Some(true)
+    } else if no {
+        Some(false)
+    } else {
+        None
+    }
+}
+
 pub async fn execute(
     action: &AttachmentAction,
     server: Option<&str>,
@@ -51,79 +67,113 @@ pub async fn execute(
                 download_batch(&client, targets, format, w).await?;
             }
         }
-        AttachmentAction::Upload {
-            bug_id,
-            file,
-            summary,
-            content_type,
-            private,
-            is_patch,
-            comment,
-            comment_private,
-            flag,
-        } => {
-            let path = Path::new(file);
-            let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or(file);
-            let data = std::fs::read(path)?;
-            let summary = summary.as_deref().unwrap_or(file_name);
-            let ct = match (content_type.as_deref(), *is_patch) {
-                (Some(explicit), _) => explicit.to_string(),
-                (None, true) => "text/plain".to_string(),
-                (None, false) => guess_content_type(file_name).to_string(),
-            };
-            let flags = super::flags::parse_flags(flag)?;
-            let size = data.len();
-            let upload_params = UploadAttachmentParams {
-                bug_id: *bug_id,
-                file_name: file_name.to_string(),
-                summary: summary.to_string(),
-                content_type: ct,
-                data,
-                flags,
-                is_private: *private,
-                comment: comment.clone(),
-                is_patch: *is_patch,
-            };
-            let att_id = client.upload_attachment(&upload_params).await?;
-            if *comment_private {
-                flip_new_comment_private(&client, *bug_id, att_id, w).await?;
-            }
-            write_result(
-                &UploadResult::new(att_id, *bug_id, size),
-                &format!("Uploaded attachment #{att_id} to bug #{bug_id} ({size} bytes)"),
-                format,
-                w.out,
-            );
-        }
-        AttachmentAction::Update {
-            id,
-            summary,
-            file_name,
-            content_type,
-            obsolete,
-            is_patch,
-            is_private,
-            flag,
-        } => {
-            let flags = super::flags::parse_flags(flag)?;
-            let params = UpdateAttachmentParams {
-                summary: summary.clone(),
-                file_name: file_name.clone(),
-                content_type: content_type.clone(),
-                is_obsolete: *obsolete,
-                is_patch: *is_patch,
-                is_private: *is_private,
-                flags,
-            };
-            client.update_attachment(*id, &params).await?;
-            write_result(
-                &ActionResult::updated(*id, ResourceKind::Attachment),
-                &format!("Updated attachment #{id}"),
-                format,
-                w.out,
-            );
-        }
+        AttachmentAction::Upload { .. } => upload(&client, action, format, w).await?,
+        AttachmentAction::Update { .. } => update(&client, action, format, w).await?,
     }
+    Ok(())
+}
+
+async fn upload(
+    client: &BugzillaClient,
+    action: &AttachmentAction,
+    format: OutputFormat,
+    w: &mut Writers<'_>,
+) -> Result<()> {
+    let AttachmentAction::Upload {
+        bug_id,
+        file,
+        summary,
+        content_type,
+        private,
+        no_private,
+        patch,
+        no_patch,
+        comment,
+        comment_private,
+        flag,
+    } = action
+    else {
+        unreachable!()
+    };
+    // Upload has no "leave unchanged" state: absent both flags is public /
+    // non-patch.
+    let is_private = resolve_bool_flag(*private, *no_private).unwrap_or(false);
+    let is_patch = resolve_bool_flag(*patch, *no_patch).unwrap_or(false);
+    let path = Path::new(file);
+    let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or(file);
+    let data = std::fs::read(path)?;
+    let summary = summary.as_deref().unwrap_or(file_name);
+    let ct = match (content_type.as_deref(), is_patch) {
+        (Some(explicit), _) => explicit.to_string(),
+        (None, true) => "text/plain".to_string(),
+        (None, false) => guess_content_type(file_name).to_string(),
+    };
+    let flags = super::flags::parse_flags(flag)?;
+    let size = data.len();
+    let upload_params = UploadAttachmentParams {
+        bug_id: *bug_id,
+        file_name: file_name.to_string(),
+        summary: summary.to_string(),
+        content_type: ct,
+        data,
+        flags,
+        is_private,
+        comment: comment.clone(),
+        is_patch,
+    };
+    let att_id = client.upload_attachment(&upload_params).await?;
+    if *comment_private {
+        flip_new_comment_private(client, *bug_id, att_id, w).await?;
+    }
+    write_result(
+        &UploadResult::new(att_id, *bug_id, size),
+        &format!("Uploaded attachment #{att_id} to bug #{bug_id} ({size} bytes)"),
+        format,
+        w.out,
+    );
+    Ok(())
+}
+
+async fn update(
+    client: &BugzillaClient,
+    action: &AttachmentAction,
+    format: OutputFormat,
+    w: &mut Writers<'_>,
+) -> Result<()> {
+    let AttachmentAction::Update {
+        id,
+        summary,
+        file_name,
+        content_type,
+        obsolete,
+        no_obsolete,
+        patch,
+        no_patch,
+        private,
+        no_private,
+        flag,
+    } = action
+    else {
+        unreachable!()
+    };
+    let flags = super::flags::parse_flags(flag)?;
+    let params = UpdateAttachmentParams {
+        summary: summary.clone(),
+        file_name: file_name.clone(),
+        content_type: content_type.clone(),
+        // None = leave unchanged; Some(b) = set explicitly.
+        is_obsolete: resolve_bool_flag(*obsolete, *no_obsolete),
+        is_patch: resolve_bool_flag(*patch, *no_patch),
+        is_private: resolve_bool_flag(*private, *no_private),
+        flags,
+    };
+    client.update_attachment(*id, &params).await?;
+    write_result(
+        &ActionResult::updated(*id, ResourceKind::Attachment),
+        &format!("Updated attachment #{id}"),
+        format,
+        w.out,
+    );
     Ok(())
 }
 
