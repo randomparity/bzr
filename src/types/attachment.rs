@@ -40,7 +40,7 @@ pub struct Attachment {
     pub is_private: bool,
     #[serde(default, deserialize_with = "bool_from_int_or_bool")]
     pub is_patch: bool,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<String>,
 }
 

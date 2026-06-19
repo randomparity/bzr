@@ -127,6 +127,38 @@ impl BugzillaClient {
             })
     }
 
+    /// Fetch a single attachment's metadata without its (base64) bytes.
+    ///
+    /// On REST the `data` field is excluded server-side via `exclude_fields`
+    /// so the bytes never cross the wire. XML-RPC has no cheap field
+    /// exclusion, so the full record is fetched. Either way the bytes are
+    /// dropped locally before returning, so the metadata-only guarantee holds
+    /// even if a server ignores `exclude_fields`.
+    pub async fn get_attachment_metadata(&self, attachment_id: u64) -> Result<Attachment> {
+        let mut attachment = match self.api_mode {
+            ApiMode::Rest => self.get_attachment_metadata_rest(attachment_id).await?,
+            ApiMode::XmlRpc | ApiMode::Hybrid => self.get_attachment(attachment_id).await?,
+        };
+        attachment.data = None;
+        Ok(attachment)
+    }
+
+    async fn get_attachment_metadata_rest(&self, attachment_id: u64) -> Result<Attachment> {
+        let data: AttachmentByIdResponse = self
+            .get_json_query(
+                &format!("bug/attachment/{attachment_id}"),
+                &[("exclude_fields", "data")],
+            )
+            .await?;
+        data.attachments
+            .into_values()
+            .next()
+            .ok_or_else(|| BzrError::NotFound {
+                resource: "attachment",
+                id: attachment_id.to_string(),
+            })
+    }
+
     pub async fn download_attachment(&self, attachment_id: u64) -> Result<(String, Vec<u8>)> {
         let attachment = self.get_attachment(attachment_id).await?;
         let data = attachment

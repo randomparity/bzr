@@ -42,6 +42,35 @@ pub fn write_attachments<W: Write + ?Sized>(
     });
 }
 
+/// Render a single attachment's metadata (no bytes). Table output is a
+/// detail block; JSON is the `Attachment` object with `data` omitted.
+pub fn write_attachment<W: Write + ?Sized>(a: &Attachment, format: OutputFormat, out: &mut W) {
+    write_formatted(a, format, out, |a, out| {
+        let patch = if a.is_patch { " [PATCH]" } else { "" };
+        let obsolete = if a.is_obsolete { " [OBSOLETE]" } else { "" };
+        let private = if a.is_private { " [PRIVATE]" } else { "" };
+        let _ = writeln!(
+            out,
+            "{} #{} - {}{}{}{}",
+            "Attachment".bold(),
+            a.id,
+            a.summary.bold(),
+            patch.cyan(),
+            obsolete.red(),
+            private.red(),
+        );
+        write_field(out, "Bug", &a.bug_id.to_string());
+        write_field(
+            out,
+            "File",
+            &format!("{} ({}, {} bytes)", a.file_name, a.content_type, a.size),
+        );
+        write_optional_field(out, "Creator", a.creator.as_deref());
+        write_optional_field(out, "Created", a.creation_time.as_deref());
+        write_optional_field(out, "Modified", a.last_change_time.as_deref());
+    });
+}
+
 /// Top-level payload for `bzr attachment download` in bulk mode.
 ///
 /// Single-ID mode continues to use [`crate::output::result_types::DownloadResult`].

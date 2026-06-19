@@ -7,8 +7,8 @@ use crate::cli::AttachmentAction;
 use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::resources::attachment::{
-    write_attachment_batch, write_attachments, AttachmentBatchResult, AttachmentDownloadResult,
-    BatchSummary, BugDownloadResult, DownloadedFile, TargetStatus,
+    write_attachment, write_attachment_batch, write_attachments, AttachmentBatchResult,
+    AttachmentDownloadResult, BatchSummary, BugDownloadResult, DownloadedFile, TargetStatus,
 };
 use crate::output::result_types::{
     write_result, ActionResult, DownloadResult, ResourceKind, UploadResult,
@@ -30,9 +30,9 @@ pub async fn execute(
     let client = super::shared::connect_and_configure(server, api).await?;
 
     match action {
-        AttachmentAction::List { bug_id } => {
-            let attachments = client.get_attachments(*bug_id).await?;
-            write_attachments(&attachments, format, w.out);
+        AttachmentAction::List { bug_id } => list_attachments(&client, *bug_id, format, w).await?,
+        AttachmentAction::View { attachment_id } => {
+            view_attachment(&client, *attachment_id, format, w).await?;
         }
         AttachmentAction::Download {
             ids,
@@ -124,6 +124,28 @@ pub async fn execute(
             );
         }
     }
+    Ok(())
+}
+
+async fn list_attachments(
+    client: &BugzillaClient,
+    bug_id: u64,
+    format: OutputFormat,
+    w: &mut Writers<'_>,
+) -> Result<()> {
+    let attachments = client.get_attachments(bug_id).await?;
+    write_attachments(&attachments, format, w.out);
+    Ok(())
+}
+
+async fn view_attachment(
+    client: &BugzillaClient,
+    attachment_id: u64,
+    format: OutputFormat,
+    w: &mut Writers<'_>,
+) -> Result<()> {
+    let attachment = client.get_attachment_metadata(attachment_id).await?;
+    write_attachment(&attachment, format, w.out);
     Ok(())
 }
 

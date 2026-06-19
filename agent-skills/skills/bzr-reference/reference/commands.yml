@@ -2,7 +2,7 @@
 # Format: "<group>: <verb> <verb> ...". Consumed by tests/drift-check.sh.
 bug: list view search create clone update history my
 comment: list add tag search-tags
-attachment: list download upload update
+attachment: list view download upload update
 config: set-server show set-default set-keyring unset-keyring migrate-to-keyring remove-server rename-server
 product: list view create update
 field: list aliases

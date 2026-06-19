@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `bzr attachment view <ATTACHMENT_ID>` shows a single attachment's metadata
+  (summary, bug, file name, content type, size, flags, creator, timestamps)
+  without downloading its bytes. On REST the `data` field is excluded
+  server-side via `exclude_fields`, so inspecting a large attachment is cheap;
+  `data` is also omitted from all attachment `--json` output. (#318)
 - `bzr classification list` enumerates the server's classifications (ID, name,
   description, product count; full objects under `--json`). Bugzilla has no
   bulk classification endpoint, so names come from the `classification` field's

@@ -114,6 +114,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--no-color] [--quiet] [--a
 │   └── search-tags <QUERY>
 ├── attachment
 │   ├── list <BUG_ID>
+│   ├── view <ATTACHMENT_ID>
 │   ├── download <ATTACHMENT_ID> [-o <FILE>]
 │   ├── upload <BUG_ID> <FILE> [--summary <S>] [--content-type <MIME>] [--private] [--flag <F>...]
 │   └── update <ATTACHMENT_ID> [--summary <S>] [--file-name <N>] [--content-type <MIME>]
@@ -623,6 +624,19 @@ List all attachments on a bug.
 ```bash
 bzr attachment list 12345
 bzr --json attachment list 12345
+```
+
+### `bzr attachment view`
+
+Show a single attachment's metadata by attachment ID — summary, bug, file
+name, content type, size, flags (patch/obsolete/private), creator, and
+timestamps — **without** downloading its bytes. On REST the `data` field is
+excluded server-side, so inspecting a large attachment is cheap. The `data`
+field is omitted from `--json` output.
+
+```bash
+bzr attachment view 9876
+bzr --json attachment view 9876 | jq '.summary, .size'
 ```
 
 ### `bzr attachment download`
