@@ -12,6 +12,25 @@ fn ok_put(id: u64) -> ResponseTemplate {
         .set_body_json(serde_json::json!({"bugs": [{"id": id, "changes": {}}]}))
 }
 
+/// JSON body for a `GET field/bug/bug_status` response listing `statuses` as
+/// the legal values. A leading null-named entry is included to mirror real
+/// Bugzilla 5.0, which carries an unset/default entry the validator must skip.
+fn status_field_body(statuses: &[&str]) -> serde_json::Value {
+    let mut values = vec![serde_json::json!({"name": serde_json::Value::Null})];
+    values.extend(statuses.iter().map(|s| serde_json::json!({"name": s})));
+    serde_json::json!({"fields": [{"values": values}]})
+}
+
+/// Mount the `GET field/bug/bug_status` mock the close/reopen status validator
+/// queries before writing.
+async fn mount_status_field(mock: &wiremock::MockServer, statuses: &[&str]) {
+    Mock::given(method("GET"))
+        .and(path("/rest/field/bug/bug_status"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(status_field_body(statuses)))
+        .mount(mock)
+        .await;
+}
+
 /// Mount a PUT mock on `/rest/bug/{id}` asserting the exact JSON body, then run
 /// `execute` for `action` and assert success.
 async fn run_verb_expecting_body(action: BugAction, id: u64, body: serde_json::Value) {
@@ -29,6 +48,51 @@ async fn run_verb_expecting_body(action: BugAction, id: u64, body: serde_json::V
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
             .await;
     assert!(result.is_ok(), "verb failed: {:?}", result.err());
+}
+
+/// Like [`run_verb_expecting_body`] but also mounts the status-field mock the
+/// close/reopen validator queries. `statuses` are the server's legal statuses.
+async fn run_status_verb(action: BugAction, id: u64, body: serde_json::Value, statuses: &[&str]) {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_status_field(&mock, statuses).await;
+    Mock::given(method("PUT"))
+        .and(path(format!("/rest/bug/{id}")))
+        .and(body_json(body))
+        .respond_with(ok_put(id))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+    assert!(result.is_ok(), "verb failed: {:?}", result.err());
+}
+
+const DEFAULT_STATUSES: &[&str] = &[
+    "UNCONFIRMED",
+    "CONFIRMED",
+    "IN_PROGRESS",
+    "RESOLVED",
+    "VERIFIED",
+];
+
+fn close_args(ids: Vec<u64>, status: &str, as_resolution: Option<&str>) -> CloseArgs {
+    CloseArgs {
+        ids,
+        status: status.into(),
+        as_resolution: as_resolution.map(Into::into),
+        comment: CommentArgs::default(),
+    }
+}
+
+fn reopen_args(ids: Vec<u64>, status: &str) -> ReopenArgs {
+    ReopenArgs {
+        ids,
+        status: status.into(),
+        comment: CommentArgs::default(),
+    }
 }
 
 #[tokio::test]
@@ -93,38 +157,151 @@ async fn resolve_with_as_override() {
 }
 
 #[tokio::test]
-async fn close_without_resolution_preserves_existing() {
-    let action = BugAction::Close(CloseArgs {
-        ids: vec![9],
-        as_resolution: None,
-        comment: CommentArgs::default(),
-    });
+async fn close_defaults_to_verified_and_preserves_resolution() {
+    let action = BugAction::Close(close_args(vec![9], "VERIFIED", None));
     // No resolution key — the server keeps any existing resolution.
-    run_verb_expecting_body(action, 9, serde_json::json!({"status": "CLOSED"})).await;
-}
-
-#[tokio::test]
-async fn close_with_as_sets_resolution() {
-    let action = BugAction::Close(CloseArgs {
-        ids: vec![9],
-        as_resolution: Some("WONTFIX".into()),
-        comment: CommentArgs::default(),
-    });
-    run_verb_expecting_body(
+    run_status_verb(
         action,
         9,
-        serde_json::json!({"status": "CLOSED", "resolution": "WONTFIX"}),
+        serde_json::json!({"status": "VERIFIED"}),
+        DEFAULT_STATUSES,
     )
     .await;
 }
 
 #[tokio::test]
-async fn reopen_sends_reopened_status() {
-    let action = BugAction::Reopen(ReopenArgs {
-        ids: vec![3],
-        comment: CommentArgs::default(),
-    });
-    run_verb_expecting_body(action, 3, serde_json::json!({"status": "REOPENED"})).await;
+async fn close_with_as_sets_resolution() {
+    let action = BugAction::Close(close_args(vec![9], "VERIFIED", Some("WONTFIX")));
+    run_status_verb(
+        action,
+        9,
+        serde_json::json!({"status": "VERIFIED", "resolution": "WONTFIX"}),
+        DEFAULT_STATUSES,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn close_status_override_targets_custom_status() {
+    // An install that defines a custom CLOSED status reaches it via --status.
+    let action = BugAction::Close(close_args(vec![9], "CLOSED", None));
+    let mut statuses = DEFAULT_STATUSES.to_vec();
+    statuses.push("CLOSED");
+    run_status_verb(
+        action,
+        9,
+        serde_json::json!({"status": "CLOSED"}),
+        &statuses,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn reopen_defaults_to_confirmed() {
+    let action = BugAction::Reopen(reopen_args(vec![3], "CONFIRMED"));
+    run_status_verb(
+        action,
+        3,
+        serde_json::json!({"status": "CONFIRMED"}),
+        DEFAULT_STATUSES,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn reopen_status_override_targets_custom_status() {
+    let action = BugAction::Reopen(reopen_args(vec![3], "REOPENED"));
+    let mut statuses = DEFAULT_STATUSES.to_vec();
+    statuses.push("REOPENED");
+    run_status_verb(
+        action,
+        3,
+        serde_json::json!({"status": "REOPENED"}),
+        &statuses,
+    )
+    .await;
+}
+
+/// A status the server does not define is rejected client-side (exit 7) with a
+/// message naming the bad value and listing valid statuses — and no PUT fires.
+#[tokio::test]
+async fn reopen_unknown_status_is_rejected() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_status_field(&mock, DEFAULT_STATUSES).await;
+    Mock::given(method("PUT"))
+        .respond_with(ok_put(3))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::Reopen(reopen_args(vec![3], "REOPENED"));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await
+            .unwrap_err();
+    assert!(
+        matches!(&err, crate::error::BzrError::InputValidation(m)
+            if m.contains("REOPENED") && m.contains("CONFIRMED")),
+        "got {err:?}"
+    );
+}
+
+/// Matching is exact and case-sensitive: a wrong-case override is rejected up
+/// front rather than passing validation and failing server-side.
+#[tokio::test]
+async fn close_wrong_case_status_is_rejected() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_status_field(&mock, DEFAULT_STATUSES).await;
+    Mock::given(method("PUT"))
+        .respond_with(ok_put(9))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::Close(close_args(vec![9], "verified", None));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await
+            .unwrap_err();
+    assert!(
+        matches!(&err, crate::error::BzrError::InputValidation(m) if m.contains("verified")),
+        "got {err:?}"
+    );
+}
+
+/// Under --dry-run no status-field GET and no PUT fire; the preview shows the
+/// status that would be sent, even one this server would reject.
+#[tokio::test]
+async fn reopen_dry_run_skips_validation_and_write() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/field/bug/bug_status"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(status_field_body(DEFAULT_STATUSES)))
+        .expect(0)
+        .mount(&mock)
+        .await;
+    Mock::given(method("PUT"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+    crate::commands::runtime::dry_run::set(true);
+
+    // REOPENED is not in DEFAULT_STATUSES, but dry-run skips validation.
+    let action = BugAction::Reopen(reopen_args(vec![3], "REOPENED"));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+    let output = io.out_str().to_string();
+    crate::commands::runtime::dry_run::set(false);
+
+    assert!(result.is_ok(), "dry-run reopen failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    assert_eq!(parsed["action"], "dry-run");
+    assert_eq!(parsed["changes"]["status"], "REOPENED");
 }
 
 #[tokio::test]
@@ -191,11 +368,14 @@ async fn resolve_batch_updates_each_id() {
     assert_eq!(parsed["succeeded"].as_array().unwrap().len(), 2);
 }
 
+/// The local comment-private validation fires before the network status check,
+/// so no status-field GET is needed for this rejection.
 #[tokio::test]
 async fn close_private_comment_without_body_is_rejected() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
     let action = BugAction::Close(CloseArgs {
         ids: vec![5],
+        status: "VERIFIED".into(),
         as_resolution: None,
         comment: CommentArgs {
             comment: None,
