@@ -9,34 +9,8 @@ use crate::types::OutputFormat;
 
 fn empty_list_action() -> BugAction {
     BugAction::List(crate::cli::ListArgs {
-        page_args: crate::cli::PageArgs::default(),
-        product: vec![],
-        component: vec![],
-        status: vec![],
-        assignee: vec![],
-        creator: vec![],
-        priority: vec![],
-        severity: vec![],
-        id: vec![],
-        alias: None,
-        summary: None,
         limit: 50,
-        field_args: crate::cli::FieldArgs {
-            fields: None,
-            exclude_fields: None,
-        },
-        created_since: None,
-        changed_since: None,
-        whiteboard: vec![],
-        target_milestone: vec![],
-        version: vec![],
-        op_sys: vec![],
-        platform: vec![],
-        resolution: vec![],
-        qa_contact: vec![],
-        url: vec![],
-        sort_args: crate::cli::SortArgs::default(),
-        count: false,
+        ..Default::default()
     })
 }
 
@@ -117,7 +91,6 @@ async fn bug_list_passes_every_field_through_to_search_params() {
         .await;
 
     let action = BugAction::List(crate::cli::ListArgs {
-        page_args: crate::cli::PageArgs::default(),
         product: vec!["Firefox".into()],
         component: vec!["General".into()],
         status: vec!["NEW".into()],
@@ -143,8 +116,7 @@ async fn bug_list_passes_every_field_through_to_search_params() {
         resolution: vec!["FIXED".into()],
         qa_contact: vec!["qa@test.com".into()],
         url: vec!["github.com/foo".into()],
-        sort_args: crate::cli::SortArgs::default(),
-        count: false,
+        ..Default::default()
     });
     let result = crate::commands::bug::execute(
         &action,
@@ -184,34 +156,9 @@ async fn bug_list_summary_only_sends_substring_filter() {
         .await;
 
     let action = BugAction::List(crate::cli::ListArgs {
-        page_args: crate::cli::PageArgs::default(),
-        product: vec![],
-        component: vec![],
-        status: vec![],
-        assignee: vec![],
-        creator: vec![],
-        priority: vec![],
-        severity: vec![],
-        id: vec![],
-        alias: None,
         summary: Some("WARNING CPU default_machine_kexec".into()),
         limit: 50,
-        field_args: crate::cli::FieldArgs {
-            fields: None,
-            exclude_fields: None,
-        },
-        created_since: None,
-        changed_since: None,
-        whiteboard: vec![],
-        target_milestone: vec![],
-        version: vec![],
-        op_sys: vec![],
-        platform: vec![],
-        resolution: vec![],
-        qa_contact: vec![],
-        url: vec![],
-        sort_args: crate::cli::SortArgs::default(),
-        count: false,
+        ..Default::default()
     });
     let result = crate::commands::bug::execute(
         &action,

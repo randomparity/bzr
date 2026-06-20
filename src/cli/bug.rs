@@ -104,7 +104,7 @@ pub struct CommentArgs {
 /// Shared `--fields` / `--exclude-fields` selection, flattened into the bug
 /// query subcommands (`list`, `view`, `search`, `my`) so the pair is defined
 /// once instead of repeated per variant.
-#[derive(Args, Debug, Clone)]
+#[derive(Args, Debug, Clone, Default)]
 pub struct FieldArgs {
     /// Fields to request from the server (comma-separated). In table output,
     /// selects which columns (or detail rows) to show, in order; under --json,
@@ -120,7 +120,7 @@ pub struct FieldArgs {
 }
 
 /// Arguments for `bug list`.
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Default)]
 pub struct ListArgs {
     /// Filter by product (repeatable for OR; prefix with ! to exclude)
     #[arg(long)]
@@ -493,7 +493,7 @@ pub struct CloneArgs {
 }
 
 /// Arguments for `bug update`.
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Default)]
 pub struct UpdateArgs {
     /// Bug ID(s).
     ///

@@ -375,7 +375,6 @@ impl SearchParams {
     }
 
     /// Access a multi-value filter field mutably by its typed [`FilterField`] key.
-    #[cfg(test)]
     pub(crate) fn get_field_mut(&mut self, field: FilterField) -> &mut Vec<String> {
         filter_field_arm!(self, field, assigned_to, mut)
     }
@@ -888,15 +887,17 @@ impl SavedQuery {
     }
 
     /// Convert this saved query into `SearchParams`, consuming `self`.
-    pub fn into_search_params(self) -> SearchParams {
+    pub fn into_search_params(mut self) -> SearchParams {
+        // The 15 multi-value filter fields are moved through the shared
+        // [`FIELD_MAPPINGS`] table so a new filter only needs a table row, not
+        // a hand-written assignment here. Each side's `get_field_mut` resolves
+        // the `assigned_to`/`assignee` column divergence for its own struct.
+        let mut params = SearchParams::default();
+        for mapping in FIELD_MAPPINGS {
+            *params.get_field_mut(mapping.field) =
+                std::mem::take(self.get_field_mut(mapping.field));
+        }
         SearchParams {
-            product: self.product,
-            component: self.component,
-            status: self.status,
-            assigned_to: self.assignee,
-            creator: self.creator,
-            priority: self.priority,
-            severity: self.severity,
             quicksearch: self.quicksearch,
             limit: self.limit,
             include_fields: self.fields,
@@ -904,16 +905,8 @@ impl SavedQuery {
             raw_params: self.raw_params,
             creation_time: self.creation_time,
             last_change_time: self.last_change_time,
-            whiteboard: self.whiteboard,
-            target_milestone: self.target_milestone,
-            version: self.version,
-            op_sys: self.op_sys,
-            platform: self.platform,
-            resolution: self.resolution,
-            qa_contact: self.qa_contact,
-            url: self.url,
             order: self.order,
-            ..Default::default()
+            ..params
         }
     }
 
