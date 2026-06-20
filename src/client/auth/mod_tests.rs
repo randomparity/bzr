@@ -192,13 +192,18 @@ async fn whoami_401_no_email_gives_api_key_error() {
 }
 
 #[tokio::test]
-async fn network_error_defaults_to_header() {
-    // When the server is unreachable, default to header auth
-    // rather than failing -- header is the safest default.
+async fn network_error_propagates_as_transport_error() {
+    // When the server is unreachable, surface the transport error rather than
+    // masking it as a successful header-auth fallback. This lets the
+    // connection layer classify TLS failures and offer TOFU / pin-rotation
+    // prompts instead of silently picking an auth method for a server it
+    // never reached.
     let result =
         detect_auth_method(&test_http_client(), "https://127.0.0.1:1", "test-key", None).await;
-    assert!(result.is_ok(), "should default to header, got: {result:?}");
-    assert_eq!(result.unwrap(), AuthMethod::Header);
+    assert!(
+        matches!(result, Err(BzrError::Http(_))),
+        "unreachable server should yield a transport error, got: {result:?}"
+    );
 }
 
 #[tokio::test]

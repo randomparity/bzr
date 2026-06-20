@@ -96,6 +96,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   replace-don't-deprecate policy no compatibility aliases are kept; update any
   scripts to the new flags. (#312)
 
+- Auth detection now surfaces transport/TLS failures instead of silently
+  defaulting to header auth. When the `rest/whoami` or `rest/valid_login`
+  probes cannot reach the server, the underlying error is propagated so the
+  connection layer can classify it — so a TLS certificate error on the *first*
+  connection to a server now triggers the trust-on-first-use (TOFU) and
+  pin-rotation prompts rather than being masked as a successful detection.
+
 ### Removed
 
 - The redundant `bzr whoami show` subcommand. `show` was the only action and

@@ -38,7 +38,10 @@ impl TryFrom<serde_json::Value> for ValidLoginResult {
 pub(super) enum ValidLoginOutcome {
     Authenticated(AuthMethod),
     AuthRejected,
-    NetworkError,
+    /// Could not complete the probe due to a transport failure. Carries the
+    /// underlying error so the caller can classify TLS/network failures
+    /// instead of masking them as a successful header-auth fallback.
+    NetworkError(reqwest::Error),
 }
 
 pub(super) async fn detect_valid_login_auth(
@@ -87,7 +90,7 @@ async fn probe_valid_login(
         Ok(r) => r,
         Err(e) => {
             super::log_probe_send_error("valid_login", method, &e);
-            return ValidLoginOutcome::NetworkError;
+            return ValidLoginOutcome::NetworkError(e);
         }
     };
     let status = resp.status();
@@ -99,7 +102,7 @@ async fn probe_valid_login(
         Ok(t) => t,
         Err(e) => {
             tracing::warn!(error = %e, "valid_login response read error");
-            return ValidLoginOutcome::NetworkError;
+            return ValidLoginOutcome::NetworkError(e);
         }
     };
     tracing::trace!(probe = "valid_login", %method, body = body_text, "auth probe response");

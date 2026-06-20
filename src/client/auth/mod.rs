@@ -92,22 +92,19 @@ async fn detect_auth_method(
     let key_header = HeaderValue::from_str(api_key)
         .map_err(|_| BzrError::config("invalid API key characters"))?;
 
-    // Try whoami endpoint first (Bugzilla 5.1+)
+    // Try whoami endpoint first (Bugzilla 5.1+). A transport/TLS failure is
+    // propagated as an error (not masked as a header-auth success) so the
+    // connection layer can classify it and offer TOFU / pin-rotation prompts.
     let whoami = detect_whoami_auth(http, base, api_key, &key_header).await;
-    match whoami {
+    let whoami_not_found = match whoami {
         WhoamiOutcome::Authenticated(method) => return Ok(method),
+        WhoamiOutcome::NetworkError(e) => return Err(BzrError::Http(e)),
         WhoamiOutcome::NotFound => {
             tracing::info!("falling back to rest/valid_login for older Bugzilla");
+            true
         }
-        WhoamiOutcome::NetworkError => {
-            tracing::warn!(
-                "could not reach server during auth detection; \
-                 defaulting to header auth"
-            );
-            return Ok(AuthMethod::Header);
-        }
-        WhoamiOutcome::AuthRejected | WhoamiOutcome::UnparseableResponse => {}
-    }
+        WhoamiOutcome::AuthRejected | WhoamiOutcome::UnparseableResponse => false,
+    };
 
     // Fall back to valid_login endpoint (Bugzilla 5.0+, requires email)
     if let Some(login) = email {
@@ -128,31 +125,21 @@ async fn detect_auth_method(
                 }
                 return Ok(method);
             }
-            ValidLoginOutcome::NetworkError => {
-                tracing::warn!(
-                    "valid_login probes failed due to network error; \
-                     defaulting to header auth"
-                );
-                return Ok(AuthMethod::Header);
-            }
+            ValidLoginOutcome::NetworkError(e) => return Err(BzrError::Http(e)),
             ValidLoginOutcome::AuthRejected => {}
         }
     }
 
-    let hint = match whoami {
-        WhoamiOutcome::NotFound if email.is_none() => {
-            "auth detection failed: rest/whoami not available and no \
-             --email provided for rest/valid_login fallback. \
-             Re-run `bzr config set-server` with --email your@email."
-        }
-        WhoamiOutcome::NotFound => {
-            "auth detection failed: rest/valid_login did not confirm \
-             your credentials. Check your API key and email address."
-        }
-        _ => {
-            "auth detection failed: could not authenticate with the \
-             server. Check your API key and server URL."
-        }
+    let hint = if whoami_not_found && email.is_none() {
+        "auth detection failed: rest/whoami not available and no \
+         --email provided for rest/valid_login fallback. \
+         Re-run `bzr config set-server` with --email your@email."
+    } else if whoami_not_found {
+        "auth detection failed: rest/valid_login did not confirm \
+         your credentials. Check your API key and email address."
+    } else {
+        "auth detection failed: could not authenticate with the \
+         server. Check your API key and server URL."
     };
     Err(BzrError::Auth(hint.into()))
 }
