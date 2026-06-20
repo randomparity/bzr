@@ -1,4 +1,4 @@
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Write};
 use std::process::ExitCode;
 
 use clap::Parser;
@@ -44,10 +44,7 @@ async fn main() -> ExitCode {
     let format = match resolve_format(&cli) {
         Ok(f) => f,
         Err(e) => {
-            #[expect(clippy::print_stderr)]
-            {
-                eprintln!("error: {e}");
-            }
+            let _ = writeln!(std::io::stderr(), "error: {e}");
             return exit_code(&e);
         }
     };
@@ -63,10 +60,7 @@ async fn main() -> ExitCode {
     let mut writers = bzr::output::writers::Writers::new(&mut out, &mut err);
 
     if let Err(e) = bzr::dispatch(&cli, format, &mut writers).await {
-        #[expect(clippy::print_stderr)]
-        {
-            eprintln!("{}", format_dispatch_error(&e, format));
-        }
+        let _ = writeln!(writers.err, "{}", format_dispatch_error(&e, format));
         return exit_code(&e);
     }
 

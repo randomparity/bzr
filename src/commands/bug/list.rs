@@ -1,4 +1,4 @@
-use crate::cli::{BugAction, FieldArgs};
+use crate::cli::{FieldArgs, ListArgs};
 use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::resources::bug::{canonical_field_list, write_bugs, ColumnSpec};
@@ -8,11 +8,11 @@ use crate::validation::parse_optional_date;
 
 pub(super) async fn handle(
     client: &BugzillaClient,
-    action: &BugAction,
+    args: &ListArgs,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let BugAction::List {
+    let ListArgs {
         product,
         component,
         status,
@@ -41,10 +41,7 @@ pub(super) async fn handle(
         sort_args,
         page_args: crate::cli::PageArgs { offset, paginate },
         count,
-    } = action
-    else {
-        unreachable!()
-    };
+    } = args;
 
     super::ensure_no_paging_with_count(*count, *offset, *paginate)?;
 
@@ -91,9 +88,15 @@ pub(super) async fn handle(
     }
 
     let spec = ColumnSpec::new(fields.as_deref(), exclude_fields.as_deref());
-    let page = crate::commands::paging::fetch_page(client, &params, *paginate).await?;
+    let page = crate::commands::runtime::paging::fetch_page(client, &params, *paginate).await?;
     write_bugs(&page.bugs, spec, format, w.out, w.err);
-    crate::commands::paging::write_truncation_note(&page, params.limit, *offset, format, w);
+    crate::commands::runtime::paging::write_truncation_note(
+        &page,
+        params.limit,
+        *offset,
+        format,
+        w,
+    );
     Ok(())
 }
 

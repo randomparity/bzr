@@ -3,7 +3,7 @@
 use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
-use crate::cli::{BugAction, CommentArgs};
+use crate::cli::{BugAction, CloseArgs, CommentArgs, DupArgs, ReopenArgs, ResolveArgs};
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
@@ -40,19 +40,19 @@ async fn resolve_dry_run_makes_no_write() {
         .expect(0)
         .mount(&mock)
         .await;
-    crate::commands::dry_run::set(true);
+    crate::commands::runtime::dry_run::set(true);
 
-    let action = BugAction::Resolve {
+    let action = BugAction::Resolve(ResolveArgs {
         ids: vec![5],
         as_resolution: "FIXED".into(),
         comment: CommentArgs::default(),
-    };
+    });
     let mut io = crate::test_helpers::CapturedIo::new();
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
             .await;
     let output = io.out_str().to_string();
-    crate::commands::dry_run::set(false);
+    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok(), "dry-run resolve failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
@@ -64,11 +64,11 @@ async fn resolve_dry_run_makes_no_write() {
 
 #[tokio::test]
 async fn resolve_defaults_to_fixed() {
-    let action = BugAction::Resolve {
+    let action = BugAction::Resolve(ResolveArgs {
         ids: vec![5],
         as_resolution: "FIXED".into(),
         comment: CommentArgs::default(),
-    };
+    });
     run_verb_expecting_body(
         action,
         5,
@@ -79,11 +79,11 @@ async fn resolve_defaults_to_fixed() {
 
 #[tokio::test]
 async fn resolve_with_as_override() {
-    let action = BugAction::Resolve {
+    let action = BugAction::Resolve(ResolveArgs {
         ids: vec![7],
         as_resolution: "WONTFIX".into(),
         comment: CommentArgs::default(),
-    };
+    });
     run_verb_expecting_body(
         action,
         7,
@@ -94,22 +94,22 @@ async fn resolve_with_as_override() {
 
 #[tokio::test]
 async fn close_without_resolution_preserves_existing() {
-    let action = BugAction::Close {
+    let action = BugAction::Close(CloseArgs {
         ids: vec![9],
         as_resolution: None,
         comment: CommentArgs::default(),
-    };
+    });
     // No resolution key — the server keeps any existing resolution.
     run_verb_expecting_body(action, 9, serde_json::json!({"status": "CLOSED"})).await;
 }
 
 #[tokio::test]
 async fn close_with_as_sets_resolution() {
-    let action = BugAction::Close {
+    let action = BugAction::Close(CloseArgs {
         ids: vec![9],
         as_resolution: Some("WONTFIX".into()),
         comment: CommentArgs::default(),
-    };
+    });
     run_verb_expecting_body(
         action,
         9,
@@ -120,26 +120,26 @@ async fn close_with_as_sets_resolution() {
 
 #[tokio::test]
 async fn reopen_sends_reopened_status() {
-    let action = BugAction::Reopen {
+    let action = BugAction::Reopen(ReopenArgs {
         ids: vec![3],
         comment: CommentArgs::default(),
-    };
+    });
     run_verb_expecting_body(action, 3, serde_json::json!({"status": "REOPENED"})).await;
 }
 
 #[tokio::test]
 async fn dup_sends_dupe_of() {
-    let action = BugAction::Dup {
+    let action = BugAction::Dup(DupArgs {
         id: 12,
         target: 100,
         comment: CommentArgs::default(),
-    };
+    });
     run_verb_expecting_body(action, 12, serde_json::json!({"dupe_of": 100})).await;
 }
 
 #[tokio::test]
 async fn resolve_posts_comment_atomically() {
-    let action = BugAction::Resolve {
+    let action = BugAction::Resolve(ResolveArgs {
         ids: vec![5],
         as_resolution: "FIXED".into(),
         comment: CommentArgs {
@@ -147,7 +147,7 @@ async fn resolve_posts_comment_atomically() {
             comment_file: None,
             comment_private: false,
         },
-    };
+    });
     run_verb_expecting_body(
         action,
         5,
@@ -176,11 +176,11 @@ async fn resolve_batch_updates_each_id() {
             .await;
     }
 
-    let action = BugAction::Resolve {
+    let action = BugAction::Resolve(ResolveArgs {
         ids: vec![1, 2],
         as_resolution: "FIXED".into(),
         comment: CommentArgs::default(),
-    };
+    });
     let mut io = crate::test_helpers::CapturedIo::new();
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
@@ -194,7 +194,7 @@ async fn resolve_batch_updates_each_id() {
 #[tokio::test]
 async fn close_private_comment_without_body_is_rejected() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
-    let action = BugAction::Close {
+    let action = BugAction::Close(CloseArgs {
         ids: vec![5],
         as_resolution: None,
         comment: CommentArgs {
@@ -202,7 +202,7 @@ async fn close_private_comment_without_body_is_rejected() {
             comment_file: None,
             comment_private: true,
         },
-    };
+    });
     let mut io = crate::test_helpers::CapturedIo::new();
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())

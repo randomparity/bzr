@@ -2,7 +2,7 @@ use std::io::IsTerminal;
 
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 
-use crate::cli::{BugAction, FieldArgs};
+use crate::cli::{FieldArgs, ViewArgs};
 use crate::client::BugzillaClient;
 use crate::config::Config;
 use crate::error::{BzrError, Result};
@@ -58,11 +58,11 @@ impl BugViewBatch {
 
 pub(super) async fn handle(
     client: &BugzillaClient,
-    action: &BugAction,
+    args: &ViewArgs,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let BugAction::View {
+    let ViewArgs {
         ids,
         permissive,
         web: _,
@@ -70,10 +70,7 @@ pub(super) async fn handle(
             fields,
             exclude_fields,
         },
-    } = action
-    else {
-        unreachable!()
-    };
+    } = args;
 
     if *permissive && ids.len() == 1 {
         return Err(BzrError::InputValidation(

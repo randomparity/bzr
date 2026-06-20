@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used, clippy::panic)]
 
 //! Drift guard for the published JSON Schemas.
 //!
@@ -324,8 +324,9 @@ fn bug_object_is_open_and_documents_builtins() {
 
 #[test]
 fn every_schema_is_wellformed_and_named_draft_2020_12() {
-    assert!(!SCHEMAS.is_empty());
+    let mut checked = 0_usize;
     for (name, body) in SCHEMAS {
+        checked += 1;
         let schema: Value =
             serde_json::from_str(body).unwrap_or_else(|e| panic!("{name}: invalid JSON: {e}"));
         assert_eq!(
@@ -346,6 +347,7 @@ fn every_schema_is_wellformed_and_named_draft_2020_12() {
             "{name}: schema file must end with a newline"
         );
     }
+    assert!(checked > 0, "schema registry is empty");
 }
 
 // ── Command behavior ─────────────────────────────────────────────────

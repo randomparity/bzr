@@ -1,5 +1,7 @@
 #![expect(clippy::unwrap_used)]
 
+use colored::Color;
+
 use super::*;
 use crate::types::OutputFormat;
 
@@ -35,64 +37,55 @@ fn truncate_unicode_counts_chars_not_bytes() {
 
 #[test]
 fn colorize_status_new_is_green() {
-    let result = colorize_status("NEW");
-    assert!(result.contains("NEW"));
+    assert_eq!(colorize_status("NEW").fgcolor, Some(Color::Green));
 }
 
 #[test]
 fn colorize_status_assigned_is_yellow() {
-    let result = colorize_status("ASSIGNED");
-    assert!(result.contains("ASSIGNED"));
+    assert_eq!(colorize_status("ASSIGNED").fgcolor, Some(Color::Yellow));
 }
 
 #[test]
 fn colorize_status_resolved_is_red() {
-    let result = colorize_status("RESOLVED");
-    assert!(result.contains("RESOLVED"));
+    assert_eq!(colorize_status("RESOLVED").fgcolor, Some(Color::Red));
 }
 
 #[test]
 fn colorize_status_unknown_passes_through() {
     let result = colorize_status("CUSTOM");
+    assert_eq!(result.fgcolor, None);
     assert!(result.contains("CUSTOM"));
 }
 
 #[test]
 fn colorize_status_case_insensitive() {
-    let result = colorize_status("new");
-    assert!(result.contains("new"));
+    assert_eq!(colorize_status("new").fgcolor, Some(Color::Green));
 }
 
 #[test]
-fn colorize_status_known_statuses_emit_ansi_escapes() {
-    // Force color output: cargo test pipes stdout, so colored auto-disables
-    // and the catch-all arm produces output identical to the colored arms,
-    // hiding `delete match arm` mutations.
-    struct ColorOverride;
-    impl Drop for ColorOverride {
-        fn drop(&mut self) {
-            colored::control::unset_override();
-        }
-    }
-    colored::control::set_override(true);
-    let _guard = ColorOverride;
-
-    for status in [
-        "NEW",
-        "UNCONFIRMED",
-        "ASSIGNED",
-        "IN_PROGRESS",
-        "RESOLVED",
-        "VERIFIED",
-        "CLOSED",
+fn colorize_status_known_statuses_map_to_distinct_colors() {
+    // Inspect the `ColoredString`'s color metadata directly instead of
+    // forcing `colored`'s process-global override on. The override is shared
+    // across the whole test binary, so flipping it raced with every
+    // concurrent test that asserts colorless buffer output. Checking the
+    // `fgcolor` field per status still kills `delete match arm` mutations: a
+    // deleted arm falls through to the catch-all `.normal()` (None).
+    for (status, want) in [
+        ("NEW", Some(Color::Green)),
+        ("UNCONFIRMED", Some(Color::Green)),
+        ("ASSIGNED", Some(Color::Yellow)),
+        ("IN_PROGRESS", Some(Color::Yellow)),
+        ("RESOLVED", Some(Color::Red)),
+        ("VERIFIED", Some(Color::Red)),
+        ("CLOSED", Some(Color::Red)),
     ] {
-        let result = colorize_status(status);
-        assert!(
-            result.contains("\x1b["),
-            "expected ANSI escape in colorize_status({status:?}), got {result:?}"
+        assert_eq!(
+            colorize_status(status).fgcolor,
+            want,
+            "unexpected color for status {status:?}"
         );
     }
-    assert_eq!(colorize_status("CUSTOM"), "CUSTOM");
+    assert_eq!(colorize_status("CUSTOM").fgcolor, None);
 }
 
 // ── shorten_email ────────────────────────────────────────────────

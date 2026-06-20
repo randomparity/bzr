@@ -178,13 +178,7 @@ pub fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<ParsedUrl> {
                 }
             }
             ParamKind::Mapped(mapping) => {
-                let Some(target) = query.get_field_mut(mapping.struct_field) else {
-                    unreachable!(
-                        "FIELD_MAPPINGS struct_field '{}' missing from get_field_mut",
-                        mapping.struct_field
-                    );
-                };
-                target.push(value.to_string());
+                query.get_field_mut(mapping.field).push(value.to_string());
             }
             ParamKind::Credential => {
                 tracing::warn!("stripping credential parameter '{key}' from URL");

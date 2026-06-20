@@ -750,9 +750,8 @@ fn warn_if_path_permissions_too_open(path: &std::path::Path, mask: u32, kind: &s
     ));
 }
 
-#[expect(clippy::print_stderr)]
 fn warn_security(message: &str) {
-    eprintln!("warning: {message}");
+    let _ = writeln!(std::io::stderr(), "warning: {message}");
 }
 
 #[cfg(test)]

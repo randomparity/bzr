@@ -4,7 +4,7 @@
 //! Only `run` requires a network client.
 
 use crate::cli::QueryAction;
-use crate::commands::shared::{merge_set, merge_vec};
+use crate::commands::runtime::shared::{merge_set, merge_vec};
 use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::output::resources::bug::{
@@ -34,12 +34,12 @@ pub async fn execute(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     match action {
-        QueryAction::Save { .. } => handle_save(action, format, w),
+        QueryAction::Save(args) => handle_save(args, format, w),
         QueryAction::List => handle_list(format, w),
-        QueryAction::Show { .. } => handle_show(action, format, w),
-        QueryAction::Update { .. } => handle_update(action, format, w),
-        QueryAction::Delete { .. } => handle_delete(action, format, w),
-        QueryAction::Run { .. } => handle_run(action, server, format, api, w).await,
+        QueryAction::Show(args) => handle_show(args, format, w),
+        QueryAction::Update(args) => handle_update(args, format, w),
+        QueryAction::Delete(args) => handle_delete(args, format, w),
+        QueryAction::Run(args) => handle_run(args, server, format, api, w).await,
     }
 }
 
@@ -52,8 +52,12 @@ fn explicit_sort_order(sort_args: &crate::cli::SortArgs) -> Option<String> {
         .map(|_| crate::validation::build_order(sort_args.sort.as_deref(), sort_args.order))
 }
 
-fn handle_save(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
-    let QueryAction::Save {
+fn handle_save(
+    args: &crate::cli::query::SaveArgs,
+    format: OutputFormat,
+    w: &mut Writers<'_>,
+) -> Result<()> {
+    let crate::cli::query::SaveArgs {
         name,
         from_url,
         search,
@@ -78,10 +82,7 @@ fn handle_save(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) 
         qa_contact,
         url,
         sort_args,
-    } = action
-    else {
-        unreachable!()
-    };
+    } = args;
 
     let creation_time =
         crate::validation::parse_optional_date(created_since.as_deref(), "--created-since")?;
@@ -159,10 +160,12 @@ fn handle_list(format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
     Ok(())
 }
 
-fn handle_show(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
-    let QueryAction::Show { name } = action else {
-        unreachable!()
-    };
+fn handle_show(
+    args: &crate::cli::query::ShowArgs,
+    format: OutputFormat,
+    w: &mut Writers<'_>,
+) -> Result<()> {
+    let name = &args.name;
     let config = Config::load()?;
     let query = config
         .queries
@@ -172,10 +175,12 @@ fn handle_show(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) 
     Ok(())
 }
 
-fn handle_delete(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
-    let QueryAction::Delete { name } = action else {
-        unreachable!()
-    };
+fn handle_delete(
+    args: &crate::cli::query::DeleteArgs,
+    format: OutputFormat,
+    w: &mut Writers<'_>,
+) -> Result<()> {
+    let name = &args.name;
     Config::update_locked(|config| {
         if config.queries.remove(name.as_str()).is_none() {
             return Err(BzrError::config(format!("query '{name}' not found")));
@@ -229,11 +234,11 @@ fn clear_query_field(q: &mut SavedQuery, field: &str) -> Result<()> {
 /// no-op call).
 fn apply_query_updates(
     q: &mut SavedQuery,
-    action: &QueryAction,
+    args: &crate::cli::query::UpdateArgs,
     creation_time: Option<&str>,
     last_change_time: Option<&str>,
 ) -> Result<bool> {
-    let QueryAction::Update {
+    let crate::cli::query::UpdateArgs {
         search,
         product,
         component,
@@ -258,10 +263,7 @@ fn apply_query_updates(
         clear,
         sort_args,
         ..
-    } = action
-    else {
-        unreachable!()
-    };
+    } = args;
     let mut changed = false;
     changed |= merge_vec(&mut q.product, product);
     changed |= merge_vec(&mut q.component, component);
@@ -304,16 +306,17 @@ fn apply_query_updates(
     Ok(changed)
 }
 
-fn handle_update(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
-    let QueryAction::Update {
+fn handle_update(
+    args: &crate::cli::query::UpdateArgs,
+    format: OutputFormat,
+    w: &mut Writers<'_>,
+) -> Result<()> {
+    let crate::cli::query::UpdateArgs {
         name,
         created_since,
         changed_since,
         ..
-    } = action
-    else {
-        unreachable!()
-    };
+    } = args;
 
     // Validate dates before acquiring the lock so a bad value exits cleanly.
     let creation_time =
@@ -327,7 +330,7 @@ fn handle_update(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>
         };
         let changed = apply_query_updates(
             q,
-            action,
+            args,
             creation_time.as_deref(),
             last_change_time.as_deref(),
         )?;
@@ -351,13 +354,13 @@ fn handle_update(action: &QueryAction, format: OutputFormat, w: &mut Writers<'_>
 }
 
 async fn handle_run(
-    action: &QueryAction,
+    args: &crate::cli::query::RunArgs,
     server: Option<&str>,
     format: OutputFormat,
     api: Option<crate::types::ApiMode>,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let QueryAction::Run {
+    let crate::cli::query::RunArgs {
         name,
         limit,
         fields,
@@ -375,10 +378,7 @@ async fn handle_run(
         url,
         sort_args,
         page_args: crate::cli::PageArgs { offset, paginate },
-    } = action
-    else {
-        unreachable!()
-    };
+    } = args;
 
     let creation_time_override =
         crate::validation::parse_optional_date(created_since.as_deref(), "--created-since")?;
@@ -415,7 +415,7 @@ async fn handle_run(
     params.exclude_fields = canonical_field_list(params.exclude_fields.as_deref());
     // Fold any saved-query/URL `offset` into the struct field and let `--offset`
     // override, so a saved-from-URL query never sends two `offset` params.
-    crate::commands::paging::resolve_offset(&mut params, *offset);
+    crate::commands::runtime::paging::resolve_offset(&mut params, *offset);
     // Result ordering: an explicit `--sort` overrides the saved order; absent
     // both, default to a stable `bug_id` so runs are deterministic — unless the
     // saved query (e.g. from a URL) already carries an `order` raw param.
@@ -442,10 +442,16 @@ async fn handle_run(
         }
     }
 
-    let client = super::shared::connect_and_configure(effective_server, api).await?;
-    let page = crate::commands::paging::fetch_page(&client, &params, *paginate).await?;
+    let client = super::runtime::shared::connect_and_configure(effective_server, api).await?;
+    let page = crate::commands::runtime::paging::fetch_page(&client, &params, *paginate).await?;
     write_bugs(&page.bugs, spec, format, w.out, w.err);
-    crate::commands::paging::write_truncation_note(&page, params.limit, *offset, format, w);
+    crate::commands::runtime::paging::write_truncation_note(
+        &page,
+        params.limit,
+        *offset,
+        format,
+        w,
+    );
     Ok(())
 }
 

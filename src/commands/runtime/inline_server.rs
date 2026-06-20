@@ -4,7 +4,7 @@
 //! let a single command run against a Bugzilla instance that was never written
 //! to any config file. The parsed definition is stashed here as process-global
 //! state (set once in `dispatch`, before any client is built) and read by
-//! [`crate::commands::shared::connect_and_configure`], mirroring the pattern
+//! [`crate::commands::runtime::shared::connect_and_configure`], mirroring the pattern
 //! used for `--dry-run` and `--yes`.
 //!
 //! Test callers that set this must hold `ENV_LOCK` and reset it to `None`

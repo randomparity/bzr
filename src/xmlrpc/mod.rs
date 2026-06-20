@@ -2,10 +2,16 @@
 //! instead of (or alongside) the REST API. Used internally by `BugzillaClient`
 //! when the detected `ApiMode` is `XmlRpc` or `Hybrid`.
 
+mod attachment;
+mod bug;
 pub(crate) mod call;
 pub(crate) mod client;
+mod comment;
 mod fault;
+mod group;
+mod mappers;
 pub(crate) mod parsing;
+mod user;
 pub(crate) mod value;
 
 #[cfg(fuzzing)]

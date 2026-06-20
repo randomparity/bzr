@@ -17,8 +17,11 @@ pub(super) enum WhoamiOutcome {
     AuthRejected,
     /// Server returned 200 but the response body was unparseable or anomalous.
     UnparseableResponse,
-    /// Could not reach the server at all (network/TLS/timeout).
-    NetworkError,
+    /// Could not reach the server at all (network/TLS/timeout). Carries the
+    /// underlying transport error so the caller can classify it (TLS cert
+    /// failure, pin mismatch, plain transport error) rather than masking it
+    /// as a successful header-auth fallback.
+    NetworkError(reqwest::Error),
 }
 
 pub(super) async fn detect_whoami_auth(
@@ -47,7 +50,7 @@ async fn probe_whoami(request: reqwest::RequestBuilder, method: AuthMethod) -> W
         Ok(r) => r,
         Err(e) => {
             super::log_probe_send_error("whoami", method, &e);
-            return WhoamiOutcome::NetworkError;
+            return WhoamiOutcome::NetworkError(e);
         }
     };
 

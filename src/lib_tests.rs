@@ -72,7 +72,7 @@ async fn dispatch_rejects_dry_run_on_unsupported_command() {
         Err(error::BzrError::InputValidation(ref msg)) if msg.contains("--dry-run")
     ));
     // The reject must not leak dry-run state into a later command.
-    assert!(!commands::dry_run::enabled());
+    assert!(!commands::runtime::dry_run::enabled());
 }
 
 #[tokio::test]

@@ -44,6 +44,7 @@ async fn bug_clone_copies_fields() {
                     "comments": [
                         {
                             "id": 2,
+                            "bug_id": 100,
                             "count": 1,
                             "text": "Follow-up reply",
                             "creator": "dev@test.com",
@@ -51,6 +52,7 @@ async fn bug_clone_copies_fields() {
                         },
                         {
                             "id": 1,
+                            "bug_id": 100,
                             "count": 0,
                             "text": "Original description",
                             "creator": "dev@test.com",
@@ -81,7 +83,7 @@ async fn bug_clone_copies_fields() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::Clone {
+    let action = BugAction::Clone(crate::cli::CloneArgs {
         id: "100".to_string(),
         summary: None,
         product: None,
@@ -98,7 +100,7 @@ async fn bug_clone_copies_fields() {
         add_blocks: false,
         no_cc: false,
         no_keywords: false,
-    };
+    });
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
@@ -136,7 +138,7 @@ async fn bug_clone_reports_id_when_comment_post_fails() {
         .and(path("/rest/bug/100/comment"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "bugs": { "100": { "comments": [{
-                "id": 1, "count": 0, "text": "Description",
+                "id": 1, "bug_id": 100, "count": 0, "text": "Description",
                 "creator": "dev@test.com", "creation_time": "2025-01-01T00:00:00Z"
             }] } }
         })))
@@ -159,7 +161,7 @@ async fn bug_clone_reports_id_when_comment_post_fails() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::Clone {
+    let action = BugAction::Clone(crate::cli::CloneArgs {
         id: "100".to_string(),
         summary: None,
         product: None,
@@ -176,7 +178,7 @@ async fn bug_clone_reports_id_when_comment_post_fails() {
         add_blocks: false,
         no_cc: false,
         no_keywords: false,
-    };
+    });
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
@@ -228,6 +230,7 @@ async fn bug_clone_no_comment_skips_comment() {
                 "100": {
                     "comments": [{
                         "id": 1,
+                        "bug_id": 100,
                         "count": 0,
                         "text": "Description",
                         "creator": "dev@test.com",
@@ -254,7 +257,7 @@ async fn bug_clone_no_comment_skips_comment() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::Clone {
+    let action = BugAction::Clone(crate::cli::CloneArgs {
         id: "100".to_string(),
         summary: None,
         product: None,
@@ -271,7 +274,7 @@ async fn bug_clone_no_comment_skips_comment() {
         add_blocks: false,
         no_cc: false,
         no_keywords: false,
-    };
+    });
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
@@ -288,7 +291,7 @@ async fn bug_clone_no_comment_skips_comment() {
 #[tokio::test]
 async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
     let (_lock, mock, _tmp) = setup_test_env().await;
-    crate::commands::dry_run::set(true);
+    crate::commands::runtime::dry_run::set(true);
 
     // Source fetch (GET) is allowed in a dry run; it builds the would-be payload.
     Mock::given(method("GET"))
@@ -311,7 +314,7 @@ async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
         .and(path("/rest/bug/100/comment"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "bugs": { "100": { "comments": [{
-                "id": 1, "count": 0, "text": "Original description",
+                "id": 1, "bug_id": 100, "count": 0, "text": "Original description",
                 "creator": "dev@test.com", "creation_time": "2025-01-01T00:00:00Z"
             }] } }
         })))
@@ -325,7 +328,7 @@ async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::Clone {
+    let action = BugAction::Clone(crate::cli::CloneArgs {
         id: "100".to_string(),
         summary: None,
         product: None,
@@ -342,13 +345,13 @@ async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
         add_blocks: false,
         no_cc: false,
         no_keywords: false,
-    };
+    });
     let mut io = crate::test_helpers::CapturedIo::new();
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
             .await;
     let output = io.out_str().to_string();
-    crate::commands::dry_run::set(false);
+    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok(), "dry-run clone failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();

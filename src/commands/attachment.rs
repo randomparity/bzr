@@ -43,7 +43,7 @@ pub async fn execute(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     validate_action(action)?;
-    let client = super::shared::connect_and_configure(server, api).await?;
+    let client = super::runtime::shared::connect_and_configure(server, api).await?;
 
     match action {
         AttachmentAction::List { bug_id } => list_attachments(&client, *bug_id, format, w).await?,
@@ -67,19 +67,19 @@ pub async fn execute(
                 download_batch(&client, targets, format, w).await?;
             }
         }
-        AttachmentAction::Upload { .. } => upload(&client, action, format, w).await?,
-        AttachmentAction::Update { .. } => update(&client, action, format, w).await?,
+        AttachmentAction::Upload(args) => upload(&client, args, format, w).await?,
+        AttachmentAction::Update(args) => update(&client, args, format, w).await?,
     }
     Ok(())
 }
 
 async fn upload(
     client: &BugzillaClient,
-    action: &AttachmentAction,
+    args: &crate::cli::attachment::UploadArgs,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let AttachmentAction::Upload {
+    let crate::cli::attachment::UploadArgs {
         bug_id,
         file,
         summary,
@@ -91,10 +91,7 @@ async fn upload(
         comment,
         comment_private,
         flag,
-    } = action
-    else {
-        unreachable!()
-    };
+    } = args;
     // Upload has no "leave unchanged" state: absent both flags is public /
     // non-patch.
     let is_private = resolve_bool_flag(*private, *no_private).unwrap_or(false);
@@ -108,7 +105,7 @@ async fn upload(
         (None, true) => "text/plain".to_string(),
         (None, false) => guess_content_type(file_name).to_string(),
     };
-    let flags = super::flags::parse_flags(flag)?;
+    let flags = super::runtime::flags::parse_flags(flag)?;
     let size = data.len();
     let upload_params = UploadAttachmentParams {
         bug_id: *bug_id,
@@ -136,11 +133,11 @@ async fn upload(
 
 async fn update(
     client: &BugzillaClient,
-    action: &AttachmentAction,
+    args: &crate::cli::attachment::UpdateArgs,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let AttachmentAction::Update {
+    let crate::cli::attachment::UpdateArgs {
         id,
         summary,
         file_name,
@@ -152,11 +149,8 @@ async fn update(
         private,
         no_private,
         flag,
-    } = action
-    else {
-        unreachable!()
-    };
-    let flags = super::flags::parse_flags(flag)?;
+    } = args;
+    let flags = super::runtime::flags::parse_flags(flag)?;
     let params = UpdateAttachmentParams {
         summary: summary.clone(),
         file_name: file_name.clone(),
@@ -201,11 +195,11 @@ async fn view_attachment(
 
 fn validate_action(action: &AttachmentAction) -> Result<()> {
     match action {
-        AttachmentAction::Upload {
+        AttachmentAction::Upload(crate::cli::attachment::UploadArgs {
             comment_private: true,
             comment: None,
             ..
-        } => Err(crate::error::BzrError::InputValidation(
+        }) => Err(crate::error::BzrError::InputValidation(
             "--comment-private requires --comment".into(),
         )),
         AttachmentAction::Download { ids, bug_ids, .. } if ids.is_empty() && bug_ids.is_empty() => {

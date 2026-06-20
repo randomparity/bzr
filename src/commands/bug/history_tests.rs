@@ -20,10 +20,10 @@ async fn bug_history_empty_prints_no_history_message() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::History {
+    let action = BugAction::History(crate::cli::HistoryArgs {
         id: 42,
         since: None,
-    };
+    });
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
@@ -46,10 +46,10 @@ async fn bug_history_rejects_malformed_since_with_exit_code_7() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let action = BugAction::History {
+    let action = BugAction::History(crate::cli::HistoryArgs {
         id: 42,
         since: Some("yesterday".into()),
-    };
+    });
     let result = crate::commands::bug::execute(
         &action,
         None,

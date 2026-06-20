@@ -43,7 +43,7 @@ pub(super) fn create_tempfile(prefix: &str, initial_content: &str) -> Result<Tem
 /// Errors:
 /// - `BzrError::Io` if the tempfile cannot be created or read.
 /// - `BzrError::InputValidation` if `$EDITOR` exits non-zero.
-pub(super) fn launch(initial: &str, prefix: &str) -> Result<String> {
+pub(crate) fn launch(initial: &str, prefix: &str) -> Result<String> {
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".into());
     let tmpfile = create_tempfile(prefix, initial)?;
 

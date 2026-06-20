@@ -1,12 +1,25 @@
-//! Library crate for bzr — exposes modules for integration testing.
+//! Library crate backing the `bzr` command-line tool.
 //!
-//! The primary entry point is the binary crate (`main.rs`). This library
-//! exists so that integration tests in `tests/` can access internal modules.
+//! `bzr` ships as a CLI binary (`main.rs`); this library is the binary's
+//! implementation, factored into modules so the binary and the integration
+//! tests in `tests/` (which compile as a separate crate and therefore need
+//! `pub` access) exercise exactly the same code paths.
+//!
+//! ## Public boundary
+//!
+//! The intended entry point is [`dispatch`], which runs a parsed
+//! [`cli::Cli`]. The resource modules ([`cli`], [`client`], [`commands`],
+//! [`config`], [`types`], …) are published only to support the binary and the
+//! integration-test harness — they are an internal surface, not a
+//! stability-guaranteed API for external consumers, and may change between
+//! releases. Genuinely test-only items (`ENV_LOCK`, `test_helpers`) are
+//! gated behind `cfg(test)` / the `test-helpers` feature and never compile
+//! into a normal release build.
 #![expect(
     clippy::missing_errors_doc,
     clippy::must_use_candidate,
     clippy::module_name_repetitions,
-    reason = "public API is for integration tests, not external consumers"
+    reason = "internal surface for the binary and integration tests, not external consumers"
 )]
 
 pub mod cli;
@@ -49,9 +62,9 @@ pub async fn dispatch(
 ) -> error::Result<()> {
     apply_network_tuning(cli);
     ensure_dry_run_supported(cli)?;
-    commands::dry_run::set(cli.dry_run);
-    commands::confirm::set_yes(cli.yes);
-    commands::inline_server::set(resolve_inline_server(cli));
+    commands::runtime::dry_run::set(cli.dry_run);
+    commands::runtime::confirm::set_yes(cli.yes);
+    commands::runtime::inline_server::set(resolve_inline_server(cli));
 
     let api = cli.api;
     let server = cli.server.as_deref();
@@ -134,15 +147,17 @@ fn apply_network_tuning(cli: &cli::Cli) {
 /// the URL and its API-key env var are present; clap's `requires` guarantees
 /// they come as a pair, but this is robust if a `Cli` is constructed directly
 /// (as integration tests do).
-fn resolve_inline_server(cli: &cli::Cli) -> Option<commands::inline_server::InlineServer> {
+fn resolve_inline_server(cli: &cli::Cli) -> Option<commands::runtime::inline_server::InlineServer> {
     cli.server_url
         .as_ref()
         .zip(cli.server_api_key_env.as_ref())
-        .map(|(url, api_key_env)| commands::inline_server::InlineServer {
-            url: url.clone(),
-            api_key_env: api_key_env.clone(),
-            email: cli.server_email.clone(),
-        })
+        .map(
+            |(url, api_key_env)| commands::runtime::inline_server::InlineServer {
+                url: url.clone(),
+                api_key_env: api_key_env.clone(),
+                email: cli.server_email.clone(),
+            },
+        )
 }
 
 /// Reject `--dry-run` on commands that don't honor it.

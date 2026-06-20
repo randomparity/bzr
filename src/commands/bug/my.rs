@@ -1,4 +1,4 @@
-use crate::cli::{BugAction, FieldArgs};
+use crate::cli::{FieldArgs, MyArgs};
 use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::resources::bug::{canonical_field_list, write_bugs, ColumnSpec};
@@ -7,11 +7,11 @@ use crate::types::{OutputFormat, SearchParams};
 
 pub(super) async fn handle(
     client: &BugzillaClient,
-    action: &BugAction,
+    args: &MyArgs,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let BugAction::My {
+    let MyArgs {
         created,
         cc,
         all,
@@ -24,10 +24,7 @@ pub(super) async fn handle(
         sort_args,
         page_args: crate::cli::PageArgs { offset, paginate },
         count,
-    } = action
-    else {
-        unreachable!()
-    };
+    } = args;
 
     super::ensure_no_paging_with_count(*count, *offset, *paginate)?;
 
@@ -78,7 +75,7 @@ pub(super) async fn handle(
     // `truncated` means at least one category had more rows than `--limit`.
     let mut truncated = false;
     for params in &searches {
-        let page = crate::commands::paging::fetch_page(client, params, *paginate).await?;
+        let page = crate::commands::runtime::paging::fetch_page(client, params, *paginate).await?;
         truncated |= page.truncated;
         for bug in page.bugs {
             // When counting, only the deduped id set matters — don't retain rows.
@@ -94,11 +91,17 @@ pub(super) async fn handle(
     }
 
     write_bugs(&all_bugs, spec, format, w.out, w.err);
-    let page = crate::commands::paging::Page {
+    let page = crate::commands::runtime::paging::Page {
         bugs: all_bugs,
         truncated,
     };
-    crate::commands::paging::write_truncation_note(&page, Some(*limit), *offset, format, w);
+    crate::commands::runtime::paging::write_truncation_note(
+        &page,
+        Some(*limit),
+        *offset,
+        format,
+        w,
+    );
     Ok(())
 }
 

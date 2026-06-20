@@ -574,7 +574,7 @@ fn write_bug_detail_table(bug: &Bug, spec: ColumnSpec<'_>, out: &mut (impl Write
         let _ = writeln!(out, "{} #{}\n", "Bug".bold(), bug.id.to_string().bold());
     }
     if field_selected(spec, "status") {
-        write_field(out, "Status", &colorize_status(&bug.status));
+        write_field(out, "Status", &colorize_status(&bug.status).to_string());
     }
     if field_selected(spec, "resolution") {
         write_optional_field(out, "Resolution", bug.resolution.as_deref());

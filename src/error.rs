@@ -74,9 +74,6 @@ pub enum BzrError {
         expected: String,
         actual: String,
     },
-
-    #[error("{0}")]
-    Other(String),
 }
 
 pub type Result<T> = std::result::Result<T, BzrError>;
@@ -95,10 +92,8 @@ const ERROR_TYPE_BATCH_PARTIAL_FAILURE: &str = "batch_partial_failure";
 const ERROR_TYPE_KEYRING: &str = "keyring";
 const ERROR_TYPE_TLS: &str = "tls";
 const ERROR_TYPE_COLLISION: &str = "collision";
-const ERROR_TYPE_OTHER: &str = "other";
 
 // Exit code constants
-const EXIT_CODE_OTHER: i32 = 1;
 const EXIT_CODE_NOT_FOUND: i32 = 2;
 const EXIT_CODE_CONFIG: i32 = 3;
 const EXIT_CODE_API: i32 = 4;
@@ -193,7 +188,6 @@ impl BzrError {
             BzrError::Keyring(_) => EXIT_CODE_KEYRING,
             BzrError::PinMismatch { .. } | BzrError::IssuerChanged { .. } => EXIT_CODE_TLS,
             BzrError::MidAirCollision { .. } => EXIT_CODE_COLLISION,
-            BzrError::Other(_) => EXIT_CODE_OTHER,
         }
     }
 
@@ -214,7 +208,6 @@ impl BzrError {
             BzrError::Keyring(_) => ERROR_TYPE_KEYRING,
             BzrError::PinMismatch { .. } | BzrError::IssuerChanged { .. } => ERROR_TYPE_TLS,
             BzrError::MidAirCollision { .. } => ERROR_TYPE_COLLISION,
-            BzrError::Other(_) => ERROR_TYPE_OTHER,
         }
     }
 }

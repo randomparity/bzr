@@ -75,7 +75,7 @@ fn write_component_table_shows_fields() {
     );
     let out = String::from_utf8(buf).unwrap();
     assert!(out.contains("Core"));
-    assert!(out.contains("9"));
+    assert!(out.contains('9'));
     assert!(out.contains("no"));
 }
 

@@ -1,4 +1,4 @@
-use crate::cli::BugAction;
+use crate::cli::CloneArgs;
 use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
@@ -7,11 +7,11 @@ use crate::types::{CreateBugParams, OutputFormat};
 
 pub(super) async fn handle(
     client: &BugzillaClient,
-    action: &BugAction,
+    args: &CloneArgs,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let BugAction::Clone {
+    let CloneArgs {
         id,
         summary,
         product,
@@ -28,10 +28,7 @@ pub(super) async fn handle(
         add_blocks,
         no_cc,
         no_keywords,
-    } = action
-    else {
-        unreachable!()
-    };
+    } = args;
 
     // Fetch source bug with all fields needed for cloning
     let source = client.get_bug(id, None, None).await?;
@@ -85,7 +82,7 @@ pub(super) async fn handle(
         ..Default::default()
     };
 
-    if crate::commands::dry_run::enabled() {
+    if crate::commands::runtime::dry_run::enabled() {
         write_clone_dry_run(source.id, &params, format, w);
         return Ok(());
     }

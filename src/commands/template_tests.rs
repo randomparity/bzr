@@ -1,5 +1,6 @@
 #![expect(clippy::unwrap_used)]
 
+use crate::cli::template::UpdateArgs;
 use crate::cli::{TemplateAction, TemplateFields};
 use crate::config::Config;
 use crate::test_helpers::setup_test_env;
@@ -384,7 +385,7 @@ fn update_action(
     severity: Option<&str>,
     clear: &[&str],
 ) -> TemplateAction {
-    TemplateAction::Update {
+    TemplateAction::Update(UpdateArgs {
         name: name.into(),
         fields: TemplateFields {
             product: product.map(Into::into),
@@ -395,7 +396,7 @@ fn update_action(
             ..Default::default()
         },
         clear: clear.iter().map(|s| (*s).to_string()).collect(),
-    }
+    })
 }
 
 async fn run(action: &TemplateAction) -> crate::error::Result<String> {

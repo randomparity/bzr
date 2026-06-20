@@ -1,5 +1,6 @@
 #![expect(clippy::unwrap_used)]
 
+use crate::cli::query::{DeleteArgs, RunArgs, SaveArgs, ShowArgs, UpdateArgs};
 use crate::cli::QueryAction;
 use crate::config::Config;
 use crate::test_helpers::setup_test_env;
@@ -8,7 +9,7 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 fn save_action(name: &str) -> QueryAction {
-    QueryAction::Save {
+    QueryAction::Save(SaveArgs {
         name: name.into(),
         from_url: None,
         search: None,
@@ -33,12 +34,12 @@ fn save_action(name: &str) -> QueryAction {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    }
+    })
 }
 
 /// Build a Save action for a single-product query with no status filters.
 fn product_save_action(name: &str, product: &str, limit: u32) -> QueryAction {
-    QueryAction::Save {
+    QueryAction::Save(SaveArgs {
         name: name.into(),
         from_url: None,
         search: None,
@@ -63,11 +64,11 @@ fn product_save_action(name: &str, product: &str, limit: u32) -> QueryAction {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    }
+    })
 }
 
 fn empty_save_action(name: &str, search: Option<String>) -> QueryAction {
-    QueryAction::Save {
+    QueryAction::Save(SaveArgs {
         name: name.into(),
         from_url: None,
         search,
@@ -92,11 +93,11 @@ fn empty_save_action(name: &str, search: Option<String>) -> QueryAction {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    }
+    })
 }
 
 fn url_save_action(name: &str, url: String) -> QueryAction {
-    QueryAction::Save {
+    QueryAction::Save(SaveArgs {
         name: name.into(),
         from_url: Some(url),
         search: None,
@@ -121,11 +122,11 @@ fn url_save_action(name: &str, url: String) -> QueryAction {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    }
+    })
 }
 
 fn run_action(name: &str) -> QueryAction {
-    QueryAction::Run {
+    QueryAction::Run(RunArgs {
         page_args: crate::cli::PageArgs::default(),
         name: name.into(),
         limit: None,
@@ -143,7 +144,7 @@ fn run_action(name: &str) -> QueryAction {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    }
+    })
 }
 
 #[tokio::test]
@@ -163,9 +164,9 @@ async fn query_save_and_show() {
     let _output = __io_a1.out_str().to_string();
     assert!(result.is_ok(), "query save failed: {result:?}");
 
-    let action = QueryAction::Show {
+    let action = QueryAction::Show(ShowArgs {
         name: "test-q".into(),
-    };
+    });
     let mut __io_a2 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
@@ -190,7 +191,7 @@ async fn query_save_persists_every_field() {
     // SavedQuery and be visible in `query show`.
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let action = QueryAction::Save {
+    let action = QueryAction::Save(SaveArgs {
         name: "comprehensive".into(),
         from_url: None,
         search: None,
@@ -215,15 +216,15 @@ async fn query_save_persists_every_field() {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    };
+    });
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(&action, None, OutputFormat::Json, None, &mut __io.writers()).await;
     let _ = __io.out_str().to_string();
     result.unwrap();
 
-    let action = QueryAction::Show {
+    let action = QueryAction::Show(ShowArgs {
         name: "comprehensive".into(),
-    };
+    });
     let mut __io_a3 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
@@ -304,9 +305,9 @@ async fn query_save_search_kind() {
     let _output = __io_a4.out_str().to_string();
     assert!(result.is_ok(), "query save failed: {result:?}");
 
-    let action = QueryAction::Show {
+    let action = QueryAction::Show(ShowArgs {
         name: "crashes".into(),
-    };
+    });
     let mut __io_a5 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
@@ -351,9 +352,9 @@ async fn query_delete_unknown_errors() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let action = QueryAction::Delete {
+    let action = QueryAction::Delete(DeleteArgs {
         name: "nonexistent".into(),
-    };
+    });
     let result = super::execute(
         &action,
         None,
@@ -445,7 +446,7 @@ async fn query_run_honors_saved_custom_fields() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     let mut save_action = product_save_action("custom-fields-test", "TestProduct", 10);
-    let QueryAction::Save { fields, .. } = &mut save_action else {
+    let QueryAction::Save(SaveArgs { fields, .. }) = &mut save_action else {
         unreachable!()
     };
     *fields = Some("id,cf_release".into());
@@ -514,7 +515,7 @@ async fn query_run_with_limit_override() {
         .mount(&mock)
         .await;
 
-    let run_action = QueryAction::Run {
+    let run_action = QueryAction::Run(RunArgs {
         page_args: crate::cli::PageArgs::default(),
         name: "override-test".into(),
         limit: Some(5),
@@ -532,7 +533,7 @@ async fn query_run_with_limit_override() {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    };
+    });
     let mut __io_a10 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &run_action,
@@ -550,7 +551,7 @@ async fn query_run_with_limit_override() {
 async fn query_save_existing_entry_reports_updated() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let save_action = QueryAction::Save {
+    let save_action = QueryAction::Save(SaveArgs {
         name: "existing".into(),
         from_url: None,
         search: None,
@@ -575,7 +576,7 @@ async fn query_save_existing_entry_reports_updated() {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    };
+    });
     let mut __io_a11 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &save_action,
@@ -588,7 +589,7 @@ async fn query_save_existing_entry_reports_updated() {
     let _ = __io_a11.out_str().to_string();
     assert!(result.is_ok());
 
-    let update_action = QueryAction::Save {
+    let update_action = QueryAction::Save(SaveArgs {
         name: "existing".into(),
         from_url: None,
         search: Some("updated".into()),
@@ -613,7 +614,7 @@ async fn query_save_existing_entry_reports_updated() {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    };
+    });
     let mut __io4 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &update_action,
@@ -655,9 +656,9 @@ async fn query_delete_removes_saved_query() {
     let _ = __io_a12.out_str().to_string();
     assert!(result.is_ok());
 
-    let delete_action = QueryAction::Delete {
+    let delete_action = QueryAction::Delete(DeleteArgs {
         name: "delete-me".into(),
-    };
+    });
     let mut __io5 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &delete_action,
@@ -672,9 +673,9 @@ async fn query_delete_removes_saved_query() {
     let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["action"], "deleted");
 
-    let show_action = QueryAction::Show {
+    let show_action = QueryAction::Show(ShowArgs {
         name: "delete-me".into(),
-    };
+    });
     let err = super::execute(
         &show_action,
         None,
@@ -691,7 +692,7 @@ async fn query_delete_removes_saved_query() {
 async fn query_run_applies_field_overrides() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
-    let save_action = QueryAction::Save {
+    let save_action = QueryAction::Save(SaveArgs {
         name: "fields-test".into(),
         from_url: None,
         search: None,
@@ -716,7 +717,7 @@ async fn query_run_applies_field_overrides() {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    };
+    });
     let mut __io_a13 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &save_action,
@@ -738,7 +739,7 @@ async fn query_run_applies_field_overrides() {
         .mount(&mock)
         .await;
 
-    let run_action = QueryAction::Run {
+    let run_action = QueryAction::Run(RunArgs {
         page_args: crate::cli::PageArgs::default(),
         name: "fields-test".into(),
         limit: None,
@@ -756,7 +757,7 @@ async fn query_run_applies_field_overrides() {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    };
+    });
     let mut __io_a14 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &run_action,
@@ -836,9 +837,9 @@ async fn query_show_unknown_errors() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let err = super::execute(
-        &QueryAction::Show {
+        &QueryAction::Show(ShowArgs {
             name: "missing".into(),
-        },
+        }),
         None,
         OutputFormat::Json,
         None,
@@ -885,7 +886,7 @@ async fn query_run_with_server_override() {
         .await;
 
     // Run with --server override pointing to the mock server ("test")
-    let run_action = QueryAction::Run {
+    let run_action = QueryAction::Run(RunArgs {
         page_args: crate::cli::PageArgs::default(),
         name: "server-test".into(),
         limit: None,
@@ -903,7 +904,7 @@ async fn query_run_with_server_override() {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    };
+    });
     let mut __io_a16 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &run_action,
@@ -957,7 +958,7 @@ async fn query_save_rejects_malformed_created_since() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let action = QueryAction::Save {
+    let action = QueryAction::Save(SaveArgs {
         name: "bad".into(),
         from_url: None,
         search: None,
@@ -982,7 +983,7 @@ async fn query_save_rejects_malformed_created_since() {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    };
+    });
 
     let result = super::execute(
         &action,
@@ -1001,7 +1002,7 @@ async fn query_save_rejects_malformed_created_since() {
 async fn query_save_stores_canonical_date_forms() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let action = QueryAction::Save {
+    let action = QueryAction::Save(SaveArgs {
         name: "recent".into(),
         from_url: None,
         search: None,
@@ -1026,7 +1027,7 @@ async fn query_save_stores_canonical_date_forms() {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    };
+    });
     let mut __io8 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
@@ -1051,7 +1052,7 @@ async fn query_save_accepts_date_only_query() {
     // "query must have at least one filter set" rejection does not fire.
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let action = QueryAction::Save {
+    let action = QueryAction::Save(SaveArgs {
         name: "date-only".into(),
         from_url: None,
         search: None,
@@ -1076,7 +1077,7 @@ async fn query_save_accepts_date_only_query() {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    };
+    });
     let mut __io9 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
@@ -1110,7 +1111,7 @@ async fn query_run_rejects_malformed_created_since_override() {
     })
     .unwrap();
 
-    let action = QueryAction::Run {
+    let action = QueryAction::Run(RunArgs {
         page_args: crate::cli::PageArgs::default(),
         name: "recent".into(),
         limit: None,
@@ -1128,7 +1129,7 @@ async fn query_run_rejects_malformed_created_since_override() {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    };
+    });
     let result = super::execute(
         &action,
         None,
@@ -1146,7 +1147,7 @@ async fn query_run_rejects_malformed_created_since_override() {
 async fn query_save_persists_158_field_filters() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let action = QueryAction::Save {
+    let action = QueryAction::Save(SaveArgs {
         name: "field-filters".into(),
         from_url: None,
         search: None,
@@ -1171,7 +1172,7 @@ async fn query_save_persists_158_field_filters() {
         qa_contact: vec!["qa@example.com".into()],
         url: vec!["github.com/foo".into()],
         sort_args: crate::cli::SortArgs::default(),
-    };
+    });
     let mut __io_a18 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
@@ -1204,7 +1205,7 @@ async fn query_save_accepts_whiteboard_only_filter() {
     // set".
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let action = QueryAction::Save {
+    let action = QueryAction::Save(SaveArgs {
         name: "wb-only".into(),
         from_url: None,
         search: None,
@@ -1229,7 +1230,7 @@ async fn query_save_accepts_whiteboard_only_filter() {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    };
+    });
     let mut __io_a19 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
@@ -1251,7 +1252,7 @@ async fn query_run_overrides_replace_saved_field_filters() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     // Save a query with whiteboard=original and resolution=FIXED.
-    let save_action = QueryAction::Save {
+    let save_action = QueryAction::Save(SaveArgs {
         name: "field-override-test".into(),
         from_url: None,
         search: None,
@@ -1276,7 +1277,7 @@ async fn query_run_overrides_replace_saved_field_filters() {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    };
+    });
     let mut __io_a20 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &save_action,
@@ -1299,7 +1300,7 @@ async fn query_run_overrides_replace_saved_field_filters() {
         .mount(&mock)
         .await;
 
-    let run_action = QueryAction::Run {
+    let run_action = QueryAction::Run(RunArgs {
         page_args: crate::cli::PageArgs::default(),
         name: "field-override-test".into(),
         limit: None,
@@ -1317,7 +1318,7 @@ async fn query_run_overrides_replace_saved_field_filters() {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    };
+    });
     let mut __io_a21 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &run_action,
@@ -1335,7 +1336,7 @@ async fn query_run_overrides_replace_saved_field_filters() {
 async fn query_run_empty_override_keeps_saved_field_filter() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
-    let save_action = QueryAction::Save {
+    let save_action = QueryAction::Save(SaveArgs {
         name: "saved-wb".into(),
         from_url: None,
         search: None,
@@ -1360,7 +1361,7 @@ async fn query_run_empty_override_keeps_saved_field_filter() {
         qa_contact: vec![],
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    };
+    });
     let mut __io_a22 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &save_action,
@@ -1450,7 +1451,7 @@ async fn query_run_sort_override_takes_precedence() {
         .await;
 
     let mut run = run_action("order-override");
-    if let QueryAction::Run { sort_args, .. } = &mut run {
+    if let QueryAction::Run(RunArgs { sort_args, .. }) = &mut run {
         sort_args.sort = Some("priority".to_string());
     }
     let mut __io = crate::test_helpers::CapturedIo::new();
@@ -1465,7 +1466,7 @@ async fn query_run_sort_override_takes_precedence() {
 async fn query_save_persists_explicit_sort() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
     let mut save = product_save_action("order-persist", "TestProduct", 10);
-    if let QueryAction::Save { sort_args, .. } = &mut save {
+    if let QueryAction::Save(SaveArgs { sort_args, .. }) = &mut save {
         sort_args.sort = Some("last_change_time".to_string());
         sort_args.order = crate::types::SortDirection::Desc;
     }
@@ -1490,7 +1491,7 @@ async fn query_save_persists_explicit_sort() {
 // ── Update (#315) ───────────────────────────────────────────────────
 
 fn empty_update(name: &str) -> QueryAction {
-    QueryAction::Update {
+    QueryAction::Update(UpdateArgs {
         name: name.into(),
         search: None,
         product: vec![],
@@ -1515,7 +1516,7 @@ fn empty_update(name: &str) -> QueryAction {
         url: vec![],
         clear: vec![],
         sort_args: crate::cli::SortArgs::default(),
-    }
+    })
 }
 
 async fn run_q(action: &QueryAction) -> crate::error::Result<()> {
@@ -1529,7 +1530,7 @@ async fn query_update_replaces_filter_keeps_rest() {
     run_q(&save_action("q")).await.unwrap(); // product=Firefox, status=NEW, limit=25
 
     let mut a = empty_update("q");
-    if let QueryAction::Update { status, .. } = &mut a {
+    if let QueryAction::Update(UpdateArgs { status, .. }) = &mut a {
         *status = vec!["ASSIGNED".into()];
     }
     run_q(&a).await.unwrap();
@@ -1547,7 +1548,7 @@ async fn query_update_replaces_limit() {
     run_q(&save_action("q")).await.unwrap();
 
     let mut a = empty_update("q");
-    if let QueryAction::Update { limit, .. } = &mut a {
+    if let QueryAction::Update(UpdateArgs { limit, .. }) = &mut a {
         *limit = Some(100);
     }
     run_q(&a).await.unwrap();
@@ -1561,7 +1562,7 @@ async fn query_update_clear_resets_filter() {
     run_q(&save_action("q")).await.unwrap();
 
     let mut a = empty_update("q");
-    if let QueryAction::Update { clear, .. } = &mut a {
+    if let QueryAction::Update(UpdateArgs { clear, .. }) = &mut a {
         *clear = vec!["status".into()];
     }
     run_q(&a).await.unwrap();
@@ -1575,7 +1576,7 @@ async fn query_update_clear_resets_filter() {
 async fn query_update_unknown_query_errors() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
     let mut a = empty_update("missing");
-    if let QueryAction::Update { status, .. } = &mut a {
+    if let QueryAction::Update(UpdateArgs { status, .. }) = &mut a {
         *status = vec!["NEW".into()];
     }
     let err = run_q(&a).await.unwrap_err();
@@ -1595,7 +1596,7 @@ async fn query_update_unknown_clear_field_errors() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
     run_q(&save_action("q")).await.unwrap();
     let mut a = empty_update("q");
-    if let QueryAction::Update { clear, .. } = &mut a {
+    if let QueryAction::Update(UpdateArgs { clear, .. }) = &mut a {
         *clear = vec!["bogus".into()];
     }
     let err = run_q(&a).await.unwrap_err();
@@ -1610,7 +1611,7 @@ async fn query_update_clearing_all_filters_rejected() {
         .unwrap(); // only product
 
     let mut a = empty_update("q");
-    if let QueryAction::Update { clear, .. } = &mut a {
+    if let QueryAction::Update(UpdateArgs { clear, .. }) = &mut a {
         *clear = vec!["product".into()];
     }
     let err = run_q(&a).await.unwrap_err();
@@ -1622,7 +1623,7 @@ async fn query_update_bad_date_errors() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
     run_q(&save_action("q")).await.unwrap();
     let mut a = empty_update("q");
-    if let QueryAction::Update { created_since, .. } = &mut a {
+    if let QueryAction::Update(UpdateArgs { created_since, .. }) = &mut a {
         *created_since = Some("not-a-date".into());
     }
     assert!(run_q(&a).await.is_err());
@@ -1634,7 +1635,7 @@ async fn query_update_clear_wins_over_set() {
     run_q(&save_action("q")).await.unwrap(); // product=Firefox, status=NEW
 
     let mut a = empty_update("q");
-    if let QueryAction::Update { status, clear, .. } = &mut a {
+    if let QueryAction::Update(UpdateArgs { status, clear, .. }) = &mut a {
         *status = vec!["ASSIGNED".into()];
         *clear = vec!["status".into()];
     }
@@ -1707,12 +1708,12 @@ async fn query_update_sets_dates_and_sort() {
     run_q(&save_action("q")).await.unwrap();
 
     let mut a = empty_update("q");
-    if let QueryAction::Update {
+    if let QueryAction::Update(UpdateArgs {
         created_since,
         changed_since,
         sort_args,
         ..
-    } = &mut a
+    }) = &mut a
     {
         *created_since = Some("2026-03-01".into());
         *changed_since = Some("2026-03-02".into());

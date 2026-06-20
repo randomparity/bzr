@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+
+### Changed
+
+- **Breaking:** attachment boolean flags now use a uniform `--x` / `--no-x`
+  presence grammar across `attachment upload` and `attachment update`, so the
+  same concept uses the same flag everywhere. `attachment upload` keeps
+  `--private` and renames `--is-patch` to `--patch` (each gaining a `--no-*`
+  form). `attachment update` replaces the value-taking `--obsolete <BOOL>` /
+  `--is-patch <BOOL>` / `--is-private <BOOL>` with `--obsolete` / `--no-obsolete`,
+  `--patch` / `--no-patch`, and `--private` / `--no-private`; passing neither
+  leaves the property unchanged. The old value-boolean forms (e.g.
+  `--obsolete true`) and the `--is-*` names no longer parse. Per the project's
+  replace-don't-deprecate policy no compatibility aliases are kept; update any
+  scripts to the new flags. (#312)
+
+- XML-RPC response object identifiers are extracted with checked conversions
+  instead of `as u64` sign-loss casts: a primary-key `id` (bug, comment,
+  attachment, user, group) that is missing or negative is now reported as a
+  malformed response rather than silently wrapping or becoming `0`. Secondary
+  fields stay tolerant — `comment.bug_id`/`attachment.bug_id` and the counters
+  `comment.count`/`attachment.size` still default to `0` when absent, so the
+  off-spec flat-comment envelope returned by some Bugzilla 5.0.x servers (which
+  may omit `bug_id`) keeps parsing.
+
+- Auth detection now surfaces transport/TLS failures instead of silently
+  defaulting to header auth. When the `rest/whoami` or `rest/valid_login`
+  probes cannot reach the server, the underlying error is propagated so the
+  connection layer can classify it — so a TLS certificate error on the *first*
+  connection to a server now triggers the trust-on-first-use (TOFU) and
+  pin-rotation prompts rather than being masked as a successful detection.
+
+### Removed
+
+- The redundant `bzr whoami show` subcommand. `show` was the only action and
+  was exactly equivalent to bare `bzr whoami`, which invited "what's the
+  difference?" confusion. Use `bzr whoami` (the form the docs already
+  promote). `whoami` now takes no subcommand. (#323)
+
+### Documentation
+
+- The command tree in `docs/bzr-cli.md` is now drift-checked against the binary
+  in CI. A new `agent-skills/tests/flag-drift-check.sh` (run alongside the
+  existing verb-level `drift-check.sh`) compares every command-specific long
+  flag the binary exposes against that command's block in the tree, both
+  directions, and fails the build on a mismatch. Fixed the existing drift it
+  surfaced — the tree was missing flags such as `bug view --web`/`--permissive`,
+  `bug update --dupe-of`/`--comment`/`--cc-add`/`--keywords-add`/`--groups-add`/
+  `--see-also-add` (and `*-remove`), `bug list`/`query` search filters
+  (`--resolution`, `--version`, `--op-sys`, `--platform`, `--whiteboard`,
+  `--target-milestone`, `--qa-contact`, `--url`), `bug create --description-file`,
+  `comment add --private`, `attachment download --bug`/`--out`/`--out-dir`,
+  `attachment upload --comment`/`--comment-private`, and `config set-keyring`/
+  `migrate-to-keyring --service`/`--account`. (#306)
+- Recorded the decision to keep `bzr` as the command name despite the
+  historical collision with GNU Bazaar (retired in 2025; its successor Breezy
+  uses `brz`), with rationale in `docs/decisions/0001-bzr-command-name.md` and
+  a README note plus shell-alias workaround. (#322)
+
 ### Added
 
 - NDJSON output via `--output ndjson` (or `BZR_OUTPUT=ndjson`): list/array
@@ -57,6 +115,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   environment variable (never a literal flag, keeping the secret out of the
   process argument list). `--server-url` requires `--server-api-key-env` and
   conflicts with `--server`; it pairs with `--config` for sandboxed runs. (#314)
+
 - `bug update --expect-unchanged-since <TIMESTAMP>` optimistic-concurrency guard.
   Pass the `last_change_time` from a preceding `bug view`; before writing, bzr
   re-reads each target bug and refuses the update (exit 14, a new distinct
@@ -67,12 +126,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `delta_ts` guard is not in the API) — so a narrow check-then-write window
   remains. With multiple IDs, all are checked first and any mismatch aborts the
   whole batch before any write. (#320)
+
 - Confirmation gate for large batch bug mutations, with a global `-y`/`--yes`
   bypass. A `bug update`/`resolve`/`close`/`reopen` targeting more than 10 bugs
   now prompts for confirmation at an interactive terminal before writing, so a
   mistyped ID list cannot mass-mutate bugs unnoticed. Non-interactive runs
   (piped stdin, agents) auto-bypass and are never blocked; `--yes` skips the
   prompt explicitly. (#313)
+
 - Global `--dry-run` flag for bug mutations. Previews `bug create`, `update`,
   `clone`, `resolve`, `close`, `reopen`, and `dup` without writing: it resolves
   and validates the request, then prints the would-be payload and affected bug
@@ -82,49 +143,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   irreversible batch `update`. `clone` still reads the source bug to build the
   preview. Using `--dry-run` on any non-mutation command exits 7. (#308)
 
-### Changed
-
-- **Breaking:** attachment boolean flags now use a uniform `--x` / `--no-x`
-  presence grammar across `attachment upload` and `attachment update`, so the
-  same concept uses the same flag everywhere. `attachment upload` keeps
-  `--private` and renames `--is-patch` to `--patch` (each gaining a `--no-*`
-  form). `attachment update` replaces the value-taking `--obsolete <BOOL>` /
-  `--is-patch <BOOL>` / `--is-private <BOOL>` with `--obsolete` / `--no-obsolete`,
-  `--patch` / `--no-patch`, and `--private` / `--no-private`; passing neither
-  leaves the property unchanged. The old value-boolean forms (e.g.
-  `--obsolete true`) and the `--is-*` names no longer parse. Per the project's
-  replace-don't-deprecate policy no compatibility aliases are kept; update any
-  scripts to the new flags. (#312)
-
-### Removed
-
-- The redundant `bzr whoami show` subcommand. `show` was the only action and
-  was exactly equivalent to bare `bzr whoami`, which invited "what's the
-  difference?" confusion. Use `bzr whoami` (the form the docs already
-  promote). `whoami` now takes no subcommand. (#323)
-
-### Documentation
-
-- The command tree in `docs/bzr-cli.md` is now drift-checked against the binary
-  in CI. A new `agent-skills/tests/flag-drift-check.sh` (run alongside the
-  existing verb-level `drift-check.sh`) compares every command-specific long
-  flag the binary exposes against that command's block in the tree, both
-  directions, and fails the build on a mismatch. Fixed the existing drift it
-  surfaced — the tree was missing flags such as `bug view --web`/`--permissive`,
-  `bug update --dupe-of`/`--comment`/`--cc-add`/`--keywords-add`/`--groups-add`/
-  `--see-also-add` (and `*-remove`), `bug list`/`query` search filters
-  (`--resolution`, `--version`, `--op-sys`, `--platform`, `--whiteboard`,
-  `--target-milestone`, `--qa-contact`, `--url`), `bug create --description-file`,
-  `comment add --private`, `attachment download --bug`/`--out`/`--out-dir`,
-  `attachment upload --comment`/`--comment-private`, and `config set-keyring`/
-  `migrate-to-keyring --service`/`--account`. (#306)
-- Recorded the decision to keep `bzr` as the command name despite the
-  historical collision with GNU Bazaar (retired in 2025; its successor Breezy
-  uses `brz`), with rationale in `docs/decisions/0001-bzr-command-name.md` and
-  a README note plus shell-alias workaround. (#322)
-
-### Added
-
 - `bzr query update <NAME>` and `bzr template update <NAME>` edit a saved query
   or template in place: a supplied flag replaces that field, an omitted flag
   leaves it unchanged, and `--clear <FIELD>` (repeatable, names matching the long
@@ -132,6 +150,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   re-create (re-specifying everything). A no-op call is rejected, as is an update
   that would leave a template with no fields or a query with no filters (exit 7).
   (#315)
+
 - Global `--timeout <SECS>` (and `BZR_TIMEOUT`) overrides the per-request
   timeout (default 30s) for slow or distant servers; the 10s connect timeout is
   unchanged. Global `--retry <N>` (default 0, max 10) retries transient failures
@@ -140,18 +159,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   5xx responses and read timeouts are retried only for safe reads (GET/HEAD),
   never for writes (create, update, comment). Retries are off by default;
   exhausted retries surface the usual network error (exit code 5). (#311)
+
 - `--count` on `bzr bug list`, `bzr bug search`, and `bzr bug my` prints only the
   number of matching bugs — an integer (table) or `{"count": N}` (JSON) — for
   dashboards, triage gates, and agent branching. It fetches ids only and lifts
   the row limit (`limit=0`), so the count reflects all matches (bounded by the
   server's max-results setting) rather than a single page; `bug my` reports the
   distinct total deduped across the active categories. (#317)
+
 - Convenience verbs over `bzr bug update` for the common state transitions:
   `bzr bug resolve <ID...> [--as <RESOLUTION>]` (defaults to `FIXED`),
   `bzr bug close <ID...> [--as <RESOLUTION>]`, `bzr bug reopen <ID...>`, and
   `bzr bug dup <ID> <TARGET>`. Each is thin sugar that builds the equivalent
   `Bug.update` and inherits its batch (multi-ID, partial-failure exit 11) and
   `--comment` / `--comment-file` / `--comment-private` behavior. (#309)
+
 - `bzr bug create` gains field flags shared with `bug update`: `--alias`,
   `--url`, `--whiteboard`, `--target-milestone`, `--deadline`, `--cc`,
   `--keywords`, `--groups`, and `--flag`. They are sent in the same
@@ -159,6 +181,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   instead of a create-then-update two-step. The list flags accept
   comma-separated, repeatable values; `--flag` uses Bugzilla flag syntax;
   `--deadline` takes `YYYY-MM-DD` and rejects malformed input with exit 7. (#301)
+
 - `bzr bug view <ID> --web` opens the bug's page (`show_bug.cgi?id=<ID>`) on the
   active server in the default browser, the `gh issue view --web` affordance.
   Resolves the URL from local config with no network call or authentication, so
@@ -166,6 +189,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   display is available (headless / SSH without X), it prints the URL and exits 0
   instead of opening a browser, which keeps it safe for scripts, pipes, and
   agents. Multiple IDs open (or print) one page each. (#310)
+
 - `--sort <FIELD>` / `--order asc|desc` on `bug list`, `bug search`, `bug my`,
   and `query run` control result ordering (mapped to Bugzilla's `order`), with
   a `bug_id` tiebreaker for deterministic ties. Absent `--sort`, results now
@@ -173,25 +197,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   this means `bug search` no longer defaults to relevance ranking; pass `--sort`
   to choose another order. `query save --sort` persists an order into the saved
   query; `query run --sort` overrides it. (#303)
+
 - Global `--config <PATH>` flag and `BZR_CONFIG` environment variable select an
   alternate `config.toml` for reads and writes. Precedence: `--config` >
   `BZR_CONFIG` > `$XDG_CONFIG_HOME/bzr/config.toml` (or the platform config
   dir). Sandboxes CI, throwaway agent runs, and per-profile configs without
   manipulating `$HOME`/`$XDG_CONFIG_HOME`. (#304)
+
 - `bzr component list --product <P>` and `bzr component view <product> <component>`
   make components directly discoverable (ID, name, description, default
   assignee, active flag) instead of only via `product view`. Both read the
   product's component set; `--json` emits the component array / object. (#316)
+
 - `bzr attachment view <ATTACHMENT_ID>` shows a single attachment's metadata
   (summary, bug, file name, content type, size, flags, creator, timestamps)
   without downloading its bytes. On REST the `data` field is excluded
   server-side via `exclude_fields`, so inspecting a large attachment is cheap;
   `data` is also omitted from all attachment `--json` output. (#318)
+
 - `bzr classification list` enumerates the server's classifications (ID, name,
   description, product count; full objects under `--json`). Bugzilla has no
   bulk classification endpoint, so names come from the `classification` field's
   legal values and each is fetched for detail. When classifications are
   disabled (only `Unclassified` exists) bzr prints a note to stderr. (#319)
+
 - `bzr config remove-server <NAME>` deletes a server alias (and its OS-keychain
   entry, if any). Removing the current default is refused while other servers
   remain; removing the only server clears the default. `bzr config
@@ -199,14 +228,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   including moving the keychain secret when it is stored under the default
   (server-name) account — and updates `default_server` if it pointed at the old
   name. Both emit the standard mutation JSON (`removed` / `renamed`). (#300)
+
 - `bzr completion <bash|zsh|fish|powershell|elvish>` prints a shell completion
   script to stdout, generated from bzr's live clap command tree so it always
   matches the installed binary's subcommands and flags. README and
   `docs/bzr-cli.md` document a one-line install per shell. (#299)
+
 - `bzr comment add` now accepts `--body-file <PATH>` to read the comment body
   from a UTF-8 file, matching `bug create --description-file` and
   `bug update --comment-file`. A path of `-` reads from stdin. `--body` and
   `--body-file` are mutually exclusive.
+
 - Bundled agent skills for driving `bzr` from AI coding agents, with a
   runtime-free installer. Five skills (`bzr-reference`, `bzr-setup`,
   `bzr-file-bug`, `bzr-triage-bug`, `bzr-search-report`) live under

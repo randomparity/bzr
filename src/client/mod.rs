@@ -217,6 +217,30 @@ impl BugzillaClient {
         })
     }
 
+    /// Dispatch an operation across the detected API mode. In Hybrid mode the
+    /// XML-RPC path is tried first and a transport failure falls back to REST
+    /// (the shape shared by the per-resource read methods). `op` names the
+    /// operation for the fallback log line.
+    pub(super) async fn dispatch_xmlrpc_first<T>(
+        &self,
+        op: &str,
+        rest: impl AsyncFnOnce() -> Result<T>,
+        xmlrpc: impl AsyncFnOnce() -> Result<T>,
+    ) -> Result<T> {
+        match self.api_mode {
+            ApiMode::Rest => rest().await,
+            ApiMode::XmlRpc => xmlrpc().await,
+            ApiMode::Hybrid => match xmlrpc().await {
+                Ok(v) => Ok(v),
+                Err(e) if e.is_transport_failure() => {
+                    tracing::info!(op, error = %e, "XML-RPC {op} failed, retrying via REST");
+                    rest().await
+                }
+                Err(e) => Err(e),
+            },
+        }
+    }
+
     /// Send a GET request and deserialize the JSON response.
     pub(super) async fn get_json<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T> {
         let req = self.apply_auth(self.http.get(self.url(path)));

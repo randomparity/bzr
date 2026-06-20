@@ -2,10 +2,10 @@ use std::io::IsTerminal;
 
 use serde::Deserialize;
 
-use crate::cli::BugAction;
+use crate::cli::CreateArgs;
 use crate::client::BugzillaClient;
-use crate::commands::editor;
-use crate::commands::shared::{merge_set, merge_vec};
+use crate::commands::runtime::editor;
+use crate::commands::runtime::shared::{merge_set, merge_vec};
 use crate::error::Result;
 use crate::output::result_types::{
     write_result, ActionResult, BatchCreateResult, CreateFailure, DryRunResult, ResourceKind,
@@ -124,8 +124,8 @@ fn resolve_description(
     description: Option<&str>,
     description_file: Option<&std::path::Path>,
 ) -> Result<Option<String>> {
-    let explicit = crate::commands::shared::materialize_body_source(
-        crate::commands::shared::classify_body_source(
+    let explicit = crate::commands::runtime::shared::materialize_body_source(
+        crate::commands::runtime::shared::classify_body_source(
             description,
             description_file,
             "--description",
@@ -137,7 +137,7 @@ fn resolve_description(
         return Ok(explicit);
     }
     if !std::io::stdin().is_terminal() {
-        let buf = crate::commands::shared::read_stdin_to_string()?;
+        let buf = crate::commands::runtime::shared::read_stdin_to_string()?;
         if buf.trim().is_empty() {
             return Err(crate::error::BzrError::InputValidation(
                 "no description supplied (piped stdin is empty)".into(),
@@ -173,10 +173,10 @@ fn run_editor_flow(
 }
 
 fn merge_fields(
-    action: &BugAction,
+    args: &CreateArgs,
     tmpl: Option<&crate::types::BugTemplate>,
 ) -> Result<MergedFields> {
-    let BugAction::Create {
+    let CreateArgs {
         product,
         component,
         version,
@@ -186,10 +186,7 @@ fn merge_fields(
         op_sys,
         rep_platform,
         ..
-    } = action
-    else {
-        unreachable!()
-    };
+    } = args;
     let resolved_product = product
         .clone()
         .or_else(|| tmpl.and_then(|t| t.product.clone()))
@@ -280,7 +277,7 @@ impl JsonCreateBug {
                 ))
             })
         };
-        let flags = crate::commands::flags::parse_flags(&self.flags)?;
+        let flags = crate::commands::runtime::flags::parse_flags(&self.flags)?;
         let deadline =
             crate::validation::parse_optional_date_only(self.deadline.as_deref(), "deadline")?;
         Ok(CreateBugParams {
@@ -312,9 +309,12 @@ impl JsonCreateBug {
 /// Read the `--from-json` argument: `-` is stdin, anything else a file path.
 fn read_from_json(arg: &str) -> Result<String> {
     if arg == "-" {
-        crate::commands::shared::read_stdin_to_string()
+        crate::commands::runtime::shared::read_stdin_to_string()
     } else {
-        crate::commands::shared::read_file_with_context(std::path::Path::new(arg), "--from-json")
+        crate::commands::runtime::shared::read_file_with_context(
+            std::path::Path::new(arg),
+            "--from-json",
+        )
     }
 }
 
@@ -371,8 +371,8 @@ fn explicit_description(
     description: Option<&str>,
     description_file: Option<&std::path::Path>,
 ) -> Result<Option<String>> {
-    crate::commands::shared::materialize_body_source(
-        crate::commands::shared::classify_body_source(
+    crate::commands::runtime::shared::materialize_body_source(
+        crate::commands::runtime::shared::classify_body_source(
             description,
             description_file,
             "--description",
@@ -385,8 +385,8 @@ fn explicit_description(
 /// Overlay explicit CLI flags onto a JSON entry: a CLI value (a `Some` scalar
 /// or a non-empty repeatable) wins over the JSON field, applied uniformly to
 /// every element of an array.
-fn overlay_cli(mut json: JsonCreateBug, action: &BugAction) -> Result<JsonCreateBug> {
-    let BugAction::Create {
+fn overlay_cli(mut json: JsonCreateBug, args: &CreateArgs) -> Result<JsonCreateBug> {
+    let CreateArgs {
         product,
         component,
         summary,
@@ -402,10 +402,7 @@ fn overlay_cli(mut json: JsonCreateBug, action: &BugAction) -> Result<JsonCreate
         depends_on,
         create_fields,
         ..
-    } = action
-    else {
-        unreachable!()
-    };
+    } = args;
     // `merge_set`/`merge_vec` overwrite the target when the CLI flag was
     // supplied (a `Some` scalar / non-empty repeatable), else leave the JSON
     // value — exactly the "CLI wins" precedence.
@@ -471,7 +468,7 @@ fn write_batch_create(result: &BatchCreateResult, format: OutputFormat, w: &mut 
 /// model (exit 11).
 async fn handle_from_json(
     client: &BugzillaClient,
-    action: &BugAction,
+    args: &CreateArgs,
     arg: &str,
     format: OutputFormat,
     w: &mut Writers<'_>,
@@ -479,7 +476,7 @@ async fn handle_from_json(
     let raw = read_from_json(arg)?;
     match parse_json_bugs(&raw)? {
         JsonInput::One(entry) => {
-            let params = overlay_cli(*entry, action)?.into_params()?;
+            let params = overlay_cli(*entry, args)?.into_params()?;
             create_and_report(client, &params, format, w).await
         }
         JsonInput::Many(entries) => {
@@ -490,7 +487,7 @@ async fn handle_from_json(
             }
             let mut params_list = Vec::with_capacity(entries.len());
             for entry in entries {
-                params_list.push(overlay_cli(entry, action)?.into_params()?);
+                params_list.push(overlay_cli(entry, args)?.into_params()?);
             }
             create_batch_from_json(client, &params_list, format, w).await
         }
@@ -505,7 +502,7 @@ async fn create_and_report(
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    if crate::commands::dry_run::enabled() {
+    if crate::commands::runtime::dry_run::enabled() {
         write_create_dry_run(params, format, w);
         return Ok(());
     }
@@ -529,7 +526,7 @@ async fn create_batch_from_json(
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    if crate::commands::dry_run::enabled() {
+    if crate::commands::runtime::dry_run::enabled() {
         // One coherent object for the whole batch (N pretty-printed objects
         // would not be valid JSON); `changes` carries the array of params.
         write_result(
@@ -562,11 +559,11 @@ async fn create_batch_from_json(
 
 pub(super) async fn handle(
     client: &BugzillaClient,
-    action: &BugAction,
+    args: &CreateArgs,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let BugAction::Create {
+    let CreateArgs {
         from_json,
         template: template_name,
         summary,
@@ -576,16 +573,13 @@ pub(super) async fn handle(
         depends_on,
         create_fields,
         ..
-    } = action
-    else {
-        unreachable!()
-    };
+    } = args;
 
     if let Some(arg) = from_json {
-        return handle_from_json(client, action, arg, format, w).await;
+        return handle_from_json(client, args, arg, format, w).await;
     }
 
-    let flags = crate::commands::flags::parse_flags(&create_fields.flag)?;
+    let flags = crate::commands::runtime::flags::parse_flags(&create_fields.flag)?;
     let deadline = crate::validation::parse_optional_date_only(
         create_fields.deadline.as_deref(),
         "--deadline",
@@ -596,7 +590,7 @@ pub(super) async fn handle(
     let editor_flow_active = resolved_description.is_none();
 
     let tmpl = load_template(template_name.as_deref())?;
-    let merged = merge_fields(action, tmpl.as_ref())?;
+    let merged = merge_fields(args, tmpl.as_ref())?;
 
     let (resolved_summary, final_description): (Option<String>, Option<String>) =
         if editor_flow_active {

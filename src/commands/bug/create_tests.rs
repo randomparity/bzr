@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used, clippy::panic)]
 
 use std::io::Write;
 
@@ -11,7 +11,7 @@ use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 fn create_action() -> BugAction {
-    BugAction::Create {
+    BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
         template: None,
         product: Some("TestProduct".into()),
@@ -28,7 +28,7 @@ fn create_action() -> BugAction {
         blocks: vec![],
         depends_on: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
-    }
+    })
 }
 
 #[tokio::test]
@@ -72,7 +72,7 @@ async fn bug_create_dry_run_makes_no_write_and_marks_payload() {
         .expect(0)
         .mount(&mock)
         .await;
-    crate::commands::dry_run::set(true);
+    crate::commands::runtime::dry_run::set(true);
 
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -84,7 +84,7 @@ async fn bug_create_dry_run_makes_no_write_and_marks_payload() {
     )
     .await;
     let output = io.out_str().to_string();
-    crate::commands::dry_run::set(false);
+    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok(), "dry-run create failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
@@ -122,7 +122,7 @@ async fn bug_create_sends_parity_fields_in_body() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::Create {
+    let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
         template: None,
         product: Some("TestProduct".into()),
@@ -149,7 +149,7 @@ async fn bug_create_sends_parity_fields_in_body() {
             groups: vec!["security".into()],
             flag: vec!["review+".into()],
         },
-    };
+    });
 
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result =
@@ -167,7 +167,7 @@ async fn bug_create_sends_parity_fields_in_body() {
 async fn bug_create_rejects_malformed_deadline() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let action = BugAction::Create {
+    let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
         template: None,
         product: Some("TestProduct".into()),
@@ -187,7 +187,7 @@ async fn bug_create_rejects_malformed_deadline() {
             deadline: Some("not-a-date".into()),
             ..Default::default()
         },
-    };
+    });
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
@@ -203,7 +203,7 @@ async fn bug_create_rejects_malformed_deadline() {
 async fn bug_create_missing_product_returns_input_validation() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let action = BugAction::Create {
+    let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
         template: None,
         product: None,
@@ -220,7 +220,7 @@ async fn bug_create_missing_product_returns_input_validation() {
         blocks: vec![],
         depends_on: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
-    };
+    });
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
@@ -242,7 +242,7 @@ async fn bug_create_missing_product_returns_input_validation() {
 async fn bug_create_missing_component_returns_input_validation() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let action = BugAction::Create {
+    let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
         template: None,
         product: Some("TestProduct".into()),
@@ -259,7 +259,7 @@ async fn bug_create_missing_component_returns_input_validation() {
         blocks: vec![],
         depends_on: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
-    };
+    });
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
@@ -281,7 +281,7 @@ async fn bug_create_missing_component_returns_input_validation() {
 async fn bug_create_with_unknown_template_errors() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let action = BugAction::Create {
+    let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
         template: Some("does-not-exist".into()),
         product: Some("TestProduct".into()),
@@ -298,7 +298,7 @@ async fn bug_create_with_unknown_template_errors() {
         blocks: vec![],
         depends_on: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
-    };
+    });
     let mut __io4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
@@ -357,7 +357,7 @@ async fn bug_create_with_template_fills_missing_fields() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::Create {
+    let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
         template: Some("tpl".into()),
         product: None,
@@ -374,7 +374,7 @@ async fn bug_create_with_template_fills_missing_fields() {
         blocks: vec![],
         depends_on: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
-    };
+    });
     let mut __io6 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
@@ -411,7 +411,7 @@ async fn bug_create_reads_description_from_file() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::Create {
+    let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
         template: None,
         product: Some("TestProduct".into()),
@@ -428,7 +428,7 @@ async fn bug_create_reads_description_from_file() {
         blocks: vec![],
         depends_on: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
-    };
+    });
     let mut __io7 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
@@ -447,7 +447,7 @@ async fn bug_create_reads_description_from_file() {
 async fn bug_create_description_file_missing_returns_input_validation() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let action = BugAction::Create {
+    let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
         template: None,
         product: Some("TestProduct".into()),
@@ -464,7 +464,7 @@ async fn bug_create_description_file_missing_returns_input_validation() {
         blocks: vec![],
         depends_on: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
-    };
+    });
     let mut __io8 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
@@ -490,7 +490,7 @@ async fn bug_create_description_file_non_utf8_returns_input_validation() {
     let bad_path = dir.join(format!("bzr-create-bad-utf8-{}.bin", std::process::id()));
     std::fs::write(&bad_path, [0xff_u8, 0xfe_u8, 0xfd_u8]).unwrap();
 
-    let action = BugAction::Create {
+    let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
         template: None,
         product: Some("TestProduct".into()),
@@ -507,7 +507,7 @@ async fn bug_create_description_file_non_utf8_returns_input_validation() {
         blocks: vec![],
         depends_on: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
-    };
+    });
     let mut __io9 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
@@ -530,7 +530,7 @@ async fn bug_create_description_file_non_utf8_returns_input_validation() {
 async fn bug_create_missing_summary_without_editor_flow_is_rejected() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let action = BugAction::Create {
+    let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
         template: None,
         product: Some("TestProduct".into()),
@@ -547,7 +547,7 @@ async fn bug_create_missing_summary_without_editor_flow_is_rejected() {
         blocks: vec![],
         depends_on: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
-    };
+    });
     let mut __io10 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
@@ -723,7 +723,7 @@ fn install_fake_editor() -> std::path::PathBuf {
 }
 
 fn editor_action_no_summary_no_description() -> BugAction {
-    BugAction::Create {
+    BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
         template: None,
         product: Some("TestProduct".into()),
@@ -740,7 +740,7 @@ fn editor_action_no_summary_no_description() -> BugAction {
         blocks: vec![],
         depends_on: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
-    }
+    })
 }
 
 #[tokio::test]
@@ -893,7 +893,7 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
     // under cargo's non-TTY stdin: the template description must NOT
     // be used as a fallback. The empty-stdin branch fires first and
     // returns InputValidation.
-    let action = BugAction::Create {
+    let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
         template: Some("tpl-with-desc".into()),
         product: None,
@@ -910,7 +910,7 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
         blocks: vec![],
         depends_on: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
-    };
+    });
     let mut __io14 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
@@ -946,7 +946,7 @@ fn resolve_description_conflict_errors() {
 /// Build a `from_json` create action: `from_json` set, every CLI field at its
 /// default so the JSON is the sole field source unless a test overrides one.
 fn from_json_action(path: &str) -> BugAction {
-    BugAction::Create {
+    BugAction::Create(crate::cli::CreateArgs {
         from_json: Some(path.to_string()),
         template: None,
         product: None,
@@ -963,7 +963,7 @@ fn from_json_action(path: &str) -> BugAction {
         blocks: vec![],
         depends_on: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
-    }
+    })
 }
 
 /// Write `json` to a file under `tmp` and return its path, so tests exercise
@@ -1086,7 +1086,7 @@ async fn from_json_cli_flag_overrides_json_field() {
 
     let json = r#"{"product":"FromJson","component":"C","summary":"S"}"#;
     let mut action = from_json_action(&write_json_file(&tmp, json));
-    if let BugAction::Create { product, .. } = &mut action {
+    if let BugAction::Create(crate::cli::CreateArgs { product, .. }) = &mut action {
         *product = Some("FromCli".into());
     }
     let mut io = crate::test_helpers::CapturedIo::new();
@@ -1210,12 +1210,12 @@ async fn from_json_batch_dry_run_emits_single_object_and_no_write() {
     let json = r#"[{"product":"P","component":"C","summary":"one"},
                    {"product":"P","component":"C","summary":"two"}]"#;
     let action = from_json_action(&write_json_file(&tmp, json));
-    crate::commands::dry_run::set(true);
+    crate::commands::runtime::dry_run::set(true);
     let mut io = crate::test_helpers::CapturedIo::new();
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
             .await;
-    crate::commands::dry_run::set(false);
+    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok(), "batch dry-run should succeed: {result:?}");
     // The whole batch is ONE valid JSON object whose changes is the array.

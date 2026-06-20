@@ -3,7 +3,7 @@
 //! Template operations are pure local file I/O — no network client needed.
 
 use crate::cli::TemplateAction;
-use crate::commands::shared::merge_set;
+use crate::commands::runtime::shared::merge_set;
 use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::output::resources::template::{
@@ -57,7 +57,7 @@ pub async fn execute(
                 .ok_or_else(|| BzrError::config(format!("template '{name}' not found")))?;
             write_template_detail(name, template, format, w.out);
         }
-        TemplateAction::Update { .. } => handle_update(action, format, w)?,
+        TemplateAction::Update(args) => handle_update(args, format, w)?,
         TemplateAction::Delete { name } => {
             Config::update_locked(|config| {
                 if config.templates.remove(name.as_str()).is_none() {
@@ -110,15 +110,16 @@ fn clear_template_field(t: &mut BugTemplate, field: &str) -> Result<()> {
 /// Merge `template update` flags into an existing template in place. A field
 /// flag replaces that field; `--clear <field>` resets it; omitted flags are
 /// left unchanged. Rejects a no-op call and a result with no fields set.
-fn handle_update(action: &TemplateAction, format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
-    let TemplateAction::Update {
+fn handle_update(
+    args: &crate::cli::template::UpdateArgs,
+    format: OutputFormat,
+    w: &mut Writers<'_>,
+) -> Result<()> {
+    let crate::cli::template::UpdateArgs {
         name,
         fields,
         clear,
-    } = action
-    else {
-        unreachable!()
-    };
+    } = args;
 
     let sets = [
         &fields.product,

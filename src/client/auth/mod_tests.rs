@@ -192,13 +192,19 @@ async fn whoami_401_no_email_gives_api_key_error() {
 }
 
 #[tokio::test]
-async fn network_error_defaults_to_header() {
-    // When the server is unreachable, default to header auth
-    // rather than failing -- header is the safest default.
+async fn non_tls_network_error_defaults_to_header() {
+    // A plain transport failure (connection refused — not a TLS cert error)
+    // falls back to header auth rather than aborting: detection isn't retried,
+    // and the real request (which is) may still succeed, so a transient
+    // detection-time blip must not fail the whole invocation. TLS-certificate
+    // failures take the opposite path (propagated so TOFU can fire) — exercised
+    // via the connection layer's TLS classification tests.
     let result =
         detect_auth_method(&test_http_client(), "https://127.0.0.1:1", "test-key", None).await;
-    assert!(result.is_ok(), "should default to header, got: {result:?}");
-    assert_eq!(result.unwrap(), AuthMethod::Header);
+    assert!(
+        matches!(result, Ok(AuthMethod::Header)),
+        "non-TLS transport failure should default to header, got: {result:?}"
+    );
 }
 
 #[tokio::test]

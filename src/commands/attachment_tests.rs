@@ -4,6 +4,7 @@ use super::*;
 use wiremock::matchers::{body_string_contains, method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
+use crate::cli::attachment::{UpdateArgs, UploadArgs};
 use crate::cli::AttachmentAction;
 use crate::test_helpers::{make_attachment, setup_test_env};
 use crate::types::OutputFormat;
@@ -93,7 +94,7 @@ async fn attachment_upload_api_error_propagates() {
     let upload_file = tmp.path().join("upload.txt");
     std::fs::write(&upload_file, "test content").unwrap();
 
-    let action = AttachmentAction::Upload {
+    let action = AttachmentAction::Upload(UploadArgs {
         bug_id: 42,
         file: upload_file.to_string_lossy().into_owned(),
         summary: Some("Test".into()),
@@ -105,7 +106,7 @@ async fn attachment_upload_api_error_propagates() {
         comment: None,
         comment_private: false,
         flag: vec![],
-    };
+    });
     let result = super::execute(
         &action,
         None,
@@ -167,7 +168,7 @@ async fn attachment_upload_returns_id() {
     let upload_file = tmp.path().join("upload.txt");
     std::fs::write(&upload_file, "test content").unwrap();
 
-    let action = AttachmentAction::Upload {
+    let action = AttachmentAction::Upload(UploadArgs {
         bug_id: 42,
         file: upload_file.to_string_lossy().into_owned(),
         summary: Some("Test upload".into()),
@@ -179,7 +180,7 @@ async fn attachment_upload_returns_id() {
         comment: None,
         comment_private: false,
         flag: vec![],
-    };
+    });
     let mut __io_a2 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
@@ -212,7 +213,7 @@ async fn attachment_upload_with_comment_includes_comment_in_request() {
     let upload_file = tmp.path().join("upload.txt");
     std::fs::write(&upload_file, "test content").unwrap();
 
-    let action = AttachmentAction::Upload {
+    let action = AttachmentAction::Upload(UploadArgs {
         bug_id: 42,
         file: upload_file.to_string_lossy().into_owned(),
         summary: Some("Test".into()),
@@ -224,7 +225,7 @@ async fn attachment_upload_with_comment_includes_comment_in_request() {
         comment: Some("see this".into()),
         comment_private: false,
         flag: vec![],
-    };
+    });
     let result = super::execute(
         &action,
         None,
@@ -257,7 +258,7 @@ async fn attachment_upload_with_is_patch_defaults_content_type_to_text_plain() {
     let upload_file = tmp.path().join("fix.patch");
     std::fs::write(&upload_file, "diff --git a b").unwrap();
 
-    let action = AttachmentAction::Upload {
+    let action = AttachmentAction::Upload(UploadArgs {
         bug_id: 42,
         file: upload_file.to_string_lossy().into_owned(),
         summary: None,
@@ -269,7 +270,7 @@ async fn attachment_upload_with_is_patch_defaults_content_type_to_text_plain() {
         comment: None,
         comment_private: false,
         flag: vec![],
-    };
+    });
     let result = super::execute(
         &action,
         None,
@@ -304,7 +305,7 @@ async fn attachment_upload_is_patch_with_explicit_content_type_keeps_content_typ
     let upload_file = tmp.path().join("fix.patch");
     std::fs::write(&upload_file, "binary").unwrap();
 
-    let action = AttachmentAction::Upload {
+    let action = AttachmentAction::Upload(UploadArgs {
         bug_id: 42,
         file: upload_file.to_string_lossy().into_owned(),
         summary: None,
@@ -316,7 +317,7 @@ async fn attachment_upload_is_patch_with_explicit_content_type_keeps_content_typ
         comment: None,
         comment_private: false,
         flag: vec![],
-    };
+    });
     let result = super::execute(
         &action,
         None,
@@ -343,7 +344,7 @@ async fn attachment_update_succeeds() {
         .mount(&mock)
         .await;
 
-    let action = AttachmentAction::Update {
+    let action = AttachmentAction::Update(UpdateArgs {
         id: 99,
         summary: Some("Updated summary".into()),
         file_name: None,
@@ -355,7 +356,7 @@ async fn attachment_update_succeeds() {
         private: false,
         no_private: false,
         flag: vec![],
-    };
+    });
     let mut __io_a3 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
@@ -387,7 +388,7 @@ async fn attachment_update_no_obsolete_sends_false() {
         .mount(&mock)
         .await;
 
-    let action = AttachmentAction::Update {
+    let action = AttachmentAction::Update(UpdateArgs {
         id: 7,
         summary: None,
         file_name: None,
@@ -399,7 +400,7 @@ async fn attachment_update_no_obsolete_sends_false() {
         private: false,
         no_private: false,
         flag: vec![],
-    };
+    });
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
     assert!(result.is_ok(), "update --no-obsolete failed: {result:?}");
@@ -420,7 +421,7 @@ async fn attachment_update_unset_bools_are_omitted() {
         .mount(&mock)
         .await;
 
-    let action = AttachmentAction::Update {
+    let action = AttachmentAction::Update(UpdateArgs {
         id: 8,
         summary: Some("only summary".into()),
         file_name: None,
@@ -432,7 +433,7 @@ async fn attachment_update_unset_bools_are_omitted() {
         private: false,
         no_private: false,
         flag: vec![],
-    };
+    });
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
     assert!(result.is_ok());
@@ -551,7 +552,7 @@ async fn attachment_upload_with_comment_private_flips_privacy() {
         .mount(&mock)
         .await;
 
-    let action = AttachmentAction::Upload {
+    let action = AttachmentAction::Upload(UploadArgs {
         bug_id: 42,
         file: upload_file.to_string_lossy().into_owned(),
         summary: Some("test".into()),
@@ -563,7 +564,7 @@ async fn attachment_upload_with_comment_private_flips_privacy() {
         comment: Some("sensitive".into()),
         comment_private: true,
         flag: vec![],
-    };
+    });
     let result = super::execute(
         &action,
         None,
@@ -585,7 +586,7 @@ async fn attachment_upload_comment_private_without_comment_is_input_error() {
     let upload_file = tmp.path().join("p.diff");
     std::fs::write(&upload_file, "x").unwrap();
 
-    let action = AttachmentAction::Upload {
+    let action = AttachmentAction::Upload(UploadArgs {
         bug_id: 42,
         file: upload_file.to_string_lossy().into_owned(),
         summary: None,
@@ -597,7 +598,7 @@ async fn attachment_upload_comment_private_without_comment_is_input_error() {
         comment: None,
         comment_private: true,
         flag: vec![],
-    };
+    });
     let result = super::execute(
         &action,
         None,
@@ -646,7 +647,7 @@ async fn attachment_upload_comment_private_partial_failure_propagates_error() {
         .mount(&mock)
         .await;
 
-    let action = AttachmentAction::Upload {
+    let action = AttachmentAction::Upload(UploadArgs {
         bug_id: 42,
         file: upload_file.to_string_lossy().into_owned(),
         summary: None,
@@ -658,7 +659,7 @@ async fn attachment_upload_comment_private_partial_failure_propagates_error() {
         comment: Some("x".into()),
         comment_private: true,
         flag: vec![],
-    };
+    });
     let result = super::execute(
         &action,
         None,
@@ -702,7 +703,7 @@ async fn attachment_upload_comment_private_no_matching_comment_is_data_integrity
         .mount(&mock)
         .await;
 
-    let action = AttachmentAction::Upload {
+    let action = AttachmentAction::Upload(UploadArgs {
         bug_id: 42,
         file: upload_file.to_string_lossy().into_owned(),
         summary: None,
@@ -714,7 +715,7 @@ async fn attachment_upload_comment_private_no_matching_comment_is_data_integrity
         comment: Some("x".into()),
         comment_private: true,
         flag: vec![],
-    };
+    });
     let result = super::execute(
         &action,
         None,
@@ -786,7 +787,7 @@ fn b64(bytes: &[u8]) -> String {
 #[tokio::test]
 async fn write_one_attachment_writes_inline_data_with_att_id_prefix() {
     let (_lock, _mock, tmp) = setup_test_env().await;
-    let client = super::super::shared::connect_and_configure(None, None)
+    let client = super::super::runtime::shared::connect_and_configure(None, None)
         .await
         .unwrap();
 
@@ -836,7 +837,7 @@ async fn write_one_attachment_falls_back_when_data_missing() {
         .mount(&mock)
         .await;
 
-    let client = super::super::shared::connect_and_configure(None, None)
+    let client = super::super::runtime::shared::connect_and_configure(None, None)
         .await
         .unwrap();
 
@@ -856,7 +857,7 @@ async fn write_one_attachment_falls_back_when_data_missing() {
 #[tokio::test]
 async fn write_one_attachment_overwrites_existing_file() {
     let (_lock, _mock, tmp) = setup_test_env().await;
-    let client = super::super::shared::connect_and_configure(None, None)
+    let client = super::super::runtime::shared::connect_and_configure(None, None)
         .await
         .unwrap();
 
@@ -1449,7 +1450,7 @@ async fn attachment_download_batch_top_level_out_dir_unwritable_fails_fast() {
 #[tokio::test]
 async fn write_one_attachment_invalid_base64_returns_data_integrity() {
     let (_lock, _mock, tmp) = setup_test_env().await;
-    let client = super::super::shared::connect_and_configure(None, None)
+    let client = super::super::runtime::shared::connect_and_configure(None, None)
         .await
         .unwrap();
 
@@ -1510,7 +1511,7 @@ fn single_download_dest_sanitizes_server_filename_when_no_out() {
 #[tokio::test]
 async fn write_one_attachment_sanitizes_server_filename_with_separators() {
     let (_lock, _mock, tmp) = setup_test_env().await;
-    let client = super::super::shared::connect_and_configure(None, None)
+    let client = super::super::runtime::shared::connect_and_configure(None, None)
         .await
         .unwrap();
 

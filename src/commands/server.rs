@@ -12,7 +12,7 @@ pub async fn execute(
     api: Option<ApiMode>,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let client = super::shared::connect_and_configure(server, api).await?;
+    let client = super::runtime::shared::connect_and_configure(server, api).await?;
 
     match action {
         ServerAction::Info => {

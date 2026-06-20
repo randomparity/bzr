@@ -7,7 +7,7 @@
 //!
 //! `--yes` is a global flag installed once per process by `dispatch` (the same
 //! pattern as `--dry-run` and the network-tuning globals), so it does not need
-//! threading through every handler signature. See [`crate::commands::dry_run`].
+//! threading through every handler signature. See [`crate::commands::runtime::dry_run`].
 
 use std::io::{BufRead, Write};
 use std::sync::atomic::{AtomicBool, Ordering};

@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used, clippy::panic)]
 
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
@@ -8,7 +8,7 @@ use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 fn make_view_action(ids: &[&str], permissive: bool) -> BugAction {
-    BugAction::View {
+    BugAction::View(crate::cli::ViewArgs {
         ids: ids.iter().map(|s| (*s).to_string()).collect(),
         permissive,
         web: false,
@@ -16,7 +16,7 @@ fn make_view_action(ids: &[&str], permissive: bool) -> BugAction {
             fields: None,
             exclude_fields: None,
         },
-    }
+    })
 }
 
 fn ok_bug_body(id: u64, summary: &str) -> serde_json::Value {
@@ -126,7 +126,7 @@ async fn view_single_json_custom_only_field_omits_forced_id() {
         .await;
 
     let mut action = make_view_action(&["42"], false);
-    let BugAction::View { field_args, .. } = &mut action else {
+    let BugAction::View(crate::cli::ViewArgs { field_args, .. }) = &mut action else {
         unreachable!()
     };
     field_args.fields = Some("cf_release".into());
@@ -160,7 +160,7 @@ async fn view_single_table_renders_requested_custom_row() {
         .await;
 
     let mut action = make_view_action(&["42"], false);
-    let BugAction::View { field_args, .. } = &mut action else {
+    let BugAction::View(crate::cli::ViewArgs { field_args, .. }) = &mut action else {
         unreachable!()
     };
     field_args.fields = Some("cf_release".into());
@@ -198,7 +198,7 @@ async fn view_single_table_warns_for_unknown_field() {
         .await;
 
     let mut action = make_view_action(&["42"], false);
-    let BugAction::View { field_args, .. } = &mut action else {
+    let BugAction::View(crate::cli::ViewArgs { field_args, .. }) = &mut action else {
         unreachable!()
     };
     field_args.fields = Some("sumary".into());
@@ -372,7 +372,7 @@ async fn view_multi_strict_json_projects_custom_fields_inside_wrapper() {
     }
 
     let mut action = make_view_action(&["1", "2"], false);
-    let BugAction::View { field_args, .. } = &mut action else {
+    let BugAction::View(crate::cli::ViewArgs { field_args, .. }) = &mut action else {
         unreachable!()
     };
     field_args.fields = Some("id,cf_release".into());
@@ -934,7 +934,7 @@ async fn execute_web_prints_url_when_fd1_not_a_tty() {
     }
 
     let (_lock, mock, _tmp) = setup_test_env().await;
-    let action = BugAction::View {
+    let action = BugAction::View(crate::cli::ViewArgs {
         ids: vec!["55".to_string()],
         permissive: false,
         web: true,
@@ -942,7 +942,7 @@ async fn execute_web_prints_url_when_fd1_not_a_tty() {
             fields: None,
             exclude_fields: None,
         },
-    };
+    });
 
     let redirect = tempfile::NamedTempFile::new().unwrap();
     // SAFETY: save fd 1, then point it at the temp file so is_terminal() is
