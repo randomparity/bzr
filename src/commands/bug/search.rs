@@ -1,9 +1,17 @@
-use crate::cli::{FieldArgs, SearchArgs};
+use std::io::Write;
+
+use crate::cli::SearchArgs;
+use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::resources::bug::{canonical_field_list, write_bugs, ColumnSpec};
 use crate::output::resources::query::write_query_saved;
 use crate::output::writers::Writers;
 use crate::types::{ApiMode, OutputFormat, Overrides, SavedQuery, SearchParams};
+
+/// The client plus the query to run, and any `--save-as` query to persist
+/// afterwards. Produced by [`resolve_client_and_params`] from either the
+/// `--from-url` or the quicksearch path.
+type SearchPlan = (BugzillaClient, SearchParams, Option<(String, SavedQuery)>);
 
 /// Default cap on bugs returned by a search when neither the URL nor `--limit`
 /// specifies one. Keeps unbounded `bug search` invocations from pulling an
@@ -56,6 +64,80 @@ fn build_params_from_url(
     params
 }
 
+/// Resolve the search client and query from `--from-url` (which may target a
+/// different server, parsed from the URL host) or from a quicksearch string.
+async fn resolve_client_and_params(
+    args: &SearchArgs,
+    server: Option<&str>,
+    api: Option<ApiMode>,
+) -> Result<SearchPlan> {
+    let fields = args.field_args.fields.as_deref();
+    let exclude_fields = args.field_args.exclude_fields.as_deref();
+
+    let Some(url_str) = args.from_url.as_deref() else {
+        let query_str = args.query.as_deref().ok_or_else(|| {
+            crate::error::BzrError::InputValidation(
+                "either a search query or --from-url is required".into(),
+            )
+        })?;
+        let client = crate::commands::shared::connect_and_configure(server, api).await?;
+        let params = SearchParams {
+            quicksearch: Some(query_str.to_string()),
+            limit: Some(args.limit.unwrap_or(DEFAULT_SEARCH_LIMIT)),
+            include_fields: canonical_field_list(fields),
+            exclude_fields: canonical_field_list(exclude_fields),
+            order: Some(crate::validation::build_order(
+                args.sort_args.sort.as_deref(),
+                args.sort_args.order,
+            )),
+            ..Default::default()
+        };
+        return Ok((client, params, None));
+    };
+
+    let config = crate::config::Config::load()?;
+    let parsed = crate::url_parser::parse_bugzilla_url(url_str, &config)?;
+    let effective_server = server.or(parsed.query.server.as_deref());
+    let client = crate::commands::shared::connect_and_configure(effective_server, api).await?;
+    let save_info = resolve_save_info(args.save_as.as_ref(), parsed.suggested_name, &parsed.query)?;
+    let mut params = build_params_from_url(
+        parsed.query,
+        args.limit,
+        canonical_field_list(fields).as_deref(),
+        canonical_field_list(exclude_fields).as_deref(),
+    );
+    // `--sort` overrides the URL's own ordering; otherwise the parsed URL
+    // order (if any) is preserved verbatim.
+    if args.sort_args.sort.is_some() {
+        params.order = Some(crate::validation::build_order(
+            args.sort_args.sort.as_deref(),
+            args.sort_args.order,
+        ));
+    }
+    Ok((client, params, save_info))
+}
+
+/// Persist the `--save-as` query (insert or update) and report the result.
+/// No-op when the search had no `--save-as`.
+fn persist_saved_query(
+    save_info: Option<(String, SavedQuery)>,
+    format: OutputFormat,
+    out: &mut dyn Write,
+) -> Result<()> {
+    let Some((name, query)) = save_info else {
+        return Ok(());
+    };
+    let mut is_update = false;
+    crate::config::Config::update_locked(|config| {
+        is_update = config.queries.contains_key(name.as_str());
+        config.queries.insert(name.clone(), query);
+        Ok(())
+    })?;
+    let verb = if is_update { "Updated" } else { "Saved" };
+    write_query_saved(&name, verb, format, out);
+    Ok(())
+}
+
 /// Handles bug search — builds its own client (unlike other handlers) because
 /// `--from-url` may resolve a different server from the URL hostname.
 pub(super) async fn handle(
@@ -65,92 +147,30 @@ pub(super) async fn handle(
     api: Option<ApiMode>,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let SearchArgs {
-        query,
-        from_url,
-        save_as,
-        limit,
-        count,
-        field_args: FieldArgs {
-            fields,
-            exclude_fields,
-        },
-        sort_args,
-        page_args: crate::cli::PageArgs { offset, paginate },
-    } = args;
+    let offset = args.page_args.offset;
+    super::ensure_no_paging_with_count(args.count, offset, args.page_args.paginate)?;
 
-    super::ensure_no_paging_with_count(*count, *offset, *paginate)?;
+    let spec = ColumnSpec::new(
+        args.field_args.fields.as_deref(),
+        args.field_args.exclude_fields.as_deref(),
+    );
 
-    let spec = ColumnSpec::new(fields.as_deref(), exclude_fields.as_deref());
+    let (client, mut params, save_info) = resolve_client_and_params(args, server, api).await?;
+    crate::commands::paging::resolve_offset(&mut params, offset);
 
-    let (client, mut params, save_info) = if let Some(url_str) = from_url {
-        let config = crate::config::Config::load()?;
-        let parsed = crate::url_parser::parse_bugzilla_url(url_str, &config)?;
-        let effective_server = server.or(parsed.query.server.as_deref());
-        let client = crate::commands::shared::connect_and_configure(effective_server, api).await?;
-        let save_info = resolve_save_info(save_as.as_ref(), parsed.suggested_name, &parsed.query)?;
-        let canonical_fields = canonical_field_list(fields.as_deref());
-        let canonical_exclude = canonical_field_list(exclude_fields.as_deref());
-        let mut params = build_params_from_url(
-            parsed.query,
-            *limit,
-            canonical_fields.as_deref(),
-            canonical_exclude.as_deref(),
-        );
-        // `--sort` overrides the URL's own ordering; otherwise the parsed URL
-        // order (if any) is preserved verbatim.
-        if sort_args.sort.is_some() {
-            params.order = Some(crate::validation::build_order(
-                sort_args.sort.as_deref(),
-                sort_args.order,
-            ));
-        }
-        (client, params, save_info)
-    } else {
-        let query_str = query.as_deref().ok_or_else(|| {
-            crate::error::BzrError::InputValidation(
-                "either a search query or --from-url is required".into(),
-            )
-        })?;
-        let client = crate::commands::shared::connect_and_configure(server, api).await?;
-        let params = SearchParams {
-            quicksearch: Some(query_str.to_string()),
-            limit: Some(limit.unwrap_or(DEFAULT_SEARCH_LIMIT)),
-            include_fields: canonical_field_list(fields.as_deref()),
-            exclude_fields: canonical_field_list(exclude_fields.as_deref()),
-            order: Some(crate::validation::build_order(
-                sort_args.sort.as_deref(),
-                sort_args.order,
-            )),
-            ..Default::default()
-        };
-        (client, params, None)
-    };
-    crate::commands::paging::resolve_offset(&mut params, *offset);
-
-    if *count {
+    if args.count {
         let bugs = client
             .search_bugs(&super::count_search_params(params))
             .await?;
         crate::output::result_types::write_count(bugs.len(), format, w.out);
     } else {
-        let page = crate::commands::paging::fetch_page(&client, &params, *paginate).await?;
+        let page =
+            crate::commands::paging::fetch_page(&client, &params, args.page_args.paginate).await?;
         write_bugs(&page.bugs, spec, format, w.out, w.err);
-        crate::commands::paging::write_truncation_note(&page, params.limit, *offset, format, w);
+        crate::commands::paging::write_truncation_note(&page, params.limit, offset, format, w);
     }
 
-    if let Some((name, query)) = save_info {
-        let mut is_update = false;
-        crate::config::Config::update_locked(|config| {
-            is_update = config.queries.contains_key(name.as_str());
-            config.queries.insert(name.clone(), query);
-            Ok(())
-        })?;
-        let verb = if is_update { "Updated" } else { "Saved" };
-        write_query_saved(&name, verb, format, w.out);
-    }
-
-    Ok(())
+    persist_saved_query(save_info, format, w.out)
 }
 
 #[cfg(test)]
