@@ -56,6 +56,16 @@ if assert_success; then
     if assert_json '.summary' "cli wins"; then test_pass; fi
 fi
 
+# --keywords round-trip. The fix-needed keyword is seeded only on bz52+; gate so
+# older Bugzilla (no keyword definition) skips cleanly rather than erroring.
+test_begin "146a. bug create --keywords round-trips"
+if require_version 520 "fix-needed keyword seeded on bz52+"; then
+    KID=$(make_bug "${_CF[@]}" --summary "kw create" --keywords fix-needed)
+    run_bzr bug view "$KID"
+    if assert_success && assert_json_contains '.keywords | join(",")' "fix-needed"; then test_pass; fi
+fi
+unset KID
+
 rm -rf "$_FJ"
 unset _CF _FJ _WB CFID FID OID
 echo ""

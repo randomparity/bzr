@@ -56,5 +56,24 @@ run_bzr bug list --whiteboard "$_PGMARK"
 if assert_success && assert_json_exists ".[] | select(.id==$P1)" &&
     assert_json "[.[] | select(.id==$PX)] | length" "0"; then test_pass; fi
 
-unset _PGMARK _PGOTHER _PG_CREATE P1 P2 P3 PX
+# --version filter: two products with distinct, per-run-unique versions prove the
+# filter discriminates (present-by-id / absent-by-id). Versions are created via
+# `product create --version`, so this needs no container fixture or code change.
+_VPA="vpa$$x${RANDOM}"
+_VPB="vpb$$x${RANDOM}"
+_VVA="va$$x${RANDOM}"
+_VVB="vb$$x${RANDOM}"
+run_bzr product create --name "$_VPA" --description d --version "$_VVA"
+run_bzr component create --product "$_VPA" --name C --description d --default-assignee "$ADMIN_EMAIL"
+run_bzr product create --name "$_VPB" --description d --version "$_VVB"
+run_bzr component create --product "$_VPB" --name C --description d --default-assignee "$ADMIN_EMAIL"
+VBA=$(make_bug --product "$_VPA" --component C --op-sys Linux --rep-platform PC --description d --version "$_VVA" --summary "ver filter a")
+VBB=$(make_bug --product "$_VPB" --component C --op-sys Linux --rep-platform PC --description d --version "$_VVB" --summary "ver filter b")
+
+test_begin "141a. bug list --version filters discriminatingly"
+run_bzr bug list --version "$_VVA"
+if assert_success && assert_json_exists ".[] | select(.id==$VBA)" &&
+    assert_json "[.[] | select(.id==$VBB)] | length" "0"; then test_pass; fi
+
+unset _PGMARK _PGOTHER _PG_CREATE P1 P2 P3 PX _VPA _VPB _VVA _VVB VBA VBB
 echo ""
