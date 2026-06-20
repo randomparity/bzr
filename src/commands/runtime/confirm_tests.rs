@@ -1,3 +1,5 @@
+#![expect(clippy::unwrap_used)]
+
 use std::io::Cursor;
 
 use super::{read_yes_no, should_prompt, BATCH_THRESHOLD};

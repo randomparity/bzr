@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used, clippy::panic)]
 
 //! Drift guard for the published JSON Schemas.
 //!

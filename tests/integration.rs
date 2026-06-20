@@ -4,7 +4,7 @@
 //! These tests are serialized via a mutex because they set the
 //! process-global `XDG_CONFIG_HOME` environment variable.
 
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used, clippy::expect_used)]
 
 use bzr::test_helpers::setup_test_env;
 use bzr::ENV_LOCK;

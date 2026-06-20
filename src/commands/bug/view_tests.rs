@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used, clippy::panic)]
 
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
