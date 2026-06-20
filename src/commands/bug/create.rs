@@ -448,7 +448,7 @@ fn overlay_cli(mut json: JsonCreateBug, action: &BugAction) -> Result<JsonCreate
 /// created-IDs line plus per-item failures on stderr in table mode.
 fn write_batch_create(result: &BatchCreateResult, format: OutputFormat, w: &mut Writers<'_>) {
     match format {
-        OutputFormat::Json => write_result(result, "", format, w.out),
+        OutputFormat::Json | OutputFormat::Ndjson => write_result(result, "", format, w.out),
         OutputFormat::Table => {
             if !result.created.is_empty() {
                 let ids: Vec<String> = result.created.iter().map(|id| format!("#{id}")).collect();

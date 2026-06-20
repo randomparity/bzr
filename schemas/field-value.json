@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/field-value.json",
+  "title": "FieldValue",
+  "description": "An allowable value for a Bugzilla field as emitted in `--format json` output.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "sort_key": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "is_active": {
+      "type": "boolean"
+    },
+    "can_change_to": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "required": [
+    "name",
+    "sort_key",
+    "is_active"
+  ],
+  "additionalProperties": false
+}

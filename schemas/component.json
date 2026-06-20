@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/component.json",
+  "title": "Component",
+  "description": "A product component as emitted in `--format json` output.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean"
+    },
+    "default_assignee": {
+      "type": ["string", "null"]
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "description",
+    "is_active",
+    "default_assignee"
+  ],
+  "additionalProperties": false
+}

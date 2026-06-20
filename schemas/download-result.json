@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/download-result.json",
+  "title": "DownloadResult",
+  "description": "Result of downloading an attachment to disk.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "file": {
+      "type": "string"
+    },
+    "size": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "resource": {
+      "type": "string",
+      "enum": ["bug", "attachment", "comment", "user", "group", "product", "component", "server"]
+    },
+    "action": {
+      "type": "string",
+      "enum": ["created", "updated", "added", "removed", "renamed", "downloaded", "dry-run"]
+    }
+  },
+  "required": [
+    "id",
+    "file",
+    "size",
+    "resource",
+    "action"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/tag-result.json",
+  "title": "TagResult",
+  "description": "Result of `comment tag`.",
+  "type": "object",
+  "properties": {
+    "comment_id": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "resource": {
+      "type": "string",
+      "enum": ["bug", "attachment", "comment", "user", "group", "product", "component", "server"]
+    },
+    "action": {
+      "type": "string",
+      "enum": ["created", "updated", "added", "removed", "renamed", "downloaded", "dry-run"]
+    }
+  },
+  "required": [
+    "comment_id",
+    "tags",
+    "resource",
+    "action"
+  ],
+  "additionalProperties": false
+}

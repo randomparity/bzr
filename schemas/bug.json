@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/bug.json",
+  "title": "Bug",
+  "description": "The object emitted by `bug view` (single) and each element of the `bug list`/`bug search`/`bug my` arrays. Server-specific custom fields are flattened in as additional top-level properties. The `--fields`/`--exclude-fields` options may project the property set, so any built-in property may be absent; for that reason `required` is empty even though the built-ins are always present absent projection.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "summary": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "resolution": {
+      "type": ["string", "null"]
+    },
+    "dupe_of": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "deadline": {
+      "type": ["string", "null"]
+    },
+    "product": {
+      "type": ["string", "null"]
+    },
+    "component": {
+      "type": ["string", "null"]
+    },
+    "version": {
+      "type": ["string", "null"]
+    },
+    "assigned_to": {
+      "type": ["string", "null"]
+    },
+    "priority": {
+      "type": ["string", "null"]
+    },
+    "severity": {
+      "type": ["string", "null"]
+    },
+    "creation_time": {
+      "type": ["string", "null"]
+    },
+    "last_change_time": {
+      "type": ["string", "null"]
+    },
+    "creator": {
+      "type": ["string", "null"]
+    },
+    "url": {
+      "type": ["string", "null"]
+    },
+    "whiteboard": {
+      "type": ["string", "null"]
+    },
+    "keywords": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "blocks": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "depends_on": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "cc": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "op_sys": {
+      "type": ["string", "null"]
+    },
+    "rep_platform": {
+      "type": ["string", "null"]
+    }
+  },
+  "required": [],
+  "additionalProperties": true
+}

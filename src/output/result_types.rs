@@ -2,7 +2,7 @@ use std::io::Write;
 
 use serde::Serialize;
 
-use super::formatting::write_json;
+use super::formatting::write_json_family;
 use crate::types::OutputFormat;
 
 // ── Result output ───────────────────────────────────────────────────
@@ -14,7 +14,7 @@ pub fn write_result<W: Write + ?Sized>(
     out: &mut W,
 ) {
     match format {
-        OutputFormat::Json => write_json(value, out),
+        OutputFormat::Json | OutputFormat::Ndjson => write_json_family(value, format, out),
         OutputFormat::Table => {
             let _ = writeln!(out, "{human_message}");
         }

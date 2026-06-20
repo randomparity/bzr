@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/batch-create-result.json",
+  "title": "BatchCreateResult",
+  "description": "Result of an array `bug create --from-json`.",
+  "type": "object",
+  "properties": {
+    "resource": {
+      "type": "string",
+      "enum": ["bug", "attachment", "comment", "user", "group", "product", "component", "server"]
+    },
+    "action": {
+      "type": "string",
+      "enum": ["created", "updated", "added", "removed", "renamed", "downloaded", "dry-run"]
+    },
+    "created": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "failed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "error"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "resource",
+    "action",
+    "created",
+    "failed"
+  ],
+  "additionalProperties": false
+}

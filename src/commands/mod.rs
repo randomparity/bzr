@@ -15,6 +15,7 @@ pub mod inline_server;
 pub(crate) mod paging;
 pub mod product;
 pub mod query;
+pub mod schema;
 pub mod server;
 mod shared;
 pub mod template;

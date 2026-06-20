@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/config-result.json",
+  "title": "ConfigResult",
+  "description": "Result of `config set-server`/`set-default`/`rename-server`/`remove-server`.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "config_file": {
+      "type": "string"
+    },
+    "resource": {
+      "type": "string",
+      "enum": ["bug", "attachment", "comment", "user", "group", "product", "component", "server"]
+    },
+    "action": {
+      "type": "string",
+      "enum": ["created", "updated", "added", "removed", "renamed", "downloaded", "dry-run"]
+    },
+    "previous_name": {
+      "type": ["string", "null"]
+    },
+    "url": {
+      "type": ["string", "null"]
+    },
+    "is_default": {
+      "type": ["boolean", "null"]
+    }
+  },
+  "required": [
+    "name",
+    "config_file",
+    "resource",
+    "action"
+  ],
+  "additionalProperties": false
+}

@@ -220,7 +220,7 @@ fn write_batch(
             let rows = batch.into_table_rows();
             write_multi_bug_view(&rows, spec, w.out);
         }
-        OutputFormat::Json => {
+        OutputFormat::Json | OutputFormat::Ndjson => {
             // Project each bug to the selected fields; the wrapper keys and the
             // per-failure metadata (`id`, `error`) stay untrimmed so `jq`
             // consumers can always rely on `.bugs[]` / `.failed[]`.

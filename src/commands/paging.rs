@@ -135,7 +135,9 @@ pub(crate) fn write_truncation_note(
         OutputFormat::Table => {
             let _ = writeln!(w.out, "{msg}");
         }
-        OutputFormat::Json => {
+        // For machine output the note goes to stderr so stdout stays a clean,
+        // parseable document (pretty JSON or one NDJSON record per line).
+        OutputFormat::Json | OutputFormat::Ndjson => {
             let _ = writeln!(w.err, "{msg}");
         }
     }

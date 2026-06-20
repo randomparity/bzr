@@ -117,10 +117,13 @@ pub struct Cli {
     #[arg(long, value_name = "EMAIL", global = true, requires = "server_url")]
     pub server_email: Option<String>,
 
-    /// Output format: `table` (default at a TTY) or `json`.
+    /// Output format: `table` (default at a TTY), `json`, or `ndjson`.
     ///
-    /// When stdout is piped, the default flips to `json` unless this
-    /// flag or `BZR_OUTPUT` overrides it. Precedence:
+    /// `ndjson` emits newline-delimited JSON — one compact value per line for
+    /// list results (a single object, e.g. one bug or a result envelope, prints
+    /// as one compact line) — ideal for streaming into agents and `jq -c`. When
+    /// stdout is piped, the default flips to `json` unless this flag or
+    /// `BZR_OUTPUT` overrides it. Precedence:
     /// `--json` > `--output` > `BZR_OUTPUT` > auto-detect.
     #[arg(long, global = true)]
     pub output: Option<OutputFormat>,
@@ -589,6 +592,24 @@ pub enum Commands {
     Completion {
         /// Shell to generate completions for.
         shell: clap_complete::Shell,
+    },
+
+    /// Print a published JSON Schema for a command's JSON output.
+    ///
+    /// `--format json` shapes are documented as checked-in JSON Schema
+    /// (draft 2020-12) so agents can validate output against a contract
+    /// instead of branching per command. Run without a name to list the
+    /// available schema names; pass one to print that schema:
+    ///
+    ///   bzr schema                # list schema names
+    ///   bzr schema bug            # the bug object (list elements / view)
+    ///   bzr schema batch-result   # the batch `bug update` envelope
+    ///
+    /// Purely local: no config, network, or auth.
+    #[command(verbatim_doc_comment)]
+    Schema {
+        /// Schema name to print; omit to list all available schema names.
+        name: Option<String>,
     },
 }
 
