@@ -73,6 +73,27 @@ pub(crate) fn get_str_array(m: &BTreeMap<String, Value>, key: &str) -> Vec<Strin
         .unwrap_or_default()
 }
 
+/// Parse a `flags` array of flag structs into view-side [`Flag`] objects.
+/// Non-struct array elements are skipped; missing members default (name/status
+/// to empty, setter/requestee to `None`), matching the REST deserializer's
+/// tolerance.
+pub(crate) fn get_flags(m: &BTreeMap<String, Value>, key: &str) -> Vec<crate::types::Flag> {
+    m.get(key)
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(Value::as_struct)
+                .map(|fm| crate::types::Flag {
+                    name: get_str(fm, "name").unwrap_or_default(),
+                    status: get_str(fm, "status").unwrap_or_default(),
+                    setter: get_nonempty_str(fm, "setter"),
+                    requestee: get_nonempty_str(fm, "requestee"),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 pub(crate) fn get_int_array(m: &BTreeMap<String, Value>, key: &str) -> Vec<u64> {
     m.get(key)
         .and_then(Value::as_array)

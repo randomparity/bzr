@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::test_helpers::make_attachment;
-use crate::types::{Attachment, OutputFormat};
+use crate::types::{Attachment, Flag, OutputFormat};
 
 fn output_attachment(id: u64, summary: &str) -> Attachment {
     make_attachment(id, 42, &format!("file_{id}.patch"), summary, None)
@@ -22,6 +22,31 @@ fn capture_batch(format: OutputFormat, result: &AttachmentBatchResult) -> (Strin
         String::from_utf8(out).unwrap(),
         String::from_utf8(err).unwrap(),
     )
+}
+
+#[test]
+fn write_attachment_detail_shows_flags() {
+    let mut a = output_attachment(10, "Fix patch");
+    a.flags = vec![Flag {
+        name: "review".into(),
+        status: "+".into(),
+        setter: Some("alice@example.com".into()),
+        requestee: None,
+    }];
+    let mut buf = Vec::new();
+    write_attachment(&a, OutputFormat::Table, &mut buf);
+    let output = String::from_utf8(buf).unwrap();
+
+    assert!(output.contains("Flags"), "got: {output}");
+    assert!(output.contains("review+"), "got: {output}");
+}
+
+#[test]
+fn attachment_json_includes_flags_array() {
+    let a = output_attachment(10, "Fix patch");
+    let value = serde_json::to_value(&a).unwrap();
+    // flags is always present (empty -> []), so consumers can rely on the key.
+    assert_eq!(value["flags"], serde_json::json!([]));
 }
 
 #[test]
@@ -114,6 +139,7 @@ fn write_attachments_table_missing_optional_fields_render_dash() {
         is_obsolete: false,
         is_private: false,
         is_patch: false,
+        flags: Vec::new(),
         data: None,
     }];
     let output = capture(OutputFormat::Table, &attachments);

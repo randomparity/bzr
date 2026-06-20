@@ -84,6 +84,7 @@ pub fn make_attachment(
         is_obsolete: false,
         is_private: false,
         is_patch: false,
+        flags: Vec::new(),
         data,
     }
 }

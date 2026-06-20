@@ -79,6 +79,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `bug view` and `attachment view` now surface Bugzilla `flags`, and `bug view`
+  also surfaces `target_milestone` — fields the REST API returns but which were
+  previously dropped. Each flag renders as `name` + status token with the
+  requestee in parentheses (e.g. `review+`, `needinfo?(qa@example.com)`). Both
+  fields are selectable via `--fields` (e.g. `bug view <id> --fields id,flags`)
+  and appear in `--json` (flags as an array, always present; `target_milestone`
+  as a string). The unset target-milestone sentinel `---` and empty flag lists
+  are suppressed in table detail but kept verbatim in JSON. (#351)
+
 - NDJSON output via `--output ndjson` (or `BZR_OUTPUT=ndjson`): list/array
   results print one compact JSON value per line and single objects print as one
   compact line — the streaming shape for agents and `jq -c`. An empty list emits

@@ -89,6 +89,21 @@
     },
     "rep_platform": {
       "type": ["string", "null"]
+    },
+    "target_milestone": {
+      "type": ["string", "null"]
+    },
+    "flags": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "type": "string" },
+          "setter": { "type": ["string", "null"] },
+          "requestee": { "type": ["string", "null"] }
+        }
+      }
     }
   },
   "required": [],

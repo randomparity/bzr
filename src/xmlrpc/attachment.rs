@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use crate::error::{BzrError, Result};
 use crate::xmlrpc::client::XmlRpcClient;
 use crate::xmlrpc::mappers::{
-    get_bool_flag, get_datetime_str, get_nonempty_str, get_str, get_u64, lookup_bug_entry,
-    require_u64, EXPECTED_STRUCT_RESPONSE,
+    get_bool_flag, get_datetime_str, get_flags, get_nonempty_str, get_str, get_u64,
+    lookup_bug_entry, require_u64, EXPECTED_STRUCT_RESPONSE,
 };
 use crate::xmlrpc::value::Value;
 
@@ -127,6 +127,7 @@ fn value_to_attachment(val: &Value) -> Result<crate::types::Attachment> {
         is_obsolete: get_bool_flag(m, "is_obsolete"),
         is_private: get_bool_flag(m, "is_private"),
         is_patch: get_bool_flag(m, "is_patch"),
+        flags: get_flags(m, "flags"),
         data,
     })
 }
