@@ -47,5 +47,14 @@ else
     fi
 fi
 
+test_begin "15a. component list --product"
+run_bzr component list --product FuncTestProd
+if assert_success && assert_json_array_min_length '.' 1 &&
+    assert_json_contains '[.[].name] | join(",")' "Backend"; then test_pass; fi
+
+test_begin "15b. component view <product> <component>"
+run_bzr component view FuncTestProd Backend
+if assert_success && assert_json '.name' "Backend"; then test_pass; fi
+
 echo ""
 

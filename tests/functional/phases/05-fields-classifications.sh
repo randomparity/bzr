@@ -40,5 +40,10 @@ test_begin "20. classification view Unclassified"
 run_bzr classification view Unclassified
 if assert_success && assert_json '.name' "Unclassified"; then test_pass; fi
 
+test_begin "20a. classification list"
+run_bzr classification list
+if assert_success && assert_json_array_min_length '.' 1 &&
+    assert_json_contains '[.[].name] | join(",")' "Unclassified"; then test_pass; fi
+
 echo ""
 
