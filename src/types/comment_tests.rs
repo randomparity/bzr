@@ -4,24 +4,27 @@ use super::*;
 
 #[test]
 fn comment_deserializes_minimal() {
-    // bug_id is required (a comment always belongs to a bug); only the truly
-    // optional fields fall back to their defaults.
-    let json = r#"{"id": 1, "bug_id": 10}"#;
+    // Only `id` is required (the primary key). The other fields, including
+    // bug_id, fall back to their defaults so off-spec/flat envelopes still
+    // parse.
+    let json = r#"{"id": 1}"#;
     let comment: Comment = serde_json::from_str(json).unwrap();
     assert_eq!(comment.id, 1);
-    assert_eq!(comment.bug_id, 10);
+    assert_eq!(comment.bug_id, 0);
     assert!(comment.text.is_empty());
     assert!(!comment.is_private);
 }
 
 #[test]
-fn comment_requires_bug_id() {
-    let json = r#"{"id": 1}"#;
-    let err = serde_json::from_str::<Comment>(json).unwrap_err();
-    assert!(
-        err.to_string().contains("bug_id"),
-        "unexpected error: {err}"
-    );
+fn comment_flat_envelope_without_bug_id_still_parses() {
+    // The flat `{"comments": [...]}` envelope some Bugzilla 5.0.x servers
+    // return (issue #135) may omit bug_id; deserialization must tolerate it
+    // rather than fail the whole comment list.
+    let json = r#"{"id": 7, "count": 2, "text": "hi", "creator": "a@b.c"}"#;
+    let comment: Comment = serde_json::from_str(json).unwrap();
+    assert_eq!(comment.id, 7);
+    assert_eq!(comment.bug_id, 0);
+    assert_eq!(comment.count, 2);
 }
 
 #[test]

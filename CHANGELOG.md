@@ -96,12 +96,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   replace-don't-deprecate policy no compatibility aliases are kept; update any
   scripts to the new flags. (#312)
 
-- XML-RPC and REST responses now treat object identifiers strictly. Required
-  IDs (`bug.id`, `comment.id`/`bug_id`, `attachment.id`/`bug_id`, user and group
-  IDs) are extracted with checked conversions instead of `as u64` sign-loss
-  casts or `#[serde(default)]`, so a missing or negative identifier is reported
-  as a malformed response rather than silently becoming `0`. Optional counters
-  (`comment.count`, `attachment.size`) still default to `0` when absent.
+- XML-RPC response object identifiers are extracted with checked conversions
+  instead of `as u64` sign-loss casts: a primary-key `id` (bug, comment,
+  attachment, user, group) that is missing or negative is now reported as a
+  malformed response rather than silently wrapping or becoming `0`. Secondary
+  fields stay tolerant — `comment.bug_id`/`attachment.bug_id` and the counters
+  `comment.count`/`attachment.size` still default to `0` when absent, so the
+  off-spec flat-comment envelope returned by some Bugzilla 5.0.x servers (which
+  may omit `bug_id`) keeps parsing.
 
 - Auth detection now surfaces transport/TLS failures instead of silently
   defaulting to header auth. When the `rest/whoami` or `rest/valid_login`

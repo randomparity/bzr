@@ -65,7 +65,7 @@ impl BugzillaClient {
     /// server doesn't expose `xmlrpc.cgi`.
     pub async fn get_attachments(&self, bug_id: u64) -> Result<Vec<Attachment>> {
         self.dispatch_xmlrpc_first(
-            "attachment list",
+            &format!("attachment list (bug {bug_id})"),
             || self.get_attachments_rest(bug_id),
             || async { self.xmlrpc_client()?.get_attachments(bug_id).await },
         )
@@ -91,7 +91,7 @@ impl BugzillaClient {
     /// private content under non-admin scope (issue #133).
     pub async fn get_attachment(&self, attachment_id: u64) -> Result<Attachment> {
         self.dispatch_xmlrpc_first(
-            "attachment fetch",
+            &format!("attachment fetch (id {attachment_id})"),
             || self.get_attachment_rest(attachment_id),
             || async {
                 self.xmlrpc_client()?

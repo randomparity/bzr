@@ -58,7 +58,7 @@ fn value_to_comment(val: &Value) -> Result<crate::types::Comment> {
 
     Ok(crate::types::Comment {
         id: require_u64(m, "id", "comment")?,
-        bug_id: require_u64(m, "bug_id", "comment")?,
+        bug_id: get_u64(m, "bug_id").unwrap_or(0),
         text: get_str(m, "text").unwrap_or_default(),
         creator: get_nonempty_str(m, "creator"),
         creation_time: get_datetime_str(m, "creation_time"),

@@ -18,6 +18,9 @@ fn bool_from_int_or_bool<'de, D: Deserializer<'de>>(d: D) -> Result<bool, D::Err
 #[non_exhaustive]
 pub struct Attachment {
     pub id: u64,
+    /// Parent bug. Tolerant of absence (defaults to `0`) for off-spec servers
+    /// and flat envelopes; `id` (the primary key) stays required.
+    #[serde(default)]
     pub bug_id: u64,
     #[serde(default)]
     pub file_name: String,

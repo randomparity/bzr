@@ -71,10 +71,13 @@ jobs:
       - run: cargo test --locked --features test-helpers
 
   functional:
-    name: Functional (bz53)
+    # Gates on bz52 (a tagged stable release), not bz53 — bz53's image builds
+    # Bugzilla from the moving `master` branch, so it would turn this PR check
+    # red on unrelated upstream changes. Run bz53/master on a schedule instead.
+    name: Functional (bz52)
     runs-on: ubuntu-latest
     env:
-      BZR_BZ_VERSION: bz53
+      BZR_BZ_VERSION: bz52
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
         with:
@@ -84,8 +87,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6e  # stable
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
         with:
-          key: functional-bz53
-      - name: Start Bugzilla 5.3 container
+          key: functional-bz52
+      - name: Start Bugzilla 5.2 container
         run: tests/functional/setup-bugzilla.sh start
       - name: Run functional tests
         run: tests/functional/run-tests.sh

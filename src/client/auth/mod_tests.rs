@@ -192,17 +192,18 @@ async fn whoami_401_no_email_gives_api_key_error() {
 }
 
 #[tokio::test]
-async fn network_error_propagates_as_transport_error() {
-    // When the server is unreachable, surface the transport error rather than
-    // masking it as a successful header-auth fallback. This lets the
-    // connection layer classify TLS failures and offer TOFU / pin-rotation
-    // prompts instead of silently picking an auth method for a server it
-    // never reached.
+async fn non_tls_network_error_defaults_to_header() {
+    // A plain transport failure (connection refused — not a TLS cert error)
+    // falls back to header auth rather than aborting: detection isn't retried,
+    // and the real request (which is) may still succeed, so a transient
+    // detection-time blip must not fail the whole invocation. TLS-certificate
+    // failures take the opposite path (propagated so TOFU can fire) — exercised
+    // via the connection layer's TLS classification tests.
     let result =
         detect_auth_method(&test_http_client(), "https://127.0.0.1:1", "test-key", None).await;
     assert!(
-        matches!(result, Err(BzrError::Http(_))),
-        "unreachable server should yield a transport error, got: {result:?}"
+        matches!(result, Ok(AuthMethod::Header)),
+        "non-TLS transport failure should default to header, got: {result:?}"
     );
 }
 

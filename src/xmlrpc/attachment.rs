@@ -113,7 +113,7 @@ fn value_to_attachment(val: &Value) -> Result<crate::types::Attachment> {
 
     Ok(crate::types::Attachment {
         id: require_u64(m, "id", "attachment")?,
-        bug_id: require_u64(m, "bug_id", "attachment")?,
+        bug_id: get_u64(m, "bug_id").unwrap_or(0),
         file_name: get_str(m, "file_name").unwrap_or_default(),
         summary: get_str(m, "summary").unwrap_or_default(),
         content_type: get_str(m, "content_type").unwrap_or_default(),

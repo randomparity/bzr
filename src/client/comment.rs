@@ -66,7 +66,7 @@ impl BugzillaClient {
         since: Option<&str>,
     ) -> Result<Vec<Comment>> {
         self.dispatch_xmlrpc_first(
-            "comment list",
+            &format!("comment list (bug {bug_id})"),
             || self.get_comments_since_rest(bug_id, since),
             || async {
                 self.xmlrpc_client()?
