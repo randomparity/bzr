@@ -35,5 +35,23 @@ test_begin "13. product update FuncTestProd"
 run_bzr product update FuncTestProd --description "Updated desc"
 if assert_success; then test_pass; fi
 
+# Per-run-unique product so create never collides on the non-reset container.
+_PV="pv$$x${RANDOM}"
+
+test_begin "13a. product create --version round-trips"
+run_bzr product create --name "$_PV" --description "version test" --version "7.7"
+if assert_success; then
+    run_bzr product view "$_PV"
+    if assert_success && assert_json_contains '[.versions[].name] | join(",")' "7.7"; then test_pass; fi
+fi
+
+test_begin "13b. product update --is-open false reflects in is_active"
+run_bzr product update "$_PV" --is-open false
+if assert_success; then
+    run_bzr product view "$_PV"
+    if assert_json '.is_active' "false"; then test_pass; fi
+fi
+
+unset _PV
 echo ""
 

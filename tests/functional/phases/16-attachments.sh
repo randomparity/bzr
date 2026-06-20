@@ -164,5 +164,30 @@ if [[ -n "$BUG1" ]] && [[ -n "${ATTACH_ID:-}" ]] && [[ "$ATTACH_ID" != "null" ]]
     rm -rf "$MIX_DIR"
 else test_skip "no BUG1 or no ATTACH_ID"; fi
 
+# attachment view (metadata only) and attachment update --file-name. Self-
+# contained: creates its own bug and attachment.
+_AB=$(make_bug --product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d --summary "att view host")
+_AF=$(mktemp /tmp/bzr-func-att.XXXXXX)
+printf 'attachment bytes' >"$_AF"
+
+test_begin "150. attachment view metadata"
+run_bzr attachment upload "$_AB" "$_AF" --summary "viewme"
+if assert_success; then
+    _AID=$(jq -r '.id // .attachment_id // (.ids[0] // empty)' "$BZR_STDOUT" 2>/dev/null)
+    run_bzr attachment view "$_AID"
+    if assert_success && assert_json '.summary' "viewme"; then test_pass; fi
+fi
+
+test_begin "151. attachment update --file-name round-trips"
+if [[ -n "${_AID:-}" ]]; then
+    run_bzr attachment update "$_AID" --file-name "renamed-att.bin"
+    if assert_success; then
+        run_bzr attachment view "$_AID"
+        if assert_json '.file_name' "renamed-att.bin"; then test_pass; fi
+    fi
+else test_skip "no attachment id"; fi
+
+rm -f "$_AF"
+unset _AB _AF _AID
 echo ""
 

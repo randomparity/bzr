@@ -52,5 +52,28 @@ test_begin "103. --server test whoami"
 run_bzr_raw --server test whoami
 if assert_success; then test_pass; fi
 
+# --output ndjson: empty list emits zero lines; with data, one value per line.
+test_begin "103a. --output ndjson (empty list emits no lines)"
+run_bzr_raw --output ndjson bug list --whiteboard "nomatch$$x${RANDOM}"
+if assert_success && assert_ndjson_line_count 0; then test_pass; fi
+
+test_begin "103b. --output ndjson (one value per line)"
+_NM="nd$$x${RANDOM}"
+make_bug --marker "$_NM" --product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d --summary "ndjson 1" >/dev/null
+make_bug --marker "$_NM" --product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d --summary "ndjson 2" >/dev/null
+run_bzr_raw --output ndjson bug list --whiteboard "$_NM"
+if assert_success && assert_ndjson_line_count 2; then test_pass; fi
+unset _NM
+
+# --dry-run previews a mutation without writing it.
+test_begin "103c. --dry-run bug create previews without writing"
+_DM="dry$$x${RANDOM}"
+run_bzr --dry-run bug create --product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d --whiteboard "$_DM" --summary "dryrun preview"
+if assert_success && assert_json '.action' "dry-run"; then
+    run_bzr bug list --whiteboard "$_DM" --count
+    if assert_count 0; then test_pass; fi
+fi
+unset _DM
+
 echo ""
 

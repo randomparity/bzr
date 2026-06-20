@@ -108,5 +108,28 @@ if [[ -n "$BUG1" ]]; then
     rm -f "$tmpfile"
 else test_skip "no BUG1"; fi
 
+# comment add --body-file (and stdin via `-`). Self-contained fixtures; stdin is
+# fed by redirection, not a pipe, so run_bzr's exit capture stays in this shell.
+_CB=$(make_bug --product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d --summary "comment bodyfile host")
+_CBF=$(mktemp /tmp/bzr-func-cbody.XXXXXX)
+
+test_begin "149. comment add --body-file"
+printf 'body from a file' >"$_CBF"
+run_bzr comment add "$_CB" --body-file "$_CBF"
+if assert_success; then
+    run_bzr comment list "$_CB"
+    if assert_stdout_contains "body from a file"; then test_pass; fi
+fi
+
+test_begin "149a. comment add --body-file - (stdin)"
+printf 'body via stdin dash' >"$_CBF"
+run_bzr comment add "$_CB" --body-file - <"$_CBF"
+if assert_success; then
+    run_bzr comment list "$_CB"
+    if assert_stdout_contains "body via stdin dash"; then test_pass; fi
+fi
+
+rm -f "$_CBF"
+unset _CB _CBF
 echo ""
 
