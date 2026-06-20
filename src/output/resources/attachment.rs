@@ -62,6 +62,15 @@ pub fn write_attachment<W: Write + ?Sized>(a: &Attachment, format: OutputFormat,
         write_optional_field(out, "Creator", a.creator.as_deref());
         write_optional_field(out, "Created", a.creation_time.as_deref());
         write_optional_field(out, "Modified", a.last_change_time.as_deref());
+        if !a.flags.is_empty() {
+            let rendered = a
+                .flags
+                .iter()
+                .map(crate::types::Flag::render_inline)
+                .collect::<Vec<_>>()
+                .join(", ");
+            write_field(out, "Flags", &rendered);
+        }
     });
 }
 

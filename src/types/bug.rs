@@ -4,9 +4,9 @@ use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
-use super::common::FlagUpdate;
+use super::common::{Flag, FlagUpdate};
 
-const BUG_BUILT_IN_FIELD_COUNT: usize = 23;
+const BUG_BUILT_IN_FIELD_COUNT: usize = 25;
 
 fn is_custom_field_name(name: &str) -> bool {
     name.starts_with("cf_")
@@ -66,6 +66,8 @@ pub struct Bug {
     pub cc: Vec<String>,
     pub op_sys: Option<String>,
     pub rep_platform: Option<String>,
+    pub target_milestone: Option<String>,
+    pub flags: Vec<Flag>,
     pub custom_fields: BTreeMap<String, Value>,
 }
 
@@ -116,6 +118,10 @@ struct BugWire {
     op_sys: Option<String>,
     #[serde(default)]
     rep_platform: Option<String>,
+    #[serde(default)]
+    target_milestone: Option<String>,
+    #[serde(default)]
+    flags: Vec<Flag>,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
@@ -146,6 +152,8 @@ impl From<BugWire> for Bug {
             cc: wire.cc,
             op_sys: wire.op_sys,
             rep_platform: wire.rep_platform,
+            target_milestone: wire.target_milestone,
+            flags: wire.flags,
             custom_fields: wire
                 .extra
                 .into_iter()
@@ -199,6 +207,8 @@ impl Serialize for Bug {
         map.serialize_entry("cc", &self.cc)?;
         map.serialize_entry("op_sys", &self.op_sys)?;
         map.serialize_entry("rep_platform", &self.rep_platform)?;
+        map.serialize_entry("target_milestone", &self.target_milestone)?;
+        map.serialize_entry("flags", &self.flags)?;
         for (name, value) in self
             .custom_fields
             .iter()

@@ -44,6 +44,18 @@
     "is_patch": {
       "type": "boolean"
     },
+    "flags": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "type": "string" },
+          "setter": { "type": ["string", "null"] },
+          "requestee": { "type": ["string", "null"] }
+        }
+      }
+    },
     "data": {
       "type": ["string", "null"]
     }
@@ -60,7 +72,8 @@
     "size",
     "is_obsolete",
     "is_private",
-    "is_patch"
+    "is_patch",
+    "flags"
   ],
   "additionalProperties": false
 }

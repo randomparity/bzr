@@ -363,6 +363,15 @@ upstream Bugzilla and `bzl-search`.
 
 Display detailed information about one or more bugs.
 
+The detail view includes the bug's `target_milestone` and `flags` when set.
+Each flag renders as `name` + status token, with the requestee in parentheses
+when present (e.g. `review+`, `needinfo?(qa@example.com)`) — the same syntax
+`--flag` accepts. The Target Milestone row is omitted when the milestone is
+unset (Bugzilla's `---` sentinel) and the Flags row is omitted when there are
+no flags; under `--json` both are always present (the raw `target_milestone`
+string and the full flag objects, including `setter`). Both are selectable via
+`--fields` (e.g. `--fields id,flags`).
+
 Under `--json` the returned object is trimmed to the selected fields
 (gh-style) on every transport, since trimming happens client-side after
 the fetch. On XML-RPC servers, single-bug `bzr bug view` fetches the full
@@ -807,10 +816,15 @@ bzr --json attachment list 12345
 ### `bzr attachment view`
 
 Show a single attachment's metadata by attachment ID — summary, bug, file
-name, content type, size, flags (patch/obsolete/private), creator, and
-timestamps — **without** downloading its bytes. On REST the `data` field is
-excluded server-side, so inspecting a large attachment is cheap. The `data`
-field is omitted from `--json` output.
+name, content type, size, the boolean state markers (patch/obsolete/private),
+creator, and timestamps — **without** downloading its bytes. On REST the
+`data` field is excluded server-side, so inspecting a large attachment is
+cheap. The `data` field is omitted from `--json` output.
+
+Bugzilla review `flags` set on the attachment are shown when present, each
+rendered as `name` + status token with the requestee in parentheses (e.g.
+`review+`, `review?(qa@example.com)`). Under `--json` the `flags` array is
+always present (empty `[]` when there are none).
 
 ```bash
 bzr attachment view 9876

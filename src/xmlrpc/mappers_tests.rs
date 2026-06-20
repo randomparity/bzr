@@ -1,8 +1,33 @@
 use std::collections::BTreeMap;
 
-use super::{get_datetime_str, get_int_array, get_nonempty_str, get_str_array, require_u64};
+use super::{
+    get_datetime_str, get_flags, get_int_array, get_nonempty_str, get_str_array, require_u64,
+};
 use crate::error::BzrError;
 use crate::xmlrpc::value::Value;
+
+#[test]
+fn get_flags_parses_structs_and_skips_non_structs() {
+    let mut flag = BTreeMap::new();
+    flag.insert("name".into(), Value::String("review".into()));
+    flag.insert("status".into(), Value::String("+".into()));
+    flag.insert("setter".into(), Value::String("alice@example.com".into()));
+
+    let mut m = BTreeMap::new();
+    m.insert(
+        "flags".into(),
+        Value::Array(vec![Value::Struct(flag), Value::Int(7)]),
+    );
+
+    let flags = get_flags(&m, "flags");
+    assert_eq!(flags.len(), 1, "non-struct element should be skipped");
+    assert_eq!(flags[0].name, "review");
+    assert_eq!(flags[0].status, "+");
+    assert_eq!(flags[0].setter.as_deref(), Some("alice@example.com"));
+    assert!(flags[0].requestee.is_none());
+
+    assert!(get_flags(&m, "missing").is_empty());
+}
 
 #[test]
 fn get_nonempty_str_filters_empty_and_non_string() {
