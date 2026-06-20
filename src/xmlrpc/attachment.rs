@@ -112,6 +112,9 @@ fn value_to_attachment(val: &Value) -> Result<crate::types::Attachment> {
     };
 
     Ok(crate::types::Attachment {
+        // `id` is a primary key and must be present and non-negative; secondary
+        // numeric fields (`bug_id`, `size`) default to 0 because off-spec
+        // Bugzilla envelopes may omit them, and a zero is harmless for display.
         id: require_u64(m, "id", "attachment")?,
         bug_id: get_u64(m, "bug_id").unwrap_or(0),
         file_name: get_str(m, "file_name").unwrap_or_default(),
