@@ -51,6 +51,7 @@ pub async fn dispatch(
     ensure_dry_run_supported(cli)?;
     commands::dry_run::set(cli.dry_run);
     commands::confirm::set_yes(cli.yes);
+    commands::inline_server::set(resolve_inline_server(cli));
 
     let api = cli.api;
     let server = cli.server.as_deref();
@@ -125,6 +126,22 @@ fn apply_network_tuning(cli: &cli::Cli) {
         env_timeout.as_deref(),
     ));
     http::set_retry_max(cli.retry.unwrap_or(0));
+}
+
+/// Build the inline server definition from the global `--server-url` flags, or
+/// `None` when no inline server was requested. Returns `Some` only when both
+/// the URL and its API-key env var are present; clap's `requires` guarantees
+/// they come as a pair, but this is robust if a `Cli` is constructed directly
+/// (as integration tests do).
+fn resolve_inline_server(cli: &cli::Cli) -> Option<commands::inline_server::InlineServer> {
+    cli.server_url
+        .as_ref()
+        .zip(cli.server_api_key_env.as_ref())
+        .map(|(url, api_key_env)| commands::inline_server::InlineServer {
+            url: url.clone(),
+            api_key_env: api_key_env.clone(),
+            email: cli.server_email.clone(),
+        })
 }
 
 /// Reject `--dry-run` on commands that don't honor it.

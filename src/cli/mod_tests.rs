@@ -179,6 +179,68 @@ fn parse_update_expect_unchanged_since() {
 }
 
 #[test]
+fn parse_inline_server_flags() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "--server-url",
+        "https://bz.example.com",
+        "--server-api-key-env",
+        "BZR_KEY",
+        "--server-email",
+        "dev@example.com",
+        "bug",
+        "view",
+        "42",
+    ])
+    .unwrap();
+    assert_eq!(cli.server_url.as_deref(), Some("https://bz.example.com"));
+    assert_eq!(cli.server_api_key_env.as_deref(), Some("BZR_KEY"));
+    assert_eq!(cli.server_email.as_deref(), Some("dev@example.com"));
+}
+
+#[test]
+fn inline_server_url_requires_api_key_env() {
+    // --server-url alone is rejected: a credential source is mandatory.
+    let result = Cli::try_parse_from([
+        "bzr",
+        "--server-url",
+        "https://bz.example.com",
+        "bug",
+        "view",
+        "42",
+    ]);
+    assert!(result.is_err(), "--server-url without env key must fail");
+}
+
+#[test]
+fn inline_server_conflicts_with_named_server() {
+    // A named (config) server and an inline one are mutually exclusive.
+    let result = Cli::try_parse_from([
+        "bzr",
+        "--server",
+        "prod",
+        "--server-url",
+        "https://bz.example.com",
+        "--server-api-key-env",
+        "BZR_KEY",
+        "bug",
+        "view",
+        "42",
+    ]);
+    assert!(result.is_err(), "--server and --server-url must conflict");
+}
+
+#[test]
+fn inline_server_email_requires_url() {
+    // --server-email is meaningless without --server-url.
+    let result = Cli::try_parse_from(["bzr", "--server-email", "dev@example.com", "bug", "list"]);
+    assert!(
+        result.is_err(),
+        "--server-email without --server-url must fail"
+    );
+}
+
+#[test]
 fn parse_global_yes_flag_short_and_long() {
     let short = Cli::try_parse_from(["bzr", "-y", "bug", "update", "5", "--status", "X"]).unwrap();
     assert!(short.yes);

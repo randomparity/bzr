@@ -20,6 +20,7 @@ pub async fn setup_test_env() -> (
     // or an interactive prompt.
     super::commands::dry_run::set(false);
     super::commands::confirm::set_yes(false);
+    super::commands::inline_server::set(None);
     let mock = wiremock::MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());

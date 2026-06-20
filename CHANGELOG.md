@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Inline / ad-hoc server via global `--server-url`, `--server-api-key-env`, and
+  optional `--server-email`. Defines an ephemeral server for a single
+  invocation, so a one-off query or a fully stateless agent run can target a
+  Bugzilla instance that was never written to any config file — nothing is read
+  from or written to `config.toml`. The API key is sourced from the named
+  environment variable (never a literal flag, keeping the secret out of the
+  process argument list). `--server-url` requires `--server-api-key-env` and
+  conflicts with `--server`; it pairs with `--config` for sandboxed runs. (#314)
 - `bug update --expect-unchanged-since <TIMESTAMP>` optimistic-concurrency guard.
   Pass the `last_change_time` from a preceding `bug view`; before writing, bzr
   re-reads each target bug and refuses the update (exit 14, a new distinct

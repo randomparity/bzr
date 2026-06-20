@@ -32,6 +32,9 @@ fn with_bzr_output<T>(value: Option<&str>, f: impl FnOnce() -> T) -> T {
 fn base_cli(command: Commands) -> Cli {
     Cli {
         server: None,
+        server_url: None,
+        server_api_key_env: None,
+        server_email: None,
         output: None,
         json: false,
         config: None,
