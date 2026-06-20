@@ -6,10 +6,11 @@ use serde_json::Value;
 use tabled::builder::Builder;
 
 use crate::output::formatting::{
-    colorize_status, shorten_email, truncate, write_divider, write_field, write_formatted,
-    write_json_family, write_list_field, write_optional_field, SUMMARY_TRUNCATE_WIDTH,
+    colorize_status, render_flags_inline, shorten_email, truncate, write_divider, write_field,
+    write_formatted, write_json_family, write_list_field, write_optional_field,
+    SUMMARY_TRUNCATE_WIDTH,
 };
-use crate::types::{Bug, Flag, HistoryEntry, OutputFormat};
+use crate::types::{Bug, HistoryEntry, OutputFormat};
 
 /// Which fields the caller asked to include / exclude, as the raw
 /// comma-separated `--fields` / `--exclude-fields` values. `Default`
@@ -183,16 +184,6 @@ const COLUMNS: &[BugColumn] = &[
         render: |b| render_flags_inline(&b.flags),
     },
 ];
-
-/// Join a bug or attachment's flags into the concise `name<status>[(requestee)]`
-/// inline form used by table columns and detail rows.
-fn render_flags_inline(flags: &[Flag]) -> String {
-    flags
-        .iter()
-        .map(Flag::render_inline)
-        .collect::<Vec<_>>()
-        .join(", ")
-}
 
 /// Bugzilla's sentinel for "no target milestone set". Suppressed in detail
 /// output so a bug without a milestone does not print a noise row.
@@ -615,10 +606,9 @@ fn write_bug_detail_table(bug: &Bug, spec: ColumnSpec<'_>, out: &mut (impl Write
         write_optional_field(out, "Component", bug.component.as_deref());
     }
     if field_selected(spec, "target_milestone") {
-        if let Some(milestone) = bug.target_milestone.as_deref() {
-            if !milestone.is_empty() && milestone != UNSET_MILESTONE {
-                write_field(out, "Target Milestone", milestone);
-            }
+        let milestone = bug.target_milestone.as_deref().unwrap_or_default();
+        if !milestone.is_empty() && milestone != UNSET_MILESTONE {
+            write_field(out, "Target Milestone", milestone);
         }
     }
     if field_selected(spec, "assigned_to") {
