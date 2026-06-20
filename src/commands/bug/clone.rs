@@ -82,7 +82,7 @@ pub(super) async fn handle(
         ..Default::default()
     };
 
-    if crate::commands::dry_run::enabled() {
+    if crate::commands::runtime::dry_run::enabled() {
         write_clone_dry_run(source.id, &params, format, w);
         return Ok(());
     }

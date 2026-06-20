@@ -229,15 +229,17 @@ async fn inline_server_connects_without_config_and_persists_nothing() {
     }
     mount_detection_mocks(&mock).await;
 
-    crate::commands::inline_server::set(Some(crate::commands::inline_server::InlineServer {
-        url: mock.uri(),
-        api_key_env: "BZR_INLINE_TEST_KEY".into(),
-        email: None,
-    }));
+    crate::commands::runtime::inline_server::set(Some(
+        crate::commands::runtime::inline_server::InlineServer {
+            url: mock.uri(),
+            api_key_env: "BZR_INLINE_TEST_KEY".into(),
+            email: None,
+        },
+    ));
     let result = super::connect_and_configure(None, None).await;
     // Reset before any assertion can unwind, so the inline definition never
     // leaks into a sibling test that expects config-based resolution.
-    crate::commands::inline_server::set(None);
+    crate::commands::runtime::inline_server::set(None);
 
     assert!(
         result.is_ok(),
@@ -262,13 +264,15 @@ async fn inline_server_missing_env_var_is_clean_error() {
         std::env::remove_var("BZR_INLINE_ABSENT_KEY");
     }
 
-    crate::commands::inline_server::set(Some(crate::commands::inline_server::InlineServer {
-        url: "https://bugzilla.example.com".into(),
-        api_key_env: "BZR_INLINE_ABSENT_KEY".into(),
-        email: None,
-    }));
+    crate::commands::runtime::inline_server::set(Some(
+        crate::commands::runtime::inline_server::InlineServer {
+            url: "https://bugzilla.example.com".into(),
+            api_key_env: "BZR_INLINE_ABSENT_KEY".into(),
+            email: None,
+        },
+    ));
     let result = super::connect_and_configure(None, None).await;
-    crate::commands::inline_server::set(None);
+    crate::commands::runtime::inline_server::set(None);
 
     match result {
         Err(BzrError::Config(msg)) => {

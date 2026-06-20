@@ -80,7 +80,7 @@ async fn resolve_client_and_params(
                 "either a search query or --from-url is required".into(),
             )
         })?;
-        let client = crate::commands::shared::connect_and_configure(server, api).await?;
+        let client = crate::commands::runtime::shared::connect_and_configure(server, api).await?;
         let params = SearchParams {
             quicksearch: Some(query_str.to_string()),
             limit: Some(args.limit.unwrap_or(DEFAULT_SEARCH_LIMIT)),
@@ -98,7 +98,8 @@ async fn resolve_client_and_params(
     let config = crate::config::Config::load()?;
     let parsed = crate::url_parser::parse_bugzilla_url(url_str, &config)?;
     let effective_server = server.or(parsed.query.server.as_deref());
-    let client = crate::commands::shared::connect_and_configure(effective_server, api).await?;
+    let client =
+        crate::commands::runtime::shared::connect_and_configure(effective_server, api).await?;
     let save_info = resolve_save_info(args.save_as.as_ref(), parsed.suggested_name, &parsed.query)?;
     let mut params = build_params_from_url(
         parsed.query,
@@ -156,7 +157,7 @@ pub(super) async fn handle(
     );
 
     let (client, mut params, save_info) = resolve_client_and_params(args, server, api).await?;
-    crate::commands::paging::resolve_offset(&mut params, offset);
+    crate::commands::runtime::paging::resolve_offset(&mut params, offset);
 
     if args.count {
         let bugs = client
@@ -165,9 +166,16 @@ pub(super) async fn handle(
         crate::output::result_types::write_count(bugs.len(), format, w.out);
     } else {
         let page =
-            crate::commands::paging::fetch_page(&client, &params, args.page_args.paginate).await?;
+            crate::commands::runtime::paging::fetch_page(&client, &params, args.page_args.paginate)
+                .await?;
         write_bugs(&page.bugs, spec, format, w.out, w.err);
-        crate::commands::paging::write_truncation_note(&page, params.limit, offset, format, w);
+        crate::commands::runtime::paging::write_truncation_note(
+            &page,
+            params.limit,
+            offset,
+            format,
+            w,
+        );
     }
 
     persist_saved_query(save_info, format, w.out)

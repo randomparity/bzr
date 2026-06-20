@@ -67,8 +67,8 @@ pub(super) fn resolve_comment(
     comment_file: Option<&std::path::Path>,
     comment_private: bool,
 ) -> Result<Option<crate::types::CommentUpdate>> {
-    let body = crate::commands::shared::materialize_body_source(
-        crate::commands::shared::classify_body_source(
+    let body = crate::commands::runtime::shared::materialize_body_source(
+        crate::commands::runtime::shared::classify_body_source(
             comment,
             comment_file,
             "--comment",
@@ -152,7 +152,7 @@ fn build_update_params(args: &UpdateArgs) -> Result<(Vec<u64>, UpdateBugParams)>
         expect_unchanged_since: _,
     } = args;
 
-    let flags = crate::commands::flags::parse_flags(flag)?;
+    let flags = crate::commands::runtime::flags::parse_flags(flag)?;
     let deadline = crate::validation::parse_optional_date_only(deadline.as_deref(), "--deadline")?;
     let params = UpdateBugParams {
         status: status.clone(),
@@ -301,7 +301,7 @@ pub(super) async fn handle(
     // Optimistic-concurrency guard, before any write. Skipped under --dry-run,
     // which performs no write (and `apply` short-circuits to a preview anyway).
     if let Some(expected) = expect_unchanged_since {
-        if !crate::commands::dry_run::enabled() {
+        if !crate::commands::runtime::dry_run::enabled() {
             ensure_unchanged_since(client, &ids, expected).await?;
         }
     }
@@ -342,7 +342,7 @@ pub(super) async fn apply(
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    if crate::commands::dry_run::enabled() {
+    if crate::commands::runtime::dry_run::enabled() {
         write_update_dry_run(&ids, &params, format, w);
         return Ok(());
     }
@@ -400,17 +400,21 @@ async fn ensure_unchanged_since(
 }
 
 /// Prompt for confirmation before a large batch mutation, wiring the real
-/// stdin/TTY into the testable [`crate::commands::confirm`] primitives. The
+/// stdin/TTY into the testable [`crate::commands::runtime::confirm`] primitives. The
 /// `should_prompt` gate is checked first, so stdin is locked only when a prompt
 /// is actually shown. Returns whether to proceed.
 fn confirm_batch(count: usize, w: &mut Writers<'_>) -> Result<bool> {
     use std::io::IsTerminal;
     let is_tty = std::io::stdin().is_terminal();
-    if !crate::commands::confirm::should_prompt(count, crate::commands::confirm::yes(), is_tty) {
+    if !crate::commands::runtime::confirm::should_prompt(
+        count,
+        crate::commands::runtime::confirm::yes(),
+        is_tty,
+    ) {
         return Ok(true);
     }
     let stdin = std::io::stdin();
-    crate::commands::confirm::read_yes_no(&mut stdin.lock(), w.err, count)
+    crate::commands::runtime::confirm::read_yes_no(&mut stdin.lock(), w.err, count)
 }
 
 #[cfg(test)]

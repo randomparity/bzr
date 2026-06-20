@@ -43,7 +43,7 @@ pub async fn execute(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     validate_action(action)?;
-    let client = super::shared::connect_and_configure(server, api).await?;
+    let client = super::runtime::shared::connect_and_configure(server, api).await?;
 
     match action {
         AttachmentAction::List { bug_id } => list_attachments(&client, *bug_id, format, w).await?,
@@ -105,7 +105,7 @@ async fn upload(
         (None, true) => "text/plain".to_string(),
         (None, false) => guess_content_type(file_name).to_string(),
     };
-    let flags = super::flags::parse_flags(flag)?;
+    let flags = super::runtime::flags::parse_flags(flag)?;
     let size = data.len();
     let upload_params = UploadAttachmentParams {
         bug_id: *bug_id,
@@ -150,7 +150,7 @@ async fn update(
         no_private,
         flag,
     } = args;
-    let flags = super::flags::parse_flags(flag)?;
+    let flags = super::runtime::flags::parse_flags(flag)?;
     let params = UpdateAttachmentParams {
         summary: summary.clone(),
         file_name: file_name.clone(),

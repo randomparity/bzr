@@ -1032,7 +1032,7 @@ async fn forbid_put(mock: &wiremock::MockServer) {
 async fn bug_update_dry_run_makes_no_write_and_marks_payload() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     forbid_put(&mock).await;
-    crate::commands::dry_run::set(true);
+    crate::commands::runtime::dry_run::set(true);
 
     let action = make_update_action(vec![42]);
     let mut io = crate::test_helpers::CapturedIo::new();
@@ -1040,7 +1040,7 @@ async fn bug_update_dry_run_makes_no_write_and_marks_payload() {
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
             .await;
     let output = io.out_str().to_string();
-    crate::commands::dry_run::set(false);
+    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok(), "dry-run update failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
@@ -1055,7 +1055,7 @@ async fn bug_update_dry_run_makes_no_write_and_marks_payload() {
 async fn bug_update_dry_run_batch_lists_all_ids() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     forbid_put(&mock).await;
-    crate::commands::dry_run::set(true);
+    crate::commands::runtime::dry_run::set(true);
 
     let action = make_update_action(vec![1, 2, 3]);
     let mut io = crate::test_helpers::CapturedIo::new();
@@ -1063,7 +1063,7 @@ async fn bug_update_dry_run_batch_lists_all_ids() {
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
             .await;
     let output = io.out_str().to_string();
-    crate::commands::dry_run::set(false);
+    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok());
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
@@ -1075,7 +1075,7 @@ async fn bug_update_dry_run_batch_lists_all_ids() {
 async fn bug_update_dry_run_table_prints_human_preview() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     forbid_put(&mock).await;
-    crate::commands::dry_run::set(true);
+    crate::commands::runtime::dry_run::set(true);
 
     let action = make_update_action(vec![7, 8]);
     let mut io = crate::test_helpers::CapturedIo::new();
@@ -1083,7 +1083,7 @@ async fn bug_update_dry_run_table_prints_human_preview() {
         crate::commands::bug::execute(&action, None, OutputFormat::Table, None, &mut io.writers())
             .await;
     let output = io.out_str().to_string();
-    crate::commands::dry_run::set(false);
+    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok(), "dry-run update (table) failed: {result:?}");
     assert!(
@@ -1096,14 +1096,14 @@ async fn bug_update_dry_run_table_prints_human_preview() {
 async fn bug_update_dry_run_still_validates_empty_update() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     forbid_put(&mock).await;
-    crate::commands::dry_run::set(true);
+    crate::commands::runtime::dry_run::set(true);
 
     let action = make_empty_update_action(vec![42]);
     let mut io = crate::test_helpers::CapturedIo::new();
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
             .await;
-    crate::commands::dry_run::set(false);
+    crate::commands::runtime::dry_run::set(false);
 
     assert!(matches!(
         result,

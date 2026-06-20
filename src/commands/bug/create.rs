@@ -4,8 +4,8 @@ use serde::Deserialize;
 
 use crate::cli::CreateArgs;
 use crate::client::BugzillaClient;
-use crate::commands::editor;
-use crate::commands::shared::{merge_set, merge_vec};
+use crate::commands::runtime::editor;
+use crate::commands::runtime::shared::{merge_set, merge_vec};
 use crate::error::Result;
 use crate::output::result_types::{
     write_result, ActionResult, BatchCreateResult, CreateFailure, DryRunResult, ResourceKind,
@@ -124,8 +124,8 @@ fn resolve_description(
     description: Option<&str>,
     description_file: Option<&std::path::Path>,
 ) -> Result<Option<String>> {
-    let explicit = crate::commands::shared::materialize_body_source(
-        crate::commands::shared::classify_body_source(
+    let explicit = crate::commands::runtime::shared::materialize_body_source(
+        crate::commands::runtime::shared::classify_body_source(
             description,
             description_file,
             "--description",
@@ -137,7 +137,7 @@ fn resolve_description(
         return Ok(explicit);
     }
     if !std::io::stdin().is_terminal() {
-        let buf = crate::commands::shared::read_stdin_to_string()?;
+        let buf = crate::commands::runtime::shared::read_stdin_to_string()?;
         if buf.trim().is_empty() {
             return Err(crate::error::BzrError::InputValidation(
                 "no description supplied (piped stdin is empty)".into(),
@@ -277,7 +277,7 @@ impl JsonCreateBug {
                 ))
             })
         };
-        let flags = crate::commands::flags::parse_flags(&self.flags)?;
+        let flags = crate::commands::runtime::flags::parse_flags(&self.flags)?;
         let deadline =
             crate::validation::parse_optional_date_only(self.deadline.as_deref(), "deadline")?;
         Ok(CreateBugParams {
@@ -309,9 +309,12 @@ impl JsonCreateBug {
 /// Read the `--from-json` argument: `-` is stdin, anything else a file path.
 fn read_from_json(arg: &str) -> Result<String> {
     if arg == "-" {
-        crate::commands::shared::read_stdin_to_string()
+        crate::commands::runtime::shared::read_stdin_to_string()
     } else {
-        crate::commands::shared::read_file_with_context(std::path::Path::new(arg), "--from-json")
+        crate::commands::runtime::shared::read_file_with_context(
+            std::path::Path::new(arg),
+            "--from-json",
+        )
     }
 }
 
@@ -368,8 +371,8 @@ fn explicit_description(
     description: Option<&str>,
     description_file: Option<&std::path::Path>,
 ) -> Result<Option<String>> {
-    crate::commands::shared::materialize_body_source(
-        crate::commands::shared::classify_body_source(
+    crate::commands::runtime::shared::materialize_body_source(
+        crate::commands::runtime::shared::classify_body_source(
             description,
             description_file,
             "--description",
@@ -499,7 +502,7 @@ async fn create_and_report(
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    if crate::commands::dry_run::enabled() {
+    if crate::commands::runtime::dry_run::enabled() {
         write_create_dry_run(params, format, w);
         return Ok(());
     }
@@ -523,7 +526,7 @@ async fn create_batch_from_json(
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    if crate::commands::dry_run::enabled() {
+    if crate::commands::runtime::dry_run::enabled() {
         // One coherent object for the whole batch (N pretty-printed objects
         // would not be valid JSON); `changes` carries the array of params.
         write_result(
@@ -576,7 +579,7 @@ pub(super) async fn handle(
         return handle_from_json(client, args, arg, format, w).await;
     }
 
-    let flags = crate::commands::flags::parse_flags(&create_fields.flag)?;
+    let flags = crate::commands::runtime::flags::parse_flags(&create_fields.flag)?;
     let deadline = crate::validation::parse_optional_date_only(
         create_fields.deadline.as_deref(),
         "--deadline",

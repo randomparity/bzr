@@ -291,7 +291,7 @@ async fn bug_clone_no_comment_skips_comment() {
 #[tokio::test]
 async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
     let (_lock, mock, _tmp) = setup_test_env().await;
-    crate::commands::dry_run::set(true);
+    crate::commands::runtime::dry_run::set(true);
 
     // Source fetch (GET) is allowed in a dry run; it builds the would-be payload.
     Mock::given(method("GET"))
@@ -351,7 +351,7 @@ async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
             .await;
     let output = io.out_str().to_string();
-    crate::commands::dry_run::set(false);
+    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok(), "dry-run clone failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();

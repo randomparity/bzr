@@ -1,7 +1,7 @@
 use std::io::IsTerminal;
 
 use crate::cli::CommentAction;
-use crate::commands::editor;
+use crate::commands::runtime::editor;
 use crate::error::{BzrError, Result};
 use crate::output::resources::comment::write_comments;
 use crate::output::result_types::{
@@ -18,7 +18,7 @@ pub async fn execute(
     api: Option<ApiMode>,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let client = super::shared::connect_and_configure(server, api).await?;
+    let client = super::runtime::shared::connect_and_configure(server, api).await?;
 
     match action {
         CommentAction::List { bug_id, since } => {
@@ -35,8 +35,8 @@ pub async fn execute(
             body_file,
             private,
         } => {
-            let resolved = super::shared::materialize_body_source(
-                super::shared::classify_body_source(
+            let resolved = super::runtime::shared::materialize_body_source(
+                super::runtime::shared::classify_body_source(
                     body.as_deref(),
                     body_file.as_deref(),
                     "--body",
@@ -104,7 +104,7 @@ pub async fn execute(
 /// Read comment body from stdin (pipe) or $EDITOR (TTY).
 fn read_comment_body() -> Result<String> {
     if !std::io::stdin().is_terminal() {
-        return super::shared::read_stdin_to_string();
+        return super::runtime::shared::read_stdin_to_string();
     }
     let raw = editor::launch("<!-- Enter your comment above this line -->\n", "comment")?;
     Ok(filter_comment_body(&raw))

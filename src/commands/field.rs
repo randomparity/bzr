@@ -18,7 +18,7 @@ pub async fn execute(
             return Ok(());
         }
         FieldAction::List { name } => {
-            let client = super::shared::connect_and_configure(server, api).await?;
+            let client = super::runtime::shared::connect_and_configure(server, api).await?;
             let values = client.get_field_values(name).await?;
             if values.is_empty() && format == OutputFormat::Table {
                 let _ = writeln!(w.out, "No values for field '{name}'.");

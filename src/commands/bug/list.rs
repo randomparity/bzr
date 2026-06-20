@@ -88,9 +88,15 @@ pub(super) async fn handle(
     }
 
     let spec = ColumnSpec::new(fields.as_deref(), exclude_fields.as_deref());
-    let page = crate::commands::paging::fetch_page(client, &params, *paginate).await?;
+    let page = crate::commands::runtime::paging::fetch_page(client, &params, *paginate).await?;
     write_bugs(&page.bugs, spec, format, w.out, w.err);
-    crate::commands::paging::write_truncation_note(&page, params.limit, *offset, format, w);
+    crate::commands::runtime::paging::write_truncation_note(
+        &page,
+        params.limit,
+        *offset,
+        format,
+        w,
+    );
     Ok(())
 }
 

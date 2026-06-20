@@ -3,7 +3,7 @@
 //! Template operations are pure local file I/O — no network client needed.
 
 use crate::cli::TemplateAction;
-use crate::commands::shared::merge_set;
+use crate::commands::runtime::shared::merge_set;
 use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::output::resources::template::{

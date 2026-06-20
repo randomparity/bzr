@@ -72,7 +72,7 @@ async fn bug_create_dry_run_makes_no_write_and_marks_payload() {
         .expect(0)
         .mount(&mock)
         .await;
-    crate::commands::dry_run::set(true);
+    crate::commands::runtime::dry_run::set(true);
 
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -84,7 +84,7 @@ async fn bug_create_dry_run_makes_no_write_and_marks_payload() {
     )
     .await;
     let output = io.out_str().to_string();
-    crate::commands::dry_run::set(false);
+    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok(), "dry-run create failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
@@ -1210,12 +1210,12 @@ async fn from_json_batch_dry_run_emits_single_object_and_no_write() {
     let json = r#"[{"product":"P","component":"C","summary":"one"},
                    {"product":"P","component":"C","summary":"two"}]"#;
     let action = from_json_action(&write_json_file(&tmp, json));
-    crate::commands::dry_run::set(true);
+    crate::commands::runtime::dry_run::set(true);
     let mut io = crate::test_helpers::CapturedIo::new();
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
             .await;
-    crate::commands::dry_run::set(false);
+    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok(), "batch dry-run should succeed: {result:?}");
     // The whole batch is ONE valid JSON object whose changes is the array.

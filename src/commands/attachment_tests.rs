@@ -787,7 +787,7 @@ fn b64(bytes: &[u8]) -> String {
 #[tokio::test]
 async fn write_one_attachment_writes_inline_data_with_att_id_prefix() {
     let (_lock, _mock, tmp) = setup_test_env().await;
-    let client = super::super::shared::connect_and_configure(None, None)
+    let client = super::super::runtime::shared::connect_and_configure(None, None)
         .await
         .unwrap();
 
@@ -837,7 +837,7 @@ async fn write_one_attachment_falls_back_when_data_missing() {
         .mount(&mock)
         .await;
 
-    let client = super::super::shared::connect_and_configure(None, None)
+    let client = super::super::runtime::shared::connect_and_configure(None, None)
         .await
         .unwrap();
 
@@ -857,7 +857,7 @@ async fn write_one_attachment_falls_back_when_data_missing() {
 #[tokio::test]
 async fn write_one_attachment_overwrites_existing_file() {
     let (_lock, _mock, tmp) = setup_test_env().await;
-    let client = super::super::shared::connect_and_configure(None, None)
+    let client = super::super::runtime::shared::connect_and_configure(None, None)
         .await
         .unwrap();
 
@@ -1450,7 +1450,7 @@ async fn attachment_download_batch_top_level_out_dir_unwritable_fails_fast() {
 #[tokio::test]
 async fn write_one_attachment_invalid_base64_returns_data_integrity() {
     let (_lock, _mock, tmp) = setup_test_env().await;
-    let client = super::super::shared::connect_and_configure(None, None)
+    let client = super::super::runtime::shared::connect_and_configure(None, None)
         .await
         .unwrap();
 
@@ -1511,7 +1511,7 @@ fn single_download_dest_sanitizes_server_filename_when_no_out() {
 #[tokio::test]
 async fn write_one_attachment_sanitizes_server_filename_with_separators() {
     let (_lock, _mock, tmp) = setup_test_env().await;
-    let client = super::super::shared::connect_and_configure(None, None)
+    let client = super::super::runtime::shared::connect_and_configure(None, None)
         .await
         .unwrap();
 

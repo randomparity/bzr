@@ -40,7 +40,7 @@ async fn resolve_dry_run_makes_no_write() {
         .expect(0)
         .mount(&mock)
         .await;
-    crate::commands::dry_run::set(true);
+    crate::commands::runtime::dry_run::set(true);
 
     let action = BugAction::Resolve {
         ids: vec![5],
@@ -52,7 +52,7 @@ async fn resolve_dry_run_makes_no_write() {
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
             .await;
     let output = io.out_str().to_string();
-    crate::commands::dry_run::set(false);
+    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok(), "dry-run resolve failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();

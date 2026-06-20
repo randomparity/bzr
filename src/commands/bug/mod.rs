@@ -133,7 +133,7 @@ pub async fn execute(
         return search::handle(args, server, format, api, w).await;
     }
 
-    let client = crate::commands::shared::connect_and_configure(server, api).await?;
+    let client = crate::commands::runtime::shared::connect_and_configure(server, api).await?;
 
     match action {
         BugAction::List(args) => list::handle(&client, args, format, w).await,
