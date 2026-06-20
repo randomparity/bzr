@@ -4,7 +4,7 @@ use super::*;
 
 #[test]
 fn bool_from_int_or_bool_deserializes_true() {
-    let json = r#"{"id":1,"is_obsolete":true,"is_private":false}"#;
+    let json = r#"{"id":1,"bug_id":10,"is_obsolete":true,"is_private":false}"#;
     let att: Attachment = serde_json::from_str(json).unwrap();
     assert!(att.is_obsolete);
     assert!(!att.is_private);
@@ -12,7 +12,7 @@ fn bool_from_int_or_bool_deserializes_true() {
 
 #[test]
 fn bool_from_int_or_bool_deserializes_integers() {
-    let json = r#"{"id":1,"is_obsolete":1,"is_private":0}"#;
+    let json = r#"{"id":1,"bug_id":10,"is_obsolete":1,"is_private":0}"#;
     let att: Attachment = serde_json::from_str(json).unwrap();
     assert!(att.is_obsolete);
     assert!(!att.is_private);
@@ -30,21 +30,21 @@ fn bool_from_int_or_bool_rejects_string() {
 
 #[test]
 fn is_patch_deserializes_as_bool() {
-    let json = r#"{"id":1,"is_patch":true}"#;
+    let json = r#"{"id":1,"bug_id":10,"is_patch":true}"#;
     let att: Attachment = serde_json::from_str(json).unwrap();
     assert!(att.is_patch);
 }
 
 #[test]
 fn is_patch_deserializes_as_int() {
-    let json = r#"{"id":1,"is_patch":1}"#;
+    let json = r#"{"id":1,"bug_id":10,"is_patch":1}"#;
     let att: Attachment = serde_json::from_str(json).unwrap();
     assert!(att.is_patch);
 }
 
 #[test]
 fn is_patch_defaults_to_false_when_absent() {
-    let json = r#"{"id":1}"#;
+    let json = r#"{"id":1,"bug_id":10}"#;
     let att: Attachment = serde_json::from_str(json).unwrap();
     assert!(!att.is_patch);
 }

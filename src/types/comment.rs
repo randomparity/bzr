@@ -13,7 +13,6 @@ pub struct UpdateCommentTagsParams {
 #[non_exhaustive]
 pub struct Comment {
     pub id: u64,
-    #[serde(default)]
     pub bug_id: u64,
     #[serde(default)]
     pub text: String,

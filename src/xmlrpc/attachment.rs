@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use crate::error::{BzrError, Result};
 use crate::xmlrpc::client::XmlRpcClient;
 use crate::xmlrpc::mappers::{
-    get_bool_flag, get_datetime_str, get_nonempty_str, get_str, lookup_bug_entry,
-    EXPECTED_STRUCT_RESPONSE,
+    get_bool_flag, get_datetime_str, get_nonempty_str, get_str, get_u64, lookup_bug_entry,
+    require_u64, EXPECTED_STRUCT_RESPONSE,
 };
 use crate::xmlrpc::value::Value;
 
@@ -102,20 +102,6 @@ fn value_to_attachment(val: &Value) -> Result<crate::types::Attachment> {
         .as_struct()
         .ok_or_else(|| BzrError::XmlRpc("expected struct for attachment".into()))?;
 
-    let id = m
-        .get("id")
-        .and_then(Value::as_i64)
-        .ok_or_else(|| BzrError::XmlRpc("attachment missing id field".into()))?;
-    let bug_id = m.get("bug_id").and_then(Value::as_i64).unwrap_or(0);
-    let size = m.get("size").and_then(Value::as_i64).unwrap_or(0);
-
-    #[expect(clippy::cast_sign_loss, reason = "attachment IDs are non-negative")]
-    let id = id as u64;
-    #[expect(clippy::cast_sign_loss, reason = "bug IDs are non-negative")]
-    let bug_id = bug_id as u64;
-    #[expect(clippy::cast_sign_loss, reason = "attachment sizes are non-negative")]
-    let size = size as u64;
-
     let data = match m.get("data") {
         Some(Value::Base64(bytes)) => Some(base64::Engine::encode(
             &base64::engine::general_purpose::STANDARD,
@@ -126,15 +112,15 @@ fn value_to_attachment(val: &Value) -> Result<crate::types::Attachment> {
     };
 
     Ok(crate::types::Attachment {
-        id,
-        bug_id,
+        id: require_u64(m, "id", "attachment")?,
+        bug_id: require_u64(m, "bug_id", "attachment")?,
         file_name: get_str(m, "file_name").unwrap_or_default(),
         summary: get_str(m, "summary").unwrap_or_default(),
         content_type: get_str(m, "content_type").unwrap_or_default(),
         creator: get_nonempty_str(m, "creator"),
         creation_time: get_datetime_str(m, "creation_time"),
         last_change_time: get_datetime_str(m, "last_change_time"),
-        size,
+        size: get_u64(m, "size").unwrap_or(0),
         is_obsolete: get_bool_flag(m, "is_obsolete"),
         is_private: get_bool_flag(m, "is_private"),
         is_patch: get_bool_flag(m, "is_patch"),

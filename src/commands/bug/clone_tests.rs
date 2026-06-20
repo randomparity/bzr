@@ -44,6 +44,7 @@ async fn bug_clone_copies_fields() {
                     "comments": [
                         {
                             "id": 2,
+                            "bug_id": 100,
                             "count": 1,
                             "text": "Follow-up reply",
                             "creator": "dev@test.com",
@@ -51,6 +52,7 @@ async fn bug_clone_copies_fields() {
                         },
                         {
                             "id": 1,
+                            "bug_id": 100,
                             "count": 0,
                             "text": "Original description",
                             "creator": "dev@test.com",
@@ -136,7 +138,7 @@ async fn bug_clone_reports_id_when_comment_post_fails() {
         .and(path("/rest/bug/100/comment"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "bugs": { "100": { "comments": [{
-                "id": 1, "count": 0, "text": "Description",
+                "id": 1, "bug_id": 100, "count": 0, "text": "Description",
                 "creator": "dev@test.com", "creation_time": "2025-01-01T00:00:00Z"
             }] } }
         })))
@@ -228,6 +230,7 @@ async fn bug_clone_no_comment_skips_comment() {
                 "100": {
                     "comments": [{
                         "id": 1,
+                        "bug_id": 100,
                         "count": 0,
                         "text": "Description",
                         "creator": "dev@test.com",
@@ -311,7 +314,7 @@ async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
         .and(path("/rest/bug/100/comment"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "bugs": { "100": { "comments": [{
-                "id": 1, "count": 0, "text": "Original description",
+                "id": 1, "bug_id": 100, "count": 0, "text": "Original description",
                 "creator": "dev@test.com", "creation_time": "2025-01-01T00:00:00Z"
             }] } }
         })))

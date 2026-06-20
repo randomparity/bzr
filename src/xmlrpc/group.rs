@@ -3,7 +3,9 @@ use std::collections::BTreeMap;
 use crate::error::{BzrError, Result};
 use crate::types::{GroupInfo, GroupMember};
 use crate::xmlrpc::client::XmlRpcClient;
-use crate::xmlrpc::mappers::{get_bool_flag, get_nonempty_str, get_str, EXPECTED_STRUCT_RESPONSE};
+use crate::xmlrpc::mappers::{
+    get_bool_flag, get_nonempty_str, get_str, get_u64, require_u64, EXPECTED_STRUCT_RESPONSE,
+};
 use crate::xmlrpc::value::Value;
 
 impl XmlRpcClient {
@@ -33,14 +35,6 @@ fn value_to_group_info(val: &Value) -> Result<GroupInfo> {
         .as_struct()
         .ok_or_else(|| BzrError::XmlRpc("expected struct for group".into()))?;
 
-    let id = m
-        .get("id")
-        .and_then(Value::as_i64)
-        .ok_or_else(|| BzrError::XmlRpc("group missing id".into()))?;
-
-    #[expect(clippy::cast_sign_loss, reason = "group IDs are non-negative")]
-    let id = id as u64;
-
     let membership = m
         .get("membership")
         .and_then(Value::as_array)
@@ -48,9 +42,7 @@ fn value_to_group_info(val: &Value) -> Result<GroupInfo> {
             arr.iter()
                 .filter_map(|v| {
                     let member_map = v.as_struct()?;
-                    let member_id = member_map.get("id").and_then(Value::as_i64)?;
-                    #[expect(clippy::cast_sign_loss, reason = "user IDs are non-negative")]
-                    let member_id = member_id as u64;
+                    let member_id = get_u64(member_map, "id")?;
                     Some(GroupMember {
                         id: member_id,
                         name: get_str(member_map, "name").unwrap_or_default(),
@@ -63,7 +55,7 @@ fn value_to_group_info(val: &Value) -> Result<GroupInfo> {
         .unwrap_or_default();
 
     Ok(GroupInfo {
-        id,
+        id: require_u64(m, "id", "group")?,
         name: get_str(m, "name").unwrap_or_default(),
         description: get_str(m, "description").unwrap_or_default(),
         is_active: get_bool_flag(m, "is_active"),

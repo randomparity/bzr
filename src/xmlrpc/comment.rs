@@ -3,7 +3,8 @@ use std::collections::BTreeMap;
 use crate::error::{BzrError, Result};
 use crate::xmlrpc::client::XmlRpcClient;
 use crate::xmlrpc::mappers::{
-    get_bool_flag, get_datetime_str, get_nonempty_str, get_str, lookup_bug_entry,
+    get_bool_flag, get_datetime_str, get_nonempty_str, get_str, get_u64, lookup_bug_entry,
+    require_u64,
 };
 use crate::xmlrpc::value::Value;
 
@@ -55,31 +56,15 @@ fn value_to_comment(val: &Value) -> Result<crate::types::Comment> {
         .as_struct()
         .ok_or_else(|| BzrError::XmlRpc("expected struct for comment".into()))?;
 
-    let id = m
-        .get("id")
-        .and_then(Value::as_i64)
-        .ok_or_else(|| BzrError::XmlRpc("comment missing id field".into()))?;
-    let bug_id = m.get("bug_id").and_then(Value::as_i64).unwrap_or(0);
-    let count = m.get("count").and_then(Value::as_i64).unwrap_or(0);
-
-    #[expect(clippy::cast_sign_loss, reason = "comment IDs are non-negative")]
-    let id = id as u64;
-    #[expect(clippy::cast_sign_loss, reason = "bug IDs are non-negative")]
-    let bug_id = bug_id as u64;
-    #[expect(clippy::cast_sign_loss, reason = "comment counts are non-negative")]
-    let count = count as u64;
     Ok(crate::types::Comment {
-        id,
-        bug_id,
+        id: require_u64(m, "id", "comment")?,
+        bug_id: require_u64(m, "bug_id", "comment")?,
         text: get_str(m, "text").unwrap_or_default(),
         creator: get_nonempty_str(m, "creator"),
         creation_time: get_datetime_str(m, "creation_time"),
-        count,
+        count: get_u64(m, "count").unwrap_or(0),
         is_private: get_bool_flag(m, "is_private"),
-        attachment_id: m
-            .get("attachment_id")
-            .and_then(Value::as_i64)
-            .and_then(|v| u64::try_from(v).ok()),
+        attachment_id: get_u64(m, "attachment_id"),
     })
 }
 

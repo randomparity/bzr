@@ -92,7 +92,7 @@ fn bug_deserialize_full() {
 
 #[test]
 fn comment_deserialize_minimal() {
-    let json = r#"{"id": 100}"#;
+    let json = r#"{"id": 100, "bug_id": 10}"#;
     let comment: Comment = serde_json::from_str(json).unwrap();
     assert_eq!(comment.id, 100);
     assert_eq!(comment.text, "");
@@ -103,7 +103,7 @@ fn comment_deserialize_minimal() {
 
 #[test]
 fn attachment_deserialize_minimal() {
-    let json = r#"{"id": 50}"#;
+    let json = r#"{"id": 50, "bug_id": 10}"#;
     let att: Attachment = serde_json::from_str(json).unwrap();
     assert_eq!(att.id, 50);
     assert_eq!(att.file_name, "");

@@ -5,7 +5,7 @@ use crate::types::{partition_filters, Bug, SearchParams, FIELD_MAPPINGS};
 use crate::xmlrpc::client::XmlRpcClient;
 use crate::xmlrpc::mappers::{
     get_datetime_str, get_int_array, get_nonempty_str, get_str, get_str_array, get_u64,
-    xmlrpc_value_to_json, EXPECTED_STRUCT_RESPONSE,
+    require_u64, xmlrpc_value_to_json, EXPECTED_STRUCT_RESPONSE,
 };
 use crate::xmlrpc::value::Value;
 
@@ -129,14 +129,8 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         .as_struct()
         .ok_or_else(|| BzrError::XmlRpc("expected struct for bug".into()))?;
 
-    let id = m
-        .get("id")
-        .and_then(Value::as_i64)
-        .ok_or_else(|| BzrError::XmlRpc("bug missing id field".into()))?;
-
     Ok(Bug {
-        #[expect(clippy::cast_sign_loss, reason = "bug IDs are non-negative")]
-        id: id as u64,
+        id: require_u64(m, "id", "bug")?,
         summary: get_str(m, "summary").unwrap_or_default(),
         status: get_str(m, "status").unwrap_or_default(),
         resolution: get_nonempty_str(m, "resolution"),

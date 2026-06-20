@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::error::{BzrError, Result};
 use crate::types::CreateUserParams;
 use crate::xmlrpc::client::XmlRpcClient;
-use crate::xmlrpc::mappers::EXPECTED_STRUCT_RESPONSE;
+use crate::xmlrpc::mappers::{require_u64, EXPECTED_STRUCT_RESPONSE};
 use crate::xmlrpc::value::Value;
 
 impl XmlRpcClient {
@@ -30,13 +30,7 @@ fn extract_id(response: &Value) -> Result<u64> {
         .as_struct()
         .ok_or_else(|| BzrError::XmlRpc(EXPECTED_STRUCT_RESPONSE.into()))?;
 
-    let id = m
-        .get("id")
-        .and_then(Value::as_i64)
-        .ok_or_else(|| BzrError::XmlRpc("response missing id field".into()))?;
-
-    #[expect(clippy::cast_sign_loss, reason = "user IDs are non-negative")]
-    Ok(id as u64)
+    require_u64(m, "id", "response")
 }
 
 #[cfg(test)]

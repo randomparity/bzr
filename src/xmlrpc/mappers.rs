@@ -46,6 +46,21 @@ pub(crate) fn get_u64(m: &BTreeMap<String, Value>, key: &str) -> Option<u64> {
         .and_then(|v| u64::try_from(v).ok())
 }
 
+/// Extract a required non-negative `u64` ID from a struct member.
+///
+/// XML-RPC transmits integers as signed `i64`, but domain identifiers
+/// (bug/comment/attachment/user/group) are non-negative. A missing field or a
+/// negative value is a malformed response, so this errors rather than silently
+/// wrapping the bit pattern the way an `as u64` cast would. `resource` names the
+/// object for the error message (e.g. `"bug"`).
+pub(crate) fn require_u64(m: &BTreeMap<String, Value>, key: &str, resource: &str) -> Result<u64> {
+    let v = m
+        .get(key)
+        .and_then(Value::as_i64)
+        .ok_or_else(|| BzrError::XmlRpc(format!("{resource} missing {key} field")))?;
+    u64::try_from(v).map_err(|_| BzrError::XmlRpc(format!("{resource} {key} is negative: {v}")))
+}
+
 pub(crate) fn get_str_array(m: &BTreeMap<String, Value>, key: &str) -> Vec<String> {
     m.get(key)
         .and_then(Value::as_array)
@@ -64,11 +79,7 @@ pub(crate) fn get_int_array(m: &BTreeMap<String, Value>, key: &str) -> Vec<u64> 
         .map(|arr| {
             arr.iter()
                 .filter_map(Value::as_i64)
-                .map(|v| {
-                    #[expect(clippy::cast_sign_loss, reason = "bug IDs are non-negative")]
-                    let id = v as u64;
-                    id
-                })
+                .filter_map(|v| u64::try_from(v).ok())
                 .collect()
         })
         .unwrap_or_default()
