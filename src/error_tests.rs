@@ -43,12 +43,6 @@ fn exit_code_io() {
 }
 
 #[test]
-fn exit_code_other() {
-    let err = BzrError::Other("something went wrong".into());
-    assert_eq!(err.exit_code(), 1);
-}
-
-#[test]
 fn exit_code_toml_parse() {
     let toml_err: std::result::Result<toml::Value, _> = toml::from_str("{{bad");
     let err = BzrError::TomlParse(toml_err.unwrap_err());
@@ -74,12 +68,6 @@ fn error_type_api() {
 fn error_type_io() {
     let err = BzrError::Io(std::io::Error::other("x"));
     assert_eq!(err.error_type(), "io");
-}
-
-#[test]
-fn error_type_other() {
-    let err = BzrError::Other("x".into());
-    assert_eq!(err.error_type(), "other");
 }
 
 #[test]

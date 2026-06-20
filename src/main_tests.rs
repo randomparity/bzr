@@ -189,9 +189,9 @@ fn exit_code_maps_known_error_to_exit_code() {
 }
 
 #[test]
-fn exit_code_maps_other_variant() {
+fn exit_code_maps_non_validation_variant() {
     // Cover the non-validation branch as well.
-    let err = BzrError::Other("boom".into());
+    let err = BzrError::Auth("boom".into());
     let code = exit_code(&err);
     let rendered = format!("{code:?}");
     assert!(rendered.contains(&err.exit_code().to_string()));
@@ -257,8 +257,8 @@ fn format_dispatch_error_renders_table() {
 }
 
 #[test]
-fn format_dispatch_error_table_for_other_error() {
-    let err = BzrError::Other("kaboom".into());
+fn format_dispatch_error_table_for_non_config_error() {
+    let err = BzrError::Auth("kaboom".into());
     let out = format_dispatch_error(&err, OutputFormat::Table);
     assert!(out.contains("kaboom"));
 }
