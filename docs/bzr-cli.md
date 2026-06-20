@@ -129,8 +129,8 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │                   [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 │   │                   [--expect-unchanged-since <TIMESTAMP>]
 │   ├── resolve <ID...> [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
-│   ├── close <ID...> [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
-│   ├── reopen <ID...> [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
+│   ├── close <ID...> [--status <STATUS>] [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
+│   ├── reopen <ID...> [--status <STATUS>] [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 │   └── dup <ID> <TARGET> [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 ├── comment
 │   ├── list <BUG_ID> [--since <DATE>]
@@ -697,22 +697,29 @@ partial-failure reporting, exit code 11) is inherited from `bug update`.
 ```bash
 bzr bug resolve 12345                       # → update --status RESOLVED --resolution FIXED
 bzr bug resolve 12345 12346 --as WONTFIX    # batch, custom resolution
-bzr bug close 12345 --comment "Shipped"     # → update --status CLOSED (resolution preserved)
+bzr bug close 12345 --comment "Shipped"     # → update --status VERIFIED (resolution preserved)
 bzr bug close 12345 --as INVALID            # close an open bug with a resolution
-bzr bug reopen 12345                         # → update --status REOPENED
+bzr bug close 12345 --status CLOSED         # install with a custom closed status
+bzr bug reopen 12345                         # → update --status CONFIRMED
+bzr bug reopen 12345 --status REOPENED       # install with a custom open status
 bzr bug dup 12345 100                        # → update --dupe-of 100
 ```
 
 | Verb | Equivalent `update` | Notes |
 |------|---------------------|-------|
 | `resolve <ID...> [--as <R>]` | `--status RESOLVED --resolution <R>` | `--as` defaults to `FIXED` |
-| `close <ID...> [--as <R>]` | `--status CLOSED [--resolution <R>]` | resolution set only when `--as` is given, otherwise the existing one is preserved |
-| `reopen <ID...>` | `--status REOPENED` | Bugzilla clears the resolution automatically |
+| `close <ID...> [--status <S>] [--as <R>]` | `--status <S> [--resolution <R>]` | `--status` defaults to `VERIFIED`; resolution set only when `--as` is given, otherwise the existing one is preserved |
+| `reopen <ID...> [--status <S>]` | `--status <S>` | `--status` defaults to `CONFIRMED`; Bugzilla clears the resolution automatically |
 | `dup <ID> <TARGET>` | `--dupe-of <TARGET>` | Bugzilla sets RESOLVED/DUPLICATE automatically |
 
-The status strings (`RESOLVED`, `CLOSED`, `REOPENED`) follow the conventional
-Bugzilla workflow; on a server with a customized workflow, an unsupported
-transition fails with the same server error `bug update` would return.
+`close` and `reopen` default to the stock Bugzilla 5.x statuses `VERIFIED` and
+`CONFIRMED`. Installs that define custom statuses (e.g. `CLOSED`, `REOPENED`)
+reach them with `--status`. The target status is validated against the server's
+status list before writing; an unknown status exits 7 (input validation) with
+the list of valid statuses, instead of the server's opaque API error. The match
+is exact and case-sensitive. Validation confirms the status exists; an
+otherwise-legal status whose *transition* the workflow forbids still fails with
+the same server error `bug update` would return.
 
 ---
 

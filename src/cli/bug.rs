@@ -1006,9 +1006,13 @@ pub enum BugAction {
     ///   bzr bug resolve 12345 --comment "Fixed in 9.1"
     #[command(verbatim_doc_comment)]
     Resolve(ResolveArgs),
-    /// Close one or more bugs (sets status CLOSED).
+    /// Close one or more bugs (sets status VERIFIED by default).
     ///
-    /// Sugar for `bug update <IDs> --status CLOSED`. By default the bug's
+    /// Sugar for `bug update <IDs> --status VERIFIED`. `VERIFIED` is a stock
+    /// Bugzilla 5.x closed status; override with `--status <STATUS>` for
+    /// installs that define a custom closed status such as `CLOSED`. The
+    /// target status is validated against the server's status list (exact,
+    /// case-sensitive); an unknown value exits 7. By default the bug's
     /// existing resolution is preserved (so close an already-resolved bug);
     /// pass `--as <RESOLUTION>` to set one when closing directly. Accepts
     /// multiple IDs (batch) and the same `--comment` flags as `bug update`.
@@ -1016,18 +1020,24 @@ pub enum BugAction {
     /// Examples:
     ///
     ///   bzr bug close 12345
+    ///   bzr bug close 12345 --status CLOSED          # install with custom status
     ///   bzr bug close 12345 12346 --as WONTFIX --comment "Out of scope"
     #[command(verbatim_doc_comment)]
     Close(CloseArgs),
-    /// Reopen one or more bugs (sets status REOPENED).
+    /// Reopen one or more bugs (sets status CONFIRMED by default).
     ///
-    /// Sugar for `bug update <IDs> --status REOPENED`. Bugzilla clears the
-    /// resolution automatically on reopen. Accepts multiple IDs (batch) and
-    /// the same `--comment` flags as `bug update`.
+    /// Sugar for `bug update <IDs> --status CONFIRMED`. `CONFIRMED` is a stock
+    /// Bugzilla 5.x open status; override with `--status <STATUS>` for installs
+    /// that define a custom open status such as `REOPENED`. Bugzilla clears the
+    /// resolution automatically when moving to an open status. The target
+    /// status is validated against the server's status list (exact,
+    /// case-sensitive); an unknown value exits 7. Accepts multiple IDs (batch)
+    /// and the same `--comment` flags as `bug update`.
     ///
     /// Examples:
     ///
     ///   bzr bug reopen 12345
+    ///   bzr bug reopen 12345 --status REOPENED       # install with custom status
     ///   bzr bug reopen 12345 --comment "Regressed in 9.2"
     #[command(verbatim_doc_comment)]
     Reopen(ReopenArgs),
@@ -1064,6 +1074,12 @@ pub struct CloseArgs {
     /// Bug ID(s) to close.
     #[arg(required = true, num_args = 1..)]
     pub ids: Vec<u64>,
+    /// Status to transition to (default `VERIFIED`, a stock Bugzilla 5.x
+    /// closed status). Override for installs with a custom closed status
+    /// (e.g. `--status CLOSED`). Validated against the server's status list;
+    /// an unknown value exits 7. Matched exactly and case-sensitively.
+    #[arg(long, value_name = "STATUS", default_value = "VERIFIED")]
+    pub status: String,
     /// Resolution to set when closing an unresolved bug. Omit to
     /// preserve any existing resolution.
     #[arg(long = "as", value_name = "RESOLUTION")]
@@ -1078,6 +1094,12 @@ pub struct ReopenArgs {
     /// Bug ID(s) to reopen.
     #[arg(required = true, num_args = 1..)]
     pub ids: Vec<u64>,
+    /// Status to transition to (default `CONFIRMED`, a stock Bugzilla 5.x
+    /// open status). Override for installs with a custom open status
+    /// (e.g. `--status REOPENED`). Validated against the server's status
+    /// list; an unknown value exits 7. Matched exactly and case-sensitively.
+    #[arg(long, value_name = "STATUS", default_value = "CONFIRMED")]
+    pub status: String,
     #[command(flatten)]
     pub comment: CommentArgs,
 }

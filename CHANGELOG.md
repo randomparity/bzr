@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking:** `bug close` and `bug reopen` now target stock Bugzilla 5.x
+  statuses by default — `close` sets `VERIFIED` (was `CLOSED`) and `reopen` sets
+  `CONFIRMED` (was `REOPENED`). Neither old status is part of the default
+  Bugzilla workflow, so both verbs previously failed against a stock install
+  with API error 51. A new `--status <STATUS>` flag on each verb overrides the
+  default for installs that define custom statuses (e.g. `--status CLOSED`). The
+  target status is validated against the server's status list before writing; an
+  unknown status now exits 7 (input validation) listing the valid statuses,
+  rather than reaching the server as the opaque API error. Matching is exact and
+  case-sensitive. Scripts relying on the old `CLOSED`/`REOPENED` targets must
+  pass `--status CLOSED` / `--status REOPENED`. (#349)
+
 - **Breaking:** attachment boolean flags now use a uniform `--x` / `--no-x`
   presence grammar across `attachment upload` and `attachment update`, so the
   same concept uses the same flag everywhere. `attachment upload` keeps
