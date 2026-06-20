@@ -3,9 +3,7 @@ use std::io::Write;
 
 use crate::types::{BugTemplate, OutputFormat};
 
-use crate::output::formatting::{
-    write_field, write_formatted, write_json_family, write_optional_field,
-};
+use crate::output::formatting::{write_field, write_formatted, write_optional_field};
 
 fn template_saved_message(name: &str, verb: &str) -> String {
     format!("{verb} template '{name}'")
@@ -38,18 +36,12 @@ pub fn write_template_saved<W: Write + ?Sized>(
     format: OutputFormat,
     out: &mut W,
 ) {
-    match format {
-        OutputFormat::Json | OutputFormat::Ndjson => {
-            write_json_family(
-                &serde_json::json!({"name": name, "action": verb.to_lowercase()}),
-                format,
-                out,
-            );
-        }
-        OutputFormat::Table => {
-            let _ = writeln!(out, "{}", template_saved_message(name, verb));
-        }
-    }
+    crate::output::result_types::write_result(
+        &serde_json::json!({"name": name, "action": verb.to_lowercase()}),
+        &template_saved_message(name, verb),
+        format,
+        out,
+    );
 }
 
 pub fn write_template_list<W: Write + ?Sized, S: ::std::hash::BuildHasher>(
