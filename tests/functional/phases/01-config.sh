@@ -83,5 +83,15 @@ export XDG_CONFIG_HOME="$_CFG_MAIN"
 rm -rf "$_CFG_SBX"
 unset _CFG_MAIN _CFG_SBX
 
+# --config reads an alternate file, bypassing XDG_CONFIG_HOME entirely.
+test_begin "6g. --config reads an alternate config file"
+_ALT_DIR=$(mktemp -d /tmp/bzr-func-altcfg.XXXXXX)
+printf 'default_server = "altsrv"\n[servers.altsrv]\nurl = "http://example.invalid:9"\napi_key = "k"\n' >"$_ALT_DIR/alt.toml"
+run_bzr --config "$_ALT_DIR/alt.toml" config show
+if assert_success && assert_json '.default_server' "altsrv" &&
+    assert_json '.servers.altsrv.url' "http://example.invalid:9"; then test_pass; fi
+rm -rf "$_ALT_DIR"
+unset _ALT_DIR
+
 echo ""
 
