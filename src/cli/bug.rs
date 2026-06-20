@@ -889,6 +889,20 @@ pub enum BugAction {
         /// Repeat the flag to remove multiple URLs.
         #[arg(long)]
         see_also_remove: Vec<String>,
+        /// Only apply the update if the bug has not changed since this time
+        /// (optimistic concurrency).
+        ///
+        /// Pass the `last_change_time` value from a preceding `bug view` (an
+        /// ISO-8601 timestamp). Before writing, bzr re-reads each target bug
+        /// and refuses the update if its current `last_change_time` differs,
+        /// exiting 14 (collision) without writing — so a read-modify-write
+        /// agent will not silently clobber a concurrent edit. The check is
+        /// client-side (Bugzilla's REST `Bug.update` has no atomic
+        /// compare-and-set), so a narrow window remains between the re-read
+        /// and the write. With multiple IDs, all are checked first and any
+        /// mismatch aborts the whole batch before any write.
+        #[arg(long, value_name = "TIMESTAMP")]
+        expect_unchanged_since: Option<String>,
     },
     /// Resolve one or more bugs (sets status RESOLVED + a resolution).
     ///

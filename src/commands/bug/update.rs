@@ -144,6 +144,7 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
         comment,
         comment_file,
         comment_private,
+        expect_unchanged_since: _,
     } = action
     else {
         unreachable!()
@@ -291,6 +292,20 @@ pub(super) async fn handle(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let (ids, params) = build_update_params(action)?;
+    let BugAction::Update {
+        expect_unchanged_since,
+        ..
+    } = action
+    else {
+        unreachable!()
+    };
+    // Optimistic-concurrency guard, before any write. Skipped under --dry-run,
+    // which performs no write (and `apply` short-circuits to a preview anyway).
+    if let Some(expected) = expect_unchanged_since {
+        if !crate::commands::dry_run::enabled() {
+            ensure_unchanged_since(client, &ids, expected).await?;
+        }
+    }
     apply(client, ids, params, format, w).await
 }
 
@@ -319,7 +334,8 @@ fn write_update_dry_run(
 /// Apply an already-built `UpdateBugParams` to one or more bug IDs, dispatching
 /// to the single- or batch-update path. Shared by `bug update` and the
 /// convenience verbs (`resolve`/`close`/`reopen`/`dup`). Under `--dry-run`,
-/// previews the change without calling the write API.
+/// previews the change without calling the write API. The optimistic-concurrency
+/// guard (`--expect-unchanged-since`) runs in `handle`, before this is called.
 pub(super) async fn apply(
     client: &BugzillaClient,
     ids: Vec<u64>,
@@ -340,6 +356,48 @@ pub(super) async fn apply(
     } else {
         update_batch(client, &ids, &params, format, w).await
     }
+}
+
+/// Optimistic-concurrency guard for `--expect-unchanged-since`: refuse the
+/// update if any target bug's current `last_change_time` differs from
+/// `expected`. The check is client-side — Bugzilla's REST `Bug.update` has no
+/// atomic compare-and-set — so a narrow window remains between this re-read and
+/// the write. All IDs are checked before any write, so a batch is
+/// all-or-nothing on collision.
+async fn ensure_unchanged_since(
+    client: &BugzillaClient,
+    ids: &[u64],
+    expected: &str,
+) -> Result<()> {
+    let expected_key = crate::validation::timestamp_compare_key(expected).ok_or_else(|| {
+        crate::error::BzrError::InputValidation(format!(
+            "--expect-unchanged-since: '{expected}' is not a recognized UTC timestamp; \
+             pass the last_change_time value from a preceding `bug view`"
+        ))
+    })?;
+    for &id in ids {
+        let bug = client
+            .get_bug(&id.to_string(), Some("id,last_change_time"), None)
+            .await?;
+        let actual = bug.last_change_time.ok_or_else(|| {
+            crate::error::BzrError::DataIntegrity(format!(
+                "bug {id} returned no last_change_time; cannot verify --expect-unchanged-since"
+            ))
+        })?;
+        let actual_key = crate::validation::timestamp_compare_key(&actual).ok_or_else(|| {
+            crate::error::BzrError::DataIntegrity(format!(
+                "bug {id} returned an unrecognized last_change_time '{actual}'"
+            ))
+        })?;
+        if actual_key != expected_key {
+            return Err(crate::error::BzrError::MidAirCollision {
+                id,
+                expected: expected.to_string(),
+                actual,
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Prompt for confirmation before a large batch mutation, wiring the real

@@ -41,6 +41,7 @@ fn make_update_action(ids: Vec<u64>) -> BugAction {
         comment: None,
         comment_file: None,
         comment_private: false,
+        expect_unchanged_since: None,
     }
 }
 
@@ -78,6 +79,7 @@ fn make_update_action_with_dupe_of(id: u64, dupe_of: u64) -> BugAction {
         comment: None,
         comment_file: None,
         comment_private: false,
+        expect_unchanged_since: None,
     }
 }
 
@@ -115,6 +117,7 @@ fn make_update_action_with_scalar_parity_fields() -> BugAction {
         comment: None,
         comment_file: None,
         comment_private: false,
+        expect_unchanged_since: None,
     }
 }
 
@@ -179,6 +182,7 @@ fn make_update_action_with_lists(lists: UpdateLists<'_>) -> BugAction {
         comment: None,
         comment_file: None,
         comment_private: false,
+        expect_unchanged_since: None,
     }
 }
 
@@ -192,6 +196,31 @@ async fn mock_put_bug_ok(mock: &wiremock::MockServer, id: u64) {
         .expect(1)
         .mount(mock)
         .await;
+}
+
+/// Mount a GET mock returning a bug with the given `last_change_time`, for the
+/// `--expect-unchanged-since` re-read.
+async fn mock_get_bug_lct(mock: &wiremock::MockServer, id: u64, lct: &str) {
+    Mock::given(method("GET"))
+        .and(path(format!("/rest/bug/{id}")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": [{"id": id, "last_change_time": lct}]})),
+        )
+        .mount(mock)
+        .await;
+}
+
+fn update_action_expect_unchanged(ids: Vec<u64>, since: &str) -> BugAction {
+    let mut action = make_update_action(ids);
+    if let BugAction::Update {
+        expect_unchanged_since,
+        ..
+    } = &mut action
+    {
+        *expect_unchanged_since = Some(since.to_string());
+    }
+    action
 }
 
 #[tokio::test]
@@ -550,6 +579,7 @@ fn make_update_action_with_comment(
         comment: comment.map(String::from),
         comment_file: comment_file.map(std::path::PathBuf::from),
         comment_private,
+        expect_unchanged_since: None,
     }
 }
 
@@ -819,6 +849,91 @@ async fn bug_update_large_batch_auto_proceeds_when_not_a_tty() {
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
     assert_eq!(parsed["action"], "updated");
     assert_eq!(parsed["succeeded"].as_array().unwrap().len(), 11);
+}
+
+// ── Optimistic concurrency (#320) ───────────────────────────────────
+
+#[tokio::test]
+async fn bug_update_expect_unchanged_proceeds_when_timestamp_matches() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_get_bug_lct(&mock, 42, "2026-06-19T12:00:00Z").await;
+    mock_put_bug_ok(&mock, 42).await;
+
+    let action = update_action_expect_unchanged(vec![42], "2026-06-19T12:00:00Z");
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+    let output = io.out_str().to_string();
+
+    assert!(
+        result.is_ok(),
+        "matching timestamp should update: {result:?}"
+    );
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    assert_eq!(parsed["action"], "updated");
+    assert_eq!(parsed["id"], 42);
+}
+
+#[tokio::test]
+async fn bug_update_expect_unchanged_matches_across_timestamp_formats() {
+    // The server returns the XML-RPC basic form while the user passes the REST
+    // canonical form of the same instant: the guard keys them equal and writes.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_get_bug_lct(&mock, 42, "20260619T12:00:00").await;
+    mock_put_bug_ok(&mock, 42).await;
+
+    let action = update_action_expect_unchanged(vec![42], "2026-06-19T12:00:00Z");
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    assert!(
+        result.is_ok(),
+        "cross-format timestamps should match and update: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn bug_update_expect_unchanged_detects_collision_and_skips_write() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_get_bug_lct(&mock, 42, "2026-06-19T12:00:00Z").await;
+    forbid_put(&mock).await;
+
+    // The bug last changed at 12:00 but we expected it unchanged since 10:00.
+    let action = update_action_expect_unchanged(vec![42], "2026-06-19T10:00:00Z");
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    let err = result.unwrap_err();
+    assert!(
+        matches!(&err, crate::error::BzrError::MidAirCollision { id: 42, .. }),
+        "expected a collision on bug 42, got {err:?}"
+    );
+    assert_eq!(err.exit_code(), 14);
+}
+
+#[tokio::test]
+async fn bug_update_expect_unchanged_batch_aborts_all_on_any_collision() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_get_bug_lct(&mock, 1, "2026-06-19T12:00:00Z").await; // matches
+    mock_get_bug_lct(&mock, 2, "2026-06-19T13:00:00Z").await; // differs -> collision
+    forbid_put(&mock).await;
+
+    let action = update_action_expect_unchanged(vec![1, 2], "2026-06-19T12:00:00Z");
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    // Bug 2's collision aborts the whole batch before any write (forbid_put).
+    assert!(matches!(
+        result,
+        Err(crate::error::BzrError::MidAirCollision { id: 2, .. })
+    ));
 }
 
 // ── Dry run (#308) ──────────────────────────────────────────────────

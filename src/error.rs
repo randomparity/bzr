@@ -65,6 +65,16 @@ pub enum BzrError {
         actual_issuer: String,
     },
 
+    #[error(
+        "mid-air collision on bug {id}: it last changed at {actual}, not {expected} \
+         as expected — someone modified it since; re-read the bug and retry"
+    )]
+    MidAirCollision {
+        id: u64,
+        expected: String,
+        actual: String,
+    },
+
     #[error("{0}")]
     Other(String),
 }
@@ -84,6 +94,7 @@ const ERROR_TYPE_DATA_INTEGRITY: &str = "data_integrity";
 const ERROR_TYPE_BATCH_PARTIAL_FAILURE: &str = "batch_partial_failure";
 const ERROR_TYPE_KEYRING: &str = "keyring";
 const ERROR_TYPE_TLS: &str = "tls";
+const ERROR_TYPE_COLLISION: &str = "collision";
 const ERROR_TYPE_OTHER: &str = "other";
 
 // Exit code constants
@@ -100,6 +111,7 @@ const EXIT_CODE_DATA_INTEGRITY: i32 = 10;
 const EXIT_CODE_BATCH_PARTIAL_FAILURE: i32 = 11;
 const EXIT_CODE_KEYRING: i32 = 12;
 const EXIT_CODE_TLS: i32 = 13;
+const EXIT_CODE_COLLISION: i32 = 14;
 
 /// Bugzilla internal server error code (HTTP 500 with code 100500).
 /// Used for retry logic in hybrid mode when extensions crash.
@@ -180,6 +192,7 @@ impl BzrError {
             BzrError::BatchPartialFailure { .. } => EXIT_CODE_BATCH_PARTIAL_FAILURE,
             BzrError::Keyring(_) => EXIT_CODE_KEYRING,
             BzrError::PinMismatch { .. } | BzrError::IssuerChanged { .. } => EXIT_CODE_TLS,
+            BzrError::MidAirCollision { .. } => EXIT_CODE_COLLISION,
             BzrError::Other(_) => EXIT_CODE_OTHER,
         }
     }
@@ -200,6 +213,7 @@ impl BzrError {
             BzrError::BatchPartialFailure { .. } => ERROR_TYPE_BATCH_PARTIAL_FAILURE,
             BzrError::Keyring(_) => ERROR_TYPE_KEYRING,
             BzrError::PinMismatch { .. } | BzrError::IssuerChanged { .. } => ERROR_TYPE_TLS,
+            BzrError::MidAirCollision { .. } => ERROR_TYPE_COLLISION,
             BzrError::Other(_) => ERROR_TYPE_OTHER,
         }
     }

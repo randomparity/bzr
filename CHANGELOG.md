@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `bug update --expect-unchanged-since <TIMESTAMP>` optimistic-concurrency guard.
+  Pass the `last_change_time` from a preceding `bug view`; before writing, bzr
+  re-reads each target bug and refuses the update (exit 14, a new distinct
+  collision code) if its `last_change_time` no longer matches, so a
+  read-modify-write agent will not silently clobber a concurrent edit. The check
+  is client-side — Bugzilla's REST `Bug.update` exposes no atomic
+  compare-and-set (the `check_collision` proposal was never merged; the web UI's
+  `delta_ts` guard is not in the API) — so a narrow check-then-write window
+  remains. With multiple IDs, all are checked first and any mismatch aborts the
+  whole batch before any write. (#320)
 - Confirmation gate for large batch bug mutations, with a global `-y`/`--yes`
   bypass. A `bug update`/`resolve`/`close`/`reopen` targeting more than 10 bugs
   now prompts for confirmation at an interactive terminal before writing, so a

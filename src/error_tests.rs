@@ -9,6 +9,22 @@ fn exit_code_config() {
 }
 
 #[test]
+fn mid_air_collision_has_distinct_exit_code_and_type() {
+    let err = BzrError::MidAirCollision {
+        id: 42,
+        expected: "2026-06-19T10:00:00Z".into(),
+        actual: "2026-06-19T12:00:00Z".into(),
+    };
+    assert_eq!(err.exit_code(), 14);
+    assert_eq!(err.error_type(), "collision");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("42") && msg.contains("mid-air collision"),
+        "{msg}"
+    );
+}
+
+#[test]
 fn exit_code_api() {
     let err = BzrError::Api {
         code: 101,

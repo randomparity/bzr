@@ -7,7 +7,7 @@
 
 pub mod datetime;
 
-pub use datetime::{parse_date_only, parse_iso8601_or_date};
+pub use datetime::{parse_date_only, parse_iso8601_or_date, timestamp_compare_key};
 
 use crate::error::Result;
 use crate::field_aliases::resolve_field_alias;

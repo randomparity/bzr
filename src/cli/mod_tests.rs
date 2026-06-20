@@ -151,6 +151,34 @@ fn parse_global_server_flag() {
 }
 
 #[test]
+fn parse_update_expect_unchanged_since() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "update",
+        "42",
+        "--status",
+        "RESOLVED",
+        "--expect-unchanged-since",
+        "2026-06-19T12:00:00Z",
+    ])
+    .unwrap();
+    let Commands::Bug {
+        action: BugAction::Update {
+            expect_unchanged_since,
+            ..
+        },
+    } = cli.command
+    else {
+        panic!("expected bug update");
+    };
+    assert_eq!(
+        expect_unchanged_since.as_deref(),
+        Some("2026-06-19T12:00:00Z")
+    );
+}
+
+#[test]
 fn parse_global_yes_flag_short_and_long() {
     let short = Cli::try_parse_from(["bzr", "-y", "bug", "update", "5", "--status", "X"]).unwrap();
     assert!(short.yes);

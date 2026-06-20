@@ -1,8 +1,38 @@
 #![expect(clippy::unwrap_used)]
 
-use super::{parse_date_only, parse_iso8601_or_date};
+use super::{parse_date_only, parse_iso8601_or_date, timestamp_compare_key};
 
 const FLAG: &str = "--created-since";
+
+#[test]
+fn timestamp_compare_key_is_transport_agnostic() {
+    // REST canonical (Z), REST naive, and XML-RPC basic forms of the same
+    // instant all key identically.
+    let rest_z = timestamp_compare_key("2026-06-19T12:00:00Z").unwrap();
+    let rest_naive = timestamp_compare_key("2026-06-19T12:00:00").unwrap();
+    let xmlrpc_basic = timestamp_compare_key("20260619T12:00:00").unwrap();
+    assert_eq!(rest_z, "20260619120000");
+    assert_eq!(rest_z, rest_naive);
+    assert_eq!(rest_z, xmlrpc_basic);
+    // A bare date expands to midnight.
+    assert_eq!(
+        timestamp_compare_key("2026-06-19").unwrap(),
+        "20260619000000"
+    );
+}
+
+#[test]
+fn timestamp_compare_key_rejects_offsets_and_garbage() {
+    // Offset forms are rejected so two different instants are never keyed equal.
+    assert!(timestamp_compare_key("2026-06-19T12:00:00+01:00").is_none());
+    assert!(timestamp_compare_key("not-a-timestamp").is_none());
+    assert!(timestamp_compare_key("").is_none());
+    // Different instants key differently.
+    assert_ne!(
+        timestamp_compare_key("2026-06-19T12:00:00Z"),
+        timestamp_compare_key("2026-06-19T13:00:00Z")
+    );
+}
 
 #[test]
 fn accepts_bare_date_and_canonicalizes() {

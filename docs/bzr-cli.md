@@ -81,6 +81,7 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 | 11 | Batch partial failure (some operations succeeded, some failed) |
 | 12 | Keyring error (OS keychain access failed, e.g. locked keyring or missing daemon) |
 | 13 | TLS error (certificate pin mismatch or issuer changed; use `--tls-pin-now` to re-pin or `--tls-pin-clear` to remove the pin) |
+| 14 | Mid-air collision (`bug update --expect-unchanged-since`: the bug changed since the given time; re-read and retry) |
 
 *Exit code 2 is produced by clap for argument errors before bzr's error handling runs, in addition to resource-not-found errors from bzr itself.
 
@@ -122,6 +123,7 @@ bzr [--server <NAME>] [--output table|json] [--json] [--config <PATH>] [--no-col
 │   │                   [--cc-add <C>] [--cc-remove <C>] [--groups-add <G>] [--groups-remove <G>]
 │   │                   [--see-also-add <URL>] [--see-also-remove <URL>]
 │   │                   [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
+│   │                   [--expect-unchanged-since <TIMESTAMP>]
 │   ├── resolve <ID...> [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 │   ├── close <ID...> [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 │   ├── reopen <ID...> [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
@@ -603,6 +605,7 @@ bzr bug update 100 200 300 --status RESOLVED --resolution WONTFIX
 | `--comment <BODY>` | No | Post a comment atomically with the field changes; `-` reads stdin (mutually exclusive with `--comment-file`) |
 | `--comment-file <PATH>` | No | Read the comment body from a UTF-8 file; `-` reads stdin (mutually exclusive with `--comment`; missing or non-UTF-8 paths exit 7) |
 | `--comment-private` | No | Mark the comment private (requires `--comment` or `--comment-file`) |
+| `--expect-unchanged-since <TIMESTAMP>` | No | Optimistic-concurrency guard: only apply if the bug's `last_change_time` still equals this value (pass the `last_change_time` from a preceding `bug view`). Re-reads each target before writing and exits 14 (collision) without writing on a mismatch. Client-side, so a narrow check-then-write window remains; with multiple IDs any mismatch aborts the whole batch |
 
 When updating multiple bugs, failures on individual bugs do not abort the batch. A summary is printed showing which bugs succeeded and which failed.
 
