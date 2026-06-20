@@ -22,11 +22,14 @@ pub(super) async fn handle(
             exclude_fields,
         },
         sort_args,
+        page_args: crate::cli::PageArgs { offset, paginate },
         count,
     } = action
     else {
         unreachable!()
     };
+
+    super::ensure_no_paging_with_count(*count, *offset, *paginate)?;
 
     let spec = ColumnSpec::new(fields.as_deref(), exclude_fields.as_deref());
 
@@ -39,6 +42,7 @@ pub(super) async fn handle(
     let mut base = SearchParams {
         status: status.clone(),
         limit: Some(*limit),
+        offset: *offset,
         include_fields: canonical_field_list(fields.as_deref()),
         exclude_fields: canonical_field_list(exclude_fields.as_deref()),
         order: Some(crate::validation::build_order(
@@ -69,8 +73,14 @@ pub(super) async fn handle(
         searches.push(p);
     }
 
+    // Page each category independently (a single global offset can't span the
+    // overlapping assigned/created/cc sets); the result is the deduped union.
+    // `truncated` means at least one category had more rows than `--limit`.
+    let mut truncated = false;
     for params in &searches {
-        for bug in client.search_bugs(params).await? {
+        let page = crate::commands::paging::fetch_page(client, params, *paginate).await?;
+        truncated |= page.truncated;
+        for bug in page.bugs {
             // When counting, only the deduped id set matters — don't retain rows.
             if seen_ids.insert(bug.id) && !*count {
                 all_bugs.push(bug);
@@ -84,6 +94,11 @@ pub(super) async fn handle(
     }
 
     write_bugs(&all_bugs, spec, format, w.out, w.err);
+    let page = crate::commands::paging::Page {
+        bugs: all_bugs,
+        truncated,
+    };
+    crate::commands::paging::write_truncation_note(&page, Some(*limit), *offset, format, w);
     Ok(())
 }
 

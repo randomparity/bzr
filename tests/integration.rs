@@ -19,6 +19,7 @@ use wiremock::{Mock, ResponseTemplate};
 /// fields they care about.
 fn empty_list_action() -> bzr::cli::BugAction {
     bzr::cli::BugAction::List {
+        page_args: bzr::cli::PageArgs::default(),
         product: vec![],
         component: vec![],
         status: vec![],
@@ -103,6 +104,7 @@ async fn bug_list_changed_since_canonicalizes_bare_date_on_wire() {
 
     let mut action = empty_list_action();
     if let bzr::cli::BugAction::List {
+        page_args: _,
         product,
         changed_since,
         ..
@@ -184,6 +186,7 @@ async fn bug_search_integration() {
         .await;
 
     let action = bzr::cli::BugAction::Search {
+        page_args: bzr::cli::PageArgs::default(),
         query: Some("crash".to_string()),
         from_url: None,
         save_as: None,
@@ -2536,6 +2539,7 @@ async fn bug_list_issue_158_mixed_positive_and_negation_reaches_wire() {
 
     let mut action = empty_list_action();
     if let bzr::cli::BugAction::List {
+        page_args: _,
         product,
         whiteboard,
         resolution,

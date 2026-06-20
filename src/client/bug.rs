@@ -142,6 +142,9 @@ fn append_option_params(
     if let Some(limit) = params.limit {
         builder = builder.query(&[("limit", limit)]);
     }
+    if let Some(offset) = params.offset {
+        builder = builder.query(&[("offset", offset)]);
+    }
     builder
 }
 

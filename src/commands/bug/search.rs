@@ -76,14 +76,17 @@ pub(super) async fn handle(
             exclude_fields,
         },
         sort_args,
+        page_args: crate::cli::PageArgs { offset, paginate },
     } = action
     else {
         unreachable!()
     };
 
+    super::ensure_no_paging_with_count(*count, *offset, *paginate)?;
+
     let spec = ColumnSpec::new(fields.as_deref(), exclude_fields.as_deref());
 
-    let (client, params, save_info) = if let Some(url_str) = from_url {
+    let (client, mut params, save_info) = if let Some(url_str) = from_url {
         let config = crate::config::Config::load()?;
         let parsed = crate::url_parser::parse_bugzilla_url(url_str, &config)?;
         let effective_server = server.or(parsed.query.server.as_deref());
@@ -126,6 +129,7 @@ pub(super) async fn handle(
         };
         (client, params, None)
     };
+    crate::commands::paging::resolve_offset(&mut params, *offset);
 
     if *count {
         let bugs = client
@@ -133,8 +137,9 @@ pub(super) async fn handle(
             .await?;
         crate::output::result_types::write_count(bugs.len(), format, w.out);
     } else {
-        let bugs = client.search_bugs(&params).await?;
-        write_bugs(&bugs, spec, format, w.out, w.err);
+        let page = crate::commands::paging::fetch_page(&client, &params, *paginate).await?;
+        write_bugs(&page.bugs, spec, format, w.out, w.err);
+        crate::commands::paging::write_truncation_note(&page, params.limit, *offset, format, w);
     }
 
     if let Some((name, query)) = save_info {

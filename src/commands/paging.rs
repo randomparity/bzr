@@ -1,0 +1,146 @@
+//! Shared result paging for the search-backed bug commands (`list`, `search`,
+//! `my`) and `query run`.
+//!
+//! Bugzilla's `Bug.search` returns no total-match count, so truncation cannot
+//! be read from the response. Two mechanisms cover the gap:
+//!
+//! - **`--offset <N>`** skips leading matches, so a window past the first
+//!   `--limit` is retrievable.
+//! - **`--paginate`** loops `offset += limit` until a short page and returns
+//!   every match — the full-retrieval path for "process all matching bugs".
+//!
+//! Without `--paginate`, [`fetch_page`] over-fetches one extra row (`limit+1`):
+//! if the server returns more than `limit`, at least one more match exists, so
+//! `truncated` is set deterministically and the surplus row trimmed away.
+
+use crate::client::BugzillaClient;
+use crate::error::Result;
+use crate::output::writers::Writers;
+use crate::types::{Bug, OutputFormat, SearchParams};
+
+/// Backstop on the `--paginate` loop: a server that ignored `offset` would
+/// otherwise return a full page forever. Far above any real result set.
+const MAX_PAGES: u32 = 10_000;
+
+/// Resolve the effective `offset` for a search. A `--from-url` (or a saved
+/// query imported from one) may carry its own `offset=` as an unrecognized
+/// param living in `raw_params`; fold it into the struct field — the single
+/// source of truth the client appends and the `--paginate` loop steps — strip
+/// the raw copy so a request never sends two conflicting `offset` params, then
+/// let an explicit CLI `--offset` override. Mirrors how a URL's `limit` is
+/// folded into the structured field.
+pub(crate) fn resolve_offset(params: &mut SearchParams, cli_offset: Option<u32>) {
+    let url_offset = params
+        .raw_params
+        .iter()
+        .find(|(k, _)| k == "offset")
+        .and_then(|(_, v)| v.parse::<u32>().ok());
+    params.raw_params.retain(|(k, _)| k != "offset");
+    params.offset = cli_offset.or(url_offset);
+}
+
+/// A page of results plus whether more matches exist beyond it.
+pub(crate) struct Page {
+    pub bugs: Vec<Bug>,
+    pub truncated: bool,
+}
+
+/// Fetch results honoring `--offset`/`--paginate`. With `paginate`, returns
+/// every match (never truncated). Otherwise returns one window, with
+/// `truncated` set when the server had more rows than `limit`.
+pub(crate) async fn fetch_page(
+    client: &BugzillaClient,
+    params: &SearchParams,
+    paginate: bool,
+) -> Result<Page> {
+    if paginate {
+        let bugs = fetch_all_pages(client, params).await?;
+        return Ok(Page {
+            bugs,
+            truncated: false,
+        });
+    }
+    // Over-fetch one row past the limit to detect "more available" without a
+    // server total. A zero/absent limit means "no window", so nothing to flag.
+    let Some(limit) = params.limit.filter(|l| *l > 0) else {
+        let bugs = client.search_bugs(params).await?;
+        return Ok(Page {
+            bugs,
+            truncated: false,
+        });
+    };
+    let mut probe = params.clone();
+    probe.limit = Some(limit.saturating_add(1));
+    let mut bugs = client.search_bugs(&probe).await?;
+    let truncated = bugs.len() as u64 > u64::from(limit);
+    bugs.truncate(limit as usize);
+    Ok(Page { bugs, truncated })
+}
+
+/// Loop `offset += limit` until a page shorter than `limit` (the last page) and
+/// return the accumulated matches. A zero/absent limit means the single
+/// unbounded request already returns everything (bounded by the server max).
+async fn fetch_all_pages(client: &BugzillaClient, params: &SearchParams) -> Result<Vec<Bug>> {
+    let Some(page_size) = params.limit.filter(|l| *l > 0) else {
+        return client.search_bugs(params).await;
+    };
+    let mut offset = params.offset.unwrap_or(0);
+    let mut all = Vec::new();
+    let mut reached_last_page = false;
+    for _ in 0..MAX_PAGES {
+        let mut p = params.clone();
+        p.offset = Some(offset);
+        let batch = client.search_bugs(&p).await?;
+        let received = batch.len();
+        all.extend(batch);
+        if received < page_size as usize {
+            reached_last_page = true;
+            break;
+        }
+        offset = offset.saturating_add(page_size);
+    }
+    if !reached_last_page {
+        // Hit the safety cap without a short page — almost always a server that
+        // ignores `offset`. Surface it rather than silently returning a
+        // possibly-incomplete (and duplicate-laden) set.
+        tracing::warn!(
+            "--paginate stopped at the {MAX_PAGES}-page safety cap; \
+             results may be incomplete (the server may be ignoring offset)"
+        );
+    }
+    Ok(all)
+}
+
+/// Emit a truncation footer when a window was truncated: a visible footer line
+/// on stdout for table output, or a note on stderr for JSON (so stdout stays a
+/// clean, parseable document). No-op when nothing was truncated.
+pub(crate) fn write_truncation_note(
+    page: &Page,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    format: OutputFormat,
+    w: &mut Writers<'_>,
+) {
+    if !page.truncated {
+        return;
+    }
+    let Some(limit) = limit else { return };
+    let next = offset.unwrap_or(0).saturating_add(limit);
+    let msg = format!(
+        "Showing first {} result(s); more available — use --paginate for all, \
+         or --offset {next} for the next page.",
+        page.bugs.len()
+    );
+    match format {
+        OutputFormat::Table => {
+            let _ = writeln!(w.out, "{msg}");
+        }
+        OutputFormat::Json => {
+            let _ = writeln!(w.err, "{msg}");
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "paging_tests.rs"]
+mod tests;

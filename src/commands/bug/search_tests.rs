@@ -9,6 +9,7 @@ use crate::types::OutputFormat;
 
 fn from_url_action(url: String, save_as: Option<String>) -> BugAction {
     BugAction::Search {
+        page_args: crate::cli::PageArgs::default(),
         query: None,
         from_url: Some(url),
         save_as,
@@ -136,7 +137,7 @@ async fn handle_search_from_url_preserves_url_limit_when_cli_unset() {
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
         .and(query_param("product", "TestProduct"))
-        .and(query_param("limit", "10"))
+        .and(query_param("limit", "11"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
         .expect(1)
         .mount(&mock)
@@ -172,7 +173,7 @@ async fn handle_search_quicksearch_passes_limit_and_field_filters() {
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
         .and(query_param("quicksearch", "crash"))
-        .and(query_param("limit", "5"))
+        .and(query_param("limit", "6"))
         .and(query_param("include_fields", "id,summary"))
         .and(query_param("exclude_fields", "comments"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
@@ -181,6 +182,7 @@ async fn handle_search_quicksearch_passes_limit_and_field_filters() {
         .await;
 
     let action = BugAction::Search {
+        page_args: crate::cli::PageArgs::default(),
         query: Some("crash".into()),
         from_url: None,
         save_as: None,
@@ -357,6 +359,7 @@ async fn bug_search_quicksearch_sends_default_order() {
         .await;
 
     let action = BugAction::Search {
+        page_args: crate::cli::PageArgs::default(),
         query: Some("crash".to_string()),
         from_url: None,
         save_as: None,
@@ -419,6 +422,7 @@ async fn handle_search_count_emits_count_object() {
         .await;
 
     let action = BugAction::Search {
+        page_args: crate::cli::PageArgs::default(),
         query: Some("crash".to_string()),
         from_url: None,
         save_as: None,
@@ -437,4 +441,89 @@ async fn handle_search_count_emits_count_object() {
     assert!(result.is_ok(), "search --count failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
     assert_eq!(parsed["count"], 4);
+}
+
+#[tokio::test]
+async fn from_url_offset_in_url_is_overridden_by_cli_offset_not_duplicated() {
+    // A URL carrying its own offset=10 plus an explicit --offset 5 must send a
+    // single offset=5 (CLI wins), never two conflicting offset params.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .mount(&mock)
+        .await;
+
+    let url = format!("{}/buglist.cgi?product=P&offset=10", mock.uri());
+    let mut action = from_url_action(url, None);
+    if let BugAction::Search {
+        page_args, limit, ..
+    } = &mut action
+    {
+        *limit = Some(20);
+        *page_args = crate::cli::PageArgs {
+            offset: Some(5),
+            paginate: false,
+        };
+    }
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+    assert!(result.is_ok(), "{result:?}");
+
+    let requests = mock.received_requests().await.unwrap();
+    let req = requests
+        .iter()
+        .find(|r| r.url.path() == "/rest/bug")
+        .expect("a GET to /rest/bug");
+    let offsets: Vec<String> = req
+        .url
+        .query_pairs()
+        .filter(|(k, _)| k == "offset")
+        .map(|(_, v)| v.into_owned())
+        .collect();
+    assert_eq!(offsets.len(), 1, "exactly one offset param: {offsets:?}");
+    assert_eq!(offsets[0], "5", "the CLI offset wins over the URL's");
+}
+
+#[tokio::test]
+async fn from_url_offset_with_paginate_sends_single_offset_per_page() {
+    // `--from-url …&offset=10 --paginate` must not leave the URL's offset in
+    // raw_params: every page request carries exactly one (loop-managed) offset.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    // Page size 2: a short first page (1 bug) stops the loop after one request.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1}]
+        })))
+        .mount(&mock)
+        .await;
+
+    let url = format!("{}/buglist.cgi?product=P&offset=10", mock.uri());
+    let mut action = from_url_action(url, None);
+    if let BugAction::Search {
+        page_args, limit, ..
+    } = &mut action
+    {
+        *limit = Some(2);
+        *page_args = crate::cli::PageArgs {
+            offset: None,
+            paginate: true,
+        };
+    }
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+    assert!(result.is_ok(), "{result:?}");
+
+    let requests = mock.received_requests().await.unwrap();
+    for req in requests.iter().filter(|r| r.url.path() == "/rest/bug") {
+        let n = req.url.query_pairs().filter(|(k, _)| k == "offset").count();
+        assert_eq!(n, 1, "each paginate request must send exactly one offset");
+    }
 }

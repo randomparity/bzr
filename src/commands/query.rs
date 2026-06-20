@@ -374,6 +374,7 @@ async fn handle_run(
         qa_contact,
         url,
         sort_args,
+        page_args: crate::cli::PageArgs { offset, paginate },
     } = action
     else {
         unreachable!()
@@ -412,6 +413,9 @@ async fn handle_run(
     });
     params.include_fields = canonical_field_list(params.include_fields.as_deref());
     params.exclude_fields = canonical_field_list(params.exclude_fields.as_deref());
+    // Fold any saved-query/URL `offset` into the struct field and let `--offset`
+    // override, so a saved-from-URL query never sends two `offset` params.
+    crate::commands::paging::resolve_offset(&mut params, *offset);
     // Result ordering: an explicit `--sort` overrides the saved order; absent
     // both, default to a stable `bug_id` so runs are deterministic — unless the
     // saved query (e.g. from a URL) already carries an `order` raw param.
@@ -439,8 +443,9 @@ async fn handle_run(
     }
 
     let client = super::shared::connect_and_configure(effective_server, api).await?;
-    let bugs = client.search_bugs(&params).await?;
-    write_bugs(&bugs, spec, format, w.out, w.err);
+    let page = crate::commands::paging::fetch_page(&client, &params, *paginate).await?;
+    write_bugs(&page.bugs, spec, format, w.out, w.err);
+    crate::commands::paging::write_truncation_note(&page, params.limit, *offset, format, w);
     Ok(())
 }
 

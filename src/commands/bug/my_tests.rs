@@ -42,6 +42,7 @@ async fn bug_my_returns_assigned_by_default() {
         .await;
 
     let action = BugAction::My {
+        page_args: crate::cli::PageArgs::default(),
         created: false,
         cc: false,
         all: false,
@@ -75,7 +76,7 @@ async fn bug_my_passes_status_limit_and_field_filters() {
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
         .and(query_param("status", "NEW"))
-        .and(query_param("limit", "7"))
+        .and(query_param("limit", "8"))
         .and(query_param("include_fields", "id,summary"))
         .and(query_param("exclude_fields", "comments"))
         .and(query_param("assigned_to", "dev@test.com"))
@@ -85,6 +86,7 @@ async fn bug_my_passes_status_limit_and_field_filters() {
         .await;
 
     let action = BugAction::My {
+        page_args: crate::cli::PageArgs::default(),
         created: false,
         cc: false,
         all: false,
@@ -126,6 +128,7 @@ async fn bug_my_created_only_runs_creator_search_not_assigned() {
         .await;
 
     let action = BugAction::My {
+        page_args: crate::cli::PageArgs::default(),
         created: true,
         cc: false,
         all: false,
@@ -166,6 +169,7 @@ async fn bug_my_cc_only_runs_cc_search_not_assigned_or_creator() {
         .await;
 
     let action = BugAction::My {
+        page_args: crate::cli::PageArgs::default(),
         created: false,
         cc: true,
         all: false,
@@ -213,6 +217,7 @@ async fn bug_my_all_deduplicates() {
         .await;
 
     let action = BugAction::My {
+        page_args: crate::cli::PageArgs::default(),
         created: false,
         cc: false,
         all: true,
@@ -261,6 +266,7 @@ async fn bug_my_all_count_reports_distinct_total() {
         .await;
 
     let action = BugAction::My {
+        page_args: crate::cli::PageArgs::default(),
         created: false,
         cc: false,
         all: true,

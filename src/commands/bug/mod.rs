@@ -46,6 +46,22 @@ pub(super) fn count_search_params(
     params
 }
 
+/// Reject `--offset`/`--paginate` combined with `--count`. `--count` reports
+/// the full match total, so windowing or page-looping it is contradictory;
+/// fail fast (exit 7) rather than silently ignore the paging flags.
+pub(super) fn ensure_no_paging_with_count(
+    count: bool,
+    offset: Option<u32>,
+    paginate: bool,
+) -> Result<()> {
+    if count && (offset.is_some() || paginate) {
+        return Err(crate::error::BzrError::InputValidation(
+            "--count cannot be combined with --offset or --paginate".into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Whether a bug action is a mutation that supports `--dry-run` (the create-,
 /// update-, and clone-shaped writes). Read actions and `--web` are excluded.
 #[must_use]
