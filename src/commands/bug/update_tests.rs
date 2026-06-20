@@ -936,6 +936,78 @@ async fn bug_update_expect_unchanged_batch_aborts_all_on_any_collision() {
     ));
 }
 
+#[tokio::test]
+async fn bug_update_expect_unchanged_rejects_unparseable_expected_value() {
+    // An unrecognized --expect-unchanged-since value fails before any re-read or
+    // write: InputValidation (exit 7), and no GET/PUT is issued.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    forbid_put(&mock).await;
+
+    let action = update_action_expect_unchanged(vec![42], "yesterday");
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    let err = result.unwrap_err();
+    assert!(
+        matches!(&err, crate::error::BzrError::InputValidation(_)),
+        "unparseable expected value should be InputValidation, got {err:?}"
+    );
+    assert_eq!(err.exit_code(), 7);
+}
+
+#[tokio::test]
+async fn bug_update_expect_unchanged_errors_when_server_omits_last_change_time() {
+    // The re-read returns a bug with no last_change_time: the guard cannot
+    // verify, so it fails with DataIntegrity (exit 10) and skips the write.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": [{"id": 42}]})),
+        )
+        .mount(&mock)
+        .await;
+    forbid_put(&mock).await;
+
+    let action = update_action_expect_unchanged(vec![42], "2026-06-19T12:00:00Z");
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    let err = result.unwrap_err();
+    assert!(
+        matches!(&err, crate::error::BzrError::DataIntegrity(_)),
+        "missing last_change_time should be DataIntegrity, got {err:?}"
+    );
+    assert_eq!(err.exit_code(), 10);
+}
+
+#[tokio::test]
+async fn bug_update_expect_unchanged_errors_when_server_last_change_time_is_garbage() {
+    // The re-read returns an unparseable last_change_time: the guard cannot key
+    // it for comparison, so it fails with DataIntegrity (exit 10), not a false
+    // collision and not a silent write.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_get_bug_lct(&mock, 42, "not-a-timestamp").await;
+    forbid_put(&mock).await;
+
+    let action = update_action_expect_unchanged(vec![42], "2026-06-19T12:00:00Z");
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    let err = result.unwrap_err();
+    assert!(
+        matches!(&err, crate::error::BzrError::DataIntegrity(_)),
+        "garbage last_change_time should be DataIntegrity, got {err:?}"
+    );
+    assert_eq!(err.exit_code(), 10);
+}
+
 // ── Dry run (#308) ──────────────────────────────────────────────────
 
 /// Mount a method-only PUT mock that must never fire — proves a dry run
