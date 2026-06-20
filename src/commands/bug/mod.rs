@@ -71,10 +71,10 @@ pub fn is_dry_runnable(action: &BugAction) -> bool {
         BugAction::Create(_)
             | BugAction::Update(_)
             | BugAction::Clone(_)
-            | BugAction::Resolve { .. }
-            | BugAction::Close { .. }
-            | BugAction::Reopen { .. }
-            | BugAction::Dup { .. }
+            | BugAction::Resolve(_)
+            | BugAction::Close(_)
+            | BugAction::Reopen(_)
+            | BugAction::Dup(_)
     )
 }
 
@@ -143,10 +143,10 @@ pub async fn execute(
         BugAction::Create(args) => create::handle(&client, args, format, w).await,
         BugAction::Clone(args) => clone::handle(&client, args, format, w).await,
         BugAction::Update(args) => update::handle(&client, args, format, w).await,
-        BugAction::Resolve { .. }
-        | BugAction::Close { .. }
-        | BugAction::Reopen { .. }
-        | BugAction::Dup { .. } => verbs::handle(&client, action, format, w).await,
+        BugAction::Resolve(a) => verbs::resolve(&client, a, format, w).await,
+        BugAction::Close(a) => verbs::close(&client, a, format, w).await,
+        BugAction::Reopen(a) => verbs::reopen(&client, a, format, w).await,
+        BugAction::Dup(a) => verbs::dup(&client, a, format, w).await,
         BugAction::Search(_) => unreachable!("handled above"),
     }
 }

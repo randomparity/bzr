@@ -15,7 +15,8 @@ mod user;
 pub use attachment::AttachmentAction;
 pub use bug::{BugAction, CommentArgs, CreateFieldArgs, FieldArgs, PageArgs, SortArgs};
 pub use bug::{
-    CloneArgs, CreateArgs, HistoryArgs, ListArgs, MyArgs, SearchArgs, UpdateArgs, ViewArgs,
+    CloneArgs, CloseArgs, CreateArgs, DupArgs, HistoryArgs, ListArgs, MyArgs, ReopenArgs,
+    ResolveArgs, SearchArgs, UpdateArgs, ViewArgs,
 };
 pub use classification::ClassificationAction;
 pub use comment::CommentAction;

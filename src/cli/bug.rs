@@ -1005,16 +1005,7 @@ pub enum BugAction {
     ///   bzr bug resolve 12345 12346 --as WONTFIX
     ///   bzr bug resolve 12345 --comment "Fixed in 9.1"
     #[command(verbatim_doc_comment)]
-    Resolve {
-        /// Bug ID(s) to resolve.
-        #[arg(required = true, num_args = 1..)]
-        ids: Vec<u64>,
-        /// Resolution to set (default `FIXED`).
-        #[arg(long = "as", value_name = "RESOLUTION", default_value = "FIXED")]
-        as_resolution: String,
-        #[command(flatten)]
-        comment: CommentArgs,
-    },
+    Resolve(ResolveArgs),
     /// Close one or more bugs (sets status CLOSED).
     ///
     /// Sugar for `bug update <IDs> --status CLOSED`. By default the bug's
@@ -1027,17 +1018,7 @@ pub enum BugAction {
     ///   bzr bug close 12345
     ///   bzr bug close 12345 12346 --as WONTFIX --comment "Out of scope"
     #[command(verbatim_doc_comment)]
-    Close {
-        /// Bug ID(s) to close.
-        #[arg(required = true, num_args = 1..)]
-        ids: Vec<u64>,
-        /// Resolution to set when closing an unresolved bug. Omit to
-        /// preserve any existing resolution.
-        #[arg(long = "as", value_name = "RESOLUTION")]
-        as_resolution: Option<String>,
-        #[command(flatten)]
-        comment: CommentArgs,
-    },
+    Close(CloseArgs),
     /// Reopen one or more bugs (sets status REOPENED).
     ///
     /// Sugar for `bug update <IDs> --status REOPENED`. Bugzilla clears the
@@ -1049,13 +1030,7 @@ pub enum BugAction {
     ///   bzr bug reopen 12345
     ///   bzr bug reopen 12345 --comment "Regressed in 9.2"
     #[command(verbatim_doc_comment)]
-    Reopen {
-        /// Bug ID(s) to reopen.
-        #[arg(required = true, num_args = 1..)]
-        ids: Vec<u64>,
-        #[command(flatten)]
-        comment: CommentArgs,
-    },
+    Reopen(ReopenArgs),
     /// Mark a bug as a duplicate of another bug.
     ///
     /// Sugar for `bug update <ID> --dupe-of <TARGET>`. Bugzilla sets the
@@ -1067,12 +1042,53 @@ pub enum BugAction {
     ///   bzr bug dup 12345 100
     ///   bzr bug dup 12345 100 --comment "Same root cause"
     #[command(verbatim_doc_comment)]
-    Dup {
-        /// The duplicate bug.
-        id: u64,
-        /// The canonical bug this one duplicates.
-        target: u64,
-        #[command(flatten)]
-        comment: CommentArgs,
-    },
+    Dup(DupArgs),
+}
+
+/// Arguments for `bug resolve`.
+#[derive(Args, Debug)]
+pub struct ResolveArgs {
+    /// Bug ID(s) to resolve.
+    #[arg(required = true, num_args = 1..)]
+    pub ids: Vec<u64>,
+    /// Resolution to set (default `FIXED`).
+    #[arg(long = "as", value_name = "RESOLUTION", default_value = "FIXED")]
+    pub as_resolution: String,
+    #[command(flatten)]
+    pub comment: CommentArgs,
+}
+
+/// Arguments for `bug close`.
+#[derive(Args, Debug)]
+pub struct CloseArgs {
+    /// Bug ID(s) to close.
+    #[arg(required = true, num_args = 1..)]
+    pub ids: Vec<u64>,
+    /// Resolution to set when closing an unresolved bug. Omit to
+    /// preserve any existing resolution.
+    #[arg(long = "as", value_name = "RESOLUTION")]
+    pub as_resolution: Option<String>,
+    #[command(flatten)]
+    pub comment: CommentArgs,
+}
+
+/// Arguments for `bug reopen`.
+#[derive(Args, Debug)]
+pub struct ReopenArgs {
+    /// Bug ID(s) to reopen.
+    #[arg(required = true, num_args = 1..)]
+    pub ids: Vec<u64>,
+    #[command(flatten)]
+    pub comment: CommentArgs,
+}
+
+/// Arguments for `bug dup`.
+#[derive(Args, Debug)]
+pub struct DupArgs {
+    /// The duplicate bug.
+    pub id: u64,
+    /// The canonical bug this one duplicates.
+    pub target: u64,
+    #[command(flatten)]
+    pub comment: CommentArgs,
 }
