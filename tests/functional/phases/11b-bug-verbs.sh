@@ -7,7 +7,8 @@
 # Covers the convenience verbs added since v0.4.4 that work against stock
 # Bugzilla 5.x: `bug resolve` and `bug dup`. `bug close`/`bug reopen` are NOT
 # covered here — they target the CLOSED/REOPENED statuses, which the default
-# Bugzilla workflow used by these containers does not define (see verbs.rs).
+# Bugzilla workflow used by these containers does not define (see verbs.rs and
+# issue #349).
 
 # ══════════════════════════════════════════════════════════════════════
 # Phase 11b: Bug convenience verbs (resolve, dup)
