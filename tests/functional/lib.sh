@@ -257,3 +257,113 @@ assert_json_exists() {
         return 1
     fi
 }
+
+# assert_json_not_contains <jq-expr> <substring> — substring is ABSENT from the
+# jq result. Backs the discriminating-fixture exclusion checks (assert a
+# non-matching fixture id is not in a filtered result).
+assert_json_not_contains() {
+    local expr="$1"
+    local substring="$2"
+    local actual
+    actual=$(jq -r "$expr" "$BZR_STDOUT" 2>/dev/null)
+    if [[ "$actual" == *"$substring"* ]]; then
+        test_fail "jq '$expr' = '$actual', unexpectedly contains '$substring'"
+        return 1
+    fi
+}
+
+# assert_json_valid — stdout parses as JSON (schema / structured-output checks).
+assert_json_valid() {
+    if ! jq -e . "$BZR_STDOUT" >/dev/null 2>&1; then
+        test_fail "stdout is not valid JSON"
+        return 1
+    fi
+}
+
+# assert_count <n> — assert the {"count": n} shape emitted by --count. Use only
+# on per-run-unique marker-isolated fixtures, never the shared corpus.
+assert_count() {
+    local expected="$1"
+    local actual
+    actual=$(jq -r '.count' "$BZR_STDOUT" 2>/dev/null)
+    if [[ "$actual" != "$expected" ]]; then
+        test_fail "count = ${actual:-null}, expected $expected"
+        return 1
+    fi
+}
+
+# assert_ndjson_line_count <n> — number of non-empty NDJSON lines on stdout.
+assert_ndjson_line_count() {
+    local expected="$1"
+    local actual
+    actual=$(grep -c '[^[:space:]]' "$BZR_STDOUT" 2>/dev/null || true)
+    if [[ "$actual" != "$expected" ]]; then
+        test_fail "ndjson line count = ${actual:-0}, expected $expected"
+        return 1
+    fi
+}
+
+# assert_stderr_contains <substring> — grep stderr (conflict, dry-run, and
+# truncation notices route there). Pairs with exit-code checks so a conflict
+# test proves the reason, not just that exit 2 fired.
+assert_stderr_contains() {
+    local substring="$1"
+    if ! grep -q "$substring" "$BZR_STDERR" 2>/dev/null; then
+        test_fail "stderr does not contain '$substring'"
+        return 1
+    fi
+}
+
+# ── Fixtures ─────────────────────────────────────────────────────────
+
+# make_bug [--marker <tag>] <bzr bug create args...> — create a bug and echo its
+# id. A marker stamps a whiteboard tag (caller passes a per-run-unique value) so
+# filter/paging/count tests isolate their own fixtures from the shared, growing
+# corpus.
+#
+# On failure it logs a diagnostic to stderr (visible in the run log even from a
+# `$(...)` capture) and echoes an empty id, but ALWAYS returns 0. This is
+# deliberate: callers use `id=$(make_bug ...)`, and under the suite's
+# `set -euo pipefail` a non-zero return from a command substitution would abort
+# the whole run. Returning 0 keeps the run alive — the caller sees an empty id
+# and the dependent test fails on its own assertion, so one bad create is one
+# failed test, not a silent total-suite abort.
+make_bug() {
+    local marker=""
+    if [[ "${1:-}" == "--marker" ]]; then
+        marker="$2"
+        shift 2
+    fi
+    if [[ -n "$marker" ]]; then
+        run_bzr bug create --whiteboard "$marker" "$@"
+    else
+        run_bzr bug create "$@"
+    fi
+    if [[ $BZR_EXIT -ne 0 ]]; then
+        echo "make_bug: bug create failed (exit $BZR_EXIT): $(tail -1 "$BZR_STDERR" 2>/dev/null)" >&2
+        return 0
+    fi
+    jq -r '.id' "$BZR_STDOUT" 2>/dev/null || true
+}
+
+# wait_for_changed <bug_id> <prev_last_change_time> — poll `bug view` until the
+# bug's last_change_time is strictly greater than the given value, so the forced
+# mid-air-collision test is deterministic (last_change_time is second-granular).
+# ISO-8601 timestamps compare lexically in chronological order. Returns non-zero
+# if the timestamp has not advanced within the retry budget.
+wait_for_changed() {
+    local bug_id="$1"
+    local prev="$2"
+    local attempt=0
+    local current
+    while [[ $attempt -lt 30 ]]; do
+        run_bzr bug view "$bug_id"
+        current=$(jq -r '.last_change_time // empty' "$BZR_STDOUT" 2>/dev/null)
+        if [[ -n "$current" ]] && [[ "$current" > "$prev" ]]; then
+            return 0
+        fi
+        sleep 1
+        attempt=$((attempt + 1))
+    done
+    return 1
+}
