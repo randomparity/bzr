@@ -139,11 +139,59 @@ fn output_format_from_str() {
         OutputFormat::Table
     );
     assert_eq!("json".parse::<OutputFormat>().unwrap(), OutputFormat::Json);
+    assert_eq!(
+        "ndjson".parse::<OutputFormat>().unwrap(),
+        OutputFormat::Ndjson
+    );
     assert!("JSON".parse::<OutputFormat>().is_err());
     assert!("Table".parse::<OutputFormat>().is_err());
     assert!("xml".parse::<OutputFormat>().is_err());
     let err = "XML".parse::<OutputFormat>().unwrap_err();
-    assert!(err.contains("expected 'table' or 'json'"));
+    assert!(err.contains("expected 'table', 'json', or 'ndjson'"));
+}
+
+// ── NDJSON rendering ─────────────────────────────────────────────
+
+#[test]
+fn ndjson_array_emits_one_compact_line_per_element() {
+    let value = serde_json::json!([{"id": 1}, {"id": 2}, {"id": 3}]);
+    let mut buf = Vec::new();
+    write_ndjson(&value, &mut buf);
+    let out = String::from_utf8(buf).unwrap();
+    assert_eq!(out, "{\"id\":1}\n{\"id\":2}\n{\"id\":3}\n");
+}
+
+#[test]
+fn ndjson_empty_array_emits_nothing() {
+    let value = serde_json::json!([]);
+    let mut buf = Vec::new();
+    write_ndjson(&value, &mut buf);
+    assert!(buf.is_empty());
+}
+
+#[test]
+fn ndjson_single_object_emits_one_compact_line() {
+    let value = serde_json::json!({"resource": "bug", "action": "updated", "id": 7});
+    let mut buf = Vec::new();
+    write_ndjson(&value, &mut buf);
+    let out = String::from_utf8(buf).unwrap();
+    // One line, no pretty-print whitespace, trailing newline only.
+    assert_eq!(out.lines().count(), 1);
+    assert!(!out.contains("  "));
+    assert!(out.ends_with('\n'));
+}
+
+#[test]
+fn json_family_json_is_pretty_ndjson_is_compact() {
+    let value = serde_json::json!([{"id": 1}]);
+    let mut pretty = Vec::new();
+    write_json_family(&value, OutputFormat::Json, &mut pretty);
+    let pretty = String::from_utf8(pretty).unwrap();
+    assert!(pretty.contains('\n') && pretty.contains("  "));
+
+    let mut compact = Vec::new();
+    write_json_family(&value, OutputFormat::Ndjson, &mut compact);
+    assert_eq!(String::from_utf8(compact).unwrap(), "{\"id\":1}\n");
 }
 
 #[test]

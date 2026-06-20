@@ -115,7 +115,7 @@ pub async fn execute(
                     validate_table_columns(spec)?;
                 }
             }
-            OutputFormat::Json => {
+            OutputFormat::Json | OutputFormat::Ndjson => {
                 if !is_view {
                     validate_json_field_selection(spec)?;
                 }

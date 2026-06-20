@@ -73,6 +73,24 @@ pub enum OutputFormat {
     #[default]
     Table,
     Json,
+    /// Newline-delimited JSON: array outputs emit one compact value per line;
+    /// single objects emit one compact line. Streaming-friendly for agents.
+    Ndjson,
+}
+
+impl OutputFormat {
+    /// Whether this format is a machine-readable JSON family (`json` or
+    /// `ndjson`) as opposed to the human `table`. The two JSON families share
+    /// every routing decision — serialization, error objects, stderr-only
+    /// notes — and differ only in how the JSON is laid out, so call sites that
+    /// branch "machine vs human" test this rather than spelling out both arms.
+    #[must_use]
+    pub fn is_json_family(self) -> bool {
+        match self {
+            OutputFormat::Json | OutputFormat::Ndjson => true,
+            OutputFormat::Table => false,
+        }
+    }
 }
 
 impl std::str::FromStr for OutputFormat {
@@ -81,8 +99,9 @@ impl std::str::FromStr for OutputFormat {
         match s {
             "table" => Ok(OutputFormat::Table),
             "json" => Ok(OutputFormat::Json),
+            "ndjson" => Ok(OutputFormat::Ndjson),
             _ => Err(format!(
-                "invalid output format '{s}': expected 'table' or 'json'"
+                "invalid output format '{s}': expected 'table', 'json', or 'ndjson'"
             )),
         }
     }

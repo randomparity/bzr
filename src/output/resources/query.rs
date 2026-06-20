@@ -4,7 +4,7 @@ use std::io::Write;
 use crate::types::{OutputFormat, QueryKind, SavedQuery};
 
 use crate::output::formatting::{
-    write_field, write_formatted, write_json, write_list_field, write_optional_field,
+    write_field, write_formatted, write_json_family, write_list_field, write_optional_field,
 };
 
 fn kind_label(kind: &QueryKind) -> &'static str {
@@ -52,9 +52,10 @@ pub fn write_query_saved<W: Write + ?Sized>(
     out: &mut W,
 ) {
     match format {
-        OutputFormat::Json => {
-            write_json(
+        OutputFormat::Json | OutputFormat::Ndjson => {
+            write_json_family(
                 &serde_json::json!({"name": name, "action": verb.to_lowercase()}),
+                format,
                 out,
             );
         }

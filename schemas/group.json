@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/group.json",
+  "title": "Group",
+  "description": "A Bugzilla group (`GroupInfo`) as emitted in `--format json` output.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean"
+    },
+    "membership": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "real_name": {
+            "type": ["string", "null"]
+          },
+          "email": {
+            "type": ["string", "null"]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "real_name",
+          "email"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "description",
+    "is_active",
+    "membership"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/multi-bug-view.json",
+  "title": "MultiBugViewResult",
+  "description": "Result of a multi-ID `bug view`.",
+  "type": "object",
+  "properties": {
+    "bugs": {
+      "type": "array",
+      "items": {
+        "$ref": "bug.json"
+      }
+    },
+    "failed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "error"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "bugs",
+    "failed"
+  ],
+  "additionalProperties": false
+}

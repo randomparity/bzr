@@ -7,7 +7,7 @@ use tabled::builder::Builder;
 
 use crate::output::formatting::{
     colorize_status, shorten_email, truncate, write_divider, write_field, write_formatted,
-    write_json, write_list_field, write_optional_field, SUMMARY_TRUNCATE_WIDTH,
+    write_json_family, write_list_field, write_optional_field, SUMMARY_TRUNCATE_WIDTH,
 };
 use crate::types::{Bug, HistoryEntry, OutputFormat};
 
@@ -528,7 +528,9 @@ pub fn write_bugs<W: Write + ?Sized, E: Write + ?Sized>(
     err: &mut E,
 ) {
     match format {
-        OutputFormat::Json => write_json(&bugs_to_json(bugs, spec), out),
+        OutputFormat::Json | OutputFormat::Ndjson => {
+            write_json_family(&bugs_to_json(bugs, spec), format, out);
+        }
         OutputFormat::Table => {
             if bugs.is_empty() {
                 let _ = writeln!(out, "No bugs found.");
@@ -552,7 +554,9 @@ pub fn write_bug_detail<W: Write + ?Sized>(
     out: &mut W,
 ) {
     match format {
-        OutputFormat::Json => write_json(&bug_to_json(bug, spec), out),
+        OutputFormat::Json | OutputFormat::Ndjson => {
+            write_json_family(&bug_to_json(bug, spec), format, out);
+        }
         OutputFormat::Table => write_bug_detail_table(bug, spec, out),
     }
 }

@@ -234,6 +234,21 @@ fn format_dispatch_error_renders_json() {
 }
 
 #[test]
+fn format_dispatch_error_ndjson_renders_compact_json_object() {
+    // Under --output ndjson the error must stay a parseable JSON object (one
+    // compact line), not degrade to the human `error: …` table form.
+    let err = BzrError::Config("bad config".into());
+    let out = format_dispatch_error(&err, OutputFormat::Ndjson);
+    assert!(
+        !out.starts_with("error:"),
+        "ndjson error must be JSON: {out}"
+    );
+    assert!(!out.contains('\n'), "ndjson error must be one line: {out}");
+    let parsed: serde_json::Value = serde_json::from_str(&out).expect("output must be valid JSON");
+    assert_eq!(parsed["error"]["exit_code"], err.exit_code());
+}
+
+#[test]
 fn format_dispatch_error_renders_table() {
     let err = BzrError::Config("bad config".into());
     let out = format_dispatch_error(&err, OutputFormat::Table);

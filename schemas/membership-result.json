@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/membership-result.json",
+  "title": "MembershipResult",
+  "description": "Result of `group add-user`/`remove-user`.",
+  "type": "object",
+  "properties": {
+    "user": {
+      "type": "string"
+    },
+    "group": {
+      "type": "string"
+    },
+    "resource": {
+      "type": "string",
+      "enum": ["bug", "attachment", "comment", "user", "group", "product", "component", "server"]
+    },
+    "action": {
+      "type": "string",
+      "enum": ["created", "updated", "added", "removed", "renamed", "downloaded", "dry-run"]
+    }
+  },
+  "required": [
+    "user",
+    "group",
+    "resource",
+    "action"
+  ],
+  "additionalProperties": false
+}

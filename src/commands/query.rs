@@ -436,7 +436,7 @@ async fn handle_run(
     };
     match format {
         OutputFormat::Table => validate_table_columns(spec)?,
-        OutputFormat::Json => {
+        OutputFormat::Json | OutputFormat::Ndjson => {
             validate_json_field_selection(spec)?;
             warn_unknown_fields(spec, w.err);
         }

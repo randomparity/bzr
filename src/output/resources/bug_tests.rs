@@ -120,6 +120,38 @@ fn write_bugs_table_empty_says_no_bugs_found() {
 }
 
 #[test]
+fn write_bugs_ndjson_emits_one_object_per_line() {
+    let bugs = vec![
+        make_bug(1, "first", "NEW"),
+        make_bug(2, "second", "ASSIGNED"),
+    ];
+    let output = capture_bugs(OutputFormat::Ndjson, &bugs);
+    let lines: Vec<&str> = output.lines().collect();
+    assert_eq!(lines.len(), 2);
+    let first: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+    let second: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+    assert_eq!(first["id"], 1);
+    assert_eq!(second["id"], 2);
+    // Compact: no pretty-print indentation on any line.
+    assert!(!output.contains("  \""));
+}
+
+#[test]
+fn write_bugs_ndjson_empty_emits_nothing() {
+    let output = capture_bugs(OutputFormat::Ndjson, &[]);
+    assert!(output.is_empty());
+}
+
+#[test]
+fn write_bug_detail_ndjson_emits_single_line() {
+    let bug = make_bug(99, "detail", "NEW");
+    let output = capture_bug_detail(OutputFormat::Ndjson, &bug);
+    assert_eq!(output.lines().count(), 1);
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    assert_eq!(parsed["id"], 99);
+}
+
+#[test]
 fn write_bugs_json_empty_renders_empty_array() {
     let output = capture_bugs(OutputFormat::Json, &[]);
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();

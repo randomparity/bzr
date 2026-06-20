@@ -84,12 +84,24 @@ fn output_format_from_str_valid() {
         OutputFormat::Table
     );
     assert_eq!("json".parse::<OutputFormat>().unwrap(), OutputFormat::Json);
+    assert_eq!(
+        "ndjson".parse::<OutputFormat>().unwrap(),
+        OutputFormat::Ndjson
+    );
+}
+
+#[test]
+fn output_format_is_json_family() {
+    assert!(OutputFormat::Json.is_json_family());
+    assert!(OutputFormat::Ndjson.is_json_family());
+    assert!(!OutputFormat::Table.is_json_family());
 }
 
 #[test]
 fn output_format_from_str_invalid() {
     let err = "xml".parse::<OutputFormat>().unwrap_err();
     assert!(err.contains("invalid output format"));
+    assert!(err.contains("ndjson"));
 }
 
 #[test]

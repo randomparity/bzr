@@ -98,6 +98,7 @@ pub async fn dispatch(
             commands::query::execute(action, server, format, api, w).await
         }
         cli::Commands::Completion { shell } => commands::completion::execute(*shell, w),
+        cli::Commands::Schema { name } => commands::schema::execute(name.as_deref(), format, w),
     }
 }
 

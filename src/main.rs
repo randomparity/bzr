@@ -81,11 +81,12 @@ fn exit_code(e: &BzrError) -> ExitCode {
 
 /// Render a dispatch error for the user.
 ///
-/// JSON output renders a structured object with `type`, `message`, and
-/// `exit_code` fields. Table output renders the conventional `error: …`
-/// prefix.
+/// JSON-family output (`json` and `ndjson`) renders a structured error object
+/// with `type`, `message`, and `exit_code` fields — one compact line, so an
+/// `ndjson` stream stays parseable. Table output renders the conventional
+/// `error: …` prefix.
 fn format_dispatch_error(err: &BzrError, format: OutputFormat) -> String {
-    if format == OutputFormat::Json {
+    if format.is_json_family() {
         let json_err = serde_json::json!({
             "error": {
                 "type": err.error_type(),

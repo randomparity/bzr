@@ -16,6 +16,41 @@ pub(super) fn write_json<W: Write + ?Sized>(value: &(impl Serialize + ?Sized), o
     );
 }
 
+/// Newline-delimited JSON. A top-level array emits one compact element per line
+/// (the streaming shape agents iterate); any other value emits as one compact
+/// line. An empty array emits nothing — zero records is zero lines.
+pub(crate) fn write_ndjson<W: Write + ?Sized>(value: &(impl Serialize + ?Sized), out: &mut W) {
+    let value = serde_json::to_value(value).expect("serializable to JSON");
+    match value {
+        serde_json::Value::Array(items) => {
+            for item in &items {
+                let _ = writeln!(out, "{item}");
+            }
+        }
+        other => {
+            let _ = writeln!(out, "{other}");
+        }
+    }
+}
+
+/// Render a value in whichever JSON family `format` selects: pretty-printed for
+/// [`OutputFormat::Json`], newline-delimited for [`OutputFormat::Ndjson`]. Used
+/// by the bespoke `match format` sites whose `Table` arm renders something
+/// other than a serialized value; [`write_formatted`] is the simpler entry
+/// point when the table form is also a function of the same value.
+pub(crate) fn write_json_family<W: Write + ?Sized>(
+    value: &(impl Serialize + ?Sized),
+    format: OutputFormat,
+    out: &mut W,
+) {
+    match format {
+        OutputFormat::Ndjson => write_ndjson(value, out),
+        // `Table` is unreachable — callers gate this on `is_json_family()` — but
+        // folding it into the pretty-JSON arm keeps the match exhaustive.
+        OutputFormat::Json | OutputFormat::Table => write_json(value, out),
+    }
+}
+
 pub(super) fn write_formatted<T, W>(
     value: &T,
     format: OutputFormat,
@@ -27,6 +62,7 @@ pub(super) fn write_formatted<T, W>(
 {
     match format {
         OutputFormat::Json => write_json(value, out),
+        OutputFormat::Ndjson => write_ndjson(value, out),
         OutputFormat::Table => table_fn(value, out),
     }
 }

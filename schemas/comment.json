@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/comment.json",
+  "title": "Comment",
+  "description": "A bug comment as emitted in `--format json` output.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "bug_id": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "text": {
+      "type": "string"
+    },
+    "creator": {
+      "type": ["string", "null"]
+    },
+    "creation_time": {
+      "type": ["string", "null"]
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "is_private": {
+      "type": "boolean"
+    },
+    "attachment_id": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    }
+  },
+  "required": [
+    "id",
+    "bug_id",
+    "text",
+    "creator",
+    "creation_time",
+    "count",
+    "is_private",
+    "attachment_id"
+  ],
+  "additionalProperties": false
+}

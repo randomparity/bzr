@@ -198,7 +198,9 @@ pub fn write_attachment_batch<O, E>(
     E: Write + ?Sized,
 {
     match format {
-        OutputFormat::Json => crate::output::formatting::write_json(result, out),
+        OutputFormat::Json | OutputFormat::Ndjson => {
+            crate::output::formatting::write_json_family(result, format, out);
+        }
         OutputFormat::Table => write_attachment_batch_table(result, out, err),
     }
 }

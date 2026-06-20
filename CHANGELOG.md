@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- NDJSON output via `--output ndjson` (or `BZR_OUTPUT=ndjson`): list/array
+  results print one compact JSON value per line and single objects print as one
+  compact line — the streaming shape for agents and `jq -c`. An empty list emits
+  no lines; the `bug list`/`search` truncation note goes to stderr so stdout
+  stays one clean record per line. Existing `table`/`json` shapes are unchanged.
+  (#305)
+
+- `bzr schema [NAME]` publishes checked-in JSON Schemas (draft 2020-12) for the
+  `--format json` output of each command family — the read-resource objects
+  (`bug`, `comment`, `attachment`, `product`, `component`, `classification`,
+  `user`, `group`, `field-value`) and the mutation/result envelopes
+  (`action-result`, `batch-result`, `batch-create-result`, `multi-bug-view`,
+  `tag-result`, `membership-result`, `count-result`, `download-result`,
+  `upload-result`, `config-result`, `search-result`, `dry-run-result`). Agents
+  can validate output against a contract instead of branching over the per-
+  command shape differences. Local command (no network); run without a name to
+  list the schemas. A drift test validates each schema against the real
+  serialized output so the published contract stays honest. (#305)
+
 - Pagination for the search-backed commands (`bug list`, `bug search`, `bug my`,
   `query run`): `--offset <N>` skips leading matches for manual paging, and
   `--paginate` loops internally past `--limit` to retrieve every match (the path

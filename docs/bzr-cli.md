@@ -24,6 +24,7 @@ For installation and quick start, see [README.md](../README.md).
 - [template](#bzr-template----bug-template-management)
 - [query](#bzr-query----saved-query-management)
 - [completion](#bzr-completion----shell-completion)
+- [schema](#bzr-schema----published-json-schemas)
 - [Flag Syntax](#flag-syntax)
 - [JSON Output](#json-output)
 - [Configuration File Format](#configuration-file-format)
@@ -38,7 +39,7 @@ For installation and quick start, see [README.md](../README.md).
 | `--server-url <URL>` | Connect to an ad-hoc server by URL, without using config. Defines an ephemeral server for this one invocation: nothing is read from or written to the config file. Requires `--server-api-key-env`; conflicts with `--server`. Pairs with `--config` for sandboxed throwaway runs. |
 | `--server-api-key-env <ENV>` | Environment variable holding the API key for `--server-url`. The key is read from this variable, never passed as a literal flag, so the secret stays out of the process argument list. Only meaningful with `--server-url`. |
 | `--server-email <EMAIL>` | Login email for `--server-url`, for the Bugzilla 5.0 whoami fallback. Optional; only meaningful with `--server-url`. |
-| `--output <FORMAT>` | Output format: `table` or `json`. Defaults to table at a TTY; auto-selects json when stdout is not a TTY. |
+| `--output <FORMAT>` | Output format: `table`, `json`, or `ndjson`. Defaults to table at a TTY; auto-selects json when stdout is not a TTY. `ndjson` emits newline-delimited JSON — one compact value per line for list results (a single object or result envelope prints as one compact line) — for streaming into agents and `jq -c`. |
 | `--json` | Shorthand for `--output json` |
 | `--config <PATH>` | Use an alternate `config.toml` for reads and writes. Takes precedence over `BZR_CONFIG`; both override the default config directory. |
 | `--no-color` | Disable colored output. Color is also suppressed automatically when stdout is not a TTY. |
@@ -58,7 +59,7 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 
 | Variable | Description |
 |----------|-------------|
-| `BZR_OUTPUT` | Default output format (`table` or `json`). Overridden by `--output` or `--json`. |
+| `BZR_OUTPUT` | Default output format (`table`, `json`, or `ndjson`). Overridden by `--output` or `--json`. |
 | `BZR_CONFIG` | Full path to an alternate `config.toml`. Overrides the default config directory; overridden by `--config`. |
 | `BZR_TIMEOUT` | Per-request timeout in seconds. Overridden by `--timeout`; invalid values are ignored with a warning. |
 | `NO_COLOR` | Disable colored output (any value). Supported natively by the `colored` crate. |
@@ -91,7 +92,7 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 ## Command Tree
 
 ```
-bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--server-email <EMAIL>] [--output table|json] [--json] [--config <PATH>] [--no-color] [--quiet] [--api rest|xmlrpc|hybrid] [--timeout <SECS>] [--retry <N>] [--dry-run] [--yes] [-v...]
+bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--server-email <EMAIL>] [--output table|json|ndjson] [--json] [--config <PATH>] [--no-color] [--quiet] [--api rest|xmlrpc|hybrid] [--timeout <SECS>] [--retry <N>] [--dry-run] [--yes] [-v...]
 ├── bug
 │   ├── list [--product <P>...] [--component <C>...] [--status <S>...] [--assignee <A>...]
 │   │        [--creator <C>...] [--priority <P>...] [--severity <S>...] [--id <ID>...]
@@ -216,7 +217,8 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │                  [--resolution <R>...] [--version <V>...] [--op-sys <OS>...] [--platform <P>...]
 │                  [--whiteboard <W>] [--target-milestone <M>...] [--qa-contact <Q>...] [--url <U>]
 │                  [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
-└── completion <bash|zsh|fish|powershell>
+├── completion <bash|zsh|fish|powershell>
+└── schema [NAME]
 ```
 
 ---
@@ -1715,6 +1717,44 @@ installed and sourced by your shell startup. For zsh, the file name must be
 
 ---
 
+## `bzr schema` -- Published JSON Schemas
+
+Print a JSON Schema (draft 2020-12) describing the `--format json` output of a
+command family. The schemas are checked into `schemas/` and embedded in the
+binary, so a consumer can validate `bzr` output against a contract instead of
+branching over the per-command shape differences. This command is local: it
+makes no network calls and needs no configured server.
+
+```
+bzr schema [NAME]
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `[NAME]` | No | Schema to print. Omit to list the available schema names. |
+
+Run without a name to list the available schemas; pass one to print it:
+
+```bash
+bzr schema                      # list schema names
+bzr schema bug                  # the bug object (bug view / list elements)
+bzr schema batch-result | jq .  # the batch `bug update` envelope
+```
+
+Listing honors `--output`: a name-per-line table at a TTY, a JSON array under
+`--json`, one JSON string per line under `--ndjson`. Printing a named schema
+emits the schema document verbatim. An unknown name exits 7 with the list of
+valid names.
+
+Available schemas: `bug`, `comment`, `attachment`, `product`, `component`,
+`classification`, `user`, `group`, `field-value` (read shapes); and the
+mutation/result envelopes `action-result`, `batch-result`,
+`batch-create-result`, `multi-bug-view`, `tag-result`, `membership-result`,
+`count-result`, `download-result`, `upload-result`, `config-result`,
+`search-result`, `dry-run-result`.
+
+---
+
 ## Flag Syntax
 
 Flags use the pattern `name[status](requestee)`:
@@ -1799,6 +1839,34 @@ Server config mutations key on `name` and carry `config_file`; `rename-server` a
 ```
 
 All mutation responses include `resource` and `action` fields. Most include `id` for the created/updated resource. Note: `comment tag` responses use `comment_id`, not `id`. Membership responses (`group_membership`) have no `id` field. Template responses use `name` instead of `id`. Server config responses (`remove-server`/`rename-server`) key on `name` (and `previous_name` for renames) with no `id`.
+
+### NDJSON output
+
+`--output ndjson` (or `BZR_OUTPUT=ndjson`) emits newline-delimited JSON: each
+element of a list/array result is printed as one compact value on its own line,
+and single objects print as one compact line. This is the streaming shape for
+agents and `jq -c`, and avoids buffering a whole pretty-printed array:
+
+```bash
+# One bug object per line
+bzr --output ndjson bug search "memory leak" | jq -c '{id, summary}'
+
+# Stream a large result set line-by-line
+bzr --output ndjson bug list --product Fedora --limit 500 | while read -r line; do
+  echo "$line" | jq -r '.id'
+done
+```
+
+An empty list emits no lines. The truncation note for a capped `bug
+list`/`search` (see [Pagination and truncation](#pagination-and-truncation))
+goes to stderr under `ndjson`, keeping stdout one clean record per line.
+
+### Published schemas
+
+`bzr schema` prints checked-in JSON Schemas (draft 2020-12) describing the
+`--format json` shape of each command family, so an agent can validate output
+against a contract instead of branching per command. See
+[`bzr schema`](#bzr-schema----published-json-schemas).
 
 ### Error output
 

@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/attachment.json",
+  "title": "Attachment",
+  "description": "A bug attachment as emitted in `--format json` output.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "bug_id": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "file_name": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "content_type": {
+      "type": "string"
+    },
+    "creator": {
+      "type": ["string", "null"]
+    },
+    "creation_time": {
+      "type": ["string", "null"]
+    },
+    "last_change_time": {
+      "type": ["string", "null"]
+    },
+    "size": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "is_obsolete": {
+      "type": "boolean"
+    },
+    "is_private": {
+      "type": "boolean"
+    },
+    "is_patch": {
+      "type": "boolean"
+    },
+    "data": {
+      "type": ["string", "null"]
+    }
+  },
+  "required": [
+    "id",
+    "bug_id",
+    "file_name",
+    "summary",
+    "content_type",
+    "creator",
+    "creation_time",
+    "last_change_time",
+    "size",
+    "is_obsolete",
+    "is_private",
+    "is_patch"
+  ],
+  "additionalProperties": false
+}

@@ -214,7 +214,7 @@ async fn update_single(
 ) -> Result<()> {
     client.update_bug(id, params).await?;
     match format {
-        OutputFormat::Json => {
+        OutputFormat::Json | OutputFormat::Ndjson => {
             write_result(
                 &ActionResult::updated(id, ResourceKind::Bug),
                 "",
@@ -237,7 +237,7 @@ fn write_batch_result(
     w: &mut Writers<'_>,
 ) {
     match format {
-        OutputFormat::Json => {
+        OutputFormat::Json | OutputFormat::Ndjson => {
             write_result(batch, "", format, w.out);
         }
         OutputFormat::Table => {
