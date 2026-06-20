@@ -3,7 +3,9 @@ use std::io::Write;
 use colored::Colorize;
 use serde::Serialize;
 
-use crate::output::formatting::{write_field, write_formatted, write_optional_field};
+use crate::output::formatting::{
+    render_flags_inline, write_field, write_formatted, write_optional_field,
+};
 use crate::types::{Attachment, OutputFormat};
 
 /// Write the colored `Attachment #<id> - <summary> [FLAGS]` header line.
@@ -63,13 +65,7 @@ pub fn write_attachment<W: Write + ?Sized>(a: &Attachment, format: OutputFormat,
         write_optional_field(out, "Created", a.creation_time.as_deref());
         write_optional_field(out, "Modified", a.last_change_time.as_deref());
         if !a.flags.is_empty() {
-            let rendered = a
-                .flags
-                .iter()
-                .map(crate::types::Flag::render_inline)
-                .collect::<Vec<_>>()
-                .join(", ");
-            write_field(out, "Flags", &rendered);
+            write_field(out, "Flags", &render_flags_inline(&a.flags));
         }
     });
 }
