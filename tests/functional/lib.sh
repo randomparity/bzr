@@ -319,7 +319,15 @@ assert_stderr_contains() {
 # make_bug [--marker <tag>] <bzr bug create args...> — create a bug and echo its
 # id. A marker stamps a whiteboard tag (caller passes a per-run-unique value) so
 # filter/paging/count tests isolate their own fixtures from the shared, growing
-# corpus. Returns non-zero (and echoes nothing) if creation fails.
+# corpus.
+#
+# On failure it logs a diagnostic to stderr (visible in the run log even from a
+# `$(...)` capture) and echoes an empty id, but ALWAYS returns 0. This is
+# deliberate: callers use `id=$(make_bug ...)`, and under the suite's
+# `set -euo pipefail` a non-zero return from a command substitution would abort
+# the whole run. Returning 0 keeps the run alive — the caller sees an empty id
+# and the dependent test fails on its own assertion, so one bad create is one
+# failed test, not a silent total-suite abort.
 make_bug() {
     local marker=""
     if [[ "${1:-}" == "--marker" ]]; then
@@ -332,9 +340,10 @@ make_bug() {
         run_bzr bug create "$@"
     fi
     if [[ $BZR_EXIT -ne 0 ]]; then
-        return 1
+        echo "make_bug: bug create failed (exit $BZR_EXIT): $(tail -1 "$BZR_STDERR" 2>/dev/null)" >&2
+        return 0
     fi
-    jq -r '.id' "$BZR_STDOUT" 2>/dev/null
+    jq -r '.id' "$BZR_STDOUT" 2>/dev/null || true
 }
 
 # wait_for_changed <bug_id> <prev_last_change_time> — poll `bug view` until the
