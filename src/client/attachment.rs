@@ -64,22 +64,12 @@ impl BugzillaClient {
     /// only path that returns the full set. REST is the fallback when the
     /// server doesn't expose `xmlrpc.cgi`.
     pub async fn get_attachments(&self, bug_id: u64) -> Result<Vec<Attachment>> {
-        match self.api_mode {
-            ApiMode::Rest => self.get_attachments_rest(bug_id).await,
-            ApiMode::XmlRpc => self.xmlrpc_client()?.get_attachments(bug_id).await,
-            ApiMode::Hybrid => match self.xmlrpc_client()?.get_attachments(bug_id).await {
-                Ok(attachments) => Ok(attachments),
-                Err(e) if e.is_transport_failure() => {
-                    tracing::info!(
-                        bug_id,
-                        error = %e,
-                        "XML-RPC attachment list failed, retrying via REST"
-                    );
-                    self.get_attachments_rest(bug_id).await
-                }
-                Err(e) => Err(e),
-            },
-        }
+        self.dispatch_xmlrpc_first(
+            "attachment list",
+            || self.get_attachments_rest(bug_id),
+            || async { self.xmlrpc_client()?.get_attachments(bug_id).await },
+        )
+        .await
     }
 
     async fn get_attachments_rest(&self, bug_id: u64) -> Result<Vec<Attachment>> {
@@ -100,30 +90,16 @@ impl BugzillaClient {
     /// Bugzilla 5.0.x deployments where REST silently filters
     /// private content under non-admin scope (issue #133).
     pub async fn get_attachment(&self, attachment_id: u64) -> Result<Attachment> {
-        match self.api_mode {
-            ApiMode::Rest => self.get_attachment_rest(attachment_id).await,
-            ApiMode::XmlRpc => {
+        self.dispatch_xmlrpc_first(
+            "attachment fetch",
+            || self.get_attachment_rest(attachment_id),
+            || async {
                 self.xmlrpc_client()?
                     .get_attachment_by_id(attachment_id)
                     .await
-            }
-            ApiMode::Hybrid => match self
-                .xmlrpc_client()?
-                .get_attachment_by_id(attachment_id)
-                .await
-            {
-                Ok(attachment) => Ok(attachment),
-                Err(e) if e.is_transport_failure() => {
-                    tracing::info!(
-                        attachment_id,
-                        error = %e,
-                        "XML-RPC attachment fetch failed, retrying via REST"
-                    );
-                    self.get_attachment_rest(attachment_id).await
-                }
-                Err(e) => Err(e),
             },
-        }
+        )
+        .await
     }
 
     async fn get_attachment_rest(&self, attachment_id: u64) -> Result<Attachment> {

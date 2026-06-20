@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::encode_path;
 use super::BugzillaClient;
 use crate::error::Result;
-use crate::types::{ApiMode, Comment, UpdateCommentTagsParams};
+use crate::types::{Comment, UpdateCommentTagsParams};
 
 #[derive(Serialize)]
 struct AddCommentBody<'a> {
@@ -65,32 +65,16 @@ impl BugzillaClient {
         bug_id: u64,
         since: Option<&str>,
     ) -> Result<Vec<Comment>> {
-        match self.api_mode {
-            ApiMode::Rest => self.get_comments_since_rest(bug_id, since).await,
-            ApiMode::XmlRpc => {
+        self.dispatch_xmlrpc_first(
+            "comment list",
+            || self.get_comments_since_rest(bug_id, since),
+            || async {
                 self.xmlrpc_client()?
                     .get_comments_since(bug_id, since)
                     .await
-            }
-            ApiMode::Hybrid => {
-                match self
-                    .xmlrpc_client()?
-                    .get_comments_since(bug_id, since)
-                    .await
-                {
-                    Ok(comments) => Ok(comments),
-                    Err(e) if e.is_transport_failure() => {
-                        tracing::info!(
-                            bug_id,
-                            error = %e,
-                            "XML-RPC comment list failed, retrying via REST"
-                        );
-                        self.get_comments_since_rest(bug_id, since).await
-                    }
-                    Err(e) => Err(e),
-                }
-            }
-        }
+            },
+        )
+        .await
     }
 
     async fn get_comments_since_rest(
