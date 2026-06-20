@@ -36,5 +36,52 @@ test_begin "6. config set-default nonexistent (expect failure)"
 run_bzr config set-default nonexistent
 if assert_exit_code 3; then test_pass; fi
 
+# ── config server lifecycle (remove/rename) — isolated sandbox so these
+#    mutation tests don't disturb the suite's shared servers/default ──
+_CFG_MAIN="$XDG_CONFIG_HOME"
+_CFG_SBX=$(mktemp -d /tmp/bzr-func-cfgsbx.XXXXXX)
+export XDG_CONFIG_HOME="$_CFG_SBX"
+run_bzr config set-server keep --url "http://example.invalid:1" --api-key k1
+run_bzr config set-server other --url "http://example.invalid:2" --api-key k2
+run_bzr config set-default keep
+
+test_begin "6a. config rename-server (happy)"
+run_bzr config rename-server other other2
+if assert_success; then
+    run_bzr config show
+    if assert_json_exists '.servers.other2' && assert_json '.servers.other' "null"; then test_pass; fi
+fi
+
+test_begin "6b. config remove-server (happy)"
+run_bzr config remove-server other2
+if assert_success; then
+    run_bzr config show
+    if assert_json '.servers.other2' "null"; then test_pass; fi
+fi
+
+test_begin "6c. config remove-server nonexistent (exit 3)"
+run_bzr config remove-server ghost
+if assert_exit_code 3; then test_pass; fi
+
+run_bzr config set-server companion --url "http://example.invalid:3" --api-key k3
+test_begin "6d. config remove-server refuses current default (exit 3)"
+run_bzr config remove-server keep
+if assert_exit_code 3 && assert_stderr_contains "current default"; then test_pass; fi
+
+test_begin "6e. config rename-server name collision (exit 3)"
+run_bzr config rename-server keep companion
+if assert_exit_code 3 && assert_stderr_contains "already exists"; then test_pass; fi
+
+test_begin "6f. config rename-server updates default pointer"
+run_bzr config rename-server keep keep2
+if assert_success; then
+    run_bzr config show
+    if assert_json '.default_server' "keep2"; then test_pass; fi
+fi
+
+export XDG_CONFIG_HOME="$_CFG_MAIN"
+rm -rf "$_CFG_SBX"
+unset _CFG_MAIN _CFG_SBX
+
 echo ""
 
