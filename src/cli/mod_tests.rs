@@ -151,6 +151,17 @@ fn parse_global_server_flag() {
 }
 
 #[test]
+fn parse_global_yes_flag_short_and_long() {
+    let short = Cli::try_parse_from(["bzr", "-y", "bug", "update", "5", "--status", "X"]).unwrap();
+    assert!(short.yes);
+    let long =
+        Cli::try_parse_from(["bzr", "--yes", "bug", "update", "5", "--status", "X"]).unwrap();
+    assert!(long.yes);
+    let absent = Cli::try_parse_from(["bzr", "bug", "list"]).unwrap();
+    assert!(!absent.yes);
+}
+
+#[test]
 fn parse_config_set_server() {
     let cli = Cli::try_parse_from([
         "bzr",
