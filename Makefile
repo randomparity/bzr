@@ -61,7 +61,7 @@ install-hooks: ## Install git pre-commit and pre-push hooks
 	@echo "Installing git hooks..."
 	@HOOKS_DIR=$$(git rev-parse --git-path hooks) && \
 	mkdir -p "$$HOOKS_DIR" && \
-	printf '#!/bin/sh\nset -eu\ncargo fmt -- --check || { echo "Run cargo fmt before committing."; exit 1; }\ncargo clippy -- -D warnings\nmake check-test-layout\n' > "$$HOOKS_DIR/pre-commit" && \
+	printf '#!/bin/sh\nset -eu\ncargo fmt -- --check || { echo "Run cargo fmt before committing."; exit 1; }\ncargo clippy --all-targets --features test-helpers -- -D warnings\nmake check-test-layout\n' > "$$HOOKS_DIR/pre-commit" && \
 	chmod +x "$$HOOKS_DIR/pre-commit" && \
 	printf '#!/bin/sh\nset -eu\ncargo test\n' > "$$HOOKS_DIR/pre-push" && \
 	chmod +x "$$HOOKS_DIR/pre-push" && \
@@ -91,7 +91,7 @@ fmt: ## Format source code
 	$(CARGO) fmt
 
 clippy: ## Run clippy lints
-	$(CARGO) clippy -- -D warnings
+	$(CARGO) clippy --all-targets --features test-helpers -- -D warnings
 
 lint: fmt clippy check-test-layout check-no-spawn ## Run all linters (fmt + clippy + test-layout + no-spawn)
 
