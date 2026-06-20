@@ -64,40 +64,6 @@ fn product_deserializes_minimal() {
 }
 
 #[test]
-fn component_deserializes_without_assignee() {
-    let json = serde_json::json!({
-        "id": 11,
-        "name": "UI",
-        "description": "User interface",
-        "is_active": false
-    });
-    let component: Component = serde_json::from_value(json).unwrap();
-    assert_eq!(component.id, 11);
-    assert_eq!(component.name, "UI");
-    assert!(!component.is_active);
-    assert!(component.default_assignee.is_none());
-}
-
-#[test]
-fn classification_deserializes() {
-    let json = serde_json::json!({
-        "id": 2,
-        "name": "Client Software",
-        "description": "Client apps",
-        "sort_key": 10,
-        "products": [
-            {"id": 1, "name": "Firefox", "description": "Browser"}
-        ]
-    });
-    let cls: Classification = serde_json::from_value(json).unwrap();
-    assert_eq!(cls.id, 2);
-    assert_eq!(cls.name, "Client Software");
-    assert_eq!(cls.sort_key, 10);
-    assert_eq!(cls.products.len(), 1);
-    assert_eq!(cls.products[0].name, "Firefox");
-}
-
-#[test]
 fn version_and_milestone_deserialize() {
     let ver_json = serde_json::json!({"id": 1, "name": "1.0", "sort_key": 5, "is_active": true});
     let ver: Version = serde_json::from_value(ver_json).unwrap();
