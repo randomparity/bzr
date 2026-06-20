@@ -36,8 +36,9 @@ pub fn write_template_saved<W: Write + ?Sized>(
     format: OutputFormat,
     out: &mut W,
 ) {
-    crate::output::result_types::write_result(
-        &serde_json::json!({"name": name, "action": verb.to_lowercase()}),
+    crate::output::result_types::write_saved(
+        name,
+        verb,
         &template_saved_message(name, verb),
         format,
         out,

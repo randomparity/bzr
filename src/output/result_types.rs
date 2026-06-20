@@ -21,6 +21,25 @@ pub fn write_result<W: Write + ?Sized>(
     }
 }
 
+/// Write a "saved <resource>" confirmation. JSON emits
+/// `{"name": ..., "action": <verb lowercased>}`; the table form prints
+/// `human_message`. Shared by the saved-query and saved-template writers,
+/// whose only difference is the human-readable summary line.
+pub fn write_saved<W: Write + ?Sized>(
+    name: &str,
+    verb: &str,
+    human_message: &str,
+    format: OutputFormat,
+    out: &mut W,
+) {
+    write_result(
+        &serde_json::json!({"name": name, "action": verb.to_lowercase()}),
+        human_message,
+        format,
+        out,
+    );
+}
+
 /// Count-only result for `--count`: serializes as `{"count": N}` under JSON;
 /// the table form prints just the integer.
 #[derive(Debug, Serialize)]
