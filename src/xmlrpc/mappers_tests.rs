@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
-use super::{get_datetime_str, get_int_array, get_nonempty_str, get_str_array};
+use super::{get_datetime_str, get_int_array, get_nonempty_str, get_str_array, require_u64};
+use crate::error::BzrError;
 use crate::xmlrpc::value::Value;
 
 #[test]
@@ -53,6 +54,40 @@ fn get_str_array_returns_strings_only() {
     );
     assert!(get_str_array(&m, "not_array").is_empty());
     assert!(get_str_array(&m, "missing").is_empty());
+}
+
+#[test]
+fn require_u64_rejects_negative_id() {
+    // XML-RPC transmits integers as signed i64, but a domain identifier can
+    // never be negative. The bit pattern must NOT wrap into a huge u64 (the old
+    // `as u64` cast); it must surface as a malformed response that names the
+    // field and shows the offending value.
+    let mut m = BTreeMap::new();
+    m.insert("id".into(), Value::Int(-1));
+    let result = require_u64(&m, "id", "bug");
+    assert!(
+        matches!(&result, Err(BzrError::XmlRpc(msg)) if msg.contains("negative") && msg.contains("-1")),
+        "negative id should be a malformed-response error, got: {result:?}"
+    );
+}
+
+#[test]
+fn require_u64_missing_field_is_distinct_from_negative() {
+    // The absent-field branch reports "missing", not "negative", so the operator
+    // can tell a truncated response from a bad value.
+    let empty = BTreeMap::new();
+    let result = require_u64(&empty, "id", "comment");
+    assert!(
+        matches!(&result, Err(BzrError::XmlRpc(msg)) if msg.contains("missing") && msg.contains("comment")),
+        "missing id should report a missing field, got: {result:?}"
+    );
+}
+
+#[test]
+fn require_u64_accepts_non_negative() {
+    let mut m = BTreeMap::new();
+    m.insert("id".into(), Value::Int(42));
+    assert!(matches!(require_u64(&m, "id", "bug"), Ok(42)));
 }
 
 #[test]
