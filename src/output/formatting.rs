@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use colored::Colorize;
+use colored::{ColoredString, Colorize};
 use serde::Serialize;
 use tabled::builder::Builder;
 
@@ -191,12 +191,12 @@ pub(super) fn shorten_email(email: &str) -> String {
     }
 }
 
-pub(super) fn colorize_status(status: &str) -> String {
+pub(super) fn colorize_status(status: &str) -> ColoredString {
     match status.to_uppercase().as_str() {
-        "NEW" | "UNCONFIRMED" => status.green().to_string(),
-        "ASSIGNED" | "IN_PROGRESS" => status.yellow().to_string(),
-        "RESOLVED" | "VERIFIED" | "CLOSED" => status.red().to_string(),
-        _ => status.to_string(),
+        "NEW" | "UNCONFIRMED" => status.green(),
+        "ASSIGNED" | "IN_PROGRESS" => status.yellow(),
+        "RESOLVED" | "VERIFIED" | "CLOSED" => status.red(),
+        _ => status.normal(),
     }
 }
 
