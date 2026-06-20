@@ -326,7 +326,7 @@ fn saved_query_url_kind_to_search_params_includes_raw_params() {
 fn field_mappings_covers_all_search_params_vec_fields() {
     let params = SearchParams::default();
     for mapping in FIELD_MAPPINGS {
-        let field = params.get_field(mapping.struct_field).unwrap();
+        let field = params.get_field(mapping.field);
         assert!(
             field.is_empty(),
             "default field should be empty: {}",
@@ -407,14 +407,14 @@ fn search_params_get_field_returns_correct_data() {
         ..Default::default()
     };
     assert_eq!(
-        params.get_field("product"),
-        Some(["Firefox".to_string()].as_slice())
+        params.get_field(FilterField::Product),
+        ["Firefox".to_string()]
     );
     assert_eq!(
-        params.get_field("status"),
-        Some(["NEW".to_string(), "ASSIGNED".to_string()].as_slice())
+        params.get_field(FilterField::Status),
+        ["NEW".to_string(), "ASSIGNED".to_string()]
     );
-    assert!(params.get_field("creator").unwrap().is_empty());
+    assert!(params.get_field(FilterField::Creator).is_empty());
 }
 
 #[test]
@@ -423,15 +423,14 @@ fn search_params_get_field_mut_updates_every_mapped_field() {
 
     for mapping in FIELD_MAPPINGS {
         params
-            .get_field_mut(mapping.struct_field)
-            .unwrap()
+            .get_field_mut(mapping.field)
             .push(format!("value-{}", mapping.struct_field));
     }
 
     for mapping in FIELD_MAPPINGS {
         assert_eq!(
-            params.get_field(mapping.struct_field),
-            Some([format!("value-{}", mapping.struct_field)].as_slice()),
+            params.get_field(mapping.field),
+            [format!("value-{}", mapping.struct_field)],
             "mapped field should roundtrip through mutable and immutable access: {}",
             mapping.struct_field
         );
@@ -439,28 +438,15 @@ fn search_params_get_field_mut_updates_every_mapped_field() {
 }
 
 #[test]
-fn search_params_get_field_returns_none_on_unknown() {
-    let params = SearchParams::default();
-    assert!(params.get_field("nonexistent").is_none());
-}
-
-#[test]
 fn saved_query_get_field_mut_returns_correct_fields() {
     let mut query = SavedQuery::default();
     query
-        .get_field_mut("assigned_to")
-        .unwrap()
+        .get_field_mut(FilterField::AssignedTo)
         .push("dev@example.com".into());
     assert_eq!(query.assignee, vec!["dev@example.com"]);
 
-    query.get_field_mut("status").unwrap().push("NEW".into());
+    query.get_field_mut(FilterField::Status).push("NEW".into());
     assert_eq!(query.status, vec!["NEW"]);
-}
-
-#[test]
-fn saved_query_get_field_mut_returns_none_for_unknown() {
-    let mut query = SavedQuery::default();
-    assert!(query.get_field_mut("nonexistent").is_none());
 }
 
 #[test]

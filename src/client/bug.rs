@@ -76,8 +76,7 @@ fn append_multi_value_params(
     params: &SearchParams,
 ) -> reqwest::RequestBuilder {
     for mapping in FIELD_MAPPINGS {
-        let (positive, _) =
-            partition_filters(params.get_field(mapping.struct_field).unwrap_or_default());
+        let (positive, _) = partition_filters(params.get_field(mapping.field));
         for v in positive {
             builder = builder.query(&[(mapping.struct_field, v)]);
         }
@@ -99,8 +98,7 @@ fn append_negated_params(
 ) -> reqwest::RequestBuilder {
     let mut idx = 1u32;
     for mapping in FIELD_MAPPINGS {
-        let (_, negated) =
-            partition_filters(params.get_field(mapping.struct_field).unwrap_or_default());
+        let (_, negated) = partition_filters(params.get_field(mapping.field));
         for v in negated {
             let f_key = format!("f{idx}");
             let o_key = format!("o{idx}");
@@ -150,13 +148,9 @@ fn append_option_params(
 
 /// Returns true if any multi-value filter field contains negated values (prefixed with `!`).
 fn has_negated_filters(params: &SearchParams) -> bool {
-    FIELD_MAPPINGS.iter().any(|m| {
-        params
-            .get_field(m.struct_field)
-            .unwrap_or_default()
-            .iter()
-            .any(|v| v.starts_with('!'))
-    })
+    FIELD_MAPPINGS
+        .iter()
+        .any(|m| params.get_field(m.field).iter().any(|v| v.starts_with('!')))
 }
 
 /// Returns true if `raw_params` contains boolean chart parameters (`fN`, `oN`, `vN`

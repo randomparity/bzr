@@ -12,8 +12,12 @@ fn is_custom_field_name(name: &str) -> bool {
     name.starts_with("cf_")
 }
 
+/// Typed key for the multi-value filter fields shared by `SearchParams` and
+/// `SavedQuery`. Used as the accessor key on both and embedded in
+/// [`FieldMapping`] so callers iterate `FIELD_MAPPINGS` without re-parsing
+/// field-name strings.
 #[derive(Clone, Copy)]
-enum FilterField {
+pub enum FilterField {
     Product,
     Component,
     Status,
@@ -29,29 +33,6 @@ enum FilterField {
     Resolution,
     QaContact,
     Url,
-}
-
-impl FilterField {
-    fn from_struct_field(name: &str) -> Option<Self> {
-        match name {
-            "product" => Some(Self::Product),
-            "component" => Some(Self::Component),
-            "status" => Some(Self::Status),
-            "assigned_to" => Some(Self::AssignedTo),
-            "creator" => Some(Self::Creator),
-            "priority" => Some(Self::Priority),
-            "severity" => Some(Self::Severity),
-            "whiteboard" => Some(Self::Whiteboard),
-            "target_milestone" => Some(Self::TargetMilestone),
-            "version" => Some(Self::Version),
-            "op_sys" => Some(Self::OpSys),
-            "platform" => Some(Self::Platform),
-            "resolution" => Some(Self::Resolution),
-            "qa_contact" => Some(Self::QaContact),
-            "url" => Some(Self::Url),
-            _ => None,
-        }
-    }
 }
 
 /// Deserialize a string that may be null into an empty string.
@@ -388,31 +369,21 @@ impl SearchParams {
         }
     }
 
-    /// Access a multi-value filter field by its `struct_field` name.
-    pub(crate) fn get_field(&self, name: &str) -> Option<&[String]> {
-        FilterField::from_struct_field(name).map(|field| self.get_filter_field(field))
-    }
-
-    /// Access a multi-value filter field mutably by its `struct_field` name.
-    #[cfg(test)]
-    pub(crate) fn get_field_mut(&mut self, name: &str) -> Option<&mut Vec<String>> {
-        FilterField::from_struct_field(name).map(|field| self.get_filter_field_mut(field))
-    }
-
-    fn get_filter_field(&self, field: FilterField) -> &[String] {
+    /// Access a multi-value filter field by its typed [`FilterField`] key.
+    pub(crate) fn get_field(&self, field: FilterField) -> &[String] {
         filter_field_arm!(self, field, assigned_to)
     }
 
+    /// Access a multi-value filter field mutably by its typed [`FilterField`] key.
     #[cfg(test)]
-    fn get_filter_field_mut(&mut self, field: FilterField) -> &mut Vec<String> {
+    pub(crate) fn get_field_mut(&mut self, field: FilterField) -> &mut Vec<String> {
         filter_field_arm!(self, field, assigned_to, mut)
     }
 
     fn has_mapped_filters(&self) -> bool {
-        FIELD_MAPPINGS.iter().any(|mapping| {
-            self.get_field(mapping.struct_field)
-                .is_some_and(|field| !field.is_empty())
-        })
+        FIELD_MAPPINGS
+            .iter()
+            .any(|mapping| !self.get_field(mapping.field).is_empty())
     }
 
     /// Returns true if any filter fields are set (product, component, etc.).
@@ -494,6 +465,8 @@ impl NegationOp {
 /// Maps a filterable field across all naming contexts.
 #[non_exhaustive]
 pub struct FieldMapping {
+    /// Typed key identifying the multi-value field on `SearchParams` / `SavedQuery`.
+    pub field: FilterField,
     /// Name on `SearchParams` / `SavedQuery` (e.g. "status").
     /// Also used as the REST API query parameter.
     pub struct_field: &'static str,
@@ -508,90 +481,105 @@ pub struct FieldMapping {
 /// Canonical field-mapping table for the 15 multi-value filter fields.
 pub const FIELD_MAPPINGS: &[FieldMapping] = &[
     FieldMapping {
+        field: FilterField::Product,
         struct_field: "product",
         url_param: "product",
         internal_name: "product",
         negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
+        field: FilterField::Component,
         struct_field: "component",
         url_param: "component",
         internal_name: "component",
         negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
+        field: FilterField::Status,
         struct_field: "status",
         url_param: "bug_status",
         internal_name: "bug_status",
         negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
+        field: FilterField::AssignedTo,
         struct_field: "assigned_to",
         url_param: "assigned_to",
         internal_name: "assigned_to",
         negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
+        field: FilterField::Creator,
         struct_field: "creator",
         url_param: "reporter",
         internal_name: "reporter",
         negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
+        field: FilterField::Priority,
         struct_field: "priority",
         url_param: "priority",
         internal_name: "priority",
         negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
+        field: FilterField::Severity,
         struct_field: "severity",
         url_param: "bug_severity",
         internal_name: "bug_severity",
         negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
+        field: FilterField::Whiteboard,
         struct_field: "whiteboard",
         url_param: "status_whiteboard",
         internal_name: "status_whiteboard",
         negation_operator: NegationOp::NotSubstring,
     },
     FieldMapping {
+        field: FilterField::TargetMilestone,
         struct_field: "target_milestone",
         url_param: "target_milestone",
         internal_name: "target_milestone",
         negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
+        field: FilterField::Version,
         struct_field: "version",
         url_param: "version",
         internal_name: "version",
         negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
+        field: FilterField::OpSys,
         struct_field: "op_sys",
         url_param: "op_sys",
         internal_name: "op_sys",
         negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
+        field: FilterField::Platform,
         struct_field: "platform",
         url_param: "rep_platform",
         internal_name: "rep_platform",
         negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
+        field: FilterField::Resolution,
         struct_field: "resolution",
         url_param: "resolution",
         internal_name: "resolution",
         negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
+        field: FilterField::QaContact,
         struct_field: "qa_contact",
         url_param: "qa_contact",
         internal_name: "qa_contact",
         negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {
+        field: FilterField::Url,
         struct_field: "url",
         url_param: "bug_file_loc",
         internal_name: "bug_file_loc",
@@ -929,29 +917,20 @@ impl SavedQuery {
         }
     }
 
-    /// Access a multi-value filter field mutably by its `struct_field` name.
+    /// Access a multi-value filter field mutably by its typed [`FilterField`] key.
     /// Maps `assigned_to` to `self.assignee` (TOML-friendly name).
-    pub fn get_field_mut(&mut self, name: &str) -> Option<&mut Vec<String>> {
-        FilterField::from_struct_field(name).map(|field| self.get_filter_field_mut(field))
-    }
-
-    fn get_field(&self, name: &str) -> Option<&[String]> {
-        FilterField::from_struct_field(name).map(|field| self.get_filter_field(field))
-    }
-
-    fn get_filter_field(&self, field: FilterField) -> &[String] {
-        filter_field_arm!(self, field, assignee)
-    }
-
-    fn get_filter_field_mut(&mut self, field: FilterField) -> &mut Vec<String> {
+    pub(crate) fn get_field_mut(&mut self, field: FilterField) -> &mut Vec<String> {
         filter_field_arm!(self, field, assignee, mut)
     }
 
+    fn get_field(&self, field: FilterField) -> &[String] {
+        filter_field_arm!(self, field, assignee)
+    }
+
     fn has_mapped_filters(&self) -> bool {
-        FIELD_MAPPINGS.iter().any(|mapping| {
-            self.get_field(mapping.struct_field)
-                .is_some_and(|field| !field.is_empty())
-        })
+        FIELD_MAPPINGS
+            .iter()
+            .any(|mapping| !self.get_field(mapping.field).is_empty())
     }
 
     /// Returns true if the query has any meaningful filters set.
