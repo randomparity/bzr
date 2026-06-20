@@ -105,7 +105,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   ├── history <ID> [--since <DATE>]
 │   ├── my [--created] [--cc] [--all] [--status <S>...] [--limit <N>] [--count]
 │   │       [--fields <F>] [--exclude-fields <F>] [--sort <FIELD>] [--order asc|desc]
-│   ├── create [--template <T>] [--product <P>] [--component <C>] --summary <S>
+│   ├── create [--from-json <PATH>] [--template <T>] [--product <P>] [--component <C>] --summary <S>
 │   │          [--version <V>] [--description <D>] [--description-file <PATH>] [--priority <P>] [--severity <S>]
 │   │          [--assignee <A>] [--op-sys <OS>] [--rep-platform <PLAT>]
 │   │          [--blocks <IDs>] [--depends-on <IDs>] [--alias <A>] [--url <U>]
@@ -460,10 +460,18 @@ echo "long-form description" | bzr bug create \
 bzr bug create --product Fedora --component kernel
 
 bzr bug create --template security-bug --summary "XSS in login form"
+
+# File a bug from a structured JSON object on stdin
+printf '%s' '{"product":"Fedora","component":"kernel","summary":"S"}' \
+  | bzr bug create --from-json -
+
+# Batch-create from a JSON array (one bug per element)
+bzr bug create --from-json bugs.json
 ```
 
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
+| `--from-json <PATH>` | No | | Create one or more bugs from a JSON object or array (`-` reads stdin). See [Structured input](#structured-input---from-json) below. Mutually exclusive with `--template`. |
 | `--product <P>` | Yes* | | Product name |
 | `--component <C>` | Yes* | | Component name |
 | `--summary <S>` | Yes** | | One-line summary |
@@ -513,10 +521,31 @@ A value of `-` for `--description` or `--description-file` reads the description
 | 0 | Success |
 | 2 | Conflicting flags (e.g. `--description` and `--description-file` both set) |
 | 4 | Bugzilla API error (e.g. server requires `--op-sys` and it wasn't provided) |
-| 7 | Input validation: missing `--summary` outside the editor flow; missing or unreadable `--description-file`; empty stdin without an explicit description; empty editor buffer; `$EDITOR` exited non-zero |
+| 7 | Input validation: missing `--summary` outside the editor flow; missing or unreadable `--description-file`; empty stdin without an explicit description; empty editor buffer; `$EDITOR` exited non-zero; malformed `--from-json` (bad JSON, unknown key, wrong shape, or missing required field) |
 | 9 | Authentication failure |
+| 11 | Partial failure: one or more elements of a `--from-json` array failed to create |
 
 Agent note: agent workflows should pass `--description` (or `--description-file`) explicitly and supply `--summary`. The `$EDITOR` flow only fires when stdin is a TTY, which is rare in headless / CI invocations.
+
+#### Structured input (`--from-json`)
+
+`--from-json <PATH>` files bugs from a structured JSON document instead of discrete flags; `-` reads the document from stdin. This is the inverse of the `--json` *output* story: an agent that already models a bug as an object can submit it directly without flattening it into shell flags.
+
+- A top-level **object** files one bug and returns the usual `{"resource":"bug","action":"created","id":N}` result.
+- A top-level **array** files one bug per element and returns a partial-failure result `{"resource":"bug","action":"created","created":[...],"failed":[{"index":N,"error":"..."}]}`. If any element fails, the command exits **11** (`BatchPartialFailure`); all input is validated before any bug is created, so a malformed element never half-creates a batch.
+
+Accepted keys match the create flag names: `product`, `component`, `summary`, `version`, `description`, `priority`, `severity`, `assignee`, `op_sys`, `rep_platform`, `alias`, `url`, `whiteboard`, `target_milestone`, `deadline`, `blocks`, `depends_on`, `cc`, `keywords`, `groups`, `flags` (an array of flag-syntax strings). **Unknown keys are rejected** (exit 7) rather than silently ignored, so a typo fails fast. `product`, `component`, and `summary` are required (in the JSON or via a CLI flag).
+
+**Precedence:** an explicit CLI flag overrides the corresponding JSON field, applied uniformly to every element of an array — e.g. `--product Fedora --from-json bugs.json` forces `product` on all entries. `--from-json` is mutually exclusive with `--template` and bypasses the `$EDITOR` flow.
+
+`bug update` and the other resource commands do not yet accept `--from-json`; that is tracked as follow-up work.
+
+```bash
+printf '%s' '{"product":"Fedora","component":"kernel","summary":"S"}' \
+  | bzr bug create --from-json -
+
+bzr bug create --from-json bugs.json --json | jq '.created'
+```
 
 ### `bzr bug clone`
 

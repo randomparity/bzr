@@ -254,7 +254,10 @@ fn write_batch_result(
     }
 }
 
-fn ensure_batch_complete(succeeded: usize, failed: usize) -> Result<()> {
+/// The shared exit-11 gate for batch mutations: returns `BatchPartialFailure`
+/// (exit 11) when any element failed, else `Ok(())`. Used by batch `bug update`
+/// and batch `bug create --from-json`.
+pub(super) fn ensure_batch_complete(succeeded: usize, failed: usize) -> Result<()> {
     if failed > 0 {
         Err(crate::error::BzrError::BatchPartialFailure { succeeded, failed })
     } else {
