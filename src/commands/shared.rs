@@ -1,6 +1,6 @@
 use crate::client::BugzillaClient;
 use crate::client::DetectedServerSettings;
-use crate::config::Config;
+use crate::config::{Config, ServerConfig};
 use crate::error::{BzrError, Result};
 use crate::tls::TlsConfig;
 use crate::types::{ApiMode, AuthMethod};
@@ -96,11 +96,40 @@ struct ConnectContext {
     api_key: String,
     email: Option<String>,
     api_override: Option<ApiMode>,
+    /// Whether detected settings (and TOFU pins) may be written back to the
+    /// config file. `false` for an inline `--server-url` server, which has no
+    /// config entry and must leave the filesystem untouched.
+    persist: bool,
 }
 
 impl ConnectContext {
     fn email_hint(&self) -> Option<&str> {
         self.email.as_deref()
+    }
+
+    /// Persist detected settings to config, unless this is an ephemeral
+    /// (inline) server — in which case it is a no-op so a stateless invocation
+    /// writes nothing to disk.
+    fn persist_settings(
+        &self,
+        settings: &DetectedServerSettings,
+        persist_auth: bool,
+    ) -> Result<()> {
+        if self.persist {
+            persist_detected_settings(&self.server_name, settings, persist_auth)?;
+        }
+        Ok(())
+    }
+
+    /// Apply `mutator` to the config under the lock, unless this is an ephemeral
+    /// (inline) server. Routes the TOFU/rotation pin writes through the same
+    /// `persist` gate as [`Self::persist_settings`], so "ephemeral ⇒ no config
+    /// writes" is a single invariant rather than a flag checked at each site.
+    fn persist_locked(&self, mutator: impl FnOnce(&mut Config) -> Result<()>) -> Result<()> {
+        if self.persist {
+            Config::update_locked(mutator)?;
+        }
+        Ok(())
     }
 
     fn hostname(&self) -> String {
@@ -143,11 +172,14 @@ async fn handle_tofu(ctx: &ConnectContext) -> Result<BugzillaClient> {
             // "always" — persist pin to config under the lock. `issuer_der` is
             // Option<String>; clone the values the closure needs before it (the
             // bare `fingerprint`/`issuer_der` are still used to build TlsConfig below).
+            // An inline server has no config entry to pin against, so "always"
+            // degrades to a session-only trust (`persist_locked` no-ops; the
+            // TlsConfig below still applies for the rest of this invocation).
             let fingerprint_c = fingerprint.clone();
             let issuer_c = issuer.clone();
             let issuer_der_c = issuer_der.clone();
             let server_name = ctx.server_name.clone();
-            Config::update_locked(move |config| {
+            ctx.persist_locked(move |config| {
                 if let Some(srv) = config.servers.get_mut(&server_name) {
                     srv.tls_pin_sha256 = Some(fingerprint_c);
                     srv.tls_pin_issuer = Some(issuer_c);
@@ -227,7 +259,7 @@ async fn handle_pin_rotation(
     let new_fp = new_fingerprint.to_owned();
     let new_iss = new_issuer.to_owned();
     let server_name = ctx.server_name.clone();
-    Config::update_locked(move |config| {
+    ctx.persist_locked(move |config| {
         if let Some(srv) = config.servers.get_mut(&server_name) {
             srv.tls_pin_sha256 = Some(new_fp);
             srv.tls_pin_issuer = Some(new_iss);
@@ -254,7 +286,7 @@ async fn detect_and_build_client(
     let settings =
         crate::client::detect_server_settings(&ctx.url, &ctx.api_key, ctx.email_hint(), tls_config)
             .await?;
-    persist_detected_settings(&ctx.server_name, &settings, true)?;
+    ctx.persist_settings(&settings, true)?;
     let api_mode = ctx.api_override.unwrap_or(settings.api_mode);
     ctx.build_client(settings.auth_method, api_mode, tls_config)
 }
@@ -332,6 +364,64 @@ enum DetectOrClient {
     Client(BugzillaClient),
 }
 
+/// A resolved connection target: the [`ConnectContext`] plus the TLS config and
+/// any cached auth/mode. Produced from either an inline `--server-url`
+/// definition or a named config server.
+struct ConnectTarget {
+    ctx: ConnectContext,
+    tls_config: TlsConfig,
+    cached_auth: Option<AuthMethod>,
+    cached_mode: Option<ApiMode>,
+}
+
+/// Resolve the connection target. When an inline server is set (global
+/// `--server-url`), builds an ephemeral, never-persisted target and skips the
+/// config file entirely — so a fully stateless invocation needs no config.
+/// Otherwise loads config and resolves the named (or default) server.
+fn resolve_connect_target(
+    server: Option<&str>,
+    api_override: Option<ApiMode>,
+) -> Result<ConnectTarget> {
+    if let Some(inline) = crate::commands::inline_server::get() {
+        let name = crate::commands::inline_server::INLINE_SERVER_NAME;
+        let srv = ServerConfig::from_url_with_env_key(inline.url, inline.api_key_env, inline.email);
+        srv.validate(name)?;
+        let tls_config = srv.tls_config(name);
+        let ctx = ConnectContext {
+            server_name: name.to_string(),
+            url: srv.url.clone(),
+            api_key: srv.resolve_api_key(name)?,
+            email: srv.email.clone(),
+            api_override,
+            persist: false,
+        };
+        return Ok(ConnectTarget {
+            ctx,
+            tls_config,
+            cached_auth: None,
+            cached_mode: None,
+        });
+    }
+
+    let config = Config::load()?;
+    let (server_name, srv) = config.resolve_server(server)?;
+    let tls_config = srv.tls_config(server_name);
+    let ctx = ConnectContext {
+        server_name: server_name.to_string(),
+        url: srv.url.clone(),
+        api_key: srv.resolve_api_key(server_name)?,
+        email: srv.email.clone(),
+        api_override,
+        persist: true,
+    };
+    Ok(ConnectTarget {
+        ctx,
+        tls_config,
+        cached_auth: srv.auth_method,
+        cached_mode: srv.api_mode,
+    })
+}
+
 /// Connect to a Bugzilla server with auto-configuration.
 ///
 /// On first connection to a server, detects auth method and API mode, then
@@ -346,16 +436,12 @@ pub async fn connect_and_configure(
     server: Option<&str>,
     api_override: Option<ApiMode>,
 ) -> Result<BugzillaClient> {
-    let config = Config::load()?;
-    let (server_name, srv) = config.resolve_server(server)?;
-    let tls_config = srv.tls_config(server_name);
-    let ctx = ConnectContext {
-        server_name: server_name.to_string(),
-        url: srv.url.clone(),
-        api_key: srv.resolve_api_key(server_name)?,
-        email: srv.email.clone(),
-        api_override,
-    };
+    let ConnectTarget {
+        ctx,
+        tls_config,
+        cached_auth,
+        cached_mode,
+    } = resolve_connect_target(server, api_override)?;
 
     if tls_config.insecure {
         tracing::warn!(
@@ -365,7 +451,9 @@ pub async fn connect_and_configure(
     }
 
     // Three cases: fully cached, partially cached (auth only), or uncached.
-    let (auth, resolved_mode) = match (srv.auth_method, srv.api_mode) {
+    // An inline server is always uncached (no config entry), so it takes the
+    // detect path and persists nothing.
+    let (auth, resolved_mode) = match (cached_auth, cached_mode) {
         (Some(method), Some(mode)) => {
             // Even with full cache, surface TLS errors at connect-time so
             // TOFU and pin-rotation prompts can fire. Skipped only when
@@ -392,7 +480,7 @@ pub async fn connect_and_configure(
             match detect_with_tofu_fallback(&ctx, &tls_config).await? {
                 DetectOrClient::Client(client) => return Ok(client),
                 DetectOrClient::Settings(settings) => {
-                    persist_detected_settings(&ctx.server_name, &settings, false)?;
+                    ctx.persist_settings(&settings, false)?;
                     (method, settings.api_mode)
                 }
             }
@@ -400,7 +488,7 @@ pub async fn connect_and_configure(
         _ => match detect_with_tofu_fallback(&ctx, &tls_config).await? {
             DetectOrClient::Client(client) => return Ok(client),
             DetectOrClient::Settings(settings) => {
-                persist_detected_settings(&ctx.server_name, &settings, true)?;
+                ctx.persist_settings(&settings, true)?;
                 (settings.auth_method, settings.api_mode)
             }
         },

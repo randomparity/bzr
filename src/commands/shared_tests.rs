@@ -19,6 +19,7 @@ fn connect_context(
         api_key: "test-key".to_string(),
         email: None,
         api_override,
+        persist: true,
     }
 }
 
@@ -211,6 +212,74 @@ api_mode = "rest"
 
     let result = super::connect_and_configure(None, None).await;
     assert!(result.is_ok(), "env-backed config should succeed");
+}
+
+/// #314 acceptance: a complete connect against an inline `--server-url` server
+/// works with NO config file present, and writes none to disk.
+#[tokio::test]
+async fn inline_server_connects_without_config_and_persists_nothing() {
+    let _lock = ENV_LOCK.lock().await;
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    // Point XDG at an empty dir — there is NO bzr/config.toml here.
+    // SAFETY: tests are serialized via ENV_LOCK.
+    unsafe {
+        std::env::set_var("XDG_CONFIG_HOME", tmp.path());
+        std::env::set_var("BZR_INLINE_TEST_KEY", "inline-secret");
+    }
+    mount_detection_mocks(&mock).await;
+
+    crate::commands::inline_server::set(Some(crate::commands::inline_server::InlineServer {
+        url: mock.uri(),
+        api_key_env: "BZR_INLINE_TEST_KEY".into(),
+        email: None,
+    }));
+    let result = super::connect_and_configure(None, None).await;
+    // Reset before any assertion can unwind, so the inline definition never
+    // leaks into a sibling test that expects config-based resolution.
+    crate::commands::inline_server::set(None);
+
+    assert!(
+        result.is_ok(),
+        "inline server should connect with no config file: {:?}",
+        result.err()
+    );
+    assert!(
+        !tmp.path().join("bzr").join("config.toml").exists(),
+        "an inline connect must not create or write the config file"
+    );
+}
+
+/// An inline server whose API-key env var is unset fails with a clear config
+/// error naming the variable — not a panic or a silent empty key.
+#[tokio::test]
+async fn inline_server_missing_env_var_is_clean_error() {
+    let _lock = ENV_LOCK.lock().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    // SAFETY: tests are serialized via ENV_LOCK.
+    unsafe {
+        std::env::set_var("XDG_CONFIG_HOME", tmp.path());
+        std::env::remove_var("BZR_INLINE_ABSENT_KEY");
+    }
+
+    crate::commands::inline_server::set(Some(crate::commands::inline_server::InlineServer {
+        url: "https://bugzilla.example.com".into(),
+        api_key_env: "BZR_INLINE_ABSENT_KEY".into(),
+        email: None,
+    }));
+    let result = super::connect_and_configure(None, None).await;
+    crate::commands::inline_server::set(None);
+
+    match result {
+        Err(BzrError::Config(msg)) => {
+            assert!(
+                msg.contains("BZR_INLINE_ABSENT_KEY"),
+                "error should name the missing env var: {msg}"
+            );
+        }
+        Err(other) => panic!("expected a Config error for the unset env var, got {other:?}"),
+        Ok(_) => panic!("expected an error for the unset env var, got a client"),
+    }
 }
 
 #[test]

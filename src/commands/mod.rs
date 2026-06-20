@@ -11,6 +11,7 @@ mod editor;
 pub mod field;
 pub mod flags;
 pub mod group;
+pub mod inline_server;
 pub mod product;
 pub mod query;
 pub mod server;

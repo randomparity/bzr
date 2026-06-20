@@ -27,7 +27,7 @@ pub struct Config {
     pub queries: HashMap<String, SavedQuery>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ServerConfig {
     pub url: String,
@@ -119,6 +119,21 @@ impl CredentialSourceKind {
 }
 
 impl ServerConfig {
+    /// Build an ephemeral server backed by an environment-variable credential,
+    /// for the inline `--server-url` flow. The result is never written to disk:
+    /// auth method and API mode are left unset (detected per-invocation) and TLS
+    /// uses the default OS trust store. Construction cannot fail; an unset or
+    /// empty env var surfaces later from [`Self::resolve_api_key`].
+    #[must_use]
+    pub fn from_url_with_env_key(url: String, api_key_env: String, email: Option<String>) -> Self {
+        ServerConfig {
+            url,
+            api_key_env: Some(api_key_env),
+            email,
+            ..Self::default()
+        }
+    }
+
     pub fn tls_config(&self, server_name: &str) -> crate::tls::TlsConfig {
         crate::tls::TlsConfig {
             insecure: self.tls_insecure,

@@ -2142,6 +2142,64 @@ async fn e2e_whoami_via_cli_args() {
     assert_eq!(parsed["name"], "admin@example.com");
 }
 
+/// #314 end-to-end: `bug view` against an inline `--server-url` server with no
+/// config file on disk, driven through the real CLI parse + dispatch path.
+#[tokio::test]
+async fn e2e_inline_server_bug_view_without_config() {
+    let _lock = ENV_LOCK.lock().await;
+    let mock = wiremock::MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    // Empty XDG dir — no bzr/config.toml exists.
+    // SAFETY: tests are serialized via ENV_LOCK.
+    unsafe {
+        std::env::set_var("XDG_CONFIG_HOME", tmp.path());
+        std::env::set_var("BZR_E2E_INLINE_KEY", "secret");
+    }
+
+    // Auth + version detection for the uncached inline server.
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/version"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.1.2"})),
+        )
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 42, "summary": "Inline view", "status": "NEW"}]
+        })))
+        .mount(&mock)
+        .await;
+
+    let (result, output) = dispatch_cli_with_output(&[
+        "bzr",
+        "--server-url",
+        &mock.uri(),
+        "--server-api-key-env",
+        "BZR_E2E_INLINE_KEY",
+        "--json",
+        "bug",
+        "view",
+        "42",
+    ])
+    .await;
+
+    assert!(result.is_ok(), "inline e2e bug view: {result:?}");
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    assert_eq!(parsed["id"], 42);
+    assert_eq!(parsed["summary"], "Inline view");
+    assert!(
+        !tmp.path().join("bzr").join("config.toml").exists(),
+        "inline invocation must not write the config file"
+    );
+}
+
 #[tokio::test]
 async fn e2e_config_show_via_cli_args() {
     let (_lock, _mock, _tmp) = setup_test_env().await;

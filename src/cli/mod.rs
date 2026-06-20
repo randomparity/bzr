@@ -82,6 +82,41 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub server: Option<String>,
 
+    /// Connect to an ad-hoc server by URL, without using config.
+    ///
+    /// Defines an ephemeral server for this one invocation: nothing is read
+    /// from or written to the config file, so a fully stateless run needs no
+    /// `config set-server` first. Requires `--server-api-key-env`; conflicts
+    /// with `--server` (a named server and an inline one are mutually
+    /// exclusive). Pairs with `--config` for sandboxed throwaway runs.
+    ///
+    ///   bzr --server-url https://bz.example.com \
+    ///     --server-api-key-env BZR_KEY bug view 123
+    #[arg(
+        long,
+        value_name = "URL",
+        global = true,
+        conflicts_with = "server",
+        requires = "server_api_key_env",
+        verbatim_doc_comment
+    )]
+    pub server_url: Option<String>,
+
+    /// Environment variable holding the API key for `--server-url`.
+    ///
+    /// The key is read from this variable, never passed as a literal flag, so
+    /// the secret stays out of the process argument list. Only meaningful with
+    /// `--server-url`.
+    #[arg(long, value_name = "ENV", global = true, requires = "server_url")]
+    pub server_api_key_env: Option<String>,
+
+    /// Login email for `--server-url` (older-Bugzilla whoami fallback).
+    ///
+    /// Optional. Mirrors the per-server `email` config field; needed only for
+    /// the Bugzilla 5.0 whoami fallback. Only meaningful with `--server-url`.
+    #[arg(long, value_name = "EMAIL", global = true, requires = "server_url")]
+    pub server_email: Option<String>,
+
     /// Output format: `table` (default at a TTY) or `json`.
     ///
     /// When stdout is piped, the default flips to `json` unless this
