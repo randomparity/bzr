@@ -7,80 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
-
-- NDJSON output via `--output ndjson` (or `BZR_OUTPUT=ndjson`): list/array
-  results print one compact JSON value per line and single objects print as one
-  compact line — the streaming shape for agents and `jq -c`. An empty list emits
-  no lines; the `bug list`/`search` truncation note goes to stderr so stdout
-  stays one clean record per line. Existing `table`/`json` shapes are unchanged.
-  (#305)
-
-- `bzr schema [NAME]` publishes checked-in JSON Schemas (draft 2020-12) for the
-  `--format json` output of each command family — the read-resource objects
-  (`bug`, `comment`, `attachment`, `product`, `component`, `classification`,
-  `user`, `group`, `field-value`) and the mutation/result envelopes
-  (`action-result`, `batch-result`, `batch-create-result`, `multi-bug-view`,
-  `tag-result`, `membership-result`, `count-result`, `download-result`,
-  `upload-result`, `config-result`, `search-result`, `dry-run-result`). Agents
-  can validate output against a contract instead of branching over the per-
-  command shape differences. Local command (no network); run without a name to
-  list the schemas. A drift test validates each schema against the real
-  serialized output so the published contract stays honest. (#305)
-
-- Pagination for the search-backed commands (`bug list`, `bug search`, `bug my`,
-  `query run`): `--offset <N>` skips leading matches for manual paging, and
-  `--paginate` loops internally past `--limit` to retrieve every match (the path
-  for "process all matching bugs" workflows). Because Bugzilla's search API
-  returns no total, truncation is detected by over-fetching one row past
-  `--limit`: a truncated table window prints a "more available" footer, and the
-  JSON window writes the same note to stderr (the stdout array shape is
-  unchanged). `--offset`/`--paginate` are mutually exclusive and cannot be
-  combined with `--count` (exit 7). (#302)
-
-- `bug create --from-json <PATH|->` structured input. Files one or more bugs
-  from a JSON object (one bug) or array (one bug per element, with the
-  partial-failure model and exit 11), so an agent that already models a bug as
-  an object can submit it directly instead of flattening it into shell flags.
-  Keys match the create flag names; unknown keys are rejected (exit 7) so a typo
-  fails fast, and undesigned `cf_*` custom-field writes (#283) stay out of this
-  path. Explicit CLI flags override the corresponding JSON field, applied to
-  every array element. Mutually exclusive with `--template`; bypasses the
-  `$EDITOR` flow. `bug update` and other resources are tracked as follow-up.
-  (#307)
-
-- Inline / ad-hoc server via global `--server-url`, `--server-api-key-env`, and
-  optional `--server-email`. Defines an ephemeral server for a single
-  invocation, so a one-off query or a fully stateless agent run can target a
-  Bugzilla instance that was never written to any config file — nothing is read
-  from or written to `config.toml`. The API key is sourced from the named
-  environment variable (never a literal flag, keeping the secret out of the
-  process argument list). `--server-url` requires `--server-api-key-env` and
-  conflicts with `--server`; it pairs with `--config` for sandboxed runs. (#314)
-- `bug update --expect-unchanged-since <TIMESTAMP>` optimistic-concurrency guard.
-  Pass the `last_change_time` from a preceding `bug view`; before writing, bzr
-  re-reads each target bug and refuses the update (exit 14, a new distinct
-  collision code) if its `last_change_time` no longer matches, so a
-  read-modify-write agent will not silently clobber a concurrent edit. The check
-  is client-side — Bugzilla's REST `Bug.update` exposes no atomic
-  compare-and-set (the `check_collision` proposal was never merged; the web UI's
-  `delta_ts` guard is not in the API) — so a narrow check-then-write window
-  remains. With multiple IDs, all are checked first and any mismatch aborts the
-  whole batch before any write. (#320)
-- Confirmation gate for large batch bug mutations, with a global `-y`/`--yes`
-  bypass. A `bug update`/`resolve`/`close`/`reopen` targeting more than 10 bugs
-  now prompts for confirmation at an interactive terminal before writing, so a
-  mistyped ID list cannot mass-mutate bugs unnoticed. Non-interactive runs
-  (piped stdin, agents) auto-bypass and are never blocked; `--yes` skips the
-  prompt explicitly. (#313)
-- Global `--dry-run` flag for bug mutations. Previews `bug create`, `update`,
-  `clone`, `resolve`, `close`, `reopen`, and `dup` without writing: it resolves
-  and validates the request, then prints the would-be payload and affected bug
-  IDs as `{"resource":"bug","action":"dry-run","ids":[...],"changes":{...}}`
-  instead of calling the write API, exiting 0 on a valid request. Useful as a
-  safety net for humans and a pre-flight validation step for agents before an
-  irreversible batch `update`. `clone` still reads the source bug to build the
-  preview. Using `--dry-run` on any non-mutation command exits 7. (#308)
 
 ### Changed
 
@@ -141,6 +67,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- NDJSON output via `--output ndjson` (or `BZR_OUTPUT=ndjson`): list/array
+  results print one compact JSON value per line and single objects print as one
+  compact line — the streaming shape for agents and `jq -c`. An empty list emits
+  no lines; the `bug list`/`search` truncation note goes to stderr so stdout
+  stays one clean record per line. Existing `table`/`json` shapes are unchanged.
+  (#305)
+
+- `bzr schema [NAME]` publishes checked-in JSON Schemas (draft 2020-12) for the
+  `--format json` output of each command family — the read-resource objects
+  (`bug`, `comment`, `attachment`, `product`, `component`, `classification`,
+  `user`, `group`, `field-value`) and the mutation/result envelopes
+  (`action-result`, `batch-result`, `batch-create-result`, `multi-bug-view`,
+  `tag-result`, `membership-result`, `count-result`, `download-result`,
+  `upload-result`, `config-result`, `search-result`, `dry-run-result`). Agents
+  can validate output against a contract instead of branching over the per-
+  command shape differences. Local command (no network); run without a name to
+  list the schemas. A drift test validates each schema against the real
+  serialized output so the published contract stays honest. (#305)
+
+- Pagination for the search-backed commands (`bug list`, `bug search`, `bug my`,
+  `query run`): `--offset <N>` skips leading matches for manual paging, and
+  `--paginate` loops internally past `--limit` to retrieve every match (the path
+  for "process all matching bugs" workflows). Because Bugzilla's search API
+  returns no total, truncation is detected by over-fetching one row past
+  `--limit`: a truncated table window prints a "more available" footer, and the
+  JSON window writes the same note to stderr (the stdout array shape is
+  unchanged). `--offset`/`--paginate` are mutually exclusive and cannot be
+  combined with `--count` (exit 7). (#302)
+
+- `bug create --from-json <PATH|->` structured input. Files one or more bugs
+  from a JSON object (one bug) or array (one bug per element, with the
+  partial-failure model and exit 11), so an agent that already models a bug as
+  an object can submit it directly instead of flattening it into shell flags.
+  Keys match the create flag names; unknown keys are rejected (exit 7) so a typo
+  fails fast, and undesigned `cf_*` custom-field writes (#283) stay out of this
+  path. Explicit CLI flags override the corresponding JSON field, applied to
+  every array element. Mutually exclusive with `--template`; bypasses the
+  `$EDITOR` flow. `bug update` and other resources are tracked as follow-up.
+  (#307)
+
+- Inline / ad-hoc server via global `--server-url`, `--server-api-key-env`, and
+  optional `--server-email`. Defines an ephemeral server for a single
+  invocation, so a one-off query or a fully stateless agent run can target a
+  Bugzilla instance that was never written to any config file — nothing is read
+  from or written to `config.toml`. The API key is sourced from the named
+  environment variable (never a literal flag, keeping the secret out of the
+  process argument list). `--server-url` requires `--server-api-key-env` and
+  conflicts with `--server`; it pairs with `--config` for sandboxed runs. (#314)
+
+- `bug update --expect-unchanged-since <TIMESTAMP>` optimistic-concurrency guard.
+  Pass the `last_change_time` from a preceding `bug view`; before writing, bzr
+  re-reads each target bug and refuses the update (exit 14, a new distinct
+  collision code) if its `last_change_time` no longer matches, so a
+  read-modify-write agent will not silently clobber a concurrent edit. The check
+  is client-side — Bugzilla's REST `Bug.update` exposes no atomic
+  compare-and-set (the `check_collision` proposal was never merged; the web UI's
+  `delta_ts` guard is not in the API) — so a narrow check-then-write window
+  remains. With multiple IDs, all are checked first and any mismatch aborts the
+  whole batch before any write. (#320)
+
+- Confirmation gate for large batch bug mutations, with a global `-y`/`--yes`
+  bypass. A `bug update`/`resolve`/`close`/`reopen` targeting more than 10 bugs
+  now prompts for confirmation at an interactive terminal before writing, so a
+  mistyped ID list cannot mass-mutate bugs unnoticed. Non-interactive runs
+  (piped stdin, agents) auto-bypass and are never blocked; `--yes` skips the
+  prompt explicitly. (#313)
+
+- Global `--dry-run` flag for bug mutations. Previews `bug create`, `update`,
+  `clone`, `resolve`, `close`, `reopen`, and `dup` without writing: it resolves
+  and validates the request, then prints the would-be payload and affected bug
+  IDs as `{"resource":"bug","action":"dry-run","ids":[...],"changes":{...}}`
+  instead of calling the write API, exiting 0 on a valid request. Useful as a
+  safety net for humans and a pre-flight validation step for agents before an
+  irreversible batch `update`. `clone` still reads the source bug to build the
+  preview. Using `--dry-run` on any non-mutation command exits 7. (#308)
+
 - `bzr query update <NAME>` and `bzr template update <NAME>` edit a saved query
   or template in place: a supplied flag replaces that field, an omitted flag
   leaves it unchanged, and `--clear <FIELD>` (repeatable, names matching the long
@@ -148,6 +150,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   re-create (re-specifying everything). A no-op call is rejected, as is an update
   that would leave a template with no fields or a query with no filters (exit 7).
   (#315)
+
 - Global `--timeout <SECS>` (and `BZR_TIMEOUT`) overrides the per-request
   timeout (default 30s) for slow or distant servers; the 10s connect timeout is
   unchanged. Global `--retry <N>` (default 0, max 10) retries transient failures
@@ -156,18 +159,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   5xx responses and read timeouts are retried only for safe reads (GET/HEAD),
   never for writes (create, update, comment). Retries are off by default;
   exhausted retries surface the usual network error (exit code 5). (#311)
+
 - `--count` on `bzr bug list`, `bzr bug search`, and `bzr bug my` prints only the
   number of matching bugs — an integer (table) or `{"count": N}` (JSON) — for
   dashboards, triage gates, and agent branching. It fetches ids only and lifts
   the row limit (`limit=0`), so the count reflects all matches (bounded by the
   server's max-results setting) rather than a single page; `bug my` reports the
   distinct total deduped across the active categories. (#317)
+
 - Convenience verbs over `bzr bug update` for the common state transitions:
   `bzr bug resolve <ID...> [--as <RESOLUTION>]` (defaults to `FIXED`),
   `bzr bug close <ID...> [--as <RESOLUTION>]`, `bzr bug reopen <ID...>`, and
   `bzr bug dup <ID> <TARGET>`. Each is thin sugar that builds the equivalent
   `Bug.update` and inherits its batch (multi-ID, partial-failure exit 11) and
   `--comment` / `--comment-file` / `--comment-private` behavior. (#309)
+
 - `bzr bug create` gains field flags shared with `bug update`: `--alias`,
   `--url`, `--whiteboard`, `--target-milestone`, `--deadline`, `--cc`,
   `--keywords`, `--groups`, and `--flag`. They are sent in the same
@@ -175,6 +181,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   instead of a create-then-update two-step. The list flags accept
   comma-separated, repeatable values; `--flag` uses Bugzilla flag syntax;
   `--deadline` takes `YYYY-MM-DD` and rejects malformed input with exit 7. (#301)
+
 - `bzr bug view <ID> --web` opens the bug's page (`show_bug.cgi?id=<ID>`) on the
   active server in the default browser, the `gh issue view --web` affordance.
   Resolves the URL from local config with no network call or authentication, so
@@ -182,6 +189,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   display is available (headless / SSH without X), it prints the URL and exits 0
   instead of opening a browser, which keeps it safe for scripts, pipes, and
   agents. Multiple IDs open (or print) one page each. (#310)
+
 - `--sort <FIELD>` / `--order asc|desc` on `bug list`, `bug search`, `bug my`,
   and `query run` control result ordering (mapped to Bugzilla's `order`), with
   a `bug_id` tiebreaker for deterministic ties. Absent `--sort`, results now
@@ -189,25 +197,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   this means `bug search` no longer defaults to relevance ranking; pass `--sort`
   to choose another order. `query save --sort` persists an order into the saved
   query; `query run --sort` overrides it. (#303)
+
 - Global `--config <PATH>` flag and `BZR_CONFIG` environment variable select an
   alternate `config.toml` for reads and writes. Precedence: `--config` >
   `BZR_CONFIG` > `$XDG_CONFIG_HOME/bzr/config.toml` (or the platform config
   dir). Sandboxes CI, throwaway agent runs, and per-profile configs without
   manipulating `$HOME`/`$XDG_CONFIG_HOME`. (#304)
+
 - `bzr component list --product <P>` and `bzr component view <product> <component>`
   make components directly discoverable (ID, name, description, default
   assignee, active flag) instead of only via `product view`. Both read the
   product's component set; `--json` emits the component array / object. (#316)
+
 - `bzr attachment view <ATTACHMENT_ID>` shows a single attachment's metadata
   (summary, bug, file name, content type, size, flags, creator, timestamps)
   without downloading its bytes. On REST the `data` field is excluded
   server-side via `exclude_fields`, so inspecting a large attachment is cheap;
   `data` is also omitted from all attachment `--json` output. (#318)
+
 - `bzr classification list` enumerates the server's classifications (ID, name,
   description, product count; full objects under `--json`). Bugzilla has no
   bulk classification endpoint, so names come from the `classification` field's
   legal values and each is fetched for detail. When classifications are
   disabled (only `Unclassified` exists) bzr prints a note to stderr. (#319)
+
 - `bzr config remove-server <NAME>` deletes a server alias (and its OS-keychain
   entry, if any). Removing the current default is refused while other servers
   remain; removing the only server clears the default. `bzr config
@@ -215,14 +228,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   including moving the keychain secret when it is stored under the default
   (server-name) account — and updates `default_server` if it pointed at the old
   name. Both emit the standard mutation JSON (`removed` / `renamed`). (#300)
+
 - `bzr completion <bash|zsh|fish|powershell|elvish>` prints a shell completion
   script to stdout, generated from bzr's live clap command tree so it always
   matches the installed binary's subcommands and flags. README and
   `docs/bzr-cli.md` document a one-line install per shell. (#299)
+
 - `bzr comment add` now accepts `--body-file <PATH>` to read the comment body
   from a UTF-8 file, matching `bug create --description-file` and
   `bug update --comment-file`. A path of `-` reads from stdin. `--body` and
   `--body-file` are mutually exclusive.
+
 - Bundled agent skills for driving `bzr` from AI coding agents, with a
   runtime-free installer. Five skills (`bzr-reference`, `bzr-setup`,
   `bzr-file-bug`, `bzr-triage-bug`, `bzr-search-report`) live under
