@@ -392,5 +392,7 @@ pub enum QueryAction {
         url: Vec<String>,
         #[command(flatten)]
         sort_args: crate::cli::SortArgs,
+        #[command(flatten)]
+        page_args: crate::cli::PageArgs,
     },
 }

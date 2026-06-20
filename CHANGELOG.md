@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Pagination for the search-backed commands (`bug list`, `bug search`, `bug my`,
+  `query run`): `--offset <N>` skips leading matches for manual paging, and
+  `--paginate` loops internally past `--limit` to retrieve every match (the path
+  for "process all matching bugs" workflows). Because Bugzilla's search API
+  returns no total, truncation is detected by over-fetching one row past
+  `--limit`: a truncated table window prints a "more available" footer, and the
+  JSON window writes the same note to stderr (the stdout array shape is
+  unchanged). `--offset`/`--paginate` are mutually exclusive and cannot be
+  combined with `--count` (exit 7). (#302)
+
 - `bug create --from-json <PATH|->` structured input. Files one or more bugs
   from a JSON object (one bug) or array (one bug per element, with the
   partial-failure model and exit 11), so an agent that already models a bug as

@@ -19,6 +19,28 @@ pub struct SortArgs {
     pub order: SortDirection,
 }
 
+/// Shared `--offset` / `--paginate` paging flags, flattened into the
+/// search-backed bug commands (`list`, `search`, `my`) and `query run`.
+/// Bugzilla returns no total, so `--paginate` (loop all pages) is the path to
+/// full retrieval and `--offset` walks windows manually.
+#[derive(Args, Debug, Clone, Default)]
+pub struct PageArgs {
+    /// Skip the first N matching bugs (manual paging past `--limit`).
+    ///
+    /// Page through a large result set by repeating with increasing offsets;
+    /// an empty/short page means there are no more matches. Mutually exclusive
+    /// with `--paginate`.
+    #[arg(long, value_name = "N", conflicts_with = "paginate")]
+    pub offset: Option<u32>,
+    /// Retrieve every matching page, looping internally past `--limit`.
+    ///
+    /// `--limit` becomes the per-request page size; bzr fetches pages until the
+    /// server returns a short page, then emits the full result set. Use this
+    /// for "process all matching bugs" workflows.
+    #[arg(long)]
+    pub paginate: bool,
+}
+
 /// Create-time field flags shared into `bug create`, giving it parity with
 /// `bug update` for the subset Bugzilla's `Bug.create` accepts in one call.
 /// Grouped into one flattened struct so the `Create` variant stays readable
@@ -200,6 +222,8 @@ pub enum BugAction {
         field_args: FieldArgs,
         #[command(flatten)]
         sort_args: SortArgs,
+        #[command(flatten)]
+        page_args: PageArgs,
         /// Filter to bugs created at or after this date.
         ///
         /// Accepts `YYYY-MM-DD` (interpreted as 00:00:00 UTC),
@@ -390,6 +414,8 @@ pub enum BugAction {
         field_args: FieldArgs,
         #[command(flatten)]
         sort_args: SortArgs,
+        #[command(flatten)]
+        page_args: PageArgs,
     },
     /// Show the change history for a single bug.
     ///
@@ -623,6 +649,8 @@ pub enum BugAction {
         field_args: FieldArgs,
         #[command(flatten)]
         sort_args: SortArgs,
+        #[command(flatten)]
+        page_args: PageArgs,
     },
     /// Clone an existing bug, optionally overriding fields.
     ///

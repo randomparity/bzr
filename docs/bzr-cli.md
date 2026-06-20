@@ -97,13 +97,13 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │        [--creator <C>...] [--priority <P>...] [--severity <S>...] [--id <ID>...]
 │   │        [--alias <A>] [--summary <S>] [--resolution <R>...] [--version <V>...] [--op-sys <OS>...]
 │   │        [--platform <P>...] [--whiteboard <W>] [--target-milestone <M>...] [--qa-contact <Q>...] [--url <U>]
-│   │        [--limit <N>] [--count] [--fields <F>] [--exclude-fields <F>]
+│   │        [--limit <N>] [--offset <N>] [--paginate] [--count] [--fields <F>] [--exclude-fields <F>]
 │   │        [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
 │   ├── view <ID> [--fields <F>] [--exclude-fields <F>] [--permissive] [--web]
-│   ├── search [<QUERY>] [--from-url <URL>] [--save-as [NAME]] [--limit <N>] [--count] [--fields <F>] [--exclude-fields <F>]
+│   ├── search [<QUERY>] [--from-url <URL>] [--save-as [NAME]] [--limit <N>] [--offset <N>] [--paginate] [--count] [--fields <F>] [--exclude-fields <F>]
 │   │          [--sort <FIELD>] [--order asc|desc]
 │   ├── history <ID> [--since <DATE>]
-│   ├── my [--created] [--cc] [--all] [--status <S>...] [--limit <N>] [--count]
+│   ├── my [--created] [--cc] [--all] [--status <S>...] [--limit <N>] [--offset <N>] [--paginate] [--count]
 │   │       [--fields <F>] [--exclude-fields <F>] [--sort <FIELD>] [--order asc|desc]
 │   ├── create [--from-json <PATH>] [--template <T>] [--product <P>] [--component <C>] --summary <S>
 │   │          [--version <V>] [--description <D>] [--description-file <PATH>] [--priority <P>] [--severity <S>]
@@ -212,7 +212,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │                 [--limit <N>] [--fields <F>] [--exclude-fields <F>] [--created-since <D>]
 │   │                 [--changed-since <D>] [--clear <FIELD>] [--sort <FIELD>] [--order asc|desc]
 │   ├── delete <NAME>
-│   └── run <NAME> [--limit <N>] [--fields <F>] [--exclude-fields <F>] [--server <NAME>]
+│   └── run <NAME> [--limit <N>] [--offset <N>] [--paginate] [--fields <F>] [--exclude-fields <F>] [--server <NAME>]
 │                  [--resolution <R>...] [--version <V>...] [--op-sys <OS>...] [--platform <P>...]
 │                  [--whiteboard <W>] [--target-milestone <M>...] [--qa-contact <Q>...] [--url <U>]
 │                  [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
@@ -259,6 +259,8 @@ Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`,
 | `--alias <A>` | No | | Filter by bug alias |
 | `--summary <S>` | No | | Substring match on the Summary field (matches all bug states) |
 | `--limit <N>` | No | 50 | Max results |
+| `--offset <N>` | No | | Skip the first N matches (manual paging past `--limit`). Mutually exclusive with `--paginate`; cannot be combined with `--count`. |
+| `--paginate` | No | | Retrieve every matching page, looping internally past `--limit` (which becomes the per-request page size). For "process all matching bugs" workflows. Cannot be combined with `--count`. |
 | `--count` | No | | Print only the count of matching bugs — an integer (table) or `{"count": N}` (JSON). Fetches ids only and lifts the row limit, so the count reflects all matches (bounded by the server's max-results setting). Ignores `--fields`, `--limit`, and `--sort`. |
 | `--fields <F>` | No | | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). A selection that resolves to no known fields is rejected with exit code 7 rather than emitting an empty object. |
 | `--exclude-fields <F>` | No | | Comma-separated fields dropped from the server request; in table output, removes those columns. Under `--json`, the object omits the dropped fields (including custom `cf_*` fields and `id`, when excluded). Excluding every field is rejected with exit code 7 rather than emitting `{}`. |
@@ -278,6 +280,40 @@ default; pass `--sort` to choose a different order. For `bug search --from-url`
 and `query run`, an explicit `--sort` overrides any ordering carried by the URL
 or saved query; otherwise the saved/URL order is preserved. `query save --sort`
 persists an order into the saved query.
+
+#### Pagination and truncation
+
+`--limit` caps a single result window. `--offset <N>` and `--paginate` apply to
+`bug list`, `bug search`, `bug my`, and `query run` and let you go past it:
+
+- **`--offset <N>`** skips the first `N` matches, so a window beyond the first
+  `--limit` is retrievable. Page through a large set by repeating with
+  increasing offsets; a short or empty page means there are no more matches.
+- **`--paginate`** loops internally — `--limit` becomes the per-request page
+  size — fetching pages until the server returns a short page, then emits the
+  full result set. This is the path for "process all matching bugs" workflows.
+  (For `bug my`, each of the assigned/created/CC categories is paged
+  independently and the union is de-duplicated.)
+
+The two are mutually exclusive, and neither may be combined with `--count`
+(which already reports the full total) — doing so exits 7.
+
+**Truncation signal.** Bugzilla's search API returns no total-match count, so
+bzr detects "more results exist" by over-fetching one row past `--limit`. When a
+window is truncated:
+
+The over-fetch detects truncation by `--limit`. It cannot detect truncation by
+the server's own `max-results` cap (the same limitation noted for `--count`): if
+`--limit` exceeds `max-results`, the server may withhold matches without a
+signal. When a window is truncated:
+
+- **Table** output appends a footer: `Showing first N result(s); more
+  available — use --paginate for all, or --offset N for the next page.`
+- **JSON** output keeps stdout a clean array and writes the same note to
+  **stderr**, so a deterministic, in-band JSON truncation flag is not added to
+  the default array shape. For programmatic truncation detection, either use
+  `--paginate` (which returns everything) or page with `--offset` until a page
+  returns fewer than `--limit` rows.
 
 #### Date format
 
@@ -390,6 +426,8 @@ bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?known_name=m
 | `--from-url <URL>` | No* | | Execute a search from a Bugzilla buglist.cgi URL. Recognized parameters (product, component, status, etc.) are mapped to structured fields; unrecognized parameters (boolean charts, field-change filters) are passed through to the REST API verbatim. |
 | `--save-as [NAME]` | No | | Save this URL query for future reuse. If `NAME` is omitted, uses the URL's `known_name` parameter as the query name. Requires `--from-url`. |
 | `--limit <N>` | No | 50 | Max results. When `--from-url` is used, the URL's own limit parameter takes precedence unless overridden here. |
+| `--offset <N>` | No | | Skip the first N matches (manual paging past `--limit`). Mutually exclusive with `--paginate`; cannot be combined with `--count`. |
+| `--paginate` | No | | Retrieve every matching page, looping internally past `--limit`. Cannot be combined with `--count`. |
 | `--count` | No | | Print only the count of matching bugs — an integer (table) or `{"count": N}` (JSON). Counts all matches (bounded by the server's max-results setting). |
 | `--fields <F>` | No | | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). A selection that resolves to no known fields is rejected with exit code 7 rather than emitting an empty object. |
 | `--exclude-fields <F>` | No | | Comma-separated fields dropped from the server request; in table output, removes those columns. Under `--json`, the object omits the dropped fields (including custom `cf_*` fields and `id`, when excluded). Excluding every field is rejected with exit code 7 rather than emitting `{}`. |
@@ -433,6 +471,8 @@ bzr bug my --status NEW --status '!RESOLVED'  # mixed positive and negated
 | `--all` | No | | Show all bugs related to me (assigned + created + CC'd) |
 | `--status <S>` | No | | Filter by status (repeatable; `!` prefix to exclude) |
 | `--limit <N>` | No | 50 | Max results per category. With `--all`, each of the three categories (assigned, created, CC'd) is queried separately up to this limit; duplicates across categories are removed. |
+| `--offset <N>` | No | | Skip the first N matches in each category. Mutually exclusive with `--paginate`; cannot be combined with `--count`. |
+| `--paginate` | No | | Retrieve every matching page of each category, looping internally past `--limit`, then de-duplicate. Cannot be combined with `--count`. |
 | `--count` | No | | Print only the count of distinct matching bugs (deduped across the active categories) — an integer (table) or `{"count": N}` (JSON). |
 | `--fields <F>` | No | | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). A selection that resolves to no known fields is rejected with exit code 7 rather than emitting an empty object. |
 | `--exclude-fields <F>` | No | | Comma-separated fields dropped from the server request; in table output, removes those columns. Under `--json`, the object omits the dropped fields (including custom `cf_*` fields and `id`, when excluded). Excluding every field is rejected with exit code 7 rather than emitting `{}`. |
@@ -1626,6 +1666,8 @@ bzr query run recent-firefox --changed-since 2026-05-01
 |--------|----------|-------------|
 | `<NAME>` | Yes | Query name |
 | `--limit <N>` | No | Override the saved limit |
+| `--offset <N>` | No | Skip the first N matches (manual paging past `--limit`). Mutually exclusive with `--paginate`. |
+| `--paginate` | No | Retrieve every matching page, looping internally past `--limit`. |
 | `--fields <F>` | No | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). |
 | `--exclude-fields <F>` | No | Comma-separated fields dropped from the server request; in table output, removes those columns. Under `--json`, the object omits the dropped fields (including custom `cf_*` fields and `id`, when excluded). |
 | `--server <NAME>` | No | Override the server to run the query against. Takes precedence over the server stored in the saved query. The global `--server` flag takes precedence over this flag. |

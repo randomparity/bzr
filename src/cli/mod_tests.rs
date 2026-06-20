@@ -270,6 +270,29 @@ fn bug_create_from_json_conflicts_with_template() {
 }
 
 #[test]
+fn parse_bug_list_offset_and_paginate() {
+    let cli =
+        Cli::try_parse_from(["bzr", "bug", "list", "--limit", "10", "--offset", "20"]).unwrap();
+    let Commands::Bug {
+        action: BugAction::List { page_args, .. },
+    } = cli.command
+    else {
+        panic!("expected bug list");
+    };
+    assert_eq!(page_args.offset, Some(20));
+    assert!(!page_args.paginate);
+}
+
+#[test]
+fn bug_list_offset_conflicts_with_paginate() {
+    let result = Cli::try_parse_from(["bzr", "bug", "list", "--offset", "20", "--paginate"]);
+    assert!(
+        result.is_err(),
+        "--offset and --paginate must be mutually exclusive"
+    );
+}
+
+#[test]
 fn parse_global_yes_flag_short_and_long() {
     let short = Cli::try_parse_from(["bzr", "-y", "bug", "update", "5", "--status", "X"]).unwrap();
     assert!(short.yes);

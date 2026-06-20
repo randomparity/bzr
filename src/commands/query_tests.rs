@@ -126,6 +126,7 @@ fn url_save_action(name: &str, url: String) -> QueryAction {
 
 fn run_action(name: &str) -> QueryAction {
     QueryAction::Run {
+        page_args: crate::cli::PageArgs::default(),
         name: name.into(),
         limit: None,
         fields: None,
@@ -507,13 +508,14 @@ async fn query_run_with_limit_override() {
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
-        .and(query_param("limit", "5"))
+        .and(query_param("limit", "6"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
         .expect(1)
         .mount(&mock)
         .await;
 
     let run_action = QueryAction::Run {
+        page_args: crate::cli::PageArgs::default(),
         name: "override-test".into(),
         limit: Some(5),
         fields: None,
@@ -737,6 +739,7 @@ async fn query_run_applies_field_overrides() {
         .await;
 
     let run_action = QueryAction::Run {
+        page_args: crate::cli::PageArgs::default(),
         name: "fields-test".into(),
         limit: None,
         fields: Some("id,summary".into()),
@@ -883,6 +886,7 @@ async fn query_run_with_server_override() {
 
     // Run with --server override pointing to the mock server ("test")
     let run_action = QueryAction::Run {
+        page_args: crate::cli::PageArgs::default(),
         name: "server-test".into(),
         limit: None,
         fields: None,
@@ -1107,6 +1111,7 @@ async fn query_run_rejects_malformed_created_since_override() {
     .unwrap();
 
     let action = QueryAction::Run {
+        page_args: crate::cli::PageArgs::default(),
         name: "recent".into(),
         limit: None,
         fields: None,
@@ -1295,6 +1300,7 @@ async fn query_run_overrides_replace_saved_field_filters() {
         .await;
 
     let run_action = QueryAction::Run {
+        page_args: crate::cli::PageArgs::default(),
         name: "field-override-test".into(),
         limit: None,
         fields: None,

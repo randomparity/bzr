@@ -39,11 +39,14 @@ pub(super) async fn handle(
         qa_contact,
         url,
         sort_args,
+        page_args: crate::cli::PageArgs { offset, paginate },
         count,
     } = action
     else {
         unreachable!()
     };
+
+    super::ensure_no_paging_with_count(*count, *offset, *paginate)?;
 
     let creation_time = parse_optional_date(created_since.as_deref(), "--created-since")?;
     let last_change_time = parse_optional_date(changed_since.as_deref(), "--changed-since")?;
@@ -60,6 +63,7 @@ pub(super) async fn handle(
         alias: alias.clone(),
         summary: summary.clone(),
         limit: Some(*limit),
+        offset: *offset,
         include_fields: canonical_field_list(fields.as_deref()),
         exclude_fields: canonical_field_list(exclude_fields.as_deref()),
         creation_time,
@@ -87,8 +91,9 @@ pub(super) async fn handle(
     }
 
     let spec = ColumnSpec::new(fields.as_deref(), exclude_fields.as_deref());
-    let bugs = client.search_bugs(&params).await?;
-    write_bugs(&bugs, spec, format, w.out, w.err);
+    let page = crate::commands::paging::fetch_page(client, &params, *paginate).await?;
+    write_bugs(&page.bugs, spec, format, w.out, w.err);
+    crate::commands::paging::write_truncation_note(&page, params.limit, *offset, format, w);
     Ok(())
 }
 

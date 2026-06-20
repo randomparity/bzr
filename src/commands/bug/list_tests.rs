@@ -9,6 +9,7 @@ use crate::types::OutputFormat;
 
 fn empty_list_action() -> BugAction {
     BugAction::List {
+        page_args: crate::cli::PageArgs::default(),
         product: vec![],
         component: vec![],
         status: vec![],
@@ -97,7 +98,7 @@ async fn bug_list_passes_every_field_through_to_search_params() {
         .and(query_param("id", "42"))
         .and(query_param("alias", "my-alias"))
         .and(query_param("summary", "kernel panic"))
-        .and(query_param("limit", "5"))
+        .and(query_param("limit", "6"))
         .and(query_param("include_fields", "id,summary"))
         .and(query_param("exclude_fields", "comments"))
         .and(query_param("creation_time", "2026-04-01T00:00:00Z"))
@@ -116,6 +117,7 @@ async fn bug_list_passes_every_field_through_to_search_params() {
         .await;
 
     let action = BugAction::List {
+        page_args: crate::cli::PageArgs::default(),
         product: vec!["Firefox".into()],
         component: vec!["General".into()],
         status: vec!["NEW".into()],
@@ -182,6 +184,7 @@ async fn bug_list_summary_only_sends_substring_filter() {
         .await;
 
     let action = BugAction::List {
+        page_args: crate::cli::PageArgs::default(),
         product: vec![],
         component: vec![],
         status: vec![],
@@ -356,6 +359,7 @@ async fn bug_list_mixed_positive_notequals_notsubstring() {
 
     let mut action = empty_list_action();
     if let BugAction::List {
+        page_args: _,
         product,
         resolution,
         whiteboard,
@@ -717,4 +721,78 @@ async fn bug_list_count_table_prints_integer_only() {
     .await;
     assert!(result.is_ok());
     assert_eq!(__io.out_str().trim(), "2");
+}
+
+// ── Pagination (#302) ────────────────────────────────────────────────
+
+fn list_action_paged(limit: u32, offset: Option<u32>, paginate: bool) -> BugAction {
+    let mut action = empty_list_action();
+    if let BugAction::List {
+        limit: l,
+        page_args,
+        ..
+    } = &mut action
+    {
+        *l = limit;
+        *page_args = crate::cli::PageArgs { offset, paginate };
+    }
+    action
+}
+
+#[tokio::test]
+async fn list_offset_reaches_server_and_truncation_footer_prints() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    // limit 2 + offset 10 → over-fetch sends limit=3 & offset=10; 3 returned ⇒
+    // truncated, footer printed, surplus row trimmed.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("limit", "3"))
+        .and(query_param("offset", "10"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1}, {"id": 2}, {"id": 3}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &list_action_paged(2, Some(10), false),
+        None,
+        OutputFormat::Table,
+        None,
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        io.out_str().contains("more available"),
+        "expected truncation footer, got: {}",
+        io.out_str()
+    );
+    assert!(io.out_str().contains("--offset 12"), "next offset = 10 + 2");
+}
+
+#[tokio::test]
+async fn list_count_with_offset_is_rejected() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let mut action = empty_list_action();
+    if let BugAction::List {
+        count, page_args, ..
+    } = &mut action
+    {
+        *count = true;
+        *page_args = crate::cli::PageArgs {
+            offset: Some(5),
+            paginate: false,
+        };
+    }
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await
+            .unwrap_err();
+    assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
+    assert_eq!(err.exit_code(), 7);
 }

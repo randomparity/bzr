@@ -244,6 +244,9 @@ pub struct SearchParams {
     /// Bug IDs to search for.
     pub id: Vec<u64>,
     pub limit: Option<u32>,
+    /// Number of leading matches to skip (Bugzilla `offset`). Combined with
+    /// `limit` for manual paging; `None` means offset 0.
+    pub offset: Option<u32>,
     pub summary: Option<String>,
     pub quicksearch: Option<String>,
     pub include_fields: Option<String>,
