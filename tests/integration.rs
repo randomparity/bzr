@@ -899,6 +899,7 @@ async fn bug_update_integration() {
         comment: None,
         comment_file: None,
         comment_private: false,
+        expect_unchanged_since: None,
     };
     let mut __io17 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
@@ -973,6 +974,7 @@ async fn bug_update_scalar_parity_fields_integration() {
         comment: None,
         comment_file: None,
         comment_private: false,
+        expect_unchanged_since: None,
     };
 
     let mut io = bzr::test_helpers::CapturedIo::new();
@@ -1044,6 +1046,7 @@ async fn bug_update_with_comment_integration() {
         comment: Some("see #other".to_string()),
         comment_file: None,
         comment_private: true,
+        expect_unchanged_since: None,
     };
     let mut __io18 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(

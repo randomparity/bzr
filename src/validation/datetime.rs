@@ -47,6 +47,32 @@ pub fn parse_date_only(s: &str, flag: &str) -> Result<String> {
     }
 }
 
+/// Reduce a Bugzilla timestamp to a canonical comparison key (`YYYYMMDDHHMMSS`)
+/// for the optimistic-concurrency guard (`bug update --expect-unchanged-since`).
+///
+/// Accepts both REST canonical forms (`2026-01-01T00:00:00Z`, the naive
+/// `…T00:00:00`, and bare `2026-01-01`) and the XML-RPC basic form
+/// (`20260101T00:00:00`), so the comparison is the same regardless of which
+/// transport produced the `last_change_time`. Offset-bearing forms
+/// (`…+01:00`) and anything else are rejected (`None`) — callers must compare
+/// the server's UTC value, so two different instants are never keyed equal.
+#[must_use]
+pub fn timestamp_compare_key(s: &str) -> Option<String> {
+    let trimmed = s.strip_suffix('Z').unwrap_or(s);
+    let key: String = trimmed
+        .chars()
+        .filter(|c| !matches!(c, '-' | ':' | 'T'))
+        .collect();
+    if !key.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    match key.len() {
+        14 => Some(key),
+        8 => Some(format!("{key}000000")),
+        _ => None,
+    }
+}
+
 fn try_canonicalize(s: &str) -> Option<String> {
     // Length-check first; this also gates the byte-indexing below
     // (each branch knows the input is exactly that many bytes long).
