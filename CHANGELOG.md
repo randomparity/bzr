@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `bug create --from-json <PATH|->` structured input. Files one or more bugs
+  from a JSON object (one bug) or array (one bug per element, with the
+  partial-failure model and exit 11), so an agent that already models a bug as
+  an object can submit it directly instead of flattening it into shell flags.
+  Keys match the create flag names; unknown keys are rejected (exit 7) so a typo
+  fails fast, and undesigned `cf_*` custom-field writes (#283) stay out of this
+  path. Explicit CLI flags override the corresponding JSON field, applied to
+  every array element. Mutually exclusive with `--template`; bypasses the
+  `$EDITOR` flow. `bug update` and other resources are tracked as follow-up.
+  (#307)
+
 - Inline / ad-hoc server via global `--server-url`, `--server-api-key-env`, and
   optional `--server-email`. Defines an ephemeral server for a single
   invocation, so a one-off query or a fully stateless agent run can target a

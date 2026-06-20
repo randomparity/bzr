@@ -307,6 +307,41 @@ impl BatchResult {
     }
 }
 
+/// Result of an array (batch) `bug create --from-json`: the IDs of the bugs
+/// that were created plus a per-item failure list. Reuses the partial-failure
+/// model of batch `bug update`/`bug view`, but the shape differs because a
+/// failed *create* has no bug ID — failures carry the **input index** instead,
+/// and successes are **new** IDs the server assigned.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct BatchCreateResult {
+    pub resource: ResourceKind,
+    pub action: ActionKind,
+    pub created: Vec<u64>,
+    pub failed: Vec<CreateFailure>,
+}
+
+/// A single failure in a batch create, identified by its 0-based position in
+/// the input array.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct CreateFailure {
+    pub index: usize,
+    pub error: String,
+}
+
+impl BatchCreateResult {
+    #[must_use]
+    pub fn new(created: Vec<u64>, failed: Vec<CreateFailure>) -> Self {
+        Self {
+            resource: ResourceKind::Bug,
+            action: ActionKind::Created,
+            created,
+            failed,
+        }
+    }
+}
+
 /// Typed result payload for multi-ID `bzr bug view` JSON output.
 ///
 /// The wrapped shape is used for **every** multi-ID invocation, with or

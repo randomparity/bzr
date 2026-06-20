@@ -12,6 +12,7 @@ use crate::types::OutputFormat;
 
 fn create_action() -> BugAction {
     BugAction::Create {
+        from_json: None,
         template: None,
         product: Some("TestProduct".into()),
         component: Some("General".into()),
@@ -122,6 +123,7 @@ async fn bug_create_sends_parity_fields_in_body() {
         .await;
 
     let action = BugAction::Create {
+        from_json: None,
         template: None,
         product: Some("TestProduct".into()),
         component: Some("General".into()),
@@ -166,6 +168,7 @@ async fn bug_create_rejects_malformed_deadline() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = BugAction::Create {
+        from_json: None,
         template: None,
         product: Some("TestProduct".into()),
         component: Some("General".into()),
@@ -201,6 +204,7 @@ async fn bug_create_missing_product_returns_input_validation() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = BugAction::Create {
+        from_json: None,
         template: None,
         product: None,
         component: Some("General".into()),
@@ -239,6 +243,7 @@ async fn bug_create_missing_component_returns_input_validation() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = BugAction::Create {
+        from_json: None,
         template: None,
         product: Some("TestProduct".into()),
         component: None,
@@ -277,6 +282,7 @@ async fn bug_create_with_unknown_template_errors() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = BugAction::Create {
+        from_json: None,
         template: Some("does-not-exist".into()),
         product: Some("TestProduct".into()),
         component: Some("General".into()),
@@ -352,6 +358,7 @@ async fn bug_create_with_template_fills_missing_fields() {
         .await;
 
     let action = BugAction::Create {
+        from_json: None,
         template: Some("tpl".into()),
         product: None,
         component: None,
@@ -405,6 +412,7 @@ async fn bug_create_reads_description_from_file() {
         .await;
 
     let action = BugAction::Create {
+        from_json: None,
         template: None,
         product: Some("TestProduct".into()),
         component: Some("General".into()),
@@ -440,6 +448,7 @@ async fn bug_create_description_file_missing_returns_input_validation() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = BugAction::Create {
+        from_json: None,
         template: None,
         product: Some("TestProduct".into()),
         component: Some("General".into()),
@@ -482,6 +491,7 @@ async fn bug_create_description_file_non_utf8_returns_input_validation() {
     std::fs::write(&bad_path, [0xff_u8, 0xfe_u8, 0xfd_u8]).unwrap();
 
     let action = BugAction::Create {
+        from_json: None,
         template: None,
         product: Some("TestProduct".into()),
         component: Some("General".into()),
@@ -521,6 +531,7 @@ async fn bug_create_missing_summary_without_editor_flow_is_rejected() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let action = BugAction::Create {
+        from_json: None,
         template: None,
         product: Some("TestProduct".into()),
         component: Some("General".into()),
@@ -713,6 +724,7 @@ fn install_fake_editor() -> std::path::PathBuf {
 
 fn editor_action_no_summary_no_description() -> BugAction {
     BugAction::Create {
+        from_json: None,
         template: None,
         product: Some("TestProduct".into()),
         component: Some("General".into()),
@@ -882,6 +894,7 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
     // be used as a fallback. The empty-stdin branch fires first and
     // returns InputValidation.
     let action = BugAction::Create {
+        from_json: None,
         template: Some("tpl-with-desc".into()),
         product: None,
         component: None,
@@ -926,4 +939,287 @@ fn resolve_description_conflict_errors() {
         }
         other => panic!("expected InputValidation, got {other:?}"),
     }
+}
+
+// ── Structured input: bug create --from-json (#307) ──────────────────
+
+/// Build a `from_json` create action: `from_json` set, every CLI field at its
+/// default so the JSON is the sole field source unless a test overrides one.
+fn from_json_action(path: &str) -> BugAction {
+    BugAction::Create {
+        from_json: Some(path.to_string()),
+        template: None,
+        product: None,
+        component: None,
+        summary: None,
+        version: None,
+        description: None,
+        description_file: None,
+        priority: None,
+        severity: None,
+        assignee: None,
+        op_sys: None,
+        rep_platform: None,
+        blocks: vec![],
+        depends_on: vec![],
+        create_fields: crate::cli::CreateFieldArgs::default(),
+    }
+}
+
+/// Write `json` to a file under `tmp` and return its path, so tests exercise
+/// the `--from-json <PATH>` branch without driving stdin.
+fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
+    let path = tmp.path().join("input.json");
+    std::fs::write(&path, json).unwrap();
+    path.to_string_lossy().into_owned()
+}
+
+#[tokio::test]
+async fn from_json_single_object_files_a_bug() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .and(body_string_contains("\"product\":\"P\""))
+        .and(body_string_contains("\"summary\":\"S\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 7})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{"product":"P","component":"C","summary":"S"}"#;
+    let action = from_json_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    assert!(
+        result.is_ok(),
+        "single object should file a bug: {result:?}"
+    );
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["action"], "created");
+    assert_eq!(parsed["id"], 7);
+}
+
+#[tokio::test]
+async fn from_json_array_batch_creates_one_per_element() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 11})))
+        .expect(2)
+        .mount(&mock)
+        .await;
+
+    let json = r#"[{"product":"P","component":"C","summary":"one"},
+                   {"product":"P","component":"C","summary":"two"}]"#;
+    let action = from_json_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    assert!(result.is_ok(), "array should batch-create: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["action"], "created");
+    assert_eq!(parsed["created"], serde_json::json!([11, 11]));
+    assert_eq!(parsed["failed"], serde_json::json!([]));
+}
+
+#[tokio::test]
+async fn from_json_array_partial_failure_exits_11() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    // First create succeeds (id 11); the component endpoint for the second is a
+    // 400 with a Bugzilla error body, so it fails.
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .and(body_string_contains("\"summary\":\"ok\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 11})))
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .and(body_string_contains("\"summary\":\"bad\""))
+        .respond_with(ResponseTemplate::new(400).set_body_json(
+            serde_json::json!({"error": true, "code": 51, "message": "Invalid component"}),
+        ))
+        .mount(&mock)
+        .await;
+
+    let json = r#"[{"product":"P","component":"C","summary":"ok"},
+                   {"product":"P","component":"Bad","summary":"bad"}]"#;
+    let action = from_json_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    let err = result.unwrap_err();
+    assert!(
+        matches!(
+            &err,
+            BzrError::BatchPartialFailure {
+                succeeded: 1,
+                failed: 1
+            }
+        ),
+        "expected partial failure 1/1, got {err:?}"
+    );
+    assert_eq!(err.exit_code(), 11);
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["created"], serde_json::json!([11]));
+    assert_eq!(parsed["failed"][0]["index"], 1);
+}
+
+#[tokio::test]
+async fn from_json_cli_flag_overrides_json_field() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    // The JSON says product "FromJson"; --product "FromCli" must win.
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .and(body_string_contains("\"product\":\"FromCli\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 5})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{"product":"FromJson","component":"C","summary":"S"}"#;
+    let mut action = from_json_action(&write_json_file(&tmp, json));
+    if let BugAction::Create { product, .. } = &mut action {
+        *product = Some("FromCli".into());
+    }
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+    assert!(
+        result.is_ok(),
+        "CLI override should win and create: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn from_json_rejects_unknown_field() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let json = r#"{"product":"P","component":"C","summary":"S","bogus":1}"#;
+    let action = from_json_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await
+            .unwrap_err();
+    match err {
+        BzrError::InputValidation(msg) => assert!(
+            msg.contains("bogus") || msg.contains("unknown field"),
+            "should name the unknown field: {msg}"
+        ),
+        other => panic!("expected InputValidation, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn from_json_missing_required_field_errors() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    // No summary in JSON and none on the CLI.
+    let json = r#"{"product":"P","component":"C"}"#;
+    let action = from_json_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await
+            .unwrap_err();
+    match err {
+        BzrError::InputValidation(msg) => assert!(msg.contains("summary"), "names field: {msg}"),
+        other => panic!("expected InputValidation, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_json_bugs_rejects_non_object_scalar() {
+    let err = super::parse_json_bugs("42").unwrap_err();
+    assert!(matches!(err, BzrError::InputValidation(_)));
+}
+
+#[test]
+fn parse_json_bugs_rejects_malformed_json() {
+    let err = super::parse_json_bugs("{not json").unwrap_err();
+    match err {
+        BzrError::InputValidation(msg) => assert!(msg.contains("invalid JSON"), "{msg}"),
+        other => panic!("expected InputValidation, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_json_bugs_object_and_array_shapes() {
+    assert!(matches!(
+        super::parse_json_bugs(r#"{"product":"P"}"#).unwrap(),
+        super::JsonInput::One(_)
+    ));
+    match super::parse_json_bugs(r#"[{"product":"P"},{"product":"Q"}]"#).unwrap() {
+        super::JsonInput::Many(v) => assert_eq!(v.len(), 2),
+        super::JsonInput::One(_) => panic!("array should parse as Many"),
+    }
+    // A 1-element array stays Many, so output shape follows input shape.
+    assert!(matches!(
+        super::parse_json_bugs(r#"[{"product":"P"}]"#).unwrap(),
+        super::JsonInput::Many(_)
+    ));
+}
+
+#[tokio::test]
+async fn from_json_single_element_array_returns_batch_shape() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 8})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    // A top-level array of ONE must still yield the partial-failure shape
+    // (`created`/`failed`), not the single-object `{id}` shape.
+    let json = r#"[{"product":"P","component":"C","summary":"S"}]"#;
+    let action = from_json_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    assert!(result.is_ok(), "1-element array should create: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["created"], serde_json::json!([8]));
+    assert_eq!(parsed["failed"], serde_json::json!([]));
+    assert!(
+        parsed.get("id").is_none(),
+        "array input must not use the single-object shape"
+    );
+}
+
+#[tokio::test]
+async fn from_json_batch_dry_run_emits_single_object_and_no_write() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    // No POST must fire under --dry-run.
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let json = r#"[{"product":"P","component":"C","summary":"one"},
+                   {"product":"P","component":"C","summary":"two"}]"#;
+    let action = from_json_action(&write_json_file(&tmp, json));
+    crate::commands::dry_run::set(true);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+    crate::commands::dry_run::set(false);
+
+    assert!(result.is_ok(), "batch dry-run should succeed: {result:?}");
+    // The whole batch is ONE valid JSON object whose changes is the array.
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["action"], "dry-run");
+    assert_eq!(parsed["changes"].as_array().unwrap().len(), 2);
 }

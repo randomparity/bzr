@@ -479,6 +479,22 @@ pub enum BugAction {
     /// values.
     #[command(verbatim_doc_comment)]
     Create {
+        /// Create one or more bugs from a JSON object or array.
+        ///
+        /// A value of `-` reads the JSON from stdin; otherwise it is a
+        /// file path. A single object files one bug; an array files one
+        /// bug per element and returns a partial-failure result (exit 11
+        /// if any element fails). Keys match the create flag names
+        /// (`product`, `component`, `summary`, `version`, `description`,
+        /// `priority`, `severity`, `assignee`, `op_sys`, `rep_platform`,
+        /// `alias`, `url`, `whiteboard`, `target_milestone`, `deadline`,
+        /// `blocks`, `depends_on`, `cc`, `keywords`, `groups`, `flags`);
+        /// unknown keys are rejected. Explicit CLI flags override the
+        /// corresponding JSON field (applied to every element of an
+        /// array). Mutually exclusive with `--template`; bypasses the
+        /// `$EDITOR` flow.
+        #[arg(long, value_name = "PATH", conflicts_with = "template")]
+        from_json: Option<String>,
         /// Use a saved template for default field values.
         ///
         /// References a named template from `bzr template list`.

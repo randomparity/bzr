@@ -223,6 +223,7 @@ async fn bug_create_integration() {
         .await;
 
     let action = bzr::cli::BugAction::Create {
+        from_json: None,
         template: None,
         product: Some("TestProduct".to_string()),
         component: Some("General".to_string()),

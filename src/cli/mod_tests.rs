@@ -241,6 +241,35 @@ fn inline_server_email_requires_url() {
 }
 
 #[test]
+fn parse_bug_create_from_json_stdin() {
+    let cli = Cli::try_parse_from(["bzr", "bug", "create", "--from-json", "-"]).unwrap();
+    let Commands::Bug {
+        action: BugAction::Create { from_json, .. },
+    } = cli.command
+    else {
+        panic!("expected bug create");
+    };
+    assert_eq!(from_json.as_deref(), Some("-"));
+}
+
+#[test]
+fn bug_create_from_json_conflicts_with_template() {
+    let result = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "create",
+        "--from-json",
+        "bugs.json",
+        "--template",
+        "sec",
+    ]);
+    assert!(
+        result.is_err(),
+        "--from-json and --template must be mutually exclusive"
+    );
+}
+
+#[test]
 fn parse_global_yes_flag_short_and_long() {
     let short = Cli::try_parse_from(["bzr", "-y", "bug", "update", "5", "--status", "X"]).unwrap();
     assert!(short.yes);
