@@ -50,6 +50,7 @@ pub async fn dispatch(
     apply_network_tuning(cli);
     ensure_dry_run_supported(cli)?;
     commands::dry_run::set(cli.dry_run);
+    commands::confirm::set_yes(cli.yes);
 
     let api = cli.api;
     let server = cli.server.as_deref();

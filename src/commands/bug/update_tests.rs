@@ -796,6 +796,31 @@ fn build_update_params_rejects_update_with_no_fields() {
     );
 }
 
+// ── Batch confirmation (#313) ───────────────────────────────────────
+
+#[tokio::test]
+async fn bug_update_large_batch_auto_proceeds_when_not_a_tty() {
+    // Test stdin is not a TTY, so a >threshold batch must run without blocking
+    // on a confirmation prompt — agents and pipes are never gated.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    let ids: Vec<u64> = (1..=11).collect();
+    for &id in &ids {
+        mock_put_bug_ok(&mock, id).await;
+    }
+
+    let action = make_update_action(ids.clone());
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+    let output = io.out_str().to_string();
+
+    assert!(result.is_ok(), "large batch should proceed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    assert_eq!(parsed["action"], "updated");
+    assert_eq!(parsed["succeeded"].as_array().unwrap().len(), 11);
+}
+
 // ── Dry run (#308) ──────────────────────────────────────────────────
 
 /// Mount a method-only PUT mock that must never fire — proves a dry run

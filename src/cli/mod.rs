@@ -170,6 +170,15 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub dry_run: bool,
 
+    /// Skip confirmation prompts for large batch mutations.
+    ///
+    /// A `bug update` (or `resolve`/`close`/`reopen`) targeting more than 10
+    /// bugs prompts for confirmation at an interactive terminal; `--yes`
+    /// bypasses that prompt. Non-interactive runs (piped stdin, agents) never
+    /// prompt, so this flag is only needed to override an interactive session.
+    #[arg(short = 'y', long, global = true)]
+    pub yes: bool,
+
     /// Set log verbosity (default: warnings only, -v=info, -vv=debug, -vvv=trace; `RUST_LOG` overrides)
     #[arg(short, long, action = clap::ArgAction::Count, global = true)]
     pub verbose: u8,

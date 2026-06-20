@@ -5,6 +5,7 @@ pub mod comment;
 pub mod completion;
 pub mod component;
 pub mod config;
+pub mod confirm;
 pub mod dry_run;
 mod editor;
 pub mod field;

@@ -331,11 +331,29 @@ pub(super) async fn apply(
         write_update_dry_run(&ids, &params, format, w);
         return Ok(());
     }
+    if !confirm_batch(ids.len(), w)? {
+        let _ = writeln!(w.err, "Aborted; no changes made.");
+        return Ok(());
+    }
     if ids.len() == 1 {
         update_single(client, ids[0], &params, format, w).await
     } else {
         update_batch(client, &ids, &params, format, w).await
     }
+}
+
+/// Prompt for confirmation before a large batch mutation, wiring the real
+/// stdin/TTY into the testable [`crate::commands::confirm`] primitives. The
+/// `should_prompt` gate is checked first, so stdin is locked only when a prompt
+/// is actually shown. Returns whether to proceed.
+fn confirm_batch(count: usize, w: &mut Writers<'_>) -> Result<bool> {
+    use std::io::IsTerminal;
+    let is_tty = std::io::stdin().is_terminal();
+    if !crate::commands::confirm::should_prompt(count, crate::commands::confirm::yes(), is_tty) {
+        return Ok(true);
+    }
+    let stdin = std::io::stdin();
+    crate::commands::confirm::read_yes_no(&mut stdin.lock(), w.err, count)
 }
 
 #[cfg(test)]

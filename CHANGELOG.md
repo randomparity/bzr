@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Confirmation gate for large batch bug mutations, with a global `-y`/`--yes`
+  bypass. A `bug update`/`resolve`/`close`/`reopen` targeting more than 10 bugs
+  now prompts for confirmation at an interactive terminal before writing, so a
+  mistyped ID list cannot mass-mutate bugs unnoticed. Non-interactive runs
+  (piped stdin, agents) auto-bypass and are never blocked; `--yes` skips the
+  prompt explicitly. (#313)
 - Global `--dry-run` flag for bug mutations. Previews `bug create`, `update`,
   `clone`, `resolve`, `close`, `reopen`, and `dup` without writing: it resolves
   and validates the request, then prints the would-be payload and affected bug
