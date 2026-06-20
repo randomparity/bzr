@@ -12,70 +12,39 @@ use crate::output::result_types::write_result;
 use crate::output::writers::Writers;
 use crate::types::OutputFormat;
 
+/// Build the `(name, embedded-json)` registry from a bare list of schema names,
+/// deriving each `schemas/<name>.json` path so a name is written exactly once.
+macro_rules! schema_registry {
+    ($($name:literal),* $(,)?) => {
+        &[ $( ($name, include_str!(concat!("../../schemas/", $name, ".json"))) ),* ]
+    };
+}
+
 /// Every published schema as `(name, schema-json)`, embedded from `schemas/`.
 /// Names are agent-facing and stable; keep this list sorted for the `schema`
 /// listing and the not-found hint.
-pub(crate) const SCHEMAS: &[(&str, &str)] = &[
-    (
-        "action-result",
-        include_str!("../../schemas/action-result.json"),
-    ),
-    ("attachment", include_str!("../../schemas/attachment.json")),
-    (
-        "batch-create-result",
-        include_str!("../../schemas/batch-create-result.json"),
-    ),
-    (
-        "batch-result",
-        include_str!("../../schemas/batch-result.json"),
-    ),
-    ("bug", include_str!("../../schemas/bug.json")),
-    (
-        "classification",
-        include_str!("../../schemas/classification.json"),
-    ),
-    ("comment", include_str!("../../schemas/comment.json")),
-    ("component", include_str!("../../schemas/component.json")),
-    (
-        "config-result",
-        include_str!("../../schemas/config-result.json"),
-    ),
-    (
-        "count-result",
-        include_str!("../../schemas/count-result.json"),
-    ),
-    (
-        "download-result",
-        include_str!("../../schemas/download-result.json"),
-    ),
-    (
-        "dry-run-result",
-        include_str!("../../schemas/dry-run-result.json"),
-    ),
-    (
-        "field-value",
-        include_str!("../../schemas/field-value.json"),
-    ),
-    ("group", include_str!("../../schemas/group.json")),
-    (
-        "membership-result",
-        include_str!("../../schemas/membership-result.json"),
-    ),
-    (
-        "multi-bug-view",
-        include_str!("../../schemas/multi-bug-view.json"),
-    ),
-    ("product", include_str!("../../schemas/product.json")),
-    (
-        "search-result",
-        include_str!("../../schemas/search-result.json"),
-    ),
-    ("tag-result", include_str!("../../schemas/tag-result.json")),
-    (
-        "upload-result",
-        include_str!("../../schemas/upload-result.json"),
-    ),
-    ("user", include_str!("../../schemas/user.json")),
+pub(crate) const SCHEMAS: &[(&str, &str)] = schema_registry![
+    "action-result",
+    "attachment",
+    "batch-create-result",
+    "batch-result",
+    "bug",
+    "classification",
+    "comment",
+    "component",
+    "config-result",
+    "count-result",
+    "download-result",
+    "dry-run-result",
+    "field-value",
+    "group",
+    "membership-result",
+    "multi-bug-view",
+    "product",
+    "search-result",
+    "tag-result",
+    "upload-result",
+    "user",
 ];
 
 /// Look up a schema by name.
