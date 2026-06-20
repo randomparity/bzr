@@ -83,7 +83,7 @@ async fn bug_clone_copies_fields() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::Clone {
+    let action = BugAction::Clone(crate::cli::CloneArgs {
         id: "100".to_string(),
         summary: None,
         product: None,
@@ -100,7 +100,7 @@ async fn bug_clone_copies_fields() {
         add_blocks: false,
         no_cc: false,
         no_keywords: false,
-    };
+    });
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
@@ -161,7 +161,7 @@ async fn bug_clone_reports_id_when_comment_post_fails() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::Clone {
+    let action = BugAction::Clone(crate::cli::CloneArgs {
         id: "100".to_string(),
         summary: None,
         product: None,
@@ -178,7 +178,7 @@ async fn bug_clone_reports_id_when_comment_post_fails() {
         add_blocks: false,
         no_cc: false,
         no_keywords: false,
-    };
+    });
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
@@ -257,7 +257,7 @@ async fn bug_clone_no_comment_skips_comment() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::Clone {
+    let action = BugAction::Clone(crate::cli::CloneArgs {
         id: "100".to_string(),
         summary: None,
         product: None,
@@ -274,7 +274,7 @@ async fn bug_clone_no_comment_skips_comment() {
         add_blocks: false,
         no_cc: false,
         no_keywords: false,
-    };
+    });
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
@@ -328,7 +328,7 @@ async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::Clone {
+    let action = BugAction::Clone(crate::cli::CloneArgs {
         id: "100".to_string(),
         summary: None,
         product: None,
@@ -345,7 +345,7 @@ async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
         add_blocks: false,
         no_cc: false,
         no_keywords: false,
-    };
+    });
     let mut io = crate::test_helpers::CapturedIo::new();
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())

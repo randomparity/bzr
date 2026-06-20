@@ -1,4 +1,4 @@
-use crate::cli::{BugAction, FieldArgs};
+use crate::cli::{FieldArgs, MyArgs};
 use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::resources::bug::{canonical_field_list, write_bugs, ColumnSpec};
@@ -7,11 +7,11 @@ use crate::types::{OutputFormat, SearchParams};
 
 pub(super) async fn handle(
     client: &BugzillaClient,
-    action: &BugAction,
+    args: &MyArgs,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let BugAction::My {
+    let MyArgs {
         created,
         cc,
         all,
@@ -24,10 +24,7 @@ pub(super) async fn handle(
         sort_args,
         page_args: crate::cli::PageArgs { offset, paginate },
         count,
-    } = action
-    else {
-        unreachable!()
-    };
+    } = args;
 
     super::ensure_no_paging_with_count(*count, *offset, *paginate)?;
 

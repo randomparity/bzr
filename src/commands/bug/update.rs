@@ -1,4 +1,4 @@
-use crate::cli::BugAction;
+use crate::cli::{BugAction, UpdateArgs};
 use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::result_types::{
@@ -97,21 +97,26 @@ pub(super) fn resolve_comment(
 
 pub(super) fn validate_action(action: &BugAction) -> Result<()> {
     match action {
-        BugAction::Update {
-            ids,
-            alias: Some(_),
-            ..
-        } if ids.len() > 1 => Err(crate::error::BzrError::InputValidation(
-            "--alias can only be used when updating one bug".into(),
-        )),
+        BugAction::Update(args) => validate_args(args),
         _ => Ok(()),
     }
 }
 
-fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)> {
-    validate_action(action)?;
+/// Reject `--alias` combined with multiple IDs (Bugzilla allows alias updates
+/// for a single bug only).
+fn validate_args(args: &UpdateArgs) -> Result<()> {
+    if args.alias.is_some() && args.ids.len() > 1 {
+        return Err(crate::error::BzrError::InputValidation(
+            "--alias can only be used when updating one bug".into(),
+        ));
+    }
+    Ok(())
+}
 
-    let BugAction::Update {
+fn build_update_params(args: &UpdateArgs) -> Result<(Vec<u64>, UpdateBugParams)> {
+    validate_args(args)?;
+
+    let UpdateArgs {
         ids,
         status,
         resolution,
@@ -145,10 +150,7 @@ fn build_update_params(action: &BugAction) -> Result<(Vec<u64>, UpdateBugParams)
         comment_file,
         comment_private,
         expect_unchanged_since: _,
-    } = action
-    else {
-        unreachable!()
-    };
+    } = args;
 
     let flags = crate::commands::flags::parse_flags(flag)?;
     let deadline = crate::validation::parse_optional_date_only(deadline.as_deref(), "--deadline")?;
@@ -290,18 +292,12 @@ async fn update_batch(
 
 pub(super) async fn handle(
     client: &BugzillaClient,
-    action: &BugAction,
+    args: &UpdateArgs,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let (ids, params) = build_update_params(action)?;
-    let BugAction::Update {
-        expect_unchanged_since,
-        ..
-    } = action
-    else {
-        unreachable!()
-    };
+    let (ids, params) = build_update_params(args)?;
+    let expect_unchanged_since = &args.expect_unchanged_since;
     // Optimistic-concurrency guard, before any write. Skipped under --dry-run,
     // which performs no write (and `apply` short-circuits to a preview anyway).
     if let Some(expected) = expect_unchanged_since {

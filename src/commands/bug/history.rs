@@ -1,4 +1,4 @@
-use crate::cli::BugAction;
+use crate::cli::HistoryArgs;
 use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::resources::bug::write_history;
@@ -8,13 +8,11 @@ use crate::validation::parse_optional_date;
 
 pub(super) async fn handle(
     client: &BugzillaClient,
-    action: &BugAction,
+    args: &HistoryArgs,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let BugAction::History { id, since } = action else {
-        unreachable!()
-    };
+    let HistoryArgs { id, since } = args;
 
     let canonical_since = parse_optional_date(since.as_deref(), "--since")?;
 

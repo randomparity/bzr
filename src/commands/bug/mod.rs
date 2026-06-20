@@ -21,12 +21,12 @@ mod view;
 /// The `--fields` / `--exclude-fields` column spec for the four field-bearing
 /// bug actions, or `None` for actions that take no field selection.
 fn bug_column_spec(action: &BugAction) -> Option<ColumnSpec<'_>> {
-    let (BugAction::List { field_args, .. }
-    | BugAction::My { field_args, .. }
-    | BugAction::Search { field_args, .. }
-    | BugAction::View { field_args, .. }) = action
-    else {
-        return None;
+    let field_args = match action {
+        BugAction::List(a) => &a.field_args,
+        BugAction::My(a) => &a.field_args,
+        BugAction::Search(a) => &a.field_args,
+        BugAction::View(a) => &a.field_args,
+        _ => return None,
     };
     Some(ColumnSpec::new(
         field_args.fields.as_deref(),
@@ -68,9 +68,9 @@ pub(super) fn ensure_no_paging_with_count(
 pub fn is_dry_runnable(action: &BugAction) -> bool {
     matches!(
         action,
-        BugAction::Create { .. }
-            | BugAction::Update { .. }
-            | BugAction::Clone { .. }
+        BugAction::Create(_)
+            | BugAction::Update(_)
+            | BugAction::Clone(_)
             | BugAction::Resolve { .. }
             | BugAction::Close { .. }
             | BugAction::Reopen { .. }
@@ -91,8 +91,10 @@ pub async fn execute(
     // `--web` resolves the bug's URL from local config and opens (or prints)
     // it — no auth, no network, no field selection. Short-circuit before any
     // of the connect/validate machinery below.
-    if let BugAction::View { ids, web: true, .. } = action {
-        return view::handle_web(ids, server, w);
+    if let BugAction::View(args) = action {
+        if args.web {
+            return view::handle_web(&args.ids, server, w);
+        }
     }
 
     // Resolve the field selection before any network I/O. A selection that
@@ -106,7 +108,7 @@ pub async fn execute(
     // tokens warn once on stderr for JSON output and for `bug view` table
     // output, since those lenient paths would otherwise hide a typo.
     if let Some(spec) = bug_column_spec(action) {
-        let is_view = matches!(action, BugAction::View { .. });
+        let is_view = matches!(action, BugAction::View(_));
         match format {
             OutputFormat::Table => {
                 if is_view {
@@ -127,24 +129,24 @@ pub async fn execute(
     // Search builds its own client because --from-url may resolve a different
     // server from the URL hostname. Skip the shared connect to avoid double
     // auth/version detection on every `bug search` invocation.
-    if let BugAction::Search { .. } = action {
-        return search::handle(action, server, format, api, w).await;
+    if let BugAction::Search(args) = action {
+        return search::handle(args, server, format, api, w).await;
     }
 
     let client = crate::commands::shared::connect_and_configure(server, api).await?;
 
     match action {
-        BugAction::List { .. } => list::handle(&client, action, format, w).await,
-        BugAction::View { .. } => view::handle(&client, action, format, w).await,
-        BugAction::History { .. } => history::handle(&client, action, format, w).await,
-        BugAction::My { .. } => my::handle(&client, action, format, w).await,
-        BugAction::Create { .. } => create::handle(&client, action, format, w).await,
-        BugAction::Clone { .. } => clone::handle(&client, action, format, w).await,
-        BugAction::Update { .. } => update::handle(&client, action, format, w).await,
+        BugAction::List(args) => list::handle(&client, args, format, w).await,
+        BugAction::View(args) => view::handle(&client, args, format, w).await,
+        BugAction::History(args) => history::handle(&client, args, format, w).await,
+        BugAction::My(args) => my::handle(&client, args, format, w).await,
+        BugAction::Create(args) => create::handle(&client, args, format, w).await,
+        BugAction::Clone(args) => clone::handle(&client, args, format, w).await,
+        BugAction::Update(args) => update::handle(&client, args, format, w).await,
         BugAction::Resolve { .. }
         | BugAction::Close { .. }
         | BugAction::Reopen { .. }
         | BugAction::Dup { .. } => verbs::handle(&client, action, format, w).await,
-        BugAction::Search { .. } => unreachable!("handled above"),
+        BugAction::Search(_) => unreachable!("handled above"),
     }
 }

@@ -41,7 +41,7 @@ async fn bug_my_returns_assigned_by_default() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::My {
+    let action = BugAction::My(crate::cli::MyArgs {
         page_args: crate::cli::PageArgs::default(),
         created: false,
         cc: false,
@@ -54,7 +54,7 @@ async fn bug_my_returns_assigned_by_default() {
         },
         sort_args: crate::cli::SortArgs::default(),
         count: false,
-    };
+    });
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
@@ -85,7 +85,7 @@ async fn bug_my_passes_status_limit_and_field_filters() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::My {
+    let action = BugAction::My(crate::cli::MyArgs {
         page_args: crate::cli::PageArgs::default(),
         created: false,
         cc: false,
@@ -98,7 +98,7 @@ async fn bug_my_passes_status_limit_and_field_filters() {
         },
         sort_args: crate::cli::SortArgs::default(),
         count: false,
-    };
+    });
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
@@ -127,7 +127,7 @@ async fn bug_my_created_only_runs_creator_search_not_assigned() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::My {
+    let action = BugAction::My(crate::cli::MyArgs {
         page_args: crate::cli::PageArgs::default(),
         created: true,
         cc: false,
@@ -140,7 +140,7 @@ async fn bug_my_created_only_runs_creator_search_not_assigned() {
         },
         sort_args: crate::cli::SortArgs::default(),
         count: false,
-    };
+    });
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
@@ -168,7 +168,7 @@ async fn bug_my_cc_only_runs_cc_search_not_assigned_or_creator() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::My {
+    let action = BugAction::My(crate::cli::MyArgs {
         page_args: crate::cli::PageArgs::default(),
         created: false,
         cc: true,
@@ -181,7 +181,7 @@ async fn bug_my_cc_only_runs_cc_search_not_assigned_or_creator() {
         },
         sort_args: crate::cli::SortArgs::default(),
         count: false,
-    };
+    });
     let mut __io4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
@@ -216,7 +216,7 @@ async fn bug_my_all_deduplicates() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::My {
+    let action = BugAction::My(crate::cli::MyArgs {
         page_args: crate::cli::PageArgs::default(),
         created: false,
         cc: false,
@@ -229,7 +229,7 @@ async fn bug_my_all_deduplicates() {
         },
         sort_args: crate::cli::SortArgs::default(),
         count: false,
-    };
+    });
     let mut __io5 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
@@ -265,7 +265,7 @@ async fn bug_my_all_count_reports_distinct_total() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::My {
+    let action = BugAction::My(crate::cli::MyArgs {
         page_args: crate::cli::PageArgs::default(),
         created: false,
         cc: false,
@@ -278,7 +278,7 @@ async fn bug_my_all_count_reports_distinct_total() {
         },
         sort_args: crate::cli::SortArgs::default(),
         count: true,
-    };
+    });
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())

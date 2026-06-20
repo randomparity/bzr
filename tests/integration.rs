@@ -18,7 +18,7 @@ use wiremock::{Mock, ResponseTemplate};
 /// Tests that exercise specific fields construct this and mutate the
 /// fields they care about.
 fn empty_list_action() -> bzr::cli::BugAction {
-    bzr::cli::BugAction::List {
+    bzr::cli::BugAction::List(bzr::cli::ListArgs {
         page_args: bzr::cli::PageArgs::default(),
         product: vec![],
         component: vec![],
@@ -47,7 +47,7 @@ fn empty_list_action() -> bzr::cli::BugAction {
         url: vec![],
         sort_args: bzr::cli::SortArgs::default(),
         count: false,
-    }
+    })
 }
 
 // ── Bug commands ──────────────────────────────────────────────────────
@@ -103,12 +103,12 @@ async fn bug_list_changed_since_canonicalizes_bare_date_on_wire() {
         .await;
 
     let mut action = empty_list_action();
-    if let bzr::cli::BugAction::List {
+    if let bzr::cli::BugAction::List(bzr::cli::ListArgs {
         page_args: _,
         product,
         changed_since,
         ..
-    } = &mut action
+    }) = &mut action
     {
         *product = vec!["Firefox".into()];
         *changed_since = Some("2026-04-01".into());
@@ -146,7 +146,7 @@ async fn bug_view_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::BugAction::View {
+    let action = bzr::cli::BugAction::View(bzr::cli::ViewArgs {
         ids: vec!["42".to_string()],
         permissive: false,
         web: false,
@@ -154,7 +154,7 @@ async fn bug_view_integration() {
             fields: None,
             exclude_fields: None,
         },
-    };
+    });
     let mut __io3 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
         &action,
@@ -185,7 +185,7 @@ async fn bug_search_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::BugAction::Search {
+    let action = bzr::cli::BugAction::Search(bzr::cli::SearchArgs {
         page_args: bzr::cli::PageArgs::default(),
         query: Some("crash".to_string()),
         from_url: None,
@@ -197,7 +197,7 @@ async fn bug_search_integration() {
         },
         sort_args: bzr::cli::SortArgs::default(),
         count: false,
-    };
+    });
     let mut __io4 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
         &action,
@@ -225,7 +225,7 @@ async fn bug_create_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::BugAction::Create {
+    let action = bzr::cli::BugAction::Create(bzr::cli::CreateArgs {
         from_json: None,
         template: None,
         product: Some("TestProduct".to_string()),
@@ -242,7 +242,7 @@ async fn bug_create_integration() {
         blocks: vec![],
         depends_on: vec![],
         create_fields: bzr::cli::CreateFieldArgs::default(),
-    };
+    });
     let mut __io5 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
         &action,
@@ -781,7 +781,7 @@ async fn api_error_propagates() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::BugAction::View {
+    let action = bzr::cli::BugAction::View(bzr::cli::ViewArgs {
         ids: vec!["99999".to_string()],
         permissive: false,
         web: false,
@@ -789,7 +789,7 @@ async fn api_error_propagates() {
             fields: None,
             exclude_fields: None,
         },
-    };
+    });
     let result = bzr::commands::bug::execute(
         &action,
         Some("test"),
@@ -827,10 +827,10 @@ async fn bug_history_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::BugAction::History {
+    let action = bzr::cli::BugAction::History(bzr::cli::HistoryArgs {
         id: 42,
         since: None,
-    };
+    });
     let mut __io16 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
         &action,
@@ -870,7 +870,7 @@ async fn bug_update_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::BugAction::Update {
+    let action = bzr::cli::BugAction::Update(bzr::cli::UpdateArgs {
         ids: vec![42],
         status: Some("RESOLVED".to_string()),
         resolution: Some("FIXED".to_string()),
@@ -904,7 +904,7 @@ async fn bug_update_integration() {
         comment_file: None,
         comment_private: false,
         expect_unchanged_since: None,
-    };
+    });
     let mut __io17 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
         &action,
@@ -945,7 +945,7 @@ async fn bug_update_scalar_parity_fields_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::BugAction::Update {
+    let action = bzr::cli::BugAction::Update(bzr::cli::UpdateArgs {
         ids: vec![42],
         status: None,
         resolution: None,
@@ -979,7 +979,7 @@ async fn bug_update_scalar_parity_fields_integration() {
         comment_file: None,
         comment_private: false,
         expect_unchanged_since: None,
-    };
+    });
 
     let mut io = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
@@ -1017,7 +1017,7 @@ async fn bug_update_with_comment_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::BugAction::Update {
+    let action = bzr::cli::BugAction::Update(bzr::cli::UpdateArgs {
         ids: vec![42],
         status: Some("RESOLVED".to_string()),
         resolution: Some("FIXED".to_string()),
@@ -1051,7 +1051,7 @@ async fn bug_update_with_comment_integration() {
         comment_file: None,
         comment_private: true,
         expect_unchanged_since: None,
-    };
+    });
     let mut __io18 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
         &action,
@@ -1301,7 +1301,7 @@ async fn attachment_upload_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::AttachmentAction::Upload {
+    let action = bzr::cli::AttachmentAction::Upload(bzr::cli::attachment::UploadArgs {
         bug_id: 42,
         file: upload_file.to_string_lossy().into_owned(),
         summary: Some("Test upload".to_string()),
@@ -1313,7 +1313,7 @@ async fn attachment_upload_integration() {
         comment: None,
         comment_private: false,
         flag: vec![],
-    };
+    });
     let result = bzr::commands::attachment::execute(
         &action,
         Some("test"),
@@ -1347,7 +1347,7 @@ async fn attachment_upload_with_comment_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::AttachmentAction::Upload {
+    let action = bzr::cli::AttachmentAction::Upload(bzr::cli::attachment::UploadArgs {
         bug_id: 42,
         file: upload_file.to_string_lossy().into_owned(),
         summary: Some("Test upload".to_string()),
@@ -1359,7 +1359,7 @@ async fn attachment_upload_with_comment_integration() {
         comment: Some("see #6789 for context".to_string()),
         comment_private: false,
         flag: vec![],
-    };
+    });
     let result = bzr::commands::attachment::execute(
         &action,
         Some("test"),
@@ -1392,7 +1392,7 @@ async fn attachment_upload_with_is_patch_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::AttachmentAction::Upload {
+    let action = bzr::cli::AttachmentAction::Upload(bzr::cli::attachment::UploadArgs {
         bug_id: 42,
         file: upload_file.to_string_lossy().into_owned(),
         summary: Some("Test patch".to_string()),
@@ -1404,7 +1404,7 @@ async fn attachment_upload_with_is_patch_integration() {
         comment: None,
         comment_private: false,
         flag: vec![],
-    };
+    });
     let result = bzr::commands::attachment::execute(
         &action,
         Some("test"),
@@ -1460,7 +1460,7 @@ async fn attachment_upload_with_comment_private_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::AttachmentAction::Upload {
+    let action = bzr::cli::AttachmentAction::Upload(bzr::cli::attachment::UploadArgs {
         bug_id: 42,
         file: upload_file.to_string_lossy().into_owned(),
         summary: Some("test".into()),
@@ -1472,7 +1472,7 @@ async fn attachment_upload_with_comment_private_integration() {
         comment: Some("sensitive".into()),
         comment_private: true,
         flag: vec![],
-    };
+    });
     let result = bzr::commands::attachment::execute(
         &action,
         Some("test"),
@@ -1544,7 +1544,7 @@ async fn attachment_update_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::AttachmentAction::Update {
+    let action = bzr::cli::AttachmentAction::Update(bzr::cli::attachment::UpdateArgs {
         id: 99,
         summary: Some("Updated summary".to_string()),
         file_name: None,
@@ -1556,7 +1556,7 @@ async fn attachment_update_integration() {
         private: false,
         no_private: false,
         flag: vec![],
-    };
+    });
     let result = bzr::commands::attachment::execute(
         &action,
         Some("test"),
@@ -2538,13 +2538,13 @@ async fn bug_list_issue_158_mixed_positive_and_negation_reaches_wire() {
         .await;
 
     let mut action = empty_list_action();
-    if let bzr::cli::BugAction::List {
+    if let bzr::cli::BugAction::List(bzr::cli::ListArgs {
         page_args: _,
         product,
         whiteboard,
         resolution,
         ..
-    } = &mut action
+    }) = &mut action
     {
         *product = vec!["P".into()];
         *whiteboard = vec!["!wip".into()];

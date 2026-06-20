@@ -1,4 +1,4 @@
-use clap::Subcommand;
+use clap::{Args, Subcommand};
 
 /// Argument IDs of the structured filter flags on `query save`. Centralized so
 /// the mutual-exclusivity lists on `--from-url` / `--search` stay in sync when a
@@ -21,6 +21,248 @@ const FILTER_FLAG_ARGS: [&str; 15] = [
     "qa_contact",
     "url",
 ];
+
+/// Arguments for `query save`.
+#[derive(Debug, Args)]
+pub struct SaveArgs {
+    /// Query name
+    pub name: String,
+    /// Import query from a Bugzilla `buglist.cgi` URL.
+    ///
+    /// Parses the URL's query parameters into known filters
+    /// where possible; unrecognized parameters are stored
+    /// verbatim and passed through at run time. Mutually
+    /// exclusive with `--search` and every filter flag.
+    #[arg(long, conflicts_with = "search", conflicts_with_all = FILTER_FLAG_ARGS)]
+    pub from_url: Option<String>,
+    /// Free-text search query (creates a `search`-kind saved query).
+    ///
+    /// Mutually exclusive with `--from-url` and the structured
+    /// filter flags. Stores the query as a free-text search;
+    /// `bzr query run <name>` then issues the same search
+    /// against the configured server.
+    #[arg(long, conflicts_with_all = FILTER_FLAG_ARGS)]
+    pub search: Option<String>,
+    /// Filter by product (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub product: Vec<String>,
+    /// Filter by component (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub component: Vec<String>,
+    /// Filter by status (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub status: Vec<String>,
+    /// Filter by assignee (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub assignee: Vec<String>,
+    /// Filter by creator (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub creator: Vec<String>,
+    /// Filter by priority (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub priority: Vec<String>,
+    /// Filter by severity (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub severity: Vec<String>,
+    /// Max number of results
+    #[arg(long)]
+    pub limit: Option<u32>,
+    /// Only return these fields (comma-separated). Built-in fields and
+    /// Bugzilla custom fields named `cf_*` are valid.
+    #[arg(long)]
+    pub fields: Option<String>,
+    /// Exclude these fields (comma-separated), including custom `cf_*`
+    /// fields when requested.
+    #[arg(long)]
+    pub exclude_fields: Option<String>,
+    /// Filter to bugs created at or after this date (saved into the query).
+    ///
+    /// Accepts the same forms as `bzr bug list --created-since`.
+    #[arg(long, value_name = "DATE")]
+    pub created_since: Option<String>,
+    /// Filter to bugs last modified at or after this date (saved into the query).
+    ///
+    /// Accepts the same forms as `bzr bug list --changed-since`.
+    #[arg(long, value_name = "DATE")]
+    pub changed_since: Option<String>,
+    /// Filter by Status Whiteboard substring (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub whiteboard: Vec<String>,
+    /// Filter by Target Milestone (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub target_milestone: Vec<String>,
+    /// Filter by Version (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub version: Vec<String>,
+    /// Filter by Operating System (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub op_sys: Vec<String>,
+    /// Filter by Platform (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub platform: Vec<String>,
+    /// Filter by Resolution (repeatable for OR; prefix with ! to exclude); empty matches open bugs
+    #[arg(long)]
+    pub resolution: Vec<String>,
+    /// Filter by QA Contact login (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub qa_contact: Vec<String>,
+    /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub url: Vec<String>,
+    #[command(flatten)]
+    pub sort_args: crate::cli::SortArgs,
+}
+
+/// Arguments for `query show`.
+#[derive(Debug, Args)]
+pub struct ShowArgs {
+    /// Query name
+    pub name: String,
+}
+
+/// Arguments for `query delete`.
+#[derive(Debug, Args)]
+pub struct DeleteArgs {
+    /// Query name
+    pub name: String,
+}
+
+/// Arguments for `query update`.
+#[derive(Debug, Args)]
+pub struct UpdateArgs {
+    /// Query name
+    pub name: String,
+    /// Replace the free-text search
+    #[arg(long)]
+    pub search: Option<String>,
+    /// Replace the product filter (repeatable)
+    #[arg(long)]
+    pub product: Vec<String>,
+    /// Replace the component filter (repeatable)
+    #[arg(long)]
+    pub component: Vec<String>,
+    /// Replace the status filter (repeatable)
+    #[arg(long)]
+    pub status: Vec<String>,
+    /// Replace the assignee filter (repeatable)
+    #[arg(long)]
+    pub assignee: Vec<String>,
+    /// Replace the creator filter (repeatable)
+    #[arg(long)]
+    pub creator: Vec<String>,
+    /// Replace the priority filter (repeatable)
+    #[arg(long)]
+    pub priority: Vec<String>,
+    /// Replace the severity filter (repeatable)
+    #[arg(long)]
+    pub severity: Vec<String>,
+    /// Replace the saved limit
+    #[arg(long)]
+    pub limit: Option<u32>,
+    /// Replace the saved field selection (comma-separated)
+    #[arg(long)]
+    pub fields: Option<String>,
+    /// Replace the saved field exclusion (comma-separated)
+    #[arg(long)]
+    pub exclude_fields: Option<String>,
+    /// Replace the saved `creation_time` filter (same forms as `bzr bug list`)
+    #[arg(long, value_name = "DATE")]
+    pub created_since: Option<String>,
+    /// Replace the saved `last_change_time` filter
+    #[arg(long, value_name = "DATE")]
+    pub changed_since: Option<String>,
+    /// Replace the Status Whiteboard filter (repeatable)
+    #[arg(long)]
+    pub whiteboard: Vec<String>,
+    /// Replace the Target Milestone filter (repeatable)
+    #[arg(long)]
+    pub target_milestone: Vec<String>,
+    /// Replace the Version filter (repeatable)
+    #[arg(long)]
+    pub version: Vec<String>,
+    /// Replace the Operating System filter (repeatable)
+    #[arg(long)]
+    pub op_sys: Vec<String>,
+    /// Replace the Platform filter (repeatable)
+    #[arg(long)]
+    pub platform: Vec<String>,
+    /// Replace the Resolution filter (repeatable)
+    #[arg(long)]
+    pub resolution: Vec<String>,
+    /// Replace the QA Contact filter (repeatable)
+    #[arg(long)]
+    pub qa_contact: Vec<String>,
+    /// Replace the URL filter (repeatable)
+    #[arg(long)]
+    pub url: Vec<String>,
+    /// Reset a field to unset (repeatable). Names match the long flags.
+    #[arg(long, value_name = "FIELD")]
+    pub clear: Vec<String>,
+    #[command(flatten)]
+    pub sort_args: crate::cli::SortArgs,
+}
+
+/// Arguments for `query run`.
+#[derive(Debug, Args)]
+pub struct RunArgs {
+    /// Query name
+    pub name: String,
+    /// Override the saved limit
+    #[arg(long)]
+    pub limit: Option<u32>,
+    /// Fields to request from the server (comma-separated). Table:
+    /// selects which columns to show (in order). --json: the JSON object
+    /// contains only the selected fields (id is included only if requested).
+    /// Built-in fields and Bugzilla custom fields named `cf_*` are valid.
+    #[arg(long)]
+    pub fields: Option<String>,
+    /// Fields to drop from the server request (comma-separated). Table:
+    /// removes those columns. --json: the JSON object omits the dropped
+    /// fields (including custom `cf_*` fields and id, if excluded).
+    #[arg(long)]
+    pub exclude_fields: Option<String>,
+    /// Override the server to run against
+    #[arg(long)]
+    pub server: Option<String>,
+    /// Override the saved `creation_time` filter for this run.
+    ///
+    /// Same accepted forms as `bzr bug list --created-since`.
+    #[arg(long, value_name = "DATE")]
+    pub created_since: Option<String>,
+    /// Override the saved `last_change_time` filter for this run.
+    ///
+    /// Same accepted forms as `bzr bug list --changed-since`.
+    #[arg(long, value_name = "DATE")]
+    pub changed_since: Option<String>,
+    /// Override the saved Whiteboard filter for this run.
+    #[arg(long)]
+    pub whiteboard: Vec<String>,
+    /// Override the saved Target Milestone filter.
+    #[arg(long)]
+    pub target_milestone: Vec<String>,
+    /// Override the saved Version filter.
+    #[arg(long)]
+    pub version: Vec<String>,
+    /// Override the saved Operating System filter.
+    #[arg(long)]
+    pub op_sys: Vec<String>,
+    /// Override the saved Platform filter.
+    #[arg(long)]
+    pub platform: Vec<String>,
+    /// Override the saved Resolution filter.
+    #[arg(long)]
+    pub resolution: Vec<String>,
+    /// Override the saved QA Contact filter.
+    #[arg(long)]
+    pub qa_contact: Vec<String>,
+    /// Override the saved URL filter.
+    #[arg(long)]
+    pub url: Vec<String>,
+    #[command(flatten)]
+    pub sort_args: crate::cli::SortArgs,
+    #[command(flatten)]
+    pub page_args: crate::cli::PageArgs,
+}
 
 #[derive(Subcommand)]
 #[expect(
@@ -64,94 +306,7 @@ pub enum QueryAction {
     /// bzr-query-list(1) for the inventory, and bzr-bug-list(1) for
     /// one-shot listing.
     #[command(verbatim_doc_comment)]
-    Save {
-        /// Query name
-        name: String,
-        /// Import query from a Bugzilla `buglist.cgi` URL.
-        ///
-        /// Parses the URL's query parameters into known filters
-        /// where possible; unrecognized parameters are stored
-        /// verbatim and passed through at run time. Mutually
-        /// exclusive with `--search` and every filter flag.
-        #[arg(long, conflicts_with = "search", conflicts_with_all = FILTER_FLAG_ARGS)]
-        from_url: Option<String>,
-        /// Free-text search query (creates a `search`-kind saved query).
-        ///
-        /// Mutually exclusive with `--from-url` and the structured
-        /// filter flags. Stores the query as a free-text search;
-        /// `bzr query run <name>` then issues the same search
-        /// against the configured server.
-        #[arg(long, conflicts_with_all = FILTER_FLAG_ARGS)]
-        search: Option<String>,
-        /// Filter by product (repeatable for OR; prefix with ! to exclude)
-        #[arg(long)]
-        product: Vec<String>,
-        /// Filter by component (repeatable for OR; prefix with ! to exclude)
-        #[arg(long)]
-        component: Vec<String>,
-        /// Filter by status (repeatable for OR; prefix with ! to exclude)
-        #[arg(long)]
-        status: Vec<String>,
-        /// Filter by assignee (repeatable for OR; prefix with ! to exclude)
-        #[arg(long)]
-        assignee: Vec<String>,
-        /// Filter by creator (repeatable for OR; prefix with ! to exclude)
-        #[arg(long)]
-        creator: Vec<String>,
-        /// Filter by priority (repeatable for OR; prefix with ! to exclude)
-        #[arg(long)]
-        priority: Vec<String>,
-        /// Filter by severity (repeatable for OR; prefix with ! to exclude)
-        #[arg(long)]
-        severity: Vec<String>,
-        /// Max number of results
-        #[arg(long)]
-        limit: Option<u32>,
-        /// Only return these fields (comma-separated). Built-in fields and
-        /// Bugzilla custom fields named `cf_*` are valid.
-        #[arg(long)]
-        fields: Option<String>,
-        /// Exclude these fields (comma-separated), including custom `cf_*`
-        /// fields when requested.
-        #[arg(long)]
-        exclude_fields: Option<String>,
-        /// Filter to bugs created at or after this date (saved into the query).
-        ///
-        /// Accepts the same forms as `bzr bug list --created-since`.
-        #[arg(long, value_name = "DATE")]
-        created_since: Option<String>,
-        /// Filter to bugs last modified at or after this date (saved into the query).
-        ///
-        /// Accepts the same forms as `bzr bug list --changed-since`.
-        #[arg(long, value_name = "DATE")]
-        changed_since: Option<String>,
-        /// Filter by Status Whiteboard substring (repeatable for OR; prefix with ! to exclude)
-        #[arg(long)]
-        whiteboard: Vec<String>,
-        /// Filter by Target Milestone (repeatable for OR; prefix with ! to exclude)
-        #[arg(long)]
-        target_milestone: Vec<String>,
-        /// Filter by Version (repeatable for OR; prefix with ! to exclude)
-        #[arg(long)]
-        version: Vec<String>,
-        /// Filter by Operating System (repeatable for OR; prefix with ! to exclude)
-        #[arg(long)]
-        op_sys: Vec<String>,
-        /// Filter by Platform (repeatable for OR; prefix with ! to exclude)
-        #[arg(long)]
-        platform: Vec<String>,
-        /// Filter by Resolution (repeatable for OR; prefix with ! to exclude); empty matches open bugs
-        #[arg(long)]
-        resolution: Vec<String>,
-        /// Filter by QA Contact login (repeatable for OR; prefix with ! to exclude)
-        #[arg(long)]
-        qa_contact: Vec<String>,
-        /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude)
-        #[arg(long)]
-        url: Vec<String>,
-        #[command(flatten)]
-        sort_args: crate::cli::SortArgs,
-    },
+    Save(SaveArgs),
     /// List all saved queries.
     ///
     /// Prints each query's name, kind (filter / search / url), and a
@@ -181,10 +336,7 @@ pub enum QueryAction {
     /// See bzr-query-run(1) to execute and bzr-query-list(1) for
     /// the inventory.
     #[command(verbatim_doc_comment)]
-    Show {
-        /// Query name
-        name: String,
-    },
+    Show(ShowArgs),
 
     /// Delete a saved query.
     ///
@@ -199,10 +351,7 @@ pub enum QueryAction {
     ///
     /// See bzr-query-list(1) to verify the query exists first.
     #[command(verbatim_doc_comment)]
-    Delete {
-        /// Query name
-        name: String,
-    },
+    Delete(DeleteArgs),
 
     /// Update fields of an existing saved query in place.
     ///
@@ -227,78 +376,7 @@ pub enum QueryAction {
     /// See bzr-query-save(1) to create one and bzr-query-show(1) to
     /// inspect the result.
     #[command(verbatim_doc_comment)]
-    Update {
-        /// Query name
-        name: String,
-        /// Replace the free-text search
-        #[arg(long)]
-        search: Option<String>,
-        /// Replace the product filter (repeatable)
-        #[arg(long)]
-        product: Vec<String>,
-        /// Replace the component filter (repeatable)
-        #[arg(long)]
-        component: Vec<String>,
-        /// Replace the status filter (repeatable)
-        #[arg(long)]
-        status: Vec<String>,
-        /// Replace the assignee filter (repeatable)
-        #[arg(long)]
-        assignee: Vec<String>,
-        /// Replace the creator filter (repeatable)
-        #[arg(long)]
-        creator: Vec<String>,
-        /// Replace the priority filter (repeatable)
-        #[arg(long)]
-        priority: Vec<String>,
-        /// Replace the severity filter (repeatable)
-        #[arg(long)]
-        severity: Vec<String>,
-        /// Replace the saved limit
-        #[arg(long)]
-        limit: Option<u32>,
-        /// Replace the saved field selection (comma-separated)
-        #[arg(long)]
-        fields: Option<String>,
-        /// Replace the saved field exclusion (comma-separated)
-        #[arg(long)]
-        exclude_fields: Option<String>,
-        /// Replace the saved `creation_time` filter (same forms as `bzr bug list`)
-        #[arg(long, value_name = "DATE")]
-        created_since: Option<String>,
-        /// Replace the saved `last_change_time` filter
-        #[arg(long, value_name = "DATE")]
-        changed_since: Option<String>,
-        /// Replace the Status Whiteboard filter (repeatable)
-        #[arg(long)]
-        whiteboard: Vec<String>,
-        /// Replace the Target Milestone filter (repeatable)
-        #[arg(long)]
-        target_milestone: Vec<String>,
-        /// Replace the Version filter (repeatable)
-        #[arg(long)]
-        version: Vec<String>,
-        /// Replace the Operating System filter (repeatable)
-        #[arg(long)]
-        op_sys: Vec<String>,
-        /// Replace the Platform filter (repeatable)
-        #[arg(long)]
-        platform: Vec<String>,
-        /// Replace the Resolution filter (repeatable)
-        #[arg(long)]
-        resolution: Vec<String>,
-        /// Replace the QA Contact filter (repeatable)
-        #[arg(long)]
-        qa_contact: Vec<String>,
-        /// Replace the URL filter (repeatable)
-        #[arg(long)]
-        url: Vec<String>,
-        /// Reset a field to unset (repeatable). Names match the long flags.
-        #[arg(long, value_name = "FIELD")]
-        clear: Vec<String>,
-        #[command(flatten)]
-        sort_args: crate::cli::SortArgs,
-    },
+    Update(UpdateArgs),
 
     /// Run a saved query against a Bugzilla server.
     ///
@@ -336,63 +414,5 @@ pub enum QueryAction {
     /// to inspect what will run, and bzr-bug-list(1) for ad-hoc
     /// listing without a saved query.
     #[command(verbatim_doc_comment)]
-    Run {
-        /// Query name
-        name: String,
-        /// Override the saved limit
-        #[arg(long)]
-        limit: Option<u32>,
-        /// Fields to request from the server (comma-separated). Table:
-        /// selects which columns to show (in order). --json: the JSON object
-        /// contains only the selected fields (id is included only if requested).
-        /// Built-in fields and Bugzilla custom fields named `cf_*` are valid.
-        #[arg(long)]
-        fields: Option<String>,
-        /// Fields to drop from the server request (comma-separated). Table:
-        /// removes those columns. --json: the JSON object omits the dropped
-        /// fields (including custom `cf_*` fields and id, if excluded).
-        #[arg(long)]
-        exclude_fields: Option<String>,
-        /// Override the server to run against
-        #[arg(long)]
-        server: Option<String>,
-        /// Override the saved `creation_time` filter for this run.
-        ///
-        /// Same accepted forms as `bzr bug list --created-since`.
-        #[arg(long, value_name = "DATE")]
-        created_since: Option<String>,
-        /// Override the saved `last_change_time` filter for this run.
-        ///
-        /// Same accepted forms as `bzr bug list --changed-since`.
-        #[arg(long, value_name = "DATE")]
-        changed_since: Option<String>,
-        /// Override the saved Whiteboard filter for this run.
-        #[arg(long)]
-        whiteboard: Vec<String>,
-        /// Override the saved Target Milestone filter.
-        #[arg(long)]
-        target_milestone: Vec<String>,
-        /// Override the saved Version filter.
-        #[arg(long)]
-        version: Vec<String>,
-        /// Override the saved Operating System filter.
-        #[arg(long)]
-        op_sys: Vec<String>,
-        /// Override the saved Platform filter.
-        #[arg(long)]
-        platform: Vec<String>,
-        /// Override the saved Resolution filter.
-        #[arg(long)]
-        resolution: Vec<String>,
-        /// Override the saved QA Contact filter.
-        #[arg(long)]
-        qa_contact: Vec<String>,
-        /// Override the saved URL filter.
-        #[arg(long)]
-        url: Vec<String>,
-        #[command(flatten)]
-        sort_args: crate::cli::SortArgs,
-        #[command(flatten)]
-        page_args: crate::cli::PageArgs,
-    },
+    Run(RunArgs),
 }

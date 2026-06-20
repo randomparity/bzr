@@ -1,4 +1,134 @@
-use clap::Subcommand;
+use clap::{Args, Subcommand};
+
+/// Arguments for `attachment upload`.
+#[derive(Debug, Args)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each bool is a distinct CLI flag (--private/--no-private, --patch/--no-patch, --comment-private); they are not a state enum"
+)]
+pub struct UploadArgs {
+    /// Bug ID
+    pub bug_id: u64,
+    /// File to upload
+    pub file: String,
+    /// Attachment summary/description
+    #[arg(long)]
+    pub summary: Option<String>,
+    /// MIME type (auto-detected if not provided)
+    #[arg(long)]
+    pub content_type: Option<String>,
+    /// Mark the new attachment as private (`--no-private` for public).
+    ///
+    /// Private attachments are visible only to users in the bug's
+    /// `insider` group (server-configured). Use carefully. Absent
+    /// both flags, the attachment is public.
+    #[arg(long, overrides_with = "no_private")]
+    pub private: bool,
+    /// Mark the new attachment as public (the default).
+    #[arg(long = "no-private", overrides_with = "private")]
+    pub no_private: bool,
+    /// Mark the new attachment as a patch (`--no-patch` for non-patch).
+    ///
+    /// Patches render as side-by-side diffs in the Bugzilla web UI
+    /// and default `--content-type` to `text/plain` when no explicit
+    /// content type is supplied. Use this for `.diff` / `.patch`
+    /// files instead of a follow-up `bzr attachment update --patch`.
+    #[arg(long, overrides_with = "no_patch")]
+    pub patch: bool,
+    /// Mark the new attachment as a non-patch (the default).
+    #[arg(long = "no-patch", overrides_with = "patch")]
+    pub no_patch: bool,
+    /// Post a comment alongside the attachment in the same request.
+    ///
+    /// Folded into the underlying `Bug.add_attachment` API call so
+    /// the comment and attachment share a creation timestamp and
+    /// are visible to the same audience as the bug. The comment
+    /// inherits the bug's default privacy unless `--comment-private`
+    /// is also set, in which case a follow-up `Bug.update` call
+    /// flips the new comment private (two API round-trips total).
+    #[arg(long)]
+    pub comment: Option<String>,
+    /// Mark the comment posted via `--comment` private.
+    ///
+    /// Issues a follow-up `Bug.update` call after the upload to flip
+    /// the just-created comment's `is_private` flag. The Bugzilla
+    /// `Bug.add_attachment` API does not accept comment privacy in
+    /// the upload itself, so this is a two-call workflow internally.
+    ///
+    /// Requires `--comment <BODY>`; using `--comment-private` alone
+    /// is a usage error (exit 7). Marking a comment private requires
+    /// `editbugs` permission or `insider` group membership; on 403 the
+    /// attachment remains uploaded but the comment stays public, and
+    /// the command exits non-zero with a stderr warning.
+    #[arg(long)]
+    pub comment_private: bool,
+    /// Set, request, or clear a flag using Bugzilla flag syntax.
+    ///
+    /// Repeatable. Accepted forms:
+    /// `name+` (granted), `name-` (denied), `name?` (request),
+    /// `name?(user@example.com)` (request a specific user), or
+    /// `name?,!` to clear an existing flag.
+    #[arg(long)]
+    pub flag: Vec<String>,
+}
+
+/// Arguments for `attachment update`.
+#[derive(Debug, Args)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each bool is a distinct CLI flag (--obsolete/--no-obsolete, --patch/--no-patch, --private/--no-private); they are not a state enum"
+)]
+pub struct UpdateArgs {
+    /// Attachment ID
+    pub id: u64,
+    /// New summary
+    #[arg(long)]
+    pub summary: Option<String>,
+    /// New file name
+    #[arg(long)]
+    pub file_name: Option<String>,
+    /// New content type
+    #[arg(long)]
+    pub content_type: Option<String>,
+    /// Mark as obsolete (`--no-obsolete` to un-obsolete).
+    ///
+    /// Absent both flags, the obsolete state is left unchanged.
+    /// Mark a patch obsolete when uploading a replacement to keep
+    /// the bug's attachment list tidy.
+    #[arg(long, overrides_with = "no_obsolete")]
+    pub obsolete: bool,
+    /// Clear the obsolete flag (un-obsolete the attachment).
+    #[arg(long = "no-obsolete", overrides_with = "obsolete")]
+    pub no_obsolete: bool,
+    /// Mark as a patch (`--no-patch` for non-patch).
+    ///
+    /// Absent both flags, the patch state is left unchanged. The
+    /// patch flag affects diff rendering in the Bugzilla web UI but
+    /// is otherwise informational.
+    #[arg(long, overrides_with = "no_patch")]
+    pub patch: bool,
+    /// Mark as a non-patch.
+    #[arg(long = "no-patch", overrides_with = "patch")]
+    pub no_patch: bool,
+    /// Mark as private (`--no-private` to make public).
+    ///
+    /// Absent both flags, the privacy is left unchanged. Private
+    /// attachments are visible only to users in the bug's
+    /// `insider` group (server-configured); use carefully.
+    #[arg(long, overrides_with = "no_private")]
+    pub private: bool,
+    /// Mark as public.
+    #[arg(long = "no-private", overrides_with = "private")]
+    pub no_private: bool,
+    /// Set, request, or clear a flag using Bugzilla flag syntax.
+    ///
+    /// Repeatable. Accepted forms:
+    /// `name+` (granted), `name-` (denied), `name?` (request),
+    /// `name?(user@example.com)` (request a specific user), or
+    /// `name?,!` to clear an existing flag.
+    #[arg(long)]
+    pub flag: Vec<String>,
+}
 
 #[derive(Subcommand)]
 pub enum AttachmentAction {
@@ -130,71 +260,7 @@ pub enum AttachmentAction {
     ///
     /// See bzr-attachment-update(1) to modify metadata after upload.
     #[command(verbatim_doc_comment)]
-    Upload {
-        /// Bug ID
-        bug_id: u64,
-        /// File to upload
-        file: String,
-        /// Attachment summary/description
-        #[arg(long)]
-        summary: Option<String>,
-        /// MIME type (auto-detected if not provided)
-        #[arg(long)]
-        content_type: Option<String>,
-        /// Mark the new attachment as private (`--no-private` for public).
-        ///
-        /// Private attachments are visible only to users in the bug's
-        /// `insider` group (server-configured). Use carefully. Absent
-        /// both flags, the attachment is public.
-        #[arg(long, overrides_with = "no_private")]
-        private: bool,
-        /// Mark the new attachment as public (the default).
-        #[arg(long = "no-private", overrides_with = "private")]
-        no_private: bool,
-        /// Mark the new attachment as a patch (`--no-patch` for non-patch).
-        ///
-        /// Patches render as side-by-side diffs in the Bugzilla web UI
-        /// and default `--content-type` to `text/plain` when no explicit
-        /// content type is supplied. Use this for `.diff` / `.patch`
-        /// files instead of a follow-up `bzr attachment update --patch`.
-        #[arg(long, overrides_with = "no_patch")]
-        patch: bool,
-        /// Mark the new attachment as a non-patch (the default).
-        #[arg(long = "no-patch", overrides_with = "patch")]
-        no_patch: bool,
-        /// Post a comment alongside the attachment in the same request.
-        ///
-        /// Folded into the underlying `Bug.add_attachment` API call so
-        /// the comment and attachment share a creation timestamp and
-        /// are visible to the same audience as the bug. The comment
-        /// inherits the bug's default privacy unless `--comment-private`
-        /// is also set, in which case a follow-up `Bug.update` call
-        /// flips the new comment private (two API round-trips total).
-        #[arg(long)]
-        comment: Option<String>,
-        /// Mark the comment posted via `--comment` private.
-        ///
-        /// Issues a follow-up `Bug.update` call after the upload to flip
-        /// the just-created comment's `is_private` flag. The Bugzilla
-        /// `Bug.add_attachment` API does not accept comment privacy in
-        /// the upload itself, so this is a two-call workflow internally.
-        ///
-        /// Requires `--comment <BODY>`; using `--comment-private` alone
-        /// is a usage error (exit 7). Marking a comment private requires
-        /// `editbugs` permission or `insider` group membership; on 403 the
-        /// attachment remains uploaded but the comment stays public, and
-        /// the command exits non-zero with a stderr warning.
-        #[arg(long)]
-        comment_private: bool,
-        /// Set, request, or clear a flag using Bugzilla flag syntax.
-        ///
-        /// Repeatable. Accepted forms:
-        /// `name+` (granted), `name-` (denied), `name?` (request),
-        /// `name?(user@example.com)` (request a specific user), or
-        /// `name?,!` to clear an existing flag.
-        #[arg(long)]
-        flag: Vec<String>,
-    },
+    Upload(UploadArgs),
 
     /// Update an existing attachment's metadata or flags.
     ///
@@ -219,55 +285,5 @@ pub enum AttachmentAction {
     /// See bzr-attachment-upload(1) to attach a new file in place
     /// of an obsoleted one.
     #[command(verbatim_doc_comment)]
-    Update {
-        /// Attachment ID
-        id: u64,
-        /// New summary
-        #[arg(long)]
-        summary: Option<String>,
-        /// New file name
-        #[arg(long)]
-        file_name: Option<String>,
-        /// New content type
-        #[arg(long)]
-        content_type: Option<String>,
-        /// Mark as obsolete (`--no-obsolete` to un-obsolete).
-        ///
-        /// Absent both flags, the obsolete state is left unchanged.
-        /// Mark a patch obsolete when uploading a replacement to keep
-        /// the bug's attachment list tidy.
-        #[arg(long, overrides_with = "no_obsolete")]
-        obsolete: bool,
-        /// Clear the obsolete flag (un-obsolete the attachment).
-        #[arg(long = "no-obsolete", overrides_with = "obsolete")]
-        no_obsolete: bool,
-        /// Mark as a patch (`--no-patch` for non-patch).
-        ///
-        /// Absent both flags, the patch state is left unchanged. The
-        /// patch flag affects diff rendering in the Bugzilla web UI but
-        /// is otherwise informational.
-        #[arg(long, overrides_with = "no_patch")]
-        patch: bool,
-        /// Mark as a non-patch.
-        #[arg(long = "no-patch", overrides_with = "patch")]
-        no_patch: bool,
-        /// Mark as private (`--no-private` to make public).
-        ///
-        /// Absent both flags, the privacy is left unchanged. Private
-        /// attachments are visible only to users in the bug's
-        /// `insider` group (server-configured); use carefully.
-        #[arg(long, overrides_with = "no_private")]
-        private: bool,
-        /// Mark as public.
-        #[arg(long = "no-private", overrides_with = "private")]
-        no_private: bool,
-        /// Set, request, or clear a flag using Bugzilla flag syntax.
-        ///
-        /// Repeatable. Accepted forms:
-        /// `name+` (granted), `name-` (denied), `name?` (request),
-        /// `name?(user@example.com)` (request a specific user), or
-        /// `name?,!` to clear an existing flag.
-        #[arg(long)]
-        flag: Vec<String>,
-    },
+    Update(UpdateArgs),
 }

@@ -8,7 +8,7 @@ use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 fn from_url_action(url: String, save_as: Option<String>) -> BugAction {
-    BugAction::Search {
+    BugAction::Search(crate::cli::SearchArgs {
         page_args: crate::cli::PageArgs::default(),
         query: None,
         from_url: Some(url),
@@ -20,7 +20,7 @@ fn from_url_action(url: String, save_as: Option<String>) -> BugAction {
         },
         sort_args: crate::cli::SortArgs::default(),
         count: false,
-    }
+    })
 }
 
 #[tokio::test]
@@ -73,7 +73,7 @@ async fn handle_search_from_url_with_custom_fields_emits_custom_field() {
     let server_url = mock.uri();
     let url = format!("{server_url}/buglist.cgi?product=TestProduct");
     let mut action = from_url_action(url, None);
-    let BugAction::Search { field_args, .. } = &mut action else {
+    let BugAction::Search(crate::cli::SearchArgs { field_args, .. }) = &mut action else {
         unreachable!()
     };
     field_args.fields = Some("id,cf_release".into());
@@ -181,7 +181,7 @@ async fn handle_search_quicksearch_passes_limit_and_field_filters() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::Search {
+    let action = BugAction::Search(crate::cli::SearchArgs {
         page_args: crate::cli::PageArgs::default(),
         query: Some("crash".into()),
         from_url: None,
@@ -193,7 +193,7 @@ async fn handle_search_quicksearch_passes_limit_and_field_filters() {
         },
         sort_args: crate::cli::SortArgs::default(),
         count: false,
-    };
+    });
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
@@ -358,7 +358,7 @@ async fn bug_search_quicksearch_sends_default_order() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::Search {
+    let action = BugAction::Search(crate::cli::SearchArgs {
         page_args: crate::cli::PageArgs::default(),
         query: Some("crash".to_string()),
         from_url: None,
@@ -370,7 +370,7 @@ async fn bug_search_quicksearch_sends_default_order() {
         },
         sort_args: crate::cli::SortArgs::default(),
         count: false,
-    };
+    });
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
@@ -391,7 +391,7 @@ async fn bug_search_from_url_sort_overrides_url_order() {
 
     let url = format!("{}/buglist.cgi?product=TestProduct", mock.uri());
     let mut action = from_url_action(url, None);
-    if let BugAction::Search { sort_args, .. } = &mut action {
+    if let BugAction::Search(crate::cli::SearchArgs { sort_args, .. }) = &mut action {
         sort_args.sort = Some("priority".to_string());
         sort_args.order = crate::types::SortDirection::Desc;
     }
@@ -421,7 +421,7 @@ async fn handle_search_count_emits_count_object() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::Search {
+    let action = BugAction::Search(crate::cli::SearchArgs {
         page_args: crate::cli::PageArgs::default(),
         query: Some("crash".to_string()),
         from_url: None,
@@ -433,7 +433,7 @@ async fn handle_search_count_emits_count_object() {
         },
         sort_args: crate::cli::SortArgs::default(),
         count: true,
-    };
+    });
     let mut io = crate::test_helpers::CapturedIo::new();
     let result =
         crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
@@ -456,9 +456,9 @@ async fn from_url_offset_in_url_is_overridden_by_cli_offset_not_duplicated() {
 
     let url = format!("{}/buglist.cgi?product=P&offset=10", mock.uri());
     let mut action = from_url_action(url, None);
-    if let BugAction::Search {
+    if let BugAction::Search(crate::cli::SearchArgs {
         page_args, limit, ..
-    } = &mut action
+    }) = &mut action
     {
         *limit = Some(20);
         *page_args = crate::cli::PageArgs {
@@ -504,9 +504,9 @@ async fn from_url_offset_with_paginate_sends_single_offset_per_page() {
 
     let url = format!("{}/buglist.cgi?product=P&offset=10", mock.uri());
     let mut action = from_url_action(url, None);
-    if let BugAction::Search {
+    if let BugAction::Search(crate::cli::SearchArgs {
         page_args, limit, ..
-    } = &mut action
+    }) = &mut action
     {
         *limit = Some(2);
         *page_args = crate::cli::PageArgs {

@@ -8,7 +8,7 @@ use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
 fn empty_list_action() -> BugAction {
-    BugAction::List {
+    BugAction::List(crate::cli::ListArgs {
         page_args: crate::cli::PageArgs::default(),
         product: vec![],
         component: vec![],
@@ -37,7 +37,7 @@ fn empty_list_action() -> BugAction {
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
         count: false,
-    }
+    })
 }
 
 #[tokio::test]
@@ -116,7 +116,7 @@ async fn bug_list_passes_every_field_through_to_search_params() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::List {
+    let action = BugAction::List(crate::cli::ListArgs {
         page_args: crate::cli::PageArgs::default(),
         product: vec!["Firefox".into()],
         component: vec!["General".into()],
@@ -145,7 +145,7 @@ async fn bug_list_passes_every_field_through_to_search_params() {
         url: vec!["github.com/foo".into()],
         sort_args: crate::cli::SortArgs::default(),
         count: false,
-    };
+    });
     let result = crate::commands::bug::execute(
         &action,
         None,
@@ -183,7 +183,7 @@ async fn bug_list_summary_only_sends_substring_filter() {
         .mount(&mock)
         .await;
 
-    let action = BugAction::List {
+    let action = BugAction::List(crate::cli::ListArgs {
         page_args: crate::cli::PageArgs::default(),
         product: vec![],
         component: vec![],
@@ -212,7 +212,7 @@ async fn bug_list_summary_only_sends_substring_filter() {
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
         count: false,
-    };
+    });
     let result = crate::commands::bug::execute(
         &action,
         None,
@@ -281,7 +281,7 @@ async fn bug_list_rejects_malformed_created_since_with_exit_code_7() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let mut action = empty_list_action();
-    if let BugAction::List { created_since, .. } = &mut action {
+    if let BugAction::List(crate::cli::ListArgs { created_since, .. }) = &mut action {
         *created_since = Some("not-a-date".into());
     }
 
@@ -316,7 +316,7 @@ async fn bug_list_rejects_malformed_changed_since_with_exit_code_7() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     let mut action = empty_list_action();
-    if let BugAction::List { changed_since, .. } = &mut action {
+    if let BugAction::List(crate::cli::ListArgs { changed_since, .. }) = &mut action {
         *changed_since = Some("2026-13-99".into());
     }
 
@@ -358,13 +358,13 @@ async fn bug_list_mixed_positive_notequals_notsubstring() {
         .await;
 
     let mut action = empty_list_action();
-    if let BugAction::List {
+    if let BugAction::List(crate::cli::ListArgs {
         page_args: _,
         product,
         resolution,
         whiteboard,
         ..
-    } = &mut action
+    }) = &mut action
     {
         *product = vec!["P".into()];
         *resolution = vec!["!FIXED".into()];
@@ -390,7 +390,7 @@ async fn bug_list_table_all_unknown_fields_exits_7_before_network() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     let mut action = empty_list_action();
-    let BugAction::List { field_args, .. } = &mut action else {
+    let BugAction::List(crate::cli::ListArgs { field_args, .. }) = &mut action else {
         unreachable!()
     };
     field_args.fields = Some("not_a_field".into());
@@ -427,7 +427,7 @@ async fn bug_list_json_fields_trims_output() {
         .await;
 
     let mut action = empty_list_action();
-    let BugAction::List { field_args, .. } = &mut action else {
+    let BugAction::List(crate::cli::ListArgs { field_args, .. }) = &mut action else {
         unreachable!()
     };
     field_args.fields = Some("summary".into());
@@ -465,7 +465,7 @@ async fn bug_list_json_custom_field_is_requested_and_emitted() {
         .await;
 
     let mut action = empty_list_action();
-    let BugAction::List { field_args, .. } = &mut action else {
+    let BugAction::List(crate::cli::ListArgs { field_args, .. }) = &mut action else {
         unreachable!()
     };
     field_args.fields = Some("id,cf_release".into());
@@ -499,7 +499,7 @@ async fn bug_list_json_custom_only_field_does_not_emit_forced_id() {
         .await;
 
     let mut action = empty_list_action();
-    let BugAction::List { field_args, .. } = &mut action else {
+    let BugAction::List(crate::cli::ListArgs { field_args, .. }) = &mut action else {
         unreachable!()
     };
     field_args.fields = Some("cf_release".into());
@@ -533,7 +533,7 @@ async fn bug_list_table_renders_custom_field_column() {
         .await;
 
     let mut action = empty_list_action();
-    let BugAction::List { field_args, .. } = &mut action else {
+    let BugAction::List(crate::cli::ListArgs { field_args, .. }) = &mut action else {
         unreachable!()
     };
     field_args.fields = Some("id,cf_release".into());
@@ -592,7 +592,7 @@ async fn bug_list_json_all_unknown_fields_exits_7() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     let mut action = empty_list_action();
-    let BugAction::List { field_args, .. } = &mut action else {
+    let BugAction::List(crate::cli::ListArgs { field_args, .. }) = &mut action else {
         unreachable!()
     };
     field_args.fields = Some("not_a_field".into());
@@ -647,7 +647,7 @@ async fn bug_list_sends_explicit_sort_and_order() {
         .await;
 
     let mut action = empty_list_action();
-    if let BugAction::List { sort_args, .. } = &mut action {
+    if let BugAction::List(crate::cli::ListArgs { sort_args, .. }) = &mut action {
         sort_args.sort = Some("last_change_time".to_string());
         sort_args.order = crate::types::SortDirection::Desc;
     }
@@ -663,7 +663,7 @@ async fn bug_list_sends_explicit_sort_and_order() {
 
 fn count_list_action() -> BugAction {
     let mut action = empty_list_action();
-    if let BugAction::List { count, .. } = &mut action {
+    if let BugAction::List(crate::cli::ListArgs { count, .. }) = &mut action {
         *count = true;
     }
     action
@@ -727,11 +727,11 @@ async fn bug_list_count_table_prints_integer_only() {
 
 fn list_action_paged(limit: u32, offset: Option<u32>, paginate: bool) -> BugAction {
     let mut action = empty_list_action();
-    if let BugAction::List {
+    if let BugAction::List(crate::cli::ListArgs {
         limit: l,
         page_args,
         ..
-    } = &mut action
+    }) = &mut action
     {
         *l = limit;
         *page_args = crate::cli::PageArgs { offset, paginate };
@@ -778,9 +778,9 @@ async fn list_offset_reaches_server_and_truncation_footer_prints() {
 async fn list_count_with_offset_is_rejected() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
     let mut action = empty_list_action();
-    if let BugAction::List {
+    if let BugAction::List(crate::cli::ListArgs {
         count, page_args, ..
-    } = &mut action
+    }) = &mut action
     {
         *count = true;
         *page_args = crate::cli::PageArgs {

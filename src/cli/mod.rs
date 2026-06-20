@@ -1,5 +1,5 @@
-mod attachment;
-mod bug;
+pub mod attachment;
+pub mod bug;
 mod classification;
 mod comment;
 mod component;
@@ -7,13 +7,16 @@ mod config;
 mod field;
 mod group;
 mod product;
-mod query;
+pub mod query;
 mod server;
-mod template;
+pub mod template;
 mod user;
 
 pub use attachment::AttachmentAction;
 pub use bug::{BugAction, CommentArgs, CreateFieldArgs, FieldArgs, PageArgs, SortArgs};
+pub use bug::{
+    CloneArgs, CreateArgs, HistoryArgs, ListArgs, MyArgs, SearchArgs, UpdateArgs, ViewArgs,
+};
 pub use classification::ClassificationAction;
 pub use comment::CommentAction;
 pub use component::ComponentAction;

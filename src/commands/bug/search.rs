@@ -1,4 +1,4 @@
-use crate::cli::{BugAction, FieldArgs};
+use crate::cli::{FieldArgs, SearchArgs};
 use crate::error::Result;
 use crate::output::resources::bug::{canonical_field_list, write_bugs, ColumnSpec};
 use crate::output::resources::query::write_query_saved;
@@ -59,13 +59,13 @@ fn build_params_from_url(
 /// Handles bug search — builds its own client (unlike other handlers) because
 /// `--from-url` may resolve a different server from the URL hostname.
 pub(super) async fn handle(
-    action: &BugAction,
+    args: &SearchArgs,
     server: Option<&str>,
     format: OutputFormat,
     api: Option<ApiMode>,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let BugAction::Search {
+    let SearchArgs {
         query,
         from_url,
         save_as,
@@ -77,10 +77,7 @@ pub(super) async fn handle(
         },
         sort_args,
         page_args: crate::cli::PageArgs { offset, paginate },
-    } = action
-    else {
-        unreachable!()
-    };
+    } = args;
 
     super::ensure_no_paging_with_count(*count, *offset, *paginate)?;
 

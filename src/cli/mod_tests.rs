@@ -122,7 +122,7 @@ fn parse_bug_list_minimal() {
     assert!(matches!(
         cli.command,
         Commands::Bug {
-            action: BugAction::List { .. }
+            action: BugAction::List(super::ListArgs { .. })
         }
     ));
 }
@@ -132,7 +132,7 @@ fn parse_bug_view_by_id() {
     let cli = Cli::try_parse_from(["bzr", "bug", "view", "12345"]).unwrap();
     match cli.command {
         Commands::Bug {
-            action: BugAction::View { ids, .. },
+            action: BugAction::View(super::ViewArgs { ids, .. }),
         } => assert_eq!(ids, vec!["12345".to_string()]),
         _ => panic!("expected Bug View"),
     }
@@ -164,10 +164,11 @@ fn parse_update_expect_unchanged_since() {
     ])
     .unwrap();
     let Commands::Bug {
-        action: BugAction::Update {
-            expect_unchanged_since,
-            ..
-        },
+        action:
+            BugAction::Update(super::UpdateArgs {
+                expect_unchanged_since,
+                ..
+            }),
     } = cli.command
     else {
         panic!("expected bug update");
@@ -244,7 +245,7 @@ fn inline_server_email_requires_url() {
 fn parse_bug_create_from_json_stdin() {
     let cli = Cli::try_parse_from(["bzr", "bug", "create", "--from-json", "-"]).unwrap();
     let Commands::Bug {
-        action: BugAction::Create { from_json, .. },
+        action: BugAction::Create(super::CreateArgs { from_json, .. }),
     } = cli.command
     else {
         panic!("expected bug create");
@@ -274,7 +275,7 @@ fn parse_bug_list_offset_and_paginate() {
     let cli =
         Cli::try_parse_from(["bzr", "bug", "list", "--limit", "10", "--offset", "20"]).unwrap();
     let Commands::Bug {
-        action: BugAction::List { page_args, .. },
+        action: BugAction::List(super::ListArgs { page_args, .. }),
     } = cli.command
     else {
         panic!("expected bug list");
@@ -364,7 +365,7 @@ fn parse_bug_search() {
     let cli = Cli::try_parse_from(["bzr", "bug", "search", "crash"]).unwrap();
     match cli.command {
         Commands::Bug {
-            action: BugAction::Search { query, limit, .. },
+            action: BugAction::Search(super::SearchArgs { query, limit, .. }),
         } => {
             assert_eq!(query.as_deref(), Some("crash"));
             assert_eq!(limit, None);
@@ -378,7 +379,7 @@ fn parse_bug_search_with_limit() {
     let cli = Cli::try_parse_from(["bzr", "bug", "search", "crash", "--limit", "10"]).unwrap();
     match cli.command {
         Commands::Bug {
-            action: BugAction::Search { limit, .. },
+            action: BugAction::Search(super::SearchArgs { limit, .. }),
         } => assert_eq!(limit, Some(10)),
         _ => panic!("expected Bug Search"),
     }
@@ -389,7 +390,7 @@ fn parse_bug_history() {
     let cli = Cli::try_parse_from(["bzr", "bug", "history", "42"]).unwrap();
     match cli.command {
         Commands::Bug {
-            action: BugAction::History { id, since },
+            action: BugAction::History(super::HistoryArgs { id, since }),
         } => {
             assert_eq!(id, 42);
             assert!(since.is_none());
@@ -415,13 +416,13 @@ fn parse_bug_create() {
     match cli.command {
         Commands::Bug {
             action:
-                BugAction::Create {
+                BugAction::Create(super::CreateArgs {
                     product,
                     component,
                     summary,
                     version,
                     ..
-                },
+                }),
         } => {
             assert_eq!(product.as_deref(), Some("TestProduct"));
             assert_eq!(component.as_deref(), Some("General"));
@@ -450,9 +451,10 @@ fn parse_bug_create_with_description_file() {
     .unwrap();
     match cli.command {
         Commands::Bug {
-            action: BugAction::Create {
-                description_file, ..
-            },
+            action:
+                BugAction::Create(super::CreateArgs {
+                    description_file, ..
+                }),
         } => {
             assert_eq!(
                 description_file.as_deref(),
@@ -498,9 +500,10 @@ fn parse_bug_update_with_flags() {
     .unwrap();
     match cli.command {
         Commands::Bug {
-            action: BugAction::Update {
-                ids, status, flag, ..
-            },
+            action:
+                BugAction::Update(super::UpdateArgs {
+                    ids, status, flag, ..
+                }),
         } => {
             assert_eq!(ids, vec![42]);
             assert_eq!(status.as_deref(), Some("RESOLVED"));
@@ -516,13 +519,13 @@ fn parse_bug_update_with_dupe_of() {
     match cli.command {
         Commands::Bug {
             action:
-                BugAction::Update {
+                BugAction::Update(super::UpdateArgs {
                     ids,
                     dupe_of,
                     status,
                     resolution,
                     ..
-                },
+                }),
         } => {
             assert_eq!(ids, vec![42]);
             assert_eq!(dupe_of, Some(99));
@@ -558,7 +561,7 @@ fn parse_bug_update_scalar_parity_flags() {
     let Commands::Bug { action } = cli.command else {
         panic!("expected bug command");
     };
-    let BugAction::Update {
+    let BugAction::Update(super::UpdateArgs {
         alias,
         deadline,
         estimated_time,
@@ -567,7 +570,7 @@ fn parse_bug_update_scalar_parity_flags() {
         reset_assigned_to,
         reset_qa_contact,
         ..
-    } = action
+    }) = action
     else {
         panic!("expected bug update");
     };
@@ -633,13 +636,13 @@ fn parse_bug_update_with_comment() {
     match cli.command {
         Commands::Bug {
             action:
-                BugAction::Update {
+                BugAction::Update(super::UpdateArgs {
                     ids,
                     comment,
                     comment_file,
                     comment_private,
                     ..
-                },
+                }),
         } => {
             assert_eq!(ids, vec![42]);
             assert_eq!(comment.as_deref(), Some("see #99"));
@@ -665,12 +668,12 @@ fn parse_bug_update_with_comment_file_and_private() {
     match cli.command {
         Commands::Bug {
             action:
-                BugAction::Update {
+                BugAction::Update(super::UpdateArgs {
                     comment,
                     comment_file,
                     comment_private,
                     ..
-                },
+                }),
         } => {
             assert!(comment.is_none());
             assert_eq!(
@@ -1141,12 +1144,12 @@ fn parse_bug_list_with_filters() {
     match cli.command {
         Commands::Bug {
             action:
-                BugAction::List {
+                BugAction::List(super::ListArgs {
                     product,
                     status,
                     limit,
                     ..
-                },
+                }),
         } => {
             assert_eq!(product, vec!["Firefox"]);
             assert_eq!(status, vec!["NEW"]);
@@ -1161,7 +1164,7 @@ fn parse_bug_list_summary_substring() {
     let cli = Cli::try_parse_from(["bzr", "bug", "list", "--summary", "kernel panic"]).unwrap();
     match cli.command {
         Commands::Bug {
-            action: BugAction::List { summary, .. },
+            action: BugAction::List(super::ListArgs { summary, .. }),
         } => {
             assert_eq!(summary.as_deref(), Some("kernel panic"));
         }
@@ -1198,13 +1201,13 @@ fn parse_bug_my_defaults() {
     match cli.command {
         Commands::Bug {
             action:
-                BugAction::My {
+                BugAction::My(super::MyArgs {
                     created,
                     cc,
                     all,
                     limit,
                     ..
-                },
+                }),
         } => {
             assert!(!created);
             assert!(!cc);
@@ -1232,7 +1235,7 @@ fn parse_bug_clone_minimal() {
     let cli = Cli::try_parse_from(["bzr", "bug", "clone", "123"]).unwrap();
     match cli.command {
         Commands::Bug {
-            action: BugAction::Clone { id, summary, .. },
+            action: BugAction::Clone(super::CloneArgs { id, summary, .. }),
         } => {
             assert_eq!(id, "123");
             assert!(summary.is_none());
@@ -1287,13 +1290,13 @@ fn parse_query_save_list_kind() {
     match cli.command {
         Commands::Query {
             action:
-                QueryAction::Save {
+                QueryAction::Save(super::query::SaveArgs {
                     name,
                     product,
                     status,
                     limit,
                     ..
-                },
+                }),
         } => {
             assert_eq!(name, "firefox-new");
             assert_eq!(product, vec!["Firefox"]);
@@ -1320,12 +1323,12 @@ fn parse_query_save_search_kind() {
     match cli.command {
         Commands::Query {
             action:
-                QueryAction::Save {
+                QueryAction::Save(super::query::SaveArgs {
                     name,
                     search,
                     limit,
                     ..
-                },
+                }),
         } => {
             assert_eq!(name, "crashes");
             assert_eq!(search.as_deref(), Some("crash in tab"));
@@ -1340,7 +1343,7 @@ fn parse_query_run() {
     let cli = Cli::try_parse_from(["bzr", "query", "run", "firefox-new"]).unwrap();
     match cli.command {
         Commands::Query {
-            action: QueryAction::Run { name, limit, .. },
+            action: QueryAction::Run(super::query::RunArgs { name, limit, .. }),
         } => {
             assert_eq!(name, "firefox-new");
             assert!(limit.is_none());
@@ -1354,7 +1357,7 @@ fn parse_query_run_with_limit_override() {
     let cli = Cli::try_parse_from(["bzr", "query", "run", "firefox-new", "--limit", "10"]).unwrap();
     match cli.command {
         Commands::Query {
-            action: QueryAction::Run { name, limit, .. },
+            action: QueryAction::Run(super::query::RunArgs { name, limit, .. }),
         } => {
             assert_eq!(name, "firefox-new");
             assert_eq!(limit, Some(10));
@@ -1379,7 +1382,7 @@ fn parse_query_show() {
     let cli = Cli::try_parse_from(["bzr", "query", "show", "firefox-new"]).unwrap();
     match cli.command {
         Commands::Query {
-            action: QueryAction::Show { name },
+            action: QueryAction::Show(super::query::ShowArgs { name }),
         } => {
             assert_eq!(name, "firefox-new");
         }
@@ -1392,7 +1395,7 @@ fn parse_query_delete() {
     let cli = Cli::try_parse_from(["bzr", "query", "delete", "firefox-new"]).unwrap();
     match cli.command {
         Commands::Query {
-            action: QueryAction::Delete { name },
+            action: QueryAction::Delete(super::query::DeleteArgs { name }),
         } => {
             assert_eq!(name, "firefox-new");
         }
@@ -1591,12 +1594,12 @@ fn parse_attachment_upload_with_summary() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload {
+                AttachmentAction::Upload(super::attachment::UploadArgs {
                     bug_id,
                     file,
                     summary,
                     ..
-                },
+                }),
         } => {
             assert_eq!(bug_id, 42);
             assert_eq!(file, "patch.diff");
@@ -1619,9 +1622,10 @@ fn parse_attachment_upload_with_private_flag() {
     .unwrap();
     match cli.command {
         Commands::Attachment {
-            action: AttachmentAction::Upload {
-                bug_id, private, ..
-            },
+            action:
+                AttachmentAction::Upload(super::attachment::UploadArgs {
+                    bug_id, private, ..
+                }),
         } => {
             assert_eq!(bug_id, 42);
             assert!(private, "--private should set the flag to true");
@@ -1635,7 +1639,7 @@ fn parse_attachment_upload_without_private_defaults_to_false() {
     let cli = Cli::try_parse_from(["bzr", "attachment", "upload", "42", "f.txt"]).unwrap();
     match cli.command {
         Commands::Attachment {
-            action: AttachmentAction::Upload { private, .. },
+            action: AttachmentAction::Upload(super::attachment::UploadArgs { private, .. }),
         } => assert!(!private, "--private absent should default to false"),
         _ => panic!("expected Attachment Upload"),
     }
@@ -1656,12 +1660,12 @@ fn parse_attachment_upload_with_comment() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload {
+                AttachmentAction::Upload(super::attachment::UploadArgs {
                     bug_id,
                     file,
                     comment,
                     ..
-                },
+                }),
         } => {
             assert_eq!(bug_id, 42);
             assert_eq!(file, "patch.diff");
@@ -1676,7 +1680,7 @@ fn parse_attachment_upload_without_comment_defaults_to_none() {
     let cli = Cli::try_parse_from(["bzr", "attachment", "upload", "42", "f.txt"]).unwrap();
     match cli.command {
         Commands::Attachment {
-            action: AttachmentAction::Upload { comment, .. },
+            action: AttachmentAction::Upload(super::attachment::UploadArgs { comment, .. }),
         } => assert!(comment.is_none(), "--comment absent should default to None"),
         _ => panic!("expected Attachment Upload"),
     }
@@ -1689,12 +1693,12 @@ fn parse_attachment_upload_with_patch_flag() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload {
+                AttachmentAction::Upload(super::attachment::UploadArgs {
                     bug_id,
                     patch,
                     no_patch,
                     ..
-                },
+                }),
         } => {
             assert_eq!(bug_id, 42);
             assert!(patch, "--patch should set the flag to true");
@@ -1709,9 +1713,10 @@ fn parse_attachment_upload_without_patch_defaults_to_false() {
     let cli = Cli::try_parse_from(["bzr", "attachment", "upload", "42", "f.txt"]).unwrap();
     match cli.command {
         Commands::Attachment {
-            action: AttachmentAction::Upload {
-                patch, no_patch, ..
-            },
+            action:
+                AttachmentAction::Upload(super::attachment::UploadArgs {
+                    patch, no_patch, ..
+                }),
         } => {
             assert!(!patch, "--patch absent should default to false");
             assert!(!no_patch);
@@ -1728,9 +1733,10 @@ fn parse_attachment_no_patch_overrides_patch() {
         Cli::try_parse_from(["bzr", "attachment", "update", "9", "--patch", "--no-patch"]).unwrap();
     match cli.command {
         Commands::Attachment {
-            action: AttachmentAction::Update {
-                patch, no_patch, ..
-            },
+            action:
+                AttachmentAction::Update(super::attachment::UpdateArgs {
+                    patch, no_patch, ..
+                }),
         } => {
             assert!(!patch, "--no-patch should override the earlier --patch");
             assert!(no_patch);
@@ -1766,12 +1772,12 @@ fn parse_attachment_upload_with_comment_private() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload {
+                AttachmentAction::Upload(super::attachment::UploadArgs {
                     bug_id,
                     comment,
                     comment_private,
                     ..
-                },
+                }),
         } => {
             assert_eq!(bug_id, 42);
             assert_eq!(comment.as_deref(), Some("sensitive"));
@@ -1786,9 +1792,10 @@ fn parse_attachment_upload_without_comment_private_defaults_to_false() {
     let cli = Cli::try_parse_from(["bzr", "attachment", "upload", "42", "f.txt"]).unwrap();
     match cli.command {
         Commands::Attachment {
-            action: AttachmentAction::Upload {
-                comment_private, ..
-            },
+            action:
+                AttachmentAction::Upload(super::attachment::UploadArgs {
+                    comment_private, ..
+                }),
         } => assert!(
             !comment_private,
             "--comment-private absent should default to false"
@@ -1824,11 +1831,11 @@ fn bug_list_parses_created_since_and_changed_since() {
     .unwrap();
     let Commands::Bug {
         action:
-            BugAction::List {
+            BugAction::List(super::ListArgs {
                 created_since,
                 changed_since,
                 ..
-            },
+            }),
     } = cli.command
     else {
         panic!("expected Bug::List variant");
@@ -1863,7 +1870,7 @@ fn bug_list_parses_158_field_filters() {
     .unwrap();
     let Commands::Bug {
         action:
-            BugAction::List {
+            BugAction::List(super::ListArgs {
                 whiteboard,
                 target_milestone,
                 version,
@@ -1873,7 +1880,7 @@ fn bug_list_parses_158_field_filters() {
                 qa_contact,
                 url,
                 ..
-            },
+            }),
     } = cli.command
     else {
         panic!("expected Bug::List variant");
@@ -1901,7 +1908,7 @@ fn bug_list_parses_repeated_whiteboard() {
     ])
     .unwrap();
     let Commands::Bug {
-        action: BugAction::List { whiteboard, .. },
+        action: BugAction::List(super::ListArgs { whiteboard, .. }),
     } = cli.command
     else {
         panic!("expected Bug::List variant");
@@ -1913,7 +1920,7 @@ fn bug_list_parses_repeated_whiteboard() {
 fn bug_list_parses_negated_whiteboard() {
     let cli = Cli::try_parse_from(["bzr", "bug", "list", "--whiteboard", "!wip"]).unwrap();
     let Commands::Bug {
-        action: BugAction::List { whiteboard, .. },
+        action: BugAction::List(super::ListArgs { whiteboard, .. }),
     } = cli.command
     else {
         panic!("expected Bug::List variant");
@@ -1948,7 +1955,7 @@ fn query_save_parses_158_field_filters() {
     .unwrap();
     let Commands::Query {
         action:
-            QueryAction::Save {
+            QueryAction::Save(super::query::SaveArgs {
                 whiteboard,
                 target_milestone,
                 version,
@@ -1958,7 +1965,7 @@ fn query_save_parses_158_field_filters() {
                 qa_contact,
                 url,
                 ..
-            },
+            }),
     } = cli.command
     else {
         panic!("expected Query::Save variant");
@@ -2000,7 +2007,7 @@ fn query_run_parses_158_field_filter_overrides() {
     .unwrap();
     let Commands::Query {
         action:
-            QueryAction::Run {
+            QueryAction::Run(super::query::RunArgs {
                 whiteboard,
                 target_milestone,
                 version,
@@ -2010,7 +2017,7 @@ fn query_run_parses_158_field_filter_overrides() {
                 qa_contact,
                 url,
                 ..
-            },
+            }),
     } = cli.command
     else {
         panic!("expected Query::Run variant");
@@ -2038,7 +2045,7 @@ fn parse_bug_update_keywords_add_comma_list() {
     .unwrap();
     match cli.command {
         Commands::Bug {
-            action: BugAction::Update { keywords_add, .. },
+            action: BugAction::Update(super::UpdateArgs { keywords_add, .. }),
         } => {
             assert_eq!(keywords_add, vec!["fix-needed", "regression"]);
         }
@@ -2059,7 +2066,7 @@ fn parse_bug_update_cc_add_comma_list() {
     .unwrap();
     match cli.command {
         Commands::Bug {
-            action: BugAction::Update { cc_add, .. },
+            action: BugAction::Update(super::UpdateArgs { cc_add, .. }),
         } => {
             assert_eq!(cc_add, vec!["a@example.com", "b@example.com"]);
         }
@@ -2080,7 +2087,7 @@ fn parse_bug_update_groups_remove_comma_list() {
     .unwrap();
     match cli.command {
         Commands::Bug {
-            action: BugAction::Update { groups_remove, .. },
+            action: BugAction::Update(super::UpdateArgs { groups_remove, .. }),
         } => {
             assert_eq!(groups_remove, vec!["secret", "internal"]);
         }
@@ -2170,7 +2177,7 @@ fn parse_query_save_search_alone_is_accepted() {
     .unwrap();
     match cli.command {
         Commands::Query {
-            action: QueryAction::Save { name, search, .. },
+            action: QueryAction::Save(super::query::SaveArgs { name, search, .. }),
         } => {
             assert_eq!(name, "crashes");
             assert_eq!(search.as_deref(), Some("crash in tab"));
@@ -2242,7 +2249,7 @@ fn parse_bug_update_see_also_add_repeated_flag() {
     .unwrap();
     match cli.command {
         Commands::Bug {
-            action: BugAction::Update { see_also_add, .. },
+            action: BugAction::Update(super::UpdateArgs { see_also_add, .. }),
         } => {
             assert_eq!(
                 see_also_add,

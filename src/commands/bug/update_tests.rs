@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used, clippy::expect_used)]
+#![expect(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
@@ -7,8 +7,16 @@ use crate::cli::BugAction;
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
+/// Borrow the inner `UpdateArgs` from a `BugAction::Update` test fixture.
+fn as_update_args(action: &BugAction) -> &crate::cli::UpdateArgs {
+    match action {
+        BugAction::Update(args) => args,
+        _ => panic!("expected BugAction::Update"),
+    }
+}
+
 fn make_update_action(ids: Vec<u64>) -> BugAction {
-    BugAction::Update {
+    BugAction::Update(crate::cli::UpdateArgs {
         ids,
         status: Some("RESOLVED".into()),
         resolution: Some("FIXED".into()),
@@ -42,11 +50,11 @@ fn make_update_action(ids: Vec<u64>) -> BugAction {
         comment_file: None,
         comment_private: false,
         expect_unchanged_since: None,
-    }
+    })
 }
 
 fn make_update_action_with_dupe_of(id: u64, dupe_of: u64) -> BugAction {
-    BugAction::Update {
+    BugAction::Update(crate::cli::UpdateArgs {
         ids: vec![id],
         status: None,
         resolution: None,
@@ -80,11 +88,11 @@ fn make_update_action_with_dupe_of(id: u64, dupe_of: u64) -> BugAction {
         comment_file: None,
         comment_private: false,
         expect_unchanged_since: None,
-    }
+    })
 }
 
 fn make_update_action_with_scalar_parity_fields() -> BugAction {
-    BugAction::Update {
+    BugAction::Update(crate::cli::UpdateArgs {
         ids: vec![42],
         status: None,
         resolution: None,
@@ -118,18 +126,18 @@ fn make_update_action_with_scalar_parity_fields() -> BugAction {
         comment_file: None,
         comment_private: false,
         expect_unchanged_since: None,
-    }
+    })
 }
 
 fn update_ids_mut(action: &mut BugAction) -> Option<&mut Vec<u64>> {
-    let BugAction::Update { ids, .. } = action else {
+    let BugAction::Update(crate::cli::UpdateArgs { ids, .. }) = action else {
         return None;
     };
     Some(ids)
 }
 
 fn update_deadline_mut(action: &mut BugAction) -> Option<&mut Option<String>> {
-    let BugAction::Update { deadline, .. } = action else {
+    let BugAction::Update(crate::cli::UpdateArgs { deadline, .. }) = action else {
         return None;
     };
     Some(deadline)
@@ -149,7 +157,7 @@ struct UpdateLists<'a> {
 
 fn make_update_action_with_lists(lists: UpdateLists<'_>) -> BugAction {
     let to_strings = |v: Vec<&str>| v.into_iter().map(String::from).collect();
-    BugAction::Update {
+    BugAction::Update(crate::cli::UpdateArgs {
         ids: vec![1],
         status: None,
         resolution: None,
@@ -183,7 +191,7 @@ fn make_update_action_with_lists(lists: UpdateLists<'_>) -> BugAction {
         comment_file: None,
         comment_private: false,
         expect_unchanged_since: None,
-    }
+    })
 }
 
 async fn mock_put_bug_ok(mock: &wiremock::MockServer, id: u64) {
@@ -213,10 +221,10 @@ async fn mock_get_bug_lct(mock: &wiremock::MockServer, id: u64, lct: &str) {
 
 fn update_action_expect_unchanged(ids: Vec<u64>, since: &str) -> BugAction {
     let mut action = make_update_action(ids);
-    if let BugAction::Update {
+    if let BugAction::Update(crate::cli::UpdateArgs {
         expect_unchanged_since,
         ..
-    } = &mut action
+    }) = &mut action
     {
         *expect_unchanged_since = Some(since.to_string());
     }
@@ -360,7 +368,7 @@ fn build_update_params_populates_string_lists() {
         see_also_add: vec!["https://example.com/issue/1"],
         ..UpdateLists::default()
     });
-    let (ids, params) = super::build_update_params(&action).unwrap();
+    let (ids, params) = super::build_update_params(as_update_args(&action)).unwrap();
     assert_eq!(ids, vec![1]);
     assert_eq!(params.keywords.add, vec!["fix-needed"]);
     assert_eq!(params.cc.add, vec!["alice@example.com"]);
@@ -371,7 +379,7 @@ fn build_update_params_populates_string_lists() {
 #[test]
 fn build_update_params_populates_dupe_of() {
     let action = make_update_action_with_dupe_of(42, 99);
-    let (ids, params) = super::build_update_params(&action).unwrap();
+    let (ids, params) = super::build_update_params(as_update_args(&action)).unwrap();
 
     assert_eq!(ids, vec![42]);
     assert_eq!(params.dupe_of, Some(99));
@@ -382,7 +390,7 @@ fn build_update_params_populates_dupe_of() {
 #[test]
 fn build_update_params_populates_scalar_parity_fields() {
     let action = make_update_action_with_scalar_parity_fields();
-    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let (_ids, params) = super::build_update_params(as_update_args(&action)).unwrap();
 
     assert_eq!(params.alias.as_deref(), Some("short-name"));
     assert_eq!(params.deadline.as_deref(), Some("2026-12-31"));
@@ -398,7 +406,7 @@ fn build_update_params_accepts_valid_deadline_verbatim() {
     let mut action = make_update_action(vec![42]);
     *update_deadline_mut(&mut action).expect("update action") = Some("2026-12-31".into());
 
-    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let (_ids, params) = super::build_update_params(as_update_args(&action)).unwrap();
     // Date-only deadlines must reach the server unchanged (no datetime expansion).
     assert_eq!(params.deadline.as_deref(), Some("2026-12-31"));
 }
@@ -408,7 +416,7 @@ fn build_update_params_rejects_invalid_deadline() {
     let mut action = make_update_action(vec![42]);
     *update_deadline_mut(&mut action).expect("update action") = Some("garbage".into());
 
-    let err = super::build_update_params(&action).unwrap_err();
+    let err = super::build_update_params(as_update_args(&action)).unwrap_err();
     assert_eq!(err.exit_code(), 7);
     assert!(
         matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("--deadline")),
@@ -421,7 +429,7 @@ fn build_update_params_rejects_alias_with_multiple_ids() {
     let mut action = make_update_action_with_scalar_parity_fields();
     *update_ids_mut(&mut action).expect("expected update action") = vec![42, 43];
 
-    let err = super::build_update_params(&action).unwrap_err();
+    let err = super::build_update_params(as_update_args(&action)).unwrap_err();
     assert!(
         matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("--alias")),
         "expected --alias validation error, got {err:?}"
@@ -435,7 +443,7 @@ fn build_update_params_trims_string_list_values() {
         see_also_add: vec!["  https://example.com/issue/1  "],
         ..UpdateLists::default()
     });
-    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let (_ids, params) = super::build_update_params(as_update_args(&action)).unwrap();
     assert_eq!(params.keywords.add, vec!["fix-needed"]);
     assert_eq!(params.see_also.add, vec!["https://example.com/issue/1"]);
 }
@@ -446,7 +454,7 @@ fn build_update_params_populates_keywords_remove() {
         keywords_remove: vec!["stale"],
         ..UpdateLists::default()
     });
-    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let (_ids, params) = super::build_update_params(as_update_args(&action)).unwrap();
     assert_eq!(params.keywords.remove, vec!["stale"]);
     assert!(params.keywords.add.is_empty());
 }
@@ -457,7 +465,7 @@ fn build_update_params_populates_cc_remove() {
         cc_remove: vec!["bob@example.com"],
         ..UpdateLists::default()
     });
-    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let (_ids, params) = super::build_update_params(as_update_args(&action)).unwrap();
     assert_eq!(params.cc.remove, vec!["bob@example.com"]);
     assert!(params.cc.add.is_empty());
 }
@@ -468,7 +476,7 @@ fn build_update_params_populates_groups_add() {
         groups_add: vec!["secret"],
         ..UpdateLists::default()
     });
-    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let (_ids, params) = super::build_update_params(as_update_args(&action)).unwrap();
     assert_eq!(params.groups.add, vec!["secret"]);
     assert!(params.groups.remove.is_empty());
 }
@@ -479,7 +487,7 @@ fn build_update_params_populates_see_also_remove() {
         see_also_remove: vec!["https://example.com/issue/2"],
         ..UpdateLists::default()
     });
-    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let (_ids, params) = super::build_update_params(as_update_args(&action)).unwrap();
     assert_eq!(params.see_also.remove, vec!["https://example.com/issue/2"]);
     assert!(params.see_also.add.is_empty());
 }
@@ -490,7 +498,7 @@ fn build_update_params_rejects_empty_keyword() {
         keywords_add: vec!["", "fix-needed"],
         ..UpdateLists::default()
     });
-    let err = super::build_update_params(&action).unwrap_err();
+    let err = super::build_update_params(as_update_args(&action)).unwrap_err();
     assert!(
         matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::FLAG_KEYWORDS_ADD)),
         "expected InputValidation naming {}, got {err:?}",
@@ -504,7 +512,7 @@ fn build_update_params_rejects_whitespace_only_cc() {
         cc_add: vec!["   "],
         ..UpdateLists::default()
     });
-    let err = super::build_update_params(&action).unwrap_err();
+    let err = super::build_update_params(as_update_args(&action)).unwrap_err();
     assert!(
         matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::FLAG_CC_ADD)),
         "expected InputValidation naming {}, got {err:?}",
@@ -518,7 +526,7 @@ fn build_update_params_rejects_empty_groups_add() {
         groups_add: vec![""],
         ..UpdateLists::default()
     });
-    let err = super::build_update_params(&action).unwrap_err();
+    let err = super::build_update_params(as_update_args(&action)).unwrap_err();
     assert!(
         matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::FLAG_GROUPS_ADD)),
         "expected InputValidation naming {}, got {err:?}",
@@ -532,7 +540,7 @@ fn build_update_params_rejects_whitespace_only_see_also_remove() {
         see_also_remove: vec!["   "],
         ..UpdateLists::default()
     });
-    let err = super::build_update_params(&action).unwrap_err();
+    let err = super::build_update_params(as_update_args(&action)).unwrap_err();
     assert!(
         matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::FLAG_SEE_ALSO_REMOVE)),
         "expected InputValidation naming {}, got {err:?}",
@@ -546,7 +554,7 @@ fn make_update_action_with_comment(
     comment_file: Option<&std::path::Path>,
     comment_private: bool,
 ) -> BugAction {
-    BugAction::Update {
+    BugAction::Update(crate::cli::UpdateArgs {
         ids,
         status: None,
         resolution: None,
@@ -580,13 +588,13 @@ fn make_update_action_with_comment(
         comment_file: comment_file.map(std::path::PathBuf::from),
         comment_private,
         expect_unchanged_since: None,
-    }
+    })
 }
 
 #[test]
 fn build_update_params_carries_public_comment() {
     let action = make_update_action_with_comment(vec![1], Some("hello"), None, false);
-    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let (_ids, params) = super::build_update_params(as_update_args(&action)).unwrap();
     let comment = params.comment.expect("comment populated");
     assert_eq!(comment.body, "hello");
     assert!(!comment.is_private);
@@ -595,7 +603,7 @@ fn build_update_params_carries_public_comment() {
 #[test]
 fn build_update_params_carries_private_comment() {
     let action = make_update_action_with_comment(vec![1], Some("secret"), None, true);
-    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let (_ids, params) = super::build_update_params(as_update_args(&action)).unwrap();
     let comment = params.comment.expect("comment populated");
     assert_eq!(comment.body, "secret");
     assert!(comment.is_private);
@@ -604,17 +612,17 @@ fn build_update_params_carries_private_comment() {
 #[test]
 fn build_update_params_omits_comment_when_unspecified() {
     let mut action = make_update_action_with_comment(vec![1], None, None, false);
-    if let BugAction::Update { status, .. } = &mut action {
+    if let BugAction::Update(crate::cli::UpdateArgs { status, .. }) = &mut action {
         *status = Some("CONFIRMED".into());
     }
-    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let (_ids, params) = super::build_update_params(as_update_args(&action)).unwrap();
     assert!(params.comment.is_none());
 }
 
 #[test]
 fn build_update_params_rejects_private_without_body() {
     let action = make_update_action_with_comment(vec![1], None, None, true);
-    let err = super::build_update_params(&action).unwrap_err();
+    let err = super::build_update_params(as_update_args(&action)).unwrap_err();
     let msg = err.to_string();
     assert!(
         msg.contains("--comment-private"),
@@ -626,7 +634,7 @@ fn build_update_params_rejects_private_without_body() {
 #[test]
 fn build_update_params_rejects_whitespace_only_comment() {
     let action = make_update_action_with_comment(vec![1], Some("   \n\t"), None, false);
-    let err = super::build_update_params(&action).unwrap_err();
+    let err = super::build_update_params(as_update_args(&action)).unwrap_err();
     assert!(matches!(
         err,
         crate::error::BzrError::InputValidation(ref m) if m.contains("empty comment")
@@ -639,7 +647,7 @@ fn build_update_params_rejects_comment_and_comment_file_together() {
     let path = dir.path().join("body.txt");
     std::fs::write(&path, "from a file").unwrap();
     let action = make_update_action_with_comment(vec![1], Some("inline"), Some(&path), false);
-    let err = super::build_update_params(&action).unwrap_err();
+    let err = super::build_update_params(as_update_args(&action)).unwrap_err();
     match err {
         crate::error::BzrError::InputValidation(msg) => {
             assert!(msg.contains("--comment"), "names inline flag: {msg}");
@@ -655,7 +663,7 @@ fn build_update_params_reads_comment_file() {
     let path = dir.path().join("body.txt");
     std::fs::write(&path, "from a file").unwrap();
     let action = make_update_action_with_comment(vec![1], None, Some(&path), false);
-    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let (_ids, params) = super::build_update_params(as_update_args(&action)).unwrap();
     let comment = params.comment.expect("comment populated");
     assert_eq!(comment.body, "from a file");
     assert!(!comment.is_private);
@@ -667,7 +675,7 @@ fn build_update_params_comment_file_with_private() {
     let path = dir.path().join("body.txt");
     std::fs::write(&path, "private body").unwrap();
     let action = make_update_action_with_comment(vec![1], None, Some(&path), true);
-    let (_ids, params) = super::build_update_params(&action).unwrap();
+    let (_ids, params) = super::build_update_params(as_update_args(&action)).unwrap();
     let comment = params.comment.expect("comment populated");
     assert!(comment.is_private);
 }
@@ -676,7 +684,7 @@ fn build_update_params_comment_file_with_private() {
 fn build_update_params_rejects_missing_comment_file() {
     let path = std::path::Path::new("/nonexistent/bzr-issue-161-test.txt");
     let action = make_update_action_with_comment(vec![1], None, Some(path), false);
-    let err = super::build_update_params(&action).unwrap_err();
+    let err = super::build_update_params(as_update_args(&action)).unwrap_err();
     let msg = err.to_string();
     assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
     assert!(
@@ -691,7 +699,7 @@ fn build_update_params_rejects_non_utf8_comment_file() {
     let path = dir.path().join("body.bin");
     std::fs::write(&path, [0xff_u8, 0xfe, 0xfd]).unwrap();
     let action = make_update_action_with_comment(vec![1], None, Some(&path), false);
-    let err = super::build_update_params(&action).unwrap_err();
+    let err = super::build_update_params(as_update_args(&action)).unwrap_err();
     assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
 }
 
@@ -701,7 +709,7 @@ fn build_update_params_rejects_whitespace_only_comment_file() {
     let path = dir.path().join("body.txt");
     std::fs::write(&path, "   \n\t  \n").unwrap();
     let action = make_update_action_with_comment(vec![1], None, Some(&path), false);
-    let err = super::build_update_params(&action).unwrap_err();
+    let err = super::build_update_params(as_update_args(&action)).unwrap_err();
     assert!(matches!(
         err,
         crate::error::BzrError::InputValidation(ref m) if m.contains("empty comment")
@@ -806,9 +814,9 @@ async fn bug_update_json_output_unchanged_with_comment() {
 
 fn make_empty_update_action(ids: Vec<u64>) -> BugAction {
     let mut action = make_update_action(ids);
-    if let BugAction::Update {
+    if let BugAction::Update(crate::cli::UpdateArgs {
         status, resolution, ..
-    } = &mut action
+    }) = &mut action
     {
         *status = None;
         *resolution = None;
@@ -819,7 +827,7 @@ fn make_empty_update_action(ids: Vec<u64>) -> BugAction {
 #[test]
 fn build_update_params_rejects_update_with_no_fields() {
     let action = make_empty_update_action(vec![42]);
-    let err = super::build_update_params(&action).unwrap_err();
+    let err = super::build_update_params(as_update_args(&action)).unwrap_err();
     assert!(
         matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("at least one")),
         "expected an at-least-one-field validation error, got {err:?}"

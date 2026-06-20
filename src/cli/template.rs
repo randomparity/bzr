@@ -53,6 +53,18 @@ impl TemplateFields {
     }
 }
 
+/// Arguments for `template update`.
+#[derive(Debug, Args)]
+pub struct UpdateArgs {
+    /// Template name
+    pub name: String,
+    #[command(flatten)]
+    pub fields: TemplateFields,
+    /// Reset a field to unset (repeatable). Names match the long flags.
+    #[arg(long, value_name = "FIELD")]
+    pub clear: Vec<String>,
+}
+
 #[derive(Subcommand)]
 pub enum TemplateAction {
     /// Save (or replace) a named bug-creation template.
@@ -107,15 +119,7 @@ pub enum TemplateAction {
     /// See bzr-template-save(1) to create one and
     /// bzr-template-show(1) to inspect the result.
     #[command(verbatim_doc_comment)]
-    Update {
-        /// Template name
-        name: String,
-        #[command(flatten)]
-        fields: TemplateFields,
-        /// Reset a field to unset (repeatable). Names match the long flags.
-        #[arg(long, value_name = "FIELD")]
-        clear: Vec<String>,
-    },
+    Update(UpdateArgs),
 
     /// List all saved templates.
     ///
