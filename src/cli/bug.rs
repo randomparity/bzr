@@ -495,13 +495,25 @@ pub struct CloneArgs {
 /// Arguments for `bug update`.
 #[derive(Args, Debug, Default)]
 pub struct UpdateArgs {
+    /// Apply one or more structured bug updates from JSON.
+    ///
+    /// A value of `-` reads the JSON from stdin; otherwise it is a
+    /// file path. A top-level object applies one edit to the
+    /// positional IDs, or to its own `id` when no positional ID is
+    /// given. A top-level array applies one independent edit per
+    /// element; each element must include `id` and returns the
+    /// existing batch result shape (exit 11 if any element fails).
+    /// Unknown keys are rejected, and explicit CLI flags override
+    /// corresponding JSON fields.
+    #[arg(long, value_name = "PATH")]
+    pub from_json: Option<String>,
     /// Bug ID(s).
     ///
     /// One or more IDs. When more than one is supplied, the
     /// same field changes are applied to every bug; partial
     /// failures (some bugs updated, others rejected) exit with
     /// code 11 and the JSON output enumerates per-bug results.
-    #[arg(required = true, num_args = 1..)]
+    #[arg(required_unless_present = "from_json", num_args = 1..)]
     pub ids: Vec<u64>,
     /// New status (e.g. `NEW`, `ASSIGNED`, `RESOLVED`, `CLOSED`).
     ///

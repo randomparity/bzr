@@ -871,6 +871,7 @@ async fn bug_update_integration() {
         .await;
 
     let action = bzr::cli::BugAction::Update(bzr::cli::UpdateArgs {
+        from_json: None,
         ids: vec![42],
         status: Some("RESOLVED".to_string()),
         resolution: Some("FIXED".to_string()),
@@ -950,6 +951,7 @@ async fn bug_update_scalar_parity_fields_integration() {
         .await;
 
     let action = bzr::cli::BugAction::Update(bzr::cli::UpdateArgs {
+        from_json: None,
         ids: vec![42],
         status: None,
         resolution: None,
@@ -1024,6 +1026,7 @@ async fn bug_update_with_comment_integration() {
         .await;
 
     let action = bzr::cli::BugAction::Update(bzr::cli::UpdateArgs {
+        from_json: None,
         ids: vec![42],
         status: Some("RESOLVED".to_string()),
         resolution: Some("FIXED".to_string()),

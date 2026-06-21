@@ -116,8 +116,8 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │              [--description <D>] [--priority <P>] [--severity <S>] [--assignee <A>]
 │   │              [--op-sys <OS>] [--rep-platform <PLAT>]
 │   │              [--no-comment] [--add-depends-on] [--add-blocks] [--no-cc] [--no-keywords]
-│   ├── update <ID...> [--status <S>] [--resolution <R>] [--dupe-of <ID>] [--assignee <A>]
-│   │                   [--priority <P>] [--severity <S>] [--summary <S>]
+│   ├── update [<ID...>] [--from-json <PATH>] [--status <S>] [--resolution <R>] [--dupe-of <ID>]
+│   │                   [--assignee <A>] [--priority <P>] [--severity <S>] [--summary <S>]
 │   │                   [--alias <A>] [--deadline <DATE>] [--estimated-time <HOURS>]
 │   │                   [--remaining-time <HOURS>] [--work-time <HOURS>]
 │   │                   [--whiteboard <W>] [--url <U>] [--target-milestone <M>]
@@ -612,7 +612,7 @@ Accepted keys match the create flag names: `product`, `component`, `summary`, `v
 
 **Precedence:** an explicit CLI flag overrides the corresponding JSON field, applied uniformly to every element of an array — e.g. `--product Fedora --from-json bugs.json` forces `product` on all entries. `--from-json` is mutually exclusive with `--template` and bypasses the `$EDITOR` flow.
 
-`bug update` and the other resource commands do not yet accept `--from-json`; that is tracked as follow-up work.
+`bug update` accepts its own structured update input via `--from-json`; other resource commands do not yet accept `--from-json`.
 
 ```bash
 printf '%s' '{"product":"Fedora","component":"kernel","summary":"S"}' \
@@ -676,11 +676,14 @@ bzr bug update 12345 --see-also-add https://example.com/issue/42 \
 bzr bug update 12345 --status RESOLVED --resolution FIXED \
     --comment "Fixed by patch in #200"
 bzr bug update 100 200 300 --status RESOLVED --resolution WONTFIX
+bzr bug update 12345 --from-json update.json
+bzr bug update --from-json updates.json --json | jq '.failed'
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `<ID...>` | Yes | Bug ID(s) — pass multiple for batch updates |
+| `<ID...>` | Yes unless `--from-json` supplies targets | Bug ID(s) — pass multiple for batch updates |
+| `--from-json <PATH>` | No | Apply structured update input from a JSON object or array (`-` reads stdin). See [Structured update input](#structured-update-input---from-json) below. |
 | `--status <S>` | No | New status |
 | `--resolution <R>` | No | Resolution (FIXED, WONTFIX, DUPLICATE, etc.) |
 | `--dupe-of <ID>` | No | Mark this bug as a duplicate of another bug; Bugzilla sets status/resolution |
@@ -715,6 +718,44 @@ bzr bug update 100 200 300 --status RESOLVED --resolution WONTFIX
 | `--comment-file <PATH>` | No | Read the comment body from a UTF-8 file; `-` reads stdin (mutually exclusive with `--comment`; missing or non-UTF-8 paths exit 7) |
 | `--comment-private` | No | Mark the comment private (requires `--comment` or `--comment-file`) |
 | `--expect-unchanged-since <TIMESTAMP>` | No | Optimistic-concurrency guard: only apply if the bug's `last_change_time` still equals this value (pass the `last_change_time` from a preceding `bug view`). Re-reads each target before writing and exits 14 (collision) without writing on a mismatch. Client-side, so a narrow check-then-write window remains; with multiple IDs any mismatch aborts the whole batch |
+
+#### Structured update input (`--from-json`)
+
+`--from-json <PATH>` applies bug updates from a structured JSON document; `-`
+reads the document from stdin.
+
+- A top-level **object** applies one update to the positional `<ID...>` targets.
+  If no positional ID is supplied, the object must include `id`. Positional IDs
+  and object `id` are mutually exclusive.
+- A top-level **array** applies one independent update per element. Each element
+  must include `id`; positional IDs are rejected with array input. Array input
+  always emits the batch result shape, even for one element.
+
+Accepted update keys are `id`, `status`, `resolution`, `dupe_of`, `alias`,
+`deadline`, `estimated_time`, `remaining_time`, `work_time`,
+`reset_assigned_to`, `reset_qa_contact`, `assignee`, `priority`, `severity`,
+`summary`, `whiteboard`, `url`, `target_milestone`, `flags`,
+`blocks_add`, `blocks_remove`, `depends_on_add`, `depends_on_remove`,
+`keywords_add`, `keywords_remove`, `cc_add`, `cc_remove`, `groups_add`,
+`groups_remove`, `see_also_add`, `see_also_remove`, `comment`,
+`comment_file`, `comment_private`, and `expect_unchanged_since`.
+**Unknown keys are rejected** (exit 7).
+
+List fields use the same add/remove semantics as the flags: for example,
+`"keywords_add": ["fix-needed"]` sends `{"keywords":{"add":["fix-needed"]}}`.
+`flags` is an array of normal `--flag` syntax strings.
+
+**Precedence:** explicit CLI flags override the corresponding JSON field. For
+arrays, overrides apply to every element. CLI `--comment -` / `--comment-file -`
+cannot be combined with `--from-json -`, and array input rejects CLI stdin
+comment sources. JSON `comment_file` must name a file path; `"-"` is rejected.
+
+```bash
+printf '%s' '{"status":"ASSIGNED","comment":"Taking this"}' \
+  | bzr bug update 12345 --from-json -
+
+bzr bug update --from-json updates.json --json | jq '.succeeded'
+```
 
 When updating multiple bugs, failures on individual bugs do not abort the batch. A summary is printed showing which bugs succeeded and which failed.
 
