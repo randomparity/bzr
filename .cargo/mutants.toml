@@ -127,4 +127,13 @@ exclude_re = [
     'delete match arm BzrError::Http\(re\) in classify_and_handle_tls_failure',
     # `handle_tofu` and `handle_pin_rotation` are skipped via
     # `#[cfg_attr(test, mutants::skip)]` in src/commands/shared.rs.
+    # The `--paginate` safety-cap warning in src/commands/runtime/paging.rs
+    # only fires when `fetch_all_pages` runs all MAX_PAGES (10_000) iterations
+    # without a short page — a server that ignores `offset`. Reaching it in a
+    # unit test would require 10_000 full-page mock responses, and its sole
+    # effect is a `tracing::warn!` with no return-value or writer impact (same
+    # untestable-side-effect category as the warn_* family above). Deleting the
+    # `!` so the warning fires on the normal path instead is observationally
+    # equivalent under any feasible test.
+    'delete ! in fetch_all_pages',
 ]
