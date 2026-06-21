@@ -363,6 +363,7 @@ async fn handle_run(
     let crate::cli::query::RunArgs {
         name,
         limit,
+        count,
         fields,
         exclude_fields,
         server: server_override,
@@ -379,6 +380,8 @@ async fn handle_run(
         sort_args,
         page_args: crate::cli::PageArgs { offset, paginate },
     } = args;
+
+    super::bug::ensure_no_paging_with_count(*count, *offset, *paginate)?;
 
     let creation_time_override =
         crate::validation::parse_optional_date(created_since.as_deref(), "--created-since")?;
@@ -426,6 +429,15 @@ async fn handle_run(
         ));
     } else if params.order.is_none() && !params.raw_params.iter().any(|(k, _)| k == "order") {
         params.order = Some(crate::validation::build_order(None, sort_args.order));
+    }
+
+    if *count {
+        let client = super::runtime::shared::connect_and_configure(effective_server, api).await?;
+        let bugs = client
+            .search_bugs(&super::bug::count_search_params(params))
+            .await?;
+        crate::output::result_types::write_count(bugs.len(), format, w.out);
+        return Ok(());
     }
 
     // Source columns from the resolved params (saved-query fields + CLI

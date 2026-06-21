@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `bug resolve`, `bug close`, `bug reopen`, and `bug dup` now accept
   `--expect-unchanged-since`, matching `bug update`'s optimistic-concurrency
   guard. (#364)
+- `query run` now accepts `--count`, matching the count-only output shape used
+  by bug search-backed commands. (#368)
 
 ### Changed
 
