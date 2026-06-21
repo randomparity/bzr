@@ -70,6 +70,34 @@ async fn run_status_verb(action: BugAction, id: u64, body: serde_json::Value, st
     assert!(result.is_ok(), "verb failed: {:?}", result.err());
 }
 
+async fn run_verb_collision_expecting_no_write(action: BugAction, id: u64) {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_status_field(&mock, DEFAULT_STATUSES).await;
+    Mock::given(method("GET"))
+        .and(path(format!("/rest/bug/{id}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": id, "last_change_time": "2026-06-19T12:05:00Z"}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("PUT"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    assert!(
+        matches!(result, Err(crate::error::BzrError::MidAirCollision { .. })),
+        "expected mid-air collision, got {result:?}"
+    );
+}
+
 const DEFAULT_STATUSES: &[&str] = &[
     "UNCONFIRMED",
     "CONFIRMED",
@@ -83,6 +111,7 @@ fn close_args(ids: Vec<u64>, status: &str, as_resolution: Option<&str>) -> Close
         ids,
         status: status.into(),
         as_resolution: as_resolution.map(Into::into),
+        expect_unchanged_since: None,
         comment: CommentArgs::default(),
     }
 }
@@ -91,6 +120,7 @@ fn reopen_args(ids: Vec<u64>, status: &str) -> ReopenArgs {
     ReopenArgs {
         ids,
         status: status.into(),
+        expect_unchanged_since: None,
         comment: CommentArgs::default(),
     }
 }
@@ -109,6 +139,7 @@ async fn resolve_dry_run_makes_no_write() {
     let action = BugAction::Resolve(ResolveArgs {
         ids: vec![5],
         as_resolution: "FIXED".into(),
+        expect_unchanged_since: None,
         comment: CommentArgs::default(),
     });
     let mut io = crate::test_helpers::CapturedIo::new();
@@ -131,6 +162,7 @@ async fn resolve_defaults_to_fixed() {
     let action = BugAction::Resolve(ResolveArgs {
         ids: vec![5],
         as_resolution: "FIXED".into(),
+        expect_unchanged_since: None,
         comment: CommentArgs::default(),
     });
     run_verb_expecting_body(
@@ -146,6 +178,7 @@ async fn resolve_with_as_override() {
     let action = BugAction::Resolve(ResolveArgs {
         ids: vec![7],
         as_resolution: "WONTFIX".into(),
+        expect_unchanged_since: None,
         comment: CommentArgs::default(),
     });
     run_verb_expecting_body(
@@ -154,6 +187,92 @@ async fn resolve_with_as_override() {
         serde_json::json!({"status": "RESOLVED", "resolution": "WONTFIX"}),
     )
     .await;
+}
+
+#[tokio::test]
+async fn bug_verbs_expect_unchanged_since_collision_skips_write() {
+    let since = "2026-06-19T12:00:00Z";
+
+    run_verb_collision_expecting_no_write(
+        BugAction::Resolve(ResolveArgs {
+            ids: vec![5],
+            as_resolution: "FIXED".into(),
+            expect_unchanged_since: Some(since.into()),
+            comment: CommentArgs::default(),
+        }),
+        5,
+    )
+    .await;
+
+    run_verb_collision_expecting_no_write(
+        BugAction::Close(CloseArgs {
+            ids: vec![6],
+            status: "VERIFIED".into(),
+            as_resolution: None,
+            expect_unchanged_since: Some(since.into()),
+            comment: CommentArgs::default(),
+        }),
+        6,
+    )
+    .await;
+
+    run_verb_collision_expecting_no_write(
+        BugAction::Reopen(ReopenArgs {
+            ids: vec![7],
+            status: "CONFIRMED".into(),
+            expect_unchanged_since: Some(since.into()),
+            comment: CommentArgs::default(),
+        }),
+        7,
+    )
+    .await;
+
+    run_verb_collision_expecting_no_write(
+        BugAction::Dup(DupArgs {
+            id: 8,
+            target: 80,
+            expect_unchanged_since: Some(since.into()),
+            comment: CommentArgs::default(),
+        }),
+        8,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn bug_verbs_expect_unchanged_since_match_writes_update() {
+    let since = "2026-06-19T12:00:00Z";
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/5"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 5, "last_change_time": since}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/5"))
+        .and(body_json(
+            serde_json::json!({"status": "RESOLVED", "resolution": "FIXED"}),
+        ))
+        .respond_with(ok_put(5))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::Resolve(ResolveArgs {
+        ids: vec![5],
+        as_resolution: "FIXED".into(),
+        expect_unchanged_since: Some(since.into()),
+        comment: CommentArgs::default(),
+    });
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    assert!(result.is_ok(), "guarded resolve failed: {result:?}");
 }
 
 #[tokio::test]
@@ -309,6 +428,7 @@ async fn dup_sends_dupe_of() {
     let action = BugAction::Dup(DupArgs {
         id: 12,
         target: 100,
+        expect_unchanged_since: None,
         comment: CommentArgs::default(),
     });
     run_verb_expecting_body(action, 12, serde_json::json!({"dupe_of": 100})).await;
@@ -319,6 +439,7 @@ async fn resolve_posts_comment_atomically() {
     let action = BugAction::Resolve(ResolveArgs {
         ids: vec![5],
         as_resolution: "FIXED".into(),
+        expect_unchanged_since: None,
         comment: CommentArgs {
             comment: Some("done in 9.1".into()),
             comment_file: None,
@@ -356,6 +477,7 @@ async fn resolve_batch_updates_each_id() {
     let action = BugAction::Resolve(ResolveArgs {
         ids: vec![1, 2],
         as_resolution: "FIXED".into(),
+        expect_unchanged_since: None,
         comment: CommentArgs::default(),
     });
     let mut io = crate::test_helpers::CapturedIo::new();
@@ -377,6 +499,7 @@ async fn close_private_comment_without_body_is_rejected() {
         ids: vec![5],
         status: "VERIFIED".into(),
         as_resolution: None,
+        expect_unchanged_since: None,
         comment: CommentArgs {
             comment: None,
             comment_file: None,

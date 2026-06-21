@@ -1070,6 +1070,9 @@ pub struct ResolveArgs {
     /// Resolution to set (default `FIXED`).
     #[arg(long = "as", value_name = "RESOLUTION", default_value = "FIXED")]
     pub as_resolution: String,
+    /// Only apply the update if the bug has not changed since this time.
+    #[arg(long, value_name = "TIMESTAMP")]
+    pub expect_unchanged_since: Option<String>,
     #[command(flatten)]
     pub comment: CommentArgs,
 }
@@ -1090,6 +1093,9 @@ pub struct CloseArgs {
     /// preserve any existing resolution.
     #[arg(long = "as", value_name = "RESOLUTION")]
     pub as_resolution: Option<String>,
+    /// Only apply the update if the bug has not changed since this time.
+    #[arg(long, value_name = "TIMESTAMP")]
+    pub expect_unchanged_since: Option<String>,
     #[command(flatten)]
     pub comment: CommentArgs,
 }
@@ -1106,6 +1112,9 @@ pub struct ReopenArgs {
     /// list; an unknown value exits 7. Matched exactly and case-sensitively.
     #[arg(long, value_name = "STATUS", default_value = "CONFIRMED")]
     pub status: String,
+    /// Only apply the update if the bug has not changed since this time.
+    #[arg(long, value_name = "TIMESTAMP")]
+    pub expect_unchanged_since: Option<String>,
     #[command(flatten)]
     pub comment: CommentArgs,
 }
@@ -1117,6 +1126,9 @@ pub struct DupArgs {
     pub id: u64,
     /// The canonical bug this one duplicates.
     pub target: u64,
+    /// Only apply the update if the bug has not changed since this time.
+    #[arg(long, value_name = "TIMESTAMP")]
+    pub expect_unchanged_since: Option<String>,
     #[command(flatten)]
     pub comment: CommentArgs,
 }

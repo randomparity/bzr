@@ -301,15 +301,17 @@ pub(super) async fn handle(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let (ids, params) = build_update_params(args)?;
-    let expect_unchanged_since = &args.expect_unchanged_since;
-    // Optimistic-concurrency guard, before any write. Skipped under --dry-run,
-    // which performs no write (and `apply` short-circuits to a preview anyway).
-    if let Some(expected) = expect_unchanged_since {
-        if !crate::commands::runtime::dry_run::enabled() {
-            ensure_unchanged_since(client, &ids, expected).await?;
-        }
-    }
-    apply(client, ids, params, format, w).await
+    apply_checked(
+        client,
+        ApplyRequest {
+            ids,
+            params,
+            expect_unchanged_since: args.expect_unchanged_since.as_deref(),
+        },
+        format,
+        w,
+    )
+    .await
 }
 
 /// Emit the would-be update without writing: the affected IDs and the payload
@@ -337,8 +339,7 @@ fn write_update_dry_run(
 /// Apply an already-built `UpdateBugParams` to one or more bug IDs, dispatching
 /// to the single- or batch-update path. Shared by `bug update` and the
 /// convenience verbs (`resolve`/`close`/`reopen`/`dup`). Under `--dry-run`,
-/// previews the change without calling the write API. The optimistic-concurrency
-/// guard (`--expect-unchanged-since`) runs in `handle`, before this is called.
+/// previews the change without calling the write API.
 pub(super) async fn apply(
     client: &BugzillaClient,
     ids: Vec<u64>,
@@ -359,6 +360,30 @@ pub(super) async fn apply(
     } else {
         update_batch(client, &ids, &params, format, w).await
     }
+}
+
+pub(super) struct ApplyRequest<'a> {
+    pub ids: Vec<u64>,
+    pub params: UpdateBugParams,
+    pub expect_unchanged_since: Option<&'a str>,
+}
+
+/// Apply an update after running the optional optimistic-concurrency guard.
+///
+/// The guard is skipped under `--dry-run`, which performs no write and whose
+/// preview still uses the same payload validation path.
+pub(super) async fn apply_checked(
+    client: &BugzillaClient,
+    request: ApplyRequest<'_>,
+    format: OutputFormat,
+    w: &mut Writers<'_>,
+) -> Result<()> {
+    if let Some(expected) = request.expect_unchanged_since {
+        if !crate::commands::runtime::dry_run::enabled() {
+            ensure_unchanged_since(client, &request.ids, expected).await?;
+        }
+    }
+    apply(client, request.ids, request.params, format, w).await
 }
 
 /// Optimistic-concurrency guard for `--expect-unchanged-since`: refuse the
