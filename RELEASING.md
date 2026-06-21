@@ -33,12 +33,18 @@ If `bzr` is already taken, rename the package before publishing. The install com
 ## Version-number convention
 
 Between releases, `Cargo.toml` carries a `-dev` SemVer pre-release suffix
-for the next planned release — e.g. directly after `v0.3.0` ships the
-project lives at `version = "0.4.0-dev"`. This makes development
-builds clearly distinguishable from the most recent release in
-`bzr --version` output, and SemVer correctly orders `0.4.0-dev <
-0.4.0`. `publish-crates.yml` gates anything containing `-` out of
-crates.io publishes, so dev builds cannot accidentally publish.
+marking the next planned release. By default this is the next **patch**
+version — directly after `v0.4.4` ships the project lives at
+`version = "0.4.5-dev"` (the `post-release-bump` job in step 7 of the
+checklist applies this automatically). The suffix is only a placeholder:
+the actual release version is chosen at tag time per SemVer based on what
+landed, so when breaking changes or new features have accumulated the
+release-prep PR bumps to the next minor instead — this is how `0.4.5-dev`
+shipped as `0.5.0`. The suffix makes development builds clearly
+distinguishable from the most recent release in `bzr --version` output, and
+SemVer correctly orders `0.4.5-dev < 0.5.0`. `publish-crates.yml` gates
+anything containing `-` out of crates.io publishes, so dev builds cannot
+accidentally publish.
 
 Each binary additionally embeds the current git short SHA via
 `build.rs`, so `bzr --version` prints `bzr 0.4.0-dev (97e0d35)` —
