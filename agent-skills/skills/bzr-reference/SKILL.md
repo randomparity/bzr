@@ -40,14 +40,36 @@ If `whoami` fails, the server or credentials are not set up — see the
 
 The full surface (with one example each) is in `reference/commands.md`. The
 groups: `bug`, `comment`, `attachment`, `config`, `product`, `field`, `user`,
-`group`, `whoami`, `server`, `classification`, `component`, `template`, `query`.
+`group`, `whoami`, `server`, `classification`, `component`, `template`, `query`,
+plus two local (no-network) top-level commands: `completion` (shell completion
+scripts) and `schema` (published JSON Schemas for `--json` output).
 
 Two surface facts agents get wrong:
 
-- **Components** are read from `bzr product view <product>` — there is **no**
-  `bzr component list` (`bzr component` only has admin `create`/`update`).
+- **Components** have their own read verbs as of 0.5.0:
+  `bzr component list --product <product>` and
+  `bzr component view <product> <component>`. `bzr product view <product>`
+  still lists components inline alongside versions and milestones, which is
+  often the convenient one-shot view.
 - **Flags** are changed through `bzr bug update --flag ...` — there is **no**
   standalone `bzr flags` command.
+
+## Global flags worth knowing
+
+These work on any command (place them before the subcommand):
+
+- `--json` / `--output ndjson` — JSON, or newline-delimited JSON (one record per
+  line) for streaming into `jq -c` or agents.
+- `--dry-run` — preview a bug mutation (`create`/`update`/`clone`/`resolve`/
+  `close`/`reopen`/`dup`) without writing; prints the would-be payload.
+- `-y` / `--yes` — skip the confirmation prompt for a batch mutation touching
+  more than 10 bugs (interactive terminals only).
+- `--timeout <secs>` / `--retry <n>` — tune per-request timeout and transient
+  retry (reads only, with backoff).
+- `--config <path>` — use an alternate `config.toml` (sandboxes the run).
+- `--server-url <url>` (+ `--server-api-key-env <env>`, optional
+  `--server-email <email>`) — a fully stateless inline server, no config file
+  needed; ideal for CI and agents. See the `bzr-setup` skill.
 
 ## Cardinal rules
 
@@ -57,6 +79,6 @@ Two surface facts agents get wrong:
   `bzr-triage-bug` skill walks this through.
 - **Keep writes explicit and minimal.** Change only the fields you intend to.
 
-This reference is authored against **bzr 0.4.4**. If `bzr --version` is much
+This reference is authored against **bzr 0.5.0**. If `bzr --version` is much
 newer and a command here is rejected, the surface may have moved; check
 `bzr <group> --help`.
