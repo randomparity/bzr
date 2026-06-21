@@ -65,7 +65,17 @@ pub(super) async fn resolve(
         comment: comment_update(&args.comment)?,
         ..Default::default()
     };
-    super::update::apply(client, args.ids.clone(), params, format, w).await
+    super::update::apply_checked(
+        client,
+        super::update::ApplyRequest {
+            ids: args.ids.clone(),
+            params,
+            expect_unchanged_since: args.expect_unchanged_since.as_deref(),
+        },
+        format,
+        w,
+    )
+    .await
 }
 
 pub(super) async fn close(
@@ -84,7 +94,17 @@ pub(super) async fn close(
         comment,
         ..Default::default()
     };
-    super::update::apply(client, args.ids.clone(), params, format, w).await
+    super::update::apply_checked(
+        client,
+        super::update::ApplyRequest {
+            ids: args.ids.clone(),
+            params,
+            expect_unchanged_since: args.expect_unchanged_since.as_deref(),
+        },
+        format,
+        w,
+    )
+    .await
 }
 
 pub(super) async fn reopen(
@@ -100,7 +120,17 @@ pub(super) async fn reopen(
         comment,
         ..Default::default()
     };
-    super::update::apply(client, args.ids.clone(), params, format, w).await
+    super::update::apply_checked(
+        client,
+        super::update::ApplyRequest {
+            ids: args.ids.clone(),
+            params,
+            expect_unchanged_since: args.expect_unchanged_since.as_deref(),
+        },
+        format,
+        w,
+    )
+    .await
 }
 
 pub(super) async fn dup(
@@ -114,7 +144,17 @@ pub(super) async fn dup(
         comment: comment_update(&args.comment)?,
         ..Default::default()
     };
-    super::update::apply(client, vec![args.id], params, format, w).await
+    super::update::apply_checked(
+        client,
+        super::update::ApplyRequest {
+            ids: vec![args.id],
+            params,
+            expect_unchanged_since: args.expect_unchanged_since.as_deref(),
+        },
+        format,
+        w,
+    )
+    .await
 }
 
 #[cfg(test)]

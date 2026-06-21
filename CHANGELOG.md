@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `bug update` now accepts `--url` and `--target-milestone`, matching fields
   that `bug create` can already set. (#363)
+- `bug resolve`, `bug close`, `bug reopen`, and `bug dup` now accept
+  `--expect-unchanged-since`, matching `bug update`'s optimistic-concurrency
+  guard. (#364)
 
 ### Changed
 

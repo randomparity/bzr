@@ -180,6 +180,73 @@ fn parse_update_expect_unchanged_since() {
 }
 
 #[test]
+fn parse_bug_verbs_expect_unchanged_since() {
+    let since = "2026-06-19T12:00:00Z";
+    let cases: Vec<(Vec<&str>, &str)> = vec![
+        (
+            vec![
+                "bzr",
+                "bug",
+                "resolve",
+                "42",
+                "--expect-unchanged-since",
+                since,
+            ],
+            "resolve",
+        ),
+        (
+            vec![
+                "bzr",
+                "bug",
+                "close",
+                "42",
+                "--expect-unchanged-since",
+                since,
+            ],
+            "close",
+        ),
+        (
+            vec![
+                "bzr",
+                "bug",
+                "reopen",
+                "42",
+                "--expect-unchanged-since",
+                since,
+            ],
+            "reopen",
+        ),
+        (
+            vec![
+                "bzr",
+                "bug",
+                "dup",
+                "42",
+                "99",
+                "--expect-unchanged-since",
+                since,
+            ],
+            "dup",
+        ),
+    ];
+
+    for (argv, name) in cases {
+        let cli = Cli::try_parse_from(argv).unwrap();
+        let Commands::Bug { action } = cli.command else {
+            panic!("expected bug command for {name}");
+        };
+        let parsed = match action {
+            BugAction::Resolve(args) => args.expect_unchanged_since,
+            BugAction::Close(args) => args.expect_unchanged_since,
+            BugAction::Reopen(args) => args.expect_unchanged_since,
+            BugAction::Dup(args) => args.expect_unchanged_since,
+            _ => panic!("expected {name} action"),
+        };
+        assert_eq!(parsed.as_deref(), Some(since), "{name}");
+    }
+}
+
+#[test]
 fn parse_bug_update_url_and_target_milestone() {
     let cli = Cli::try_parse_from([
         "bzr",

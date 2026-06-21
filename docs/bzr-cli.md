@@ -85,7 +85,7 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 | 11 | Batch partial failure (some operations succeeded, some failed) |
 | 12 | Keyring error (OS keychain access failed, e.g. locked keyring or missing daemon) |
 | 13 | TLS error (certificate pin mismatch or issuer changed; use `--tls-pin-now` to re-pin or `--tls-pin-clear` to remove the pin) |
-| 14 | Mid-air collision (`bug update --expect-unchanged-since`: the bug changed since the given time; re-read and retry) |
+| 14 | Mid-air collision (`bug update`/convenience verb `--expect-unchanged-since`: the bug changed since the given time; re-read and retry) |
 
 *Exit code 2 is produced by clap for argument errors before bzr's error handling runs, in addition to resource-not-found errors from bzr itself.
 
@@ -129,10 +129,15 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │                   [--see-also-add <URL>] [--see-also-remove <URL>]
 │   │                   [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 │   │                   [--expect-unchanged-since <TIMESTAMP>]
-│   ├── resolve <ID...> [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
-│   ├── close <ID...> [--status <STATUS>] [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
-│   ├── reopen <ID...> [--status <STATUS>] [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
+│   ├── resolve <ID...> [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>]
+│   │                   [--comment-private] [--expect-unchanged-since <TIMESTAMP>]
+│   ├── close <ID...> [--status <STATUS>] [--as <RESOLUTION>] [--comment <BODY>]
+│   │                 [--comment-file <PATH>] [--comment-private]
+│   │                 [--expect-unchanged-since <TIMESTAMP>]
+│   ├── reopen <ID...> [--status <STATUS>] [--comment <BODY>] [--comment-file <PATH>]
+│   │                  [--comment-private] [--expect-unchanged-since <TIMESTAMP>]
 │   └── dup <ID> <TARGET> [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
+│                       [--expect-unchanged-since <TIMESTAMP>]
 ├── comment
 │   ├── list <BUG_ID> [--since <DATE>]
 │   ├── add <BUG_ID> [--body <TEXT>] [--body-file <PATH>] [--private]
@@ -706,6 +711,9 @@ time. Each accepts multiple IDs (batch, except `dup`) and the same
 `--comment` / `--comment-file` / `--comment-private` flags as `bug update`,
 posting the comment atomically with the change. Batch behavior (per-bug
 partial-failure reporting, exit code 11) is inherited from `bug update`.
+`--expect-unchanged-since <TIMESTAMP>` is also inherited from `bug update`: it
+re-reads each target and exits 14 without writing if `last_change_time` differs
+from the supplied value.
 
 ```bash
 bzr bug resolve 12345                       # → update --status RESOLVED --resolution FIXED
@@ -720,10 +728,10 @@ bzr bug dup 12345 100                        # → update --dupe-of 100
 
 | Verb | Equivalent `update` | Notes |
 |------|---------------------|-------|
-| `resolve <ID...> [--as <R>]` | `--status RESOLVED --resolution <R>` | `--as` defaults to `FIXED` |
-| `close <ID...> [--status <S>] [--as <R>]` | `--status <S> [--resolution <R>]` | `--status` defaults to `VERIFIED`; resolution set only when `--as` is given, otherwise the existing one is preserved |
-| `reopen <ID...> [--status <S>]` | `--status <S>` | `--status` defaults to `CONFIRMED`; Bugzilla clears the resolution automatically |
-| `dup <ID> <TARGET>` | `--dupe-of <TARGET>` | Bugzilla sets RESOLVED/DUPLICATE automatically |
+| `resolve <ID...> [--as <R>] [--expect-unchanged-since <T>]` | `--status RESOLVED --resolution <R>` | `--as` defaults to `FIXED` |
+| `close <ID...> [--status <S>] [--as <R>] [--expect-unchanged-since <T>]` | `--status <S> [--resolution <R>]` | `--status` defaults to `VERIFIED`; resolution set only when `--as` is given, otherwise the existing one is preserved |
+| `reopen <ID...> [--status <S>] [--expect-unchanged-since <T>]` | `--status <S>` | `--status` defaults to `CONFIRMED`; Bugzilla clears the resolution automatically |
+| `dup <ID> <TARGET> [--expect-unchanged-since <T>]` | `--dupe-of <TARGET>` | Bugzilla sets RESOLVED/DUPLICATE automatically |
 
 `close` and `reopen` default to the stock Bugzilla 5.x statuses `VERIFIED` and
 `CONFIRMED`. Installs that define custom statuses (e.g. `CLOSED`, `REOPENED`)
