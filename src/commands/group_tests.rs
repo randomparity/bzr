@@ -81,6 +81,35 @@ async fn group_create_sends_post() {
 }
 
 #[tokio::test]
+async fn group_create_dry_run_makes_no_write_and_marks_payload() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("POST"))
+        .and(path("/rest/group"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 5})))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let action = GroupAction::Create {
+        name: "new-group".into(),
+        description: "A test group".into(),
+        is_active: true,
+    };
+    crate::commands::runtime::dry_run::set(true);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    crate::commands::runtime::dry_run::set(false);
+
+    assert!(result.is_ok(), "dry-run group create failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["resource"], "group");
+    assert_eq!(parsed["action"], "dry-run");
+    assert_eq!(parsed["ids"], serde_json::json!([]));
+    assert_eq!(parsed["changes"]["name"], "new-group");
+}
+
+#[tokio::test]
 async fn group_update_sends_put() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
@@ -109,6 +138,57 @@ async fn group_update_sends_put() {
     )
     .await;
     assert!(result.is_ok(), "group update failed: {result:?}");
+}
+
+#[tokio::test]
+async fn group_update_dry_run_makes_no_write_and_marks_payload() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("PUT"))
+        .and(path("/rest/group/admin"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"groups": [{"changes": {}}]})),
+        )
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let action = GroupAction::Update {
+        group: "admin".into(),
+        description: Some("Updated description".into()),
+        is_active: Some(false),
+    };
+    crate::commands::runtime::dry_run::set(true);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    crate::commands::runtime::dry_run::set(false);
+
+    assert!(result.is_ok(), "dry-run group update failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["resource"], "group");
+    assert_eq!(parsed["action"], "dry-run");
+    assert_eq!(parsed["ids"], serde_json::json!([]));
+    assert_eq!(parsed["changes"]["description"], "Updated description");
+    assert_eq!(parsed["changes"]["is_active"], false);
+}
+
+#[tokio::test]
+async fn group_update_without_fields_is_rejected() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let action = GroupAction::Update {
+        group: "admin".into(),
+        description: None,
+        is_active: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+            if msg.contains("no fields to update")),
+        "expected input validation, got {result:?}"
+    );
 }
 
 #[tokio::test]

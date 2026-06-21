@@ -1,7 +1,7 @@
 use crate::cli::UserAction;
-use crate::error::Result;
+use crate::error::{BzrError, Result};
 use crate::output::resources::user::{write_users, write_users_detailed};
-use crate::output::result_types::{write_result, ActionResult, ResourceKind};
+use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
@@ -29,6 +29,7 @@ pub async fn execute(
     api: Option<ApiMode>,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    validate_action(action)?;
     let client = super::runtime::shared::connect_and_configure(server, api).await?;
 
     match action {
@@ -52,6 +53,16 @@ pub async fn execute(
                 full_name: full_name.clone(),
                 password: password.clone(),
             };
+            if super::runtime::dry_run::enabled() {
+                let message = format!("Would create user '{email}'");
+                write_result(
+                    &DryRunResult::new(ResourceKind::User, &[], &params),
+                    &message,
+                    format,
+                    w.out,
+                );
+                return Ok(());
+            }
             let id = client.create_user(&params).await?;
             write_result(
                 &ActionResult::created_named(id, email.as_str(), ResourceKind::User),
@@ -75,6 +86,16 @@ pub async fn execute(
                 email: email.clone(),
                 login_denied_text: denied_text,
             };
+            if super::runtime::dry_run::enabled() {
+                let message = format!("Would update user '{user}'");
+                write_result(
+                    &DryRunResult::new(ResourceKind::User, &[], &params),
+                    &message,
+                    format,
+                    w.out,
+                );
+                return Ok(());
+            }
             client.update_user(user, &params).await?;
             write_result(
                 &ActionResult::updated_named(user.as_str(), None, ResourceKind::User),
@@ -82,6 +103,33 @@ pub async fn execute(
                 format,
                 w.out,
             );
+        }
+    }
+    Ok(())
+}
+
+#[must_use]
+pub fn is_dry_runnable(action: &UserAction) -> bool {
+    matches!(
+        action,
+        UserAction::Create { .. } | UserAction::Update { .. }
+    )
+}
+
+fn validate_action(action: &UserAction) -> Result<()> {
+    if let UserAction::Update {
+        real_name,
+        email,
+        disable_login,
+        login_denied_text,
+        ..
+    } = action
+    {
+        let denied_text = resolve_login_denied_text(*disable_login, login_denied_text.as_deref());
+        if real_name.is_none() && email.is_none() && denied_text.is_none() {
+            return Err(BzrError::InputValidation(
+                "no fields to update; specify at least one field to change".into(),
+            ));
         }
     }
     Ok(())

@@ -119,6 +119,39 @@ async fn component_create_succeeds() {
 }
 
 #[tokio::test]
+async fn component_create_dry_run_makes_no_write_and_marks_payload() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("POST"))
+        .and(path("/rest/component"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 42})))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let action = ComponentAction::Create {
+        product: "TestProduct".to_string(),
+        name: "Backend".to_string(),
+        description: "Backend component".to_string(),
+        default_assignee: "dev@test.com".to_string(),
+    };
+    crate::commands::runtime::dry_run::set(true);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    crate::commands::runtime::dry_run::set(false);
+
+    assert!(
+        result.is_ok(),
+        "dry-run component create failed: {result:?}"
+    );
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["resource"], "component");
+    assert_eq!(parsed["action"], "dry-run");
+    assert_eq!(parsed["ids"], serde_json::json!([]));
+    assert_eq!(parsed["changes"]["name"], "Backend");
+}
+
+#[tokio::test]
 async fn component_create_http_500_returns_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
@@ -176,4 +209,57 @@ async fn component_update_succeeds() {
     let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["id"], 10);
     assert_eq!(parsed["action"], "updated");
+}
+
+#[tokio::test]
+async fn component_update_dry_run_makes_no_write_and_marks_payload() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("PUT"))
+        .and(path("/rest/component/10"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 10})))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let action = ComponentAction::Update {
+        id: 10,
+        name: Some("Updated".to_string()),
+        description: None,
+        default_assignee: Some("owner@test.com".to_string()),
+    };
+    crate::commands::runtime::dry_run::set(true);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    crate::commands::runtime::dry_run::set(false);
+
+    assert!(
+        result.is_ok(),
+        "dry-run component update failed: {result:?}"
+    );
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["resource"], "component");
+    assert_eq!(parsed["action"], "dry-run");
+    assert_eq!(parsed["ids"], serde_json::json!([10]));
+    assert_eq!(parsed["changes"]["name"], "Updated");
+    assert_eq!(parsed["changes"]["default_assignee"], "owner@test.com");
+}
+
+#[tokio::test]
+async fn component_update_without_fields_is_rejected() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let action = ComponentAction::Update {
+        id: 10,
+        name: None,
+        description: None,
+        default_assignee: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+            if msg.contains("no fields to update")),
+        "expected input validation, got {result:?}"
+    );
 }

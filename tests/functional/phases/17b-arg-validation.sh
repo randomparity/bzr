@@ -44,6 +44,6 @@ if assert_exit_code 2 && assert_stderr_contains "unexpected argument"; then test
 # --dry-run rejected on a non-mutation command (input error, exit 7).
 test_begin "127. --dry-run on non-mutation (exit 7)"
 run_bzr --dry-run server info
-if assert_exit_code 7 && assert_stderr_contains "only supported for bug"; then test_pass; fi
+if assert_exit_code 7 && assert_stderr_contains "only supported for bug create"; then test_pass; fi
 
 echo ""

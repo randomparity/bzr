@@ -106,3 +106,63 @@ async fn dispatch_allows_dry_run_on_bug_update() {
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["ids"], serde_json::json!([5]));
 }
+
+#[tokio::test]
+async fn dispatch_allows_dry_run_on_admin_create() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let cli = cli::Cli::try_parse_from([
+        "bzr",
+        "--server",
+        "test",
+        "--json",
+        "--dry-run",
+        "product",
+        "create",
+        "--name",
+        "DryRun",
+        "--description",
+        "Preview",
+    ])
+    .unwrap();
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
+    let output = io.out_str().to_string();
+
+    assert!(result.is_ok(), "dry-run dispatch failed: {result:?}");
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    assert_eq!(parsed["resource"], "product");
+    assert_eq!(parsed["action"], "dry-run");
+}
+
+#[tokio::test]
+async fn dispatch_rejects_dry_run_on_group_membership_mutation() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let cli = cli::Cli::try_parse_from([
+        "bzr",
+        "--server",
+        "test",
+        "--dry-run",
+        "group",
+        "add-user",
+        "--group",
+        "editbugs",
+        "--user",
+        "alice@example.com",
+    ])
+    .unwrap();
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
+
+    assert!(matches!(
+        result,
+        Err(error::BzrError::InputValidation(ref msg)) if msg.contains("product create")
+            && msg.contains("group create/update")
+    ));
+}

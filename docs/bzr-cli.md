@@ -47,7 +47,7 @@ For installation and quick start, see [README.md](../README.md).
 | `--api <MODE>` | Override API transport: `rest`, `xmlrpc`, or `hybrid`. Auto-detected from server version if not set. |
 | `--timeout <SECS>` | Per-request timeout in seconds (default 30). Takes precedence over `BZR_TIMEOUT`. The 10s connect timeout is unaffected. |
 | `--retry <N>` | Retry transient failures up to N times with exponential backoff honoring `Retry-After`. 429 and connect failures are retried for any operation; 5xx and read timeouts only for safe reads (GET/HEAD), never for writes (create, update, comment) where a replay could duplicate the effect. Default 0 (disabled); max 10. Exhausted retries exit 5. |
-| `--dry-run` | Preview a bug mutation without writing. Resolves and validates the request, then prints the would-be payload and affected bug IDs as `{"resource":"bug","action":"dry-run","ids":[...],"changes":{...}}` instead of calling the write API. Exits 0 on a valid request. Only valid for `bug create`, `update`, `clone`, `resolve`, `close`, `reopen`, and `dup`; on any other command it exits 7. `clone` still reads the source bug to build the preview. |
+| `--dry-run` | Preview a supported mutation without writing. Resolves and validates the request, then prints the would-be payload and affected IDs as `{"resource":"bug","action":"dry-run","ids":[...],"changes":{...}}` instead of calling the write API. Exits 0 on a valid request. Supported for `bug create`, `update`, `clone`, `resolve`, `close`, `reopen`, `dup`, and `product`/`component`/`user`/`group` `create` and `update`; on any other command it exits 7. `bug clone` still reads the source bug to build the preview. |
 | `-y, --yes` | Skip the confirmation prompt for a large batch mutation. A `bug update`/`resolve`/`close`/`reopen` targeting more than 10 bugs prompts for confirmation at an interactive terminal; `--yes` bypasses it. Non-interactive runs (piped stdin, agents) never prompt, so this is only needed in an interactive session. |
 | `-v, --verbose` | Increase log verbosity (`-v`=info, `-vv`=debug, `-vvv`=trace; `RUST_LOG` overrides) |
 | `-h, --help` | Print help |
@@ -1048,6 +1048,7 @@ Create a new product (requires admin privileges).
 ```bash
 bzr product create --name "New Product" --description "A new product"
 bzr product create --name "New Product" --description "Desc" --version "1.0" --is-open true
+bzr --dry-run product create --name "New Product" --description "Preview"
 ```
 
 | Option | Required | Default | Description |
@@ -1067,6 +1068,7 @@ Update an existing product (requires admin privileges).
 bzr product update "My Product" --description "Updated description"
 bzr product update "My Product" --is-open false
 bzr product update "My Product" --default-milestone "2.0"
+bzr --dry-run product update "My Product" --is-open false
 ```
 
 | Option | Required | Description |
@@ -1138,6 +1140,7 @@ Create a new user (requires admin privileges).
 bzr user create --email alice@example.com --full-name "Alice Smith"
 bzr user create --email bob@example.com --password s3cret
 bzr user create --email carol@example.com --login carol   # Bugzilla 5.3+ with use_email_as_login disabled
+bzr --dry-run user create --email alice@example.com --full-name "Alice Smith"
 ```
 
 | Option | Required | Description |
@@ -1158,6 +1161,7 @@ Update an existing user (requires admin privileges).
 ```bash
 bzr user update alice@example.com --real-name "Alice J. Smith"
 bzr user update alice@example.com --disable-login true --login-denied-text "Account suspended"
+bzr --dry-run user update alice@example.com --disable-login false
 ```
 
 | Option | Required | Description |
@@ -1229,6 +1233,7 @@ Create a new group (requires admin privileges).
 ```bash
 bzr group create --name "qa-team" --description "QA team members"
 bzr group create --name "qa-team" --description "QA" --is-active true
+bzr --dry-run group create --name "qa-team" --description "QA team members"
 ```
 
 | Option | Required | Default | Description |
@@ -1246,6 +1251,7 @@ Update an existing group (requires admin privileges).
 ```bash
 bzr group update qa-team --description "Updated QA team description"
 bzr group update qa-team --is-active false
+bzr --dry-run group update qa-team --is-active false
 ```
 
 | Option | Required | Description |
@@ -1341,6 +1347,8 @@ Create a new component in a product (requires admin privileges).
 ```bash
 bzr component create --product Fedora --name "new-component" \
   --description "Handles new features" --default-assignee dev@example.com
+bzr --dry-run component create --product Fedora --name "new-component" \
+  --description "Handles new features" --default-assignee dev@example.com
 ```
 
 | Option | Required | Description |
@@ -1359,6 +1367,7 @@ Update an existing component (requires admin privileges).
 ```bash
 bzr component update 42 --name "renamed-component"
 bzr component update 42 --default-assignee newdev@example.com
+bzr --dry-run component update 42 --default-assignee newdev@example.com
 ```
 
 | Option | Required | Description |
