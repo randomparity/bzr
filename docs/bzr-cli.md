@@ -585,6 +585,22 @@ A value of `-` for `--description` or `--description-file` reads the description
 
 Agent note: agent workflows should pass `--description` (or `--description-file`) explicitly and supply `--summary`. The `$EDITOR` flow only fires when stdin is a TTY, which is rare in headless / CI invocations.
 
+#### Idempotency and ambiguous create failures
+
+`bzr bug create` does not support a server-backed idempotency key. The Bugzilla
+REST create API returns the ID for a newly filed bug, and its documented create
+contract has no key, header, or token that `bzr` can replay after a transport
+failure. `--retry` therefore keeps the global write-safety rule: it may retry
+429/connect failures, but it does not replay `bug create` after a
+5xx/read-timeout failure where Bugzilla might already have filed the bug.
+
+Agent note: after an ambiguous create failure, do not blindly rerun the same
+command. Search for the intended bug first, using the summary/product/component
+and any deliberately distinctive marker you supplied, such as an alias, URL, or
+whiteboard value. Treat URL and whiteboard matches as search aids, not uniqueness
+proof. Inspect candidates before retrying. `--dry-run` can audit the payload
+before the first write, but it is not a reservation.
+
 #### Structured input (`--from-json`)
 
 `--from-json <PATH>` files bugs from a structured JSON document instead of discrete flags; `-` reads the document from stdin. This is the inverse of the `--json` *output* story: an agent that already models a bug as an object can submit it directly without flattening it into shell flags.

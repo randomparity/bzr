@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Documented that `bug create` has no Bugzilla-backed idempotency-key support
+  and that agents should inspect before retrying ambiguous create failures.
+  (#370)
 - Release artifacts now ship a SLSA provenance bundle (`*.intoto.jsonl`) as a
   release asset alongside each binary, in addition to the existing GitHub
   attestations API publication. The installer smoke tests now download and
