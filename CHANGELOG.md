@@ -59,6 +59,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 
+- Refreshed the bundled agent skills (`agent-skills/skills/`) for the 0.5.0 CLI
+  surface: corrected the stale "there is no `bzr component list`" claims (the
+  `component list`/`component view` and `classification list` read verbs now
+  exist), documented the global flags (`--output ndjson`, `--dry-run`,
+  `-y`/`--yes`, `--timeout`/`--retry`, `--config`, and the stateless
+  `--server-url`/`--server-api-key-env`/`--server-email` trio), the new
+  `completion` and `schema` top-level commands, `bug` sort/pagination/count and
+  extended filters, `create` field-parity flags and `--from-json`, `update
+  --expect-unchanged-since`, the convenience verbs `resolve`/`close`/`reopen`/
+  `dup`, `comment add --body-file`, `attachment view` and the `--x`/`--no-x`
+  boolean grammar, `config remove-server`/`rename-server`, and `template
+  update`/`query update`. Bumped the skill-set `VERSION` to track the tool
+  version (0.5.0). (#355)
+
 - The command tree in `docs/bzr-cli.md` is now drift-checked against the binary
   in CI. A new `agent-skills/tests/flag-drift-check.sh` (run alongside the
   existing verb-level `drift-check.sh`) compares every command-specific long
@@ -72,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `comment add --private`, `attachment download --bug`/`--out`/`--out-dir`,
   `attachment upload --comment`/`--comment-private`, and `config set-keyring`/
   `migrate-to-keyring --service`/`--account`. (#306)
+
 - Recorded the decision to keep `bzr` as the command name despite the
   historical collision with GNU Bazaar (retired in 2025; its successor Breezy
   uses `brz`), with rationale in `docs/decisions/0001-bzr-command-name.md` and
