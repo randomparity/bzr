@@ -1,4 +1,4 @@
-# bzr command manifest — authored against bzr 0.4.4.
+# bzr command manifest — authored against bzr 0.5.0.
 # Format: "<group>: <verb> <verb> ...". Consumed by tests/drift-check.sh.
 bug: list view search create clone update history my resolve close reopen dup
 comment: list add tag search-tags
@@ -14,3 +14,5 @@ classification: list view
 component: list view create update
 template: save list show update delete
 query: save list show update delete run
+completion:
+schema:

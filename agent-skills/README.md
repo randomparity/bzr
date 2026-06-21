@@ -47,7 +47,7 @@ make skills-test    # from the repo root: builds bzr, runs the full suite
 check against the freshly built `bzr` (it fails closed — a set-but-missing
 `BZR_BIN` errors rather than silently skipping), exercises the installer's
 guards hermetically, and lints all shell sources. The command surface is authored
-against `bzr` 0.4.4. The installer copies whole skill folders, marks each with a
+against `bzr` 0.5.0. The installer copies whole skill folders, marks each with a
 `.bzr-skill-managed` sentinel so it only ever touches its own folders, and refuses
 to write through a symlinked destination or overwrite an unmarked ("foreign")
 folder without `--force`.

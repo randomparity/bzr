@@ -12,7 +12,8 @@ bzr product list --json | jq -r '.[].name'
 bzr product view <Product> --json | jq -r '.components[].name'
 ```
 
-There is no `bzr component list` — components come from `product view`.
+`bzr component list --product <Product>` lists a product's components, and
+`bzr product view <Product>` shows them inline alongside versions and milestones.
 
 ## 2. Reuse a template if one fits
 
@@ -37,6 +38,33 @@ bzr bug create \
   --summary "Boot fails with 'no root device' after 6.x upgrade" \
   --description "Steps: 1) upgrade to 6.x 2) reboot. Expected: boots. Actual: drops to dracut with 'no root device'. Version: 6.9.0."
 ```
+
+Set any metadata in the same call — no follow-up `update` is needed. The create
+flags that mirror `bug update` are `--alias`, `--url`, `--whiteboard`,
+`--target-milestone`, `--deadline` (`YYYY-MM-DD`), `--cc`, `--keywords`,
+`--groups`, and `--flag` (Bugzilla flag syntax, e.g. `review?(qa@example.com)`).
+`--cc`/`--keywords`/`--groups` take comma-separated values and may repeat:
+
+```
+bzr bug create --product <P> --component <C> --summary "..." --description "..." \
+  --keywords regression,crash --cc qa@example.com \
+  --target-milestone 9.0 --flag "review?(maintainer@example.com)"
+```
+
+## Structured or batch filing
+
+For machine-generated reports, file from JSON instead of flags. A single object
+files one bug; an array files one per element (exit 11 if any element fails):
+
+```
+bzr bug create --from-json bug.json
+echo '{"product":"P","component":"C","summary":"...","description":"..."}' \
+  | bzr bug create --from-json -        # `-` reads JSON from stdin
+```
+
+JSON keys match the create flag names (`target_milestone`, `cc`, `keywords`, …);
+explicit CLI flags override the corresponding JSON field. Add `--dry-run` to any
+create to validate and preview the payload without writing.
 
 ## 4. Confirm
 
