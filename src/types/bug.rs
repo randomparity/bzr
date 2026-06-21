@@ -721,6 +721,10 @@ pub struct UpdateBugParams {
     pub summary: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub whiteboard: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_milestone: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub flags: Vec<FlagUpdate>,
     #[serde(skip_serializing_if = "IdListUpdate::is_empty")]

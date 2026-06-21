@@ -561,6 +561,12 @@ pub struct UpdateArgs {
     /// Whiteboard
     #[arg(long)]
     pub whiteboard: Option<String>,
+    /// Set this bug's URL field.
+    #[arg(long)]
+    pub url: Option<String>,
+    /// Set this bug's target milestone.
+    #[arg(long, value_name = "MILESTONE")]
+    pub target_milestone: Option<String>,
     /// Post a comment atomically with the field changes.
     ///
     /// A value of `-` reads the comment from stdin. Mutually
