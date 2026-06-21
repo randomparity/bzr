@@ -110,3 +110,5 @@ Operate on bugs.
 ## schema
 - `bzr schema`            # list the published JSON Schema names
 - `bzr schema bug`        # print one schema (draft 2020-12) for `--json` output
+- `bzr schema bug-create-input`  # `bug create --from-json` payload
+- `bzr schema bug-update-input`  # `bug update --from-json` payload

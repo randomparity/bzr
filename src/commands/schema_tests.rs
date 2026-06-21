@@ -2,13 +2,14 @@
 
 //! Drift guard for the published JSON Schemas.
 //!
-//! Each schema is validated against the *actual serialized output* of a
+//! Output schemas are validated against the *actual serialized output* of a
 //! representative typed value: every serialized key must be declared in the
 //! schema's `properties` (unless the schema is open via `additionalProperties:
-//! true`), and every `required` key must be present in the serialization. A
-//! field added, removed, or renamed on a result type therefore fails CI here
-//! until its schema is updated — keeping the published contract honest without
-//! a runtime schema-validation dependency.
+//! true`), and every `required` key must be present in the serialization.
+//! Structured input schemas are guarded beside their parsers. A field added,
+//! removed, or renamed therefore fails CI until its schema is updated, keeping
+//! the published contract honest without a runtime schema-validation
+//! dependency.
 
 use serde_json::{json, Value};
 
@@ -383,6 +384,8 @@ fn execute_list_json_is_array_of_names() {
     let parsed: Value = serde_json::from_str(io.out_str()).unwrap();
     let names = parsed.as_array().unwrap();
     assert!(names.iter().any(|n| n == "bug"));
+    assert!(names.iter().any(|n| n == "bug-create-input"));
+    assert!(names.iter().any(|n| n == "bug-update-input"));
     assert!(names.iter().any(|n| n == "batch-result"));
 }
 

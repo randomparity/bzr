@@ -598,15 +598,17 @@ pub enum Commands {
         shell: clap_complete::Shell,
     },
 
-    /// Print a published JSON Schema for a command's JSON output.
+    /// Print a published JSON Schema for a command's JSON contract.
     ///
-    /// `--format json` shapes are documented as checked-in JSON Schema
-    /// (draft 2020-12) so agents can validate output against a contract
-    /// instead of branching per command. Run without a name to list the
-    /// available schema names; pass one to print that schema:
+    /// `--format json` output shapes and selected `--from-json` input payloads
+    /// are documented as checked-in JSON Schema (draft 2020-12) so agents can
+    /// validate against a contract instead of branching per command. Run
+    /// without a name to list the available schema names; pass one to print
+    /// that schema:
     ///
     ///   bzr schema                # list schema names
     ///   bzr schema bug            # the bug object (list elements / view)
+    ///   bzr schema bug-create-input  # `bug create --from-json` payload
     ///   bzr schema batch-result   # the batch `bug update` envelope
     ///
     /// Purely local: no config, network, or auth.

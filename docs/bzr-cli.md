@@ -612,7 +612,9 @@ Accepted keys match the create flag names: `product`, `component`, `summary`, `v
 
 **Precedence:** an explicit CLI flag overrides the corresponding JSON field, applied uniformly to every element of an array — e.g. `--product Fedora --from-json bugs.json` forces `product` on all entries. `--from-json` is mutually exclusive with `--template` and bypasses the `$EDITOR` flow.
 
-`bug update` accepts its own structured update input via `--from-json`; other resource commands do not yet accept `--from-json`.
+The `bug create` payload shape is published as `bzr schema bug-create-input`.
+`bug update` accepts its own structured update input via `--from-json`; other
+resource commands do not yet accept `--from-json`.
 
 ```bash
 printf '%s' '{"product":"Fedora","component":"kernel","summary":"S"}' \
@@ -749,6 +751,7 @@ List fields use the same add/remove semantics as the flags: for example,
 arrays, overrides apply to every element. CLI `--comment -` / `--comment-file -`
 cannot be combined with `--from-json -`, and array input rejects CLI stdin
 comment sources. JSON `comment_file` must name a file path; `"-"` is rejected.
+The payload shape is published as `bzr schema bug-update-input`.
 
 ```bash
 printf '%s' '{"status":"ASSIGNED","comment":"Taking this"}' \
@@ -1815,11 +1818,11 @@ installed and sourced by your shell startup. For zsh, the file name must be
 
 ## `bzr schema` -- Published JSON Schemas
 
-Print a JSON Schema (draft 2020-12) describing the `--format json` output of a
-command family. The schemas are checked into `schemas/` and embedded in the
-binary, so a consumer can validate `bzr` output against a contract instead of
-branching over the per-command shape differences. This command is local: it
-makes no network calls and needs no configured server.
+Print a JSON Schema (draft 2020-12) describing a JSON contract used by `bzr`.
+The schemas are checked into `schemas/` and embedded in the binary, so a
+consumer can validate `bzr` output or selected `--from-json` input payloads
+against a contract instead of branching over per-command shape differences.
+This command is local: it makes no network calls and needs no configured server.
 
 ```
 bzr schema [NAME]
@@ -1834,6 +1837,8 @@ Run without a name to list the available schemas; pass one to print it:
 ```bash
 bzr schema                      # list schema names
 bzr schema bug                  # the bug object (bug view / list elements)
+bzr schema bug-create-input     # `bug create --from-json` payload
+bzr schema bug-update-input     # `bug update --from-json` payload
 bzr schema batch-result | jq .  # the batch `bug update` envelope
 ```
 
@@ -1847,7 +1852,8 @@ Available schemas: `bug`, `comment`, `attachment`, `product`, `component`,
 mutation/result envelopes `action-result`, `batch-result`,
 `batch-create-result`, `multi-bug-view`, `tag-result`, `membership-result`,
 `count-result`, `download-result`, `upload-result`, `config-result`,
-`search-result`, `dry-run-result`.
+`search-result`, `dry-run-result`; and the structured input contracts
+`bug-create-input`, `bug-update-input`.
 
 ---
 

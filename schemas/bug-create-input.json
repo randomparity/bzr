@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/bug-create-input.json",
+  "title": "BugCreateInput",
+  "description": "Payload accepted by `bug create --from-json`. A top-level object creates one bug; a top-level array creates one bug per element and uses the batch-create result shape. Required create fields may be supplied by JSON or explicit CLI flags, so this schema describes payload shape rather than post-merge command validity.",
+  "type": ["object", "array"],
+  "oneOf": [
+    {
+      "$ref": "#/$defs/bugCreateInputObject"
+    },
+    {
+      "description": "Batch form: each element is one bug-create object.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/bugCreateInputObject"
+      }
+    }
+  ],
+  "$defs": {
+    "bugCreateInputObject": {
+      "description": "One structured bug-create payload. Unknown keys are rejected.",
+      "type": "object",
+      "properties": {
+        "product": {
+          "type": ["string", "null"],
+          "examples": ["Fedora"]
+        },
+        "component": {
+          "type": ["string", "null"],
+          "examples": ["kernel"]
+        },
+        "summary": {
+          "type": ["string", "null"],
+          "examples": ["Crash on suspend"]
+        },
+        "version": {
+          "type": ["string", "null"],
+          "examples": ["unspecified"]
+        },
+        "description": {
+          "type": ["string", "null"],
+          "examples": ["Steps to reproduce..."]
+        },
+        "priority": {
+          "type": ["string", "null"],
+          "examples": ["P2"]
+        },
+        "severity": {
+          "type": ["string", "null"],
+          "examples": ["normal"]
+        },
+        "assignee": {
+          "type": ["string", "null"],
+          "examples": ["dev@example.com"]
+        },
+        "op_sys": {
+          "type": ["string", "null"],
+          "examples": ["Linux"]
+        },
+        "rep_platform": {
+          "type": ["string", "null"],
+          "examples": ["x86_64"]
+        },
+        "alias": {
+          "type": ["string", "null"],
+          "examples": ["suspend-crash"]
+        },
+        "url": {
+          "type": ["string", "null"],
+          "examples": ["https://example.com/reproducer"]
+        },
+        "whiteboard": {
+          "type": ["string", "null"],
+          "examples": ["needs-triage"]
+        },
+        "target_milestone": {
+          "type": ["string", "null"],
+          "examples": ["5.0"]
+        },
+        "deadline": {
+          "type": ["string", "null"],
+          "format": "date",
+          "examples": ["2026-12-31"]
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "examples": [[100, 200]]
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "examples": [[50]]
+        },
+        "cc": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [["alice@example.com"]]
+        },
+        "keywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [["regression"]]
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [["security"]]
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [["review?(alice@example.com)"]]
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  }
+}
