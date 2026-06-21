@@ -641,6 +641,13 @@ jobs:
           # Tap (read-only https clone) so `--merge` can resolve and edit the
           # formula at $(brew --repository randomparity/tap)/Formula/bzr.rb.
           brew tap randomparity/tap
+          # Homebrew 6.0.0 refuses to load a formula from a non-official tap
+          # unless it is trusted. `brew bottle --merge` loads the formula by
+          # tap context (the JSON names it), so it hits this check -- unlike
+          # the `bottles` job, which installs by fully-qualified name
+          # (`randomparity/tap/bzr`), the documented exemption that needs no
+          # trust. Trust the single formula (not the whole tap) before merging.
+          brew trust --formula randomparity/tap/bzr
           brew bottle --merge --write --no-commit bottle-json/*.json
 
           tap_dir="$(brew --repository randomparity/tap)"
