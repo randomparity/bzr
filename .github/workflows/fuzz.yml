@@ -45,7 +45,7 @@ jobs:
       # unstable `rustc_layout_scalar_valid_range_{start,end}` attribute
       # form rustix 0.36.5 uses. Bump this once cargo-fuzz pulls a rustix
       # release that compiles on current nightly.
-      - uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6e  # master
+      - uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537  # master
         with:
           toolchain: nightly-2026-05-02
 
