@@ -1029,6 +1029,8 @@ fn update_bug_params_serializes_scalar_parity_fields() {
         estimated_time: Some(3.5),
         remaining_time: Some(1.25),
         work_time: Some(0.5),
+        url: Some("https://example.com/repro".into()),
+        target_milestone: Some("5.0".into()),
         ..Default::default()
     };
     let json = serde_json::to_value(&params).unwrap();
@@ -1038,6 +1040,8 @@ fn update_bug_params_serializes_scalar_parity_fields() {
     assert_eq!(json["estimated_time"], 3.5);
     assert_eq!(json["remaining_time"], 1.25);
     assert_eq!(json["work_time"], 0.5);
+    assert_eq!(json["url"], "https://example.com/repro");
+    assert_eq!(json["target_milestone"], "5.0");
 }
 
 #[test]
@@ -1064,6 +1068,8 @@ fn update_bug_params_default_omits_scalar_parity_fields() {
         "estimated_time",
         "remaining_time",
         "work_time",
+        "url",
+        "target_milestone",
         "reset_assigned_to",
         "reset_qa_contact",
     ] {

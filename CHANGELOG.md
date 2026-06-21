@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   (GHSA-phqj-4mhp-q6mq): a potential out-of-bounds write in
   `CipherCtxRef::cipher_update_inplace` for AES-KW-PAD ciphers.
 
+### Added
+
+- `bug update` now accepts `--url` and `--target-milestone`, matching fields
+  that `bug create` can already set. (#363)
+
 ### Changed
 
 - Release artifacts now ship a SLSA provenance bundle (`*.intoto.jsonl`) as a

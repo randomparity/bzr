@@ -42,6 +42,8 @@ fn make_update_action_with_scalar_parity_fields() -> BugAction {
         work_time: Some(0.5),
         reset_assigned_to: true,
         reset_qa_contact: true,
+        url: Some("https://example.com/repro".into()),
+        target_milestone: Some("5.0".into()),
         ..Default::default()
     })
 }
@@ -191,6 +193,37 @@ async fn bug_update_sends_dupe_of_body() {
 }
 
 #[tokio::test]
+async fn bug_update_sends_url_and_target_milestone_body() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/42"))
+        .and(body_json(serde_json::json!({
+            "url": "https://example.com/repro",
+            "target_milestone": "5.0"
+        })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": [{"id": 42, "changes": {}}]})),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::Update(crate::cli::UpdateArgs {
+        ids: vec![42],
+        url: Some("https://example.com/repro".into()),
+        target_milestone: Some("5.0".into()),
+        ..Default::default()
+    });
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
 async fn bug_update_batch_mixed_results() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
@@ -291,6 +324,8 @@ fn build_update_params_populates_scalar_parity_fields() {
     assert_eq!(params.estimated_time, Some(3.5));
     assert_eq!(params.remaining_time, Some(1.25));
     assert_eq!(params.work_time, Some(0.5));
+    assert_eq!(params.url.as_deref(), Some("https://example.com/repro"));
+    assert_eq!(params.target_milestone.as_deref(), Some("5.0"));
     assert!(params.reset_assigned_to);
     assert!(params.reset_qa_contact);
 }

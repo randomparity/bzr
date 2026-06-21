@@ -180,6 +180,34 @@ fn parse_update_expect_unchanged_since() {
 }
 
 #[test]
+fn parse_bug_update_url_and_target_milestone() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "update",
+        "42",
+        "--url",
+        "https://example.com/repro",
+        "--target-milestone",
+        "5.0",
+    ])
+    .unwrap();
+    let Commands::Bug {
+        action:
+            BugAction::Update(super::UpdateArgs {
+                url,
+                target_milestone,
+                ..
+            }),
+    } = cli.command
+    else {
+        panic!("expected bug update");
+    };
+    assert_eq!(url.as_deref(), Some("https://example.com/repro"));
+    assert_eq!(target_milestone.as_deref(), Some("5.0"));
+}
+
+#[test]
 fn parse_inline_server_flags() {
     let cli = Cli::try_parse_from([
         "bzr",

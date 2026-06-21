@@ -120,7 +120,8 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │                   [--priority <P>] [--severity <S>] [--summary <S>]
 │   │                   [--alias <A>] [--deadline <DATE>] [--estimated-time <HOURS>]
 │   │                   [--remaining-time <HOURS>] [--work-time <HOURS>]
-│   │                   [--whiteboard <W>] [--reset-assigned-to] [--reset-qa-contact]
+│   │                   [--whiteboard <W>] [--url <U>] [--target-milestone <M>]
+│   │                   [--reset-assigned-to] [--reset-qa-contact]
 │   │                   [--flag <F>...] [--blocks-add <IDs>]
 │   │                   [--blocks-remove <IDs>] [--depends-on-add <IDs>]
 │   │                   [--depends-on-remove <IDs>] [--keywords-add <K>] [--keywords-remove <K>]
@@ -642,6 +643,7 @@ bzr bug update 12345 --status RESOLVED --resolution FIXED
 bzr bug update 12345 --dupe-of 67890
 bzr bug update 12345 --deadline 2026-12-31 --estimated-time 3.5
 bzr bug update 12345 --work-time 0.5 --remaining-time 1.25
+bzr bug update 12345 --url https://example.com/repro --target-milestone 5.0
 bzr bug update 12345 --reset-assigned-to --reset-qa-contact
 bzr bug update 12345 --flag "review?(alice@example.com)"
 bzr bug update 12345 --blocks-add 100,200 --depends-on-add 50
@@ -672,6 +674,8 @@ bzr bug update 100 200 300 --status RESOLVED --resolution WONTFIX
 | `--severity <S>` | No | Set severity |
 | `--summary <S>` | No | Update summary text |
 | `--whiteboard <W>` | No | Set whiteboard text |
+| `--url <U>` | No | Set the URL field |
+| `--target-milestone <M>` | No | Set the target milestone |
 | `--flag <F>` | No | Set flags (repeatable; see [Flag Syntax](#flag-syntax)) |
 | `--blocks-add <IDs>` | No | Add bug IDs to the blocks list (comma-separated) |
 | `--blocks-remove <IDs>` | No | Remove bug IDs from the blocks list (comma-separated) |
