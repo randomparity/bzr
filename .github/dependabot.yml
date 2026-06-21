@@ -31,3 +31,9 @@ updates:
       github-actions-dependencies:
         patterns:
           - "*"
+    ignore:
+      # fuzz.yml pins dtolnay/rust-toolchain to a `master` SHA so the action
+      # honors its `toolchain: nightly-...` input. Dependabot repeatedly
+      # collapses that pin onto a stable-channel branch SHA (e.g. `1.89`),
+      # silently breaking Fuzz CI. Bump this pin by hand instead. See #207.
+      - dependency-name: "dtolnay/rust-toolchain"
