@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/product-update-input.json",
+  "title": "ProductUpdateInput",
+  "description": "Object payload accepted by `product update --from-json`. The target product may be supplied by positional CLI argument or by the JSON `name` field, but not both.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": ["string", "null"],
+      "examples": ["Fedora"]
+    },
+    "description": {
+      "type": ["string", "null"],
+      "examples": ["Fedora Linux"]
+    },
+    "default_milestone": {
+      "type": ["string", "null"],
+      "examples": ["Next"]
+    },
+    "is_open": {
+      "type": ["boolean", "null"],
+      "examples": [false]
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

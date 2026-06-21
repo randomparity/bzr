@@ -646,10 +646,11 @@ async fn component_create_integration() {
         .await;
 
     let action = bzr::cli::ComponentAction::Create {
-        product: "TestProduct".to_string(),
-        name: "Backend".to_string(),
-        description: "Backend component".to_string(),
-        default_assignee: "dev@test.com".to_string(),
+        from_json: None,
+        product: Some("TestProduct".to_string()),
+        name: Some("Backend".to_string()),
+        description: Some("Backend component".to_string()),
+        default_assignee: Some("dev@test.com".to_string()),
     };
     let mut __io14 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::component::execute(
@@ -1597,7 +1598,8 @@ async fn component_update_integration() {
         .await;
 
     let action = bzr::cli::ComponentAction::Update {
-        id: 10,
+        from_json: None,
+        id: Some(10),
         name: Some("Updated".to_string()),
         description: None,
         default_assignee: None,
@@ -1664,10 +1666,11 @@ async fn product_create_integration() {
         .await;
 
     let action = bzr::cli::ProductAction::Create {
-        name: "NewProduct".to_string(),
-        description: "A new product".to_string(),
-        version: "1.0".to_string(),
-        is_open: true,
+        from_json: None,
+        name: Some("NewProduct".to_string()),
+        description: Some("A new product".to_string()),
+        version: Some("1.0".to_string()),
+        is_open: Some(true),
     };
     let result = bzr::commands::product::execute(
         &action,
@@ -1697,7 +1700,8 @@ async fn product_update_integration() {
         .await;
 
     let action = bzr::cli::ProductAction::Update {
-        name: "Firefox".to_string(),
+        from_json: None,
+        name: Some("Firefox".to_string()),
         description: Some("Updated description".to_string()),
         default_milestone: None,
         is_open: None,
@@ -1728,7 +1732,8 @@ async fn user_create_integration() {
         .await;
 
     let action = bzr::cli::UserAction::Create {
-        email: "new@example.com".to_string(),
+        from_json: None,
+        email: Some("new@example.com".to_string()),
         login: None,
         full_name: Some("New User".to_string()),
         password: None,
@@ -1761,7 +1766,8 @@ async fn user_update_integration() {
         .await;
 
     let action = bzr::cli::UserAction::Update {
-        user: "alice@example.com".to_string(),
+        from_json: None,
+        user: Some("alice@example.com".to_string()),
         real_name: Some("Alice Updated".to_string()),
         email: None,
         disable_login: None,
@@ -1793,9 +1799,10 @@ async fn group_create_integration() {
         .await;
 
     let action = bzr::cli::GroupAction::Create {
-        name: "testers".to_string(),
-        description: "Tester group".to_string(),
-        is_active: true,
+        from_json: None,
+        name: Some("testers".to_string()),
+        description: Some("Tester group".to_string()),
+        is_active: Some(true),
     };
     let result = bzr::commands::group::execute(
         &action,
@@ -1825,7 +1832,8 @@ async fn group_update_integration() {
         .await;
 
     let action = bzr::cli::GroupAction::Update {
-        group: "testers".to_string(),
+        from_json: None,
+        group: Some("testers".to_string()),
         description: Some("Updated testers".to_string()),
         is_active: None,
     };

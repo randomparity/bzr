@@ -74,18 +74,21 @@ pub enum ProductAction {
     /// bzr-component-create(1) to add components.
     #[command(verbatim_doc_comment)]
     Create {
+        /// Read product fields from a JSON object (`-` reads stdin)
+        #[arg(long, value_name = "PATH")]
+        from_json: Option<String>,
         /// Product name
-        #[arg(long)]
-        name: String,
+        #[arg(long, required_unless_present = "from_json")]
+        name: Option<String>,
         /// Product description
-        #[arg(long)]
-        description: String,
+        #[arg(long, required_unless_present = "from_json")]
+        description: Option<String>,
         /// Initial version
-        #[arg(long, default_value = "unspecified")]
-        version: String,
+        #[arg(long)]
+        version: Option<String>,
         /// Whether the product is open for bugs
-        #[arg(long, default_value = "true")]
-        is_open: bool,
+        #[arg(long)]
+        is_open: Option<bool>,
     },
 
     /// Update an existing product (admin only).
@@ -109,8 +112,12 @@ pub enum ProductAction {
     /// See bzr-product-view(1) to inspect current state.
     #[command(verbatim_doc_comment)]
     Update {
+        /// Read product update fields from a JSON object (`-` reads stdin)
+        #[arg(long, value_name = "PATH")]
+        from_json: Option<String>,
         /// Product name
-        name: String,
+        #[arg(required_unless_present = "from_json")]
+        name: Option<String>,
         /// New description
         #[arg(long)]
         description: Option<String>,

@@ -1,12 +1,18 @@
 #![expect(clippy::unwrap_used)]
 
-use wiremock::matchers::{method, path, query_param};
+use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::ComponentAction;
 use crate::error::BzrError;
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
+
+fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
+    let path = tmp.path().join("input.json");
+    std::fs::write(&path, json).unwrap();
+    path.to_string_lossy().into_owned()
+}
 
 /// Mock `GET /rest/product?names=MyApp` returning a product with two
 /// components.
@@ -98,10 +104,11 @@ async fn component_create_succeeds() {
         .await;
 
     let action = ComponentAction::Create {
-        product: "TestProduct".to_string(),
-        name: "Backend".to_string(),
-        description: "Backend component".to_string(),
-        default_assignee: "dev@test.com".to_string(),
+        from_json: None,
+        product: Some("TestProduct".to_string()),
+        name: Some("Backend".to_string()),
+        description: Some("Backend component".to_string()),
+        default_assignee: Some("dev@test.com".to_string()),
     };
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
@@ -130,10 +137,11 @@ async fn component_create_dry_run_makes_no_write_and_marks_payload() {
         .await;
 
     let action = ComponentAction::Create {
-        product: "TestProduct".to_string(),
-        name: "Backend".to_string(),
-        description: "Backend component".to_string(),
-        default_assignee: "dev@test.com".to_string(),
+        from_json: None,
+        product: Some("TestProduct".to_string()),
+        name: Some("Backend".to_string()),
+        description: Some("Backend component".to_string()),
+        default_assignee: Some("dev@test.com".to_string()),
     };
     crate::commands::runtime::dry_run::set(true);
     let mut io = crate::test_helpers::CapturedIo::new();
@@ -152,6 +160,42 @@ async fn component_create_dry_run_makes_no_write_and_marks_payload() {
 }
 
 #[tokio::test]
+async fn component_create_from_json_sends_merged_body() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("POST"))
+        .and(path("/rest/component"))
+        .and(body_json(serde_json::json!({
+            "product": "FromCli",
+            "name": "Backend",
+            "description": "From JSON",
+            "default_assignee": "dev@test.com"
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 42})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{"product":"FromJson","name":"Backend","description":"From JSON","default_assignee":"dev@test.com"}"#;
+    let action = ComponentAction::Create {
+        from_json: Some(write_json_file(&tmp, json)),
+        product: Some("FromCli".to_string()),
+        name: None,
+        description: None,
+        default_assignee: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        result.is_ok(),
+        "component create from JSON failed: {result:?}"
+    );
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["id"], 42);
+}
+
+#[tokio::test]
 async fn component_create_http_500_returns_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
@@ -163,10 +207,11 @@ async fn component_create_http_500_returns_error() {
         .await;
 
     let action = ComponentAction::Create {
-        product: "TestProduct".to_string(),
-        name: "Backend".to_string(),
-        description: "Backend component".to_string(),
-        default_assignee: "dev@test.com".to_string(),
+        from_json: None,
+        product: Some("TestProduct".to_string()),
+        name: Some("Backend".to_string()),
+        description: Some("Backend component".to_string()),
+        default_assignee: Some("dev@test.com".to_string()),
     };
     let result = super::execute(
         &action,
@@ -190,7 +235,8 @@ async fn component_update_succeeds() {
         .await;
 
     let action = ComponentAction::Update {
-        id: 10,
+        from_json: None,
+        id: Some(10),
         name: Some("Updated".to_string()),
         description: None,
         default_assignee: None,
@@ -223,7 +269,8 @@ async fn component_update_dry_run_makes_no_write_and_marks_payload() {
         .await;
 
     let action = ComponentAction::Update {
-        id: 10,
+        from_json: None,
+        id: Some(10),
         name: Some("Updated".to_string()),
         description: None,
         default_assignee: Some("owner@test.com".to_string()),
@@ -246,10 +293,135 @@ async fn component_update_dry_run_makes_no_write_and_marks_payload() {
 }
 
 #[tokio::test]
+async fn component_update_from_json_uses_json_target() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("PUT"))
+        .and(path("/rest/component/10"))
+        .and(body_json(serde_json::json!({
+            "name": "Backend",
+            "description": "Updated",
+            "default_assignee": "owner@test.com"
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 10})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{"id":10,"name":"Backend","description":"Updated"}"#;
+    let action = ComponentAction::Update {
+        from_json: Some(write_json_file(&tmp, json)),
+        id: None,
+        name: None,
+        description: None,
+        default_assignee: Some("owner@test.com".to_string()),
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        result.is_ok(),
+        "component update from JSON failed: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn component_update_from_json_rejects_positional_and_json_target() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let json = r#"{"id":10,"name":"Backend"}"#;
+    let action = ComponentAction::Update {
+        from_json: Some(write_json_file(&tmp, json)),
+        id: Some(11),
+        name: None,
+        description: None,
+        default_assignee: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+            if msg.contains("cannot combine positional component ID")),
+        "expected target conflict, got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn component_from_json_rejects_unknown_field() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let json = r#"{"product":"P","name":"C","description":"D","default_assignee":"dev@test.com","bogus":true}"#;
+    let action = ComponentAction::Create {
+        from_json: Some(write_json_file(&tmp, json)),
+        product: None,
+        name: None,
+        description: None,
+        default_assignee: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+            if msg.contains("bogus") || msg.contains("unknown field")),
+        "expected unknown field validation, got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn component_from_json_missing_required_field_names_cli_flag() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let json = r#"{"product":"P","name":"C","description":"D"}"#;
+    let action = ComponentAction::Create {
+        from_json: Some(write_json_file(&tmp, json)),
+        product: None,
+        name: None,
+        description: None,
+        default_assignee: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        Some("missing"),
+        OutputFormat::Json,
+        None,
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(
+        matches!(result, Err(BzrError::InputValidation(ref msg))
+            if msg.contains("'default_assignee' is required")
+                && msg.contains("--default-assignee")),
+        "expected missing field validation, got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn component_from_json_rejects_array_shape() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let action = ComponentAction::Create {
+        from_json: Some(write_json_file(&tmp, "[]")),
+        product: None,
+        name: None,
+        description: None,
+        default_assignee: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+            if msg.contains("expects a JSON object")),
+        "expected object-shape validation, got {result:?}"
+    );
+}
+
+#[tokio::test]
 async fn component_update_without_fields_is_rejected() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
     let action = ComponentAction::Update {
-        id: 10,
+        from_json: None,
+        id: Some(10),
         name: None,
         description: None,
         default_assignee: None,

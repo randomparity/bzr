@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Schemas for the structured payloads accepted by `--from-json`. (#366)
 - `--dry-run` now previews product, component, user, and group create/update
   requests without writing. (#367)
+- Product, component, user, and group create/update now accept object-shaped
+  `--from-json <PATH|->` structured input with published schemas. (#369)
 - `query run` now accepts `--count`, matching the count-only output shape used
   by bug search-backed commands. (#368)
 

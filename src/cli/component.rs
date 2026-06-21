@@ -72,18 +72,21 @@ pub enum ComponentAction {
     /// and bzr-component-update(1) to modify it later.
     #[command(verbatim_doc_comment)]
     Create {
+        /// Read component fields from a JSON object (`-` reads stdin)
+        #[arg(long, value_name = "PATH")]
+        from_json: Option<String>,
         /// Product name
-        #[arg(long)]
-        product: String,
+        #[arg(long, required_unless_present = "from_json")]
+        product: Option<String>,
         /// Component name
-        #[arg(long)]
-        name: String,
+        #[arg(long, required_unless_present = "from_json")]
+        name: Option<String>,
         /// Component description
-        #[arg(long)]
-        description: String,
+        #[arg(long, required_unless_present = "from_json")]
+        description: Option<String>,
         /// Default assignee email
-        #[arg(long)]
-        default_assignee: String,
+        #[arg(long, required_unless_present = "from_json")]
+        default_assignee: Option<String>,
     },
 
     /// Update an existing component by ID (admin only).
@@ -105,8 +108,12 @@ pub enum ComponentAction {
     /// bzr-product-view(1) to find component IDs.
     #[command(verbatim_doc_comment)]
     Update {
+        /// Read component update fields from a JSON object (`-` reads stdin)
+        #[arg(long, value_name = "PATH")]
+        from_json: Option<String>,
         /// Component ID
-        id: u64,
+        #[arg(required_unless_present = "from_json")]
+        id: Option<u64>,
         /// New name
         #[arg(long)]
         name: Option<String>,

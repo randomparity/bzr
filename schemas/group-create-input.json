@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/group-create-input.json",
+  "title": "GroupCreateInput",
+  "description": "Object payload accepted by `group create --from-json`. Required create fields may be supplied by JSON or explicit CLI flags, so this schema describes payload shape rather than post-merge command validity.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": ["string", "null"],
+      "examples": ["qa-team"]
+    },
+    "description": {
+      "type": ["string", "null"],
+      "examples": ["QA team members"]
+    },
+    "is_active": {
+      "type": ["boolean", "null"],
+      "examples": [true]
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

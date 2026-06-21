@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/component-create-input.json",
+  "title": "ComponentCreateInput",
+  "description": "Object payload accepted by `component create --from-json`. Required create fields may be supplied by JSON or explicit CLI flags, so this schema describes payload shape rather than post-merge command validity.",
+  "type": "object",
+  "properties": {
+    "product": {
+      "type": ["string", "null"],
+      "examples": ["Fedora"]
+    },
+    "name": {
+      "type": ["string", "null"],
+      "examples": ["kernel"]
+    },
+    "description": {
+      "type": ["string", "null"],
+      "examples": ["Kernel bugs"]
+    },
+    "default_assignee": {
+      "type": ["string", "null"],
+      "examples": ["dev@example.com"]
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

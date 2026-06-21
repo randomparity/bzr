@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/user-update-input.json",
+  "title": "UserUpdateInput",
+  "description": "Object payload accepted by `user update --from-json`. The target user may be supplied by positional CLI argument or by the JSON `user` field, but not both.",
+  "type": "object",
+  "properties": {
+    "user": {
+      "type": ["string", "null"],
+      "examples": ["alice@example.com"]
+    },
+    "real_name": {
+      "type": ["string", "null"],
+      "examples": ["Alice Smith"]
+    },
+    "email": {
+      "type": ["string", "null"],
+      "examples": ["alice@example.com"]
+    },
+    "disable_login": {
+      "type": ["boolean", "null"],
+      "examples": [true]
+    },
+    "login_denied_text": {
+      "type": ["string", "null"],
+      "examples": ["Account disabled"]
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}
