@@ -3,6 +3,22 @@
 use super::*;
 
 #[test]
+fn attachment_deserializes_flags_and_defaults_empty() {
+    let with = r#"{"id":1,"bug_id":10,"flags":[{"name":"review","status":"+","setter":"a@x"}]}"#;
+    let att: Attachment = serde_json::from_str(with).unwrap();
+    assert_eq!(att.flags.len(), 1);
+    assert_eq!(att.flags[0].name, "review");
+    assert_eq!(att.flags[0].status, "+");
+    assert_eq!(att.flags[0].setter.as_deref(), Some("a@x"));
+
+    let without: Attachment = serde_json::from_str(r#"{"id":2,"bug_id":10}"#).unwrap();
+    assert!(without.flags.is_empty());
+    // flags serializes always as an array so consumers can rely on the key.
+    let value = serde_json::to_value(&without).unwrap();
+    assert_eq!(value["flags"], serde_json::json!([]));
+}
+
+#[test]
 fn bool_from_int_or_bool_deserializes_true() {
     let json = r#"{"id":1,"bug_id":10,"is_obsolete":true,"is_private":false}"#;
     let att: Attachment = serde_json::from_str(json).unwrap();

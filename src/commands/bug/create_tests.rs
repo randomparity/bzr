@@ -1223,3 +1223,181 @@ async fn from_json_batch_dry_run_emits_single_object_and_no_write() {
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["changes"].as_array().unwrap().len(), 2);
 }
+
+#[test]
+fn preview_params_propagates_every_merged_field() {
+    // The editor preview is built from MergedFields::preview_params. Every
+    // resolved field must flow into the CreateBugParams the editor template
+    // renders; dropping any one (or replacing the whole body with a default)
+    // would silently show the user a blank field in the $EDITOR buffer.
+    let merged = super::MergedFields {
+        product: "Prod".into(),
+        component: "Comp".into(),
+        version: Some("9.9".into()),
+        priority: Some("P1".into()),
+        severity: Some("blocker".into()),
+        assigned_to: Some("dev@example.com".into()),
+        op_sys: Some("Linux".into()),
+        rep_platform: Some("ARM".into()),
+        template_description: None,
+    };
+
+    let p = merged.preview_params();
+
+    assert_eq!(p.product, "Prod");
+    assert_eq!(p.component, "Comp");
+    assert_eq!(p.version, "9.9");
+    assert_eq!(p.priority.as_deref(), Some("P1"));
+    assert_eq!(p.severity.as_deref(), Some("blocker"));
+    assert_eq!(p.assigned_to.as_deref(), Some("dev@example.com"));
+    assert_eq!(p.op_sys.as_deref(), Some("Linux"));
+    assert_eq!(p.rep_platform.as_deref(), Some("ARM"));
+}
+
+#[tokio::test]
+async fn run_editor_flow_returns_parsed_editor_output() {
+    // run_editor_flow renders the template, launches $EDITOR, and parses the
+    // buffer back into (summary, description). The TTY gate that decides
+    // *whether* to enter the editor lives a layer up in `handle`, so this
+    // function is exercisable directly with a fake editor — no terminal needed.
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let script = install_fake_editor();
+    let prev = std::env::var("EDITOR").ok();
+    // SAFETY: setup_test_env holds bzr::ENV_LOCK for the test duration,
+    // serializing env access across all tests that use it.
+    unsafe { std::env::set_var("EDITOR", &script) };
+
+    let merged = super::MergedFields {
+        product: "Prod".into(),
+        component: "Comp".into(),
+        version: None,
+        priority: None,
+        severity: None,
+        assigned_to: None,
+        op_sys: None,
+        rep_platform: None,
+        template_description: None,
+    };
+    let result = super::run_editor_flow(Some("Pre-fill"), &merged);
+
+    // SAFETY: see above.
+    unsafe {
+        if let Some(p) = prev {
+            std::env::set_var("EDITOR", p);
+        } else {
+            std::env::remove_var("EDITOR");
+        }
+    }
+    let _ = std::fs::remove_file(&script);
+
+    let (summary, description) = result.unwrap();
+    assert_eq!(summary, "Editor summary");
+    assert_eq!(description, "Editor description");
+}
+
+#[test]
+fn build_editor_template_separates_no_newline_body_from_sentinel() {
+    use crate::types::CreateBugParams;
+    let params = CreateBugParams {
+        product: "P".into(),
+        component: "C".into(),
+        version: "1".into(),
+        ..Default::default()
+    };
+    // The body has no trailing newline; the renderer must add one so a blank
+    // line sits between the body and the sentinel. The `delete !` mutant drops
+    // that, butting the body directly against the sentinel line.
+    let buf = super::build_editor_template(None, Some("Body line"), &params);
+    assert!(
+        buf.contains("Body line\n\n"),
+        "a blank line must follow a body lacking its own trailing newline, got: {buf:?}"
+    );
+}
+
+#[tokio::test]
+async fn from_json_cli_description_overrides_json_description() {
+    // explicit_description resolves --description for the JSON path; a supplied
+    // value must overwrite the JSON `description`. Mutants that always return
+    // None / a constant would let the JSON value through (or inject garbage).
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .and(body_string_contains("\"description\":\"cli-desc\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 9})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{"product":"P","component":"C","summary":"S","description":"json-desc"}"#;
+    let mut action = from_json_action(&write_json_file(&tmp, json));
+    if let BugAction::Create(crate::cli::CreateArgs { description, .. }) = &mut action {
+        *description = Some("cli-desc".into());
+    }
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+    assert!(
+        result.is_ok(),
+        "CLI --description must override the JSON description on the wire: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn from_json_preserves_blocks_and_depends_on_without_cli_override() {
+    // overlay_cli keeps the JSON `blocks`/`depends_on` when no --blocks/
+    // --depends-on flag is supplied (the `!is_empty()` guards). The `delete !`
+    // mutants invert that, clobbering the JSON arrays with the empty CLI vecs.
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .and(body_string_contains("\"blocks\":[10,20]"))
+        .and(body_string_contains("\"depends_on\":[30]"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 12})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json =
+        r#"{"product":"P","component":"C","summary":"S","blocks":[10,20],"depends_on":[30]}"#;
+    let action = from_json_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+    assert!(
+        result.is_ok(),
+        "JSON blocks/depends_on must reach the wire unchanged: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn from_json_batch_table_lists_created_ids() {
+    // The table-mode batch summary prints "Created bugs: …" only when at least
+    // one bug was created (`!created.is_empty()`). The `delete !` mutant inverts
+    // the guard, suppressing the line on a successful batch.
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 11})))
+        .expect(2)
+        .mount(&mock)
+        .await;
+
+    let json = r#"[{"product":"P","component":"C","summary":"one"},
+                   {"product":"P","component":"C","summary":"two"}]"#;
+    let action = from_json_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Table, None, &mut io.writers())
+            .await;
+    assert!(
+        result.is_ok(),
+        "table batch create should succeed: {result:?}"
+    );
+    assert!(
+        io.out_str().contains("Created bugs: #11"),
+        "table output must list the created ids, got: {:?}",
+        io.out_str()
+    );
+}

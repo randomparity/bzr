@@ -17,8 +17,8 @@ pub use bug::{
 pub use classification::{Classification, ClassificationProduct};
 pub use comment::{Comment, UpdateCommentTagsParams};
 pub use common::{
-    ApiMode, AuthMethod, ExtensionInfo, FlagStatus, FlagUpdate, OutputFormat, ServerExtensions,
-    ServerInfoResponse, ServerVersion, SortDirection,
+    ApiMode, AuthMethod, ExtensionInfo, Flag, FlagStatus, FlagUpdate, OutputFormat,
+    ServerExtensions, ServerInfoResponse, ServerVersion, SortDirection,
 };
 pub use component::{Component, CreateComponentParams, UpdateComponentParams};
 pub use group::{CreateGroupParams, GroupInfo, GroupMember, UpdateGroupParams};

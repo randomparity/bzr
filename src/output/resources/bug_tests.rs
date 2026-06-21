@@ -1,7 +1,16 @@
 #![expect(clippy::unwrap_used)]
 
 use super::*;
-use crate::types::{Bug, FieldChange, HistoryEntry};
+use crate::types::{Bug, FieldChange, Flag, HistoryEntry};
+
+fn review_flag(status: &str, requestee: Option<&str>) -> Flag {
+    Flag {
+        name: "review".into(),
+        status: status.into(),
+        setter: Some("alice@example.com".into()),
+        requestee: requestee.map(Into::into),
+    }
+}
 
 fn make_bug(id: u64, summary: &str, status: &str) -> Bug {
     Bug {
@@ -28,6 +37,8 @@ fn make_bug(id: u64, summary: &str, status: &str) -> Bug {
         cc: vec!["watcher@example.com".into()],
         op_sys: None,
         rep_platform: None,
+        target_milestone: None,
+        flags: Vec::new(),
         custom_fields: std::collections::BTreeMap::new(),
     }
 }
@@ -428,6 +439,63 @@ fn write_bug_detail_table_renders_all_fields() {
 }
 
 #[test]
+fn write_bug_detail_table_shows_flags_and_milestone() {
+    let mut bug = make_bug(7, "has flags", "NEW");
+    bug.target_milestone = Some("9.0".into());
+    bug.flags = vec![
+        review_flag("+", None),
+        review_flag("?", Some("bob@example.com")),
+    ];
+    let mut out = Vec::new();
+
+    write_bug_detail(&bug, ColumnSpec::default(), OutputFormat::Table, &mut out);
+    let output = String::from_utf8(out).unwrap();
+
+    assert!(output.contains("Target Milestone"), "got: {output}");
+    assert!(output.contains("9.0"));
+    assert!(output.contains("Flags"));
+    assert!(output.contains("review+"), "got: {output}");
+    assert!(output.contains("review?(bob@example.com)"), "got: {output}");
+}
+
+#[test]
+fn write_bug_detail_table_suppresses_unset_milestone_and_empty_flags() {
+    let mut bug = make_bug(7, "no milestone", "NEW");
+    bug.target_milestone = Some("---".into());
+    // flags left empty
+    let mut out = Vec::new();
+
+    write_bug_detail(&bug, ColumnSpec::default(), OutputFormat::Table, &mut out);
+    let output = String::from_utf8(out).unwrap();
+
+    assert!(
+        !output.contains("Target Milestone"),
+        "should suppress ---: {output}"
+    );
+    assert!(
+        !output.contains("Flags"),
+        "should suppress empty flags: {output}"
+    );
+}
+
+#[test]
+fn bug_to_json_keeps_flags_when_selected() {
+    let mut bug = make_bug(7, "s", "NEW");
+    bug.flags = vec![review_flag("+", None)];
+    let spec = ColumnSpec::new(Some("id,flags"), None);
+
+    let value = bug_to_json(&bug, spec);
+    let map = value.as_object().unwrap();
+
+    assert!(map.contains_key("id"));
+    assert!(map.contains_key("flags"));
+    assert_eq!(map["flags"][0]["name"], "review");
+    // Trimmed to the selection: summary and status are gone.
+    assert!(!map.contains_key("summary"));
+    assert!(!map.contains_key("status"));
+}
+
+#[test]
 fn write_bug_detail_table_shows_dupe_of() {
     let bug = crate::types::Bug {
         id: 42,
@@ -453,6 +521,8 @@ fn write_bug_detail_table_shows_dupe_of() {
         cc: vec![],
         op_sys: None,
         rep_platform: None,
+        target_milestone: None,
+        flags: Vec::new(),
         custom_fields: std::collections::BTreeMap::new(),
     };
     let mut out = Vec::new();
@@ -495,6 +565,8 @@ fn write_bug_detail_table_handles_minimal_bug() {
         cc: vec![],
         op_sys: None,
         rep_platform: None,
+        target_milestone: None,
+        flags: Vec::new(),
         custom_fields: std::collections::BTreeMap::new(),
     };
     let output = capture_bug_detail(OutputFormat::Table, &bug);
@@ -690,6 +762,8 @@ fn sample_bug(id: u64, summary: &str) -> Bug {
         cc: vec![],
         op_sys: None,
         rep_platform: None,
+        target_milestone: None,
+        flags: Vec::new(),
         custom_fields: std::collections::BTreeMap::new(),
     }
 }
@@ -841,7 +915,7 @@ fn validate_table_columns_ok_for_all_blank_include() {
 /// The serde key sequence of `Bug`, in struct-declaration order. Locks the
 /// `preserve_order` decision (Finding 4) and is the reference for the registry
 /// drift guard (Finding 3).
-const BUG_STRUCT_KEY_ORDER: [&str; 23] = [
+const BUG_STRUCT_KEY_ORDER: [&str; 25] = [
     "id",
     "summary",
     "status",
@@ -865,6 +939,8 @@ const BUG_STRUCT_KEY_ORDER: [&str; 23] = [
     "cc",
     "op_sys",
     "rep_platform",
+    "target_milestone",
+    "flags",
 ];
 
 fn keys_of(value: &serde_json::Value) -> Vec<String> {

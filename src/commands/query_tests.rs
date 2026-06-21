@@ -1727,3 +1727,76 @@ async fn query_update_sets_dates_and_sort() {
     assert!(q.last_change_time.is_some());
     assert!(q.order.is_some());
 }
+
+#[tokio::test]
+async fn query_update_only_product_is_a_change() {
+    // Updating ONLY --product must register as a change. apply_query_updates
+    // starts `changed = false` and ORs in each merge result; the `&=` mutant on
+    // the product line would keep `changed` false and the update would be
+    // rejected as "no changes". product/component are the only merge_vec fields
+    // without a sole-field update test, so this closes that coverage gap.
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run_q(&save_action("q")).await.unwrap(); // product=Firefox, status=NEW
+
+    let mut a = empty_update("q");
+    if let QueryAction::Update(UpdateArgs { product, .. }) = &mut a {
+        *product = vec!["Thunderbird".into()];
+    }
+    run_q(&a).await.unwrap(); // must NOT fail with "no changes"
+
+    let config = Config::load().unwrap();
+    assert_eq!(
+        config.queries["q"].product,
+        vec!["Thunderbird".to_string()],
+        "a sole --product update must be applied"
+    );
+}
+
+#[tokio::test]
+async fn query_update_only_component_is_a_change() {
+    // Companion to the product case: a sole --component update must also count
+    // as a change. The `&=` mutant on the component line would swallow it.
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run_q(&save_action("q")).await.unwrap();
+
+    let mut a = empty_update("q");
+    if let QueryAction::Update(UpdateArgs { component, .. }) = &mut a {
+        *component = vec!["General".into()];
+    }
+    run_q(&a).await.unwrap();
+
+    let config = Config::load().unwrap();
+    assert_eq!(
+        config.queries["q"].component,
+        vec!["General".to_string()],
+        "a sole --component update must be applied"
+    );
+}
+
+#[tokio::test]
+async fn query_run_without_sort_keeps_saved_order() {
+    // A saved query carrying an explicit order must keep it when `run` is
+    // invoked without --sort. The bug_id default must fire only when the saved
+    // order is absent AND no raw `order` param exists (`&&`). The `||` mutant
+    // would clobber the saved order with the default whenever there is no raw
+    // order param — exactly the common case of a structured saved query.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    let mut save = product_save_action("ordered", "TestProduct", 10);
+    if let QueryAction::Save(SaveArgs { sort_args, .. }) = &mut save {
+        sort_args.sort = Some("last_change_time".into());
+        sort_args.order = crate::types::SortDirection::Desc;
+    }
+    run_q(&save).await.unwrap();
+
+    // The wire must carry the SAVED order, not the bug_id default.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("order", "last_change_time DESC, bug_id"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    run_q(&run_action("ordered")).await.unwrap();
+}

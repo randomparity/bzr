@@ -129,8 +129,8 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │                   [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 │   │                   [--expect-unchanged-since <TIMESTAMP>]
 │   ├── resolve <ID...> [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
-│   ├── close <ID...> [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
-│   ├── reopen <ID...> [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
+│   ├── close <ID...> [--status <STATUS>] [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
+│   ├── reopen <ID...> [--status <STATUS>] [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 │   └── dup <ID> <TARGET> [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 ├── comment
 │   ├── list <BUG_ID> [--since <DATE>]
@@ -362,6 +362,15 @@ upstream Bugzilla and `bzl-search`.
 ### `bzr bug view`
 
 Display detailed information about one or more bugs.
+
+The detail view includes the bug's `target_milestone` and `flags` when set.
+Each flag renders as `name` + status token, with the requestee in parentheses
+when present (e.g. `review+`, `needinfo?(qa@example.com)`) — the same syntax
+`--flag` accepts. The Target Milestone row is omitted when the milestone is
+unset (Bugzilla's `---` sentinel) and the Flags row is omitted when there are
+no flags; under `--json` both are always present (the raw `target_milestone`
+string and the full flag objects, including `setter`). Both are selectable via
+`--fields` (e.g. `--fields id,flags`).
 
 Under `--json` the returned object is trimmed to the selected fields
 (gh-style) on every transport, since trimming happens client-side after
@@ -697,22 +706,29 @@ partial-failure reporting, exit code 11) is inherited from `bug update`.
 ```bash
 bzr bug resolve 12345                       # → update --status RESOLVED --resolution FIXED
 bzr bug resolve 12345 12346 --as WONTFIX    # batch, custom resolution
-bzr bug close 12345 --comment "Shipped"     # → update --status CLOSED (resolution preserved)
+bzr bug close 12345 --comment "Shipped"     # → update --status VERIFIED (resolution preserved)
 bzr bug close 12345 --as INVALID            # close an open bug with a resolution
-bzr bug reopen 12345                         # → update --status REOPENED
+bzr bug close 12345 --status CLOSED         # install with a custom closed status
+bzr bug reopen 12345                         # → update --status CONFIRMED
+bzr bug reopen 12345 --status REOPENED       # install with a custom open status
 bzr bug dup 12345 100                        # → update --dupe-of 100
 ```
 
 | Verb | Equivalent `update` | Notes |
 |------|---------------------|-------|
 | `resolve <ID...> [--as <R>]` | `--status RESOLVED --resolution <R>` | `--as` defaults to `FIXED` |
-| `close <ID...> [--as <R>]` | `--status CLOSED [--resolution <R>]` | resolution set only when `--as` is given, otherwise the existing one is preserved |
-| `reopen <ID...>` | `--status REOPENED` | Bugzilla clears the resolution automatically |
+| `close <ID...> [--status <S>] [--as <R>]` | `--status <S> [--resolution <R>]` | `--status` defaults to `VERIFIED`; resolution set only when `--as` is given, otherwise the existing one is preserved |
+| `reopen <ID...> [--status <S>]` | `--status <S>` | `--status` defaults to `CONFIRMED`; Bugzilla clears the resolution automatically |
 | `dup <ID> <TARGET>` | `--dupe-of <TARGET>` | Bugzilla sets RESOLVED/DUPLICATE automatically |
 
-The status strings (`RESOLVED`, `CLOSED`, `REOPENED`) follow the conventional
-Bugzilla workflow; on a server with a customized workflow, an unsupported
-transition fails with the same server error `bug update` would return.
+`close` and `reopen` default to the stock Bugzilla 5.x statuses `VERIFIED` and
+`CONFIRMED`. Installs that define custom statuses (e.g. `CLOSED`, `REOPENED`)
+reach them with `--status`. The target status is validated against the server's
+status list before writing; an unknown status exits 7 (input validation) with
+the list of valid statuses, instead of the server's opaque API error. The match
+is exact and case-sensitive. Validation confirms the status exists; an
+otherwise-legal status whose *transition* the workflow forbids still fails with
+the same server error `bug update` would return.
 
 ---
 
@@ -800,10 +816,15 @@ bzr --json attachment list 12345
 ### `bzr attachment view`
 
 Show a single attachment's metadata by attachment ID — summary, bug, file
-name, content type, size, flags (patch/obsolete/private), creator, and
-timestamps — **without** downloading its bytes. On REST the `data` field is
-excluded server-side, so inspecting a large attachment is cheap. The `data`
-field is omitted from `--json` output.
+name, content type, size, the boolean state markers (patch/obsolete/private),
+creator, and timestamps — **without** downloading its bytes. On REST the
+`data` field is excluded server-side, so inspecting a large attachment is
+cheap. The `data` field is omitted from `--json` output.
+
+Bugzilla review `flags` set on the attachment are shown when present, each
+rendered as `name` + status token with the requestee in parentheses (e.g.
+`review+`, `review?(qa@example.com)`). Under `--json` the `flags` array is
+always present (empty `[]` when there are none).
 
 ```bash
 bzr attachment view 9876

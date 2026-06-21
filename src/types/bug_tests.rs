@@ -32,6 +32,62 @@ fn bug_deserializes_deadline() {
 }
 
 #[test]
+fn bug_deserializes_target_milestone_and_flags() {
+    let json = r#"{
+        "id": 42,
+        "target_milestone": "9.0",
+        "flags": [
+            {"name": "review", "status": "+", "setter": "alice@example.com"},
+            {"name": "needinfo", "status": "?", "requestee": "bob@example.com"}
+        ]
+    }"#;
+    let bug: Bug = serde_json::from_str(json).unwrap();
+
+    assert_eq!(bug.target_milestone.as_deref(), Some("9.0"));
+    assert_eq!(bug.flags.len(), 2);
+    assert_eq!(bug.flags[0].name, "review");
+    assert_eq!(bug.flags[0].status, "+");
+    assert_eq!(bug.flags[0].setter.as_deref(), Some("alice@example.com"));
+    assert_eq!(bug.flags[1].status, "?");
+    assert_eq!(bug.flags[1].requestee.as_deref(), Some("bob@example.com"));
+}
+
+#[test]
+fn bug_without_flags_defaults_to_empty_and_serializes_array() {
+    let bug: Bug = serde_json::from_str(r#"{"id": 42}"#).unwrap();
+    assert!(bug.flags.is_empty());
+    assert!(bug.target_milestone.is_none());
+
+    let serialized = serde_json::to_value(&bug).unwrap();
+    // flags is always present as an array (empty -> []), target_milestone null.
+    assert_eq!(serialized["flags"], serde_json::json!([]));
+    assert!(serialized["target_milestone"].is_null());
+}
+
+#[test]
+fn bug_serializes_flags_and_target_milestone() {
+    let json =
+        r#"{"id": 7, "target_milestone": "---", "flags": [{"name": "review", "status": "+"}]}"#;
+    let bug: Bug = serde_json::from_str(json).unwrap();
+    let serialized = serde_json::to_value(&bug).unwrap();
+
+    // JSON stays faithful: the raw "---" sentinel is preserved (only the table
+    // detail suppresses it).
+    assert_eq!(serialized["target_milestone"], "---");
+    assert_eq!(serialized["flags"][0]["name"], "review");
+    assert_eq!(serialized["flags"][0]["status"], "+");
+}
+
+#[test]
+fn flag_with_unexpected_status_token_still_deserializes() {
+    // The read-side Flag.status is a plain String, so a token the FlagStatus
+    // enum does not model must not break bug view.
+    let json = r#"{"id": 1, "flags": [{"name": "weird", "status": "??"}]}"#;
+    let bug: Bug = serde_json::from_str(json).unwrap();
+    assert_eq!(bug.flags[0].status, "??");
+}
+
+#[test]
 fn bug_deserializes_custom_fields() {
     let json = r#"{"id": 42, "summary": "s", "cf_release": "9.6"}"#;
     let bug: Bug = serde_json::from_str(json).unwrap();

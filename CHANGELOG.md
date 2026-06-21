@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking:** `bug close` and `bug reopen` now target stock Bugzilla 5.x
+  statuses by default — `close` sets `VERIFIED` (was `CLOSED`) and `reopen` sets
+  `CONFIRMED` (was `REOPENED`). Neither old status is part of the default
+  Bugzilla workflow, so both verbs previously failed against a stock install
+  with API error 51. A new `--status <STATUS>` flag on each verb overrides the
+  default for installs that define custom statuses (e.g. `--status CLOSED`). The
+  target status is validated against the server's status list before writing; an
+  unknown status now exits 7 (input validation) listing the valid statuses,
+  rather than reaching the server as the opaque API error. Matching is exact and
+  case-sensitive. Scripts relying on the old `CLOSED`/`REOPENED` targets must
+  pass `--status CLOSED` / `--status REOPENED`. (#349)
+
 - **Breaking:** attachment boolean flags now use a uniform `--x` / `--no-x`
   presence grammar across `attachment upload` and `attachment update`, so the
   same concept uses the same flag everywhere. `attachment upload` keeps
@@ -47,6 +59,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 
+- Refreshed the bundled agent skills (`agent-skills/skills/`) for the 0.5.0 CLI
+  surface: corrected the stale "there is no `bzr component list`" claims (the
+  `component list`/`component view` and `classification list` read verbs now
+  exist), documented the global flags (`--output ndjson`, `--dry-run`,
+  `-y`/`--yes`, `--timeout`/`--retry`, `--config`, and the stateless
+  `--server-url`/`--server-api-key-env`/`--server-email` trio), the new
+  `completion` and `schema` top-level commands, `bug` sort/pagination/count and
+  extended filters, `create` field-parity flags and `--from-json`, `update
+  --expect-unchanged-since`, the convenience verbs `resolve`/`close`/`reopen`/
+  `dup`, `comment add --body-file`, `attachment view` and the `--x`/`--no-x`
+  boolean grammar, `config remove-server`/`rename-server`, and `template
+  update`/`query update`. Bumped the skill-set `VERSION` to track the tool
+  version (0.5.0). (#355)
+
 - The command tree in `docs/bzr-cli.md` is now drift-checked against the binary
   in CI. A new `agent-skills/tests/flag-drift-check.sh` (run alongside the
   existing verb-level `drift-check.sh`) compares every command-specific long
@@ -60,12 +86,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `comment add --private`, `attachment download --bug`/`--out`/`--out-dir`,
   `attachment upload --comment`/`--comment-private`, and `config set-keyring`/
   `migrate-to-keyring --service`/`--account`. (#306)
+
 - Recorded the decision to keep `bzr` as the command name despite the
   historical collision with GNU Bazaar (retired in 2025; its successor Breezy
   uses `brz`), with rationale in `docs/decisions/0001-bzr-command-name.md` and
   a README note plus shell-alias workaround. (#322)
 
 ### Added
+
+- `bug view` and `attachment view` now surface Bugzilla `flags`, and `bug view`
+  also surfaces `target_milestone` — fields the REST API returns but which were
+  previously dropped. Each flag renders as `name` + status token with the
+  requestee in parentheses (e.g. `review+`, `needinfo?(qa@example.com)`). Both
+  fields are selectable via `--fields` (e.g. `bug view <id> --fields id,flags`)
+  and appear in `--json` (flags as an array, always present; `target_milestone`
+  as a string). The unset target-milestone sentinel `---` and empty flag lists
+  are suppressed in table detail but kept verbatim in JSON. (#351)
 
 - NDJSON output via `--output ndjson` (or `BZR_OUTPUT=ndjson`): list/array
   results print one compact JSON value per line and single objects print as one

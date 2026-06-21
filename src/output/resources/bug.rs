@@ -6,8 +6,9 @@ use serde_json::Value;
 use tabled::builder::Builder;
 
 use crate::output::formatting::{
-    colorize_status, shorten_email, truncate, write_divider, write_field, write_formatted,
-    write_json_family, write_list_field, write_optional_field, SUMMARY_TRUNCATE_WIDTH,
+    colorize_status, render_flags_inline, shorten_email, truncate, write_divider, write_field,
+    write_formatted, write_json_family, write_list_field, write_optional_field,
+    SUMMARY_TRUNCATE_WIDTH,
 };
 use crate::types::{Bug, HistoryEntry, OutputFormat};
 
@@ -172,7 +173,21 @@ const COLUMNS: &[BugColumn] = &[
         header: "DUPE_OF",
         render: |b| b.dupe_of.map(|id| id.to_string()).unwrap_or_default(),
     },
+    BugColumn {
+        aliases: &["target_milestone", "milestone"],
+        header: "MILESTONE",
+        render: |b| b.target_milestone.clone().unwrap_or_default(),
+    },
+    BugColumn {
+        aliases: &["flags"],
+        header: "FLAGS",
+        render: |b| render_flags_inline(&b.flags),
+    },
 ];
+
+/// Bugzilla's sentinel for "no target milestone set". Suppressed in detail
+/// output so a bug without a milestone does not print a noise row.
+const UNSET_MILESTONE: &str = "---";
 
 #[derive(Clone, Copy)]
 enum SelectedBugField<'a> {
@@ -590,6 +605,12 @@ fn write_bug_detail_table(bug: &Bug, spec: ColumnSpec<'_>, out: &mut (impl Write
     if field_selected(spec, "component") {
         write_optional_field(out, "Component", bug.component.as_deref());
     }
+    if field_selected(spec, "target_milestone") {
+        let milestone = bug.target_milestone.as_deref().unwrap_or_default();
+        if !milestone.is_empty() && milestone != UNSET_MILESTONE {
+            write_field(out, "Target Milestone", milestone);
+        }
+    }
     if field_selected(spec, "assigned_to") {
         write_optional_field(out, "Assignee", bug.assigned_to.as_deref());
     }
@@ -616,6 +637,9 @@ fn write_bug_detail_table(bug: &Bug, spec: ColumnSpec<'_>, out: &mut (impl Write
     }
     if field_selected(spec, "depends_on") {
         write_id_list_field(out, "Depends on", &bug.depends_on);
+    }
+    if field_selected(spec, "flags") && !bug.flags.is_empty() {
+        write_field(out, "Flags", &render_flags_inline(&bug.flags));
     }
     for name in selected_custom_detail_fields(spec) {
         write_field(out, name, &render_custom_value(bug.custom_fields.get(name)));

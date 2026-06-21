@@ -4,9 +4,20 @@ use colored::{ColoredString, Colorize};
 use serde::Serialize;
 use tabled::builder::Builder;
 
-use crate::types::OutputFormat;
+use crate::types::{Flag, OutputFormat};
 
 // ── Formatting primitives ───────────────────────────────────────────
+
+/// Join a bug or attachment's flags into the concise comma-separated
+/// `name<status>[(requestee)]` inline form used by table columns and detail
+/// rows on both resources.
+pub(super) fn render_flags_inline(flags: &[Flag]) -> String {
+    flags
+        .iter()
+        .map(Flag::render_inline)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
 
 pub(super) fn write_json<W: Write + ?Sized>(value: &(impl Serialize + ?Sized), out: &mut W) {
     let _ = writeln!(

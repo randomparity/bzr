@@ -4,7 +4,7 @@ use crate::error::{BzrError, Result};
 use crate::types::{partition_filters, Bug, SearchParams, FIELD_MAPPINGS};
 use crate::xmlrpc::client::XmlRpcClient;
 use crate::xmlrpc::mappers::{
-    get_datetime_str, get_int_array, get_nonempty_str, get_str, get_str_array, get_u64,
+    get_datetime_str, get_flags, get_int_array, get_nonempty_str, get_str, get_str_array, get_u64,
     require_u64, xmlrpc_value_to_json, EXPECTED_STRUCT_RESPONSE,
 };
 use crate::xmlrpc::value::Value;
@@ -152,6 +152,8 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         cc: get_str_array(m, "cc"),
         op_sys: get_nonempty_str(m, "op_sys"),
         rep_platform: get_nonempty_str(m, "rep_platform"),
+        target_milestone: get_nonempty_str(m, "target_milestone"),
+        flags: get_flags(m, "flags"),
         custom_fields: custom_fields_from_xmlrpc(m),
     })
 }

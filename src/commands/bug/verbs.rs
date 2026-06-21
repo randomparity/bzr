@@ -5,7 +5,7 @@
 
 use crate::cli::{CloseArgs, CommentArgs, DupArgs, ReopenArgs, ResolveArgs};
 use crate::client::BugzillaClient;
-use crate::error::Result;
+use crate::error::{BzrError, Result};
 use crate::output::writers::Writers;
 use crate::types::{CommentUpdate, OutputFormat, UpdateBugParams};
 
@@ -17,6 +17,40 @@ fn comment_update(args: &CommentArgs) -> Result<Option<CommentUpdate>> {
         args.comment_file.as_deref(),
         args.comment_private,
     )
+}
+
+/// Confirm the `close` / `reopen` target status exists on the server before
+/// writing, so an unknown status fails with an actionable client-side error
+/// (exit 7) rather than the server's opaque "no status named X" API error.
+///
+/// The match is exact and case-sensitive against the names the server returns
+/// (Bugzilla statuses are uppercase). The check proves the status *exists*; the
+/// legality of the transition from the bug's current status is still left to
+/// the server. Skipped under `--dry-run`, which performs no mutation and whose
+/// preview already shows the status that would be sent.
+async fn validate_target_status(client: &BugzillaClient, status: &str) -> Result<()> {
+    if crate::commands::runtime::dry_run::enabled() {
+        return Ok(());
+    }
+    if status.trim().is_empty() {
+        return Err(BzrError::InputValidation("--status cannot be empty".into()));
+    }
+    let values = client.get_field_values("status").await?;
+    if values
+        .iter()
+        .any(|v| !v.name.is_empty() && v.name == status)
+    {
+        return Ok(());
+    }
+    let valid: Vec<&str> = values
+        .iter()
+        .map(|v| v.name.as_str())
+        .filter(|n| !n.is_empty())
+        .collect();
+    Err(BzrError::InputValidation(format!(
+        "no status named '{status}' on this server; valid statuses: {}",
+        valid.join(", ")
+    )))
 }
 
 pub(super) async fn resolve(
@@ -40,10 +74,14 @@ pub(super) async fn close(
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    // Resolve the comment (local validation) before the network status check so
+    // a bad --comment-private combination fails without a round-trip.
+    let comment = comment_update(&args.comment)?;
+    validate_target_status(client, &args.status).await?;
     let params = UpdateBugParams {
-        status: Some("CLOSED".into()),
+        status: Some(args.status.clone()),
         resolution: args.as_resolution.clone(),
-        comment: comment_update(&args.comment)?,
+        comment,
         ..Default::default()
     };
     super::update::apply(client, args.ids.clone(), params, format, w).await
@@ -55,9 +93,11 @@ pub(super) async fn reopen(
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let comment = comment_update(&args.comment)?;
+    validate_target_status(client, &args.status).await?;
     let params = UpdateBugParams {
-        status: Some("REOPENED".into()),
-        comment: comment_update(&args.comment)?,
+        status: Some(args.status.clone()),
+        comment,
         ..Default::default()
     };
     super::update::apply(client, args.ids.clone(), params, format, w).await

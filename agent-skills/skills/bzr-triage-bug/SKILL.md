@@ -35,9 +35,37 @@ bzr comment add <id> --body "Reproduced on Fedora 42; root cause is X."
 bzr comment tag <id> --add needs-info
 ```
 
+### Convenience verbs (sugar over `update`)
+
+```
+bzr bug resolve <id> --as FIXED        # status RESOLVED + resolution
+bzr bug close <id>                     # default status VERIFIED (stock 5.x)
+bzr bug reopen <id>                    # default status CONFIRMED (stock 5.x)
+bzr bug dup <id> <dupe-of-id>          # mark as a duplicate
+```
+
+`close`/`reopen` default to the stock Bugzilla 5.x statuses VERIFIED / CONFIRMED;
+pass `--status <STATUS>` for installs with custom statuses (e.g.
+`bzr bug close <id> --status CLOSED`).
+
 Pass only the flags for fields you intend to change. If a status transition is
 rejected, `bzr field list status --json` shows the allowed `can_change_to`
 targets from the current state.
+
+### Guard against mid-air collisions
+
+After reading the bug, capture its `last_change_time` and pass it back on the
+write so a concurrent edit is detected instead of clobbered:
+
+```
+ts=$(bzr bug view <id> --json | jq -r '.last_change_time')
+bzr bug update <id> --status RESOLVED --resolution FIXED \
+  --expect-unchanged-since "$ts"      # exits 14 if the bug changed meanwhile
+```
+
+This is the cardinal read-before-write rule made enforceable. To rehearse a
+change without writing, add `--dry-run` — bzr validates and prints the would-be
+payload (`"action":"dry-run"`) without calling the API.
 
 ## 3. Verify
 
