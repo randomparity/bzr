@@ -1,11 +1,17 @@
 #![expect(clippy::unwrap_used)]
 
-use wiremock::matchers::{method, path, query_param};
+use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::GroupAction;
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
+
+fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
+    let path = tmp.path().join("input.json");
+    std::fs::write(&path, json).unwrap();
+    path.to_string_lossy().into_owned()
+}
 
 #[tokio::test]
 async fn group_view_returns_info() {
@@ -59,9 +65,10 @@ async fn group_create_sends_post() {
         .await;
 
     let action = GroupAction::Create {
-        name: "new-group".into(),
-        description: "A test group".into(),
-        is_active: true,
+        from_json: None,
+        name: Some("new-group".into()),
+        description: Some("A test group".into()),
+        is_active: Some(true),
     };
     let mut __io_a2 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
@@ -81,6 +88,38 @@ async fn group_create_sends_post() {
 }
 
 #[tokio::test]
+async fn group_create_from_json_sends_merged_body() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("POST"))
+        .and(path("/rest/group"))
+        .and(body_json(serde_json::json!({
+            "name": "FromCli",
+            "description": "From JSON",
+            "is_active": false
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 9})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{"name":"FromJson","description":"From JSON","is_active":false}"#;
+    let action = GroupAction::Create {
+        from_json: Some(write_json_file(&tmp, json)),
+        name: Some("FromCli".into()),
+        description: None,
+        is_active: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(result.is_ok(), "group create from JSON failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["id"], 9);
+    assert_eq!(parsed["action"], "created");
+}
+
+#[tokio::test]
 async fn group_create_dry_run_makes_no_write_and_marks_payload() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
@@ -92,9 +131,10 @@ async fn group_create_dry_run_makes_no_write_and_marks_payload() {
         .await;
 
     let action = GroupAction::Create {
-        name: "new-group".into(),
-        description: "A test group".into(),
-        is_active: true,
+        from_json: None,
+        name: Some("new-group".into()),
+        description: Some("A test group".into()),
+        is_active: Some(true),
     };
     crate::commands::runtime::dry_run::set(true);
     let mut io = crate::test_helpers::CapturedIo::new();
@@ -125,7 +165,8 @@ async fn group_update_sends_put() {
         .await;
 
     let action = GroupAction::Update {
-        group: "admin".into(),
+        from_json: None,
+        group: Some("admin".into()),
         description: Some("Updated description".into()),
         is_active: None,
     };
@@ -138,6 +179,99 @@ async fn group_update_sends_put() {
     )
     .await;
     assert!(result.is_ok(), "group update failed: {result:?}");
+}
+
+#[tokio::test]
+async fn group_update_from_json_uses_json_target() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("PUT"))
+        .and(path("/rest/group/admin"))
+        .and(body_json(serde_json::json!({
+            "description": "Updated",
+            "is_active": false
+        })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"groups": [{"changes": {}}]})),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{"group":"admin","description":"Updated"}"#;
+    let action = GroupAction::Update {
+        from_json: Some(write_json_file(&tmp, json)),
+        group: None,
+        description: None,
+        is_active: Some(false),
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(result.is_ok(), "group update from JSON failed: {result:?}");
+}
+
+#[tokio::test]
+async fn group_update_from_json_rejects_positional_and_json_target() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+
+    let json = r#"{"group":"admin","description":"Updated"}"#;
+    let action = GroupAction::Update {
+        from_json: Some(write_json_file(&tmp, json)),
+        group: Some("other".into()),
+        description: None,
+        is_active: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+            if msg.contains("cannot combine positional group")),
+        "expected target conflict validation, got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn group_from_json_rejects_unknown_field() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+
+    let json = r#"{"name":"new-group","description":"Group","bogus":true}"#;
+    let action = GroupAction::Create {
+        from_json: Some(write_json_file(&tmp, json)),
+        name: None,
+        description: None,
+        is_active: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+            if msg.contains("unknown field") && msg.contains("bogus")),
+        "expected unknown field validation, got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn group_from_json_rejects_array_shape() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+
+    let action = GroupAction::Create {
+        from_json: Some(write_json_file(&tmp, r#"[{"name":"new-group"}]"#)),
+        name: None,
+        description: None,
+        is_active: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+            if msg.contains("expects a JSON object")),
+        "expected object-shape validation, got {result:?}"
+    );
 }
 
 #[tokio::test]
@@ -155,7 +289,8 @@ async fn group_update_dry_run_makes_no_write_and_marks_payload() {
         .await;
 
     let action = GroupAction::Update {
-        group: "admin".into(),
+        from_json: None,
+        group: Some("admin".into()),
         description: Some("Updated description".into()),
         is_active: Some(false),
     };
@@ -177,7 +312,8 @@ async fn group_update_dry_run_makes_no_write_and_marks_payload() {
 async fn group_update_without_fields_is_rejected() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
     let action = GroupAction::Update {
-        group: "admin".into(),
+        from_json: None,
+        group: Some("admin".into()),
         description: None,
         is_active: None,
     };

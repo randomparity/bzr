@@ -112,15 +112,18 @@ pub enum GroupAction {
     /// bzr-group-add-user(1) to populate it.
     #[command(verbatim_doc_comment)]
     Create {
+        /// Read group fields from a JSON object (`-` reads stdin)
+        #[arg(long, value_name = "PATH")]
+        from_json: Option<String>,
         /// Group name
-        #[arg(long)]
-        name: String,
+        #[arg(long, required_unless_present = "from_json")]
+        name: Option<String>,
         /// Group description
-        #[arg(long)]
-        description: String,
+        #[arg(long, required_unless_present = "from_json")]
+        description: Option<String>,
         /// Whether the group is active
-        #[arg(long, default_value = "true")]
-        is_active: bool,
+        #[arg(long)]
+        is_active: Option<bool>,
     },
 
     /// Update an existing group's description or active state.
@@ -139,8 +142,12 @@ pub enum GroupAction {
     /// bzr-group-view(1) to inspect current state.
     #[command(verbatim_doc_comment)]
     Update {
+        /// Read group update fields from a JSON object (`-` reads stdin)
+        #[arg(long, value_name = "PATH")]
+        from_json: Option<String>,
         /// Group name or ID
-        group: String,
+        #[arg(required_unless_present = "from_json")]
+        group: Option<String>,
         /// New description
         #[arg(long)]
         description: Option<String>,

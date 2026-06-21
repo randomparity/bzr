@@ -11,6 +11,7 @@ pub mod confirm;
 pub mod dry_run;
 pub(crate) mod editor;
 pub mod flags;
+pub(crate) mod from_json;
 pub mod inline_server;
 pub(crate) mod paging;
 pub(crate) mod shared;

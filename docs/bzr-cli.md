@@ -155,23 +155,23 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 ├── product
 │   ├── list [--type <TYPE>]
 │   ├── view <NAME>
-│   ├── create --name <N> --description <D> [--version <V>] [--is-open <BOOL>]
-│   └── update <NAME> [--description <D>] [--default-milestone <M>] [--is-open <BOOL>]
+│   ├── create [--from-json <PATH>] [--name <N>] [--description <D>] [--version <V>] [--is-open <BOOL>]
+│   └── update [<NAME>] [--from-json <PATH>] [--description <D>] [--default-milestone <M>] [--is-open <BOOL>]
 ├── field
 │   ├── aliases
 │   └── list <FIELD_NAME>
 ├── user
 │   ├── search <QUERY> [--details]
-│   ├── create --email <E> [--full-name <N>] [--password <P>] [--login <L>]
-│   └── update <USER> [--real-name <N>] [--email <E>] [--disable-login <BOOL>]
+│   ├── create [--from-json <PATH>] [--email <E>] [--full-name <N>] [--password <P>] [--login <L>]
+│   └── update [<USER>] [--from-json <PATH>] [--real-name <N>] [--email <E>] [--disable-login <BOOL>]
 │                      [--login-denied-text <T>]
 ├── group
 │   ├── add-user --group <G> --user <U>
 │   ├── remove-user --group <G> --user <U>
 │   ├── list-users --group <G> [--details]
 │   ├── view <GROUP>
-│   ├── create --name <N> --description <D> [--is-active <BOOL>]
-│   └── update <GROUP> [--description <D>] [--is-active <BOOL>]
+│   ├── create [--from-json <PATH>] [--name <N>] [--description <D>] [--is-active <BOOL>]
+│   └── update [<GROUP>] [--from-json <PATH>] [--description <D>] [--is-active <BOOL>]
 ├── whoami
 ├── server
 │   └── info
@@ -181,8 +181,8 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 ├── component
 │   ├── list --product <P>
 │   ├── view <PRODUCT> <COMPONENT>
-│   ├── create --product <P> --name <N> --description <D> --default-assignee <E>
-│   └── update <ID> [--name <N>] [--description <D>] [--default-assignee <E>]
+│   ├── create [--from-json <PATH>] [--product <P>] [--name <N>] [--description <D>] [--default-assignee <E>]
+│   └── update [<ID>] [--from-json <PATH>] [--name <N>] [--description <D>] [--default-assignee <E>]
 ├── config
 │   ├── set-server <NAME> --url <URL> (--api-key <KEY> | --api-key-env <ENV_VAR>) [--email <EMAIL>] [--auth-method <METHOD>]
 │   │                     [--tls-insecure] [--tls-ca-cert <PATH>] [--tls-pin-sha256 <HEX>] [--tls-pin-now] [--tls-pin-clear]
@@ -613,8 +613,14 @@ Accepted keys match the create flag names: `product`, `component`, `summary`, `v
 **Precedence:** an explicit CLI flag overrides the corresponding JSON field, applied uniformly to every element of an array — e.g. `--product Fedora --from-json bugs.json` forces `product` on all entries. `--from-json` is mutually exclusive with `--template` and bypasses the `$EDITOR` flow.
 
 The `bug create` payload shape is published as `bzr schema bug-create-input`.
-`bug update` accepts its own structured update input via `--from-json`; other
-resource commands do not yet accept `--from-json`.
+`bug update` accepts its own structured update input via `--from-json` and
+publishes `bzr schema bug-update-input`.
+
+Admin create/update commands for products, components, users, and groups also
+accept `--from-json`, but only object-shaped payloads. Their schemas are
+published as `<resource>-create-input` and `<resource>-update-input`, for
+example `bzr schema product-create-input`. As with bug input, explicit CLI
+flags override the matching JSON fields and unknown JSON keys are rejected.
 
 ```bash
 printf '%s' '{"product":"Fedora","component":"kernel","summary":"S"}' \
@@ -1048,13 +1054,15 @@ Create a new product (requires admin privileges).
 ```bash
 bzr product create --name "New Product" --description "A new product"
 bzr product create --name "New Product" --description "Desc" --version "1.0" --is-open true
+bzr product create --from-json product.json --name "CLI name"
 bzr --dry-run product create --name "New Product" --description "Preview"
 ```
 
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
-| `--name <N>` | Yes | | Product name |
-| `--description <D>` | Yes | | Product description |
+| `--from-json <PATH>` | No | | Read product fields from a JSON object (`-` reads stdin). Schema: `bzr schema product-create-input` |
+| `--name <N>` | Yes unless JSON supplies it | | Product name |
+| `--description <D>` | Yes unless JSON supplies it | | Product description |
 | `--version <V>` | No | "unspecified" | Initial version |
 | `--is-open <BOOL>` | No | true | Whether the product is open for bugs |
 
@@ -1068,12 +1076,14 @@ Update an existing product (requires admin privileges).
 bzr product update "My Product" --description "Updated description"
 bzr product update "My Product" --is-open false
 bzr product update "My Product" --default-milestone "2.0"
+bzr product update --from-json product-update.json --is-open false
 bzr --dry-run product update "My Product" --is-open false
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `<NAME>` | Yes | Product name |
+| `<NAME>` | Yes unless JSON supplies `name` | Product name |
+| `--from-json <PATH>` | No | Read product update fields from a JSON object (`-` reads stdin). Schema: `bzr schema product-update-input` |
 | `--description <D>` | No | New description |
 | `--default-milestone <M>` | No | Default milestone |
 | `--is-open <BOOL>` | No | Whether the product is open for bugs |
@@ -1140,12 +1150,14 @@ Create a new user (requires admin privileges).
 bzr user create --email alice@example.com --full-name "Alice Smith"
 bzr user create --email bob@example.com --password s3cret
 bzr user create --email carol@example.com --login carol   # Bugzilla 5.3+ with use_email_as_login disabled
+bzr user create --from-json user.json --email alice@example.com
 bzr --dry-run user create --email alice@example.com --full-name "Alice Smith"
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `--email <E>` | Yes | User email |
+| `--from-json <PATH>` | No | Read user fields from a JSON object (`-` reads stdin). Schema: `bzr schema user-create-input` |
+| `--email <E>` | Yes unless JSON supplies it | User email |
 | `--login <L>` | No | Login name (if different from email). Required on Bugzilla 5.3+ when `use_email_as_login` is disabled |
 | `--full-name <N>` | No | Full name |
 | `--password <P>` | No | Password (server generates one if omitted) |
@@ -1161,12 +1173,14 @@ Update an existing user (requires admin privileges).
 ```bash
 bzr user update alice@example.com --real-name "Alice J. Smith"
 bzr user update alice@example.com --disable-login true --login-denied-text "Account suspended"
+bzr user update --from-json user-update.json --disable-login false
 bzr --dry-run user update alice@example.com --disable-login false
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `<USER>` | Yes | User ID or login name |
+| `<USER>` | Yes unless JSON supplies `user` | User ID or login name |
+| `--from-json <PATH>` | No | Read user update fields from a JSON object (`-` reads stdin). Schema: `bzr schema user-update-input` |
 | `--real-name <N>` | No | New real name |
 | `--email <E>` | No | New email |
 | `--disable-login <BOOL>` | No | Disable login |
@@ -1233,13 +1247,15 @@ Create a new group (requires admin privileges).
 ```bash
 bzr group create --name "qa-team" --description "QA team members"
 bzr group create --name "qa-team" --description "QA" --is-active true
+bzr group create --from-json group.json --name "qa-team"
 bzr --dry-run group create --name "qa-team" --description "QA team members"
 ```
 
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
-| `--name <N>` | Yes | | Group name |
-| `--description <D>` | Yes | | Group description |
+| `--from-json <PATH>` | No | | Read group fields from a JSON object (`-` reads stdin). Schema: `bzr schema group-create-input` |
+| `--name <N>` | Yes unless JSON supplies it | | Group name |
+| `--description <D>` | Yes unless JSON supplies it | | Group description |
 | `--is-active <BOOL>` | No | true | Whether the group is active |
 
 Agent note: this is an admin write. In automation, pair it with a preceding `bzr --json group view <name>` or existing state check when you need idempotent behavior.
@@ -1251,12 +1267,14 @@ Update an existing group (requires admin privileges).
 ```bash
 bzr group update qa-team --description "Updated QA team description"
 bzr group update qa-team --is-active false
+bzr group update --from-json group-update.json --is-active false
 bzr --dry-run group update qa-team --is-active false
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `<GROUP>` | Yes | Group name or ID |
+| `<GROUP>` | Yes unless JSON supplies `group` | Group name or ID |
+| `--from-json <PATH>` | No | Read group update fields from a JSON object (`-` reads stdin). Schema: `bzr schema group-update-input` |
 | `--description <D>` | No | New description |
 | `--is-active <BOOL>` | No | Whether the group is active |
 
@@ -1347,16 +1365,18 @@ Create a new component in a product (requires admin privileges).
 ```bash
 bzr component create --product Fedora --name "new-component" \
   --description "Handles new features" --default-assignee dev@example.com
+bzr component create --from-json component.json --product Fedora
 bzr --dry-run component create --product Fedora --name "new-component" \
   --description "Handles new features" --default-assignee dev@example.com
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `--product <P>` | Yes | Product name |
-| `--name <N>` | Yes | Component name |
-| `--description <D>` | Yes | Component description |
-| `--default-assignee <E>` | Yes | Default assignee email |
+| `--from-json <PATH>` | No | Read component fields from a JSON object (`-` reads stdin). Schema: `bzr schema component-create-input` |
+| `--product <P>` | Yes unless JSON supplies it | Product name |
+| `--name <N>` | Yes unless JSON supplies it | Component name |
+| `--description <D>` | Yes unless JSON supplies it | Component description |
+| `--default-assignee <E>` | Yes unless JSON supplies it | Default assignee email |
 
 Agent note: this is safer after confirming the product exists with `bzr --json product view <product>` and that the assignee is valid with `bzr --json user search "<email-or-name>"`.
 
@@ -1367,12 +1387,14 @@ Update an existing component (requires admin privileges).
 ```bash
 bzr component update 42 --name "renamed-component"
 bzr component update 42 --default-assignee newdev@example.com
+bzr component update --from-json component-update.json --name "renamed-component"
 bzr --dry-run component update 42 --default-assignee newdev@example.com
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `<ID>` | Yes | Component ID |
+| `<ID>` | Yes unless JSON supplies `id` | Component ID |
+| `--from-json <PATH>` | No | Read component update fields from a JSON object (`-` reads stdin). Schema: `bzr schema component-update-input` |
 | `--name <N>` | No | New name |
 | `--description <D>` | No | New description |
 | `--default-assignee <E>` | No | New default assignee |
@@ -1848,6 +1870,7 @@ bzr schema                      # list schema names
 bzr schema bug                  # the bug object (bug view / list elements)
 bzr schema bug-create-input     # `bug create --from-json` payload
 bzr schema bug-update-input     # `bug update --from-json` payload
+bzr schema product-create-input # `product create --from-json` payload
 bzr schema batch-result | jq .  # the batch `bug update` envelope
 ```
 
@@ -1862,7 +1885,10 @@ mutation/result envelopes `action-result`, `batch-result`,
 `batch-create-result`, `multi-bug-view`, `tag-result`, `membership-result`,
 `count-result`, `download-result`, `upload-result`, `config-result`,
 `search-result`, `dry-run-result`; and the structured input contracts
-`bug-create-input`, `bug-update-input`.
+`bug-create-input`, `bug-update-input`, `product-create-input`,
+`product-update-input`, `component-create-input`, `component-update-input`,
+`user-create-input`, `user-update-input`, `group-create-input`,
+`group-update-input`.
 
 ---
 

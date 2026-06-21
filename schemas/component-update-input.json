@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/component-update-input.json",
+  "title": "ComponentUpdateInput",
+  "description": "Object payload accepted by `component update --from-json`. The target component ID may be supplied by positional CLI argument or by the JSON `id` field, but not both.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "examples": [42]
+    },
+    "name": {
+      "type": ["string", "null"],
+      "examples": ["backend"]
+    },
+    "description": {
+      "type": ["string", "null"],
+      "examples": ["Backend services"]
+    },
+    "default_assignee": {
+      "type": ["string", "null"],
+      "examples": ["dev@example.com"]
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

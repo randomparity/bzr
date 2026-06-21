@@ -42,7 +42,8 @@ The full surface (with one example each) is in `reference/commands.md`. The
 groups: `bug`, `comment`, `attachment`, `config`, `product`, `field`, `user`,
 `group`, `whoami`, `server`, `classification`, `component`, `template`, `query`,
 plus two local (no-network) top-level commands: `completion` (shell completion
-scripts) and `schema` (published JSON Schemas for `--json` output).
+scripts) and `schema` (published JSON Schemas for `--json` output and
+`--from-json` input).
 
 Two surface facts agents get wrong:
 
@@ -70,6 +71,15 @@ These work on any command (place them before the subcommand):
 - `--server-url <url>` (+ `--server-api-key-env <env>`, optional
   `--server-email <email>`) — a fully stateless inline server, no config file
   needed; ideal for CI and agents. See the `bzr-setup` skill.
+
+## Structured input
+
+`bug create`, `bug update`, and admin create/update commands for products,
+components, users, and groups accept `--from-json <path|->`. Explicit CLI flags
+override matching JSON fields, and unknown JSON keys exit 7 instead of being
+ignored. Bugs support object and array payloads; admin resources accept one
+object payload. Use `bzr schema <name>` to inspect the contract, e.g.
+`bug-create-input`, `product-update-input`, or `component-create-input`.
 
 ## Cardinal rules
 

@@ -9,6 +9,23 @@ use crate::output::writers::Writers;
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{CreateGroupParams, UpdateGroupParams};
+use serde::Deserialize;
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct JsonCreateGroup {
+    name: Option<String>,
+    description: Option<String>,
+    is_active: Option<bool>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct JsonUpdateGroup {
+    group: Option<String>,
+    description: Option<String>,
+    is_active: Option<bool>,
+}
 
 pub async fn execute(
     action: &GroupAction,
@@ -17,11 +34,9 @@ pub async fn execute(
     api: Option<ApiMode>,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    validate_action(action)?;
-    let client = super::runtime::shared::connect_and_configure(server, api).await?;
-
     match action {
         GroupAction::AddUser { group, user } => {
+            let client = super::runtime::shared::connect_and_configure(server, api).await?;
             client.add_user_to_group(user, group).await?;
             write_result(
                 &MembershipResult::added(user.as_str(), group.as_str()),
@@ -31,6 +46,7 @@ pub async fn execute(
             );
         }
         GroupAction::RemoveUser { group, user } => {
+            let client = super::runtime::shared::connect_and_configure(server, api).await?;
             client.remove_user_from_group(user, group).await?;
             write_result(
                 &MembershipResult::removed(user.as_str(), group.as_str()),
@@ -40,29 +56,34 @@ pub async fn execute(
             );
         }
         GroupAction::ListUsers { group, details } => {
+            let client = super::runtime::shared::connect_and_configure(server, api).await?;
             let users = client.get_group_members(group, *details).await?;
-            if *details {
-                write_users_detailed(&users, format, w.out);
+            let write = if *details {
+                write_users_detailed
             } else {
-                write_users(&users, format, w.out);
-            }
+                write_users
+            };
+            write(&users, format, w.out);
         }
         GroupAction::View { group } => {
+            let client = super::runtime::shared::connect_and_configure(server, api).await?;
             let info = client.get_group(group).await?;
             write_group_info(&info, format, w.out);
         }
         GroupAction::Create {
+            from_json,
             name,
             description,
             is_active,
         } => {
-            let params = CreateGroupParams {
-                name: name.clone(),
-                description: description.clone(),
-                is_active: *is_active,
-            };
+            let params = build_create_params(
+                from_json.as_deref(),
+                name.as_deref(),
+                description.as_deref(),
+                *is_active,
+            )?;
             if super::runtime::dry_run::enabled() {
-                let message = format!("Would create group '{name}'");
+                let message = format!("Would create group '{}'", params.name);
                 write_result(
                     &DryRunResult::new(ResourceKind::Group, &[], &params),
                     &message,
@@ -71,23 +92,20 @@ pub async fn execute(
                 );
                 return Ok(());
             }
-            let id = client.create_group(&params).await?;
-            write_result(
-                &ActionResult::created_named(id, name.as_str(), ResourceKind::Group),
-                &format!("Created group #{id} '{name}'"),
-                format,
-                w.out,
-            );
+            create_group(&params, server, format, api, w).await?;
         }
         GroupAction::Update {
+            from_json,
             group,
             description,
             is_active,
         } => {
-            let params = UpdateGroupParams {
-                description: description.clone(),
-                is_active: *is_active,
-            };
+            let (group, params) = build_update_params(
+                from_json.as_deref(),
+                group.as_deref(),
+                description.as_deref(),
+                *is_active,
+            )?;
             if super::runtime::dry_run::enabled() {
                 let message = format!("Would update group '{group}'");
                 write_result(
@@ -98,7 +116,8 @@ pub async fn execute(
                 );
                 return Ok(());
             }
-            client.update_group(group, &params).await?;
+            let client = super::runtime::shared::connect_and_configure(server, api).await?;
+            client.update_group(&group, &params).await?;
             write_result(
                 &ActionResult::updated_named(group.as_str(), None, ResourceKind::Group),
                 &format!("Updated group '{group}'"),
@@ -110,6 +129,24 @@ pub async fn execute(
     Ok(())
 }
 
+async fn create_group(
+    params: &CreateGroupParams,
+    server: Option<&str>,
+    format: OutputFormat,
+    api: Option<ApiMode>,
+    w: &mut Writers<'_>,
+) -> Result<()> {
+    let client = super::runtime::shared::connect_and_configure(server, api).await?;
+    let id = client.create_group(params).await?;
+    write_result(
+        &ActionResult::created_named(id, params.name.as_str(), ResourceKind::Group),
+        &format!("Created group #{id} '{}'", params.name),
+        format,
+        w.out,
+    );
+    Ok(())
+}
+
 #[must_use]
 pub fn is_dry_runnable(action: &GroupAction) -> bool {
     matches!(
@@ -118,18 +155,59 @@ pub fn is_dry_runnable(action: &GroupAction) -> bool {
     )
 }
 
-fn validate_action(action: &GroupAction) -> Result<()> {
-    if let GroupAction::Update {
-        description,
-        is_active,
-        ..
-    } = action
-    {
-        if description.is_none() && is_active.is_none() {
-            return Err(BzrError::InputValidation(
-                "no fields to update; specify at least one field to change".into(),
-            ));
-        }
+fn build_create_params(
+    from_json: Option<&str>,
+    name: Option<&str>,
+    description: Option<&str>,
+    is_active: Option<bool>,
+) -> Result<CreateGroupParams> {
+    let mut input = if let Some(arg) = from_json {
+        super::runtime::from_json::read_object::<JsonCreateGroup>(arg)?
+    } else {
+        JsonCreateGroup::default()
+    };
+    super::runtime::from_json::merge_string(&mut input.name, name);
+    super::runtime::from_json::merge_string(&mut input.description, description);
+    super::runtime::from_json::merge_copy(&mut input.is_active, is_active);
+    Ok(CreateGroupParams {
+        name: super::runtime::from_json::required_string(input.name, "name")?,
+        description: super::runtime::from_json::required_string(input.description, "description")?,
+        is_active: input.is_active.unwrap_or(true),
+    })
+}
+
+fn build_update_params(
+    from_json: Option<&str>,
+    group: Option<&str>,
+    description: Option<&str>,
+    is_active: Option<bool>,
+) -> Result<(String, UpdateGroupParams)> {
+    let mut input = if let Some(arg) = from_json {
+        super::runtime::from_json::read_object::<JsonUpdateGroup>(arg)?
+    } else {
+        JsonUpdateGroup::default()
+    };
+    let target = super::runtime::from_json::resolve_string_target(
+        group,
+        input.group.take(),
+        "--from-json object cannot combine positional group with JSON group",
+        "--from-json object requires a group",
+    )?;
+    super::runtime::from_json::merge_string(&mut input.description, description);
+    super::runtime::from_json::merge_copy(&mut input.is_active, is_active);
+    let params = UpdateGroupParams {
+        description: input.description,
+        is_active: input.is_active,
+    };
+    validate_update_params(&params)?;
+    Ok((target, params))
+}
+
+fn validate_update_params(params: &UpdateGroupParams) -> Result<()> {
+    if params.description.is_none() && params.is_active.is_none() {
+        return Err(BzrError::InputValidation(
+            "no fields to update; specify at least one field to change".into(),
+        ));
     }
     Ok(())
 }

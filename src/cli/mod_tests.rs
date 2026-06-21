@@ -379,6 +379,112 @@ fn parse_bug_update_from_json_stdin() {
 }
 
 #[test]
+fn parse_product_create_from_json_stdin() {
+    let cli = Cli::try_parse_from(["bzr", "product", "create", "--from-json", "-"]).unwrap();
+    let Commands::Product {
+        action: ProductAction::Create { from_json, .. },
+    } = cli.command
+    else {
+        panic!("expected product create");
+    };
+    assert_eq!(from_json.as_deref(), Some("-"));
+}
+
+#[test]
+fn parse_product_update_from_json_stdin() {
+    let cli = Cli::try_parse_from(["bzr", "product", "update", "--from-json", "-"]).unwrap();
+    let Commands::Product {
+        action: ProductAction::Update {
+            from_json, name, ..
+        },
+    } = cli.command
+    else {
+        panic!("expected product update");
+    };
+    assert_eq!(from_json.as_deref(), Some("-"));
+    assert!(name.is_none());
+}
+
+#[test]
+fn parse_component_create_from_json_stdin() {
+    let cli = Cli::try_parse_from(["bzr", "component", "create", "--from-json", "-"]).unwrap();
+    let Commands::Component {
+        action: ComponentAction::Create { from_json, .. },
+    } = cli.command
+    else {
+        panic!("expected component create");
+    };
+    assert_eq!(from_json.as_deref(), Some("-"));
+}
+
+#[test]
+fn parse_component_update_from_json_stdin() {
+    let cli = Cli::try_parse_from(["bzr", "component", "update", "--from-json", "-"]).unwrap();
+    let Commands::Component {
+        action: ComponentAction::Update { from_json, id, .. },
+    } = cli.command
+    else {
+        panic!("expected component update");
+    };
+    assert_eq!(from_json.as_deref(), Some("-"));
+    assert!(id.is_none());
+}
+
+#[test]
+fn parse_user_create_from_json_stdin() {
+    let cli = Cli::try_parse_from(["bzr", "user", "create", "--from-json", "-"]).unwrap();
+    let Commands::User {
+        action: UserAction::Create { from_json, .. },
+    } = cli.command
+    else {
+        panic!("expected user create");
+    };
+    assert_eq!(from_json.as_deref(), Some("-"));
+}
+
+#[test]
+fn parse_user_update_from_json_stdin() {
+    let cli = Cli::try_parse_from(["bzr", "user", "update", "--from-json", "-"]).unwrap();
+    let Commands::User {
+        action: UserAction::Update {
+            from_json, user, ..
+        },
+    } = cli.command
+    else {
+        panic!("expected user update");
+    };
+    assert_eq!(from_json.as_deref(), Some("-"));
+    assert!(user.is_none());
+}
+
+#[test]
+fn parse_group_create_from_json_stdin() {
+    let cli = Cli::try_parse_from(["bzr", "group", "create", "--from-json", "-"]).unwrap();
+    let Commands::Group {
+        action: GroupAction::Create { from_json, .. },
+    } = cli.command
+    else {
+        panic!("expected group create");
+    };
+    assert_eq!(from_json.as_deref(), Some("-"));
+}
+
+#[test]
+fn parse_group_update_from_json_stdin() {
+    let cli = Cli::try_parse_from(["bzr", "group", "update", "--from-json", "-"]).unwrap();
+    let Commands::Group {
+        action: GroupAction::Update {
+            from_json, group, ..
+        },
+    } = cli.command
+    else {
+        panic!("expected group update");
+    };
+    assert_eq!(from_json.as_deref(), Some("-"));
+    assert!(group.is_none());
+}
+
+#[test]
 fn parse_bug_list_offset_and_paginate() {
     let cli =
         Cli::try_parse_from(["bzr", "bug", "list", "--limit", "10", "--offset", "20"]).unwrap();
@@ -1156,16 +1262,18 @@ fn parse_component_create() {
         Commands::Component {
             action:
                 ComponentAction::Create {
+                    from_json,
                     product,
                     name,
                     description,
                     default_assignee,
                 },
         } => {
-            assert_eq!(product, "TestProduct");
-            assert_eq!(name, "Backend");
-            assert_eq!(description, "Backend component");
-            assert_eq!(default_assignee, "dev@test.com");
+            assert_eq!(from_json, None);
+            assert_eq!(product.as_deref(), Some("TestProduct"));
+            assert_eq!(name.as_deref(), Some("Backend"));
+            assert_eq!(description.as_deref(), Some("Backend component"));
+            assert_eq!(default_assignee.as_deref(), Some("dev@test.com"));
         }
         _ => panic!("expected Component Create"),
     }

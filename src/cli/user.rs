@@ -51,9 +51,12 @@ pub enum UserAction {
     /// bzr-group-add-user(1) to grant group membership.
     #[command(verbatim_doc_comment)]
     Create {
+        /// Read user fields from a JSON object (`-` reads stdin)
+        #[arg(long, value_name = "PATH")]
+        from_json: Option<String>,
         /// User email
-        #[arg(long)]
-        email: String,
+        #[arg(long, required_unless_present = "from_json")]
+        email: Option<String>,
         /// Login name (required on Bugzilla 5.3+ when `use_email_as_login` is disabled;
         /// set `api_mode` to "hybrid" to use XML-RPC which avoids the REST login field conflict)
         #[arg(long)]
@@ -86,8 +89,12 @@ pub enum UserAction {
     /// See bzr-user-create(1) for new accounts.
     #[command(verbatim_doc_comment)]
     Update {
+        /// Read user update fields from a JSON object (`-` reads stdin)
+        #[arg(long, value_name = "PATH")]
+        from_json: Option<String>,
         /// User ID or login name
-        user: String,
+        #[arg(required_unless_present = "from_json")]
+        user: Option<String>,
         /// New real name
         #[arg(long)]
         real_name: Option<String>,

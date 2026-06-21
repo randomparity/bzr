@@ -1,11 +1,17 @@
 #![expect(clippy::unwrap_used)]
 
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::UserAction;
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
+
+fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
+    let path = tmp.path().join("input.json");
+    std::fs::write(&path, json).unwrap();
+    path.to_string_lossy().into_owned()
+}
 
 #[test]
 fn resolve_login_denied_text_disable_with_custom_text() {
@@ -94,7 +100,8 @@ async fn update_user_disable_login_sends_denied_text() {
         .await;
 
     let action = UserAction::Update {
-        user: "alice@test.com".to_string(),
+        from_json: None,
+        user: Some("alice@test.com".to_string()),
         real_name: None,
         email: None,
         disable_login: Some(true),
@@ -127,7 +134,8 @@ async fn update_user_enable_login_sends_empty_denied_text() {
         .await;
 
     let action = UserAction::Update {
-        user: "bob@test.com".to_string(),
+        from_json: None,
+        user: Some("bob@test.com".to_string()),
         real_name: None,
         email: None,
         disable_login: Some(false),
@@ -159,7 +167,8 @@ async fn user_update_dry_run_makes_no_write_and_marks_payload() {
         .await;
 
     let action = UserAction::Update {
-        user: "alice@test.com".to_string(),
+        from_json: None,
+        user: Some("alice@test.com".to_string()),
         real_name: Some("Alice Smith".to_string()),
         email: None,
         disable_login: Some(true),
@@ -184,10 +193,98 @@ async fn user_update_dry_run_makes_no_write_and_marks_payload() {
 }
 
 #[tokio::test]
+async fn user_update_from_json_uses_json_target() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("PUT"))
+        .and(path("/rest/user/alice%40test%2Ecom"))
+        .and(body_json(serde_json::json!({
+            "names": ["alice@test.com"],
+            "real_name": "Alice Smith",
+            "email": "alice.new@test.com",
+            "login_denied_text": "Closed"
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{"user":"alice@test.com","real_name":"Alice Smith","disable_login":true,"login_denied_text":"Closed"}"#;
+    let action = UserAction::Update {
+        from_json: Some(write_json_file(&tmp, json)),
+        user: None,
+        real_name: None,
+        email: Some("alice.new@test.com".to_string()),
+        disable_login: None,
+        login_denied_text: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(result.is_ok(), "user update from JSON failed: {result:?}");
+}
+
+#[tokio::test]
+async fn user_update_from_json_cli_disable_login_overrides_json_denied_text() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("PUT"))
+        .and(path("/rest/user/alice%40test%2Ecom"))
+        .and(body_json(serde_json::json!({
+            "names": ["alice@test.com"],
+            "login_denied_text": ""
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{"user":"alice@test.com","disable_login":true,"login_denied_text":"Closed"}"#;
+    let action = UserAction::Update {
+        from_json: Some(write_json_file(&tmp, json)),
+        user: None,
+        real_name: None,
+        email: None,
+        disable_login: Some(false),
+        login_denied_text: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        result.is_ok(),
+        "CLI disable-login override failed: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn user_update_from_json_rejects_positional_and_json_target() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let json = r#"{"user":"alice@test.com","real_name":"Alice"}"#;
+    let action = UserAction::Update {
+        from_json: Some(write_json_file(&tmp, json)),
+        user: Some("bob@test.com".to_string()),
+        real_name: None,
+        email: None,
+        disable_login: None,
+        login_denied_text: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+            if msg.contains("cannot combine positional user")),
+        "expected target conflict, got {result:?}"
+    );
+}
+
+#[tokio::test]
 async fn user_update_without_fields_is_rejected() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
     let action = UserAction::Update {
-        user: "alice@test.com".to_string(),
+        from_json: None,
+        user: Some("alice@test.com".to_string()),
         real_name: None,
         email: None,
         disable_login: None,
@@ -215,7 +312,8 @@ async fn user_create_sends_post() {
         .await;
 
     let action = UserAction::Create {
-        email: "new@test.com".into(),
+        from_json: None,
+        email: Some("new@test.com".into()),
         login: None,
         full_name: Some("New User".into()),
         password: None,
@@ -249,7 +347,8 @@ async fn user_create_dry_run_makes_no_write_and_marks_payload() {
         .await;
 
     let action = UserAction::Create {
-        email: "new@test.com".into(),
+        from_json: None,
+        email: Some("new@test.com".into()),
         login: Some("newuser".into()),
         full_name: Some("New User".into()),
         password: None,
@@ -266,6 +365,80 @@ async fn user_create_dry_run_makes_no_write_and_marks_payload() {
     assert_eq!(parsed["ids"], serde_json::json!([]));
     assert_eq!(parsed["changes"]["email"], "new@test.com");
     assert_eq!(parsed["changes"]["login"], "newuser");
+}
+
+#[tokio::test]
+async fn user_create_from_json_sends_merged_body() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("POST"))
+        .and(path("/rest/user"))
+        .and(body_json(serde_json::json!({
+            "email": "cli@test.com",
+            "login": "json-login",
+            "full_name": "JSON User",
+            "password": "secret"
+        })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 99})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{"email":"json@test.com","login":"json-login","full_name":"JSON User","password":"secret"}"#;
+    let action = UserAction::Create {
+        from_json: Some(write_json_file(&tmp, json)),
+        email: Some("cli@test.com".into()),
+        login: None,
+        full_name: None,
+        password: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(result.is_ok(), "user create from JSON failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["id"], 99);
+}
+
+#[tokio::test]
+async fn user_from_json_rejects_unknown_field() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let json = r#"{"email":"new@test.com","bogus":true}"#;
+    let action = UserAction::Create {
+        from_json: Some(write_json_file(&tmp, json)),
+        email: None,
+        login: None,
+        full_name: None,
+        password: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+            if msg.contains("bogus") || msg.contains("unknown field")),
+        "expected unknown field validation, got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn user_from_json_rejects_array_shape() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let action = UserAction::Create {
+        from_json: Some(write_json_file(&tmp, "[]")),
+        email: None,
+        login: None,
+        full_name: None,
+        password: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+            if msg.contains("expects a JSON object")),
+        "expected object-shape validation, got {result:?}"
+    );
 }
 
 #[tokio::test]

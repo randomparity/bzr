@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/product-create-input.json",
+  "title": "ProductCreateInput",
+  "description": "Object payload accepted by `product create --from-json`. Required create fields may be supplied by JSON or explicit CLI flags, so this schema describes payload shape rather than post-merge command validity.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": ["string", "null"],
+      "examples": ["Fedora"]
+    },
+    "description": {
+      "type": ["string", "null"],
+      "examples": ["Fedora Linux"]
+    },
+    "version": {
+      "type": ["string", "null"],
+      "examples": ["unspecified"]
+    },
+    "is_open": {
+      "type": ["boolean", "null"],
+      "examples": [true]
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

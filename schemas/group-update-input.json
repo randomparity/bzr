@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/group-update-input.json",
+  "title": "GroupUpdateInput",
+  "description": "Object payload accepted by `group update --from-json`. The target group may be supplied by positional CLI argument or by the JSON `group` field, but not both.",
+  "type": "object",
+  "properties": {
+    "group": {
+      "type": ["string", "null"],
+      "examples": ["qa-team"]
+    },
+    "description": {
+      "type": ["string", "null"],
+      "examples": ["QA team members"]
+    },
+    "is_active": {
+      "type": ["boolean", "null"],
+      "examples": [false]
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}
