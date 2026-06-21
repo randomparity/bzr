@@ -3,7 +3,7 @@
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use super::{fetch_page, write_truncation_note, Page};
+use super::{fetch_page, resolve_offset, write_truncation_note, Page};
 use crate::client::test_helpers::test_client;
 use crate::types::{Bug, OutputFormat, SearchParams};
 
@@ -144,4 +144,102 @@ fn truncation_note_noop_when_not_truncated() {
     );
     assert!(io.out_str().is_empty());
     assert!(io.err_str().is_empty());
+}
+
+#[test]
+fn resolve_offset_folds_url_offset_into_field() {
+    // A `--from-url` import (or a saved query from one) leaves `offset=` sitting
+    // in `raw_params`. `resolve_offset` must match that *specific* key, fold its
+    // value into the struct field, and strip the raw copy so the request never
+    // sends two conflicting `offset` params. Matching "any param except offset"
+    // (the `k != "offset"` mutant) would leave the field unset.
+    let mut params = SearchParams {
+        raw_params: vec![("offset".to_string(), "5".to_string())],
+        ..Default::default()
+    };
+
+    resolve_offset(&mut params, None);
+
+    assert_eq!(
+        params.offset,
+        Some(5),
+        "the url's offset=5 must be folded into the structured field"
+    );
+    assert!(
+        !params.raw_params.iter().any(|(k, _)| k == "offset"),
+        "the raw offset copy must be stripped to avoid a duplicate query param"
+    );
+}
+
+#[test]
+fn resolve_offset_cli_overrides_url() {
+    // An explicit `--offset` on the command line wins over a url-carried offset.
+    let mut params = SearchParams {
+        raw_params: vec![("offset".to_string(), "5".to_string())],
+        ..Default::default()
+    };
+
+    resolve_offset(&mut params, Some(9));
+
+    assert_eq!(
+        params.offset,
+        Some(9),
+        "explicit --offset 9 overrides url offset=5"
+    );
+}
+
+#[tokio::test]
+async fn fetch_page_exact_fill_is_not_truncated() {
+    let mock = MockServer::start().await;
+    // limit 2 → over-fetch requests limit=3, but the server has exactly 2 rows.
+    // The window is filled precisely with nothing beyond it: `len > limit` is
+    // false. The `>=` mutant would read 2 >= 2 as "more available" and wrongly
+    // flag truncation. This is the off-by-one boundary the other tests skip
+    // (they return strictly more, or strictly fewer, than the limit).
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("limit", "3"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(bugs_body(2)))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let page = fetch_page(&client, &params_with_limit(2), false)
+        .await
+        .unwrap();
+
+    assert!(
+        !page.truncated,
+        "exactly `limit` rows means the window is full with nothing beyond it"
+    );
+    assert_eq!(page.bugs.len(), 2);
+}
+
+#[tokio::test]
+async fn fetch_page_paginate_zero_limit_makes_single_unbounded_request() {
+    let mock = MockServer::start().await;
+    // A zero limit means "no window": `--paginate` must collapse to one
+    // unbounded request rather than entering the offset-stepping loop. The
+    // `*l > 0` guard filters the 0 out. The `*l >= 0` mutant (always true for
+    // u32) would admit a `page_size` of 0 and step `offset += 0` forever; the
+    // bounded mock turns that runaway loop into a hard error on the 2nd request.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(bugs_body(1)))
+        .up_to_n_times(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        limit: Some(0),
+        ..Default::default()
+    };
+    let page = fetch_page(&client, &params, true).await.unwrap();
+
+    assert_eq!(
+        page.bugs.len(),
+        1,
+        "a single unbounded request returns the one page as-is"
+    );
 }
