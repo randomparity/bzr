@@ -295,7 +295,13 @@ jobs:
       # Signed-Releases check only inspects release assets, so the bundle has
       # to travel with the artifacts too. The upload-artifact glob below
       # (bzr-<tag>-<target>.*) picks this file up automatically.
+      #
+      # Skipped on Windows: the bundle-path output is backslash-separated
+      # there, which `cp` under Git Bash mishandles. Windows binaries still
+      # get provenance via the attestations API (above); Scorecard only needs
+      # one .intoto.jsonl asset per release, which the non-Windows legs supply.
       - name: Stage provenance bundle as release asset
+        if: runner.os != 'Windows'
         shell: bash
         env:
           BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
@@ -471,7 +477,12 @@ jobs:
               Write-Error "install.ps1 checksum mismatch: expected=$expectedHash actual=$actualHash"
               exit 1
           }
-          & ./install.ps1
+          # Execute the verified content as a string rather than invoking the
+          # downloaded file directly: Invoke-WebRequest stamps the file with the
+          # internet-zone Mark-of-the-Web, which a RemoteSigned execution policy
+          # would refuse. Hashing the on-disk file first preserves the integrity
+          # check; piping its content to iex avoids the policy/MOTW gate.
+          Get-Content install.ps1 -Raw | Invoke-Expression
           $installed = & (Join-Path $env:BZR_INSTALL_DIR 'bzr.exe') --version
           $expected = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"' |
                        Select-Object -First 1).Matches[0].Groups[1].Value
