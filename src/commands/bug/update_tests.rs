@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use wiremock::matchers::{body_json, method, path};
+use wiremock::matchers::{body_json, body_partial_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::BugAction;
@@ -115,6 +115,15 @@ async fn mock_get_bug_lct(mock: &wiremock::MockServer, id: u64, lct: &str) {
         .await;
 }
 
+async fn received_put_count(mock: &wiremock::MockServer) -> usize {
+    mock.received_requests()
+        .await
+        .unwrap()
+        .iter()
+        .filter(|request| request.method.as_str() == "PUT")
+        .count()
+}
+
 fn update_action_expect_unchanged(ids: Vec<u64>, since: &str) -> BugAction {
     let mut action = make_update_action(ids);
     if let BugAction::Update(crate::cli::UpdateArgs {
@@ -125,6 +134,419 @@ fn update_action_expect_unchanged(ids: Vec<u64>, since: &str) -> BugAction {
         *expect_unchanged_since = Some(since.to_string());
     }
     action
+}
+
+fn from_json_update_action(path: &str) -> BugAction {
+    BugAction::Update(crate::cli::UpdateArgs {
+        from_json: Some(path.to_string()),
+        ..Default::default()
+    })
+}
+
+fn from_json_update_action_with_ids(ids: Vec<u64>, path: &str) -> BugAction {
+    BugAction::Update(crate::cli::UpdateArgs {
+        from_json: Some(path.to_string()),
+        ids,
+        ..Default::default()
+    })
+}
+
+fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
+    let path = tmp.path().join("update-input.json");
+    std::fs::write(&path, json).unwrap();
+    path.to_string_lossy().into_owned()
+}
+
+#[tokio::test]
+async fn bug_update_from_json_object_uses_positional_id() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/42"))
+        .and(body_json(serde_json::json!({"status": "ASSIGNED"})))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": [{"id": 42, "changes": {}}]})),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{"status":"ASSIGNED"}"#;
+    let action = from_json_update_action_with_ids(vec![42], &write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    assert!(
+        result.is_ok(),
+        "JSON object update should succeed: {result:?}"
+    );
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["action"], "updated");
+    assert_eq!(parsed["id"], 42);
+}
+
+#[tokio::test]
+async fn bug_update_from_json_cli_flag_overrides_json_field() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/42"))
+        .and(body_json(serde_json::json!({"status": "ASSIGNED"})))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": [{"id": 42, "changes": {}}]})),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{"id":42,"status":"NEW"}"#;
+    let mut action = from_json_update_action(&write_json_file(&tmp, json));
+    if let BugAction::Update(crate::cli::UpdateArgs { status, .. }) = &mut action {
+        *status = Some("ASSIGNED".into());
+    }
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    assert!(
+        result.is_ok(),
+        "CLI status should override JSON: {result:?}"
+    );
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["action"], "updated");
+    assert_eq!(parsed["id"], 42);
+}
+
+#[tokio::test]
+async fn bug_update_from_json_list_fields_use_add_remove_shapes() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/42"))
+        .and(body_partial_json(serde_json::json!({
+            "keywords": {"add": ["fix-needed"], "remove": ["stale"]},
+            "blocks": {"add": [100]},
+            "depends_on": {"remove": [50]},
+            "see_also": {"add": ["https://example.com/issue/1"]},
+        })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": [{"id": 42, "changes": {}}]})),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{
+        "keywords_add":["fix-needed"],
+        "keywords_remove":["stale"],
+        "blocks_add":[100],
+        "depends_on_remove":[50],
+        "see_also_add":["https://example.com/issue/1"]
+    }"#;
+    let action = from_json_update_action_with_ids(vec![42], &write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    assert!(result.is_ok(), "JSON list deltas should update: {result:?}");
+}
+
+#[tokio::test]
+async fn bug_update_from_json_array_batches_per_id() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/1"))
+        .and(body_json(serde_json::json!({"status": "ASSIGNED"})))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": [{"id": 1, "changes": {}}]})),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/2"))
+        .and(body_json(serde_json::json!({"priority": "high"})))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": [{"id": 2, "changes": {}}]})),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"[{"id":1,"status":"ASSIGNED"},{"id":2,"priority":"high"}]"#;
+    let action = from_json_update_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    assert!(result.is_ok(), "array update should succeed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["succeeded"], serde_json::json!([1, 2]));
+    assert_eq!(parsed["failed"], serde_json::json!([]));
+}
+
+#[tokio::test]
+async fn bug_update_from_json_single_element_array_returns_batch_shape() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/8"))
+        .and(body_json(serde_json::json!({"status": "ASSIGNED"})))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": [{"id": 8, "changes": {}}]})),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"[{"id":8,"status":"ASSIGNED"}]"#;
+    let action = from_json_update_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    assert!(
+        result.is_ok(),
+        "one-element array should update: {result:?}"
+    );
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["succeeded"], serde_json::json!([8]));
+    assert_eq!(parsed["failed"], serde_json::json!([]));
+    assert!(
+        parsed.get("id").is_none(),
+        "array input must not use the single-object shape"
+    );
+}
+
+#[tokio::test]
+async fn bug_update_from_json_array_dry_run_emits_single_object_and_no_write() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let json = r#"[{"id":1,"status":"ASSIGNED"},{"id":2,"priority":"high"}]"#;
+    let action = from_json_update_action(&write_json_file(&tmp, json));
+    crate::commands::runtime::dry_run::set(true);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+    crate::commands::runtime::dry_run::set(false);
+
+    assert!(result.is_ok(), "array dry-run should succeed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["action"], "dry-run");
+    assert_eq!(parsed["ids"], serde_json::json!([1, 2]));
+    assert_eq!(parsed["changes"].as_array().unwrap().len(), 2);
+    assert_eq!(received_put_count(&mock).await, 0);
+}
+
+#[tokio::test]
+async fn bug_update_from_json_array_partial_failure_exits_11() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    mock_put_bug_ok(&mock, 1).await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/2"))
+        .respond_with(ResponseTemplate::new(500).set_body_string("boom"))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"[{"id":1,"status":"ASSIGNED"},{"id":2,"status":"ASSIGNED"}]"#;
+    let action = from_json_update_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    let err = result.unwrap_err();
+    assert!(matches!(
+        err,
+        crate::error::BzrError::BatchPartialFailure {
+            succeeded: 1,
+            failed: 1
+        }
+    ));
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["succeeded"], serde_json::json!([1]));
+    assert_eq!(parsed["failed"][0]["id"], 2);
+}
+
+#[tokio::test]
+async fn bug_update_from_json_comment_and_expect_guard() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    mock_get_bug_lct(&mock, 42, "2026-06-21T12:00:00Z").await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/42"))
+        .and(body_partial_json(serde_json::json!({
+            "status": "ASSIGNED",
+            "comment": {
+                "body": "ready",
+                "is_private": true,
+            },
+        })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": [{"id": 42, "changes": {}}]})),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{
+        "id":42,
+        "status":"ASSIGNED",
+        "comment":"ready",
+        "comment_private":true,
+        "expect_unchanged_since":"2026-06-21T12:00:00Z"
+    }"#;
+    let action = from_json_update_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+
+    assert!(
+        result.is_ok(),
+        "JSON comment/concurrency update should succeed: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn bug_update_from_json_rejects_unknown_field() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    let json = r#"{"id":42,"status":"ASSIGNED","bogus":true}"#;
+    let action = from_json_update_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await
+            .unwrap_err();
+
+    assert!(
+        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("bogus") || msg.contains("unknown field")),
+        "expected unknown-field validation, got {err:?}"
+    );
+    assert_eq!(received_put_count(&mock).await, 0);
+}
+
+#[tokio::test]
+async fn bug_update_from_json_rejects_empty_array() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    let action = from_json_update_action(&write_json_file(&tmp, "[]"));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await
+            .unwrap_err();
+
+    assert!(
+        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("empty array")),
+        "expected empty-array validation, got {err:?}"
+    );
+    assert_eq!(received_put_count(&mock).await, 0);
+}
+
+#[tokio::test]
+async fn bug_update_from_json_rejects_array_item_without_id() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    let json = r#"[{"status":"ASSIGNED"}]"#;
+    let action = from_json_update_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await
+            .unwrap_err();
+
+    assert!(
+        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("id is required")),
+        "expected array-item id validation, got {err:?}"
+    );
+    assert_eq!(received_put_count(&mock).await, 0);
+}
+
+#[tokio::test]
+async fn bug_update_from_json_rejects_object_without_target_id() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    let json = r#"{"status":"ASSIGNED"}"#;
+    let action = from_json_update_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await
+            .unwrap_err();
+
+    assert!(
+        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("requires positional IDs") && msg.contains("id field")),
+        "expected object target validation, got {err:?}"
+    );
+    assert_eq!(received_put_count(&mock).await, 0);
+}
+
+#[tokio::test]
+async fn bug_update_from_json_rejects_mixed_positional_and_json_id() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    let json = r#"{"id":42,"status":"ASSIGNED"}"#;
+    let action = from_json_update_action_with_ids(vec![43], &write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await
+            .unwrap_err();
+
+    assert!(
+        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("id") && msg.contains("positional")),
+        "expected mixed-id-source validation, got {err:?}"
+    );
+    assert_eq!(received_put_count(&mock).await, 0);
+}
+
+#[tokio::test]
+async fn bug_update_from_json_rejects_dupe_of_with_status() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    let json = r#"{"id":42,"dupe_of":99,"status":"RESOLVED"}"#;
+    let action = from_json_update_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await
+            .unwrap_err();
+
+    assert!(
+        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("--dupe-of") && msg.contains("--status")),
+        "expected dupe/status conflict validation, got {err:?}"
+    );
+    assert_eq!(received_put_count(&mock).await, 0);
+}
+
+#[tokio::test]
+async fn bug_update_from_json_rejects_json_comment_file_stdin() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    let json = r#"{"id":42,"status":"ASSIGNED","comment_file":"-"}"#;
+    let action = from_json_update_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await
+            .unwrap_err();
+
+    assert!(
+        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("comment_file") && msg.contains("stdin")),
+        "expected comment_file stdin validation, got {err:?}"
+    );
+    assert_eq!(received_put_count(&mock).await, 0);
 }
 
 #[tokio::test]

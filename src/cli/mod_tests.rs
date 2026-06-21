@@ -366,6 +366,19 @@ fn bug_create_from_json_conflicts_with_template() {
 }
 
 #[test]
+fn parse_bug_update_from_json_stdin() {
+    let cli = Cli::try_parse_from(["bzr", "bug", "update", "--from-json", "-"]).unwrap();
+    let Commands::Bug {
+        action: BugAction::Update(super::UpdateArgs { from_json, ids, .. }),
+    } = cli.command
+    else {
+        panic!("expected bug update");
+    };
+    assert_eq!(from_json.as_deref(), Some("-"));
+    assert!(ids.is_empty());
+}
+
+#[test]
 fn parse_bug_list_offset_and_paginate() {
     let cli =
         Cli::try_parse_from(["bzr", "bug", "list", "--limit", "10", "--offset", "20"]).unwrap();
