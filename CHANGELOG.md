@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+- Bump the transitive `openssl` dependency (via the `keyring` feature's
+  `dbus-secret-service` on Linux) to 0.10.81, addressing CVE-2026-45784
+  (GHSA-phqj-4mhp-q6mq): a potential out-of-bounds write in
+  `CipherCtxRef::cipher_update_inplace` for AES-KW-PAD ciphers.
+
+### Changed
+
+- Release artifacts now ship a SLSA provenance bundle (`*.intoto.jsonl`) as a
+  release asset alongside each binary, in addition to the existing GitHub
+  attestations API publication. The installer smoke tests now download and
+  verify installers against the published `SHA256SUMS` before executing them
+  instead of piping the download straight into a shell.
+
 ## [0.5.0] - 2026-06-21
 
 ### Changed
