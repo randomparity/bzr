@@ -5,7 +5,7 @@ use crate::cli::QueryAction;
 use crate::config::Config;
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
-use wiremock::matchers::{method, path, query_param};
+use wiremock::matchers::{method, path, query_param, query_param_is_missing};
 use wiremock::{Mock, ResponseTemplate};
 
 fn save_action(name: &str) -> QueryAction {
@@ -129,6 +129,7 @@ fn run_action(name: &str) -> QueryAction {
     QueryAction::Run(RunArgs {
         page_args: crate::cli::PageArgs::default(),
         name: name.into(),
+        count: false,
         limit: None,
         fields: None,
         exclude_fields: None,
@@ -145,6 +146,15 @@ fn run_action(name: &str) -> QueryAction {
         url: vec![],
         sort_args: crate::cli::SortArgs::default(),
     })
+}
+
+fn count_run_action(name: &str) -> QueryAction {
+    let mut action = run_action(name);
+    let QueryAction::Run(RunArgs { count, .. }) = &mut action else {
+        unreachable!()
+    };
+    *count = true;
+    action
 }
 
 #[tokio::test]
@@ -491,6 +501,188 @@ async fn query_run_honors_saved_custom_fields() {
 }
 
 #[tokio::test]
+async fn query_run_count_json_emits_count_object() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    let save_action = product_save_action("count-json-test", "TestProduct", 25);
+    let mut save_io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &save_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut save_io.writers(),
+    )
+    .await;
+    assert!(result.is_ok(), "query save failed: {result:?}");
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("product", "TestProduct"))
+        .and(query_param("include_fields", "id"))
+        .and(query_param("limit", "0"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1}, {"id": 2}, {"id": 3}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = count_run_action("count-json-test");
+
+    let mut run_io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut run_io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "query run --count failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(run_io.out_str().trim()).unwrap();
+    assert_eq!(parsed["count"], 3);
+}
+
+#[tokio::test]
+async fn query_run_count_table_prints_integer_only() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    let save_action = product_save_action("count-table-test", "TestProduct", 25);
+    let mut save_io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &save_action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut save_io.writers(),
+    )
+    .await;
+    assert!(result.is_ok(), "query save failed: {result:?}");
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 10}, {"id": 11}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = count_run_action("count-table-test");
+
+    let mut run_io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Table,
+        None,
+        &mut run_io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "query run --count failed: {result:?}");
+    assert_eq!(run_io.out_str().trim(), "2");
+}
+
+#[tokio::test]
+async fn query_run_count_rejects_offset_and_paginate() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    for (offset, paginate) in [(Some(10), false), (None, true)] {
+        let action = QueryAction::Run(RunArgs {
+            page_args: crate::cli::PageArgs { offset, paginate },
+            name: "count-conflict-test".into(),
+            count: true,
+            limit: None,
+            fields: None,
+            exclude_fields: None,
+            server: None,
+            created_since: None,
+            changed_since: None,
+            whiteboard: vec![],
+            target_milestone: vec![],
+            version: vec![],
+            op_sys: vec![],
+            platform: vec![],
+            resolution: vec![],
+            qa_contact: vec![],
+            url: vec![],
+            sort_args: crate::cli::SortArgs::default(),
+        });
+        let mut run_io = crate::test_helpers::CapturedIo::new();
+        let result = super::execute(
+            &action,
+            None,
+            OutputFormat::Json,
+            None,
+            &mut run_io.writers(),
+        )
+        .await;
+
+        assert!(
+            matches!(result, Err(crate::error::BzrError::InputValidation(ref message)) if message.contains("--count")),
+            "expected count paging conflict, got {result:?}"
+        );
+    }
+
+    let received = mock.received_requests().await.unwrap();
+    assert!(
+        received.is_empty(),
+        "expected conflict validation before network I/O, got {} request(s)",
+        received.len()
+    );
+}
+
+#[tokio::test]
+async fn query_run_count_ignores_saved_url_offset() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Config::update_locked(|config| {
+        config.queries.insert(
+            "count-offset-test".into(),
+            crate::types::SavedQuery {
+                product: vec!["TestProduct".into()],
+                raw_params: vec![("offset".into(), "50".into())],
+                ..crate::types::SavedQuery::default()
+            },
+        );
+        Ok(())
+    })
+    .unwrap();
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("product", "TestProduct"))
+        .and(query_param("include_fields", "id"))
+        .and(query_param("limit", "0"))
+        .and(query_param_is_missing("offset"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = count_run_action("count-offset-test");
+
+    let mut run_io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut run_io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "query run --count failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(run_io.out_str().trim()).unwrap();
+    assert_eq!(parsed["count"], 4);
+}
+
+#[tokio::test]
 async fn query_run_with_limit_override() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
@@ -518,6 +710,7 @@ async fn query_run_with_limit_override() {
     let run_action = QueryAction::Run(RunArgs {
         page_args: crate::cli::PageArgs::default(),
         name: "override-test".into(),
+        count: false,
         limit: Some(5),
         fields: None,
         exclude_fields: None,
@@ -742,6 +935,7 @@ async fn query_run_applies_field_overrides() {
     let run_action = QueryAction::Run(RunArgs {
         page_args: crate::cli::PageArgs::default(),
         name: "fields-test".into(),
+        count: false,
         limit: None,
         fields: Some("id,summary".into()),
         exclude_fields: Some("comments".into()),
@@ -889,6 +1083,7 @@ async fn query_run_with_server_override() {
     let run_action = QueryAction::Run(RunArgs {
         page_args: crate::cli::PageArgs::default(),
         name: "server-test".into(),
+        count: false,
         limit: None,
         fields: None,
         exclude_fields: None,
@@ -1114,6 +1309,7 @@ async fn query_run_rejects_malformed_created_since_override() {
     let action = QueryAction::Run(RunArgs {
         page_args: crate::cli::PageArgs::default(),
         name: "recent".into(),
+        count: false,
         limit: None,
         fields: None,
         exclude_fields: None,
@@ -1303,6 +1499,7 @@ async fn query_run_overrides_replace_saved_field_filters() {
     let run_action = QueryAction::Run(RunArgs {
         page_args: crate::cli::PageArgs::default(),
         name: "field-override-test".into(),
+        count: false,
         limit: None,
         fields: None,
         exclude_fields: None,

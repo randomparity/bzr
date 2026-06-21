@@ -36,13 +36,16 @@ fn bug_column_spec(action: &BugAction) -> Option<ColumnSpec<'_>> {
 
 /// Rewrite search params for `--count`: fetch only IDs (smallest payload) and
 /// lift the row limit (`0` = all matches, bounded by the server's max-results)
-/// so the count reflects the full match set, not a page of it.
+/// so the count reflects the full match set, not a page of it. Clear offsets
+/// that may have come from saved Bugzilla URLs for the same reason.
 pub(super) fn count_search_params(
     mut params: crate::types::SearchParams,
 ) -> crate::types::SearchParams {
     params.include_fields = Some("id".to_string());
     params.exclude_fields = None;
     params.limit = Some(0);
+    params.offset = None;
+    params.raw_params.retain(|(key, _)| key != "offset");
     params
 }
 

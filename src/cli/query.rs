@@ -210,6 +210,13 @@ pub struct RunArgs {
     /// Override the saved limit
     #[arg(long)]
     pub limit: Option<u32>,
+    /// Print only the count of matching bugs.
+    ///
+    /// Requests id-only results and lifts the row limit, matching
+    /// `bug list --count` / `bug search --count`. Cannot be combined
+    /// with `--offset` or `--paginate`.
+    #[arg(long)]
+    pub count: bool,
     /// Fields to request from the server (comma-separated). Table:
     /// selects which columns to show (in order). --json: the JSON object
     /// contains only the selected fields (id is included only if requested).

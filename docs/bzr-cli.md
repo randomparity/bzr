@@ -219,7 +219,8 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │                 [--limit <N>] [--fields <F>] [--exclude-fields <F>] [--created-since <D>]
 │   │                 [--changed-since <D>] [--clear <FIELD>] [--sort <FIELD>] [--order asc|desc]
 │   ├── delete <NAME>
-│   └── run <NAME> [--limit <N>] [--offset <N>] [--paginate] [--fields <F>] [--exclude-fields <F>] [--server <NAME>]
+│   └── run <NAME> [--limit <N>] [--offset <N>] [--paginate] [--count]
+│                  [--fields <F>] [--exclude-fields <F>] [--server <NAME>]
 │                  [--resolution <R>...] [--version <V>...] [--op-sys <OS>...] [--platform <P>...]
 │                  [--whiteboard <W>] [--target-milestone <M>...] [--qa-contact <Q>...] [--url <U>]
 │                  [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
@@ -1677,7 +1678,8 @@ bzr query delete firefox-new
 
 ### `bzr query run`
 
-Execute a saved query. Supports runtime overrides for limit, fields, exclude-fields, and server.
+Execute a saved query. Supports runtime overrides for limit, fields,
+exclude-fields, server, and count-only output.
 
 ```bash
 # Run a saved query
@@ -1685,6 +1687,9 @@ bzr query run firefox-new
 
 # Run with a different limit
 bzr query run firefox-new --limit 10
+
+# Count matching bugs without printing rows
+bzr query run firefox-new --count
 
 # Run with field selection
 bzr query run firefox-new --fields id,summary,status
@@ -1701,8 +1706,9 @@ bzr query run recent-firefox --changed-since 2026-05-01
 |--------|----------|-------------|
 | `<NAME>` | Yes | Query name |
 | `--limit <N>` | No | Override the saved limit |
-| `--offset <N>` | No | Skip the first N matches (manual paging past `--limit`). Mutually exclusive with `--paginate`. |
-| `--paginate` | No | Retrieve every matching page, looping internally past `--limit`. |
+| `--offset <N>` | No | Skip the first N matches (manual paging past `--limit`). Mutually exclusive with `--paginate`; cannot be combined with `--count`. |
+| `--paginate` | No | Retrieve every matching page, looping internally past `--limit`. Cannot be combined with `--count`. |
+| `--count` | No | Print only the count of matching bugs — an integer (table) or `{"count": N}` (JSON). Fetches ids only and lifts the row limit, so the count reflects all matches (bounded by the server's max-results setting). Ignores saved and per-run `--fields` and `--limit`; sort settings do not affect the count output. |
 | `--fields <F>` | No | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). |
 | `--exclude-fields <F>` | No | Comma-separated fields dropped from the server request; in table output, removes those columns. Under `--json`, the object omits the dropped fields (including custom `cf_*` fields and `id`, when excluded). |
 | `--server <NAME>` | No | Override the server to run the query against. Takes precedence over the server stored in the saved query. The global `--server` flag takes precedence over this flag. |

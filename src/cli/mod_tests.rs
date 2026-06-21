@@ -1462,6 +1462,20 @@ fn parse_query_run_with_limit_override() {
 }
 
 #[test]
+fn parse_query_run_count() {
+    let cli = Cli::try_parse_from(["bzr", "query", "run", "firefox-new", "--count"]).unwrap();
+    match cli.command {
+        Commands::Query {
+            action: QueryAction::Run(super::query::RunArgs { name, count, .. }),
+        } => {
+            assert_eq!(name, "firefox-new");
+            assert!(count);
+        }
+        _ => panic!("expected Query Run"),
+    }
+}
+
+#[test]
 fn parse_query_list() {
     let cli = Cli::try_parse_from(["bzr", "query", "list"]).unwrap();
     assert!(matches!(
