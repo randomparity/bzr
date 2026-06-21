@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   guard. (#364)
 - `bug update` now accepts `--from-json <PATH|->` structured input for object
   and array update payloads. (#365)
+- `schema` now publishes `bug-create-input` and `bug-update-input` JSON
+  Schemas for the structured payloads accepted by `--from-json`. (#366)
 - `query run` now accepts `--count`, matching the count-only output shape used
   by bug search-backed commands. (#368)
 

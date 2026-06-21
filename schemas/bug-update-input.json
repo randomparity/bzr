@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/bug-update-input.json",
+  "title": "BugUpdateInput",
+  "description": "Payload accepted by `bug update --from-json`. A top-level object applies one update to positional IDs or to its own `id`; a top-level array applies one independent update per element and always uses the batch result shape. This schema describes payload shape rather than every post-merge command precondition.",
+  "type": ["object", "array"],
+  "oneOf": [
+    {
+      "$ref": "#/$defs/bugUpdateInputObject"
+    },
+    {
+      "description": "Batch form: each element is one bug-update object and must include `id`.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/bugUpdateInputArrayItem"
+      }
+    }
+  ],
+  "$defs": {
+    "bugUpdateInputObject": {
+      "description": "One structured bug-update payload. Unknown keys are rejected.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "examples": [12345]
+        },
+        "status": {
+          "type": ["string", "null"],
+          "examples": ["ASSIGNED"]
+        },
+        "resolution": {
+          "type": ["string", "null"],
+          "examples": ["FIXED"]
+        },
+        "dupe_of": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "examples": [67890]
+        },
+        "alias": {
+          "type": ["string", "null"],
+          "examples": ["short-name"]
+        },
+        "deadline": {
+          "type": ["string", "null"],
+          "format": "date",
+          "examples": ["2026-12-31"]
+        },
+        "estimated_time": {
+          "type": ["number", "null"],
+          "examples": [3.5]
+        },
+        "remaining_time": {
+          "type": ["number", "null"],
+          "examples": [1.25]
+        },
+        "work_time": {
+          "type": ["number", "null"],
+          "examples": [0.5]
+        },
+        "reset_assigned_to": {
+          "type": ["boolean", "null"],
+          "examples": [true]
+        },
+        "reset_qa_contact": {
+          "type": ["boolean", "null"],
+          "examples": [true]
+        },
+        "assignee": {
+          "type": ["string", "null"],
+          "examples": ["dev@example.com"]
+        },
+        "priority": {
+          "type": ["string", "null"],
+          "examples": ["P2"]
+        },
+        "severity": {
+          "type": ["string", "null"],
+          "examples": ["normal"]
+        },
+        "summary": {
+          "type": ["string", "null"],
+          "examples": ["Updated summary"]
+        },
+        "whiteboard": {
+          "type": ["string", "null"],
+          "examples": ["needs-triage"]
+        },
+        "url": {
+          "type": ["string", "null"],
+          "examples": ["https://example.com/reproducer"]
+        },
+        "target_milestone": {
+          "type": ["string", "null"],
+          "examples": ["5.0"]
+        },
+        "comment": {
+          "type": ["string", "null"],
+          "examples": ["Taking this bug."]
+        },
+        "comment_file": {
+          "type": ["string", "null"],
+          "examples": ["comment.txt"]
+        },
+        "comment_private": {
+          "type": ["boolean", "null"],
+          "examples": [true]
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [["review?(alice@example.com)"]]
+        },
+        "blocks_add": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "examples": [[100]]
+        },
+        "blocks_remove": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "examples": [[200]]
+        },
+        "depends_on_add": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "examples": [[50]]
+        },
+        "depends_on_remove": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "examples": [[60]]
+        },
+        "keywords_add": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [["regression"]]
+        },
+        "keywords_remove": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [["stale"]]
+        },
+        "cc_add": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [["alice@example.com"]]
+        },
+        "cc_remove": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [["bob@example.com"]]
+        },
+        "groups_add": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [["security"]]
+        },
+        "groups_remove": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [["old-security"]]
+        },
+        "see_also_add": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [["https://example.com/issue/42"]]
+        },
+        "see_also_remove": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [["https://example.com/old/42"]]
+        },
+        "expect_unchanged_since": {
+          "type": ["string", "null"],
+          "examples": ["2026-06-21T12:34:56Z"]
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "bugUpdateInputArrayItem": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/bugUpdateInputObject"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": ["id"]
+        }
+      ]
+    }
+  }
+}

@@ -1,11 +1,12 @@
-//! `bzr schema` — publish JSON Schemas for the tool's JSON output shapes.
+//! `bzr schema` — publish JSON Schemas for the tool's JSON contracts.
 //!
-//! Purely local: no config, network, or auth. Each schema describes the
-//! `--format json` body of a command family so agents can validate output
-//! against a contract instead of branching per command. The schema files are
-//! checked into `schemas/` at the repo root and embedded here at build time;
-//! a drift test (see `schema_tests.rs`) validates representative serialized
-//! values against them, so a struct change that breaks a schema fails CI.
+//! Purely local: no config, network, or auth. Each schema describes either a
+//! `--format json` output body or a `--from-json` input payload so agents can
+//! validate against a contract instead of branching per command. The schema
+//! files are checked into `schemas/` at the repo root and embedded here at build
+//! time; drift tests validate representative serialized values and structured
+//! input parsers against them, so a contract change fails CI until the schema is
+//! updated.
 
 use crate::error::{BzrError, Result};
 use crate::output::result_types::write_result;
@@ -29,6 +30,8 @@ pub(crate) const SCHEMAS: &[(&str, &str)] = schema_registry![
     "batch-create-result",
     "batch-result",
     "bug",
+    "bug-create-input",
+    "bug-update-input",
     "classification",
     "comment",
     "component",
