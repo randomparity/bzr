@@ -446,10 +446,9 @@ impl ActionResult {
 /// Typed result payload for a `--dry-run` mutation preview.
 ///
 /// Serializes the normal mutation marker (`resource`, `action: "dry-run"`)
-/// plus the affected existing bug `ids` (empty for `create`/`clone`, which
-/// produce a new bug) and the `changes` payload that *would* be sent to the
-/// write API. `changes` is generic over the request type so `create`
-/// (`CreateBugParams`) and `update` (`UpdateBugParams`) can share one shape
+/// plus affected existing resource `ids` when available and the `changes`
+/// payload that *would* be sent to the write API. `changes` is generic over the
+/// request type so create and update payloads can share one result shape
 /// without an intermediate `serde_json::Value`.
 #[derive(Debug, Serialize)]
 #[non_exhaustive]
@@ -461,9 +460,9 @@ pub struct DryRunResult<'a, P: Serialize> {
 }
 
 impl<'a, P: Serialize> DryRunResult<'a, P> {
-    /// Build a dry-run preview for `resource`, listing the existing bug `ids`
-    /// that would be affected (empty for create-shaped operations) and the
-    /// would-be request `changes`.
+    /// Build a dry-run preview for `resource`, listing numeric resource `ids`
+    /// when available (empty for name-keyed or create-shaped operations) and
+    /// the would-be request `changes`.
     pub fn new(resource: ResourceKind, ids: &'a [u64], changes: &'a P) -> Self {
         Self {
             resource,

@@ -1,7 +1,7 @@
 use crate::cli::ComponentAction;
 use crate::error::{BzrError, Result};
 use crate::output::resources::component::{write_component, write_components};
-use crate::output::result_types::{write_result, ActionResult, ResourceKind};
+use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
 use crate::types::ApiMode;
 use crate::types::OutputFormat;
@@ -14,6 +14,7 @@ pub async fn execute(
     api: Option<ApiMode>,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    validate_action(action)?;
     let client = super::runtime::shared::connect_and_configure(server, api).await?;
 
     match action {
@@ -45,6 +46,16 @@ pub async fn execute(
                 description: description.clone(),
                 default_assignee: default_assignee.clone(),
             };
+            if super::runtime::dry_run::enabled() {
+                let message = format!("Would create component '{name}' in product '{product}'");
+                write_result(
+                    &DryRunResult::new(ResourceKind::Component, &[], &params),
+                    &message,
+                    format,
+                    w.out,
+                );
+                return Ok(());
+            }
             let id = client.create_component(&params).await?;
             write_result(
                 &ActionResult::created(id, ResourceKind::Component),
@@ -64,6 +75,17 @@ pub async fn execute(
                 description: description.clone(),
                 default_assignee: default_assignee.clone(),
             };
+            if super::runtime::dry_run::enabled() {
+                let ids = [*id];
+                let message = format!("Would update component #{id}");
+                write_result(
+                    &DryRunResult::new(ResourceKind::Component, &ids, &params),
+                    &message,
+                    format,
+                    w.out,
+                );
+                return Ok(());
+            }
             client.update_component(*id, &params).await?;
             write_result(
                 &ActionResult::updated(*id, ResourceKind::Component),
@@ -71,6 +93,31 @@ pub async fn execute(
                 format,
                 w.out,
             );
+        }
+    }
+    Ok(())
+}
+
+#[must_use]
+pub fn is_dry_runnable(action: &ComponentAction) -> bool {
+    matches!(
+        action,
+        ComponentAction::Create { .. } | ComponentAction::Update { .. }
+    )
+}
+
+fn validate_action(action: &ComponentAction) -> Result<()> {
+    if let ComponentAction::Update {
+        name,
+        description,
+        default_assignee,
+        ..
+    } = action
+    {
+        if name.is_none() && description.is_none() && default_assignee.is_none() {
+            return Err(BzrError::InputValidation(
+                "no fields to update; specify at least one field to change".into(),
+            ));
         }
     }
     Ok(())

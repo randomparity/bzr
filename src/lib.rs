@@ -163,20 +163,27 @@ fn resolve_inline_server(cli: &cli::Cli) -> Option<commands::runtime::inline_ser
 /// Reject `--dry-run` on commands that don't honor it.
 ///
 /// `--dry-run` is a global flag (so it can appear after any subcommand), but
-/// only the bug mutations preview without writing. Allowing it elsewhere would
+/// only selected mutations preview without writing. Allowing it elsewhere would
 /// silently ignore it — e.g. `bzr comment add --dry-run` would still post the
 /// comment. Fail fast (exit 7) instead of writing when a preview was asked for.
 fn ensure_dry_run_supported(cli: &cli::Cli) -> error::Result<()> {
     if !cli.dry_run {
         return Ok(());
     }
-    if let cli::Commands::Bug { action } = &cli.command {
-        if commands::bug::is_dry_runnable(action) {
-            return Ok(());
-        }
+    let supported = match &cli.command {
+        cli::Commands::Bug { action } => commands::bug::is_dry_runnable(action),
+        cli::Commands::Product { action } => commands::product::is_dry_runnable(action),
+        cli::Commands::Component { action } => commands::component::is_dry_runnable(action),
+        cli::Commands::User { action } => commands::user::is_dry_runnable(action),
+        cli::Commands::Group { action } => commands::group::is_dry_runnable(action),
+        _ => false,
+    };
+    if supported {
+        return Ok(());
     }
     Err(error::BzrError::InputValidation(
-        "--dry-run is only supported for bug create, update, clone, resolve, close, reopen, and dup"
+        "--dry-run is only supported for bug create/update/clone/resolve/close/reopen/dup, \
+         product create/update, component create/update, user create/update, and group create/update"
             .into(),
     ))
 }

@@ -148,6 +148,62 @@ async fn update_user_enable_login_sends_empty_denied_text() {
 }
 
 #[tokio::test]
+async fn user_update_dry_run_makes_no_write_and_marks_payload() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("PUT"))
+        .and(path("/rest/user/alice%40test%2Ecom"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let action = UserAction::Update {
+        user: "alice@test.com".to_string(),
+        real_name: Some("Alice Smith".to_string()),
+        email: None,
+        disable_login: Some(true),
+        login_denied_text: Some("Closed".to_string()),
+    };
+    crate::commands::runtime::dry_run::set(true);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    crate::commands::runtime::dry_run::set(false);
+
+    assert!(result.is_ok(), "dry-run user update failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["resource"], "user");
+    assert_eq!(parsed["action"], "dry-run");
+    assert_eq!(parsed["ids"], serde_json::json!([]));
+    assert_eq!(
+        parsed["changes"]["names"],
+        serde_json::json!(["alice@test.com"])
+    );
+    assert_eq!(parsed["changes"]["real_name"], "Alice Smith");
+    assert_eq!(parsed["changes"]["login_denied_text"], "Closed");
+}
+
+#[tokio::test]
+async fn user_update_without_fields_is_rejected() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let action = UserAction::Update {
+        user: "alice@test.com".to_string(),
+        real_name: None,
+        email: None,
+        disable_login: None,
+        login_denied_text: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+            if msg.contains("no fields to update")),
+        "expected input validation, got {result:?}"
+    );
+}
+
+#[tokio::test]
 async fn user_create_sends_post() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
@@ -179,6 +235,37 @@ async fn user_create_sends_post() {
         serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["action"], "created");
     assert_eq!(parsed["id"], 99);
+}
+
+#[tokio::test]
+async fn user_create_dry_run_makes_no_write_and_marks_payload() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("POST"))
+        .and(path("/rest/user"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 99})))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let action = UserAction::Create {
+        email: "new@test.com".into(),
+        login: Some("newuser".into()),
+        full_name: Some("New User".into()),
+        password: None,
+    };
+    crate::commands::runtime::dry_run::set(true);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    crate::commands::runtime::dry_run::set(false);
+
+    assert!(result.is_ok(), "dry-run user create failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["resource"], "user");
+    assert_eq!(parsed["action"], "dry-run");
+    assert_eq!(parsed["ids"], serde_json::json!([]));
+    assert_eq!(parsed["changes"]["email"], "new@test.com");
+    assert_eq!(parsed["changes"]["login"], "newuser");
 }
 
 #[tokio::test]

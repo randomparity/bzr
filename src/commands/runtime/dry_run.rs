@@ -2,8 +2,8 @@
 //!
 //! `--dry-run` is a global CLI flag. Like the network-tuning globals (see
 //! `lib::apply_network_tuning`), it is installed once per process by
-//! `dispatch` and read by the bug mutation handlers, which short-circuit
-//! before any write API call and emit a `"action":"dry-run"` payload instead.
+//! `dispatch` and read by mutation handlers, which short-circuit before any
+//! write API call and emit a `"action":"dry-run"` payload instead.
 //!
 //! Using a process-global avoids threading a `dry_run` bool through every
 //! command handler signature (and every test call site). The CLI runs a

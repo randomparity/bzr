@@ -202,13 +202,13 @@ pub struct Cli {
     #[arg(long, value_name = "N", global = true, value_parser = clap::value_parser!(u32).range(0..=10))]
     pub retry: Option<u32>,
 
-    /// Preview a bug mutation without writing (no API call).
+    /// Preview a supported mutation without writing.
     ///
     /// Resolves and validates the request, then prints the would-be payload
-    /// and affected bug IDs with `"action":"dry-run"` instead of calling the
-    /// write API. Exits 0 on a valid request. Only valid for the bug
-    /// mutations (`create`, `update`, `clone`, `resolve`, `close`, `reopen`,
-    /// `dup`); used on any other command it exits 7.
+    /// and affected IDs with `"action":"dry-run"` instead of calling the
+    /// write API. Exits 0 on a valid request. Supported for bug mutations and
+    /// product/component/user/group `create` and `update`; used on any other
+    /// command it exits 7.
     #[arg(long, global = true)]
     pub dry_run: bool,
 

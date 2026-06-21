@@ -223,6 +223,21 @@ fn dry_run_result_conforms() {
     assert_conforms("dry-run-result", &to_value(&dry));
 }
 
+#[test]
+fn dry_run_result_schema_allows_admin_resources() {
+    let schema = schema_for("dry-run-result");
+    let resources = schema
+        .pointer("/properties/resource/enum")
+        .and_then(Value::as_array)
+        .unwrap();
+    for resource in ["product", "component", "user", "group"] {
+        assert!(
+            resources.contains(&Value::String(resource.into())),
+            "dry-run-result schema must allow {resource} dry-run previews"
+        );
+    }
+}
+
 // ── Resource object types ────────────────────────────────────────────
 
 #[test]
