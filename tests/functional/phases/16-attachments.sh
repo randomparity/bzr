@@ -9,7 +9,7 @@
 echo "── Phase 15: Attachments ───────────────────────────────────"
 
 test_begin "95. create temp file"
-echo "bzr functional test content $(date +%s)" > /tmp/bzr-func-test.txt
+echo "bzr functional test content $(date +%s)" >/tmp/bzr-func-test.txt
 test_pass
 
 test_begin "96. attachment upload"
@@ -34,6 +34,14 @@ if [[ -n "${ATTACH_ID:-}" ]] && [[ "$ATTACH_ID" != "null" ]]; then
     if assert_success && assert_file_contains /tmp/bzr-func-downloaded.txt "bzr functional test content"; then
         test_pass
     fi
+else
+    test_skip "no attachment ID"
+fi
+
+test_begin "98a. attachment download --out - streams raw bytes"
+if [[ -n "${ATTACH_ID:-}" ]] && [[ "$ATTACH_ID" != "null" ]]; then
+    run_bzr_raw attachment download "$ATTACH_ID" --out -
+    if assert_success && assert_stdout_equals_file /tmp/bzr-func-test.txt; then test_pass; fi
 else
     test_skip "no attachment ID"
 fi
@@ -64,9 +72,9 @@ if [[ -n "$BUG1" ]]; then
             run_bzr comment list "$BUG1"
             if assert_success; then
                 POSTCOMMENT_COUNT=$(jq '. | length' "$BZR_STDOUT" 2>/dev/null || echo "")
-                if [[ -n "$PRECOMMENT_COUNT" ]] \
-                    && [[ -n "$POSTCOMMENT_COUNT" ]] \
-                    && [[ "$POSTCOMMENT_COUNT" -eq $((PRECOMMENT_COUNT + 1)) ]]; then
+                if [[ -n "$PRECOMMENT_COUNT" ]] &&
+                    [[ -n "$POSTCOMMENT_COUNT" ]] &&
+                    [[ "$POSTCOMMENT_COUNT" -eq $((PRECOMMENT_COUNT + 1)) ]]; then
                     test_pass
                 else
                     test_fail "comment count did not grow by 1 (pre=$PRECOMMENT_COUNT post=$POSTCOMMENT_COUNT)"
@@ -82,8 +90,8 @@ if [[ -n "$BUG1" ]]; then
         --summary "patch test" --patch
     if assert_success; then
         run_bzr attachment list "$BUG1"
-        if assert_success \
-            && assert_json '[.[] | select(.summary == "patch test")][-1].is_patch' "true"; then
+        if assert_success &&
+            assert_json '[.[] | select(.summary == "patch test")][-1].is_patch' "true"; then
             test_pass
         fi
     fi
@@ -113,6 +121,43 @@ if [[ -n "$BUG1" ]]; then
         fi
     fi
 else test_skip "no BUG1"; fi
+
+test_begin "100k. attachment upload --comment-file"
+if [[ -n "$BUG1" ]]; then
+    _ACF=$(mktemp /tmp/bzr-func-attachment-comment.XXXXXX)
+    printf 'attachment comment from file' >"$_ACF"
+    run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
+        --summary "comment file upload" --comment-file "$_ACF"
+    if assert_success; then
+        run_bzr comment list "$BUG1"
+        if assert_stdout_contains "attachment comment from file"; then test_pass; fi
+    fi
+    rm -f "$_ACF"
+else test_skip "no BUG1"; fi
+
+test_begin "100l. attachment upload --comment-file -"
+if [[ -n "$BUG1" ]]; then
+    _ACF=$(mktemp /tmp/bzr-func-attachment-comment.XXXXXX)
+    printf 'attachment comment from stdin' >"$_ACF"
+    run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
+        --summary "comment stdin upload" --comment-file - <"$_ACF"
+    if assert_success; then
+        run_bzr comment list "$BUG1"
+        if assert_stdout_contains "attachment comment from stdin"; then test_pass; fi
+    fi
+    rm -f "$_ACF"
+else test_skip "no BUG1"; fi
+
+test_begin "100m. attachment upload empty --comment-file rejected"
+if [[ -n "$BUG1" ]]; then
+    _ACF=$(mktemp /tmp/bzr-func-attachment-comment.XXXXXX)
+    printf '   ' >"$_ACF"
+    run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
+        --summary "empty comment upload" --comment-file "$_ACF"
+    if assert_exit_code 7 && assert_stderr_contains "empty comment, aborting"; then test_pass; fi
+    rm -f "$_ACF"
+else test_skip "no BUG1"; fi
+unset _ACF
 
 test_begin "100i. attachment download --bug bulk into per-bug subdir"
 if [[ -n "$BUG1" ]]; then
@@ -187,7 +232,16 @@ if [[ -n "${_AID:-}" ]]; then
     fi
 else test_skip "no attachment id"; fi
 
+test_begin "152. attachment update --content-type and --flag"
+if [[ -n "${_AID:-}" ]]; then
+    run_bzr attachment update "$_AID" --content-type text/plain --flag 'review?'
+    if assert_success; then
+        run_bzr attachment view "$_AID"
+        if assert_json '.content_type' "text/plain" &&
+            assert_json_contains '[.flags[].name] | join(",")' "review"; then test_pass; fi
+    fi
+else test_skip "no attachment id"; fi
+
 rm -f "$_AF"
 unset _AB _AF _AID
 echo ""
-

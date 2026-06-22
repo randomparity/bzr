@@ -69,4 +69,12 @@ test_begin "127. --dry-run on non-mutation (exit 7)"
 run_bzr --dry-run server info
 if assert_exit_code 7 && assert_stderr_contains "only supported for bug create"; then test_pass; fi
 
+test_begin "128. attachment update no fields rejected"
+run_bzr attachment update 1
+if assert_exit_code 7 && assert_stderr_contains "no attachment fields to update"; then test_pass; fi
+
+test_begin "129. comment tag no changes rejected"
+run_bzr comment tag 1
+if assert_exit_code 7 && assert_stderr_contains "no comment tag changes"; then test_pass; fi
+
 echo ""
