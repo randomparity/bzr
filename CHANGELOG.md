@@ -40,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `attachment upload` now accepts `--comment-file <PATH>` and the shared `-`
   stdin convention for `--comment` and `--comment-file`, while rejecting empty
   attachment comments consistently. (#386)
+- `attachment download <ID> --out -` now streams a single attachment's raw bytes
+  to stdout without writing a file or emitting formatted result output. (#387)
 - `bug update` now accepts `--url` and `--target-milestone`, matching fields
   that `bug create` can already set. (#363)
 - `bug resolve`, `bug close`, `bug reopen`, and `bug dup` now accept

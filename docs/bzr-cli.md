@@ -970,13 +970,14 @@ bzr --json attachment view 9876 | jq '.summary, .size'
 
 ### `bzr attachment download`
 
-Download one or more attachments to disk.
+Download one or more attachments to disk, or stream one attachment's bytes to stdout.
 
 **Synopsis:**
 
 ```
 bzr attachment download <ID>...
 bzr attachment download <ID> --out <PATH>
+bzr attachment download <ID> --out -
 bzr attachment download [<ID>...] --bug <BUG_ID>... [--out-dir <DIR>]
 ```
 
@@ -986,8 +987,11 @@ bzr attachment download [<ID>...] --bug <BUG_ID>... [--out-dir <DIR>]
 |---|---|
 | `<ID>` | Attachment ID(s). Repeatable as positional arguments. |
 | `--bug <BUG_ID>` | Download every attachment for the given bug. Repeatable. |
-| `-o`, `--out <PATH>` | Output file path. Single-attachment shape only; conflicts with `--out-dir` and `--bug`. |
+| `-o`, `--out <PATH>` | Output file path, or `-` for stdout. Single-attachment shape only. |
 | `--out-dir <DIR>` | Output directory for batch downloads. Default: `./attachments`. Files land at `<out-dir>/<bug-id>/<att-id>.<file_name>`. |
+
+`--out` conflicts with `--out-dir` and `--bug`. Use `./-` if you need a literal file
+named `-`.
 
 **Examples:**
 
@@ -997,6 +1001,9 @@ bzr attachment download 9876
 
 # Single attachment, custom path
 bzr attachment download 9876 --out patch.diff
+
+# Single attachment to stdout
+bzr attachment download 9876 --out - > patch.diff
 
 # Multiple attachment IDs into a directory
 bzr attachment download 9876 9877 9878 --out-dir /tmp/patches
@@ -1010,7 +1017,13 @@ bzr attachment download --bug 12345 9876 --out-dir /tmp/mixed
 
 **Output:**
 
-The single-attachment shape emits a one-line `Downloaded attachment #N to PATH (BYTES bytes)` summary or a `DownloadResult` JSON object.
+The single-attachment file-output shape emits a one-line
+`Downloaded attachment #N to PATH (BYTES bytes)` summary or a `DownloadResult` JSON
+object.
+
+With `--out -`, stdout is the raw attachment byte stream. `--json`, `--output json`,
+and `--output table` do not emit a `DownloadResult`; success is reported by exit code
+only, and stderr is left for diagnostics.
 
 The bulk shapes emit an `AttachmentBatchResult` (table or JSON): per-bug success rows with each saved file, per-attachment rows for positional IDs, and a `Summary: X succeeded, Y failed, Z total bytes` trailer. Bug-level and per-attachment failures are written to stderr in table mode.
 

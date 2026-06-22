@@ -1172,6 +1172,20 @@ fn parse_attachment_download_with_out() {
 }
 
 #[test]
+fn parse_attachment_download_with_out_dash() {
+    let cli = Cli::try_parse_from(["bzr", "attachment", "download", "100", "--out", "-"]).unwrap();
+    match cli.command {
+        Commands::Attachment {
+            action: AttachmentAction::Download { ids, out, .. },
+        } => {
+            assert_eq!(ids, vec![100]);
+            assert_eq!(out.as_deref(), Some("-"));
+        }
+        _ => panic!("expected Attachment Download"),
+    }
+}
+
+#[test]
 fn parse_attachment_download_multiple_positional_ids() {
     let cli = Cli::try_parse_from(["bzr", "attachment", "download", "100", "200", "300"]).unwrap();
     match cli.command {
