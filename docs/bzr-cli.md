@@ -158,7 +158,8 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   ├── view <ATTACHMENT_ID>
 │   ├── download <ATTACHMENT_ID> [--bug <ID>] [-o|--out <FILE>] [--out-dir <DIR>]
 │   ├── upload <BUG_ID> <FILE> [--summary <S>] [--content-type <MIME>] [--comment <BODY>]
-│   │                          [--comment-private] [--private|--no-private] [--patch|--no-patch] [--flag <F>...]
+│   │                          [--comment-file <PATH>] [--comment-private]
+│   │                          [--private|--no-private] [--patch|--no-patch] [--flag <F>...]
 │   └── update <ATTACHMENT_ID> [--summary <S>] [--file-name <N>] [--content-type <MIME>]
 │                               [--obsolete|--no-obsolete] [--patch|--no-patch]
 │                               [--private|--no-private] [--flag <F>...]
@@ -1027,12 +1028,16 @@ The bulk shapes emit an `AttachmentBatchResult` (table or JSON): per-bug success
 
 Upload a file as an attachment to a bug. MIME type is auto-detected from the file extension if not specified. Add `--private` to mark the attachment as visible only to users with elevated permissions on the server.
 
+Post an attachment comment with `--comment` or `--comment-file`; a value of `-` for either option reads the comment from stdin. Empty or whitespace-only comments are rejected.
+
 ```bash
 bzr attachment upload 12345 screenshot.png
 bzr attachment upload 12345 data.csv --summary "Performance data" --content-type text/csv
 bzr attachment upload 12345 patch.diff --flag "review?(alice@example.com)"
 bzr attachment upload 12345 secret.bin --summary "internal trace" --private
 bzr attachment upload 12345 fix.patch --comment "see #6789 for context"
+bzr attachment upload 12345 fix.patch --comment-file notes.md
+printf '%s\n' "Generated test log" | bzr attachment upload 12345 logs.txt --comment-file -
 bzr attachment upload 12345 patch.diff --comment "sensitive context" --comment-private
 bzr attachment upload 12345 fix.patch --patch
 ```
@@ -1045,8 +1050,9 @@ bzr attachment upload 12345 fix.patch --patch
 | `--content-type <MIME>` | No | MIME type (auto-detected if omitted; defaults to `text/plain` when `--patch` is set without an explicit type) |
 | `--private` / `--no-private` | No | Mark the attachment private (or explicitly public; default public) |
 | `--patch` / `--no-patch` | No | Mark the attachment a patch (or non-patch; default non-patch); `--patch` defaults `--content-type` to `text/plain` |
-| `--comment <BODY>` | No | Post a comment alongside the attachment in the same API call |
-| `--comment-private` | No | Mark the comment posted via `--comment` private. Issues a follow-up `Bug.update` call (two API round-trips). Requires `--comment`. |
+| `--comment <BODY>` | No | Post a comment alongside the attachment in the same API call; `-` reads stdin (mutually exclusive with `--comment-file`) |
+| `--comment-file <PATH>` | No | Read the attachment comment from a UTF-8 file; `-` reads stdin (mutually exclusive with `--comment`; missing or non-UTF-8 paths exit 7) |
+| `--comment-private` | No | Mark the comment posted via `--comment` or `--comment-file` private. Issues a follow-up `Bug.update` call (two API round-trips). Requires one comment source. |
 | `--flag <F>` | No | Set flags (repeatable; see [Flag Syntax](#flag-syntax)) |
 
 Agent note: for clearer audit trails, agents should usually pass `--summary` explicitly instead of relying on the filename-derived default.

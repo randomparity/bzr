@@ -1323,6 +1323,7 @@ async fn attachment_upload_integration() {
         patch: false,
         no_patch: false,
         comment: None,
+        comment_file: None,
         comment_private: false,
         flag: vec![],
     });
@@ -1369,6 +1370,7 @@ async fn attachment_upload_with_comment_integration() {
         patch: false,
         no_patch: false,
         comment: Some("see #6789 for context".to_string()),
+        comment_file: None,
         comment_private: false,
         flag: vec![],
     });
@@ -1414,6 +1416,7 @@ async fn attachment_upload_with_is_patch_integration() {
         patch: true,
         no_patch: false,
         comment: None,
+        comment_file: None,
         comment_private: false,
         flag: vec![],
     });
@@ -1482,6 +1485,7 @@ async fn attachment_upload_with_comment_private_integration() {
         patch: false,
         no_patch: false,
         comment: Some("sensitive".into()),
+        comment_file: None,
         comment_private: true,
         flag: vec![],
     });

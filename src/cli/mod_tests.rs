@@ -2240,6 +2240,110 @@ fn parse_attachment_upload_with_comment() {
 }
 
 #[test]
+fn parse_attachment_upload_with_comment_dash() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "attachment",
+        "upload",
+        "42",
+        "patch.diff",
+        "--comment",
+        "-",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Attachment {
+            action:
+                AttachmentAction::Upload(super::attachment::UploadArgs {
+                    bug_id, comment, ..
+                }),
+        } => {
+            assert_eq!(bug_id, 42);
+            assert_eq!(comment.as_deref(), Some("-"));
+        }
+        _ => panic!("expected Attachment Upload"),
+    }
+}
+
+#[test]
+fn parse_attachment_upload_with_comment_file() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "attachment",
+        "upload",
+        "42",
+        "patch.diff",
+        "--comment-file",
+        "notes.md",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Attachment {
+            action:
+                AttachmentAction::Upload(super::attachment::UploadArgs {
+                    bug_id,
+                    comment_file,
+                    ..
+                }),
+        } => {
+            assert_eq!(bug_id, 42);
+            assert_eq!(
+                comment_file.as_deref(),
+                Some(std::path::Path::new("notes.md"))
+            );
+        }
+        _ => panic!("expected Attachment Upload"),
+    }
+}
+
+#[test]
+fn parse_attachment_upload_with_comment_file_dash() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "attachment",
+        "upload",
+        "42",
+        "patch.diff",
+        "--comment-file",
+        "-",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Attachment {
+            action:
+                AttachmentAction::Upload(super::attachment::UploadArgs {
+                    bug_id,
+                    comment_file,
+                    ..
+                }),
+        } => {
+            assert_eq!(bug_id, 42);
+            assert_eq!(comment_file.as_deref(), Some(std::path::Path::new("-")));
+        }
+        _ => panic!("expected Attachment Upload"),
+    }
+}
+
+#[test]
+fn parse_attachment_upload_comment_and_comment_file_conflict() {
+    let result = Cli::try_parse_from([
+        "bzr",
+        "attachment",
+        "upload",
+        "42",
+        "patch.diff",
+        "--comment",
+        "inline",
+        "--comment-file",
+        "notes.md",
+    ]);
+    let Err(err) = result else {
+        panic!("--comment and --comment-file should conflict");
+    };
+    assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+}
+
+#[test]
 fn parse_attachment_upload_without_comment_defaults_to_none() {
     let cli = Cli::try_parse_from(["bzr", "attachment", "upload", "42", "f.txt"]).unwrap();
     match cli.command {
