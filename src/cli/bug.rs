@@ -387,7 +387,7 @@ pub struct CreateArgs {
 }
 
 /// Arguments for `bug my`.
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Default)]
 #[expect(
     clippy::struct_excessive_bools,
     reason = "each bool is a distinct CLI view flag (--created, --cc, --all, --count); they are not a state enum"
@@ -413,6 +413,54 @@ pub struct MyArgs {
     /// Filter by status (repeatable for OR; prefix with ! to exclude)
     #[arg(long)]
     pub status: Vec<String>,
+    /// Filter by product (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub product: Vec<String>,
+    /// Filter by component (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub component: Vec<String>,
+    /// Filter by priority (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub priority: Vec<String>,
+    /// Filter by severity (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub severity: Vec<String>,
+    /// Filter to bugs created at or after this date.
+    ///
+    /// Accepts `YYYY-MM-DD` (interpreted as 00:00:00 UTC),
+    /// `YYYY-MM-DDTHH:MM:SS`, `YYYY-MM-DDTHH:MM:SSZ`, or
+    /// `YYYY-MM-DDTHH:MM:SS±HH:MM`. Malformed input exits 7.
+    #[arg(long, value_name = "DATE")]
+    pub created_since: Option<String>,
+    /// Filter to bugs last modified at or after this date.
+    ///
+    /// Same accepted forms as `--created-since`.
+    #[arg(long, value_name = "DATE")]
+    pub changed_since: Option<String>,
+    /// Filter by Status Whiteboard substring (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub whiteboard: Vec<String>,
+    /// Filter by Target Milestone (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub target_milestone: Vec<String>,
+    /// Filter by Version (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub version: Vec<String>,
+    /// Filter by Operating System (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub op_sys: Vec<String>,
+    /// Filter by Platform (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub platform: Vec<String>,
+    /// Filter by Resolution (repeatable for OR; prefix with ! to exclude); empty matches open bugs
+    #[arg(long)]
+    pub resolution: Vec<String>,
+    /// Filter by QA Contact login (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub qa_contact: Vec<String>,
+    /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub url: Vec<String>,
     /// Max results per category (assigned/created/cc).
     ///
     /// With `--all`, the limit applies independently to each of

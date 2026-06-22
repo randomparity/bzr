@@ -108,8 +108,12 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   ├── search [<QUERY>] [--from-url <URL>] [--save-as [NAME]] [--limit <N>] [--offset <N>] [--paginate] [--count] [--fields <F>] [--exclude-fields <F>]
 │   │          [--sort <FIELD>] [--order asc|desc]
 │   ├── history <ID> [--since <DATE>]
-│   ├── my [--created] [--cc] [--all] [--status <S>...] [--limit <N>] [--offset <N>] [--paginate] [--count]
-│   │       [--fields <F>] [--exclude-fields <F>] [--sort <FIELD>] [--order asc|desc]
+│   ├── my [--created] [--cc] [--all] [--status <S>...] [--product <P>...] [--component <C>...]
+│   │       [--priority <P>...] [--severity <S>...] [--resolution <R>...] [--version <V>...]
+│   │       [--op-sys <OS>...] [--platform <P>...] [--whiteboard <W>...] [--target-milestone <M>...]
+│   │       [--qa-contact <Q>...] [--url <U>...] [--created-since <D>] [--changed-since <D>]
+│   │       [--limit <N>] [--offset <N>] [--paginate] [--count] [--fields <F>] [--exclude-fields <F>]
+│   │       [--sort <FIELD>] [--order asc|desc]
 │   ├── create [--from-json <PATH>] [--template <T>] [--product <P>] [--component <C>] --summary <S>
 │   │          [--version <V>] [--description <D>] [--description-file <PATH>] [--priority <P>] [--severity <S>]
 │   │          [--assignee <A>] [--op-sys <OS>] [--rep-platform <PLAT>]
@@ -481,6 +485,7 @@ bzr bug my --created          # bugs I created
 bzr bug my --cc               # bugs I'm CC'd on
 bzr bug my --all              # all of the above
 bzr bug my --status NEW --limit 20
+bzr bug my --product Core --target-milestone 5.0 --changed-since 2026-04-01
 bzr bug my --all --status '!CLOSED'         # all non-closed bugs
 bzr bug my --status NEW --status ASSIGNED   # OR filter
 bzr bug my --status NEW --status '!RESOLVED'  # mixed positive and negated
@@ -492,6 +497,20 @@ bzr bug my --status NEW --status '!RESOLVED'  # mixed positive and negated
 | `--cc` | No | | Show bugs I'm CC'd on (instead of assigned) |
 | `--all` | No | | Show all bugs related to me (assigned + created + CC'd) |
 | `--status <S>` | No | | Filter by status (repeatable; `!` prefix to exclude) |
+| `--product <P>` | No | | Filter by product (repeatable; `!` prefix to exclude) |
+| `--component <C>` | No | | Filter by component (repeatable; `!` prefix to exclude) |
+| `--priority <P>` | No | | Filter by priority (repeatable; `!` prefix to exclude) |
+| `--severity <S>` | No | | Filter by severity (repeatable; `!` prefix to exclude) |
+| `--created-since <DATE>` | No | | Filter to bugs created at or after this date. Accepts `YYYY-MM-DD`, `YYYY-MM-DDTHH:MM:SS`, `YYYY-MM-DDTHH:MM:SSZ`, or `YYYY-MM-DDTHH:MM:SS±HH:MM`; malformed input exits 7. |
+| `--changed-since <DATE>` | No | | Filter to bugs last modified at or after this date. Same accepted forms as `--created-since`. |
+| `--whiteboard <W>` | No | | Filter by Status Whiteboard substring (repeatable; `!` prefix to exclude) |
+| `--target-milestone <M>` | No | | Filter by Target Milestone (repeatable; `!` prefix to exclude) |
+| `--version <V>` | No | | Filter by version (repeatable; `!` prefix to exclude) |
+| `--op-sys <OS>` | No | | Filter by operating system (repeatable; `!` prefix to exclude) |
+| `--platform <P>` | No | | Filter by platform/hardware (repeatable; `!` prefix to exclude) |
+| `--resolution <R>` | No | | Filter by resolution (repeatable; `!` prefix to exclude; empty matches open bugs) |
+| `--qa-contact <Q>` | No | | Filter by QA contact login (repeatable; `!` prefix to exclude) |
+| `--url <U>` | No | | Filter by URL field substring (repeatable; `!` prefix to exclude) |
 | `--limit <N>` | No | 50 | Max results per category. With `--all`, each of the three categories (assigned, created, CC'd) is queried separately up to this limit; duplicates across categories are removed. |
 | `--offset <N>` | No | | Skip the first N matches in each category. Mutually exclusive with `--paginate`; cannot be combined with `--count`. |
 | `--paginate` | No | | Retrieve every matching page of each category, looping internally past `--limit`, then de-duplicate. Cannot be combined with `--count`. |

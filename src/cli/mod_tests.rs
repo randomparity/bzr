@@ -1568,6 +1568,81 @@ fn parse_bug_my_defaults() {
 }
 
 #[test]
+fn bug_my_parses_shared_filter_set() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "my",
+        "--product",
+        "Core",
+        "--component",
+        "Networking",
+        "--priority",
+        "P1",
+        "--severity",
+        "S2",
+        "--created-since",
+        "2026-04-01",
+        "--changed-since",
+        "2026-04-15T12:00:00Z",
+        "--whiteboard",
+        "needs-review",
+        "--target-milestone",
+        "5.0",
+        "--version",
+        "9.4",
+        "--op-sys",
+        "Linux",
+        "--platform",
+        "x86_64",
+        "--resolution",
+        "FIXED",
+        "--qa-contact",
+        "qa@example.com",
+        "--url",
+        "github.com/foo",
+    ])
+    .unwrap();
+    let Commands::Bug {
+        action:
+            BugAction::My(super::MyArgs {
+                product,
+                component,
+                priority,
+                severity,
+                created_since,
+                changed_since,
+                whiteboard,
+                target_milestone,
+                version,
+                op_sys,
+                platform,
+                resolution,
+                qa_contact,
+                url,
+                ..
+            }),
+    } = cli.command
+    else {
+        panic!("expected Bug My");
+    };
+    assert_eq!(product, vec!["Core"]);
+    assert_eq!(component, vec!["Networking"]);
+    assert_eq!(priority, vec!["P1"]);
+    assert_eq!(severity, vec!["S2"]);
+    assert_eq!(created_since.as_deref(), Some("2026-04-01"));
+    assert_eq!(changed_since.as_deref(), Some("2026-04-15T12:00:00Z"));
+    assert_eq!(whiteboard, vec!["needs-review"]);
+    assert_eq!(target_milestone, vec!["5.0"]);
+    assert_eq!(version, vec!["9.4"]);
+    assert_eq!(op_sys, vec!["Linux"]);
+    assert_eq!(platform, vec!["x86_64"]);
+    assert_eq!(resolution, vec!["FIXED"]);
+    assert_eq!(qa_contact, vec!["qa@example.com"]);
+    assert_eq!(url, vec!["github.com/foo"]);
+}
+
+#[test]
 fn parse_bug_my_all_conflicts_with_created() {
     let result = Cli::try_parse_from(["bzr", "bug", "my", "--all", "--created"]);
     assert!(result.is_err(), "--all should conflict with --created");

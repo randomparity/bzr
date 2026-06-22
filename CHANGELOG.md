@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `--server-tls-insecure`, `--server-tls-ca-cert`,
   `--server-tls-pin-sha256`, and session-only `--server-tls-pin-now`.
   These settings are never persisted to config. (#381)
+- `bug my` now accepts the shared practical bug filters for product,
+  component, priority, severity, created/changed dates, whiteboard, target
+  milestone, version, operating system, platform, resolution, QA contact, and
+  URL. (#382)
 - `bug update` now accepts `--url` and `--target-milestone`, matching fields
   that `bug create` can already set. (#363)
 - `bug resolve`, `bug close`, `bug reopen`, and `bug dup` now accept
