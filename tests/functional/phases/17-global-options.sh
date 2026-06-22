@@ -75,5 +75,38 @@ if assert_success && assert_json '.action' "dry-run"; then
 fi
 unset _DM
 
-echo ""
+test_begin "103d. --dry-run product create previews without writing"
+_DP=$(unique_name dryprod)
+run_bzr --dry-run product create --name "$_DP" --description "dry product"
+if assert_success && assert_json '.resource' "product" && assert_json '.action' "dry-run"; then
+    run_bzr product view "$_DP"
+    if assert_failure; then test_pass; fi
+fi
+unset _DP
 
+test_begin "103e. --dry-run component update by name resolves but does not write"
+run_bzr --dry-run component update --product FuncTestProd --component Backend \
+    --description "dry component update"
+if [[ $BZR_EXIT -eq 0 ]]; then
+    run_bzr component view FuncTestProd Backend
+    if assert_stdout_not_contains "dry component update"; then test_pass; fi
+elif grep -q "32614" "$BZR_STDERR" 2>/dev/null; then
+    test_skip "component update REST endpoint not available"
+else
+    assert_success
+fi
+
+test_begin "103f. --dry-run user update previews without writing"
+run_bzr --dry-run user update testuser@test.bzr --disable-login false
+if assert_success && assert_json '.resource' "user" && assert_json '.action' "dry-run"; then
+    test_pass
+fi
+
+test_begin "103g. --dry-run group update previews without writing"
+run_bzr --dry-run group update functest-grp --description "dry group update"
+if assert_success && assert_json '.resource' "group" && assert_json '.action' "dry-run"; then
+    run_bzr group view functest-grp
+    if assert_stdout_not_contains "dry group update"; then test_pass; fi
+fi
+
+echo ""

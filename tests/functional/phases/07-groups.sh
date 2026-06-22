@@ -92,4 +92,28 @@ test_begin "32. group list-users (after remove)"
 run_bzr group list-users --group functest-grp
 if assert_success && assert_stdout_not_contains "testuser@test.bzr"; then test_pass; fi
 
+_GJSON_DIR=$(mktemp -d /tmp/bzr-func-group-json.XXXXXX)
+_GJ_NAME=$(unique_name groupjson)
+write_json_fixture "$_GJSON_DIR/create.json" \
+    "{\"name\":\"$_GJ_NAME\",\"description\":\"group json\",\"is_active\":true}"
+write_json_fixture "$_GJSON_DIR/update.json" \
+    "{\"group\":\"$_GJ_NAME\",\"description\":\"group json updated\",\"is_active\":false}"
+
+test_begin "32a. group create --from-json"
+run_bzr group create --from-json "$_GJSON_DIR/create.json"
+if assert_success; then
+    run_bzr group view "$_GJ_NAME"
+    if assert_json '.name' "$_GJ_NAME"; then test_pass; fi
+fi
+
+test_begin "32b. group update --from-json"
+run_bzr group update --from-json "$_GJSON_DIR/update.json"
+if assert_success; then
+    run_bzr group view "$_GJ_NAME"
+    if assert_json '.description' "group json updated"; then test_pass; fi
+fi
+
+rm -r "$_GJSON_DIR"
+unset _GJSON_DIR _GJ_NAME
+
 echo ""
