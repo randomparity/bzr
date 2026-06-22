@@ -48,6 +48,37 @@ async fn detect_version_returns_rest_for_5_1() {
 }
 
 #[tokio::test]
+async fn detect_version_and_mode_without_auth_sends_no_credentials() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/version"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.1.2"})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let (version, mode) =
+        detect_version_and_mode_without_auth(&test_http_client(), &server.uri()).await;
+
+    assert_eq!(version.as_deref(), Some("5.1.2"));
+    assert_eq!(mode, ApiMode::Rest);
+
+    let requests = server.received_requests().await.unwrap_or_default();
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0]
+        .headers
+        .get(crate::http::AUTH_HEADER_NAME)
+        .is_none());
+    assert!(requests[0]
+        .url
+        .query_pairs()
+        .all(|(name, _)| name != crate::http::AUTH_QUERY_PARAM));
+}
+
+#[tokio::test]
 async fn detect_version_returns_hybrid_for_5_0() {
     let server = MockServer::start().await;
 

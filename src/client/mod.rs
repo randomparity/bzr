@@ -50,8 +50,8 @@ enum PreparedAuth {
 pub struct BugzillaClient {
     pub(super) http: reqwest::Client,
     pub(super) base_url: String,
-    auth: PreparedAuth,
-    pub(super) api_key: String,
+    auth: Option<PreparedAuth>,
+    pub(super) api_key: Option<String>,
     pub(super) api_mode: ApiMode,
     pub(super) xmlrpc: Option<XmlRpcClient>,
     /// Email hint for Bugzilla 5.0 compatibility (whoami fallback via user lookup).
@@ -66,8 +66,8 @@ pub struct BugzillaClient {
 #[derive(Clone, Copy)]
 pub struct BugzillaClientConfig<'a> {
     pub base_url: &'a str,
-    pub credential: &'a str,
-    pub auth_method: AuthMethod,
+    pub credential: Option<&'a str>,
+    pub auth_method: Option<AuthMethod>,
     pub api_mode: ApiMode,
     pub email_hint: Option<&'a str>,
     pub tls_config: &'a crate::tls::TlsConfig,
@@ -161,13 +161,26 @@ impl BugzillaClient {
             tls_config,
         } = config;
 
-        let auth = match auth_method {
-            AuthMethod::Header => {
-                let value = HeaderValue::from_str(credential)
+        let auth = match (credential, auth_method) {
+            (Some(key), Some(AuthMethod::Header)) => {
+                let value = HeaderValue::from_str(key)
                     .map_err(|_| BzrError::config("invalid API key characters"))?;
-                PreparedAuth::Header(value)
+                Some(PreparedAuth::Header(value))
             }
-            AuthMethod::QueryParam => PreparedAuth::QueryParam(credential.to_string()),
+            (Some(key), Some(AuthMethod::QueryParam)) => {
+                Some(PreparedAuth::QueryParam(key.to_string()))
+            }
+            (None, None) => None,
+            (Some(_), None) => {
+                return Err(BzrError::config(
+                    "internal: credential provided without detected auth method",
+                ));
+            }
+            (None, Some(_)) => {
+                return Err(BzrError::config(
+                    "internal: auth method provided without credential",
+                ));
+            }
         };
 
         let http = crate::tls::build_tls_client(tls_config)?;
@@ -175,7 +188,7 @@ impl BugzillaClient {
         // Always construct the XML-RPC client — even in REST mode, some
         // methods (e.g. Group.get on Bugzilla 5.3+) require XML-RPC fallback
         // because the REST endpoint is broken for them.
-        if api_mode != ApiMode::Rest && auth_method == AuthMethod::Header {
+        if api_mode != ApiMode::Rest && auth_method == Some(AuthMethod::Header) {
             tracing::info!(
                 "XML-RPC always sends API key in request body, \
                  overriding configured header auth for XML-RPC calls"
@@ -183,13 +196,13 @@ impl BugzillaClient {
         }
         let xmlrpc = Some(XmlRpcClient::new(http.clone(), base_url, credential));
 
-        tracing::debug!(base_url, %auth_method, %api_mode, "created Bugzilla client");
+        tracing::debug!(base_url, ?auth_method, %api_mode, "created Bugzilla client");
 
         Ok(BugzillaClient {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
             auth,
-            api_key: credential.to_string(),
+            api_key: credential.map(String::from),
             api_mode,
             xmlrpc,
             email_hint: email_hint.map(String::from),
@@ -307,17 +320,18 @@ impl BugzillaClient {
         self.parse_json(resp).await
     }
 
-    /// Apply auth credentials to a request. Infallible because the API key
-    /// was validated at client construction time. Delegates to the shared
-    /// [`crate::http::apply_auth_to_request`] primitive.
+    /// Apply auth credentials to a request. Infallible because any configured
+    /// API key was validated at client construction time. Anonymous clients
+    /// leave the request unchanged.
     pub(super) fn apply_auth(&self, builder: RequestBuilder) -> RequestBuilder {
         match &self.auth {
-            PreparedAuth::Header(value) => {
+            Some(PreparedAuth::Header(value)) => {
                 crate::http::apply_auth_to_request(builder, Some(value), None)
             }
-            PreparedAuth::QueryParam(key) => {
+            Some(PreparedAuth::QueryParam(key)) => {
                 crate::http::apply_auth_to_request(builder, None, Some(key))
             }
+            None => builder,
         }
     }
 
@@ -420,6 +434,9 @@ impl BugzillaClient {
         &self,
         retry_builder: Option<RequestBuilder>,
     ) -> Result<Option<reqwest::Response>> {
+        if self.auth.is_none() {
+            return Ok(None);
+        }
         let Some(clone) = retry_builder else {
             return Ok(None);
         };
@@ -438,14 +455,17 @@ impl BugzillaClient {
     }
 
     fn apply_alternate_auth(&self, builder: RequestBuilder) -> Result<RequestBuilder> {
-        match &self.auth {
-            PreparedAuth::Header(_) => Ok(builder.query(&[(AUTH_QUERY_PARAM, &self.api_key)])),
-            PreparedAuth::QueryParam(_) => {
-                let value = HeaderValue::from_str(&self.api_key).map_err(|e| {
+        match (&self.auth, self.api_key.as_deref()) {
+            (Some(PreparedAuth::Header(_)), Some(api_key)) => {
+                Ok(builder.query(&[(AUTH_QUERY_PARAM, api_key)]))
+            }
+            (Some(PreparedAuth::QueryParam(_)), Some(api_key)) => {
+                let value = HeaderValue::from_str(api_key).map_err(|e| {
                     BzrError::Config(format!("API key contains invalid header characters: {e}"))
                 })?;
                 Ok(builder.header(AUTH_HEADER_NAME, value))
             }
+            _ => Ok(builder),
         }
     }
 

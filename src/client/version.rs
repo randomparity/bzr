@@ -11,6 +11,28 @@ pub(super) async fn detect_version_and_mode(
     api_key: &str,
     auth_method: AuthMethod,
 ) -> (Option<String>, ApiMode) {
+    detect_version_and_mode_inner(http, base_url, Some((api_key, auth_method))).await
+}
+
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Task 3 wires anonymous runtime detection to this helper"
+    )
+)]
+pub(super) async fn detect_version_and_mode_without_auth(
+    http: &reqwest::Client,
+    base_url: &str,
+) -> (Option<String>, ApiMode) {
+    detect_version_and_mode_inner(http, base_url, None).await
+}
+
+async fn detect_version_and_mode_inner(
+    http: &reqwest::Client,
+    base_url: &str,
+    auth: Option<(&str, AuthMethod)>,
+) -> (Option<String>, ApiMode) {
     #[derive(serde::Deserialize)]
     struct VersionResponse {
         version: String,
@@ -19,13 +41,16 @@ pub(super) async fn detect_version_and_mode(
     let base = base_url.trim_end_matches('/');
     let url = format!("{base}/rest/version");
 
-    let req = match apply_auth(http.get(&url), api_key, auth_method) {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::debug!("auth setup failed for version probe: {e}");
-            // Fall back to unauthenticated request — version endpoint is often public.
-            http.get(&url)
-        }
+    let req = match auth {
+        Some((api_key, auth_method)) => match apply_auth(http.get(&url), api_key, auth_method) {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::debug!("auth setup failed for version probe: {e}");
+                // Fall back to unauthenticated request — version endpoint is often public.
+                http.get(&url)
+            }
+        },
+        None => http.get(&url),
     };
 
     let resp = match req.send().await {

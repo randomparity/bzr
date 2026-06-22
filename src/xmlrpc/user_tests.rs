@@ -49,7 +49,7 @@ async fn create_user_returns_id_from_response() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let params = CreateUserParams {
         email: "alice@example.com".into(),
         login: Some("alice".into()),

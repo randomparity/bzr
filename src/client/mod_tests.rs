@@ -35,8 +35,8 @@ fn safe_url_preserves_path() {
 fn new_trims_trailing_slash_and_keeps_email_hint() {
     let client = BugzillaClient::new(BugzillaClientConfig {
         base_url: "https://bugzilla.example.com/",
-        credential: "test-key",
-        auth_method: AuthMethod::Header,
+        credential: Some("test-key"),
+        auth_method: Some(AuthMethod::Header),
         api_mode: ApiMode::Rest,
         email_hint: Some("user@example.com"),
         tls_config: &crate::tls::TlsConfig::default(),
@@ -58,12 +58,49 @@ fn apply_auth_adds_query_param_credentials() {
     assert_eq!(request.url().query(), Some(expected_query.as_str()));
 }
 
+#[tokio::test]
+async fn anonymous_client_sends_no_api_key_header_or_query() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/version"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.1.2"})),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = BugzillaClient::new(BugzillaClientConfig {
+        base_url: &mock.uri(),
+        credential: None,
+        auth_method: None,
+        api_mode: ApiMode::Rest,
+        email_hint: None,
+        tls_config: &crate::tls::TlsConfig::default(),
+    })
+    .unwrap();
+
+    let value = client.get_json_value("version").await.unwrap();
+    assert_eq!(value["version"], "5.1.2");
+
+    let requests = mock.received_requests().await.unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0]
+        .headers
+        .get(crate::http::AUTH_HEADER_NAME)
+        .is_none());
+    assert!(requests[0]
+        .url
+        .query_pairs()
+        .all(|(name, _)| name != crate::http::AUTH_QUERY_PARAM));
+}
+
 #[test]
 fn alternate_auth_rejects_invalid_header_characters() {
     let client = BugzillaClient::new(BugzillaClientConfig {
         base_url: "https://bugzilla.example.com",
-        credential: "bad\nkey",
-        auth_method: AuthMethod::QueryParam,
+        credential: Some("bad\nkey"),
+        auth_method: Some(AuthMethod::QueryParam),
         api_mode: ApiMode::Rest,
         email_hint: None,
         tls_config: &crate::tls::TlsConfig::default(),
@@ -225,6 +262,36 @@ async fn auth_fallback_both_fail_returns_original_error() {
         msg.contains("410") || msg.contains("log in"),
         "expected auth error: {msg}"
     );
+}
+
+#[tokio::test]
+async fn anonymous_client_does_not_retry_401_with_alternate_auth() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
+            "error": true,
+            "code": 410,
+            "message": "You must log in."
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = BugzillaClient::new(BugzillaClientConfig {
+        base_url: &mock.uri(),
+        credential: None,
+        auth_method: None,
+        api_mode: ApiMode::Rest,
+        email_hint: None,
+        tls_config: &crate::tls::TlsConfig::default(),
+    })
+    .unwrap();
+
+    let err = client.search_users("alice", false).await.unwrap_err();
+
+    assert!(err.to_string().contains("410"));
+    assert_eq!(mock.received_requests().await.unwrap().len(), 1);
 }
 
 #[tokio::test]

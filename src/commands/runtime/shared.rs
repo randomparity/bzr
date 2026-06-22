@@ -144,8 +144,8 @@ impl ConnectContext {
     ) -> Result<BugzillaClient> {
         BugzillaClient::new(crate::client::BugzillaClientConfig {
             base_url: &self.url,
-            credential: &self.api_key,
-            auth_method,
+            credential: Some(&self.api_key),
+            auth_method: Some(auth_method),
             api_mode,
             email_hint: self.email_hint(),
             tls_config,

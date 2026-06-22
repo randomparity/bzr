@@ -9,8 +9,8 @@ pub fn test_http_client() -> reqwest::Client {
 pub fn test_client(base_url: &str) -> BugzillaClient {
     BugzillaClient::new(BugzillaClientConfig {
         base_url,
-        credential: "test-key",
-        auth_method: AuthMethod::Header,
+        credential: Some("test-key"),
+        auth_method: Some(AuthMethod::Header),
         api_mode: ApiMode::Rest,
         email_hint: None,
         tls_config: &crate::tls::TlsConfig::default(),
@@ -21,8 +21,8 @@ pub fn test_client(base_url: &str) -> BugzillaClient {
 pub fn test_client_hybrid(base_url: &str) -> BugzillaClient {
     BugzillaClient::new(BugzillaClientConfig {
         base_url,
-        credential: "test-key",
-        auth_method: AuthMethod::Header,
+        credential: Some("test-key"),
+        auth_method: Some(AuthMethod::Header),
         api_mode: ApiMode::Hybrid,
         email_hint: None,
         tls_config: &crate::tls::TlsConfig::default(),
@@ -33,8 +33,8 @@ pub fn test_client_hybrid(base_url: &str) -> BugzillaClient {
 pub fn test_client_query_param(base_url: &str) -> BugzillaClient {
     BugzillaClient::new(BugzillaClientConfig {
         base_url,
-        credential: "test-key",
-        auth_method: AuthMethod::QueryParam,
+        credential: Some("test-key"),
+        auth_method: Some(AuthMethod::QueryParam),
         api_mode: ApiMode::Rest,
         email_hint: None,
         tls_config: &crate::tls::TlsConfig::default(),
@@ -45,8 +45,8 @@ pub fn test_client_query_param(base_url: &str) -> BugzillaClient {
 pub fn test_client_xmlrpc(base_url: &str) -> BugzillaClient {
     BugzillaClient::new(BugzillaClientConfig {
         base_url,
-        credential: "test-key",
-        auth_method: AuthMethod::Header,
+        credential: Some("test-key"),
+        auth_method: Some(AuthMethod::Header),
         api_mode: ApiMode::XmlRpc,
         email_hint: None,
         tls_config: &crate::tls::TlsConfig::default(),
