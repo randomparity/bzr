@@ -31,6 +31,11 @@ bzr bug update <id> --flag "review+(alice@example.com)"
 # Add context as a comment rather than overwriting the description
 bzr comment add <id> --body "Reproduced on Fedora 42; root cause is X."
 
+# Attach evidence or a patch with context in the same upload
+bzr attachment upload <id> trace.log --comment-file notes.md
+printf '%s\n' "Patch generated from branch foo." \
+  | bzr attachment upload <id> fix.patch --patch --comment-file -
+
 # Tag a comment for workflow
 bzr comment tag <id> --add needs-info
 ```
@@ -66,6 +71,16 @@ bzr bug update <id> --status RESOLVED --resolution FIXED \
 This is the cardinal read-before-write rule made enforceable. To rehearse a
 change without writing, add `--dry-run` — bzr validates and prints the would-be
 payload (`"action":"dry-run"`) without calling the API.
+
+### Attachment reads
+
+Use JSON metadata for decisions, and use stdout only for the raw bytes of one
+attachment:
+
+```
+bzr attachment list <id> --json | jq -r '.[] | "\(.id)\t\(.file_name)"'
+bzr attachment download <attachment-id> --out - > patch.diff
+```
 
 ## 3. Verify
 

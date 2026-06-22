@@ -22,8 +22,19 @@ bzr template list
 bzr bug create --template <name> --summary "..." --description "..."
 ```
 
-A template supplies saved field defaults (product, component, etc.) so you only
-fill in what is bug-specific.
+A template supplies saved field defaults so you only fill in what is bug-specific.
+Templates can carry routing fields and create metadata: `--product`,
+`--component`, `--version`, `--priority`, `--severity`, `--assignee`,
+`--op-sys`, `--rep-platform`, `--description`, `--url`, `--whiteboard`,
+`--target-milestone`, `--deadline`, `--cc`, `--keywords`, `--groups`, and
+`--flag`.
+
+```
+bzr template save security-routing \
+  --product Security --component Triage \
+  --severity critical --cc triage@example.com --flag review?
+bzr template update security-routing --target-milestone next --clear assignee
+```
 
 ## 3. Write a good report
 
@@ -49,6 +60,14 @@ flags that mirror `bug update` are `--alias`, `--url`, `--whiteboard`,
 bzr bug create --product <P> --component <C> --summary "..." --description "..." \
   --keywords regression,crash --cc qa@example.com \
   --target-milestone 9.0 --flag "review?(maintainer@example.com)"
+```
+
+To file a close variant of an existing bug, prefer `bug clone` and override only
+the fields that should differ from the source:
+
+```
+bzr bug clone 12345 --summary "Backport to 9.4" \
+  --version "9.4" --target-milestone 9.4 --add-depends-on
 ```
 
 ## Structured or batch filing

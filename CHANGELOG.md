@@ -50,6 +50,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CLI docs, source help comments, schema descriptions, and bundled agent-skill
   docs are guarded against stale long flag names such as `--is-patch`,
   `--format json`, and `--ndjson`. (#391)
+- Bundled bzr agent skills now teach the new CLI UX follow-ups: public
+  read-only servers, stateless TLS trust flags, richer `bug my` filters,
+  `query update --from-url`, richer templates and clone overrides, attachment
+  stdin comments, single-attachment stdout downloads, and the error schema.
+  (#392)
 - `bug update` now accepts `--url` and `--target-milestone`, matching fields
   that `bug create` can already set. (#363)
 - `bug resolve`, `bug close`, `bug reopen`, and `bug dup` now accept
