@@ -36,6 +36,19 @@ test_begin "125. --server-url + --server conflict"
 run_bzr --server-url http://example.invalid:1 --server test whoami
 if assert_exit_code 2 && assert_stderr_contains "cannot be used with"; then test_pass; fi
 
+test_begin "125a. --server-api-key-env requires --server-url"
+run_bzr --server-api-key-env BZR_FUNC_INLINE_KEY server info
+if assert_exit_code 2 && assert_stderr_contains "required"; then test_pass; fi
+
+test_begin "125b. --server-tls-insecure requires --server-url"
+run_bzr --server-tls-insecure server info
+if assert_exit_code 2 && assert_stderr_contains "required"; then test_pass; fi
+
+test_begin "125c. ad-hoc TLS flags are mutually exclusive"
+run_bzr --server-url "$BZ_URL" --server-tls-insecure \
+    --server-tls-pin-now server info
+if assert_exit_code 2 && assert_stderr_contains "cannot be used with"; then test_pass; fi
+
 # `whoami show` subcommand removed (#323): bare `whoami` only.
 test_begin "126. whoami show (removed subcommand → exit 2)"
 run_bzr whoami show

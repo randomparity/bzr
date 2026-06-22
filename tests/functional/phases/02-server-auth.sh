@@ -56,4 +56,29 @@ fi
 rm -f "$_FLAG_SQL"
 unset _FLAG_SQL
 
+test_begin "8c. credentialless named server info"
+run_bzr_raw --json --server public server info
+if assert_success && assert_json_exists '.version'; then test_pass; fi
+
+test_begin "8d. credentialless named whoami fails before network auth"
+run_bzr_raw --json --server public whoami
+if assert_exit_code 3 && assert_stderr_contains "requires credentials"; then test_pass; fi
+
+test_begin "8e. credentialless named write fails before mutation"
+run_bzr_raw --json --server public bug create \
+    --product FuncTestProd --component Backend --summary "public write" \
+    --description "should not write" --op-sys Linux --rep-platform PC
+if assert_exit_code 3 && assert_stderr_contains "requires credentials"; then test_pass; fi
+
+test_begin "8f. inline credentialless server info"
+run_bzr_raw --json --server-url "$BZ_URL" server info
+if assert_success && assert_json_exists '.version'; then test_pass; fi
+
+test_begin "8g. inline credentialed whoami"
+export BZR_FUNC_INLINE_KEY="$API_KEY"
+run_bzr_raw --json --server-url "$BZ_URL" \
+    --server-api-key-env BZR_FUNC_INLINE_KEY --server-email "$ADMIN_EMAIL" whoami
+if assert_success && assert_json_exists '.id'; then test_pass; fi
+unset BZR_FUNC_INLINE_KEY
+
 echo ""

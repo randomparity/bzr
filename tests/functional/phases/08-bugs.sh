@@ -51,10 +51,10 @@ else test_skip "no duplicate source/target"; fi
 test_begin "34d. bug view verifies duplicate transition"
 if [[ -n "$BUG_DUP_SOURCE" ]] && [[ -n "$BUG_DUP_TARGET" ]]; then
     run_bzr bug view "$BUG_DUP_SOURCE" --json
-    if assert_success \
-        && assert_json '.status' "RESOLVED" \
-        && assert_json '.resolution' "DUPLICATE" \
-        && assert_json '.dupe_of' "$BUG_DUP_TARGET"; then
+    if assert_success &&
+        assert_json '.status' "RESOLVED" &&
+        assert_json '.resolution' "DUPLICATE" &&
+        assert_json '.dupe_of' "$BUG_DUP_TARGET"; then
         test_pass
     fi
 else test_skip "no duplicate source/target"; fi
@@ -64,6 +64,16 @@ if [[ -n "$BUG1" ]]; then
     run_bzr bug view "$BUG1"
     if assert_success && assert_json '.summary' "Bug one"; then test_pass; fi
 else test_skip "no BUG1"; fi
+
+test_begin "35a. credentialless named bug view"
+if [[ -n "$BUG1" ]]; then
+    run_bzr_raw --json --server public bug view "$BUG1"
+    if assert_success && assert_json '.summary' "Bug one"; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "35b. inline credentialless bug list"
+run_bzr_raw --json --server-url "$BZ_URL" bug list --product FuncTestProd --limit 1
+if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
 
 test_begin "36. bug view --fields"
 if [[ -n "$BUG1" ]]; then
@@ -154,8 +164,8 @@ if [[ -n "$BUG2" ]]; then
     # filter window includes BUG2 and excludes any older fixtures. Bugzilla
     # matches "at or after" inclusively; subtract 5 minutes to tolerate clock
     # skew between the runner and the container.
-    SINCE_TS=$(date -u -d '5 minutes ago' '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null \
-                || date -u -v-5M '+%Y-%m-%dT%H:%M:%SZ')
+    SINCE_TS=$(date -u -d '5 minutes ago' '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null ||
+        date -u -v-5M '+%Y-%m-%dT%H:%M:%SZ')
     run_bzr bug list --product FuncTestProd --changed-since "$SINCE_TS"
     if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
 else test_skip "no BUG2"; fi
@@ -176,9 +186,9 @@ if [[ -n "$BUG1" ]] && [[ -n "$BUG2" ]]; then
     # BUG1 has whiteboard "wip"; BUG2 does not. Negation must exclude BUG1
     # and include BUG2.
     run_bzr bug list --product FuncTestProd --whiteboard '!wip'
-    if assert_success \
-        && assert_stdout_not_contains "\"id\":$BUG1" \
-        && assert_stdout_contains "$BUG2"; then
+    if assert_success &&
+        assert_stdout_not_contains "\"id\":$BUG1" &&
+        assert_stdout_contains "$BUG2"; then
         test_pass
     fi
 else test_skip "no BUG1/BUG2"; fi
@@ -196,9 +206,9 @@ if [[ -n "$BUG1" ]] && [[ -n "$BUG2" ]]; then
     # must exclude BUG1 and include BUG2 (empty resolution !=
     # "FIXED" by Bugzilla's notequals semantics).
     run_bzr bug list --product FuncTestProd --resolution '!FIXED'
-    if assert_success \
-        && assert_stdout_not_contains "\"id\":$BUG1" \
-        && assert_stdout_contains "$BUG2"; then
+    if assert_success &&
+        assert_stdout_not_contains "\"id\":$BUG1" &&
+        assert_stdout_contains "$BUG2"; then
         test_pass
     fi
 else test_skip "no BUG1/BUG2"; fi
@@ -210,9 +220,9 @@ if assert_failure; then test_pass; fi
 test_begin "46a. bug view multi-ID (all succeed, JSON wrapped shape)"
 if [[ -n "$BUG1" ]] && [[ -n "$BUG2" ]]; then
     run_bzr bug view "$BUG1" "$BUG2"
-    if assert_success \
-        && assert_json_array_length '.bugs' 2 \
-        && assert_json_array_length '.failed' 0; then
+    if assert_success &&
+        assert_json_array_length '.bugs' 2 &&
+        assert_json_array_length '.failed' 0; then
         test_pass
     fi
 else test_skip "no BUG1/BUG2"; fi
@@ -226,10 +236,10 @@ else test_skip "no BUG1"; fi
 test_begin "46c. bug view multi-ID --permissive surfaces per-bug error"
 if [[ -n "$BUG1" ]] && [[ -n "$BUG2" ]]; then
     run_bzr bug view "$BUG1" "$BUG2" 999999 --permissive
-    if assert_success \
-        && assert_json_array_length '.bugs' 2 \
-        && assert_json_array_length '.failed' 1 \
-        && assert_json '.failed[0].id' "999999"; then
+    if assert_success &&
+        assert_json_array_length '.bugs' 2 &&
+        assert_json_array_length '.failed' 1 &&
+        assert_json '.failed[0].id' "999999"; then
         test_pass
     fi
 else test_skip "no BUG1/BUG2"; fi
@@ -237,6 +247,7 @@ else test_skip "no BUG1/BUG2"; fi
 test_begin "47. bug create (bug three — clone source)"
 run_bzr bug create --product FuncTestProd --component Backend --summary "Clone source bug" --description "Description for cloning" --priority Highest --severity critical --op-sys Linux --rep-platform PC
 if assert_success && assert_json_exists '.id'; then
+    # shellcheck disable=SC2034 # consumed by later sourced phases
     BUG3=$(jq -r '.id' "$BZR_STDOUT")
     test_pass
 fi
@@ -247,6 +258,7 @@ if [[ -n "$BUG1" ]] && [[ -n "$BUG2" ]]; then
         --summary "Bug with relationships" --description "Relationship test description" \
         --blocks "$BUG1" --depends-on "$BUG2" --op-sys All --rep-platform All
     if assert_success && assert_json_exists '.id'; then
+        # shellcheck disable=SC2034 # consumed by later sourced phases
         BUG4=$(jq -r '.id' "$BZR_STDOUT")
         test_pass
     fi
@@ -255,7 +267,7 @@ else test_skip "no BUG1/BUG2"; fi
 # ── Bug create: description-source precedence ────────────────────────
 test_begin "48a. bug create --description-file"
 DESC_FILE=$(mktemp /tmp/bzr-func-desc.XXXXXX)
-echo "description from file" > "$DESC_FILE"
+echo "description from file" >"$DESC_FILE"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "From file" --description-file "$DESC_FILE" \
     --op-sys All --rep-platform All
@@ -264,7 +276,7 @@ rm -f "$DESC_FILE"
 
 test_begin "48b. bug create --description and --description-file conflict (clap exit 2)"
 DESC_FILE=$(mktemp /tmp/bzr-func-desc.XXXXXX)
-echo "should-not-appear" > "$DESC_FILE"
+echo "should-not-appear" >"$DESC_FILE"
 run_bzr_raw bug create --product FuncTestProd --component Backend \
     --summary "Conflict test" --description literal \
     --description-file "$DESC_FILE" --op-sys All --rep-platform All
@@ -280,7 +292,7 @@ if assert_success; then test_pass; fi
 
 test_begin "48d. bug create --description-file wins over piped stdin"
 DESC_FILE=$(mktemp /tmp/bzr-func-desc.XXXXXX)
-echo "from file" > "$DESC_FILE"
+echo "from file" >"$DESC_FILE"
 run_bzr bug create \
     --product FuncTestProd --component Backend \
     --summary "Precedence file>stdin" --description-file "$DESC_FILE" \
@@ -309,7 +321,7 @@ if assert_exit_code 7; then test_pass; fi
 
 test_begin "48g. bug create empty fake-editor → exit 7 (TTY-conditional)"
 EDITOR_SCRIPT=$(mktemp /tmp/bzr-empty-editor-XXXXXX.sh)
-cat > "$EDITOR_SCRIPT" <<'SH'
+cat >"$EDITOR_SCRIPT" <<'SH'
 #!/bin/sh
 : > "$1"
 SH
@@ -320,9 +332,8 @@ chmod +x "$EDITOR_SCRIPT"
 # expected exit code is 7.
 EDITOR="$EDITOR_SCRIPT" run_bzr_raw bug create \
     --product FuncTestProd --component Backend \
-    --op-sys All --rep-platform All < /dev/null
+    --op-sys All --rep-platform All </dev/null
 if assert_exit_code 7; then test_pass; fi
 rm -f "$EDITOR_SCRIPT"
 
 echo ""
-

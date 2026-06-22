@@ -24,6 +24,14 @@ test_begin "3a. config set-server auto-detect"
 run_bzr config set-server auto --url "$BZ_URL" --api-key "$API_KEY" --email "$ADMIN_EMAIL"
 if assert_success; then test_pass; fi
 
+test_begin "3b. config set-server public without credentials"
+run_bzr config set-server public --url "$BZ_URL"
+if assert_success; then
+    run_bzr config show
+    if assert_json '.servers.public.url' "$BZ_URL" &&
+        assert_json '.servers.public.api_key_source' "none"; then test_pass; fi
+fi
+
 test_begin "4. config set-default alt"
 run_bzr config set-default alt
 if assert_success; then test_pass; fi
@@ -94,4 +102,3 @@ rm -rf "$_ALT_DIR"
 unset _ALT_DIR
 
 echo ""
-
