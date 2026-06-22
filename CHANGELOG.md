@@ -33,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Bug templates now support the create metadata fields accepted by
   `bug create`: URL, whiteboard, target milestone, deadline, CC, keywords,
   groups, and flags. (#384)
+- `bug clone` now copies URL, whiteboard, target milestone, and deadline from
+  the source bug, and accepts create-time metadata overrides for URL,
+  whiteboard, target milestone, deadline, CC, keywords, groups, and flags.
+  (#385)
 - `bug update` now accepts `--url` and `--target-milestone`, matching fields
   that `bug create` can already set. (#363)
 - `bug resolve`, `bug close`, `bug reopen`, and `bug dup` now accept

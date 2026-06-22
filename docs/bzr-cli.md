@@ -123,6 +123,8 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   ├── clone <ID> [--summary <S>] [--product <P>] [--component <C>] [--version <V>]
 │   │              [--description <D>] [--priority <P>] [--severity <S>] [--assignee <A>]
 │   │              [--op-sys <OS>] [--rep-platform <PLAT>]
+│   │              [--url <U>] [--whiteboard <W>] [--target-milestone <T>] [--deadline <DATE>]
+│   │              [--cc <C>...] [--keywords <K>...] [--groups <G>...] [--flag <F>...]
 │   │              [--no-comment] [--add-depends-on] [--add-blocks] [--no-cc] [--no-keywords]
 │   ├── update [<ID...>] [--from-json <PATH>] [--status <S>] [--resolution <R>] [--dupe-of <ID>]
 │   │                   [--assignee <A>] [--priority <P>] [--severity <S>] [--summary <S>]
@@ -661,13 +663,27 @@ bzr bug create --from-json bugs.json --json | jq '.created'
 
 ### `bzr bug clone`
 
-Clone an existing bug, copying its fields into a new bug. Override flags (`--summary`, `--product`, `--component`, `--version`, `--description`, `--priority`, `--severity`, `--assignee`, `--op-sys`, `--rep-platform`) take precedence over values copied from the source.
+Clone an existing bug, copying its fields into a new bug. Override flags
+(`--summary`, `--product`, `--component`, `--version`, `--description`,
+`--priority`, `--severity`, `--assignee`, `--op-sys`, `--rep-platform`,
+`--url`, `--whiteboard`, `--target-milestone`, and `--deadline`) take
+precedence over values copied from the source.
+
+By default, clone copies product, component, version, summary, comment #0 as
+the new description, priority, severity, assignee, operating system, hardware
+platform, URL, whiteboard, target milestone, deadline, CC, and keywords.
+Aliases, groups, and flags are not copied. Use `--cc` or `--keywords` to
+replace the copied lists; these conflict with `--no-cc` and `--no-keywords`.
+Use `--groups` and `--flag` to set those create-time fields explicitly on the
+new bug.
 
 ```bash
 bzr bug clone 12345
 bzr bug clone 12345 --summary "Variant: different environment"
 bzr bug clone 12345 --component NewComponent --add-depends-on
-bzr bug clone 12345 --no-comment --no-cc
+bzr bug clone 12345 --url https://example.com/repro --flag review?
+bzr bug clone 12345 --cc qa@example.com --keywords regression,security
+bzr bug clone 12345 --no-comment --no-cc --no-keywords
 ```
 
 | Option | Required | Description |
@@ -683,13 +699,24 @@ bzr bug clone 12345 --no-comment --no-cc
 | `--assignee <A>` | No | Override assignee |
 | `--op-sys <OS>` | No | Override operating system |
 | `--rep-platform <PLAT>` | No | Override hardware platform |
+| `--url <U>` | No | Override URL |
+| `--whiteboard <W>` | No | Override Status Whiteboard |
+| `--target-milestone <T>` | No | Override Target Milestone |
+| `--deadline <DATE>` | No | Override deadline (`YYYY-MM-DD`) |
+| `--cc <C>...` | No | Replace copied CC list (comma-separated, repeatable) |
+| `--keywords <K>...` | No | Replace copied keywords (comma-separated, repeatable) |
+| `--groups <G>...` | No | Add the cloned bug to groups; not copied from source |
+| `--flag <F>...` | No | Set or request flags; not copied from source |
 | `--no-comment` | No | Skip the "Cloned from bug #N" comment |
 | `--add-depends-on` | No | Make the new bug depend on the source bug |
 | `--add-blocks` | No | Make the new bug block the source bug |
 | `--no-cc` | No | Don't copy the CC list from the source bug |
 | `--no-keywords` | No | Don't copy keywords from the source bug |
 
-Agent note: cloning without overrides copies metadata from the source bug, which may be broader than an agent intends. For predictable automation, use explicit overrides such as `--summary`, `--component`, `--description`, `--no-cc`, or `--no-keywords`.
+Agent note: cloning without overrides copies metadata from the source bug,
+which may be broader than an agent intends. For predictable automation, use
+explicit overrides such as `--summary`, `--component`, `--description`,
+`--url`, `--whiteboard`, `--cc`, `--keywords`, `--no-cc`, or `--no-keywords`.
 
 ### `bzr bug update`
 
