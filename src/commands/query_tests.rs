@@ -1690,6 +1690,7 @@ async fn query_save_persists_explicit_sort() {
 fn empty_update(name: &str) -> QueryAction {
     QueryAction::Update(UpdateArgs {
         name: name.into(),
+        from_url: None,
         search: None,
         product: vec![],
         component: vec![],
@@ -1923,6 +1924,71 @@ async fn query_update_sets_dates_and_sort() {
     assert!(q.creation_time.is_some());
     assert!(q.last_change_time.is_some());
     assert!(q.order.is_some());
+}
+
+#[tokio::test]
+async fn query_update_from_url_replaces_existing_query() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    let original_url = format!(
+        "{}/buglist.cgi?product=OldProduct&bug_status=NEW&f1=old&o1=substring&v1=stale&limit=25",
+        mock.uri()
+    );
+    run_q(&url_save_action("web", original_url)).await.unwrap();
+
+    let refreshed_url = format!(
+        "{}/buglist.cgi?product=NewProduct&bug_status=ASSIGNED&priority=P1\
+         &f1=qa_contact&o1=changedfrom&v1=qa%40example.com&limit=5&order=Bug+Number",
+        mock.uri()
+    );
+    let mut update = empty_update("web");
+    if let QueryAction::Update(UpdateArgs {
+        from_url,
+        limit,
+        fields,
+        exclude_fields,
+        created_since,
+        changed_since,
+        sort_args,
+        ..
+    }) = &mut update
+    {
+        *from_url = Some(refreshed_url);
+        *limit = Some(77);
+        *fields = Some("id,summary".into());
+        *exclude_fields = Some("creator".into());
+        *created_since = Some("2026-04-01".into());
+        *changed_since = Some("2026-04-15T12:00:00Z".into());
+        sort_args.sort = Some("priority".into());
+    }
+
+    run_q(&update).await.unwrap();
+
+    let config = Config::load().unwrap();
+    let q = &config.queries["web"];
+    assert_eq!(q.kind, crate::types::QueryKind::Url);
+    assert_eq!(q.product, vec!["NewProduct"]);
+    assert_eq!(q.status, vec!["ASSIGNED"]);
+    assert_eq!(q.priority, vec!["P1"]);
+    assert_eq!(q.limit, Some(77));
+    assert_eq!(q.fields.as_deref(), Some("id,summary"));
+    assert_eq!(q.exclude_fields.as_deref(), Some("creator"));
+    assert_eq!(q.creation_time.as_deref(), Some("2026-04-01T00:00:00Z"));
+    assert_eq!(q.last_change_time.as_deref(), Some("2026-04-15T12:00:00Z"));
+    assert_eq!(q.order.as_deref(), Some("priority ASC, bug_id"));
+    assert_eq!(q.server.as_deref(), Some("test"));
+    assert!(q
+        .source_url
+        .as_deref()
+        .is_some_and(|url| url.contains("product=NewProduct")));
+    assert!(q
+        .raw_params
+        .contains(&("f1".to_string(), "qa_contact".to_string())));
+    assert!(q
+        .raw_params
+        .contains(&("order".to_string(), "Bug Number".to_string())));
+    assert!(!q
+        .raw_params
+        .contains(&("v1".to_string(), "stale".to_string())));
 }
 
 #[tokio::test]

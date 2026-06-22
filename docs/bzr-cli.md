@@ -220,12 +220,13 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │               [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
 │   ├── list
 │   ├── show <NAME>
-│   ├── update <NAME> [--search <Q>] [--product <P>...] [--component <C>...] [--status <S>...]
-│   │                 [--assignee <A>...] [--creator <C>...] [--priority <P>...] [--severity <S>...]
-│   │                 [--resolution <R>...] [--version <V>...] [--op-sys <OS>...] [--platform <P>...]
-│   │                 [--whiteboard <W>...] [--target-milestone <M>...] [--qa-contact <Q>...] [--url <U>...]
+│   ├── update <NAME> (--from-url <URL> | [--search <Q>] [--product <P>...] [--component <C>...]
+│   │                 [--status <S>...] [--assignee <A>...] [--creator <C>...] [--priority <P>...]
+│   │                 [--severity <S>...] [--resolution <R>...] [--version <V>...] [--op-sys <OS>...]
+│   │                 [--platform <P>...] [--whiteboard <W>...] [--target-milestone <M>...]
+│   │                 [--qa-contact <Q>...] [--url <U>...] [--clear <FIELD>])
 │   │                 [--limit <N>] [--fields <F>] [--exclude-fields <F>] [--created-since <D>]
-│   │                 [--changed-since <D>] [--clear <FIELD>] [--sort <FIELD>] [--order asc|desc]
+│   │                 [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
 │   ├── delete <NAME>
 │   └── run <NAME> [--limit <N>] [--offset <N>] [--paginate] [--count]
 │                  [--fields <F>] [--exclude-fields <F>] [--server <NAME>]
@@ -1797,14 +1798,39 @@ replaces that field's saved list; a scalar flag (`--limit`, `--fields`,
 it unchanged. `--clear <FIELD>` (repeatable; names match the long flags, e.g.
 `status`, `limit`, `search`, `created-since`, `sort`) resets a saved field. At
 least one change is required, and an update that would leave the query with no
-filters is rejected (exit 7). Raw passthrough params from a `--from-url` query
-are preserved. `--sort` / `--order` set the persisted ordering. If a field is
-both set and cleared in one call, `--clear` wins.
+filters is rejected (exit 7). Raw passthrough params from an existing
+`--from-url` query are preserved during manual updates. `--sort` / `--order`
+set the persisted ordering. If a field is both set and cleared in one call,
+`--clear` wins.
+
+`--from-url <URL>` refreshes the saved query from a Bugzilla `buglist.cgi` URL.
+This replaces the saved URL-derived filters, raw passthrough params, source
+URL, and associated server with the newly parsed URL. It is mutually exclusive
+with `--search`, manual filter flags, and `--clear`. `--limit`, `--fields`,
+`--exclude-fields`, `--created-since`, `--changed-since`, `--sort`, and
+`--order` may still be supplied as stored overrides for the refreshed query.
 
 ```bash
 bzr query update firefox-new --status ASSIGNED
 bzr query update firefox-new --limit 100 --clear severity
+bzr query update firefox-web --from-url "https://bugzilla.example.com/buglist.cgi?product=Firefox&bug_status=NEW"
 ```
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `<NAME>` | Yes | Query name |
+| `--from-url <URL>` | No | Refresh query from a Bugzilla buglist.cgi URL. Mutually exclusive with `--search`, manual filter flags, and `--clear`. |
+| `--search <Q>` | No | Replace the saved free-text search |
+| `--limit <N>` | No | Replace the saved limit; with `--from-url`, overrides the URL's `limit=` value |
+| `--fields <F>` | No | Replace the saved field selection; with `--from-url`, stores this selection on the refreshed query |
+| `--exclude-fields <F>` | No | Replace the saved field exclusion; with `--from-url`, stores this exclusion on the refreshed query |
+| `--created-since <DATE>` | No | Replace the saved `creation_time` filter. Same accepted forms as [`bzr bug list --created-since`](#date-format). |
+| `--changed-since <DATE>` | No | Replace the saved `last_change_time` filter. Same accepted forms as [`bzr bug list --changed-since`](#date-format). |
+| `--clear <FIELD>` | No | Reset a saved field during manual updates. Not valid with `--from-url`. |
+
+Manual `bzr bug list` filter flags are also accepted for non-URL updates; see
+[`query save`](#bzr-query-save) and [bug list](#bzr-bug-list) for the shared
+filter syntax.
 
 ### `bzr query delete`
 

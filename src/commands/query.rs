@@ -52,6 +52,38 @@ fn explicit_sort_order(sort_args: &crate::cli::SortArgs) -> Option<String> {
         .map(|_| crate::validation::build_order(sort_args.sort.as_deref(), sort_args.order))
 }
 
+#[derive(Clone, Copy)]
+struct UrlQueryOverrides<'a> {
+    limit: Option<u32>,
+    fields: Option<&'a str>,
+    exclude_fields: Option<&'a str>,
+    creation_time: Option<&'a str>,
+    last_change_time: Option<&'a str>,
+    sort_args: &'a crate::cli::SortArgs,
+}
+
+fn saved_query_from_url(url_str: &str, overrides: UrlQueryOverrides<'_>) -> Result<SavedQuery> {
+    let config = Config::load()?;
+    let parsed = crate::url_parser::parse_bugzilla_url(url_str, &config)?;
+    let mut query = parsed.query;
+    query.limit = overrides.limit.or(query.limit);
+    query.fields = overrides.fields.map(ToOwned::to_owned).or(query.fields);
+    query.exclude_fields = overrides
+        .exclude_fields
+        .map(ToOwned::to_owned)
+        .or(query.exclude_fields);
+    query.creation_time = overrides
+        .creation_time
+        .map(ToOwned::to_owned)
+        .or(query.creation_time);
+    query.last_change_time = overrides
+        .last_change_time
+        .map(ToOwned::to_owned)
+        .or(query.last_change_time);
+    query.order = explicit_sort_order(overrides.sort_args);
+    Ok(query)
+}
+
 fn handle_save(
     args: &crate::cli::query::SaveArgs,
     format: OutputFormat,
@@ -90,18 +122,17 @@ fn handle_save(
         crate::validation::parse_optional_date(changed_since.as_deref(), "--changed-since")?;
 
     let query = if let Some(url_str) = from_url {
-        let config = Config::load()?;
-        let parsed = crate::url_parser::parse_bugzilla_url(url_str, &config)?;
-        let mut query = parsed.query;
-        // A flag value overrides the URL-parsed value; otherwise the parsed
-        // value is kept.
-        query.limit = (*limit).or(query.limit);
-        query.fields = fields.clone().or(query.fields);
-        query.exclude_fields = exclude_fields.clone().or(query.exclude_fields);
-        query.creation_time = creation_time.or(query.creation_time);
-        query.last_change_time = last_change_time.or(query.last_change_time);
-        query.order = explicit_sort_order(sort_args);
-        query
+        saved_query_from_url(
+            url_str,
+            UrlQueryOverrides {
+                limit: *limit,
+                fields: fields.as_deref(),
+                exclude_fields: exclude_fields.as_deref(),
+                creation_time: creation_time.as_deref(),
+                last_change_time: last_change_time.as_deref(),
+                sort_args,
+            },
+        )?
     } else {
         let kind = if search.is_some() {
             QueryKind::Search
@@ -313,8 +344,13 @@ fn handle_update(
 ) -> Result<()> {
     let crate::cli::query::UpdateArgs {
         name,
+        from_url,
+        limit,
+        fields,
+        exclude_fields,
         created_since,
         changed_since,
+        sort_args,
         ..
     } = args;
 
@@ -323,8 +359,39 @@ fn handle_update(
         crate::validation::parse_optional_date(created_since.as_deref(), "--created-since")?;
     let last_change_time =
         crate::validation::parse_optional_date(changed_since.as_deref(), "--changed-since")?;
+    let replacement = from_url
+        .as_deref()
+        .map(|url_str| {
+            saved_query_from_url(
+                url_str,
+                UrlQueryOverrides {
+                    limit: *limit,
+                    fields: fields.as_deref(),
+                    exclude_fields: exclude_fields.as_deref(),
+                    creation_time: creation_time.as_deref(),
+                    last_change_time: last_change_time.as_deref(),
+                    sort_args,
+                },
+            )
+        })
+        .transpose()?;
 
     Config::update_locked(|config| {
+        if let Some(query) = replacement {
+            if !config.queries.contains_key(name.as_str()) {
+                return Err(BzrError::config(format!("query '{name}' not found")));
+            }
+            if !query.has_filters() {
+                return Err(BzrError::InputValidation(
+                    "update would leave the query with no filters; a saved query must keep at \
+                     least one filter set"
+                        .into(),
+                ));
+            }
+            config.queries.insert(name.clone(), query);
+            return Ok(());
+        }
+
         let Some(q) = config.queries.get_mut(name.as_str()) else {
             return Err(BzrError::config(format!("query '{name}' not found")));
         };
