@@ -26,6 +26,14 @@ struct MergedFields {
     assigned_to: Option<String>,
     op_sys: Option<String>,
     rep_platform: Option<String>,
+    url: Option<String>,
+    whiteboard: Option<String>,
+    target_milestone: Option<String>,
+    deadline: Option<String>,
+    cc: Vec<String>,
+    keywords: Vec<String>,
+    groups: Vec<String>,
+    flags: Vec<String>,
     template_description: Option<String>,
 }
 
@@ -185,6 +193,7 @@ fn merge_fields(
         assignee,
         op_sys,
         rep_platform,
+        create_fields,
         ..
     } = args;
     let resolved_product = product
@@ -224,8 +233,40 @@ fn merge_fields(
         rep_platform: rep_platform
             .clone()
             .or_else(|| tmpl.and_then(|t| t.rep_platform.clone())),
+        url: create_fields
+            .url
+            .clone()
+            .or_else(|| tmpl.and_then(|t| t.url.clone())),
+        whiteboard: create_fields
+            .whiteboard
+            .clone()
+            .or_else(|| tmpl.and_then(|t| t.whiteboard.clone())),
+        target_milestone: create_fields
+            .target_milestone
+            .clone()
+            .or_else(|| tmpl.and_then(|t| t.target_milestone.clone())),
+        deadline: create_fields
+            .deadline
+            .clone()
+            .or_else(|| tmpl.and_then(|t| t.deadline.clone())),
+        cc: merge_template_vec(&create_fields.cc, tmpl, |t| &t.cc),
+        keywords: merge_template_vec(&create_fields.keywords, tmpl, |t| &t.keywords),
+        groups: merge_template_vec(&create_fields.groups, tmpl, |t| &t.groups),
+        flags: merge_template_vec(&create_fields.flag, tmpl, |t| &t.flags),
         template_description: tmpl.and_then(|t| t.description.clone()),
     })
+}
+
+fn merge_template_vec(
+    cli_values: &[String],
+    tmpl: Option<&crate::types::BugTemplate>,
+    template_values: impl FnOnce(&crate::types::BugTemplate) -> &[String],
+) -> Vec<String> {
+    if cli_values.is_empty() {
+        tmpl.map(template_values).unwrap_or_default().to_vec()
+    } else {
+        cli_values.to_vec()
+    }
 }
 
 /// One bug's worth of structured input for `bug create --from-json`. Keys match
@@ -579,18 +620,15 @@ pub(super) async fn handle(
         return handle_from_json(client, args, arg, format, w).await;
     }
 
-    let flags = crate::commands::runtime::flags::parse_flags(&create_fields.flag)?;
-    let deadline = crate::validation::parse_optional_date_only(
-        create_fields.deadline.as_deref(),
-        "--deadline",
-    )?;
-
     let resolved_description =
         resolve_description(description.as_deref(), description_file.as_deref())?;
     let editor_flow_active = resolved_description.is_none();
 
     let tmpl = load_template(template_name.as_deref())?;
     let merged = merge_fields(args, tmpl.as_ref())?;
+    let flags = crate::commands::runtime::flags::parse_flags(&merged.flags)?;
+    let deadline =
+        crate::validation::parse_optional_date_only(merged.deadline.as_deref(), "--deadline")?;
 
     let (resolved_summary, final_description): (Option<String>, Option<String>) =
         if editor_flow_active {
@@ -618,15 +656,15 @@ pub(super) async fn handle(
         op_sys: merged.op_sys,
         rep_platform: merged.rep_platform,
         alias: create_fields.alias.clone(),
-        url: create_fields.url.clone(),
-        whiteboard: create_fields.whiteboard.clone(),
-        target_milestone: create_fields.target_milestone.clone(),
+        url: merged.url,
+        whiteboard: merged.whiteboard,
+        target_milestone: merged.target_milestone,
         deadline,
         blocks: blocks.clone(),
         depends_on: depends_on.clone(),
-        cc: create_fields.cc.clone(),
-        keywords: create_fields.keywords.clone(),
-        groups: create_fields.groups.clone(),
+        cc: merged.cc,
+        keywords: merged.keywords,
+        groups: merged.groups,
         flags,
     };
     create_and_report(client, &params, format, w).await

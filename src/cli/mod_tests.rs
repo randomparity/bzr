@@ -1697,6 +1697,49 @@ fn parse_template_save_with_fields() {
 }
 
 #[test]
+fn parse_template_save_with_create_metadata_fields() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "template",
+        "save",
+        "routing",
+        "--url",
+        "https://example.com/repro",
+        "--whiteboard",
+        "needs-triage",
+        "--target-milestone",
+        "M1",
+        "--deadline",
+        "2026-12-31",
+        "--cc",
+        "a@example.com,b@example.com",
+        "--keywords",
+        "regression,security",
+        "--groups",
+        "confidential",
+        "--flag",
+        "review?(qa@example.com)",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Template {
+            action: TemplateAction::Save { name, fields },
+        } => {
+            assert_eq!(name, "routing");
+            assert_eq!(fields.url.as_deref(), Some("https://example.com/repro"));
+            assert_eq!(fields.whiteboard.as_deref(), Some("needs-triage"));
+            assert_eq!(fields.target_milestone.as_deref(), Some("M1"));
+            assert_eq!(fields.deadline.as_deref(), Some("2026-12-31"));
+            assert_eq!(fields.cc, vec!["a@example.com", "b@example.com"]);
+            assert_eq!(fields.keywords, vec!["regression", "security"]);
+            assert_eq!(fields.groups, vec!["confidential"]);
+            assert_eq!(fields.flag, vec!["review?(qa@example.com)"]);
+        }
+        _ => panic!("expected Template Save"),
+    }
+}
+
+#[test]
 fn parse_query_save_list_kind() {
     let cli = Cli::try_parse_from([
         "bzr",

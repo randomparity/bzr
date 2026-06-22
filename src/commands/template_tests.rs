@@ -106,6 +106,85 @@ async fn template_save_with_single_field_succeeds() {
 }
 
 #[tokio::test]
+async fn template_save_and_show_create_metadata_fields() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let action = TemplateAction::Save {
+        name: "routing".into(),
+        fields: TemplateFields {
+            url: Some("https://example.com/repro".into()),
+            whiteboard: Some("needs-triage".into()),
+            target_milestone: Some("M1".into()),
+            deadline: Some("2026-12-31".into()),
+            cc: vec!["cc@example.com".into()],
+            keywords: vec!["regression".into()],
+            groups: vec!["security".into()],
+            flag: vec!["review?".into()],
+            ..Default::default()
+        },
+    };
+    let mut save_io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut save_io.writers(),
+    )
+    .await;
+    let _ = save_io.out_str().to_string();
+    assert!(result.is_ok(), "template save failed: {result:?}");
+
+    let mut show_io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &TemplateAction::Show {
+            name: "routing".into(),
+        },
+        None,
+        OutputFormat::Json,
+        None,
+        &mut show_io.writers(),
+    )
+    .await;
+    assert!(result.is_ok(), "template show failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(show_io.out_str().trim()).unwrap();
+    assert_eq!(parsed["url"], "https://example.com/repro");
+    assert_eq!(parsed["whiteboard"], "needs-triage");
+    assert_eq!(parsed["target_milestone"], "M1");
+    assert_eq!(parsed["deadline"], "2026-12-31");
+    assert_eq!(parsed["cc"], serde_json::json!(["cc@example.com"]));
+    assert_eq!(parsed["keywords"], serde_json::json!(["regression"]));
+    assert_eq!(parsed["groups"], serde_json::json!(["security"]));
+    assert_eq!(parsed["flags"], serde_json::json!(["review?"]));
+}
+
+#[tokio::test]
+async fn template_save_rejects_malformed_deadline() {
+    let mut cap_io = crate::test_helpers::CapturedIo::new();
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let action = TemplateAction::Save {
+        name: "bad-deadline".into(),
+        fields: TemplateFields {
+            product: Some("TestProduct".into()),
+            deadline: Some("2026-99-99".into()),
+            ..Default::default()
+        },
+    };
+    let err = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut cap_io.writers(),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+    assert!(err.to_string().contains("--deadline"));
+}
+
+#[tokio::test]
 async fn template_delete_unknown_errors() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, _tmp) = setup_test_env().await;
@@ -456,6 +535,70 @@ async fn template_update_clear_resets_field() {
 }
 
 #[tokio::test]
+async fn template_update_merges_and_clears_create_metadata_fields() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run(&save_action("routing")).await.unwrap();
+
+    run(&TemplateAction::Update(UpdateArgs {
+        name: "routing".into(),
+        fields: TemplateFields {
+            url: Some("https://example.com/updated".into()),
+            whiteboard: Some("needs-routing".into()),
+            target_milestone: Some("M2".into()),
+            deadline: Some("2026-12-31".into()),
+            cc: vec!["cc@example.com".into()],
+            keywords: vec!["regression".into()],
+            groups: vec!["security".into()],
+            flag: vec!["review+".into()],
+            ..Default::default()
+        },
+        clear: vec![],
+    }))
+    .await
+    .unwrap();
+
+    let config = Config::load().unwrap();
+    let t = &config.templates["routing"];
+    assert_eq!(t.url.as_deref(), Some("https://example.com/updated"));
+    assert_eq!(t.whiteboard.as_deref(), Some("needs-routing"));
+    assert_eq!(t.target_milestone.as_deref(), Some("M2"));
+    assert_eq!(t.deadline.as_deref(), Some("2026-12-31"));
+    assert_eq!(t.cc, vec!["cc@example.com"]);
+    assert_eq!(t.keywords, vec!["regression"]);
+    assert_eq!(t.groups, vec!["security"]);
+    assert_eq!(t.flags, vec!["review+"]);
+
+    run(&TemplateAction::Update(UpdateArgs {
+        name: "routing".into(),
+        fields: TemplateFields::default(),
+        clear: vec![
+            "url".into(),
+            "whiteboard".into(),
+            "target-milestone".into(),
+            "deadline".into(),
+            "cc".into(),
+            "keywords".into(),
+            "groups".into(),
+            "flags".into(),
+        ],
+    }))
+    .await
+    .unwrap();
+
+    let config = Config::load().unwrap();
+    let t = &config.templates["routing"];
+    assert!(t.url.is_none());
+    assert!(t.whiteboard.is_none());
+    assert!(t.target_milestone.is_none());
+    assert!(t.deadline.is_none());
+    assert!(t.cc.is_empty());
+    assert!(t.keywords.is_empty());
+    assert!(t.groups.is_empty());
+    assert!(t.flags.is_empty());
+    assert_eq!(t.product.as_deref(), Some("TestProduct"));
+}
+
+#[tokio::test]
 async fn template_update_unknown_template_errors() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
     let err = run(&update_action(
@@ -541,6 +684,14 @@ fn clear_template_field_handles_every_name() {
         op_sys: Some("o".into()),
         rep_platform: Some("rp".into()),
         description: Some("d".into()),
+        url: Some("u".into()),
+        whiteboard: Some("w".into()),
+        target_milestone: Some("tm".into()),
+        deadline: Some("2026-12-31".into()),
+        cc: vec!["cc@example.com".into()],
+        keywords: vec!["k".into()],
+        groups: vec!["g".into()],
+        flags: vec!["review?".into()],
     };
     for name in [
         "product",
@@ -552,6 +703,15 @@ fn clear_template_field_handles_every_name() {
         "op-sys",
         "rep-platform",
         "description",
+        "url",
+        "whiteboard",
+        "target-milestone",
+        "deadline",
+        "cc",
+        "keywords",
+        "groups",
+        "flag",
+        "flags",
     ] {
         super::clear_template_field(&mut t, name).unwrap();
     }

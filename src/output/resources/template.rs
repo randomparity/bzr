@@ -3,7 +3,9 @@ use std::io::Write;
 
 use crate::types::{BugTemplate, OutputFormat};
 
-use crate::output::formatting::{write_field, write_formatted, write_optional_field};
+use crate::output::formatting::{
+    write_field, write_formatted, write_list_field, write_optional_field,
+};
 
 fn template_saved_message(name: &str, verb: &str) -> String {
     format!("{verb} template '{name}'")
@@ -88,6 +90,18 @@ pub fn write_template_detail<W: Write + ?Sized>(
         write_optional_field(out, "OS", view.template.op_sys.as_deref());
         write_optional_field(out, "Platform", view.template.rep_platform.as_deref());
         write_optional_field(out, "Description", view.template.description.as_deref());
+        write_optional_field(out, "URL", view.template.url.as_deref());
+        write_optional_field(out, "Whiteboard", view.template.whiteboard.as_deref());
+        write_optional_field(
+            out,
+            "Target Milestone",
+            view.template.target_milestone.as_deref(),
+        );
+        write_optional_field(out, "Deadline", view.template.deadline.as_deref());
+        write_list_field(out, "CC", &view.template.cc);
+        write_list_field(out, "Keywords", &view.template.keywords);
+        write_list_field(out, "Groups", &view.template.groups);
+        write_list_field(out, "Flags", &view.template.flags);
     });
 }
 

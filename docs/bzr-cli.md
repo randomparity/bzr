@@ -204,12 +204,18 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 ├── template
 │   ├── save <NAME> [--product <P>] [--component <C>] [--version <V>] [--priority <P>]
 │   │               [--severity <S>] [--assignee <A>] [--op-sys <OS>] [--rep-platform <PLAT>]
-│   │               [--description <D>]
+│   │               [--description <D>] [--url <U>] [--whiteboard <W>]
+│   │               [--target-milestone <M>]
+│   │               [--deadline <DATE>] [--cc <C>...] [--keywords <K>...]
+│   │               [--groups <G>...] [--flag <F>...]
 │   ├── list
 │   ├── show <NAME>
 │   ├── update <NAME> [--product <P>] [--component <C>] [--version <V>] [--priority <P>]
 │   │                 [--severity <S>] [--assignee <A>] [--op-sys <OS>] [--rep-platform <PLAT>]
-│   │                 [--description <D>] [--clear <FIELD>]
+│   │                 [--description <D>] [--url <U>] [--whiteboard <W>]
+│   │                 [--target-milestone <M>]
+│   │                 [--deadline <DATE>] [--cc <C>...] [--keywords <K>...]
+│   │                 [--groups <G>...] [--flag <F>...] [--clear <FIELD>]
 │   └── delete <NAME>
 ├── query
 │   ├── save <NAME> (--from-url <URL> | [--product <P>...] [--component <C>...] [--status <S>...]
@@ -1643,15 +1649,21 @@ troubleshooting.
 
 ## `bzr template` -- Bug Template Management
 
-Templates store named sets of default field values for bug creation. They are saved in the config file and can be used with `bzr bug create --template`.
+Templates store named sets of default field values for bug creation. They are
+saved in the config file and can be used with `bzr bug create --template`.
 
 ### `bzr template save`
 
-Save a named template with default field values.
+Save a named template with default field values for `bug create`. Templates can
+store routing fields and one-call create metadata: URL, whiteboard, target
+milestone, deadline, CC, keywords, groups, and flags.
 
 ```bash
-bzr template save security-bug --product Security --component Triage --priority P1 --severity critical
+bzr template save security-bug --product Security --component Triage \
+  --priority P1 --severity critical
 bzr template save kernel-bug --product Fedora --component kernel --assignee dev@example.com
+bzr template save security-routing --product Security --component Triage \
+  --whiteboard needs-triage --cc triage@example.com --flag 'review?'
 ```
 
 | Option | Required | Description |
@@ -1666,10 +1678,23 @@ bzr template save kernel-bug --product Fedora --component kernel --assignee dev@
 | `--op-sys <OS>` | No | Default operating system |
 | `--rep-platform <PLAT>` | No | Default hardware platform |
 | `--description <D>` | No | Default description |
+| `--url <U>` | No | Default URL field |
+| `--whiteboard <W>` | No | Default Status Whiteboard |
+| `--target-milestone <M>` | No | Default Target Milestone |
+| `--deadline <DATE>` | No | Default deadline (`YYYY-MM-DD`) |
+| `--cc <C>...` | No | Default CC entries (comma-separated, repeatable) |
+| `--keywords <K>...` | No | Default keywords (comma-separated, repeatable) |
+| `--groups <G>...` | No | Default groups (comma-separated, repeatable) |
+| `--flag <F>...` | No | Default Bugzilla flag updates. See [Flag Syntax](#flag-syntax). |
 
 At least one field must be set.
 
-Agent note: templates are agent-friendly because they remove repeated server-specific defaults from future `bug create` calls. Prefer them when agents repeatedly file similar bugs.
+When used with `bzr bug create --template <NAME>`, these values are applied as
+defaults. Explicit `bug create` flags still override the template values.
+
+Agent note: templates are agent-friendly because they remove repeated
+server-specific defaults from future `bug create` calls. Prefer them when agents
+repeatedly file similar bugs.
 
 ### `bzr template list`
 
@@ -1680,6 +1705,9 @@ bzr template list
 bzr --json template list
 ```
 
+JSON output includes every stored template field, including the create metadata
+fields. Unset fields are omitted from the saved config and from JSON values.
+
 ### `bzr template show`
 
 Show details of a template.
@@ -1689,18 +1717,25 @@ bzr template show security-bug
 bzr --json template show security-bug
 ```
 
+Use `--json` when an agent needs the full stored-default object, including
+`url`, `whiteboard`, `target_milestone`, `deadline`, `cc`, `keywords`,
+`groups`, and `flags`.
+
 ### `bzr template update`
 
 Edit an existing template in place. A supplied field flag replaces that field;
-an omitted flag leaves it unchanged. `--clear <FIELD>` (repeatable; names match
-the long flags: `product`, `component`, `version`, `priority`, `severity`,
-`assignee`, `op-sys`, `rep-platform`, `description`) resets a field. At least one
-change is required, and a fully-cleared template is rejected (exit 7). If a field
-is both set and cleared in one call, `--clear` wins.
+an omitted flag leaves it unchanged. `--clear <FIELD>` is repeatable and resets a
+stored field. Valid clear names are `product`, `component`, `version`,
+`priority`, `severity`, `assignee`, `op-sys`, `rep-platform`, `description`,
+`url`, `whiteboard`, `target-milestone`, `deadline`, `cc`, `keywords`, `groups`,
+`flag`, and `flags`. At least one change is required, and a fully-cleared
+template is rejected (exit 7). If a field is both set and cleared in one call,
+`--clear` wins.
 
 ```bash
 bzr template update security-bug --severity blocker
 bzr template update security-bug --clear assignee
+bzr template update security-bug --target-milestone M1 --clear whiteboard
 ```
 
 ### `bzr template delete`

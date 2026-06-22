@@ -16,6 +16,14 @@ fn make_template() -> BugTemplate {
         op_sys: None,
         rep_platform: None,
         description: Some("Default description".into()),
+        url: Some("https://example.com/repro".into()),
+        whiteboard: Some("needs-triage".into()),
+        target_milestone: Some("M1".into()),
+        deadline: Some("2026-12-31".into()),
+        cc: vec!["cc@example.com".into()],
+        keywords: vec!["regression".into()],
+        groups: vec!["security".into()],
+        flags: vec!["review?".into()],
     }
 }
 
@@ -37,6 +45,11 @@ fn template_list_json_serializes() {
     assert!(parsed["default"].is_object());
     assert_eq!(parsed["default"]["product"], "Widget");
     assert_eq!(parsed["default"]["component"], "Backend");
+    assert_eq!(
+        parsed["default"]["cc"],
+        serde_json::json!(["cc@example.com"])
+    );
+    assert_eq!(parsed["default"]["flags"], serde_json::json!(["review?"]));
 }
 
 #[test]
@@ -57,6 +70,7 @@ fn template_detail_json_with_flatten() {
     assert_eq!(parsed["name"], "test-tmpl");
     assert_eq!(parsed["product"], "Widget");
     assert_eq!(parsed["priority"], "P1");
+    assert_eq!(parsed["target_milestone"], "M1");
     assert!(parsed["version"].is_null());
 }
 
@@ -72,6 +86,14 @@ fn template_empty_fields_omitted_in_json() {
         op_sys: None,
         rep_platform: None,
         description: None,
+        url: None,
+        whiteboard: None,
+        target_milestone: None,
+        deadline: None,
+        cc: vec![],
+        keywords: vec![],
+        groups: vec![],
+        flags: vec![],
     };
     let json = serde_json::to_string(&template).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -109,6 +131,14 @@ fn template_summary_line_without_fields_is_name_only() {
             op_sys: None,
             rep_platform: None,
             description: None,
+            url: None,
+            whiteboard: None,
+            target_milestone: None,
+            deadline: None,
+            cc: vec![],
+            keywords: vec![],
+            groups: vec![],
+            flags: vec![],
         },
     );
     assert_eq!(line, "zzz");
@@ -138,6 +168,14 @@ fn write_template_detail_table_renders_missing_fields_as_dash() {
         op_sys: None,
         rep_platform: None,
         description: Some("Default description".into()),
+        url: Some("https://example.com/repro".into()),
+        whiteboard: Some("needs-triage".into()),
+        target_milestone: Some("M1".into()),
+        deadline: Some("2026-12-31".into()),
+        cc: vec!["cc@example.com".into()],
+        keywords: vec!["regression".into()],
+        groups: vec!["security".into()],
+        flags: vec!["review?".into()],
     };
 
     let output = capture_detail("default", &template, OutputFormat::Table);
@@ -150,6 +188,14 @@ fn write_template_detail_table_renders_missing_fields_as_dash() {
     assert!(output.contains("  -"));
     assert!(output.contains("Description"));
     assert!(output.contains("Default description"));
+    assert!(output.contains("URL"));
+    assert!(output.contains("https://example.com/repro"));
+    assert!(output.contains("Target Milestone"));
+    assert!(output.contains("M1"));
+    assert!(output.contains("CC"));
+    assert!(output.contains("cc@example.com"));
+    assert!(output.contains("Flags"));
+    assert!(output.contains("review?"));
 }
 
 #[test]
@@ -168,6 +214,14 @@ fn write_template_list_table_renders_sorted_summaries() {
             op_sys: None,
             rep_platform: None,
             description: None,
+            url: None,
+            whiteboard: None,
+            target_milestone: None,
+            deadline: None,
+            cc: vec![],
+            keywords: vec![],
+            groups: vec![],
+            flags: vec![],
         },
     );
 
