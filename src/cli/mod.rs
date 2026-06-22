@@ -122,6 +122,79 @@ pub struct Cli {
     #[arg(long, value_name = "EMAIL", global = true, requires = "server_url")]
     pub server_email: Option<String>,
 
+    /// Accept invalid TLS certificates for `--server-url`.
+    ///
+    /// Disables certificate validation for this one ad-hoc invocation only.
+    /// Nothing is read from or written to config. Mutually exclusive with
+    /// `--server-tls-ca-cert`, `--server-tls-pin-sha256`, and
+    /// `--server-tls-pin-now`.
+    #[arg(
+        long,
+        global = true,
+        requires = "server_url",
+        conflicts_with_all = [
+            "server_tls_ca_cert",
+            "server_tls_pin_sha256",
+            "server_tls_pin_now"
+        ],
+    )]
+    pub server_tls_insecure: bool,
+
+    /// PEM CA certificate file for `--server-url`.
+    ///
+    /// Adds this CA to trust for one ad-hoc invocation only. The path is not
+    /// persisted. Mutually exclusive with `--server-tls-insecure`,
+    /// `--server-tls-pin-sha256`, and `--server-tls-pin-now`.
+    #[arg(
+        long,
+        value_name = "PATH",
+        global = true,
+        requires = "server_url",
+        conflicts_with_all = [
+            "server_tls_insecure",
+            "server_tls_pin_sha256",
+            "server_tls_pin_now"
+        ],
+    )]
+    pub server_tls_ca_cert: Option<std::path::PathBuf>,
+
+    /// Pin a certificate fingerprint for `--server-url`.
+    ///
+    /// Uses the `sha256//<base64>` format accepted by named server config and
+    /// applies it to this one ad-hoc invocation only. Mutually exclusive with
+    /// `--server-tls-insecure`, `--server-tls-ca-cert`, and
+    /// `--server-tls-pin-now`.
+    #[arg(
+        long,
+        value_name = "PIN",
+        global = true,
+        requires = "server_url",
+        conflicts_with_all = [
+            "server_tls_insecure",
+            "server_tls_ca_cert",
+            "server_tls_pin_now"
+        ],
+    )]
+    pub server_tls_pin_sha256: Option<String>,
+
+    /// Pin the current certificate for one `--server-url` invocation.
+    ///
+    /// Connects once, captures the server certificate fingerprint, and uses
+    /// that pin for the remaining API calls in this process. The pin is not
+    /// persisted. Mutually exclusive with `--server-tls-insecure`,
+    /// `--server-tls-ca-cert`, and `--server-tls-pin-sha256`.
+    #[arg(
+        long,
+        global = true,
+        requires = "server_url",
+        conflicts_with_all = [
+            "server_tls_insecure",
+            "server_tls_ca_cert",
+            "server_tls_pin_sha256"
+        ],
+    )]
+    pub server_tls_pin_now: bool,
+
     /// Output format: `table` (default at a TTY), `json`, or `ndjson`.
     ///
     /// `ndjson` emits newline-delimited JSON — one compact value per line for

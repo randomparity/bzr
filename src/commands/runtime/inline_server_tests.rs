@@ -1,4 +1,4 @@
-use super::{get, set, InlineServer, INLINE_SERVER_NAME};
+use super::{get, set, InlineServer, InlineTlsOptions, INLINE_SERVER_NAME};
 use crate::ENV_LOCK;
 
 #[tokio::test]
@@ -11,6 +11,7 @@ async fn set_then_get_round_trips() {
         url: "https://bugzilla.example.com".into(),
         api_key_env: Some("BZR_KEY".into()),
         email: Some("dev@example.com".into()),
+        tls: InlineTlsOptions::default(),
     };
     set(Some(inline.clone()));
     assert_eq!(get(), Some(inline));
@@ -28,6 +29,7 @@ async fn set_then_get_round_trips_without_api_key_env() {
         url: "https://bugzilla.example.com".into(),
         api_key_env: None,
         email: None,
+        tls: InlineTlsOptions::default(),
     };
     set(Some(inline.clone()));
     assert_eq!(get(), Some(inline));

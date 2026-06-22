@@ -36,7 +36,7 @@ fail=0
 # Globals the tree's root line is expected to spell out, and that every command
 # inherits. -v/--verbose, --help and --version are auto/standard flags the
 # curated tree abbreviates (`[-v...]`) or omits, so they are not required there.
-ROOT_GLOBALS='--server --server-url --server-api-key-env --server-email --output --json --config --no-color --quiet --api --timeout --retry --dry-run --yes'
+ROOT_GLOBALS='--server --server-url --server-api-key-env --server-email --server-tls-insecure --server-tls-ca-cert --server-tls-pin-sha256 --server-tls-pin-now --output --json --config --no-color --quiet --api --timeout --retry --dry-run --yes'
 # Full inherited set excluded from per-command comparison on both sides (the
 # tree lists them once on its root line, but a command block may still repeat
 # one, e.g. `query run [--server <NAME>]`, and that is not drift). Derived from

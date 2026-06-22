@@ -292,6 +292,7 @@ cargo install --path . --locked
 bzr config set-server public-bz --url https://bugzilla.example.org
 bzr --server public-bz bug list --product Firefox --limit 10
 bzr --server-url https://bugzilla.example.org bug view 12345
+bzr --server-url https://bugzilla.internal --server-tls-ca-cert /etc/pki/internal-ca.pem server info
 
 # Preferred: read the API key from an environment variable
 export BZR_API_KEY=YOUR_API_KEY
@@ -485,7 +486,7 @@ once, captures the leaf certificate's SPKI fingerprint, prints it, and
 prompts before storing it:
 
 ```sh
-bzr config set-server my-bz https://bugzilla.example.com --tls-pin-now
+bzr config set-server my-bz --url https://bugzilla.example.com --tls-pin-now
 ```
 
 Subsequent connections to `my-bz` verify the pin. If the server
@@ -500,6 +501,24 @@ bzr config set-server my-bz --tls-pin-clear
 ```
 
 Removes both `tls_ca_cert` and `tls_pin_sha256` for the server.
+
+### Ad-hoc TLS for stateless runs
+
+The same trust shapes are available without writing config by using
+prefixed global flags with `--server-url`:
+
+```sh
+bzr --server-url https://bugzilla.internal --server-tls-ca-cert /etc/pki/internal-ca.pem server info
+bzr --server-url https://bugzilla.internal --server-tls-pin-sha256 sha256//BASE64PIN bug view 123
+bzr --server-url https://bugzilla.internal --server-tls-pin-now server info
+```
+
+`--server-tls-insecure`, `--server-tls-ca-cert`,
+`--server-tls-pin-sha256`, and `--server-tls-pin-now` are mutually
+exclusive, apply only to the current process, and are never persisted.
+`--server-tls-pin-now` trusts the first certificate presented for this
+invocation only; use an explicit CA or fingerprint when CI needs
+reproducible trust.
 
 ### Storage
 

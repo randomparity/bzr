@@ -307,6 +307,7 @@ async fn inline_server_connects_without_config_and_persists_nothing() {
             url: mock.uri(),
             api_key_env: Some("BZR_INLINE_TEST_KEY".into()),
             email: None,
+            tls: crate::commands::runtime::inline_server::InlineTlsOptions::default(),
         },
     ));
     let result = super::connect_and_configure(None, None).await;
@@ -347,6 +348,7 @@ async fn inline_credentialless_server_connects_without_config() {
             url: mock.uri(),
             api_key_env: None,
             email: None,
+            tls: crate::commands::runtime::inline_server::InlineTlsOptions::default(),
         },
     ));
     let result = super::connect_and_configure(None, None).await;
@@ -391,6 +393,7 @@ async fn inline_server_missing_env_var_is_clean_error() {
             url: "https://bugzilla.example.com".into(),
             api_key_env: Some("BZR_INLINE_ABSENT_KEY".into()),
             email: None,
+            tls: crate::commands::runtime::inline_server::InlineTlsOptions::default(),
         },
     ));
     let result = super::connect_and_configure(None, None).await;

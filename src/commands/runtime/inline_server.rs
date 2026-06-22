@@ -11,12 +11,23 @@
 //! before releasing the lock, so the inline definition cannot leak into a
 //! sibling test that expects config-based resolution.
 
+use std::path::PathBuf;
 use std::sync::RwLock;
 
 /// Synthetic server name for an inline server. Parenthesized so it can never
 /// collide with a real (TOML-table) config server name; shown in error
 /// messages and any TLS prompt.
 pub const INLINE_SERVER_NAME: &str = "(inline)";
+
+/// TLS trust options for an ad-hoc server. These mirror the named-server TLS
+/// controls that make sense without persistent config.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct InlineTlsOptions {
+    pub insecure: bool,
+    pub ca_cert_path: Option<PathBuf>,
+    pub pin_sha256: Option<String>,
+    pub pin_now: bool,
+}
 
 /// An ad-hoc server defined entirely on the command line. The API key env var
 /// is optional for public read-only commands.
@@ -25,6 +36,7 @@ pub struct InlineServer {
     pub url: String,
     pub api_key_env: Option<String>,
     pub email: Option<String>,
+    pub tls: InlineTlsOptions,
 }
 
 static INLINE: RwLock<Option<InlineServer>> = RwLock::new(None);
