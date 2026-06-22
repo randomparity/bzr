@@ -13,7 +13,9 @@ pub mod template;
 mod user;
 
 pub use attachment::AttachmentAction;
-pub use bug::{BugAction, CommentArgs, CreateFieldArgs, FieldArgs, PageArgs, SortArgs};
+pub use bug::{
+    BugAction, CloneCreateFieldArgs, CommentArgs, CreateFieldArgs, FieldArgs, PageArgs, SortArgs,
+};
 pub use bug::{
     CloneArgs, CloseArgs, CreateArgs, DupArgs, HistoryArgs, ListArgs, MyArgs, ReopenArgs,
     ResolveArgs, SearchArgs, UpdateArgs, ViewArgs,

@@ -1,9 +1,11 @@
 use crate::cli::CloneArgs;
 use crate::client::BugzillaClient;
+use crate::commands::runtime::flags::parse_flags;
 use crate::error::Result;
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
 use crate::types::{CreateBugParams, OutputFormat};
+use crate::validation::parse_optional_date_only;
 
 pub(super) async fn handle(
     client: &BugzillaClient,
@@ -23,12 +25,16 @@ pub(super) async fn handle(
         assignee,
         op_sys,
         rep_platform,
+        create_fields,
         no_comment,
         add_depends_on,
         add_blocks,
         no_cc,
         no_keywords,
     } = args;
+
+    let flags = parse_flags(&create_fields.flag)?;
+    let deadline = parse_optional_date_only(create_fields.deadline.as_deref(), "--deadline")?;
 
     // Fetch source bug with all fields needed for cloning
     let source = client.get_bug(id, None, None).await?;
@@ -71,14 +77,19 @@ pub(super) async fn handle(
         assigned_to: assignee.clone().or(source.assigned_to),
         op_sys: op_sys.clone().or(source.op_sys),
         rep_platform: rep_platform.clone().or(source.rep_platform),
+        url: create_fields.url.clone().or(source.url),
+        whiteboard: create_fields.whiteboard.clone().or(source.whiteboard),
+        target_milestone: create_fields
+            .target_milestone
+            .clone()
+            .or(source.target_milestone),
+        deadline: deadline.or(source.deadline),
         blocks,
         depends_on,
-        cc: if *no_cc { vec![] } else { source.cc },
-        keywords: if *no_keywords {
-            vec![]
-        } else {
-            source.keywords
-        },
+        cc: clone_list(source.cc, &create_fields.cc, *no_cc),
+        keywords: clone_list(source.keywords, &create_fields.keywords, *no_keywords),
+        groups: create_fields.groups.clone(),
+        flags,
         ..Default::default()
     };
 
@@ -115,6 +126,20 @@ pub(super) async fn handle(
         w.out,
     );
     Ok(())
+}
+
+fn clone_list(
+    source_values: Vec<String>,
+    override_values: &[String],
+    omit_source: bool,
+) -> Vec<String> {
+    if omit_source {
+        Vec::new()
+    } else if override_values.is_empty() {
+        source_values
+    } else {
+        override_values.to_vec()
+    }
 }
 
 /// Emit the would-be clone payload without writing, marked `"action":"dry-run"`.

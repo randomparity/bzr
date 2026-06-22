@@ -1669,6 +1669,89 @@ fn parse_bug_clone_minimal() {
 }
 
 #[test]
+fn parse_bug_clone_with_create_metadata_overrides() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "clone",
+        "123",
+        "--url",
+        "https://example.com/repro",
+        "--whiteboard",
+        "needs-routing",
+        "--target-milestone",
+        "M1",
+        "--deadline",
+        "2026-12-31",
+        "--cc",
+        "a@example.com,b@example.com",
+        "--keywords",
+        "regression,security",
+        "--groups",
+        "confidential",
+        "--flag",
+        "review?(qa@example.com)",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Bug {
+            action:
+                BugAction::Clone(super::CloneArgs {
+                    id, create_fields, ..
+                }),
+        } => {
+            assert_eq!(id, "123");
+            assert_eq!(
+                create_fields.url.as_deref(),
+                Some("https://example.com/repro")
+            );
+            assert_eq!(create_fields.whiteboard.as_deref(), Some("needs-routing"));
+            assert_eq!(create_fields.target_milestone.as_deref(), Some("M1"));
+            assert_eq!(create_fields.deadline.as_deref(), Some("2026-12-31"));
+            assert_eq!(create_fields.cc, vec!["a@example.com", "b@example.com"]);
+            assert_eq!(create_fields.keywords, vec!["regression", "security"]);
+            assert_eq!(create_fields.groups, vec!["confidential"]);
+            assert_eq!(create_fields.flag, vec!["review?(qa@example.com)"]);
+        }
+        _ => panic!("expected Bug Clone"),
+    }
+}
+
+#[test]
+fn parse_bug_clone_cc_override_conflicts_with_no_cc() {
+    let result = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "clone",
+        "123",
+        "--no-cc",
+        "--cc",
+        "a@example.com",
+    ]);
+    let Err(err) = result else {
+        panic!("--cc should conflict with --no-cc");
+    };
+    assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+}
+
+#[test]
+fn parse_bug_clone_keywords_override_conflicts_with_no_keywords() {
+    let result = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "clone",
+        "123",
+        "--no-keywords",
+        "--keywords",
+        "regression",
+    ]);
+    let Err(err) = result else {
+        panic!("--keywords should conflict with --no-keywords");
+    };
+    assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+}
+
+#[test]
 fn parse_template_save_with_fields() {
     let cli = Cli::try_parse_from([
         "bzr",

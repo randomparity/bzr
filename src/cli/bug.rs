@@ -79,6 +79,42 @@ pub struct CreateFieldArgs {
     pub flag: Vec<String>,
 }
 
+/// Create-time metadata overrides accepted by `bug clone`.
+///
+/// This intentionally omits `--alias`: a clone must never copy the source
+/// alias, and assigning a new unique alias while cloning is a narrower workflow
+/// than the metadata fields users commonly need to adjust.
+#[derive(Args, Debug, Clone, Default)]
+pub struct CloneCreateFieldArgs {
+    /// Override the URL field.
+    #[arg(long)]
+    pub url: Option<String>,
+    /// Override the Status Whiteboard.
+    #[arg(long)]
+    pub whiteboard: Option<String>,
+    /// Override the Target Milestone.
+    #[arg(long)]
+    pub target_milestone: Option<String>,
+    /// Override the deadline date (`YYYY-MM-DD`).
+    #[arg(long, value_name = "DATE")]
+    pub deadline: Option<String>,
+    /// Replace the copied CC list (comma-separated, repeatable).
+    #[arg(long, value_delimiter = ',', conflicts_with = "no_cc")]
+    pub cc: Vec<String>,
+    /// Replace the copied keywords (comma-separated, repeatable).
+    #[arg(long, value_delimiter = ',', conflicts_with = "no_keywords")]
+    pub keywords: Vec<String>,
+    /// Add the cloned bug to these groups (comma-separated, repeatable).
+    #[arg(long, value_delimiter = ',')]
+    pub groups: Vec<String>,
+    /// Set or request a flag using Bugzilla flag syntax (repeatable).
+    ///
+    /// Accepted forms: `name+` (granted), `name-` (denied), `name?`
+    /// (request), or `name?(user@example.com)` (request a specific user).
+    #[arg(long)]
+    pub flag: Vec<String>,
+}
+
 /// Shared comment flags for the convenience verbs (`resolve`, `close`,
 /// `reopen`, `dup`), which post a comment atomically with the state change —
 /// the same `--comment` / `--comment-file` / `--comment-private` set `bug
@@ -523,6 +559,8 @@ pub struct CloneArgs {
     /// Override hardware platform
     #[arg(long)]
     pub rep_platform: Option<String>,
+    #[command(flatten)]
+    pub create_fields: CloneCreateFieldArgs,
     /// Skip adding "Cloned from bug #N" comment
     #[arg(long)]
     pub no_comment: bool,
@@ -983,16 +1021,18 @@ pub enum BugAction {
     ///
     /// Copies the source bug's product, component, version, summary,
     /// description, priority, severity, assignee, op-sys,
-    /// rep-platform, CC list, and keywords into a new bug. Pass any
-    /// of the override flags (`--summary`, `--product`, ...) to
-    /// change values for the clone; unspecified fields inherit from
-    /// the source.
+    /// rep-platform, URL, whiteboard, target milestone, deadline, CC
+    /// list, and keywords into a new bug. Pass any of the override
+    /// flags (`--summary`, `--product`, `--url`, ...) to change values
+    /// for the clone; unspecified fields inherit from the source.
     ///
     /// By default the new bug gets a "Cloned from bug #N" comment;
     /// disable with `--no-comment`. Use `--add-depends-on` to link
     /// the new bug as a dependency of the source, or `--add-blocks`
     /// to make it block the source. `--no-cc` and `--no-keywords`
-    /// skip copying those lists.
+    /// skip copying those lists; `--cc` and `--keywords` replace the
+    /// copied lists. `--groups` and `--flag` are explicit additions
+    /// for the new bug and are not copied from the source.
     ///
     /// Examples:
     ///
