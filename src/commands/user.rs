@@ -149,6 +149,14 @@ pub fn is_dry_runnable(action: &UserAction) -> bool {
     )
 }
 
+pub(crate) fn requires_credentials(action: &UserAction) -> Option<&'static str> {
+    match action {
+        UserAction::Search { .. } => None,
+        UserAction::Create { .. } => Some("user create"),
+        UserAction::Update { .. } => Some("user update"),
+    }
+}
+
 fn build_create_params(
     from_json: Option<&str>,
     email: Option<&str>,

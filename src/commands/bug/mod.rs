@@ -81,6 +81,22 @@ pub fn is_dry_runnable(action: &BugAction) -> bool {
     )
 }
 
+pub(crate) fn requires_credentials(action: &BugAction) -> Option<&'static str> {
+    match action {
+        BugAction::List(_) | BugAction::View(_) | BugAction::Search(_) | BugAction::History(_) => {
+            None
+        }
+        BugAction::Create(_) => Some("bug create"),
+        BugAction::My(_) => Some("bug my"),
+        BugAction::Clone(_) => Some("bug clone"),
+        BugAction::Update(_) => Some("bug update"),
+        BugAction::Resolve(_) => Some("bug resolve"),
+        BugAction::Close(_) => Some("bug close"),
+        BugAction::Reopen(_) => Some("bug reopen"),
+        BugAction::Dup(_) => Some("bug dup"),
+    }
+}
+
 /// Dispatch bug actions to their respective handlers.
 pub async fn execute(
     action: &BugAction,

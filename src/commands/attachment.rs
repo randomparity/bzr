@@ -19,6 +19,16 @@ use crate::types::Attachment;
 use crate::types::OutputFormat;
 use crate::types::{UpdateAttachmentParams, UploadAttachmentParams};
 
+pub(crate) fn requires_credentials(action: &AttachmentAction) -> Option<&'static str> {
+    match action {
+        AttachmentAction::List { .. }
+        | AttachmentAction::View { .. }
+        | AttachmentAction::Download { .. } => None,
+        AttachmentAction::Upload(_) => Some("attachment upload"),
+        AttachmentAction::Update(_) => Some("attachment update"),
+    }
+}
+
 /// Collapse a `--flag` / `--no-flag` presence pair into a tri-state.
 ///
 /// Returns `Some(true)` for the positive flag, `Some(false)` for the negative,
