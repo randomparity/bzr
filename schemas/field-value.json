@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/randomparity/bzr/schemas/field-value.json",
   "title": "FieldValue",
-  "description": "An allowable value for a Bugzilla field as emitted in `--format json` output.",
+  "description": "An allowable value for a Bugzilla field as emitted in `--json` output.",
   "type": "object",
   "properties": {
     "name": {

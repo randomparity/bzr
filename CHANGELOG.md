@@ -47,6 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   without a separate ID lookup. (#388)
 - `bzr schema error` now publishes the JSON error envelope emitted on stderr
   under `--json` and `--output ndjson`. (#390)
+- CLI docs, source help comments, schema descriptions, and bundled agent-skill
+  docs are guarded against stale long flag names such as `--is-patch`,
+  `--format json`, and `--ndjson`. (#391)
 - `bug update` now accepts `--url` and `--target-milestone`, matching fields
   that `bug create` can already set. (#363)
 - `bug resolve`, `bug close`, `bug reopen`, and `bug dup` now accept
@@ -182,7 +185,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   (#305)
 
 - `bzr schema [NAME]` publishes checked-in JSON Schemas (draft 2020-12) for the
-  `--format json` output of each command family — the read-resource objects
+  `--json` output of each command family — the read-resource objects
   (`bug`, `comment`, `attachment`, `product`, `component`, `classification`,
   `user`, `group`, `field-value`) and the mutation/result envelopes
   (`action-result`, `batch-result`, `batch-create-result`, `multi-bug-view`,

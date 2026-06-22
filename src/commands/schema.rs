@@ -1,7 +1,7 @@
 //! `bzr schema` — publish JSON Schemas for the tool's JSON contracts.
 //!
 //! Purely local: no config, network, or auth. Each schema describes either a
-//! `--format json` output body or a `--from-json` input payload so agents can
+//! `--json` output body or a `--from-json` input payload so agents can
 //! validate against a contract instead of branching per command. The schema
 //! files are checked into `schemas/` at the repo root and embedded here at build
 //! time; drift tests validate representative serialized values and structured
@@ -92,7 +92,7 @@ fn write_one(name: &str, w: &mut Writers<'_>) -> Result<()> {
 }
 
 /// List available schema names: one per line for table, a JSON array for
-/// `--json`, one name per line for `--ndjson`.
+/// `--json`, one name per line for `--output ndjson`.
 fn write_list(format: OutputFormat, w: &mut Writers<'_>) {
     let names = available_names();
     let table = names.join("\n");

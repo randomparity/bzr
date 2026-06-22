@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/randomparity/bzr/schemas/comment.json",
   "title": "Comment",
-  "description": "A bug comment as emitted in `--format json` output.",
+  "description": "A bug comment as emitted in `--json` output.",
   "type": "object",
   "properties": {
     "id": {

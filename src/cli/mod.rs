@@ -675,7 +675,7 @@ pub enum Commands {
 
     /// Print a published JSON Schema for a command's JSON contract.
     ///
-    /// `--format json` output shapes and selected `--from-json` input payloads
+    /// `--json` output shapes and selected `--from-json` input payloads
     /// are documented as checked-in JSON Schema (draft 2020-12) so agents can
     /// validate against a contract instead of branching per command. Run
     /// without a name to list the available schema names; pass one to print
