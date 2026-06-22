@@ -238,12 +238,11 @@ pub struct Cli {
 pub enum Commands {
     /// Operate on bugs: list, view, search, create, clone, update, history.
     ///
-    /// The `bug` group is the most commonly used part of bzr. Read paths
-    /// (`list`, `view`, `search`, `history`, `my`) work without any
-    /// authentication beyond what the configured server requires; write
-    /// paths (`create`, `clone`, `update`) require credentials and the
-    /// caller must have appropriate Bugzilla permissions on the target
-    /// product.
+    /// The `bug` group is the most commonly used part of bzr. Public read
+    /// paths (`list`, `view`, `search`, `history`) work without any
+    /// authentication beyond what the configured server requires. Write paths
+    /// (`create`, `clone`, `update`) and identity-derived reads (`my`) require
+    /// credentials.
     ///
     /// Filter flags (`--product`, `--component`, `--status`, `--assignee`,
     /// `--creator`, `--priority`, `--severity`) on `list` and `my` are
