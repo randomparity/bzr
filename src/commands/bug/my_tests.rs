@@ -54,6 +54,7 @@ async fn bug_my_returns_assigned_by_default() {
         },
         sort_args: crate::cli::SortArgs::default(),
         count: false,
+        ..Default::default()
     });
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result =
@@ -98,6 +99,7 @@ async fn bug_my_passes_status_limit_and_field_filters() {
         },
         sort_args: crate::cli::SortArgs::default(),
         count: false,
+        ..Default::default()
     });
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -110,6 +112,73 @@ async fn bug_my_passes_status_limit_and_field_filters() {
     .await;
     let _ = __io2.out_str().to_string();
     assert!(result.is_ok(), "bug my with filters failed: {result:?}");
+}
+
+#[tokio::test]
+async fn bug_my_all_passes_shared_filters_to_each_category() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_whoami(&mock).await;
+
+    for identity_filter in ["assigned_to", "creator", "cc"] {
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param(identity_filter, "dev@test.com"))
+            .and(query_param("product", "Core"))
+            .and(query_param("component", "Networking"))
+            .and(query_param("priority", "P1"))
+            .and(query_param("severity", "S2"))
+            .and(query_param("creation_time", "2026-04-01T00:00:00Z"))
+            .and(query_param("last_change_time", "2026-04-15T12:00:00Z"))
+            .and(query_param("whiteboard", "needs-review"))
+            .and(query_param("target_milestone", "5.0"))
+            .and(query_param("version", "9.4"))
+            .and(query_param("op_sys", "Linux"))
+            .and(query_param("platform", "x86_64"))
+            .and(query_param("resolution", "FIXED"))
+            .and(query_param("qa_contact", "qa@example.com"))
+            .and(query_param("url", "github.com/foo"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+            .expect(1)
+            .mount(&mock)
+            .await;
+    }
+
+    let action = BugAction::My(crate::cli::MyArgs {
+        page_args: crate::cli::PageArgs::default(),
+        created: false,
+        cc: false,
+        all: true,
+        status: vec![],
+        limit: 50,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
+        sort_args: crate::cli::SortArgs::default(),
+        count: false,
+        product: vec!["Core".into()],
+        component: vec!["Networking".into()],
+        priority: vec!["P1".into()],
+        severity: vec!["S2".into()],
+        created_since: Some("2026-04-01".into()),
+        changed_since: Some("2026-04-15T12:00:00Z".into()),
+        whiteboard: vec!["needs-review".into()],
+        target_milestone: vec!["5.0".into()],
+        version: vec!["9.4".into()],
+        op_sys: vec!["Linux".into()],
+        platform: vec!["x86_64".into()],
+        resolution: vec!["FIXED".into()],
+        qa_contact: vec!["qa@example.com".into()],
+        url: vec!["github.com/foo".into()],
+    });
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
+            .await;
+    assert!(
+        result.is_ok(),
+        "bug my --all with shared filters failed: {result:?}"
+    );
 }
 
 #[tokio::test]
@@ -140,6 +209,7 @@ async fn bug_my_created_only_runs_creator_search_not_assigned() {
         },
         sort_args: crate::cli::SortArgs::default(),
         count: false,
+        ..Default::default()
     });
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -181,6 +251,7 @@ async fn bug_my_cc_only_runs_cc_search_not_assigned_or_creator() {
         },
         sort_args: crate::cli::SortArgs::default(),
         count: false,
+        ..Default::default()
     });
     let mut __io4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -229,6 +300,7 @@ async fn bug_my_all_deduplicates() {
         },
         sort_args: crate::cli::SortArgs::default(),
         count: false,
+        ..Default::default()
     });
     let mut __io5 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
@@ -278,6 +350,7 @@ async fn bug_my_all_count_reports_distinct_total() {
         },
         sort_args: crate::cli::SortArgs::default(),
         count: true,
+        ..Default::default()
     });
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result =
