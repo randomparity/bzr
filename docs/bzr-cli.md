@@ -39,6 +39,10 @@ For installation and quick start, see [README.md](../README.md).
 | `--server-url <URL>` | Connect to an ad-hoc server by URL, without using config. Defines an ephemeral server for this one invocation: nothing is read from or written to the config file. `--server-api-key-env` is optional for read-only commands and required for writes and identity-derived commands; conflicts with `--server`. Pairs with `--config` for sandboxed throwaway runs. |
 | `--server-api-key-env <ENV>` | Environment variable holding the API key for `--server-url`. The key is read from this variable, never passed as a literal flag, so the secret stays out of the process argument list. Only meaningful with `--server-url`. |
 | `--server-email <EMAIL>` | Login email for `--server-url`, for the Bugzilla 5.0 whoami fallback. Optional; only meaningful with `--server-url`. |
+| `--server-tls-insecure` | Accept invalid TLS certificates for one `--server-url` invocation. Mutually exclusive with the other `--server-tls-*` trust options and never persisted. |
+| `--server-tls-ca-cert <PATH>` | Add a PEM CA certificate file to trust for one `--server-url` invocation. Mutually exclusive with the other `--server-tls-*` trust options and never persisted. |
+| `--server-tls-pin-sha256 <PIN>` | Pin the server certificate fingerprint for one `--server-url` invocation. Uses the same `sha256//<base64>` format as named server config and never persists. |
+| `--server-tls-pin-now` | Capture the current server certificate and pin it for the rest of this `--server-url` process only. The first contact is trusted for this invocation and no config is written. |
 | `--output <FORMAT>` | Output format: `table`, `json`, or `ndjson`. Defaults to table at a TTY; auto-selects json when stdout is not a TTY. `ndjson` emits newline-delimited JSON — one compact value per line for list results (a single object or result envelope prints as one compact line) — for streaming into agents and `jq -c`. |
 | `--json` | Shorthand for `--output json` |
 | `--config <PATH>` | Use an alternate `config.toml` for reads and writes. Takes precedence over `BZR_CONFIG`; both override the default config directory. |
@@ -84,7 +88,7 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 | 10 | Data integrity error (e.g. missing attachment data) |
 | 11 | Batch partial failure (some operations succeeded, some failed) |
 | 12 | Keyring error (OS keychain access failed, e.g. locked keyring or missing daemon) |
-| 13 | TLS error (certificate pin mismatch or issuer changed; use `--tls-pin-now` to re-pin or `--tls-pin-clear` to remove the pin) |
+| 13 | TLS error (certificate pin mismatch or issuer changed; use `--tls-pin-now` to re-pin, `--tls-pin-clear` to remove a named-server pin, or `--server-tls-pin-now` for session-only ad-hoc trust) |
 | 14 | Mid-air collision (`bug update`/convenience verb `--expect-unchanged-since`: the bug changed since the given time; re-read and retry) |
 
 *Exit code 2 is produced by clap for argument errors before bzr's error handling runs, in addition to resource-not-found errors from bzr itself.
@@ -92,7 +96,7 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 ## Command Tree
 
 ```
-bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--server-email <EMAIL>] [--output table|json|ndjson] [--json] [--config <PATH>] [--no-color] [--quiet] [--api rest|xmlrpc|hybrid] [--timeout <SECS>] [--retry <N>] [--dry-run] [--yes] [-v...]
+bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--server-email <EMAIL>] [--server-tls-insecure | --server-tls-ca-cert <PATH> | --server-tls-pin-sha256 <PIN> | --server-tls-pin-now] [--output table|json|ndjson] [--json] [--config <PATH>] [--no-color] [--quiet] [--api rest|xmlrpc|hybrid] [--timeout <SECS>] [--retry <N>] [--dry-run] [--yes] [-v...]
 ├── bug
 │   ├── list [--product <P>...] [--component <C>...] [--status <S>...] [--assignee <A>...]
 │   │        [--creator <C>...] [--priority <P>...] [--severity <S>...] [--id <ID>...]
@@ -1427,10 +1431,21 @@ exploration:
 bzr config set-server public-bz --url https://bugzilla.example.org
 bzr --server public-bz bug list --product Firefox --limit 10
 bzr --server-url https://bugzilla.example.org bug view 12345
+bzr --server-url https://bugzilla.internal --server-tls-ca-cert /etc/pki/internal-ca.pem server info
+bzr --server-url https://bugzilla.internal --server-tls-pin-now server info
 ```
 
 Writes and identity-derived commands such as `whoami` and `bug my` require a
 credential source and fail before writing when none is configured.
+
+Ad-hoc `--server-url` invocations support prefixed TLS trust flags for
+stateless internal-server runs: `--server-tls-insecure`,
+`--server-tls-ca-cert <PATH>`, `--server-tls-pin-sha256 <PIN>`, and
+`--server-tls-pin-now`. These choices are mutually exclusive, require
+`--server-url`, and are never written to config. `--server-tls-pin-now`
+captures the first certificate presented and pins it only for the current
+process; use an explicit CA or fingerprint when CI needs reproducible trust.
+There is no ad-hoc `--tls-pin-clear` equivalent because no pin is stored.
 
 The `--tls-insecure` flag disables TLS certificate verification for the server. Use this for servers with self-signed, expired, or wrong-hostname certificates (e.g. internal Bugzilla instances behind corporate firewalls).
 

@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Named and ad-hoc Bugzilla servers can be used without credentials for
   read-only commands. Writes and identity-derived commands now fail fast when
   no credential source is available. (#380)
+- Ad-hoc `--server-url` runs now accept stateless TLS trust controls:
+  `--server-tls-insecure`, `--server-tls-ca-cert`,
+  `--server-tls-pin-sha256`, and session-only `--server-tls-pin-now`.
+  These settings are never persisted to config. (#381)
 - `bug update` now accepts `--url` and `--target-milestone`, matching fields
   that `bug create` can already set. (#363)
 - `bug resolve`, `bug close`, `bug reopen`, and `bug dup` now accept

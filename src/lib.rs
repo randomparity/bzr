@@ -153,6 +153,12 @@ fn resolve_inline_server(cli: &cli::Cli) -> Option<commands::runtime::inline_ser
             url: url.clone(),
             api_key_env: cli.server_api_key_env.clone(),
             email: cli.server_email.clone(),
+            tls: commands::runtime::inline_server::InlineTlsOptions {
+                insecure: cli.server_tls_insecure,
+                ca_cert_path: cli.server_tls_ca_cert.clone(),
+                pin_sha256: cli.server_tls_pin_sha256.clone(),
+                pin_now: cli.server_tls_pin_now,
+            },
         })
 }
 

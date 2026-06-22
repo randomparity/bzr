@@ -377,6 +377,7 @@ struct ConnectTarget {
     tls_config: TlsConfig,
     cached_auth: Option<AuthMethod>,
     cached_mode: Option<ApiMode>,
+    pin_current_cert: bool,
 }
 
 /// Resolve the connection target. When an inline server is set (global
@@ -389,7 +390,7 @@ fn resolve_connect_target(
 ) -> Result<ConnectTarget> {
     if let Some(inline) = crate::commands::runtime::inline_server::get() {
         let name = crate::commands::runtime::inline_server::INLINE_SERVER_NAME;
-        let srv = match inline.api_key_env {
+        let mut srv = match inline.api_key_env {
             Some(api_key_env) => {
                 ServerConfig::from_url_with_env_key(inline.url, api_key_env, inline.email)
             }
@@ -399,6 +400,9 @@ fn resolve_connect_target(
                 ..ServerConfig::default()
             },
         };
+        srv.tls_insecure = inline.tls.insecure;
+        srv.tls_ca_cert = inline.tls.ca_cert_path;
+        srv.tls_pin_sha256 = inline.tls.pin_sha256;
         srv.validate(name)?;
         let tls_config = srv.tls_config(name);
         let ctx = ConnectContext {
@@ -414,6 +418,7 @@ fn resolve_connect_target(
             tls_config,
             cached_auth: None,
             cached_mode: None,
+            pin_current_cert: inline.tls.pin_now,
         });
     }
 
@@ -439,7 +444,19 @@ fn resolve_connect_target(
         tls_config,
         cached_auth,
         cached_mode: srv.api_mode,
+        pin_current_cert: false,
     })
+}
+
+async fn pin_current_cert_for_session(
+    ctx: &ConnectContext,
+    tls_config: &mut TlsConfig,
+) -> Result<()> {
+    let (fingerprint, _issuer, issuer_der) = crate::tls::tofu::probe_server_cert(&ctx.url).await?;
+    tls_config.pin_sha256 = Some(fingerprint);
+    tls_config.pin_issuer_der = issuer_der;
+    tls_config.server_name = Some(ctx.server_name.clone());
+    Ok(())
 }
 
 async fn probe_cached_connection(
@@ -477,10 +494,15 @@ pub async fn connect_and_configure(
 ) -> Result<BugzillaClient> {
     let ConnectTarget {
         ctx,
-        tls_config,
+        mut tls_config,
         cached_auth,
         cached_mode,
+        pin_current_cert,
     } = resolve_connect_target(server, api_override)?;
+
+    if pin_current_cert {
+        pin_current_cert_for_session(&ctx, &mut tls_config).await?;
+    }
 
     if tls_config.insecure {
         tracing::warn!(

@@ -65,7 +65,7 @@ matching_doc() {
 ## Command Tree
 
 ```
-bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--server-email <EMAIL>] [--output table|json] [--json] [--config <PATH>] [--no-color] [--quiet] [--api rest|xmlrpc|hybrid] [--timeout <SECS>] [--retry <N>] [--dry-run] [--yes] [-v...]
+bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--server-email <EMAIL>] [--server-tls-insecure] [--server-tls-ca-cert <PATH>] [--server-tls-pin-sha256 <PIN>] [--server-tls-pin-now] [--output table|json] [--json] [--config <PATH>] [--no-color] [--quiet] [--api rest|xmlrpc|hybrid] [--timeout <SECS>] [--retry <N>] [--dry-run] [--yes] [-v...]
 ├── demo
 │   ├── alpha [--foo <X>] [--bar <Y>]
 │   ├── beta [--baz <Z>]

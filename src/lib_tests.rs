@@ -1,6 +1,10 @@
 #![expect(clippy::unwrap_used)]
 
 use clap::Parser;
+use std::io::{Read as _, Write as _};
+use std::net::TcpListener;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -306,6 +310,70 @@ async fn dispatch_allows_public_server_info_without_credentials() {
     assert!(result.is_ok(), "public server info failed: {result:?}");
 }
 
+#[tokio::test]
+async fn dispatch_inline_tls_insecure_connects_to_self_signed_server_without_config() {
+    assert_self_signed_inline_server_info_succeeds(3, |_server, _tmp| {
+        vec!["--server-tls-insecure".into()]
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn dispatch_inline_tls_pin_sha256_connects_to_self_signed_server_without_config() {
+    assert_self_signed_inline_server_info_succeeds(3, |server, _tmp| {
+        vec!["--server-tls-pin-sha256".into(), server.pin_sha256.clone()]
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn dispatch_inline_tls_pin_now_connects_to_self_signed_server_without_config() {
+    assert_self_signed_inline_server_info_succeeds(4, |_server, _tmp| {
+        vec!["--server-tls-pin-now".into()]
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn dispatch_inline_tls_ca_cert_connects_to_self_signed_server_without_config() {
+    assert_self_signed_inline_server_info_succeeds(3, |server, tmp| {
+        let ca_path = tmp.path().join("ca.pem");
+        std::fs::write(&ca_path, &server.ca_pem).unwrap();
+        vec!["--server-tls-ca-cert".into(), ca_path.display().to_string()]
+    })
+    .await;
+}
+
+async fn assert_self_signed_inline_server_info_succeeds(
+    expected_requests: usize,
+    build_tls_args: impl FnOnce(&SelfSignedBugzillaServer, &tempfile::TempDir) -> Vec<String>,
+) {
+    let _lock = ENV_LOCK.lock().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    // SAFETY: tests are serialized via ENV_LOCK.
+    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    let server = spawn_self_signed_bugzilla_server(expected_requests);
+    let mut argv = vec!["bzr".into(), "--server-url".into(), server.url.clone()];
+    argv.extend(build_tls_args(&server, &tmp));
+    argv.extend(["--json".into(), "server".into(), "info".into()]);
+    let argv = argv.iter().map(String::as_str).collect::<Vec<_>>();
+    let cli = cli::Cli::try_parse_from(argv).unwrap();
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
+    commands::runtime::inline_server::set(None);
+    server.handle.join().unwrap();
+
+    assert!(
+        result.is_ok(),
+        "ad-hoc TLS settings should connect to a self-signed server: {result:?}"
+    );
+    assert!(
+        !tmp.path().join("bzr").join("config.toml").exists(),
+        "an inline TLS connect must not create or write the config file"
+    );
+}
+
 fn write_public_config(tmp: &tempfile::TempDir, server_url: &str) {
     let config_dir = tmp.path().join("bzr");
     std::fs::create_dir_all(&config_dir).unwrap();
@@ -331,4 +399,119 @@ url = "{server_url}"
     }
     // SAFETY: Tests are serialized via ENV_LOCK.
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+}
+
+struct SelfSignedBugzillaServer {
+    url: String,
+    pin_sha256: String,
+    ca_pem: String,
+    handle: std::thread::JoinHandle<()>,
+}
+
+fn spawn_self_signed_bugzilla_server(expected_requests: usize) -> SelfSignedBugzillaServer {
+    let params = rcgen::CertificateParams::new(vec!["localhost".to_owned()]).unwrap();
+    let key_pair = rcgen::KeyPair::generate().unwrap();
+    let cert = params.self_signed(&key_pair).unwrap();
+    let cert_der_bytes = cert.der().to_vec();
+    let pin_sha256 = crate::tls::fingerprint::compute_fingerprint(&cert_der_bytes);
+    let ca_pem = cert.pem();
+    let cert_der = rustls::pki_types::CertificateDer::from(cert_der_bytes);
+    let key_der = rustls::pki_types::PrivateKeyDer::Pkcs8(
+        rustls::pki_types::PrivatePkcs8KeyDer::from(key_pair.serialize_der()),
+    );
+    let config = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(vec![cert_der], key_der)
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let handle = std::thread::spawn(move || {
+        let config = Arc::new(config);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        for _ in 0..expected_requests {
+            let Ok(tcp) = accept_until(&listener, deadline) else {
+                return;
+            };
+            let Ok(connection) = rustls::ServerConnection::new(Arc::clone(&config)) else {
+                return;
+            };
+            let mut stream = rustls::StreamOwned::new(connection, tcp);
+            let Ok(request) = read_http_request(&mut stream) else {
+                return;
+            };
+            if write_bugzilla_response(&mut stream, &request).is_err() {
+                return;
+            }
+        }
+    });
+
+    SelfSignedBugzillaServer {
+        url: format!("https://localhost:{port}"),
+        pin_sha256,
+        ca_pem,
+        handle,
+    }
+}
+
+fn accept_until(listener: &TcpListener, deadline: Instant) -> std::io::Result<std::net::TcpStream> {
+    loop {
+        match listener.accept() {
+            Ok((tcp, _addr)) => {
+                tcp.set_nonblocking(false)?;
+                return Ok(tcp);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                if Instant::now() >= deadline {
+                    return Err(e);
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+fn read_http_request(
+    stream: &mut rustls::StreamOwned<rustls::ServerConnection, std::net::TcpStream>,
+) -> std::io::Result<String> {
+    let mut bytes = Vec::new();
+    let mut buf = [0_u8; 512];
+    loop {
+        let n = stream.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&buf[..n]);
+        if bytes.windows(4).any(|window| window == b"\r\n\r\n") {
+            break;
+        }
+    }
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+fn write_bugzilla_response(
+    stream: &mut rustls::StreamOwned<rustls::ServerConnection, std::net::TcpStream>,
+    request: &str,
+) -> std::io::Result<()> {
+    let mut parts = request
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .split_whitespace();
+    let method = parts.next().unwrap_or_default();
+    let path = parts.next().unwrap_or_default();
+    let body = match path {
+        "/rest/version" => r#"{"version":"5.1.2"}"#,
+        "/rest/extensions" => r#"{"extensions":{}}"#,
+        _ => "{}",
+    };
+    let body = if method == "HEAD" { "" } else { body };
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    stream.write_all(response.as_bytes())?;
+    stream.flush()
 }

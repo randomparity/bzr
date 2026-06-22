@@ -349,6 +349,103 @@ fn inline_server_email_requires_url() {
 }
 
 #[test]
+fn parse_inline_server_tls_flags() {
+    let cases = [
+        vec![
+            "bzr",
+            "--server-url",
+            "https://bz.example.com",
+            "--server-tls-insecure",
+            "bug",
+            "view",
+            "42",
+        ],
+        vec![
+            "bzr",
+            "--server-url",
+            "https://bz.example.com",
+            "--server-tls-ca-cert",
+            "/path/to/ca.pem",
+            "bug",
+            "view",
+            "42",
+        ],
+        vec![
+            "bzr",
+            "--server-url",
+            "https://bz.example.com",
+            "--server-tls-pin-sha256",
+            "sha256//abc123",
+            "bug",
+            "view",
+            "42",
+        ],
+        vec![
+            "bzr",
+            "--server-url",
+            "https://bz.example.com",
+            "--server-tls-pin-now",
+            "bug",
+            "view",
+            "42",
+        ],
+    ];
+
+    for argv in cases {
+        let result = Cli::try_parse_from(argv);
+        assert!(
+            result.is_ok(),
+            "ad-hoc TLS flags should parse: {:?}",
+            result.err()
+        );
+    }
+}
+
+#[test]
+fn inline_server_tls_flags_require_url() {
+    let result = Cli::try_parse_from(["bzr", "--server-tls-insecure", "bug", "view", "1"]);
+    assert!(
+        result.is_err(),
+        "--server-tls-insecure without --server-url must fail"
+    );
+}
+
+#[test]
+fn inline_server_tls_choices_are_mutually_exclusive() {
+    let result = Cli::try_parse_from([
+        "bzr",
+        "--server-url",
+        "https://bz.example.com",
+        "--server-tls-insecure",
+        "--server-tls-ca-cert",
+        "/path/to/ca.pem",
+        "bug",
+        "view",
+        "1",
+    ]);
+    assert!(
+        result.is_err(),
+        "--server-tls-insecure should conflict with --server-tls-ca-cert"
+    );
+
+    let result = Cli::try_parse_from([
+        "bzr",
+        "--server-url",
+        "https://bz.example.com",
+        "--server-tls-pin-now",
+        "--server-tls-pin-sha256",
+        "sha256//abc123",
+        "bug",
+        "view",
+        "1",
+    ]);
+    assert!(
+        result.is_err(),
+        "--server-tls-pin-now should conflict with --server-tls-pin-sha256"
+    );
+}
+
+#[test]
 fn parse_bug_create_from_json_stdin() {
     let cli = Cli::try_parse_from(["bzr", "bug", "create", "--from-json", "-"]).unwrap();
     let Commands::Bug {
