@@ -198,11 +198,6 @@ fn ensure_credentials_for_command(cli: &cli::Cli) -> error::Result<()> {
 }
 
 fn command_requires_credentials(command: &cli::Commands) -> Option<&'static str> {
-    credential_requirement_for_resource(command)
-        .or_else(|| credential_requirement_for_identity(command))
-}
-
-fn credential_requirement_for_resource(command: &cli::Commands) -> Option<&'static str> {
     match command {
         cli::Commands::Bug { action } => commands::bug::requires_credentials(action),
         cli::Commands::Comment { action } => commands::comment::requires_credentials(action),
@@ -211,12 +206,6 @@ fn credential_requirement_for_resource(command: &cli::Commands) -> Option<&'stat
         cli::Commands::Component { action } => commands::component::requires_credentials(action),
         cli::Commands::User { action } => commands::user::requires_credentials(action),
         cli::Commands::Group { action } => commands::group::requires_credentials(action),
-        _ => None,
-    }
-}
-
-fn credential_requirement_for_identity(command: &cli::Commands) -> Option<&'static str> {
-    match command {
         cli::Commands::Whoami => Some("whoami"),
         _ => None,
     }
