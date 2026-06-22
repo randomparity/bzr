@@ -74,11 +74,18 @@ if assert_success &&
     assert_json '.target_milestone' "---" &&
     assert_json '.deadline' "2026-12-30"; then test_pass; fi
 
-test_begin "146c. bug create --groups succeeds with fixture group"
-GID=$(make_bug "${_CF[@]}" --summary "group create" --groups functest-grp)
+test_begin "146c. bug create --groups restricts public access"
+_GROUP_WB=$(unique_name group-restrict)
+GID=$(make_bug --marker "$_GROUP_WB" "${_CF[@]}" --summary "group create" --groups functest-grp)
 if [[ -n "$GID" ]]; then
     run_bzr bug view "$GID"
-    if assert_success && assert_json '.id' "$GID"; then test_pass; fi
+    if assert_success && assert_json '.id' "$GID"; then
+        run_bzr_raw --json --server public bug view "$GID"
+        if assert_failure; then
+            run_bzr_raw --json --server public bug list --whiteboard "$_GROUP_WB"
+            if assert_success && assert_json_array_length '.' 0; then test_pass; fi
+        fi
+    fi
 fi
 
 test_begin "146d. bug create --flag round-trips"
@@ -88,5 +95,5 @@ if assert_success &&
     assert_json_contains '[.flags[].name] | join(",")' "bzr_bug_review"; then test_pass; fi
 
 rm -r "$_FJ"
-unset _CF _FJ _WB CFID FID OID MID GID
+unset _CF _FJ _WB _GROUP_WB CFID FID OID MID GID
 echo ""
