@@ -540,6 +540,39 @@ fn parse_component_update_from_json_stdin() {
 }
 
 #[test]
+fn parse_component_update_with_product_component_target() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "component",
+        "update",
+        "--product",
+        "MyApp",
+        "--component",
+        "Backend",
+        "--description",
+        "Updated",
+    ])
+    .unwrap();
+    let Commands::Component {
+        action:
+            ComponentAction::Update {
+                id,
+                product,
+                component,
+                description,
+                ..
+            },
+    } = cli.command
+    else {
+        panic!("expected component update");
+    };
+    assert!(id.is_none());
+    assert_eq!(product.as_deref(), Some("MyApp"));
+    assert_eq!(component.as_deref(), Some("Backend"));
+    assert_eq!(description.as_deref(), Some("Updated"));
+}
+
+#[test]
 fn parse_user_create_from_json_stdin() {
     let cli = Cli::try_parse_from(["bzr", "user", "create", "--from-json", "-"]).unwrap();
     let Commands::User {

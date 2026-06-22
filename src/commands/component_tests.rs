@@ -40,6 +40,31 @@ async fn mount_product_with_components(mock: &wiremock::MockServer) {
         .await;
 }
 
+/// Mock `GET /rest/product?names=MyApp` returning duplicate component names.
+async fn mount_product_with_duplicate_components(mock: &wiremock::MockServer) {
+    Mock::given(method("GET"))
+        .and(path("/rest/product"))
+        .and(query_param("names", "MyApp"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "products": [{
+                "id": 1,
+                "name": "MyApp",
+                "description": "App",
+                "is_active": true,
+                "components": [
+                    {"id": 10, "name": "Backend", "description": "be", "is_active": true,
+                     "default_assignee": "dev@example.com"},
+                    {"id": 12, "name": "Backend", "description": "duplicate", "is_active": true,
+                     "default_assignee": "other@example.com"}
+                ],
+                "versions": [],
+                "milestones": []
+            }]
+        })))
+        .mount(mock)
+        .await;
+}
+
 #[tokio::test]
 async fn component_list_returns_components() {
     let (_lock, mock, _tmp) = setup_test_env().await;
@@ -237,6 +262,8 @@ async fn component_update_succeeds() {
     let action = ComponentAction::Update {
         from_json: None,
         id: Some(10),
+        product: None,
+        component: None,
         name: Some("Updated".to_string()),
         description: None,
         default_assignee: None,
@@ -258,6 +285,164 @@ async fn component_update_succeeds() {
 }
 
 #[tokio::test]
+async fn component_update_by_product_and_component_resolves_id() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_product_with_components(&mock).await;
+
+    Mock::given(method("PUT"))
+        .and(path("/rest/component/10"))
+        .and(body_json(serde_json::json!({"description": "Updated"})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 10})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = ComponentAction::Update {
+        from_json: None,
+        id: None,
+        product: Some("MyApp".to_string()),
+        component: Some("Backend".to_string()),
+        name: None,
+        description: Some("Updated".to_string()),
+        default_assignee: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        result.is_ok(),
+        "component update by product/name failed: {result:?}"
+    );
+    let parsed = serde_json::from_str::<serde_json::Value>(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["id"], 10);
+    assert_eq!(parsed["action"], "updated");
+}
+
+#[tokio::test]
+async fn component_update_from_json_uses_product_component_target() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    mount_product_with_components(&mock).await;
+
+    Mock::given(method("PUT"))
+        .and(path("/rest/component/10"))
+        .and(body_json(serde_json::json!({"description": "Updated"})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 10})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{"product":"MyApp","component":"Backend","description":"Updated"}"#;
+    let action = ComponentAction::Update {
+        from_json: Some(write_json_file(&tmp, json)),
+        id: None,
+        product: None,
+        component: None,
+        name: None,
+        description: None,
+        default_assignee: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        result.is_ok(),
+        "component update from JSON product/name target failed: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn component_update_rejects_id_and_product_component_target() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let action = ComponentAction::Update {
+        from_json: None,
+        id: Some(10),
+        product: Some("MyApp".to_string()),
+        component: Some("Backend".to_string()),
+        name: None,
+        description: Some("Updated".to_string()),
+        default_assignee: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        matches!(result, Err(BzrError::InputValidation(ref msg))
+            if msg.contains("either component ID or --product/--component")),
+        "expected mixed-target validation, got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn component_update_rejects_product_without_component() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let action = ComponentAction::Update {
+        from_json: None,
+        id: None,
+        product: Some("MyApp".to_string()),
+        component: None,
+        name: None,
+        description: Some("Updated".to_string()),
+        default_assignee: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        matches!(result, Err(BzrError::InputValidation(ref msg))
+            if msg.contains("--product requires --component")),
+        "expected missing component validation, got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn component_update_named_target_unknown_component_is_not_found() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_product_with_components(&mock).await;
+
+    let action = ComponentAction::Update {
+        from_json: None,
+        id: None,
+        product: Some("MyApp".to_string()),
+        component: Some("Missing".to_string()),
+        name: None,
+        description: Some("Updated".to_string()),
+        default_assignee: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        matches!(result, Err(BzrError::NotFound { resource: "component", ref id })
+            if id == "MyApp/Missing"),
+        "expected component not found, got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn component_update_named_target_duplicate_component_is_ambiguous() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_product_with_duplicate_components(&mock).await;
+
+    let action = ComponentAction::Update {
+        from_json: None,
+        id: None,
+        product: Some("MyApp".to_string()),
+        component: Some("Backend".to_string()),
+        name: None,
+        description: Some("Updated".to_string()),
+        default_assignee: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        matches!(result, Err(BzrError::InputValidation(ref msg))
+            if msg.contains("ambiguous") && msg.contains("numeric component ID")),
+        "expected duplicate component ambiguity, got {result:?}"
+    );
+}
+
+#[tokio::test]
 async fn component_update_dry_run_makes_no_write_and_marks_payload() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
@@ -271,6 +456,8 @@ async fn component_update_dry_run_makes_no_write_and_marks_payload() {
     let action = ComponentAction::Update {
         from_json: None,
         id: Some(10),
+        product: None,
+        component: None,
         name: Some("Updated".to_string()),
         description: None,
         default_assignee: Some("owner@test.com".to_string()),
@@ -312,6 +499,8 @@ async fn component_update_from_json_uses_json_target() {
     let action = ComponentAction::Update {
         from_json: Some(write_json_file(&tmp, json)),
         id: None,
+        product: None,
+        component: None,
         name: None,
         description: None,
         default_assignee: Some("owner@test.com".to_string()),
@@ -332,6 +521,8 @@ async fn component_update_from_json_rejects_positional_and_json_target() {
     let action = ComponentAction::Update {
         from_json: Some(write_json_file(&tmp, json)),
         id: Some(11),
+        product: None,
+        component: None,
         name: None,
         description: None,
         default_assignee: None,
@@ -343,6 +534,52 @@ async fn component_update_from_json_rejects_positional_and_json_target() {
         matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
             if msg.contains("cannot combine positional component ID")),
         "expected target conflict, got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn component_update_from_json_rejects_id_and_product_component_target() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let json = r#"{"id":10,"product":"MyApp","component":"Backend","description":"Updated"}"#;
+    let action = ComponentAction::Update {
+        from_json: Some(write_json_file(&tmp, json)),
+        id: None,
+        product: None,
+        component: None,
+        name: None,
+        description: None,
+        default_assignee: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        matches!(result, Err(BzrError::InputValidation(ref msg))
+            if msg.contains("either component ID or --product/--component")),
+        "expected JSON mixed-target validation, got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn component_update_from_json_rejects_partial_product_component_target() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let json = r#"{"product":"MyApp","description":"Updated"}"#;
+    let action = ComponentAction::Update {
+        from_json: Some(write_json_file(&tmp, json)),
+        id: None,
+        product: None,
+        component: None,
+        name: None,
+        description: None,
+        default_assignee: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    assert!(
+        matches!(result, Err(BzrError::InputValidation(ref msg))
+            if msg.contains("'product' and 'component' must be supplied together")),
+        "expected partial JSON name-target validation, got {result:?}"
     );
 }
 
@@ -422,6 +659,8 @@ async fn component_update_without_fields_is_rejected() {
     let action = ComponentAction::Update {
         from_json: None,
         id: Some(10),
+        product: None,
+        component: None,
         name: None,
         description: None,
         default_assignee: None,

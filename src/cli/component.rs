@@ -89,31 +89,40 @@ pub enum ComponentAction {
         default_assignee: Option<String>,
     },
 
-    /// Update an existing component by ID (admin only).
+    /// Update an existing component by ID or product/name (admin only).
     ///
     /// Requires Bugzilla admin permissions. Pass any of the flags
     /// to change that property: `--name`, `--description`,
     /// `--default-assignee`. Only the supplied fields are modified.
     ///
-    /// The numeric `<id>` is the component ID, not the name.
-    /// Discover IDs via `bzr product view <product>` (look for
-    /// `components[].id`).
+    /// The numeric `<id>` is the component ID, not the name. As a
+    /// human-oriented alternative, pass `--product <PRODUCT>` with
+    /// `--component <COMPONENT>` to resolve the current component name
+    /// exactly within that product. `--name` remains the new component
+    /// name.
     ///
     /// Examples:
     ///
     ///   bzr component update 42 --description "Updated description"
+    ///   bzr component update --product MyApp --component Backend \
+    ///     --description "Updated description"
     ///   bzr component update 42 --default-assignee newowner@example.com
     ///
     /// See bzr-component-create(1) for new components and
-    /// bzr-product-view(1) to find component IDs.
+    /// bzr-product-view(1) to inspect component IDs and names.
     #[command(verbatim_doc_comment)]
     Update {
         /// Read component update fields from a JSON object (`-` reads stdin)
         #[arg(long, value_name = "PATH")]
         from_json: Option<String>,
         /// Component ID
-        #[arg(required_unless_present = "from_json")]
         id: Option<u64>,
+        /// Product name for name-based targeting
+        #[arg(long, value_name = "PRODUCT")]
+        product: Option<String>,
+        /// Current component name for name-based targeting
+        #[arg(long, value_name = "COMPONENT")]
+        component: Option<String>,
         /// New name
         #[arg(long)]
         name: Option<String>,

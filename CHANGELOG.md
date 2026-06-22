@@ -42,6 +42,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   attachment comments consistently. (#386)
 - `attachment download <ID> --out -` now streams a single attachment's raw bytes
   to stdout without writing a file or emitting formatted result output. (#387)
+- `component update` now accepts `--product <PRODUCT> --component <COMPONENT>`
+  and JSON `product`/`component` targets, resolving exact component names
+  without a separate ID lookup. (#388)
 - `bug update` now accepts `--url` and `--target-milestone`, matching fields
   that `bug create` can already set. (#363)
 - `bug resolve`, `bug close`, `bug reopen`, and `bug dup` now accept
