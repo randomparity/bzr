@@ -257,8 +257,29 @@ fn validate_action(action: &AttachmentAction) -> Result<()> {
         } if ids.len() != 1 => Err(crate::error::BzrError::InputValidation(
             "--out requires exactly one attachment ID".into(),
         )),
+        AttachmentAction::Update(args) if !update_has_changes(args) => {
+            Err(crate::error::BzrError::InputValidation(
+                "no attachment fields to update; specify at least one of --summary, --file-name, \
+                 --content-type, --obsolete/--no-obsolete, --patch/--no-patch, \
+                 --private/--no-private, or --flag"
+                    .into(),
+            ))
+        }
         _ => Ok(()),
     }
+}
+
+fn update_has_changes(args: &crate::cli::attachment::UpdateArgs) -> bool {
+    args.summary.is_some()
+        || args.file_name.is_some()
+        || args.content_type.is_some()
+        || args.obsolete
+        || args.no_obsolete
+        || args.patch
+        || args.no_patch
+        || args.private
+        || args.no_private
+        || !args.flag.is_empty()
 }
 
 /// Maps file extensions (compared case-insensitively) to their MIME type.

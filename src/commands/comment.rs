@@ -26,6 +26,7 @@ pub async fn execute(
     api: Option<ApiMode>,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    validate_action(action)?;
     let client = super::runtime::shared::connect_and_configure(server, api).await?;
 
     match action {
@@ -107,6 +108,15 @@ pub async fn execute(
         }
     }
     Ok(())
+}
+
+fn validate_action(action: &CommentAction) -> Result<()> {
+    match action {
+        CommentAction::Tag { add, remove, .. } if add.is_empty() && remove.is_empty() => Err(
+            BzrError::InputValidation("no comment tag changes; specify --add or --remove".into()),
+        ),
+        _ => Ok(()),
+    }
 }
 
 /// Read comment body from stdin (pipe) or $EDITOR (TTY).
