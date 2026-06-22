@@ -63,6 +63,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `attachment update <ID>` and `comment tag <COMMENT_ID>` now reject no-op
+  invocations before contacting Bugzilla and suggest the flags needed to make a
+  change. (#389)
 - Documented that `bug create` has no Bugzilla-backed idempotency-key support
   and that agents should inspect before retrying ambiguous create failures.
   (#370)

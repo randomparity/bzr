@@ -571,6 +571,46 @@ async fn attachment_update_unset_bools_are_omitted() {
     assert!(!body.contains("is_private"), "body: {body}");
 }
 
+#[tokio::test]
+async fn attachment_update_without_changes_is_rejected_before_put() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/attachment/8"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let action = AttachmentAction::Update(UpdateArgs {
+        id: 8,
+        summary: None,
+        file_name: None,
+        content_type: None,
+        obsolete: false,
+        no_obsolete: false,
+        patch: false,
+        no_patch: false,
+        private: false,
+        no_private: false,
+        flag: vec![],
+    });
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    let err = result.unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+    let msg = err.to_string();
+    assert!(
+        msg.contains("no attachment fields to update"),
+        "error should name the missing change: {msg}"
+    );
+    assert!(
+        msg.contains("--summary") && msg.contains("--flag"),
+        "error should suggest update flags: {msg}"
+    );
+}
+
 #[test]
 fn guess_content_type_text_plain() {
     assert_eq!(guess_content_type("file.txt"), "text/plain");
