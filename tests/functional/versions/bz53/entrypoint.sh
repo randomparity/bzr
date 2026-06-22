@@ -7,6 +7,7 @@ API_KEY="FuncTest0123456789abcdef0123456789abcdef"
 echo "==> Starting MariaDB..."
 /usr/libexec/mysqld --user=mysql --datadir=/var/lib/mysql &
 MYSQL_PID=$!
+trap 'kill "$MYSQL_PID" 2>/dev/null || true' EXIT
 
 # Wait for MariaDB socket (up to 30s)
 for i in $(seq 1 30); do

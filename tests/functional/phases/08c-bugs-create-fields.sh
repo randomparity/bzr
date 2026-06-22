@@ -82,10 +82,10 @@ if [[ -n "$GID" ]]; then
 fi
 
 test_begin "146d. bug create --flag round-trips"
-FID=$(make_bug "${_CF[@]}" --summary "flag create" --flag 'review?')
+FID=$(make_bug "${_CF[@]}" --summary "flag create" --flag 'bzr_bug_review?')
 run_bzr bug view "$FID"
 if assert_success &&
-    assert_json_contains '[.flags[].name] | join(",")' "review"; then test_pass; fi
+    assert_json_contains '[.flags[].name] | join(",")' "bzr_bug_review"; then test_pass; fi
 
 rm -r "$_FJ"
 unset _CF _FJ _WB CFID FID OID MID GID

@@ -188,7 +188,7 @@ if assert_exit_code 7; then test_pass; fi
 test_begin "45c. bug list --whiteboard (substring positive includes bug)"
 if [[ -n "$BUG1" ]]; then
     # BUG1 had --whiteboard "wip" set in test 41.
-    run_bzr bug list --product FuncTestProd --whiteboard wip
+    run_bzr bug list --id "$BUG1" --product FuncTestProd --whiteboard wip
     if assert_success && assert_stdout_contains "$BUG1"; then test_pass; fi
 else test_skip "no BUG1"; fi
 
@@ -196,7 +196,7 @@ test_begin "45d. bug list --whiteboard (notsubstring excludes bug)"
 if [[ -n "$BUG1" ]] && [[ -n "$BUG2" ]]; then
     # BUG1 has whiteboard "wip"; BUG2 does not. Negation must exclude BUG1
     # and include BUG2.
-    run_bzr bug list --product FuncTestProd --whiteboard '!wip'
+    run_bzr bug list --id "$BUG1" --id "$BUG2" --product FuncTestProd --whiteboard '!wip'
     if assert_success &&
         assert_stdout_not_contains "\"id\":$BUG1" &&
         assert_stdout_contains "$BUG2"; then
@@ -207,7 +207,7 @@ else test_skip "no BUG1/BUG2"; fi
 test_begin "45e. bug list --resolution FIXED (positive)"
 if [[ -n "$BUG1" ]]; then
     # BUG1 was resolved FIXED in test 43.
-    run_bzr bug list --product FuncTestProd --resolution FIXED
+    run_bzr bug list --id "$BUG1" --product FuncTestProd --resolution FIXED
     if assert_success && assert_stdout_contains "$BUG1"; then test_pass; fi
 else test_skip "no BUG1"; fi
 
@@ -216,7 +216,7 @@ if [[ -n "$BUG1" ]] && [[ -n "$BUG2" ]]; then
     # BUG1 is FIXED; BUG2 is open (empty resolution). The notequals filter
     # must exclude BUG1 and include BUG2 (empty resolution !=
     # "FIXED" by Bugzilla's notequals semantics).
-    run_bzr bug list --product FuncTestProd --resolution '!FIXED'
+    run_bzr bug list --id "$BUG1" --id "$BUG2" --product FuncTestProd --resolution '!FIXED'
     if assert_success &&
         assert_stdout_not_contains "\"id\":$BUG1" &&
         assert_stdout_contains "$BUG2"; then

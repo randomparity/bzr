@@ -234,11 +234,11 @@ else test_skip "no attachment id"; fi
 
 test_begin "152. attachment update --content-type and --flag"
 if [[ -n "${_AID:-}" ]]; then
-    run_bzr attachment update "$_AID" --content-type text/plain --flag 'review?'
+    run_bzr attachment update "$_AID" --content-type text/plain --flag 'bzr_attachment_review?'
     if assert_success; then
         run_bzr attachment view "$_AID"
         if assert_json '.content_type' "text/plain" &&
-            assert_json_contains '[.flags[].name] | join(",")' "review"; then test_pass; fi
+            assert_json_contains '[.flags[].name] | join(",")' "bzr_attachment_review"; then test_pass; fi
     fi
 else test_skip "no attachment id"; fi
 

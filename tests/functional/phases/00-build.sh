@@ -38,4 +38,3 @@ if ! curl -sf "${BZ_URL}/rest/version" >/dev/null 2>&1; then
 fi
 echo "  Bugzilla is up."
 echo ""
-

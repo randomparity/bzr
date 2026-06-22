@@ -26,23 +26,23 @@ cat >"$_FLAG_SQL" <<'SQL'
 INSERT INTO flagtypes
     (name, description, target_type, is_active, is_requestable,
      is_requesteeble, is_multiplicable, sortkey)
-SELECT 'review', 'Functional test review flag for bugs', 'b', 1, 1, 1, 1, 10
+SELECT 'bzr_bug_review', 'Functional test review flag for bugs', 'b', 1, 1, 1, 1, 10
 WHERE NOT EXISTS (
-    SELECT 1 FROM flagtypes WHERE name = 'review' AND target_type = 'b'
+    SELECT 1 FROM flagtypes WHERE name = 'bzr_bug_review' AND target_type = 'b'
 );
 
 INSERT INTO flagtypes
     (name, description, target_type, is_active, is_requestable,
      is_requesteeble, is_multiplicable, sortkey)
-SELECT 'review', 'Functional test review flag for attachments', 'a', 1, 1, 1, 1, 10
+SELECT 'bzr_attachment_review', 'Functional test review flag for attachments', 'a', 1, 1, 1, 1, 10
 WHERE NOT EXISTS (
-    SELECT 1 FROM flagtypes WHERE name = 'review' AND target_type = 'a'
+    SELECT 1 FROM flagtypes WHERE name = 'bzr_attachment_review' AND target_type = 'a'
 );
 
 INSERT INTO flaginclusions (type_id, product_id, component_id)
 SELECT id, NULL, NULL
 FROM flagtypes
-WHERE name = 'review'
+WHERE name IN ('bzr_bug_review', 'bzr_attachment_review')
   AND target_type IN ('b', 'a')
   AND NOT EXISTS (
       SELECT 1 FROM flaginclusions WHERE flaginclusions.type_id = flagtypes.id

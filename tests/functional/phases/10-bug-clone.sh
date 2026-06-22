@@ -62,13 +62,13 @@ if [[ -n "$BUG3" ]]; then
     run_bzr bug clone "$BUG3" --op-sys Linux --rep-platform PC --no-comment \
         --url "http://example.com/clone-override" --whiteboard "$_CL_WB" \
         --target-milestone=--- --deadline 2026-12-28 \
-        --cc "$ADMIN_EMAIL" --flag 'review?'
+        --cc "$ADMIN_EMAIL" --flag 'bzr_bug_review?'
     if assert_success && assert_json_exists '.id'; then
         _CL_OVERRIDE=$(jq -r '.id' "$BZR_STDOUT")
         run_bzr bug view "$_CL_OVERRIDE"
         if assert_json '.url' "http://example.com/clone-override" &&
             assert_json '.whiteboard' "$_CL_WB" &&
-            assert_json_contains '[.flags[].name] | join(",")' "review"; then test_pass; fi
+            assert_json_contains '[.flags[].name] | join(",")' "bzr_bug_review"; then test_pass; fi
     fi
 else test_skip "no BUG3"; fi
 unset _CL_META _CL_WB _CL_OVERRIDE

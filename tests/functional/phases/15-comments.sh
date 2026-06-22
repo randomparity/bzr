@@ -69,8 +69,8 @@ if [[ -n "$BUG1" ]]; then
     if assert_success; then
         run_bzr comment list "$BUG1"
         post_count=$(jq '. | length' "$BZR_STDOUT")
-        if [[ "$post_count" -eq $((pre_count + 1)) ]] \
-            && jq -e '.[-1].text == "atomic comment from #161 test"' "$BZR_STDOUT" >/dev/null; then
+        if [[ "$post_count" -eq $((pre_count + 1)) ]] &&
+            jq -e '.[-1].text == "atomic comment from #161 test"' "$BZR_STDOUT" >/dev/null; then
             test_pass
         else
             test_fail "comment not appended atomically (pre=$pre_count post=$post_count)"
@@ -83,8 +83,8 @@ if [[ -n "$BUG1" ]]; then
     run_bzr bug update "$BUG1" --comment "private atomic comment" --comment-private
     if assert_success; then
         run_bzr --api hybrid comment list "$BUG1"
-        if jq -e '.[-1].is_private == true' "$BZR_STDOUT" >/dev/null \
-            && jq -e '.[-1].text == "private atomic comment"' "$BZR_STDOUT" >/dev/null; then
+        if jq -e '.[-1].is_private == true' "$BZR_STDOUT" >/dev/null &&
+            jq -e '.[-1].text == "private atomic comment"' "$BZR_STDOUT" >/dev/null; then
             test_pass
         else
             test_fail "last comment not private or text mismatch"
@@ -95,7 +95,7 @@ else test_skip "no BUG1"; fi
 test_begin "94f. bug update --comment-file"
 if [[ -n "$BUG1" ]]; then
     tmpfile=$(mktemp)
-    printf 'comment from file\nsecond line\n' > "$tmpfile"
+    printf 'comment from file\nsecond line\n' >"$tmpfile"
     run_bzr bug update "$BUG1" --comment-file "$tmpfile"
     if assert_success; then
         run_bzr comment list "$BUG1"
@@ -132,4 +132,3 @@ fi
 rm -f "$_CBF"
 unset _CB _CBF
 echo ""
-
