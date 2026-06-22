@@ -59,5 +59,32 @@ if assert_exit_code 11; then
     if assert_json '.status' "RESOLVED"; then test_pass; fi
 fi
 
-unset _VERB_CREATE VID SRC TGT
+test_begin "134a. bug resolve --expect-unchanged-since happy path"
+VID=$(make_bug "${_VERB_CREATE[@]}" --summary "verb resolve guarded")
+run_bzr bug view "$VID"
+if assert_success; then
+    LCT=$(jq -r '.last_change_time' "$BZR_STDOUT" 2>/dev/null || true)
+    run_bzr bug resolve "$VID" --expect-unchanged-since "$LCT"
+    if assert_success; then
+        run_bzr bug view "$VID"
+        if assert_json '.status' "RESOLVED"; then test_pass; fi
+    fi
+fi
+
+test_begin "134b. bug dup --expect-unchanged-since detects collision"
+SRC=$(make_bug "${_VERB_CREATE[@]}" --summary "verb dup guarded source")
+TGT=$(make_bug "${_VERB_CREATE[@]}" --summary "verb dup guarded target")
+run_bzr bug view "$SRC"
+if assert_success; then
+    LCT=$(jq -r '.last_change_time' "$BZR_STDOUT" 2>/dev/null || true)
+    run_bzr bug update "$SRC" --whiteboard "verb-guard-touch"
+    if wait_for_changed "$SRC" "$LCT"; then
+        run_bzr bug dup "$SRC" "$TGT" --expect-unchanged-since "$LCT"
+        if assert_exit_code 14; then test_pass; fi
+    else
+        test_skip "last_change_time did not advance within retry budget"
+    fi
+fi
+
+unset _VERB_CREATE VID SRC TGT LCT
 echo ""

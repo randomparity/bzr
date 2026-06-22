@@ -66,6 +66,27 @@ if require_version 520 "fix-needed keyword seeded on bz52+"; then
 fi
 unset KID
 
-rm -rf "$_FJ"
-unset _CF _FJ _WB CFID FID OID
+test_begin "146b. bug create --target-milestone and --deadline round-trip"
+MID=$(make_bug "${_CF[@]}" --summary "milestone create" \
+    --target-milestone=--- --deadline 2026-12-30)
+run_bzr bug view "$MID"
+if assert_success &&
+    assert_json '.target_milestone' "---" &&
+    assert_json '.deadline' "2026-12-30"; then test_pass; fi
+
+test_begin "146c. bug create --groups succeeds with fixture group"
+GID=$(make_bug "${_CF[@]}" --summary "group create" --groups functest-grp)
+if [[ -n "$GID" ]]; then
+    run_bzr bug view "$GID"
+    if assert_success && assert_json '.id' "$GID"; then test_pass; fi
+fi
+
+test_begin "146d. bug create --flag round-trips"
+FID=$(make_bug "${_CF[@]}" --summary "flag create" --flag 'review?')
+run_bzr bug view "$FID"
+if assert_success &&
+    assert_json_contains '[.flags[].name] | join(",")' "review"; then test_pass; fi
+
+rm -r "$_FJ"
+unset _CF _FJ _WB CFID FID OID MID GID
 echo ""

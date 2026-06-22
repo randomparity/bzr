@@ -36,6 +36,46 @@ if [[ -n "$TMPL_BUG" ]]; then
     fi
 else test_skip "no TMPL_BUG"; fi
 
+test_begin "69a. template save metadata fields"
+run_bzr template save meta-tmpl --product FuncTestProd --component Backend \
+    --priority Normal --severity normal --url "http://example.com/template" \
+    --whiteboard "template-wb" --target-milestone=--- --deadline 2026-12-27 \
+    --cc "$ADMIN_EMAIL" --flag 'review?'
+if assert_success; then
+    run_bzr template show meta-tmpl
+    if assert_json '.url' "http://example.com/template" &&
+        assert_json '.whiteboard' "template-wb" &&
+        assert_json '.deadline' "2026-12-27"; then test_pass; fi
+fi
+
+test_begin "69b. bug create --template metadata applies"
+run_bzr bug create --template meta-tmpl --summary "Bug from meta template" \
+    --description "Description from meta template" --op-sys Linux --rep-platform PC
+if assert_success && assert_json_exists '.id'; then
+    _TMETA_BUG=$(jq -r '.id' "$BZR_STDOUT")
+    run_bzr bug view "$_TMETA_BUG"
+    if assert_json '.url' "http://example.com/template" &&
+        assert_json '.whiteboard' "template-wb" &&
+        assert_json_contains '[.flags[].name] | join(",")' "review"; then test_pass; fi
+fi
+
+test_begin "69c. template update --clear metadata"
+run_bzr template update meta-tmpl --clear url --clear whiteboard --cc "$ADMIN_EMAIL"
+if assert_success; then
+    run_bzr template show meta-tmpl
+    if assert_json '.url' "null" &&
+        assert_json '.whiteboard' "null" &&
+        assert_json_contains '.cc | join(",")' "$ADMIN_EMAIL"; then test_pass; fi
+fi
+
+test_begin "69d. template delete metadata template"
+run_bzr template delete meta-tmpl
+if assert_success; then
+    run_bzr template show meta-tmpl
+    if assert_failure; then test_pass; fi
+fi
+unset _TMETA_BUG
+
 test_begin "70. template delete"
 run_bzr template delete func-tmpl
 if assert_success; then test_pass; fi
@@ -45,4 +85,3 @@ run_bzr template show func-tmpl
 if assert_failure; then test_pass; fi
 
 echo ""
-
