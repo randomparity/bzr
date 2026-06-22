@@ -45,6 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `component update` now accepts `--product <PRODUCT> --component <COMPONENT>`
   and JSON `product`/`component` targets, resolving exact component names
   without a separate ID lookup. (#388)
+- `bzr schema error` now publishes the JSON error envelope emitted on stderr
+  under `--json` and `--output ndjson`. (#390)
 - `bug update` now accepts `--url` and `--target-milestone`, matching fields
   that `bug create` can already set. (#363)
 - `bug resolve`, `bug close`, `bug reopen`, and `bug dup` now accept

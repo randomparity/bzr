@@ -41,6 +41,7 @@ pub(crate) const SCHEMAS: &[(&str, &str)] = schema_registry![
     "count-result",
     "download-result",
     "dry-run-result",
+    "error",
     "field-value",
     "group",
     "group-create-input",
