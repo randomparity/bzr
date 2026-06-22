@@ -7,10 +7,10 @@ BZ_VERSION="${BZR_BZ_VERSION:-bz50}"
 
 bz_version_num() {
     case "$BZ_VERSION" in
-        bz50) echo 500 ;;
-        bz52) echo 520 ;;
-        bz53) echo 530 ;;
-        *)    echo 0 ;;
+    bz50) echo 500 ;;
+    bz52) echo 520 ;;
+    bz53) echo 530 ;;
+    *) echo 0 ;;
     esac
     return 0
 }
@@ -53,14 +53,14 @@ test_begin() {
 
 test_pass() {
     PASS_COUNT=$((PASS_COUNT + 1))
-    printf "${GREEN}PASS${RESET}\n"
+    printf '%bPASS%b\n' "$GREEN" "$RESET"
     return 0
 }
 
 test_fail() {
     local reason="${1:-}"
     FAIL_COUNT=$((FAIL_COUNT + 1))
-    printf "${RED}FAIL${RESET}"
+    printf '%bFAIL%b' "$RED" "$RESET"
     if [[ -n "$reason" ]]; then
         printf "  (%s)" "$reason"
     fi
@@ -78,7 +78,7 @@ test_fail() {
 test_skip() {
     local reason="${1:-}"
     SKIP_COUNT=$((SKIP_COUNT + 1))
-    printf "${YELLOW}SKIP${RESET}"
+    printf '%bSKIP%b' "$YELLOW" "$RESET"
     if [[ -n "$reason" ]]; then
         printf "  (%s)" "$reason"
     fi
@@ -366,4 +366,64 @@ wait_for_changed() {
         attempt=$((attempt + 1))
     done
     return 1
+}
+
+# unique_name <prefix> — per-run fixture id safe for Bugzilla names.
+unique_name() {
+    local prefix="$1"
+    printf '%s-%s-%s' "$prefix" "$$" "$RANDOM"
+    return 0
+}
+
+# write_json_fixture <path> <json> — writes compact JSON without a trailing
+# shell-expanded newline surprise.
+write_json_fixture() {
+    local path="$1"
+    local json="$2"
+    printf '%s' "$json" >"$path"
+    return 0
+}
+
+# assert_stdout_equals_file <path> — raw stdout exactly matches file bytes.
+assert_stdout_equals_file() {
+    local path="$1"
+    if ! cmp -s "$BZR_STDOUT" "$path"; then
+        test_fail "stdout does not exactly match '$path'"
+        return 1
+    fi
+}
+
+# assert_schema_list_contains <name> — schema list stdout contains a schema name.
+assert_schema_list_contains() {
+    local name="$1"
+    assert_json_exists "index(\"$name\")"
+}
+
+container_runtime() {
+    if command -v podman >/dev/null 2>&1; then
+        printf '%s' podman
+        return 0
+    fi
+    if command -v docker >/dev/null 2>&1; then
+        printf '%s' docker
+        return 0
+    fi
+    return 1
+}
+
+bugzilla_container_name() {
+    printf '%s' "${BZR_FUNC_CONTAINER:-bzr-func-test-${BZ_VERSION}}"
+    return 0
+}
+
+# run_bugzilla_sql_file <path> — execute SQL inside the running Bugzilla
+# container. Use this only for fixture capabilities that Bugzilla's public API
+# cannot create, such as flag types and product group controls.
+run_bugzilla_sql_file() {
+    local sql_file="$1"
+    local runtime
+    local container
+    runtime=$(container_runtime)
+    container=$(bugzilla_container_name)
+    "$runtime" exec -i "$container" mysql -u root bugs <"$sql_file"
 }
