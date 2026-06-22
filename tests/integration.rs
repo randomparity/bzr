@@ -1604,6 +1604,8 @@ async fn component_update_integration() {
     let action = bzr::cli::ComponentAction::Update {
         from_json: None,
         id: Some(10),
+        product: None,
+        component: None,
         name: Some("Updated".to_string()),
         description: None,
         default_assignee: None,

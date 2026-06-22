@@ -577,7 +577,7 @@ pub enum Commands {
     ///   bzr component create --product MyProduct --name Backend \
     ///     --description "Backend services" \
     ///     --default-assignee dev@example.com
-    ///   bzr component update --product MyProduct --name Backend \
+    ///   bzr component update --product MyProduct --component Backend \
     ///     --description "Updated description"
     ///
     /// See bzr-component-create(1) and bzr-component-update(1) for

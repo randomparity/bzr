@@ -193,7 +193,8 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   ├── list --product <P>
 │   ├── view <PRODUCT> <COMPONENT>
 │   ├── create [--from-json <PATH>] [--product <P>] [--name <N>] [--description <D>] [--default-assignee <E>]
-│   └── update [<ID>] [--from-json <PATH>] [--name <N>] [--description <D>] [--default-assignee <E>]
+│   └── update [<ID>] [--from-json <PATH>] [--product <P>] [--component <C>]
+│              [--name <N>] [--description <D>] [--default-assignee <E>]
 ├── config
 │   ├── set-server <NAME> --url <URL> [--api-key <KEY> | --api-key-env <ENV_VAR>] [--email <EMAIL>] [--auth-method <METHOD>]
 │   │                     [--tls-insecure] [--tls-ca-cert <PATH>] [--tls-pin-sha256 <HEX>] [--tls-pin-now] [--tls-pin-clear]
@@ -1458,10 +1459,11 @@ Agent note: this is safer after confirming the product exists with `bzr --json p
 
 ### `bzr component update`
 
-Update an existing component (requires admin privileges).
+Update an existing component by ID or exact product/component name (requires admin privileges).
 
 ```bash
 bzr component update 42 --name "renamed-component"
+bzr component update --product MyApp --component Backend --description "Updated backend"
 bzr component update 42 --default-assignee newdev@example.com
 bzr component update --from-json component-update.json --name "renamed-component"
 bzr --dry-run component update 42 --default-assignee newdev@example.com
@@ -1469,11 +1471,17 @@ bzr --dry-run component update 42 --default-assignee newdev@example.com
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `<ID>` | Yes unless JSON supplies `id` | Component ID |
+| `<ID>` | Yes unless another target is supplied | Component ID |
+| `--product <P>` | With `--component` for name target | Product containing the component |
+| `--component <C>` | With `--product` for name target | Existing component name, exact match |
 | `--from-json <PATH>` | No | Read component update fields from a JSON object (`-` reads stdin). Schema: `bzr schema component-update-input` |
 | `--name <N>` | No | New name |
 | `--description <D>` | No | New description |
 | `--default-assignee <E>` | No | New default assignee |
+
+Use either `<ID>`, JSON `id`, CLI `--product`/`--component`, or JSON
+`product`/`component` as the target. `--name` is always the new name, not the
+target component name.
 
 ---
 

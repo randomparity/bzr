@@ -49,19 +49,6 @@ pub(crate) fn resolve_string_target(
     }
 }
 
-pub(crate) fn resolve_u64_target(
-    positional: Option<u64>,
-    json: Option<u64>,
-    conflict: &str,
-    missing: &str,
-) -> Result<u64> {
-    match (positional, json) {
-        (Some(_), Some(_)) => Err(BzrError::InputValidation(conflict.into())),
-        (Some(value), None) | (None, Some(value)) => Ok(value),
-        (None, None) => Err(BzrError::InputValidation(missing.into())),
-    }
-}
-
 fn parse_object<T: DeserializeOwned>(raw: &str) -> Result<T> {
     let value: serde_json::Value = serde_json::from_str(raw)
         .map_err(|e| BzrError::InputValidation(format!("--from-json: invalid JSON: {e}")))?;
