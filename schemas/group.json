@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/randomparity/bzr/schemas/group.json",
   "title": "Group",
-  "description": "A Bugzilla group (`GroupInfo`) as emitted in `--format json` output.",
+  "description": "A Bugzilla group (`GroupInfo`) as emitted in `--json` output.",
   "type": "object",
   "properties": {
     "id": {

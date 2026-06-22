@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/randomparity/bzr/schemas/attachment.json",
   "title": "Attachment",
-  "description": "A bug attachment as emitted in `--format json` output.",
+  "description": "A bug attachment as emitted in `--json` output.",
   "type": "object",
   "properties": {
     "id": {

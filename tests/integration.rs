@@ -1430,7 +1430,7 @@ async fn attachment_upload_with_is_patch_integration() {
     .await;
     assert!(
         result.is_ok(),
-        "upload with --is-patch should succeed: {result:?}"
+        "upload with --patch should succeed: {result:?}"
     );
 }
 
@@ -2624,6 +2624,80 @@ fn cli_and_docs_avoid_misleading_trim_phrasing() {
             );
         }
     }
+}
+
+fn push_files_with_extension(
+    dir: &std::path::Path,
+    extension: &str,
+    files: &mut Vec<std::path::PathBuf>,
+) {
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            push_files_with_extension(&path, extension, files);
+        } else if path.extension().is_some_and(|e| e == extension) {
+            files.push(path);
+        }
+    }
+}
+
+fn check_stale_flag_line(
+    path: &std::path::Path,
+    line_no: usize,
+    line: &str,
+    forbidden: &[(&str, &str)],
+    findings: &mut Vec<String>,
+) {
+    for (old, replacement) in forbidden {
+        if line.contains(old) {
+            findings.push(format!(
+                "{}:{line_no}: replace {old:?} with {replacement:?}",
+                path.display()
+            ));
+        }
+    }
+}
+
+#[test]
+fn docs_and_help_comments_use_current_long_flags() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let forbidden = [
+        ("--is-patch", "--patch"),
+        ("--format json", "--json or --output json"),
+        ("--ndjson", "--output ndjson"),
+    ];
+    let mut findings = Vec::new();
+
+    let mut prose_files = vec![root.join("README.md"), root.join("docs/bzr-cli.md")];
+    push_files_with_extension(&root.join("agent-skills"), "md", &mut prose_files);
+    push_files_with_extension(&root.join("schemas"), "json", &mut prose_files);
+    prose_files.sort();
+
+    for path in prose_files {
+        let content = std::fs::read_to_string(&path).unwrap();
+        for (idx, line) in content.lines().enumerate() {
+            check_stale_flag_line(&path, idx + 1, line, &forbidden, &mut findings);
+        }
+    }
+
+    let mut source_files = Vec::new();
+    push_files_with_extension(&root.join("src"), "rs", &mut source_files);
+    source_files.sort();
+    for path in source_files {
+        let content = std::fs::read_to_string(&path).unwrap();
+        for (idx, line) in content.lines().enumerate() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("///") || trimmed.starts_with("//!") {
+                check_stale_flag_line(&path, idx + 1, line, &forbidden, &mut findings);
+            }
+        }
+    }
+
+    assert!(
+        findings.is_empty(),
+        "stale CLI flag references:\n{}",
+        findings.join("\n")
+    );
 }
 
 // ── #206 --json field trimming ───────────────────────────────────────

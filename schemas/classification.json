@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/randomparity/bzr/schemas/classification.json",
   "title": "Classification",
-  "description": "A Bugzilla classification as emitted in `--format json` output.",
+  "description": "A Bugzilla classification as emitted in `--json` output.",
   "type": "object",
   "properties": {
     "id": {

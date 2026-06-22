@@ -2038,7 +2038,7 @@ bzr schema batch-result | jq .  # the batch `bug update` envelope
 ```
 
 Listing honors `--output`: a name-per-line table at a TTY, a JSON array under
-`--json`, one JSON string per line under `--ndjson`. Printing a named schema
+`--json`, one JSON string per line under `--output ndjson`. Printing a named schema
 emits the schema document verbatim. An unknown name exits 7 with the list of
 valid names.
 
@@ -2164,7 +2164,7 @@ goes to stderr under `ndjson`, keeping stdout one clean record per line.
 ### Published schemas
 
 `bzr schema` prints checked-in JSON Schemas (draft 2020-12) describing the
-`--format json` shape of each command family, so an agent can validate output
+`--json` shape of each command family, so an agent can validate output
 against a contract instead of branching per command. See
 [`bzr schema`](#bzr-schema----published-json-schemas).
 

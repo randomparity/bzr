@@ -404,10 +404,7 @@ async fn attachment_upload_with_is_patch_defaults_content_type_to_text_plain() {
         &mut __cap_io.writers(),
     )
     .await;
-    assert!(
-        result.is_ok(),
-        "upload --is-patch should succeed: {result:?}"
-    );
+    assert!(result.is_ok(), "upload --patch should succeed: {result:?}");
 }
 
 #[tokio::test]
@@ -454,7 +451,7 @@ async fn attachment_upload_is_patch_with_explicit_content_type_keeps_content_typ
     .await;
     assert!(
         result.is_ok(),
-        "upload --is-patch with explicit ct should succeed: {result:?}"
+        "upload --patch with explicit ct should succeed: {result:?}"
     );
 }
 
