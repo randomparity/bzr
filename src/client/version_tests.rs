@@ -60,8 +60,15 @@ async fn detect_version_and_mode_without_auth_sends_no_credentials() {
         .mount(&server)
         .await;
 
-    let (version, mode) =
-        detect_version_and_mode_without_auth(&test_http_client(), &server.uri()).await;
+    let result =
+        detect_version_and_mode_without_auth_checked(&test_http_client(), &server.uri()).await;
+    assert!(
+        result.is_ok(),
+        "anonymous version probe should succeed: {result:?}"
+    );
+    let Ok((version, mode)) = result else {
+        return;
+    };
 
     assert_eq!(version.as_deref(), Some("5.1.2"));
     assert_eq!(mode, ApiMode::Rest);

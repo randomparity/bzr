@@ -13,7 +13,7 @@ use crate::types::{ApiMode, AuthMethod};
 use self::valid_login::{detect_valid_login_auth, verify_header_auth_via_rest, ValidLoginOutcome};
 use self::whoami::{detect_whoami_auth, WhoamiOutcome};
 
-use super::version::{detect_version_and_mode, detect_version_and_mode_without_auth};
+use super::version::{detect_version_and_mode, detect_version_and_mode_without_auth_checked};
 
 /// Result of server settings detection -- auth method, API mode, and
 /// optionally the server version string. Returned by [`detect_server_settings`]
@@ -68,7 +68,7 @@ pub async fn detect_server_settings_without_auth(
     tls_config: &crate::tls::TlsConfig,
 ) -> Result<DetectedServerSettings> {
     let http = crate::tls::build_tls_client(tls_config)?;
-    let (version, api_mode) = detect_version_and_mode_without_auth(&http, url).await;
+    let (version, api_mode) = detect_version_and_mode_without_auth_checked(&http, url).await?;
 
     tracing::info!(
         %api_mode,
