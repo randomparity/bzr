@@ -5,7 +5,7 @@ use base64::Engine;
 
 use crate::cli::AttachmentAction;
 use crate::client::BugzillaClient;
-use crate::error::Result;
+use crate::error::{BzrError, Result};
 use crate::output::resources::attachment::{
     write_attachment, write_attachment_batch, write_attachments, AttachmentBatchResult,
     AttachmentDownloadResult, BatchSummary, BugDownloadResult, DownloadedFile, TargetStatus,
@@ -99,6 +99,7 @@ async fn upload(
         patch,
         no_patch,
         comment,
+        comment_file,
         comment_private,
         flag,
     } = args;
@@ -116,6 +117,11 @@ async fn upload(
         (None, false) => guess_content_type(file_name).to_string(),
     };
     let flags = super::runtime::flags::parse_flags(flag)?;
+    let comment = resolve_upload_comment(
+        comment.as_deref(),
+        comment_file.as_deref(),
+        *comment_private,
+    )?;
     let size = data.len();
     let upload_params = UploadAttachmentParams {
         bug_id: *bug_id,
@@ -125,7 +131,7 @@ async fn upload(
         data,
         flags,
         is_private,
-        comment: comment.clone(),
+        comment,
         is_patch,
     };
     let att_id = client.upload_attachment(&upload_params).await?;
@@ -139,6 +145,34 @@ async fn upload(
         w.out,
     );
     Ok(())
+}
+
+fn resolve_upload_comment(
+    comment: Option<&str>,
+    comment_file: Option<&Path>,
+    comment_private: bool,
+) -> Result<Option<String>> {
+    let body = super::runtime::shared::materialize_body_source(
+        super::runtime::shared::classify_body_source(
+            comment,
+            comment_file,
+            "--comment",
+            "--comment-file",
+        )?,
+        "--comment-file",
+    )?;
+    if body.is_none() && comment_private {
+        return Err(BzrError::InputValidation(
+            "--comment-private requires --comment or --comment-file".into(),
+        ));
+    }
+    let Some(text) = body else {
+        return Ok(None);
+    };
+    if text.trim().is_empty() {
+        return Err(BzrError::InputValidation("empty comment, aborting".into()));
+    }
+    Ok(Some(text))
 }
 
 async fn update(
@@ -208,9 +242,10 @@ fn validate_action(action: &AttachmentAction) -> Result<()> {
         AttachmentAction::Upload(crate::cli::attachment::UploadArgs {
             comment_private: true,
             comment: None,
+            comment_file: None,
             ..
         }) => Err(crate::error::BzrError::InputValidation(
-            "--comment-private requires --comment".into(),
+            "--comment-private requires --comment or --comment-file".into(),
         )),
         AttachmentAction::Download { ids, bug_ids, .. } if ids.is_empty() && bug_ids.is_empty() => {
             Err(crate::error::BzrError::InputValidation(

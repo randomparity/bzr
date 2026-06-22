@@ -37,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the source bug, and accepts create-time metadata overrides for URL,
   whiteboard, target milestone, deadline, CC, keywords, groups, and flags.
   (#385)
+- `attachment upload` now accepts `--comment-file <PATH>` and the shared `-`
+  stdin convention for `--comment` and `--comment-file`, while rejecting empty
+  attachment comments consistently. (#386)
 - `bug update` now accepts `--url` and `--target-milestone`, matching fields
   that `bug create` can already set. (#363)
 - `bug resolve`, `bug close`, `bug reopen`, and `bug dup` now accept

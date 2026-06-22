@@ -46,20 +46,26 @@ pub struct UploadArgs {
     /// inherits the bug's default privacy unless `--comment-private`
     /// is also set, in which case a follow-up `Bug.update` call
     /// flips the new comment private (two API round-trips total).
-    #[arg(long)]
+    /// Use `--comment -` to read the comment from stdin.
+    #[arg(long, conflicts_with = "comment_file")]
     pub comment: Option<String>,
-    /// Mark the comment posted via `--comment` private.
+    /// Read the attachment comment from a UTF-8 file.
+    ///
+    /// Use `--comment-file -` to read the comment from stdin.
+    #[arg(long, value_name = "PATH", conflicts_with = "comment")]
+    pub comment_file: Option<std::path::PathBuf>,
+    /// Mark the comment posted via `--comment` or `--comment-file` private.
     ///
     /// Issues a follow-up `Bug.update` call after the upload to flip
     /// the just-created comment's `is_private` flag. The Bugzilla
     /// `Bug.add_attachment` API does not accept comment privacy in
     /// the upload itself, so this is a two-call workflow internally.
     ///
-    /// Requires `--comment <BODY>`; using `--comment-private` alone
-    /// is a usage error (exit 7). Marking a comment private requires
-    /// `editbugs` permission or `insider` group membership; on 403 the
-    /// attachment remains uploaded but the comment stays public, and
-    /// the command exits non-zero with a stderr warning.
+    /// Requires `--comment <BODY>` or `--comment-file <PATH>`; using
+    /// `--comment-private` alone is a usage error (exit 7). Marking a
+    /// comment private requires `editbugs` permission or `insider` group
+    /// membership; on 403 the attachment remains uploaded but the comment
+    /// stays public, and the command exits non-zero with a stderr warning.
     #[arg(long)]
     pub comment_private: bool,
     /// Set, request, or clear a flag using Bugzilla flag syntax.
@@ -232,12 +238,13 @@ pub enum AttachmentAction {
     /// `--summary` sets the attachment's display label;
     /// it defaults to the file name if omitted.
     ///
-    /// `--comment <BODY>` posts a comment alongside the attachment
-    /// in a single API call. Use this when the attachment needs
-    /// explanatory context — typical for patches.
+    /// `--comment <BODY>` or `--comment-file <PATH>` posts a comment
+    /// alongside the attachment in a single API call. Use this when
+    /// the attachment needs explanatory context -- typical for patches.
+    /// Pass `-` to either option to read the comment from stdin.
     ///
-    /// `--comment-private` (used together with `--comment`) marks the
-    /// new comment private after upload. This requires `editbugs`
+    /// `--comment-private` (used together with one comment source)
+    /// marks the new comment private after upload. This requires `editbugs`
     /// permission. Permission errors leave the attachment uploaded and
     /// the comment public; rerun privacy via the web UI.
     ///
@@ -254,9 +261,11 @@ pub enum AttachmentAction {
     ///   bzr attachment upload 12345 fix.patch \
     ///     --flag 'review?(maintainer@example.com)'
     ///   bzr attachment upload 12345 fix.patch --comment "see #4567 for context"
+    ///   bzr attachment upload 12345 fix.patch --comment-file notes.md
+    ///   bzr attachment upload 12345 trace.log --comment-file -
     ///   bzr attachment upload 12345 patch.diff \
     ///     --comment "private context" --comment-private
-    ///   bzr attachment upload 12345 fix.patch --is-patch
+    ///   bzr attachment upload 12345 fix.patch --patch
     ///
     /// See bzr-attachment-update(1) to modify metadata after upload.
     #[command(verbatim_doc_comment)]

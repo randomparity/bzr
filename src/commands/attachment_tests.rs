@@ -104,6 +104,7 @@ async fn attachment_upload_api_error_propagates() {
         patch: false,
         no_patch: false,
         comment: None,
+        comment_file: None,
         comment_private: false,
         flag: vec![],
     });
@@ -178,6 +179,7 @@ async fn attachment_upload_returns_id() {
         patch: false,
         no_patch: false,
         comment: None,
+        comment_file: None,
         comment_private: false,
         flag: vec![],
     });
@@ -223,6 +225,7 @@ async fn attachment_upload_with_comment_includes_comment_in_request() {
         patch: false,
         no_patch: false,
         comment: Some("see this".into()),
+        comment_file: None,
         comment_private: false,
         flag: vec![],
     });
@@ -238,6 +241,127 @@ async fn attachment_upload_with_comment_includes_comment_in_request() {
         result.is_ok(),
         "upload with --comment should succeed: {result:?}"
     );
+}
+
+#[tokio::test]
+async fn attachment_upload_with_comment_file_includes_comment_in_request() {
+    use wiremock::matchers::body_string_contains;
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/42/attachment"))
+        .and(body_string_contains("\"comment\":\"from file body\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [202]})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let upload_file = tmp.path().join("upload.txt");
+    let comment_file = tmp.path().join("comment.txt");
+    std::fs::write(&upload_file, "test content").unwrap();
+    std::fs::write(&comment_file, "from file body").unwrap();
+
+    let action = AttachmentAction::Upload(UploadArgs {
+        bug_id: 42,
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: Some("Test".into()),
+        content_type: Some("text/plain".into()),
+        private: false,
+        no_private: false,
+        patch: false,
+        no_patch: false,
+        comment: None,
+        comment_file: Some(comment_file),
+        comment_private: false,
+        flag: vec![],
+    });
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "upload with --comment-file should succeed: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn attachment_upload_rejects_whitespace_comment() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
+    let (_lock, _mock, tmp) = setup_test_env().await;
+
+    let upload_file = tmp.path().join("upload.txt");
+    std::fs::write(&upload_file, "test content").unwrap();
+
+    let action = AttachmentAction::Upload(UploadArgs {
+        bug_id: 42,
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: Some("Test".into()),
+        content_type: Some("text/plain".into()),
+        private: false,
+        no_private: false,
+        patch: false,
+        no_patch: false,
+        comment: Some(" \n\t".into()),
+        comment_file: None,
+        comment_private: false,
+        flag: vec![],
+    });
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(crate::error::BzrError::InputValidation(_))
+    ));
+}
+
+#[tokio::test]
+async fn attachment_upload_rejects_whitespace_comment_file() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
+    let (_lock, _mock, tmp) = setup_test_env().await;
+
+    let upload_file = tmp.path().join("upload.txt");
+    let comment_file = tmp.path().join("comment.txt");
+    std::fs::write(&upload_file, "test content").unwrap();
+    std::fs::write(&comment_file, " \n\t").unwrap();
+
+    let action = AttachmentAction::Upload(UploadArgs {
+        bug_id: 42,
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: Some("Test".into()),
+        content_type: Some("text/plain".into()),
+        private: false,
+        no_private: false,
+        patch: false,
+        no_patch: false,
+        comment: None,
+        comment_file: Some(comment_file),
+        comment_private: false,
+        flag: vec![],
+    });
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(crate::error::BzrError::InputValidation(_))
+    ));
 }
 
 #[tokio::test]
@@ -268,6 +392,7 @@ async fn attachment_upload_with_is_patch_defaults_content_type_to_text_plain() {
         patch: true,
         no_patch: false,
         comment: None,
+        comment_file: None,
         comment_private: false,
         flag: vec![],
     });
@@ -315,6 +440,7 @@ async fn attachment_upload_is_patch_with_explicit_content_type_keeps_content_typ
         patch: true,
         no_patch: false,
         comment: None,
+        comment_file: None,
         comment_private: false,
         flag: vec![],
     });
@@ -562,6 +688,7 @@ async fn attachment_upload_with_comment_private_flips_privacy() {
         patch: false,
         no_patch: false,
         comment: Some("sensitive".into()),
+        comment_file: None,
         comment_private: true,
         flag: vec![],
     });
@@ -576,6 +703,77 @@ async fn attachment_upload_with_comment_private_flips_privacy() {
     assert!(
         result.is_ok(),
         "two-call workflow should succeed: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn attachment_upload_comment_private_with_comment_file_flips_privacy() {
+    use wiremock::matchers::body_string_contains;
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    let upload_file = tmp.path().join("p.diff");
+    let comment_file = tmp.path().join("comment.txt");
+    std::fs::write(&upload_file, "diff --git a/x b/x").unwrap();
+    std::fs::write(&comment_file, "file sensitive").unwrap();
+
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/42/attachment"))
+        .and(body_string_contains("\"comment\":\"file sensitive\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [200]})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": {
+                "42": {
+                    "comments": [
+                        {"id": 555, "bug_id": 42, "text": "file sensitive", "is_private": false, "attachment_id": 200}
+                    ]
+                }
+            }
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/42"))
+        .and(body_string_contains("\"comment_is_private\""))
+        .and(body_string_contains("\"555\":true"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = AttachmentAction::Upload(UploadArgs {
+        bug_id: 42,
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: Some("test".into()),
+        content_type: Some("text/x-diff".into()),
+        private: false,
+        no_private: false,
+        patch: false,
+        no_patch: false,
+        comment: None,
+        comment_file: Some(comment_file),
+        comment_private: true,
+        flag: vec![],
+    });
+    let result = super::execute(
+        &action,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "comment-file two-call workflow should succeed: {result:?}"
     );
 }
 
@@ -596,6 +794,7 @@ async fn attachment_upload_comment_private_without_comment_is_input_error() {
         patch: false,
         no_patch: false,
         comment: None,
+        comment_file: None,
         comment_private: true,
         flag: vec![],
     });
@@ -657,6 +856,7 @@ async fn attachment_upload_comment_private_partial_failure_propagates_error() {
         patch: false,
         no_patch: false,
         comment: Some("x".into()),
+        comment_file: None,
         comment_private: true,
         flag: vec![],
     });
@@ -713,6 +913,7 @@ async fn attachment_upload_comment_private_no_matching_comment_is_data_integrity
         patch: false,
         no_patch: false,
         comment: Some("x".into()),
+        comment_file: None,
         comment_private: true,
         flag: vec![],
     });
