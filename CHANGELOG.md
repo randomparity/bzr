@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   component, priority, severity, created/changed dates, whiteboard, target
   milestone, version, operating system, platform, resolution, QA contact, and
   URL. (#382)
+- `query update` now accepts `--from-url <URL>` to refresh an existing saved
+  query from an updated Bugzilla `buglist.cgi` URL without delete-and-recreate.
+  (#383)
 - `bug update` now accepts `--url` and `--target-milestone`, matching fields
   that `bug create` can already set. (#363)
 - `bug resolve`, `bug close`, `bug reopen`, and `bug dup` now accept

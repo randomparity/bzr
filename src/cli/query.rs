@@ -1,9 +1,10 @@
 use clap::{Args, Subcommand};
 
-/// Argument IDs of the structured filter flags on `query save`. Centralized so
-/// the mutual-exclusivity lists on `--from-url` / `--search` stay in sync when a
-/// filter flag is added or renamed (rather than hand-maintaining two literal
-/// lists). Keep in lockstep with the `Vec<String>` filter fields on `Save`.
+/// Argument IDs of the structured filter flags on saved-query commands.
+/// Centralized so the mutual-exclusivity lists on `--from-url` / `--search`
+/// stay in sync when a filter flag is added or renamed (rather than
+/// hand-maintaining two literal lists). Keep in lockstep with the `Vec<String>`
+/// filter fields on `SaveArgs` and `UpdateArgs`.
 const FILTER_FLAG_ARGS: [&str; 15] = [
     "product",
     "component",
@@ -132,6 +133,14 @@ pub struct DeleteArgs {
 pub struct UpdateArgs {
     /// Query name
     pub name: String,
+    /// Refresh this saved query from a Bugzilla `buglist.cgi` URL.
+    ///
+    /// Replaces the saved query's URL-derived filters, raw passthrough params,
+    /// source URL, and saved server. Mutually exclusive with manual filter
+    /// flags, `--search`, and `--clear`.
+    #[arg(long, conflicts_with = "search", conflicts_with = "clear")]
+    #[arg(conflicts_with_all = FILTER_FLAG_ARGS)]
+    pub from_url: Option<String>,
     /// Replace the free-text search
     #[arg(long)]
     pub search: Option<String>,
@@ -375,10 +384,18 @@ pub enum QueryAction {
     /// `--from-url` query are preserved. If a field is both set and
     /// cleared in one call, `--clear` wins.
     ///
+    /// `--from-url` refreshes the saved query from a Bugzilla
+    /// `buglist.cgi` URL, replacing URL-derived filters, raw
+    /// pass-through params, source URL, and saved server. It is
+    /// mutually exclusive with `--search`, manual filter flags, and
+    /// `--clear`; `--limit`, `--fields`, date filters, and sorting
+    /// may still be supplied as stored overrides.
+    ///
     /// Examples:
     ///
     ///   bzr query update firefox-new --status ASSIGNED
     ///   bzr query update firefox-new --limit 100 --clear severity
+    ///   bzr query update firefox-web --from-url 'https://bz/buglist.cgi?product=Firefox'
     ///
     /// See bzr-query-save(1) to create one and bzr-query-show(1) to
     /// inspect the result.
