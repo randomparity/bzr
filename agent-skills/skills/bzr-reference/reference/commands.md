@@ -1,11 +1,14 @@
-# bzr command surface (authored against bzr 0.5.0)
+# bzr command surface (authored against bzr 0.5.1-dev)
 
 Global (place before the subcommand): `--json` (force JSON; long form
 `--output json`), `--output ndjson` (one compact record per line, for `jq -c`),
 `--dry-run` (preview a bug mutation, no write), `-y`/`--yes` (skip the batch
 confirmation prompt), `--timeout <secs>`, `--retry <n>`, `--config <path>`
-(alternate config.toml), and the stateless inline server trio
-`--server-url <url>` / `--server-api-key-env <env>` / `--server-email <email>`.
+(alternate config.toml), and stateless inline server flags:
+`--server-url <url>` (credentials optional for public read-only commands),
+`--server-api-key-env <env>`, `--server-email <email>`, and one of the inline
+TLS trust flags `--server-tls-ca-cert`, `--server-tls-pin-sha256`,
+`--server-tls-pin-now`, or `--server-tls-insecure`.
 `--help` works on any group.
 
 ## bug
@@ -22,13 +25,21 @@ Operate on bugs.
     --target-milestone --deadline --cc --keywords --groups --flag`.
   - `bzr bug create --from-json <path|->`   # one object = one bug; an array batches
 - `bzr bug clone 12345`
+  - Override create fields on the clone: `--summary --product --component
+    --version --description --priority --severity --assignee --op-sys
+    --rep-platform --url --whiteboard --target-milestone --deadline --cc
+    --keywords --groups --flag`.
 - `bzr bug update 12345 --status RESOLVED --resolution FIXED --flag "review+(a@b.com)"`
   - `--expect-unchanged-since <last_change_time>`   # abort (exit 14) on mid-air collision
 - `bzr bug resolve 12345 [--as WONTFIX]` (sugar over `update`)
 - `bzr bug close 12345 [--status CLOSED]` / `reopen 12345 [--status REOPENED]`
   (default to stock statuses VERIFIED / CONFIRMED) / `dup 12345 100`
 - `bzr bug history 12345 [--since 2025-01-01]`
-- `bzr bug my [--status \!CLOSED]`
+- `bzr bug my [--status \!CLOSED] [--product Foo] [--component Bar]`
+  - Supports the shared list filters: `--product --component --priority
+    --severity --created-since --changed-since --whiteboard --target-milestone
+    --version --op-sys --platform --resolution --qa-contact --url`, plus
+    `--count`, `--fields`, sorting, paging, and `--all`/`--created`/`--cc`.
 - A `-` value for `--description`/`--description-file`/`--comment-file`/`--from-json`
   reads from stdin.
 
@@ -43,7 +54,10 @@ Operate on bugs.
 - `bzr attachment list 12345 [--json]`
 - `bzr attachment view <id> [--json]`           # one attachment's metadata
 - `bzr attachment download 12345`
+- `bzr attachment download <id> --out - > attachment.bin`
+  - `--out -` streams one attachment's raw bytes to stdout and suppresses result output.
 - `bzr attachment upload 12345 patch.diff --flag "review?(a@b.com)" --comment "context"`
+  - `--comment <body>` and `--comment-file <path|->` post context with the upload.
   - `--comment-private` marks that comment private; `--patch`/`--no-patch` and
     `--private`/`--no-private` set the booleans.
 - `bzr attachment update <id> ...`
@@ -52,6 +66,10 @@ Operate on bugs.
 
 ## config
 - `bzr config set-server my-bz --url https://bugzilla.example.com --api-key-env BZR_API_KEY`
+- `bzr config set-server public-bz --url https://bugzilla.example.com`
+  - Omit `--api-key*` for public read-only servers.
+- TLS trust: `--tls-ca-cert <path>`, `--tls-pin-sha256 <pin>`,
+  `--tls-pin-now`, `--tls-insecure`, or `--tls-pin-clear`.
 - `bzr config show`
 - `bzr config set-default my-bz`
 - `bzr config set-keyring my-bz` / `bzr config unset-keyring my-bz`
@@ -94,7 +112,11 @@ Operate on bugs.
 
 ## template
 - `bzr template save fedora-kernel --product Fedora --component kernel`
-- `bzr template update fedora-kernel --component drm`   # merge fields in place
+  - Templates can also store `--version --priority --severity --assignee
+    --op-sys --rep-platform --description --url --whiteboard
+    --target-milestone --deadline --cc --keywords --groups --flag`.
+- `bzr template update fedora-kernel --component drm --cc triage@example.com`
+  - Merge fields in place; `--clear <field>` unsets a stored field.
 - `bzr template list` / `bzr template show <name>` / `bzr template delete <name>`
 - Apply at create: `bzr bug create --template fedora-kernel --summary "..."`
 
@@ -102,6 +124,9 @@ Operate on bugs.
 - `bzr query save my-open --assignee you@example.com --status NEW --status ASSIGNED`
   - `--sort <field> --order asc|desc` persists the result order with the query.
 - `bzr query update my-open --status ASSIGNED --clear assignee`  # edit in place; `--clear <field>` drops a field
+- `bzr query update my-open --from-url 'https://bz/buglist.cgi?product=Foo'`
+  - Refreshes saved URL-derived filters while allowing stored overrides such as
+    `--limit`, `--fields`, dates, and sort order.
 - `bzr query run my-open [--json]`
 - `bzr query list` / `bzr query show <name>` / `bzr query delete <name>`
 
@@ -113,3 +138,4 @@ Operate on bugs.
 - `bzr schema bug`        # print one schema (draft 2020-12) for `--json` output
 - `bzr schema bug-create-input`  # `bug create --from-json` payload
 - `bzr schema bug-update-input`  # `bug update --from-json` payload
+- `bzr schema error`      # common JSON/NDJSON error envelope

@@ -8,6 +8,10 @@ description: Use when searching Bugzilla or producing a bug report/digest with b
 ## Ad-hoc search
 
 ```
+# Public read-only server, no config or API key
+bzr --server-url https://bugzilla.example.com bug search "crash on startup" --json \
+  | jq -r '.[] | "\(.id)\t\(.status)\t\(.summary)"'
+
 bzr bug search "crash on startup" --json | jq -r '.[] | "\(.id)\t\(.status)\t\(.summary)"'
 bzr bug list --product Foo --status NEW --json | jq -r '.[].id'
 ```
@@ -46,14 +50,23 @@ place rather than re-saving it:
 ```
 bzr query save my-open --status NEW --status ASSIGNED --sort changed --order desc
 bzr query update my-open --status ASSIGNED --clear assignee   # --clear drops a field
+bzr query update imported --from-url 'https://bz/buglist.cgi?product=Foo'
 ```
+
+`query update --from-url` refreshes a saved Bugzilla URL import without losing
+allowed overrides such as `--limit`, `--fields`, date filters, and sort order.
 
 ## Your own bugs
 
 ```
-bzr bug my --status \!CLOSED --json | jq 'length'                 # count
-bzr bug my --status \!CLOSED --json | jq -r '.[] | "\(.id)\t\(.summary)"'
+bzr bug my --status \!CLOSED --product Foo --json | jq 'length'      # count
+bzr bug my --status \!CLOSED --component Bar --changed-since 2026-01-01 --json \
+  | jq -r '.[] | "\(.id)\t\(.summary)"'
 ```
+
+`bug my` supports the same product/component/status/date/metadata filters as
+`bug list`, plus `--all`, `--created`, `--cc`, `--count`, `--fields`,
+`--sort`, paging, and `--limit` per category.
 
 ## Build a digest
 

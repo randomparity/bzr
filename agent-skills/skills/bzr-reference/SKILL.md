@@ -23,18 +23,33 @@ bzr bug search "crash on boot" --json | jq -r '.[].id'
 
 See `reference/json-recipes.md` for extraction patterns.
 
-## Authentication
+## Server access
 
-A server is configured with `bzr config set-server`. The API key comes from an
-environment variable or the OS keychain. Check the active server and identity:
+A named server is configured with `bzr config set-server`. Omit credentials for
+public read-only Bugzilla exploration; add an API key source only when you need
+writes or identity-derived commands such as `whoami` and `bug my`:
 
 ```
-bzr config show     # lists servers and credential sources
-bzr whoami          # confirms the authenticated user
+bzr config set-server public-bz --url https://bugzilla.example.com
+bzr --server public-bz server info --json
+
+export BZR_API_KEY=...
+bzr config set-server my-bz --url https://bugzilla.example.com --api-key-env BZR_API_KEY
+bzr whoami --json
 ```
 
-If `whoami` fails, the server or credentials are not set up — see the
-`bzr-setup` skill.
+For one-off runs, skip config entirely with `--server-url <url>`. It also works
+without `--server-api-key-env` for public read-only commands:
+
+```
+bzr --server-url https://bugzilla.example.com bug view 12345 --json
+bzr --server-url https://bugzilla.example.com --server-api-key-env BZR_API_KEY whoami --json
+```
+
+Inline server TLS trust flags are `--server-tls-insecure`,
+`--server-tls-ca-cert <path>`, `--server-tls-pin-sha256 <pin>`, and
+`--server-tls-pin-now`. Named servers use the matching `config set-server`
+`--tls-*` flags. If `whoami` fails, see the `bzr-setup` skill.
 
 ## Command groups
 
@@ -71,6 +86,9 @@ These work on any command (place them before the subcommand):
 - `--server-url <url>` (+ `--server-api-key-env <env>`, optional
   `--server-email <email>`) — a fully stateless inline server, no config file
   needed; ideal for CI and agents. See the `bzr-setup` skill.
+- `--server-tls-insecure` / `--server-tls-ca-cert <path>` /
+  `--server-tls-pin-sha256 <pin>` / `--server-tls-pin-now` — TLS trust controls
+  for that one inline server invocation.
 
 ## Structured input
 
@@ -79,7 +97,8 @@ components, users, and groups accept `--from-json <path|->`. Explicit CLI flags
 override matching JSON fields, and unknown JSON keys exit 7 instead of being
 ignored. Bugs support object and array payloads; admin resources accept one
 object payload. Use `bzr schema <name>` to inspect the contract, e.g.
-`bug-create-input`, `product-update-input`, or `component-create-input`.
+`bug-create-input`, `bug-update-input`, `product-update-input`,
+`component-create-input`, or `error`.
 
 ## Cardinal rules
 
@@ -89,6 +108,6 @@ object payload. Use `bzr schema <name>` to inspect the contract, e.g.
   `bzr-triage-bug` skill walks this through.
 - **Keep writes explicit and minimal.** Change only the fields you intend to.
 
-This reference is authored against **bzr 0.5.0**. If `bzr --version` is much
+This reference is authored against **bzr 0.5.1-dev**. If `bzr --version` is much
 newer and a command here is rejected, the surface may have moved; check
 `bzr <group> --help`.

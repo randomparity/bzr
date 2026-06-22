@@ -1,15 +1,25 @@
 ---
 name: bzr-setup
-description: Use when bzr is not yet configured for a Bugzilla server, or when bzr whoami fails — configures a server URL and credentials (env var or OS keychain) and verifies the connection.
+description: Configure bzr for public or authenticated Bugzilla servers, credentials, and TLS trust.
 ---
 
 # Set up bzr for a Bugzilla server
 
-Goal: go from no configuration to a working, authenticated bzr.
+Goal: go from no configuration to a working bzr. Public read-only servers do not
+need credentials; writes and identity-derived commands do.
 
 ## 1. Add the server
 
-Pick a short name and the Bugzilla base URL. Choose a credential source:
+Pick a short name and the Bugzilla base URL. For public read-only exploration,
+omit the API key:
+
+```
+bzr config set-server public-bz --url https://bugzilla.example.com
+bzr --server public-bz server info --json
+bzr --server public-bz bug view 12345 --json
+```
+
+For writes, private bugs, `whoami`, or `bug my`, choose a credential source.
 
 Environment variable (good for CI / agents):
 ```
@@ -28,6 +38,13 @@ bzr config set-server my-bz --url https://bugzilla.example.com
 bzr config set-keyring my-bz
 ```
 
+If the server uses non-default TLS trust, set one named-server trust mode:
+
+```
+bzr config set-server lab --url https://bugzilla.lab --tls-ca-cert /path/ca.pem
+bzr config set-server pinned --url https://bugzilla.example.com --tls-pin-now
+```
+
 Set it as default if you have more than one:
 ```
 bzr config set-default my-bz
@@ -36,9 +53,12 @@ bzr config set-default my-bz
 ## Stateless: no config file at all
 
 For CI or agents, skip config entirely and define the server inline per
-invocation. Nothing is read from or written to `config.toml`:
+invocation. Nothing is read from or written to `config.toml`. The API key env
+var is optional for public read-only commands:
 
 ```
+bzr --server-url https://bugzilla.example.com server info --json
+
 export BZR_API_KEY=...
 bzr --server-url https://bugzilla.example.com \
     --server-api-key-env BZR_API_KEY \
@@ -46,16 +66,21 @@ bzr --server-url https://bugzilla.example.com \
 ```
 
 Add `--server-email <addr>` only if the server needs the Bugzilla 5.0 whoami
-fallback. To use a sandboxed config file instead of the default, point any
-command at it with `--config <path>` (overrides `BZR_CONFIG` and the default
+fallback. For self-hosted TLS, use exactly one inline trust flag:
+`--server-tls-ca-cert <path>`, `--server-tls-pin-sha256 <pin>`,
+`--server-tls-pin-now`, or, only for controlled test systems,
+`--server-tls-insecure`.
+
+To use a sandboxed config file instead of the default, point any command at it
+with `--config <path>` (overrides `BZR_CONFIG` and the default
 `$XDG_CONFIG_HOME/bzr/config.toml`).
 
 ## 2. Verify
 
 ```
-bzr config show     # confirm the server and credential source
-bzr whoami          # confirm authentication works
-bzr server info     # confirm the server is reachable and its capabilities
+bzr config show                 # confirm server URLs and credential sources
+bzr server info --json          # confirm the server is reachable
+bzr whoami --json               # confirm authentication, when credentials exist
 ```
 
 If `whoami` fails: re-check the URL, that the API key is valid, and that the

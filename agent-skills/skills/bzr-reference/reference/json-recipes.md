@@ -3,6 +3,9 @@
 All read paths support `--json`. Pipe to `jq`.
 
 ```
+# Public read-only Bugzilla, no config or API key
+bzr --server-url https://bugzilla.example.com server info --json | jq -r '.version'
+
 # Bug ids from a search
 bzr bug search "memory leak" --json | jq -r '.[].id'
 
