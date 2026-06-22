@@ -491,6 +491,159 @@ async fn bug_create_with_template_fills_missing_fields() {
 }
 
 #[tokio::test]
+async fn bug_create_template_applies_create_metadata_defaults() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let save = TemplateAction::Save {
+        name: "routing".into(),
+        fields: TemplateFields {
+            product: Some("TestProduct".into()),
+            component: Some("General".into()),
+            url: Some("https://example.com/repro".into()),
+            whiteboard: Some("needs-triage".into()),
+            target_milestone: Some("M1".into()),
+            deadline: Some("2026-12-31".into()),
+            cc: vec!["cc@example.com".into()],
+            keywords: vec!["regression".into()],
+            groups: vec!["security".into()],
+            flag: vec!["review?(qa@example.com)".into()],
+            ..Default::default()
+        },
+    };
+    let mut save_io = crate::test_helpers::CapturedIo::new();
+    crate::commands::template::execute(
+        &save,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut save_io.writers(),
+    )
+    .await
+    .unwrap();
+    let _ = save_io.out_str().to_string();
+
+    crate::commands::runtime::dry_run::set(true);
+    let action = BugAction::Create(crate::cli::CreateArgs {
+        from_json: None,
+        template: Some("routing".into()),
+        product: None,
+        component: None,
+        summary: Some("From template".into()),
+        version: None,
+        description: Some("body".into()),
+        description_file: None,
+        priority: None,
+        severity: None,
+        assignee: None,
+        op_sys: None,
+        rep_platform: None,
+        blocks: vec![],
+        depends_on: vec![],
+        create_fields: crate::cli::CreateFieldArgs::default(),
+    });
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+    crate::commands::runtime::dry_run::set(false);
+    assert!(result.is_ok(), "template create dry-run failed: {result:?}");
+
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let changes = &parsed["changes"];
+    assert_eq!(changes["url"], "https://example.com/repro");
+    assert_eq!(changes["whiteboard"], "needs-triage");
+    assert_eq!(changes["target_milestone"], "M1");
+    assert_eq!(changes["deadline"], "2026-12-31");
+    assert_eq!(changes["cc"], serde_json::json!(["cc@example.com"]));
+    assert_eq!(changes["keywords"], serde_json::json!(["regression"]));
+    assert_eq!(changes["groups"], serde_json::json!(["security"]));
+    assert_eq!(changes["flags"][0]["name"], "review");
+    assert_eq!(changes["flags"][0]["status"], "?");
+    assert_eq!(changes["flags"][0]["requestee"], "qa@example.com");
+}
+
+#[tokio::test]
+async fn bug_create_cli_create_metadata_overrides_template() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let save = TemplateAction::Save {
+        name: "routing".into(),
+        fields: TemplateFields {
+            product: Some("TestProduct".into()),
+            component: Some("General".into()),
+            url: Some("https://example.com/template".into()),
+            whiteboard: Some("template-whiteboard".into()),
+            target_milestone: Some("TemplateM".into()),
+            deadline: Some("2026-01-01".into()),
+            cc: vec!["template-cc@example.com".into()],
+            keywords: vec!["template-keyword".into()],
+            groups: vec!["template-group".into()],
+            flag: vec!["review?".into()],
+            ..Default::default()
+        },
+    };
+    let mut save_io = crate::test_helpers::CapturedIo::new();
+    crate::commands::template::execute(
+        &save,
+        None,
+        OutputFormat::Json,
+        None,
+        &mut save_io.writers(),
+    )
+    .await
+    .unwrap();
+    let _ = save_io.out_str().to_string();
+
+    crate::commands::runtime::dry_run::set(true);
+    let action = BugAction::Create(crate::cli::CreateArgs {
+        from_json: None,
+        template: Some("routing".into()),
+        product: None,
+        component: None,
+        summary: Some("From template".into()),
+        version: None,
+        description: Some("body".into()),
+        description_file: None,
+        priority: None,
+        severity: None,
+        assignee: None,
+        op_sys: None,
+        rep_platform: None,
+        blocks: vec![],
+        depends_on: vec![],
+        create_fields: crate::cli::CreateFieldArgs {
+            alias: None,
+            url: Some("https://example.com/cli".into()),
+            whiteboard: Some("cli-whiteboard".into()),
+            target_milestone: Some("CliM".into()),
+            deadline: Some("2026-12-31".into()),
+            cc: vec!["cli-cc@example.com".into()],
+            keywords: vec!["cli-keyword".into()],
+            groups: vec!["cli-group".into()],
+            flag: vec!["approval+".into()],
+        },
+    });
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result =
+        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
+            .await;
+    crate::commands::runtime::dry_run::set(false);
+    assert!(result.is_ok(), "template create dry-run failed: {result:?}");
+
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let changes = &parsed["changes"];
+    assert_eq!(changes["url"], "https://example.com/cli");
+    assert_eq!(changes["whiteboard"], "cli-whiteboard");
+    assert_eq!(changes["target_milestone"], "CliM");
+    assert_eq!(changes["deadline"], "2026-12-31");
+    assert_eq!(changes["cc"], serde_json::json!(["cli-cc@example.com"]));
+    assert_eq!(changes["keywords"], serde_json::json!(["cli-keyword"]));
+    assert_eq!(changes["groups"], serde_json::json!(["cli-group"]));
+    assert_eq!(changes["flags"][0]["name"], "approval");
+    assert_eq!(changes["flags"][0]["status"], "+");
+}
+
+#[tokio::test]
 async fn bug_create_reads_description_from_file() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
@@ -1320,11 +1473,11 @@ async fn from_json_batch_dry_run_emits_single_object_and_no_write() {
 }
 
 #[test]
-fn preview_params_propagates_every_merged_field() {
+fn preview_params_propagates_editor_field_values() {
     // The editor preview is built from MergedFields::preview_params. Every
-    // resolved field must flow into the CreateBugParams the editor template
-    // renders; dropping any one (or replacing the whole body with a default)
-    // would silently show the user a blank field in the $EDITOR buffer.
+    // editor-visible field must flow into the CreateBugParams the editor
+    // template renders; dropping any one would silently show the user a blank
+    // field in the $EDITOR buffer.
     let merged = super::MergedFields {
         product: "Prod".into(),
         component: "Comp".into(),
@@ -1334,6 +1487,14 @@ fn preview_params_propagates_every_merged_field() {
         assigned_to: Some("dev@example.com".into()),
         op_sys: Some("Linux".into()),
         rep_platform: Some("ARM".into()),
+        url: Some("https://example.com/repro".into()),
+        whiteboard: Some("needs-triage".into()),
+        target_milestone: Some("M1".into()),
+        deadline: Some("2026-12-31".into()),
+        cc: vec!["cc@example.com".into()],
+        keywords: vec!["regression".into()],
+        groups: vec!["security".into()],
+        flags: vec![],
         template_description: None,
     };
 
@@ -1371,6 +1532,14 @@ async fn run_editor_flow_returns_parsed_editor_output() {
         assigned_to: None,
         op_sys: None,
         rep_platform: None,
+        url: None,
+        whiteboard: None,
+        target_milestone: None,
+        deadline: None,
+        cc: vec![],
+        keywords: vec![],
+        groups: vec![],
+        flags: vec![],
         template_description: None,
     };
     let result = super::run_editor_flow(Some("Pre-fill"), &merged);

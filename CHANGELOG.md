@@ -30,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `query update` now accepts `--from-url <URL>` to refresh an existing saved
   query from an updated Bugzilla `buglist.cgi` URL without delete-and-recreate.
   (#383)
+- Bug templates now support the create metadata fields accepted by
+  `bug create`: URL, whiteboard, target milestone, deadline, CC, keywords,
+  groups, and flags. (#384)
 - `bug update` now accepts `--url` and `--target-milestone`, matching fields
   that `bug create` can already set. (#363)
 - `bug resolve`, `bug close`, `bug reopen`, and `bug dup` now accept

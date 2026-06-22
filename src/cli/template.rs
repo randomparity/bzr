@@ -33,6 +33,30 @@ pub struct TemplateFields {
     /// Default description
     #[arg(long)]
     pub description: Option<String>,
+    /// Default URL
+    #[arg(long)]
+    pub url: Option<String>,
+    /// Default whiteboard
+    #[arg(long)]
+    pub whiteboard: Option<String>,
+    /// Default target milestone
+    #[arg(long)]
+    pub target_milestone: Option<String>,
+    /// Default deadline (`YYYY-MM-DD`)
+    #[arg(long, value_name = "DATE")]
+    pub deadline: Option<String>,
+    /// Default CC addresses
+    #[arg(long, value_delimiter = ',')]
+    pub cc: Vec<String>,
+    /// Default keywords
+    #[arg(long, value_delimiter = ',')]
+    pub keywords: Vec<String>,
+    /// Default groups
+    #[arg(long, value_delimiter = ',')]
+    pub groups: Vec<String>,
+    /// Default Bugzilla flag updates (for example `review?`)
+    #[arg(long)]
+    pub flag: Vec<String>,
 }
 
 impl TemplateFields {
@@ -49,6 +73,14 @@ impl TemplateFields {
             op_sys: self.op_sys.clone(),
             rep_platform: self.rep_platform.clone(),
             description: self.description.clone(),
+            url: self.url.clone(),
+            whiteboard: self.whiteboard.clone(),
+            target_milestone: self.target_milestone.clone(),
+            deadline: self.deadline.clone(),
+            cc: self.cc.clone(),
+            keywords: self.keywords.clone(),
+            groups: self.groups.clone(),
+            flags: self.flag.clone(),
         }
     }
 }
@@ -60,7 +92,7 @@ pub struct UpdateArgs {
     pub name: String,
     #[command(flatten)]
     pub fields: TemplateFields,
-    /// Reset a field to unset (repeatable). Names match the long flags.
+    /// Reset a field to unset (repeatable).
     #[arg(long, value_name = "FIELD")]
     pub clear: Vec<String>,
 }
@@ -70,11 +102,14 @@ pub enum TemplateAction {
     /// Save (or replace) a named bug-creation template.
     ///
     /// Templates store reusable defaults for `bzr bug create`. At
-    /// least one default field must be supplied (`--product`,
-    /// `--component`, `--version`, `--priority`, `--severity`,
-    /// `--assignee`, `--op-sys`, `--rep-platform`, or
-    /// `--description`); empty templates are rejected with exit
-    /// code 7 (input validation).
+    /// least one default field must be supplied. Supported defaults
+    /// include the routing fields (`--product`, `--component`,
+    /// `--version`, `--priority`, `--severity`, `--assignee`,
+    /// `--op-sys`, `--rep-platform`, and `--description`) plus
+    /// create metadata (`--url`, `--whiteboard`,
+    /// `--target-milestone`, `--deadline`, `--cc`, `--keywords`,
+    /// `--groups`, and `--flag`). Empty templates are rejected with
+    /// exit code 7 (input validation).
     ///
     /// Saving over an existing template name replaces it. Templates
     /// are stored locally in `~/.config/bzr/config.toml` and never
@@ -86,6 +121,8 @@ pub enum TemplateAction {
     ///     --component Vulnerabilities --severity critical
     ///   bzr template save fedora-kernel --product Fedora \
     ///     --component kernel --priority high
+    ///   bzr template save security-routing --product Security \
+    ///     --component Triage --cc triage@example.com --flag review?
     ///
     /// See bzr-template-show(1) to inspect a template,
     /// bzr-template-delete(1) to remove one, and bzr-bug-create(1)
@@ -103,18 +140,21 @@ pub enum TemplateAction {
     /// Merges the supplied flags into the named template without
     /// re-specifying the rest: a flag replaces that field, an
     /// omitted flag leaves it unchanged. Use `--clear <field>`
-    /// (repeatable) to reset a field to unset; valid names are the
-    /// long flag names (`product`, `component`, `version`,
-    /// `priority`, `severity`, `assignee`, `op-sys`, `rep-platform`,
-    /// `description`). At least one change (a field flag or
-    /// `--clear`) is required, and the result must keep at least one
-    /// field set (a fully-cleared template is rejected, exit 7). If a
-    /// field is both set and cleared in one call, `--clear` wins.
+    /// (repeatable) to reset a field to unset. Valid names are
+    /// `product`, `component`, `version`, `priority`, `severity`,
+    /// `assignee`, `op-sys`, `rep-platform`, `description`, `url`,
+    /// `whiteboard`, `target-milestone`, `deadline`, `cc`,
+    /// `keywords`, `groups`, `flag`, and `flags`. At least one
+    /// change (a field flag or `--clear`) is required, and the result
+    /// must keep at least one field set (a fully-cleared template is
+    /// rejected, exit 7). If a field is both set and cleared in one
+    /// call, `--clear` wins.
     ///
     /// Examples:
     ///
     ///   bzr template update security-bug --severity blocker
     ///   bzr template update security-bug --clear assignee
+    ///   bzr template update security-bug --cc triage@example.com
     ///
     /// See bzr-template-save(1) to create one and
     /// bzr-template-show(1) to inspect the result.

@@ -3,7 +3,7 @@
 //! Template operations are pure local file I/O — no network client needed.
 
 use crate::cli::TemplateAction;
-use crate::commands::runtime::shared::merge_set;
+use crate::commands::runtime::shared::{merge_set, merge_vec};
 use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::output::resources::template::{
@@ -26,7 +26,8 @@ pub async fn execute(
 ) -> Result<()> {
     match action {
         TemplateAction::Save { name, fields } => {
-            let template = fields.to_template();
+            let mut template = fields.to_template();
+            validate_template(&mut template)?;
 
             // Require at least one field to be set
             if template_is_empty(&template) {
@@ -83,9 +84,24 @@ fn template_is_empty(t: &BugTemplate) -> bool {
         && t.op_sys.is_none()
         && t.rep_platform.is_none()
         && t.description.is_none()
+        && t.url.is_none()
+        && t.whiteboard.is_none()
+        && t.target_milestone.is_none()
+        && t.deadline.is_none()
+        && t.cc.is_empty()
+        && t.keywords.is_empty()
+        && t.groups.is_empty()
+        && t.flags.is_empty()
 }
 
-/// Reset the named field to unset. The name matches the long flag (kebab-case).
+/// Validate template defaults that share parsing rules with `bug create`.
+fn validate_template(t: &mut BugTemplate) -> Result<()> {
+    t.deadline = crate::validation::parse_optional_date_only(t.deadline.as_deref(), "--deadline")?;
+    crate::commands::runtime::flags::parse_flags(&t.flags)?;
+    Ok(())
+}
+
+/// Reset the named field to unset. Most names match the long flag (kebab-case).
 fn clear_template_field(t: &mut BugTemplate, field: &str) -> Result<()> {
     match field {
         "product" => t.product = None,
@@ -97,10 +113,19 @@ fn clear_template_field(t: &mut BugTemplate, field: &str) -> Result<()> {
         "op-sys" => t.op_sys = None,
         "rep-platform" => t.rep_platform = None,
         "description" => t.description = None,
+        "url" => t.url = None,
+        "whiteboard" => t.whiteboard = None,
+        "target-milestone" => t.target_milestone = None,
+        "deadline" => t.deadline = None,
+        "cc" => t.cc.clear(),
+        "keywords" => t.keywords.clear(),
+        "groups" => t.groups.clear(),
+        "flag" | "flags" => t.flags.clear(),
         other => {
             return Err(BzrError::InputValidation(format!(
                 "unknown --clear field '{other}'; valid fields: product, component, \
-                 version, priority, severity, assignee, op-sys, rep-platform, description"
+                 version, priority, severity, assignee, op-sys, rep-platform, description, url, \
+                 whiteboard, target-milestone, deadline, cc, keywords, groups, flag, flags"
             )))
         }
     }
@@ -121,18 +146,7 @@ fn handle_update(
         clear,
     } = args;
 
-    let sets = [
-        &fields.product,
-        &fields.component,
-        &fields.version,
-        &fields.priority,
-        &fields.severity,
-        &fields.assignee,
-        &fields.op_sys,
-        &fields.rep_platform,
-        &fields.description,
-    ];
-    if sets.iter().all(|f| f.is_none()) && clear.is_empty() {
+    if template_is_empty(&fields.to_template()) && clear.is_empty() {
         return Err(BzrError::InputValidation(
             "no changes specified: provide a field flag or --clear <field>".into(),
         ));
@@ -151,9 +165,18 @@ fn handle_update(
         merge_set(&mut t.op_sys, fields.op_sys.as_deref());
         merge_set(&mut t.rep_platform, fields.rep_platform.as_deref());
         merge_set(&mut t.description, fields.description.as_deref());
+        merge_set(&mut t.url, fields.url.as_deref());
+        merge_set(&mut t.whiteboard, fields.whiteboard.as_deref());
+        merge_set(&mut t.target_milestone, fields.target_milestone.as_deref());
+        merge_set(&mut t.deadline, fields.deadline.as_deref());
+        merge_vec(&mut t.cc, &fields.cc);
+        merge_vec(&mut t.keywords, &fields.keywords);
+        merge_vec(&mut t.groups, &fields.groups);
+        merge_vec(&mut t.flags, &fields.flag);
         for field in clear {
             clear_template_field(t, field)?;
         }
+        validate_template(t)?;
         if template_is_empty(t) {
             return Err(BzrError::InputValidation(
                 "update would clear all fields; a template must keep at least one field set".into(),
