@@ -20,5 +20,65 @@ test_begin "8a. --server auto whoami"
 run_bzr_raw --json --server auto whoami
 if assert_success && assert_json_exists '.id'; then test_pass; fi
 
-echo ""
+test_begin "8b. fixture flag types exist"
+_FLAG_SQL=$(mktemp /tmp/bzr-func-flags.XXXXXX.sql)
+cat >"$_FLAG_SQL" <<'SQL'
+INSERT INTO flagtypes
+    (name, description, target_type, is_active, is_requestable,
+     is_requesteeble, is_multiplicable, sortkey)
+SELECT 'bzr_bug_review', 'Functional test review flag for bugs', 'b', 1, 1, 1, 1, 10
+WHERE NOT EXISTS (
+    SELECT 1 FROM flagtypes WHERE name = 'bzr_bug_review' AND target_type = 'b'
+);
 
+INSERT INTO flagtypes
+    (name, description, target_type, is_active, is_requestable,
+     is_requesteeble, is_multiplicable, sortkey)
+SELECT 'bzr_attachment_review', 'Functional test review flag for attachments', 'a', 1, 1, 1, 1, 10
+WHERE NOT EXISTS (
+    SELECT 1 FROM flagtypes WHERE name = 'bzr_attachment_review' AND target_type = 'a'
+);
+
+INSERT INTO flaginclusions (type_id, product_id, component_id)
+SELECT id, NULL, NULL
+FROM flagtypes
+WHERE name IN ('bzr_bug_review', 'bzr_attachment_review')
+  AND target_type IN ('b', 'a')
+  AND NOT EXISTS (
+      SELECT 1 FROM flaginclusions WHERE flaginclusions.type_id = flagtypes.id
+  );
+SQL
+if run_bugzilla_sql_file "$_FLAG_SQL"; then
+    test_pass
+else
+    test_fail "could not seed functional flag types"
+fi
+rm -f "$_FLAG_SQL"
+unset _FLAG_SQL
+
+test_begin "8c. credentialless named server info"
+run_bzr_raw --json --server public server info
+if assert_success && assert_json_exists '.version'; then test_pass; fi
+
+test_begin "8d. credentialless named whoami fails before network auth"
+run_bzr_raw --json --server public whoami
+if assert_exit_code 3 && assert_stderr_contains "requires credentials"; then test_pass; fi
+
+test_begin "8e. credentialless named write fails before mutation"
+run_bzr_raw --json --server public bug create \
+    --product FuncTestProd --component Backend --summary "public write" \
+    --description "should not write" --op-sys Linux --rep-platform PC
+if assert_exit_code 3 && assert_stderr_contains "requires credentials"; then test_pass; fi
+
+test_begin "8f. inline credentialless server info"
+run_bzr_raw --json --server-url "$BZ_URL" server info
+if assert_success && assert_json_exists '.version'; then test_pass; fi
+
+test_begin "8g. inline credentialed whoami"
+export BZR_FUNC_INLINE_KEY="$API_KEY"
+run_bzr_raw --json --server-url "$BZ_URL" \
+    --server-api-key-env BZR_FUNC_INLINE_KEY --server-email "$ADMIN_EMAIL" whoami
+if assert_success && assert_json_exists '.id'; then test_pass; fi
+unset BZR_FUNC_INLINE_KEY
+
+echo ""

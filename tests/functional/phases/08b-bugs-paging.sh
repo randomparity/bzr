@@ -21,7 +21,7 @@ _PGOTHER="pgother$$x${RANDOM}"
 _PG_CREATE=(--product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d)
 
 P1=$(make_bug --marker "$_PGMARK" "${_PG_CREATE[@]}" --summary "paging 1")
-P2=$(make_bug --marker "$_PGMARK" "${_PG_CREATE[@]}" --summary "paging 2")
+make_bug --marker "$_PGMARK" "${_PG_CREATE[@]}" --summary "paging 2" >/dev/null
 P3=$(make_bug --marker "$_PGMARK" "${_PG_CREATE[@]}" --summary "paging 3")
 PX=$(make_bug --marker "$_PGOTHER" "${_PG_CREATE[@]}" --summary "paging foreign")
 
@@ -75,5 +75,5 @@ run_bzr bug list --version "$_VVA"
 if assert_success && assert_json_exists ".[] | select(.id==$VBA)" &&
     assert_json "[.[] | select(.id==$VBB)] | length" "0"; then test_pass; fi
 
-unset _PGMARK _PGOTHER _PG_CREATE P1 P2 P3 PX _VPA _VPB _VVA _VVB VBA VBB
+unset _PGMARK _PGOTHER _PG_CREATE P1 P3 PX _VPA _VPB _VVA _VVB VBA VBB
 echo ""

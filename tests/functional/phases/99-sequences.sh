@@ -42,8 +42,8 @@ if assert_success && assert_json_exists '.id'; then
                 run_bzr bug view "$SEQ_LIFE"
                 if assert_json '.status' "RESOLVED" && assert_json '.resolution' "FIXED"; then
                     run_bzr comment list "$SEQ_LIFE"
-                    if assert_success \
-                        && [[ "$(jq '[.[] | select(.text | contains("LIFECYCLE-MARKER-105"))] | length' "$BZR_STDOUT")" -ge 1 ]]; then
+                    if assert_success &&
+                        [[ "$(jq '[.[] | select(.text | contains("LIFECYCLE-MARKER-105"))] | length' "$BZR_STDOUT")" -ge 1 ]]; then
                         test_pass
                     else
                         test_fail "resolve comment not found"
@@ -66,17 +66,17 @@ if assert_success && assert_json_exists '.id'; then
     run_bzr bug update "$SEQ_PAR" --whiteboard "parity-marker-106"
     if assert_success; then
         run_bzr --api rest bug view "$SEQ_PAR"
-        if assert_success \
-            && assert_json '.whiteboard' "parity-marker-106" \
-            && assert_json '.summary' "Parity bug"; then
+        if assert_success &&
+            assert_json '.whiteboard' "parity-marker-106" &&
+            assert_json '.summary' "Parity bug"; then
             run_bzr --api hybrid bug view "$SEQ_PAR"
-            if assert_success \
-                && assert_json '.whiteboard' "parity-marker-106" \
-                && assert_json '.summary' "Parity bug"; then
+            if assert_success &&
+                assert_json '.whiteboard' "parity-marker-106" &&
+                assert_json '.summary' "Parity bug"; then
                 run_bzr --api xmlrpc bug view "$SEQ_PAR"
-                if assert_success \
-                    && assert_json '.whiteboard' "parity-marker-106" \
-                    && assert_json '.summary' "Parity bug"; then
+                if assert_success &&
+                    assert_json '.whiteboard' "parity-marker-106" &&
+                    assert_json '.summary' "Parity bug"; then
                     test_pass
                 fi
             fi
@@ -93,9 +93,9 @@ run_bzr bug create --product FuncTestProd --component Backend \
 if assert_success && assert_json_exists '.id'; then
     SEQ_BVALID=$(jq -r '.id' "$BZR_STDOUT")
     run_bzr bug update "$SEQ_BVALID" 999999 --whiteboard "batch-partial-107"
-    if assert_exit_code 11 \
-        && assert_json '.succeeded[0]' "$SEQ_BVALID" \
-        && assert_json '.failed[0].id' "999999"; then
+    if assert_exit_code 11 &&
+        assert_json '.succeeded[0]' "$SEQ_BVALID" &&
+        assert_json '.failed[0].id' "999999"; then
         run_bzr bug view "$SEQ_BVALID"
         if assert_success && assert_json '.whiteboard' "batch-partial-107"; then test_pass; fi
     fi
@@ -113,8 +113,8 @@ if assert_success && assert_json_exists '.id'; then
     if assert_success && assert_json_exists '.id'; then
         SEQ_CDST=$(jq -r '.id' "$BZR_STDOUT")
         run_bzr comment list "$SEQ_CDST"
-        if assert_success \
-            && [[ "$(jq '[.[] | select(.count == 0 and (.text | contains("CLONE-DESC-MARKER-108")))] | length' "$BZR_STDOUT")" -ge 1 ]]; then
+        if assert_success &&
+            [[ "$(jq '[.[] | select(.count == 0 and (.text | contains("CLONE-DESC-MARKER-108")))] | length' "$BZR_STDOUT")" -ge 1 ]]; then
             test_pass
         else
             test_fail "clone comment #0 missing source description"
@@ -123,4 +123,3 @@ if assert_success && assert_json_exists '.id'; then
 else test_skip "create failed"; fi
 
 echo ""
-

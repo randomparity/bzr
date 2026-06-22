@@ -7,7 +7,9 @@
 # globals below are consumed by the sourced phase files; shellcheck cannot
 # follow the dynamic `source` in the phase loop, so disable its unused-variable
 # warning for them here.
-# shellcheck disable=SC2034
+# SC1091: lib.sh is resolved from the computed script directory.
+# SC2329: cleanup is invoked through the EXIT trap.
+# shellcheck disable=SC1091,SC2034,SC2329
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,10 +21,10 @@ source "$SCRIPT_DIR/lib.sh"
 # ── Constants ────────────────────────────────────────────────────────
 BZ_VERSION="${BZR_BZ_VERSION:-bz50}"
 case "$BZ_VERSION" in
-    bz50) DEFAULT_PORT=8089 ;;
-    bz52) DEFAULT_PORT=8090 ;;
-    bz53) DEFAULT_PORT=8091 ;;
-    *)    DEFAULT_PORT=8089 ;;
+bz50) DEFAULT_PORT=8089 ;;
+bz52) DEFAULT_PORT=8090 ;;
+bz53) DEFAULT_PORT=8091 ;;
+*) DEFAULT_PORT=8089 ;;
 esac
 BZ_PORT="${BZR_FUNC_PORT:-$DEFAULT_PORT}"
 BZ_URL="http://127.0.0.1:${BZ_PORT}"
@@ -61,7 +63,7 @@ trap cleanup EXIT
 # ══════════════════════════════════════════════════════════════════════
 for _phase in \
     00-build 01-config 02-server-auth 03-products 04-components \
-    05-fields-classifications 06-users 07-groups 08-bugs 08b-bugs-paging 08c-bugs-create-fields \
+    05-fields-classifications 06-users 07-groups 08-bugs 08b-bugs-paging 08c-bugs-create-fields 08d-bug-update-from-json \
     09-bug-relationships 09b-bug-collision \
     10-bug-clone 11-batch-update 11b-bug-verbs 12-my-bugs 13-templates 14-queries \
     15-comments 15b-comments-private 16-attachments 16b-attachments-private \

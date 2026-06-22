@@ -1,5 +1,7 @@
 #!/bin/bash
 # Run functional tests against all supported Bugzilla versions.
+# SC2329: cleanup_all is invoked through the EXIT trap.
+# shellcheck disable=SC2329
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

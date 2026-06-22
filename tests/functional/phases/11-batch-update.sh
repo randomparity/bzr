@@ -27,4 +27,3 @@ if [[ -n "$BUG4" ]]; then
 else test_skip "no BUG4"; fi
 
 echo ""
-

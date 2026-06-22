@@ -76,4 +76,3 @@ if [[ -n "$BUG1" ]]; then
 else test_skip "no BUG1"; fi
 
 echo ""
-

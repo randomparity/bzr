@@ -59,22 +59,26 @@ tests/functional/setup-bugzilla.sh stop
 
 ## Test Structure
 
-Tests run in dependency order across 12 phases:
+Tests run in dependency order across the phase files sourced by
+`tests/functional/run-tests.sh`:
 
-1. **Config** — set-server, show, set-default (no network)
-2. **Server & Auth** — server info, whoami, autodetect path
-3. **Products** — create, list, view, update
-4. **Components** — create, update
-5. **Fields & Classifications** — field list, classification view
-6. **Users** — create, search, update
-7. **Groups** — create, view, update, add/remove/list users, REST override fallback
-8. **Bugs** — create, view, list, search, update, history, negative test
-9. **Comments** — add, list, tag, search-tags
-10. **Attachments** — upload, list, download, update
-11. **Global Options** — --output table, --quiet, --server
-12. **Cleanup** — summary and exit code
+1. Build and isolated config setup
+2. Server/auth detection and fixture capability setup
+3. Products and components
+4. Fields, classifications, users, and groups
+5. Bug create/read/update/search/paging/relationships/collision/clone workflows
+6. Batch updates and convenience verbs
+7. My-bug filters, templates, and saved queries
+8. Comments and attachments, including private-resource hybrid/XML-RPC paths
+9. Global options, argument validation, completion, schema, and sequence tests
 
-Total: ~65 tests.
+The suite creates real Bugzilla data in the running container and reads it back
+through the CLI. Count and paging assertions use per-run unique whiteboard
+markers so repeated runs against an already-started container stay stable.
+
+TLS functional coverage for ad-hoc `--server-tls-*` flags is intentionally not
+part of this suite expansion. It needs an HTTPS fixture in front of Bugzilla and
+is tracked separately in GitHub issue #406.
 
 ## Config Isolation
 

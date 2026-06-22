@@ -28,9 +28,9 @@ if [[ -n "$BUG1" ]]; then
     # Several public attachments are uploaded earlier in the run and this
     # section adds one private; the list must include ≥3 total AND the
     # private one must be visible (is_private: true present).
-    if assert_success \
-        && assert_json_array_min_length '.' 3 \
-        && [[ "$(jq '[.[] | select(.is_private == true)] | length' "$BZR_STDOUT")" -ge 1 ]]; then
+    if assert_success &&
+        assert_json_array_min_length '.' 3 &&
+        [[ "$(jq '[.[] | select(.is_private == true)] | length' "$BZR_STDOUT")" -ge 1 ]]; then
         test_pass
     fi
 else test_skip "no BUG1"; fi
@@ -38,9 +38,9 @@ else test_skip "no BUG1"; fi
 test_begin "100c. attachment list returns private attachment in XML-RPC mode"
 if [[ -n "$BUG1" ]]; then
     run_bzr --api xmlrpc attachment list "$BUG1"
-    if assert_success \
-        && assert_json_array_min_length '.' 3 \
-        && [[ "$(jq '[.[] | select(.is_private == true)] | length' "$BZR_STDOUT")" -ge 1 ]]; then
+    if assert_success &&
+        assert_json_array_min_length '.' 3 &&
+        [[ "$(jq '[.[] | select(.is_private == true)] | length' "$BZR_STDOUT")" -ge 1 ]]; then
         test_pass
     fi
 else test_skip "no BUG1"; fi
@@ -70,4 +70,3 @@ else
 fi
 
 echo ""
-

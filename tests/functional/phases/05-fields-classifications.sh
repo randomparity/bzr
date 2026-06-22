@@ -46,4 +46,3 @@ if assert_success && assert_json_array_min_length '.' 1 &&
     assert_json_contains '[.[].name] | join(",")' "Unclassified"; then test_pass; fi
 
 echo ""
-
