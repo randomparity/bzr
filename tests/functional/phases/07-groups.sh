@@ -13,7 +13,7 @@ run_bzr group create --name functest-grp --description "Test group"
 if [[ $BZR_EXIT -eq 0 ]]; then
     test_pass
 elif grep -q "already exists" "$BZR_STDERR" 2>/dev/null; then
-    test_pass  # idempotent
+    test_pass # idempotent
 else
     assert_success
 fi
@@ -37,6 +37,31 @@ fi
 test_begin "27. group update functest-grp"
 run_bzr group update functest-grp --description "Updated group desc"
 if assert_success; then test_pass; fi
+
+test_begin "27a. fixture group enabled for FuncTestProd bugs"
+_GROUP_SQL=$(mktemp /tmp/bzr-func-group-control.XXXXXX.sql)
+cat >"$_GROUP_SQL" <<'SQL'
+INSERT INTO group_control_map
+    (group_id, product_id, entry, membercontrol, othercontrol, canedit,
+     editcomponents, editbugs, canconfirm)
+SELECT g.id, p.id, 0, 1, 1, 1, 0, 1, 1
+FROM groups AS g
+JOIN products AS p ON p.name = 'FuncTestProd'
+WHERE g.name = 'functest-grp'
+ON DUPLICATE KEY UPDATE
+    membercontrol = 1,
+    othercontrol = 1,
+    canedit = 1,
+    editbugs = 1,
+    canconfirm = 1;
+SQL
+if run_bugzilla_sql_file "$_GROUP_SQL"; then
+    test_pass
+else
+    test_fail "could not enable functest-grp for FuncTestProd"
+fi
+rm -f "$_GROUP_SQL"
+unset _GROUP_SQL
 
 # Re-enable testuser before group membership tests (test 24 disables it)
 test_begin "27b. user re-enable for group tests"
@@ -68,4 +93,3 @@ run_bzr group list-users --group functest-grp
 if assert_success && assert_stdout_not_contains "testuser@test.bzr"; then test_pass; fi
 
 echo ""
-
