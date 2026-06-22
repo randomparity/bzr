@@ -386,10 +386,10 @@ fn single_download_dest(out: Option<&str>, server_filename: &str) -> Result<std:
     }
 }
 
-/// Single-attachment download: writes one decoded blob to `out` (if
-/// supplied) or to the attachment's stored `file_name` in the current
-/// directory. Paired with `download_batch` for bulk shapes; both paths
-/// are first-class.
+/// Single-attachment download: writes one decoded blob to stdout when
+/// `--out -` is supplied, otherwise to `out` or the attachment's stored
+/// `file_name` in the current directory. Paired with `download_batch`
+/// for bulk shapes; both paths are first-class.
 async fn download_single(
     client: &BugzillaClient,
     id: u64,
@@ -398,6 +398,10 @@ async fn download_single(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let (filename, data) = client.download_attachment(id).await?;
+    if out == Some("-") {
+        w.out.write_all(&data)?;
+        return Ok(());
+    }
     let dest = single_download_dest(out, &filename)?;
     std::fs::write(&dest, &data)?;
     let dest = dest.to_string_lossy().into_owned();

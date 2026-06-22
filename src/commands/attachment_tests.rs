@@ -1431,6 +1431,54 @@ async fn attachment_download_batch_legacy_single_id_unchanged() {
 }
 
 #[tokio::test]
+async fn attachment_download_single_out_dash_streams_bytes_without_result() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/9876"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "attachments": {
+                "9876": one_att(9876, 12345, "trace.bin", b"raw\0bytes\n"),
+            }
+        })))
+        .mount(&mock)
+        .await;
+
+    let dash_path = std::path::Path::new("-");
+    assert!(
+        !dash_path.exists(),
+        "stdout-mode test requires no pre-existing file named '-' in the cwd",
+    );
+
+    let action = AttachmentAction::Download {
+        ids: vec![9876],
+        bug_ids: vec![],
+        out: Some("-".into()),
+        out_dir: "./attachments".into(),
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+
+    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+
+    let wrote_dash_file = dash_path.exists();
+    if wrote_dash_file {
+        std::fs::remove_file(dash_path).unwrap();
+    }
+
+    assert!(result.is_ok(), "expected stdout download, got {result:?}");
+    assert_eq!(io.out, b"raw\0bytes\n");
+    assert!(
+        io.err.is_empty(),
+        "stderr should stay empty: {:?}",
+        io.err_str()
+    );
+    assert!(
+        !wrote_dash_file,
+        "--out - must stream to stdout, not create a file named '-'",
+    );
+}
+
+#[tokio::test]
 async fn attachment_download_batch_bug_not_found_partial_failure() {
     let (_lock, mock, tmp) = setup_test_env().await;
 

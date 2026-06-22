@@ -182,8 +182,9 @@ pub enum AttachmentAction {
     ///
     /// Three argument shapes are accepted:
     ///
-    /// 1. Single attachment, free-form path:
+    /// 1. Single attachment, free-form path or stdout:
     ///    bzr attachment download 9876 --out patch.diff
+    ///    bzr attachment download 9876 --out - > patch.diff
     ///
     /// 2. Multiple attachment IDs (positional):
     ///    bzr attachment download 9876 9877 9878 [--out-dir DIR]
@@ -195,12 +196,15 @@ pub enum AttachmentAction {
     /// `<out-dir>/<bug-id>/<att-id>.<file_name>`. The attachment-ID
     /// prefix avoids same-name collisions on a single bug. `--out-dir`
     /// defaults to `./attachments` and is created (recursively) on
-    /// demand. `--out` is only valid for shape 1.
+    /// demand. `--out` is only valid for shape 1. Use `--out -`
+    /// to write the raw bytes to stdout; result formatting is
+    /// suppressed so the byte stream stays clean.
     ///
     /// Examples:
     ///
     ///   bzr attachment download 9876
     ///   bzr attachment download 9876 --out patch.diff
+    ///   bzr attachment download 9876 --out - > patch.diff
     ///   bzr attachment download 9876 9877 9878 --out-dir /tmp/patches
     ///   bzr attachment download --bug 12345 --bug 67890 --out-dir /tmp/all
     ///   bzr attachment download --bug 12345 9876 --out-dir /tmp/mixed
@@ -216,7 +220,7 @@ pub enum AttachmentAction {
         #[arg(long = "bug", value_name = "BUG_ID")]
         bug_ids: Vec<u64>,
 
-        /// Output file path (single-attachment shape only).
+        /// Output file path, or `-` for stdout (single-attachment shape only).
         #[arg(
             short = 'o',
             long = "out",
