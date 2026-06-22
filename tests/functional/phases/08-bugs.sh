@@ -134,6 +134,17 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
+test_begin "42c. bug update --url and --target-milestone"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug update "$BUG1" --url "http://example.com/updated-$BUG1" \
+        --target-milestone=---
+    if assert_success; then
+        run_bzr bug view "$BUG1"
+        if assert_json '.url' "http://example.com/updated-$BUG1" &&
+            assert_json '.target_milestone' "---"; then test_pass; fi
+    fi
+else test_skip "no BUG1"; fi
+
 test_begin "42b. bug update reset assignee and QA contact"
 if [[ -n "$BUG1" ]]; then
     run_bzr bug update "$BUG1" --reset-assigned-to --reset-qa-contact
