@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Named and ad-hoc Bugzilla servers can be used without credentials for
+  read-only commands. Writes and identity-derived commands now fail fast when
+  no credential source is available. (#380)
 - `bug update` now accepts `--url` and `--target-milestone`, matching fields
   that `bug create` can already set. (#363)
 - `bug resolve`, `bug close`, `bug reopen`, and `bug dup` now accept

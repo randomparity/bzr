@@ -295,17 +295,29 @@ fn parse_inline_server_flags() {
 }
 
 #[test]
-fn inline_server_url_requires_api_key_env() {
-    // --server-url alone is rejected: a credential source is mandatory.
-    let result = Cli::try_parse_from([
+fn inline_server_url_no_longer_requires_api_key_env() {
+    let cli = Cli::try_parse_from([
         "bzr",
         "--server-url",
         "https://bz.example.com",
         "bug",
         "view",
         "42",
-    ]);
-    assert!(result.is_err(), "--server-url without env key must fail");
+    ])
+    .unwrap();
+
+    assert_eq!(cli.server_url.as_deref(), Some("https://bz.example.com"));
+    assert_eq!(cli.server_api_key_env, None);
+}
+
+#[test]
+fn inline_server_api_key_env_still_requires_url() {
+    let result =
+        Cli::try_parse_from(["bzr", "--server-api-key-env", "BZR_KEY", "bug", "view", "1"]);
+    assert!(
+        result.is_err(),
+        "--server-api-key-env without --server-url must fail"
+    );
 }
 
 #[test]
@@ -556,6 +568,30 @@ fn parse_config_set_server_with_env_var() {
         cli.command,
         Commands::Config {
             action: ConfigAction::SetServer { .. }
+        }
+    ));
+}
+
+#[test]
+fn parse_config_set_server_without_api_key_source() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "config",
+        "set-server",
+        "public",
+        "--url",
+        "https://bz.example.com",
+    ])
+    .unwrap();
+
+    assert!(matches!(
+        cli.command,
+        Commands::Config {
+            action: ConfigAction::SetServer {
+                api_key: None,
+                api_key_env: None,
+                ..
+            }
         }
     ));
 }

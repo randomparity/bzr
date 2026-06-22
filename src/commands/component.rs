@@ -134,6 +134,14 @@ pub fn is_dry_runnable(action: &ComponentAction) -> bool {
     )
 }
 
+pub(crate) fn requires_credentials(action: &ComponentAction) -> Option<&'static str> {
+    match action {
+        ComponentAction::List { .. } | ComponentAction::View { .. } => None,
+        ComponentAction::Create { .. } => Some("component create"),
+        ComponentAction::Update { .. } => Some("component update"),
+    }
+}
+
 fn build_create_params(
     from_json: Option<&str>,
     product: Option<&str>,

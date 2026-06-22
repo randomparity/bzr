@@ -88,7 +88,7 @@ async fn xmlrpc_get_comments_since_parses_full_response() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(reqwest::Client::new(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(reqwest::Client::new(), &mock.uri(), Some("test-key"));
     let comments = client.get_comments_since(42, None).await.unwrap();
 
     assert_eq!(comments.len(), 2);
@@ -120,7 +120,7 @@ async fn xmlrpc_get_comments_since_serializes_new_since() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(reqwest::Client::new(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(reqwest::Client::new(), &mock.uri(), Some("test-key"));
     let comments = client
         .get_comments_since(42, Some("2026-01-01T00:00:00Z"))
         .await

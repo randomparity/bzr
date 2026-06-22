@@ -1,11 +1,45 @@
 #![expect(clippy::unwrap_used)]
 
+use std::io::Read as _;
+use std::net::TcpListener;
+use std::sync::Arc;
+
 use wiremock::matchers::{header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use super::*;
 use crate::client::test_helpers::test_http_client;
+use crate::error::BzrError;
 use crate::http::AUTH_HEADER_NAME;
+
+fn spawn_self_signed_https_server() -> (String, std::thread::JoinHandle<()>) {
+    let params = rcgen::CertificateParams::new(vec!["localhost".to_owned()]).unwrap();
+    let key_pair = rcgen::KeyPair::generate().unwrap();
+    let cert = params.self_signed(&key_pair).unwrap();
+    let cert_der = rustls::pki_types::CertificateDer::from(cert.der().to_vec());
+    let key_der = rustls::pki_types::PrivateKeyDer::Pkcs8(
+        rustls::pki_types::PrivatePkcs8KeyDer::from(key_pair.serialize_der()),
+    );
+    let server_config = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(vec![cert_der], key_der)
+        .unwrap();
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let handle = std::thread::spawn(move || {
+        let Ok((tcp, _addr)) = listener.accept() else {
+            return;
+        };
+        let Ok(connection) = rustls::ServerConnection::new(Arc::new(server_config)) else {
+            return;
+        };
+        let mut stream = rustls::StreamOwned::new(connection, tcp);
+        let _ = stream.read(&mut [0_u8; 1]);
+    });
+
+    (format!("https://localhost:{port}"), handle)
+}
 
 #[tokio::test]
 async fn header_auth_succeeds() {
@@ -208,6 +242,26 @@ async fn non_tls_network_error_defaults_to_header() {
 }
 
 #[tokio::test]
+async fn anonymous_detection_propagates_tls_certificate_errors() {
+    let (url, handle) = spawn_self_signed_https_server();
+
+    let result = detect_server_settings_without_auth(&url, &crate::tls::TlsConfig::default()).await;
+    handle.join().unwrap();
+
+    assert!(
+        matches!(&result, Err(BzrError::Http(_))),
+        "expected TLS HTTP error from anonymous detection, got: {result:?}"
+    );
+    let Err(BzrError::Http(err)) = result else {
+        return;
+    };
+    assert!(
+        crate::http::is_tls_cert_error(&err),
+        "anonymous detection should surface TLS cert errors, got: {err:#}"
+    );
+}
+
+#[tokio::test]
 async fn whoami_404_no_email_suggests_email_flag() {
     let server = MockServer::start().await;
 
@@ -338,7 +392,7 @@ async fn detect_server_settings_returns_all_fields() {
     )
     .await
     .unwrap();
-    assert_eq!(detected.auth_method, AuthMethod::Header);
+    assert_eq!(detected.auth_method, Some(AuthMethod::Header));
     assert_eq!(detected.api_mode, ApiMode::Rest);
     assert_eq!(detected.server_version.as_deref(), Some("5.1.2"));
 }
@@ -386,7 +440,7 @@ async fn detect_server_settings_keeps_version_none_when_probe_fails() {
     )
     .await
     .unwrap();
-    assert_eq!(detected.auth_method, AuthMethod::Header);
+    assert_eq!(detected.auth_method, Some(AuthMethod::Header));
     assert_eq!(detected.api_mode, ApiMode::Hybrid);
     assert!(detected.server_version.is_none());
 }

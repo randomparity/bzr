@@ -155,6 +155,16 @@ pub fn is_dry_runnable(action: &GroupAction) -> bool {
     )
 }
 
+pub(crate) fn requires_credentials(action: &GroupAction) -> Option<&'static str> {
+    match action {
+        GroupAction::ListUsers { .. } | GroupAction::View { .. } => None,
+        GroupAction::AddUser { .. } => Some("group add-user"),
+        GroupAction::RemoveUser { .. } => Some("group remove-user"),
+        GroupAction::Create { .. } => Some("group create"),
+        GroupAction::Update { .. } => Some("group update"),
+    }
+}
+
 fn build_create_params(
     from_json: Option<&str>,
     name: Option<&str>,

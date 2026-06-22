@@ -9,32 +9,34 @@ use crate::xmlrpc::value::Value;
 pub struct XmlRpcClient {
     http: reqwest::Client,
     base_url: String,
-    api_key: String,
+    api_key: Option<String>,
 }
 
 impl XmlRpcClient {
-    pub fn new(http: reqwest::Client, base_url: &str, api_key: &str) -> Self {
+    pub fn new(http: reqwest::Client, base_url: &str, api_key: Option<&str>) -> Self {
         XmlRpcClient {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
-            api_key: api_key.to_string(),
+            api_key: api_key.map(String::from),
         }
     }
 
-    // SECURITY: The request body contains Bugzilla_api_key in plain text.
-    // Never log the request body. Response bodies are safe to log at trace
-    // level since Bugzilla does not echo auth credentials back.
+    // SECURITY: When configured, the request body contains Bugzilla_api_key in
+    // plain text. Never log the request body. Response bodies are safe to log
+    // at trace level since Bugzilla does not echo auth credentials back.
     //
-    // NOTE: XML-RPC always transmits the API key in the request body
-    // (as a method parameter), regardless of the REST AuthMethod detected
-    // for this server. This is an inherent XML-RPC protocol constraint —
-    // there is no header-based auth equivalent for XML-RPC calls.
+    // NOTE: XML-RPC transmits the API key in the request body (as a method
+    // parameter), regardless of the REST AuthMethod detected for this server.
+    // This is an inherent XML-RPC protocol constraint; there is no header-based
+    // auth equivalent for XML-RPC calls.
     pub(crate) async fn call(
         &self,
         method: &str,
         mut params: BTreeMap<String, Value>,
     ) -> Result<Value> {
-        params.insert(AUTH_QUERY_PARAM.into(), Value::from(self.api_key.as_str()));
+        if let Some(api_key) = self.api_key.as_deref() {
+            params.insert(AUTH_QUERY_PARAM.into(), Value::from(api_key));
+        }
 
         let body = build_request(method, params);
         let url = format!("{}/xmlrpc.cgi", self.base_url);

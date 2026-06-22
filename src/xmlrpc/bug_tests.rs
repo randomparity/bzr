@@ -26,7 +26,7 @@ async fn search_bugs_returns_results() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let params = SearchParams {
         product: vec!["TestProduct".into()],
         limit: Some(10),
@@ -66,7 +66,7 @@ async fn search_bugs_empty_result() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let params = SearchParams {
         product: vec!["Empty".into()],
         ..Default::default()
@@ -87,7 +87,7 @@ async fn get_bug_by_id() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let bug = client.get_bug("100").await.unwrap();
     assert_eq!(bug.id, 100);
     assert_eq!(bug.summary, "Specific bug");
@@ -115,7 +115,7 @@ async fn get_bug_by_id_parses_dupe_of() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let bug = client.get_bug("100").await.unwrap();
 
     assert_eq!(bug.dupe_of, Some(99));
@@ -132,7 +132,7 @@ async fn get_bug_by_alias() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let bug = client.get_bug("my-alias").await.unwrap();
     assert_eq!(bug.id, 55);
     assert_eq!(bug.summary, "Alias bug");
@@ -153,7 +153,7 @@ async fn search_bugs_multi_value_sends_array() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let params = SearchParams {
         status: vec!["NEW".into(), "ASSIGNED".into()],
         ..Default::default()
@@ -178,7 +178,7 @@ async fn search_bugs_negation_sends_boolean_chart() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let params = SearchParams {
         status: vec!["!CLOSED".into()],
         ..Default::default()
@@ -206,7 +206,7 @@ async fn search_bugs_fields_and_ids_use_xmlrpc_arrays() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let params = SearchParams {
         id: vec![42],
         include_fields: Some("id, summary".into()),
@@ -244,7 +244,7 @@ async fn get_bug_empty_result_is_not_found() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let err = client.get_bug("42").await.unwrap_err();
     assert!(matches!(
         err,
@@ -349,7 +349,7 @@ async fn search_bugs_sends_creation_time_and_last_change_time() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let params = SearchParams {
         creation_time: Some("2026-04-01T00:00:00Z".into()),
         last_change_time: Some("2026-04-15T00:00:00Z".into()),
@@ -371,7 +371,7 @@ async fn search_bugs_xmlrpc_sends_whiteboard() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let params = SearchParams {
         whiteboard: vec!["needs-review".into()],
         ..Default::default()
@@ -392,7 +392,7 @@ async fn search_bugs_xmlrpc_sends_resolution() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let params = SearchParams {
         resolution: vec!["FIXED".into()],
         ..Default::default()
@@ -417,7 +417,7 @@ async fn search_bugs_xmlrpc_negation_whiteboard_uses_notsubstring() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let params = SearchParams {
         whiteboard: vec!["!wip".into()],
         ..Default::default()
@@ -438,7 +438,7 @@ async fn search_bugs_xmlrpc_sends_target_milestone() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let params = SearchParams {
         target_milestone: vec!["5.0".into()],
         ..Default::default()
@@ -459,7 +459,7 @@ async fn search_bugs_xmlrpc_sends_version() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let params = SearchParams {
         version: vec!["9.4".into()],
         ..Default::default()
@@ -480,7 +480,7 @@ async fn search_bugs_xmlrpc_sends_op_sys() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let params = SearchParams {
         op_sys: vec!["Linux".into()],
         ..Default::default()
@@ -503,7 +503,7 @@ async fn search_bugs_xmlrpc_sends_platform() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let params = SearchParams {
         platform: vec!["x86_64".into()],
         ..Default::default()
@@ -524,7 +524,7 @@ async fn search_bugs_xmlrpc_sends_qa_contact() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let params = SearchParams {
         qa_contact: vec!["qa@example.com".into()],
         ..Default::default()
@@ -545,7 +545,7 @@ async fn search_bugs_xmlrpc_sends_url() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let params = SearchParams {
         url: vec!["github.com/foo".into()],
         ..Default::default()
@@ -570,7 +570,7 @@ async fn search_bugs_xmlrpc_negation_resolution_uses_notequals() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let params = SearchParams {
         resolution: vec!["!FIXED".into()],
         ..Default::default()

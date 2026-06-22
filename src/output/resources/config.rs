@@ -33,13 +33,13 @@ pub struct ServerDisplayInfo {
 impl ServerDisplayInfo {
     fn from_config(srv: &crate::config::ServerConfig) -> Self {
         let (api_key, api_key_source) = match srv.credential_source() {
-            Ok(CredentialSource::Inline(api_key)) => {
+            Ok(Some(CredentialSource::Inline(api_key))) => {
                 (mask_api_key(api_key), CredentialSourceKind::Inline.as_str())
             }
-            Ok(CredentialSource::EnvVar(var_name)) => {
+            Ok(Some(CredentialSource::EnvVar(var_name))) => {
                 (var_name.to_string(), CredentialSourceKind::Env.as_str())
             }
-            Ok(CredentialSource::Keyring { service, account }) => {
+            Ok(Some(CredentialSource::Keyring { service, account })) => {
                 let display = if account.is_empty() {
                     format!("{service}/<server-name>")
                 } else {
@@ -47,6 +47,7 @@ impl ServerDisplayInfo {
                 };
                 (display, CredentialSourceKind::Keyring.as_str())
             }
+            Ok(None) => ("none".to_string(), "none"),
             Err(_) => ("[invalid config]".to_string(), "invalid"),
         };
         Self {

@@ -122,6 +122,14 @@ pub fn is_dry_runnable(action: &ProductAction) -> bool {
     )
 }
 
+pub(crate) fn requires_credentials(action: &ProductAction) -> Option<&'static str> {
+    match action {
+        ProductAction::List { .. } | ProductAction::View { .. } => None,
+        ProductAction::Create { .. } => Some("product create"),
+        ProductAction::Update { .. } => Some("product update"),
+    }
+}
+
 fn build_create_params(
     from_json: Option<&str>,
     name: Option<&str>,

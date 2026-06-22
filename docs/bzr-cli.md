@@ -36,7 +36,7 @@ For installation and quick start, see [README.md](../README.md).
 | Option | Description |
 |--------|-------------|
 | `--server <NAME>` | Use a specific server from config instead of the default |
-| `--server-url <URL>` | Connect to an ad-hoc server by URL, without using config. Defines an ephemeral server for this one invocation: nothing is read from or written to the config file. Requires `--server-api-key-env`; conflicts with `--server`. Pairs with `--config` for sandboxed throwaway runs. |
+| `--server-url <URL>` | Connect to an ad-hoc server by URL, without using config. Defines an ephemeral server for this one invocation: nothing is read from or written to the config file. `--server-api-key-env` is optional for read-only commands and required for writes and identity-derived commands; conflicts with `--server`. Pairs with `--config` for sandboxed throwaway runs. |
 | `--server-api-key-env <ENV>` | Environment variable holding the API key for `--server-url`. The key is read from this variable, never passed as a literal flag, so the secret stays out of the process argument list. Only meaningful with `--server-url`. |
 | `--server-email <EMAIL>` | Login email for `--server-url`, for the Bugzilla 5.0 whoami fallback. Optional; only meaningful with `--server-url`. |
 | `--output <FORMAT>` | Output format: `table`, `json`, or `ndjson`. Defaults to table at a TTY; auto-selects json when stdout is not a TTY. `ndjson` emits newline-delimited JSON — one compact value per line for list results (a single object or result envelope prints as one compact line) — for streaming into agents and `jq -c`. |
@@ -184,7 +184,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   ├── create [--from-json <PATH>] [--product <P>] [--name <N>] [--description <D>] [--default-assignee <E>]
 │   └── update [<ID>] [--from-json <PATH>] [--name <N>] [--description <D>] [--default-assignee <E>]
 ├── config
-│   ├── set-server <NAME> --url <URL> (--api-key <KEY> | --api-key-env <ENV_VAR>) [--email <EMAIL>] [--auth-method <METHOD>]
+│   ├── set-server <NAME> --url <URL> [--api-key <KEY> | --api-key-env <ENV_VAR>] [--email <EMAIL>] [--auth-method <METHOD>]
 │   │                     [--tls-insecure] [--tls-ca-cert <PATH>] [--tls-pin-sha256 <HEX>] [--tls-pin-now] [--tls-pin-clear]
 │   ├── set-keyring <NAME> [--service <S>] [--account <A>]
 │   ├── unset-keyring <NAME>
@@ -1415,9 +1415,22 @@ bzr config set-server redhat --url https://bugzilla.redhat.com --api-key-env RED
 bzr config set-server mozilla --url https://bugzilla.mozilla.org --api-key-env MOZILLA_BZ_API_KEY
 bzr config set-server internal --url https://bugzilla.internal --api-key-env INTERNAL_BZ_API_KEY --tls-insecure
 bzr config set-server legacy --url https://bugzilla.example.com --api-key abc123
+bzr config set-server public-bz --url https://bugzilla.example.org
 ```
 
 The `--email` flag is required for older Bugzilla servers (5.0 or earlier) that don't support the `/rest/whoami` endpoint.
+
+Public Bugzilla servers can be configured without an API key for read-only
+exploration:
+
+```bash
+bzr config set-server public-bz --url https://bugzilla.example.org
+bzr --server public-bz bug list --product Firefox --limit 10
+bzr --server-url https://bugzilla.example.org bug view 12345
+```
+
+Writes and identity-derived commands such as `whoami` and `bug my` require a
+credential source and fail before writing when none is configured.
 
 The `--tls-insecure` flag disables TLS certificate verification for the server. Use this for servers with self-signed, expired, or wrong-hostname certificates (e.g. internal Bugzilla instances behind corporate firewalls).
 
@@ -1427,8 +1440,8 @@ The first server added is automatically set as the default.
 |--------|----------|-------------|
 | `<NAME>` | Yes | Server alias name |
 | `--url <URL>` | Yes | Server URL |
-| `--api-key <KEY>` | One of `--api-key` / `--api-key-env` | API key value (less secure: can leak via shell history or process args) |
-| `--api-key-env <ENV_VAR>` | One of `--api-key` / `--api-key-env` | Environment variable name containing the API key |
+| `--api-key <KEY>` | No | API key value (less secure: can leak via shell history or process args) |
+| `--api-key-env <ENV_VAR>` | No | Environment variable name containing the API key |
 | `--email <EMAIL>` | No | Login email (required for Bugzilla 5.0 or earlier) |
 | `--auth-method <METHOD>` | No | Override auto-detected auth method (`header` or `query_param`) |
 | `--tls-insecure` | No | Disable TLS certificate verification (self-signed, expired, wrong hostname) |
@@ -1443,7 +1456,7 @@ The first server added is automatically set as the default.
 | `--tls-pin-now` | Connect and pin the server's current certificate |
 | `--tls-pin-clear` | Remove a stored certificate pin |
 
-Agent note: prefer `--api-key-env` in local shells, CI, and agent environments. API keys passed on the command line may end up in shell history or process listings, and inline keys are stored in `config.toml`. Verify the result with `bzr whoami` or `bzr --json config show`.
+Agent note: prefer `--api-key-env` in local shells, CI, and agent environments. API keys passed on the command line may end up in shell history or process listings, and inline keys are stored in `config.toml`. Verify public connectivity with `bzr server info`; use `bzr whoami` only after adding credentials.
 
 ### `bzr config set-default`
 
@@ -2072,7 +2085,7 @@ severity = "critical"
 
 ## Authentication
 
-`bzr` authenticates using Bugzilla API keys. Prefer `--api-key-env` so the secret is resolved at runtime rather than stored in `~/.config/bzr/config.toml`. On Unix systems, `bzr` warns if the config directory or config file permissions are broader than owner-only access. On first use, it auto-detects whether your server supports header-based auth (`X-BUGZILLA-API-KEY`) or query parameter auth (`Bugzilla_api_key`), and caches the result.
+`bzr` authenticates using Bugzilla API keys when a command needs an identity or write access. Public Bugzilla servers can omit credentials for read-only commands; writes and identity-derived reads such as `whoami` and `bug my` fail fast until a credential source is configured. Prefer `--api-key-env` so the secret is resolved at runtime rather than stored in `~/.config/bzr/config.toml`. On Unix systems, `bzr` warns if the config directory or config file permissions are broader than owner-only access. On first credentialed use, it auto-detects whether your server supports header-based auth (`X-BUGZILLA-API-KEY`) or query parameter auth (`Bugzilla_api_key`), and caches the result.
 
 Detection probes endpoints in order:
 

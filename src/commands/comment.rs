@@ -11,6 +11,14 @@ use crate::output::writers::Writers;
 use crate::types::ApiMode;
 use crate::types::{OutputFormat, UpdateCommentTagsParams};
 
+pub(crate) fn requires_credentials(action: &CommentAction) -> Option<&'static str> {
+    match action {
+        CommentAction::List { .. } | CommentAction::SearchTags { .. } => None,
+        CommentAction::Add { .. } => Some("comment add"),
+        CommentAction::Tag { .. } => Some("comment tag"),
+    }
+}
+
 pub async fn execute(
     action: &CommentAction,
     server: Option<&str>,

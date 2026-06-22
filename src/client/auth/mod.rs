@@ -13,7 +13,7 @@ use crate::types::{ApiMode, AuthMethod};
 use self::valid_login::{detect_valid_login_auth, verify_header_auth_via_rest, ValidLoginOutcome};
 use self::whoami::{detect_whoami_auth, WhoamiOutcome};
 
-use super::version::detect_version_and_mode;
+use super::version::{detect_version_and_mode, detect_version_and_mode_without_auth_checked};
 
 /// Result of server settings detection -- auth method, API mode, and
 /// optionally the server version string. Returned by [`detect_server_settings`]
@@ -21,7 +21,7 @@ use super::version::detect_version_and_mode;
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct DetectedServerSettings {
-    pub auth_method: AuthMethod,
+    pub auth_method: Option<AuthMethod>,
     pub api_mode: ApiMode,
     /// `Some` when the version endpoint responded successfully; `None` on
     /// transient failures. Callers should only persist `api_mode` and
@@ -53,7 +53,31 @@ pub async fn detect_server_settings(
     );
 
     Ok(DetectedServerSettings {
-        auth_method: method,
+        auth_method: Some(method),
+        api_mode,
+        server_version: version,
+    })
+}
+
+/// Detect API mode and server version without credentials.
+///
+/// This is used for public read-only servers. No auth probes are sent, and the
+/// returned settings intentionally have no auth method to cache.
+pub async fn detect_server_settings_without_auth(
+    url: &str,
+    tls_config: &crate::tls::TlsConfig,
+) -> Result<DetectedServerSettings> {
+    let http = crate::tls::build_tls_client(tls_config)?;
+    let (version, api_mode) = detect_version_and_mode_without_auth_checked(&http, url).await?;
+
+    tracing::info!(
+        %api_mode,
+        version = version.as_deref().unwrap_or("unknown"),
+        "detected anonymous server settings"
+    );
+
+    Ok(DetectedServerSettings {
+        auth_method: None,
         api_mode,
         server_version: version,
     })

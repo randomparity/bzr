@@ -62,6 +62,7 @@ pub async fn dispatch(
 ) -> error::Result<()> {
     apply_network_tuning(cli);
     ensure_dry_run_supported(cli)?;
+    ensure_credentials_for_command(cli)?;
     commands::runtime::dry_run::set(cli.dry_run);
     commands::runtime::confirm::set_yes(cli.yes);
     commands::runtime::inline_server::set(resolve_inline_server(cli));
@@ -143,21 +144,16 @@ fn apply_network_tuning(cli: &cli::Cli) {
 }
 
 /// Build the inline server definition from the global `--server-url` flags, or
-/// `None` when no inline server was requested. Returns `Some` only when both
-/// the URL and its API-key env var are present; clap's `requires` guarantees
-/// they come as a pair, but this is robust if a `Cli` is constructed directly
-/// (as integration tests do).
+/// `None` when no inline server was requested. The API-key env var is optional
+/// for public read-only commands.
 fn resolve_inline_server(cli: &cli::Cli) -> Option<commands::runtime::inline_server::InlineServer> {
     cli.server_url
         .as_ref()
-        .zip(cli.server_api_key_env.as_ref())
-        .map(
-            |(url, api_key_env)| commands::runtime::inline_server::InlineServer {
-                url: url.clone(),
-                api_key_env: api_key_env.clone(),
-                email: cli.server_email.clone(),
-            },
-        )
+        .map(|url| commands::runtime::inline_server::InlineServer {
+            url: url.clone(),
+            api_key_env: cli.server_api_key_env.clone(),
+            email: cli.server_email.clone(),
+        })
 }
 
 /// Reject `--dry-run` on commands that don't honor it.
@@ -186,6 +182,43 @@ fn ensure_dry_run_supported(cli: &cli::Cli) -> error::Result<()> {
          product create/update, component create/update, user create/update, and group create/update"
             .into(),
     ))
+}
+
+fn ensure_credentials_for_command(cli: &cli::Cli) -> error::Result<()> {
+    let Some(command_name) = command_requires_credentials(&cli.command) else {
+        return Ok(());
+    };
+    if active_server_has_credentials(cli)? {
+        return Ok(());
+    }
+    Err(error::BzrError::Config(format!(
+        "{command_name} requires credentials; configure api_key, api_key_env, \
+         api_key_keyring, or pass --server-api-key-env with --server-url"
+    )))
+}
+
+fn command_requires_credentials(command: &cli::Commands) -> Option<&'static str> {
+    match command {
+        cli::Commands::Bug { action } => commands::bug::requires_credentials(action),
+        cli::Commands::Comment { action } => commands::comment::requires_credentials(action),
+        cli::Commands::Attachment { action } => commands::attachment::requires_credentials(action),
+        cli::Commands::Product { action } => commands::product::requires_credentials(action),
+        cli::Commands::Component { action } => commands::component::requires_credentials(action),
+        cli::Commands::User { action } => commands::user::requires_credentials(action),
+        cli::Commands::Group { action } => commands::group::requires_credentials(action),
+        cli::Commands::Whoami => Some("whoami"),
+        _ => None,
+    }
+}
+
+fn active_server_has_credentials(cli: &cli::Cli) -> error::Result<bool> {
+    if cli.server_url.is_some() {
+        return Ok(cli.server_api_key_env.is_some());
+    }
+
+    let config = config::Config::load()?;
+    let (_, server) = config.resolve_server(cli.server.as_deref())?;
+    Ok(server.credential_source()?.is_some())
 }
 
 /// Shared mutex for tests that modify the process-global `XDG_CONFIG_HOME` env var.

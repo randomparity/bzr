@@ -9,7 +9,7 @@ async fn set_then_get_round_trips() {
 
     let inline = InlineServer {
         url: "https://bugzilla.example.com".into(),
-        api_key_env: "BZR_KEY".into(),
+        api_key_env: Some("BZR_KEY".into()),
         email: Some("dev@example.com".into()),
     };
     set(Some(inline.clone()));
@@ -17,6 +17,22 @@ async fn set_then_get_round_trips() {
 
     set(None);
     assert_eq!(get(), None, "clearing restores the no-inline state");
+}
+
+#[tokio::test]
+async fn set_then_get_round_trips_without_api_key_env() {
+    let _lock = ENV_LOCK.lock().await;
+    set(None);
+
+    let inline = InlineServer {
+        url: "https://bugzilla.example.com".into(),
+        api_key_env: None,
+        email: None,
+    };
+    set(Some(inline.clone()));
+    assert_eq!(get(), Some(inline));
+
+    set(None);
 }
 
 #[test]

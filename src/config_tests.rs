@@ -84,14 +84,20 @@ fn config_file_io_operations() {
 }
 
 #[test]
-fn credential_source_errors_when_no_api_key_source_defined() {
+fn credential_source_allows_no_api_key_source() {
     let mut srv = make_server_config("https://example.com");
     srv.api_key = None;
-    let err = srv.credential_source().unwrap_err();
-    assert!(
-        err.to_string().contains("must define one of"),
-        "expected 'must define one of' message, got: {err}"
-    );
+
+    assert!(srv.credential_source().unwrap().is_none());
+    assert!(srv.validate("public").is_ok());
+}
+
+#[test]
+fn resolve_optional_api_key_none_without_source() {
+    let mut srv = make_server_config("https://example.com");
+    srv.api_key = None;
+
+    assert_eq!(srv.resolve_optional_api_key("public").unwrap(), None);
 }
 
 #[test]
@@ -284,7 +290,7 @@ fn env_backed_server_resolves_api_key_from_environment() {
     assert_eq!(server.resolve_api_key("test").unwrap(), "secret-from-env");
     assert_eq!(
         server.credential_source_kind().unwrap(),
-        CredentialSourceKind::Env
+        Some(CredentialSourceKind::Env)
     );
 }
 
@@ -376,7 +382,7 @@ fn credential_source_keyring_variant() {
         tls_pin_issuer_der: None,
     };
     match server.credential_source().unwrap() {
-        CredentialSource::Keyring { service, account } => {
+        Some(CredentialSource::Keyring { service, account }) => {
             assert_eq!(service, "bzr");
             // account defaults handled at resolve time via server_name
             assert_eq!(account, "");
@@ -385,7 +391,7 @@ fn credential_source_keyring_variant() {
     }
     assert_eq!(
         server.credential_source_kind().unwrap(),
-        CredentialSourceKind::Keyring
+        Some(CredentialSourceKind::Keyring)
     );
 }
 
@@ -688,9 +694,8 @@ fn save_without_validation_hardens_recreated_file() {
     // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
     unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
-    // A server left without any credential source (the unset-keyring state):
-    // Config::save() would reject this, so unset-keyring uses
-    // save_without_validation — which must still harden the file.
+    // A server without any credential source must still be saved with hardened
+    // file permissions.
     let mut servers = HashMap::new();
     let mut srv = make_server_config("https://bugzilla.example.com");
     srv.api_key = None;
@@ -701,11 +706,6 @@ fn save_without_validation_hardens_recreated_file() {
         templates: HashMap::new(),
         queries: HashMap::new(),
     };
-
-    assert!(
-        config.save().is_err(),
-        "credential-less config must fail validation"
-    );
 
     let config_path = tmp.path().join("bzr").join("config.toml");
     // Force the recreation scenario: ensure no pre-hardened file exists.

@@ -113,8 +113,8 @@ pub async fn execute(
 
 /// Remove a server alias from the config, dropping any keychain entry.
 fn remove_server(name: &str, format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
-    // Advisory snapshot: read unvalidated so an unrelated credential-less
-    // server (left by `unset-keyring`) does not block the removal.
+    // Advisory snapshot: read unvalidated so an unrelated invalid server does
+    // not block the removal.
     let config = Config::read_unvalidated()?;
     let server = config
         .servers
@@ -140,10 +140,8 @@ fn remove_server(name: &str, format: OutputFormat, w: &mut Writers<'_>) -> Resul
         crate::credentials::keyring::delete(&service, &account)?;
     }
 
-    // `update_locked_without_validation`: removal never introduces a
-    // credential-less server, and the whole-config validator would otherwise
-    // reject the write whenever any *other* server is credential-less (the
-    // state `unset-keyring` deliberately leaves on disk).
+    // `update_locked_without_validation`: removal cannot improve or worsen an
+    // unrelated invalid server, so avoid blocking on whole-config validation.
     Config::update_locked_without_validation(|config| {
         config.servers.remove(name);
         if config.default_server.as_deref() == Some(name) {
@@ -171,8 +169,8 @@ fn rename_server(old: &str, new: &str, format: OutputFormat, w: &mut Writers<'_>
             "new name must differ from the current name",
         ));
     }
-    // Advisory snapshot: read unvalidated so an unrelated credential-less
-    // server (left by `unset-keyring`) does not block the rename.
+    // Advisory snapshot: read unvalidated so an unrelated invalid server does
+    // not block the rename.
     let config = Config::read_unvalidated()?;
     let server = config
         .servers
@@ -199,9 +197,9 @@ fn rename_server(old: &str, new: &str, format: OutputFormat, w: &mut Writers<'_>
         _ => None,
     };
 
-    // `update_locked_without_validation`: a rename preserves the credential
-    // source, so it cannot create a credential-less server, but the validator
-    // would reject the write if any *other* server is already credential-less.
+    // `update_locked_without_validation`: a rename preserves the server
+    // contents, so avoid blocking on whole-config validation for unrelated
+    // invalid entries.
     Config::update_locked_without_validation(|config| {
         let server_cfg = config
             .servers
@@ -282,9 +280,9 @@ async fn set_server(
         return Ok(());
     }
 
-    if api_key.is_some() == api_key_env.is_some() {
+    if api_key.is_some() && api_key_env.is_some() {
         return Err(crate::error::BzrError::InputValidation(
-            "provide exactly one of --api-key or --api-key-env".into(),
+            "provide at most one of --api-key or --api-key-env".into(),
         ));
     }
     let is_update = Config::load()?.servers.contains_key(name);
@@ -339,8 +337,10 @@ async fn set_server(
     }
     if let Some(var_name) = api_key_env {
         let _ = write!(human, "\nAPI key source: env var {var_name}");
-    } else {
+    } else if api_key.is_some() {
         human.push_str("\nAPI key source: inline config value");
+    } else {
+        human.push_str("\nAPI key source: none (read-only)");
     }
     let _ = write!(human, "\nConfig file: {}", path.display());
 
@@ -443,8 +443,9 @@ fn unset_keyring(name: &str, format: OutputFormat, w: &mut Writers<'_>) -> Resul
     let human = format!(
         "Removed keychain entry for server '{name}' (service={service_name}, \
          account={account_name}).\nThe server entry is still present but has \
-         no API key source — re-run `bzr config set-server` or \
-         `bzr config set-keyring` to re-credential.\nConfig file: {}",
+         no API key source; public reads can still work. Configure \
+         `--api-key-env`, `--api-key`, or `bzr config set-keyring` before \
+         writes.\nConfig file: {}",
         path.display()
     );
     write_result(
@@ -498,6 +499,12 @@ fn migrate_to_keyring(
     // to the keychain — otherwise we would silently store to an
     // unintended location when --service/--account differ from the
     // existing ref.
+    let Some(source_kind) = source_kind else {
+        return Err(crate::error::BzrError::config(format!(
+            "server '{name}' has no API key source to migrate"
+        )));
+    };
+
     if source_kind == crate::config::CredentialSourceKind::Keyring {
         return Err(crate::error::BzrError::config(format!(
             "server '{name}' already uses a keyring credential source"

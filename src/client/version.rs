@@ -1,5 +1,12 @@
+use crate::error::{BzrError, Result};
 use crate::http::apply_auth;
 use crate::types::{ApiMode, AuthMethod};
+
+#[derive(Debug, Clone, Copy)]
+enum SendErrorHandling {
+    FallbackToXmlRpc,
+    PropagateTlsCertificate,
+}
 
 /// Detect server version and determine API mode.
 ///
@@ -11,6 +18,35 @@ pub(super) async fn detect_version_and_mode(
     api_key: &str,
     auth_method: AuthMethod,
 ) -> (Option<String>, ApiMode) {
+    detect_version_and_mode_inner(
+        http,
+        base_url,
+        Some((api_key, auth_method)),
+        SendErrorHandling::FallbackToXmlRpc,
+    )
+    .await
+    .unwrap_or((None, ApiMode::XmlRpc))
+}
+
+pub(super) async fn detect_version_and_mode_without_auth_checked(
+    http: &reqwest::Client,
+    base_url: &str,
+) -> Result<(Option<String>, ApiMode)> {
+    detect_version_and_mode_inner(
+        http,
+        base_url,
+        None,
+        SendErrorHandling::PropagateTlsCertificate,
+    )
+    .await
+}
+
+async fn detect_version_and_mode_inner(
+    http: &reqwest::Client,
+    base_url: &str,
+    auth: Option<(&str, AuthMethod)>,
+    send_error_handling: SendErrorHandling,
+) -> Result<(Option<String>, ApiMode)> {
     #[derive(serde::Deserialize)]
     struct VersionResponse {
         version: String,
@@ -19,18 +55,28 @@ pub(super) async fn detect_version_and_mode(
     let base = base_url.trim_end_matches('/');
     let url = format!("{base}/rest/version");
 
-    let req = match apply_auth(http.get(&url), api_key, auth_method) {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::debug!("auth setup failed for version probe: {e}");
-            // Fall back to unauthenticated request — version endpoint is often public.
-            http.get(&url)
-        }
+    let req = match auth {
+        Some((api_key, auth_method)) => match apply_auth(http.get(&url), api_key, auth_method) {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::debug!("auth setup failed for version probe: {e}");
+                // Fall back to unauthenticated request — version endpoint is often public.
+                http.get(&url)
+            }
+        },
+        None => http.get(&url),
     };
 
     let resp = match req.send().await {
         Ok(r) => r,
         Err(e) => {
+            if matches!(
+                send_error_handling,
+                SendErrorHandling::PropagateTlsCertificate
+            ) && crate::http::is_tls_cert_error(&e)
+            {
+                return Err(BzrError::Http(e));
+            }
             tracing::warn!(
                 "{}",
                 crate::http::tls_hint(
@@ -38,7 +84,7 @@ pub(super) async fn detect_version_and_mode(
                     &e,
                 )
             );
-            return (None, ApiMode::XmlRpc);
+            return Ok((None, ApiMode::XmlRpc));
         }
     };
 
@@ -47,23 +93,23 @@ pub(super) async fn detect_version_and_mode(
             status = %resp.status(),
             "version endpoint not available, assuming pre-5.0"
         );
-        return (None, ApiMode::XmlRpc);
+        return Ok((None, ApiMode::XmlRpc));
     }
 
     let Ok(body) = resp.text().await else {
         tracing::warn!("version response body unreadable, falling back to xmlrpc");
-        return (None, ApiMode::XmlRpc);
+        return Ok((None, ApiMode::XmlRpc));
     };
 
     let Ok(parsed) = serde_json::from_str::<VersionResponse>(&body) else {
         // Endpoint exists (200 OK) but returns non-standard body -- assume a
         // modern server with a custom extension; default to Hybrid.
-        return (None, ApiMode::Hybrid);
+        return Ok((None, ApiMode::Hybrid));
     };
 
     let mode = version_to_api_mode(&parsed.version);
     tracing::debug!(version = %parsed.version, %mode, "determined API mode from version");
-    (Some(parsed.version), mode)
+    Ok((Some(parsed.version), mode))
 }
 
 /// Parse a Bugzilla version string and determine the API mode.

@@ -82,7 +82,7 @@ async fn xmlrpc_get_attachments_parses_full_response() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let attachments = client.get_attachments(42).await.unwrap();
 
     assert_eq!(attachments.len(), 2);
@@ -116,7 +116,7 @@ async fn xmlrpc_get_attachments_requests_inline_data_field() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let _ = client.get_attachments(42).await.unwrap();
 }
 
@@ -150,7 +150,7 @@ async fn xmlrpc_get_attachment_by_id_request_body_omits_exclude_fields() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let attachment = client.get_attachment_by_id(9).await.unwrap();
     assert_eq!(attachment.data.as_deref(), Some("YmU="));
 }
@@ -179,7 +179,7 @@ async fn xmlrpc_get_attachment_by_id_parses_response() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let attachment = client.get_attachment_by_id(2002).await.unwrap();
     assert_eq!(attachment.id, 2002);
     assert!(attachment.is_private);
@@ -197,7 +197,7 @@ async fn xmlrpc_get_attachment_by_id_not_found_returns_error() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let err = client.get_attachment_by_id(9999).await.unwrap_err();
     assert!(matches!(
         err,
@@ -219,7 +219,7 @@ async fn xmlrpc_get_attachments_returns_empty_when_bug_has_none() {
         .mount(&mock)
         .await;
 
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), "test-key");
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let attachments = client.get_attachments(42).await.unwrap();
     assert!(attachments.is_empty());
 }
