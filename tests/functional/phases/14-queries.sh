@@ -56,6 +56,30 @@ test_begin "82. query run with fields override"
 run_bzr query run prod-bugs --fields id,summary,status
 if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
 
+test_begin "82a. query run --count"
+_QCOUNT_MARK=$(unique_name query-count)
+make_bug --marker "$_QCOUNT_MARK" --product FuncTestProd --component Backend \
+    --op-sys Linux --rep-platform PC --description d --summary "query count 1" >/dev/null
+make_bug --marker "$_QCOUNT_MARK" --product FuncTestProd --component Backend \
+    --op-sys Linux --rep-platform PC --description d --summary "query count 2" >/dev/null
+run_bzr query save count-bugs --product FuncTestProd --whiteboard "$_QCOUNT_MARK" --limit 1
+if assert_success && assert_json '.action' "saved"; then
+    run_bzr query run count-bugs --count
+    if assert_success && assert_count 2; then test_pass; fi
+fi
+unset _QCOUNT_MARK
+
+test_begin "82b. query update --from-url"
+_Q_URL="${BZ_URL}/buglist.cgi?product=FuncTestProd&component=Backend&bug_status=NEW&query_format=advanced"
+run_bzr query update complex --from-url "$_Q_URL" --limit 2
+if assert_success; then
+    run_bzr query show complex
+    if assert_json '.product[0]' "FuncTestProd" &&
+        assert_json '.component[0]' "Backend" &&
+        assert_json '.limit' "2"; then test_pass; fi
+fi
+unset _Q_URL
+
 # ── Cleanup and error handling ───────────────────────────────────────
 
 test_begin "83. query delete"
@@ -77,9 +101,11 @@ if assert_failure; then test_pass; fi
 test_begin "87. query delete remaining"
 run_bzr query delete prod-bugs
 if assert_success; then
-    run_bzr query delete complex
-    if assert_success; then test_pass; fi
+    run_bzr query delete count-bugs
+    if assert_success; then
+        run_bzr query delete complex
+        if assert_success; then test_pass; fi
+    fi
 fi
 
 echo ""
-

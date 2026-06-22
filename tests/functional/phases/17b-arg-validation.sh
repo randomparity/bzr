@@ -24,6 +24,16 @@ test_begin "122. bug list --offset + --paginate conflict"
 run_bzr bug list --offset 1 --paginate
 if assert_exit_code 2 && assert_stderr_contains "cannot be used with"; then test_pass; fi
 
+test_begin "122a. query run --count + --offset conflict"
+run_bzr query run prod-bugs --count --offset 1
+if assert_exit_code 7 &&
+    assert_stderr_contains "cannot be combined with --offset or --paginate"; then test_pass; fi
+
+test_begin "122b. query run --count + --paginate conflict"
+run_bzr query run prod-bugs --count --paginate
+if assert_exit_code 7 &&
+    assert_stderr_contains "cannot be combined with --offset or --paginate"; then test_pass; fi
+
 test_begin "123. bug create --template + --from-json conflict"
 run_bzr bug create --template t --from-json /tmp/none
 if assert_exit_code 2 && assert_stderr_contains "cannot be used with"; then test_pass; fi
