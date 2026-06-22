@@ -403,6 +403,7 @@ fn execute_list_json_is_array_of_names() {
     assert!(names.iter().any(|n| n == "bug-update-input"));
     assert!(names.iter().any(|n| n == "component-create-input"));
     assert!(names.iter().any(|n| n == "component-update-input"));
+    assert!(names.iter().any(|n| n == "error"));
     assert!(names.iter().any(|n| n == "group-create-input"));
     assert!(names.iter().any(|n| n == "group-update-input"));
     assert!(names.iter().any(|n| n == "product-create-input"));

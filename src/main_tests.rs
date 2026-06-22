@@ -202,21 +202,18 @@ fn exit_code_maps_non_validation_variant() {
 }
 
 #[test]
-fn exit_code_maps_highest_tls_code() {
-    // Guards the upper bound documented on `exit_code`: the TLS variants
-    // return 13, the largest code, and must survive the `u8::try_from`
-    // conversion without collapsing to the `unwrap_or(1)` fallback.
-    let err = BzrError::PinMismatch {
-        server: "example.com".into(),
-        expected: "sha256//old".into(),
-        actual: "sha256//new".into(),
+fn exit_code_maps_highest_code() {
+    let err = BzrError::MidAirCollision {
+        id: 123,
+        expected: "2026-06-22T01:02:03Z".into(),
+        actual: "2026-06-22T01:02:04Z".into(),
     };
-    assert_eq!(err.exit_code(), 13);
+    assert_eq!(err.exit_code(), 14);
     let code = exit_code(&err);
     let rendered = format!("{code:?}");
     assert!(
-        rendered.contains("13"),
-        "expected ExitCode debug to include 13, got {rendered}"
+        rendered.contains("14"),
+        "expected ExitCode debug to include 14, got {rendered}"
     );
 }
 
@@ -250,6 +247,101 @@ fn format_dispatch_error_ndjson_renders_compact_json_object() {
     assert!(!out.contains('\n'), "ndjson error must be one line: {out}");
     let parsed: serde_json::Value = serde_json::from_str(&out).expect("output must be valid JSON");
     assert_eq!(parsed["error"]["exit_code"], err.exit_code());
+}
+
+fn schema_from_command(name: &str) -> serde_json::Value {
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+    let mut writers = bzr::output::writers::Writers::new(&mut out, &mut err);
+
+    bzr::commands::schema::execute(Some(name), OutputFormat::Json, &mut writers)
+        .expect("schema must be published");
+
+    serde_json::from_slice(&out).expect("schema output must be valid JSON")
+}
+
+fn assert_error_matches_schema(schema: &serde_json::Value, value: &serde_json::Value) {
+    let envelope_required = schema
+        .get("required")
+        .and_then(serde_json::Value::as_array)
+        .expect("schema must declare required top-level fields");
+    assert!(
+        envelope_required.iter().any(|field| field == "error"),
+        "schema must require the top-level error envelope"
+    );
+
+    let error_schema = schema
+        .pointer("/properties/error")
+        .expect("schema must describe error property");
+    let required = error_schema
+        .get("required")
+        .and_then(serde_json::Value::as_array)
+        .expect("error property must declare required fields");
+    let error = value
+        .get("error")
+        .and_then(serde_json::Value::as_object)
+        .expect("formatted value must contain an error object");
+    let properties = error_schema
+        .get("properties")
+        .and_then(serde_json::Value::as_object)
+        .expect("error property must declare nested properties");
+
+    for key in ["type", "message", "exit_code"] {
+        assert!(
+            required.iter().any(|field| field == key),
+            "schema must require error.{key}"
+        );
+        assert!(error.contains_key(key), "formatted error missing {key}");
+        assert!(
+            properties.contains_key(key),
+            "schema must describe error.{key}"
+        );
+    }
+
+    assert!(error["type"].is_string());
+    assert!(error["message"].is_string());
+    assert!(error["exit_code"].is_i64() || error["exit_code"].is_u64());
+
+    let exit_code = error["exit_code"]
+        .as_i64()
+        .expect("formatted exit_code must fit in i64");
+    let exit_code_schema = properties
+        .get("exit_code")
+        .expect("schema must describe error.exit_code");
+    let minimum = exit_code_schema
+        .get("minimum")
+        .and_then(serde_json::Value::as_i64)
+        .expect("schema must declare error.exit_code minimum");
+    let maximum = exit_code_schema
+        .get("maximum")
+        .and_then(serde_json::Value::as_i64)
+        .expect("schema must declare error.exit_code maximum");
+    assert!(
+        (minimum..=maximum).contains(&exit_code),
+        "formatted exit_code {exit_code} outside schema bounds {minimum}..={maximum}"
+    );
+}
+
+#[test]
+fn format_dispatch_error_json_family_matches_published_schema() {
+    let schema = schema_from_command("error");
+    let errors = [
+        BzrError::InputValidation("bad input".into()),
+        BzrError::MidAirCollision {
+            id: 123,
+            expected: "2026-06-22T01:02:03Z".into(),
+            actual: "2026-06-22T01:02:04Z".into(),
+        },
+    ];
+
+    for err in errors {
+        for format in [OutputFormat::Json, OutputFormat::Ndjson] {
+            let out = format_dispatch_error(&err, format);
+            let parsed: serde_json::Value =
+                serde_json::from_str(&out).expect("output must be valid JSON");
+            assert_error_matches_schema(&schema, &parsed);
+        }
+    }
 }
 
 #[test]

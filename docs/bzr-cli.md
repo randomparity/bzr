@@ -2032,6 +2032,7 @@ bzr schema                      # list schema names
 bzr schema bug                  # the bug object (bug view / list elements)
 bzr schema bug-create-input     # `bug create --from-json` payload
 bzr schema bug-update-input     # `bug update --from-json` payload
+bzr schema error                # stderr error envelope under JSON-family output
 bzr schema product-create-input # `product create --from-json` payload
 bzr schema batch-result | jq .  # the batch `bug update` envelope
 ```
@@ -2046,7 +2047,7 @@ Available schemas: `bug`, `comment`, `attachment`, `product`, `component`,
 mutation/result envelopes `action-result`, `batch-result`,
 `batch-create-result`, `multi-bug-view`, `tag-result`, `membership-result`,
 `count-result`, `download-result`, `upload-result`, `config-result`,
-`search-result`, `dry-run-result`; and the structured input contracts
+`search-result`, `dry-run-result`, `error`; and the structured input contracts
 `bug-create-input`, `bug-update-input`, `product-create-input`,
 `product-update-input`, `component-create-input`, `component-update-input`,
 `user-create-input`, `user-update-input`, `group-create-input`,
@@ -2174,6 +2175,8 @@ When `--json` is active, errors are emitted as JSON on stderr:
 ```json
 {"error":{"type":"api","message":"Bugzilla API error: Invalid Bug ID (code 101)","exit_code":4}}
 ```
+
+The error envelope schema is published as `bzr schema error`.
 
 ---
 
