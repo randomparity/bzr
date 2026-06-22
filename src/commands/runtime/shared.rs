@@ -6,8 +6,9 @@ use crate::tls::TlsConfig;
 use crate::types::{ApiMode, AuthMethod};
 
 /// Persist detected server settings to config under the lock.
-/// Always persists `auth_method` when `persist_auth` is true. Only persists
-/// `api_mode`/`server_version` when version detection succeeded.
+/// Persists `auth_method` when `persist_auth` is true and detection produced
+/// one. Only persists `api_mode`/`server_version` when version detection
+/// succeeded.
 ///
 /// If the server was concurrently removed from disk, this is a no-op (we do
 /// not resurrect a deleted server with detected settings) — logged, not silent.
@@ -24,7 +25,9 @@ fn persist_detected_settings(
             return Ok(());
         };
         if persist_auth {
-            srv.auth_method = Some(settings.auth_method);
+            if let Some(auth_method) = settings.auth_method {
+                srv.auth_method = Some(auth_method);
+            }
         }
         if settings.server_version.is_some() {
             srv.api_mode = Some(settings.api_mode);
@@ -93,7 +96,7 @@ fn extract_hostname(url: &str) -> String {
 struct ConnectContext {
     server_name: String,
     url: String,
-    api_key: String,
+    api_key: Option<String>,
     email: Option<String>,
     api_override: Option<ApiMode>,
     /// Whether detected settings (and TOFU pins) may be written back to the
@@ -138,14 +141,14 @@ impl ConnectContext {
 
     fn build_client(
         &self,
-        auth_method: AuthMethod,
+        auth_method: Option<AuthMethod>,
         api_mode: ApiMode,
         tls_config: &TlsConfig,
     ) -> Result<BugzillaClient> {
         BugzillaClient::new(crate::client::BugzillaClientConfig {
             base_url: &self.url,
-            credential: Some(&self.api_key),
-            auth_method: Some(auth_method),
+            credential: self.api_key.as_deref(),
+            auth_method,
             api_mode,
             email_hint: self.email_hint(),
             tls_config,
@@ -283,12 +286,21 @@ async fn detect_and_build_client(
     ctx: &ConnectContext,
     tls_config: &TlsConfig,
 ) -> Result<BugzillaClient> {
-    let settings =
-        crate::client::detect_server_settings(&ctx.url, &ctx.api_key, ctx.email_hint(), tls_config)
-            .await?;
+    let settings = detect_settings(ctx, tls_config).await?;
     ctx.persist_settings(&settings, true)?;
     let api_mode = ctx.api_override.unwrap_or(settings.api_mode);
     ctx.build_client(settings.auth_method, api_mode, tls_config)
+}
+
+async fn detect_settings(
+    ctx: &ConnectContext,
+    tls_config: &TlsConfig,
+) -> Result<DetectedServerSettings> {
+    if let Some(api_key) = ctx.api_key.as_deref() {
+        crate::client::detect_server_settings(&ctx.url, api_key, ctx.email_hint(), tls_config).await
+    } else {
+        crate::client::detect_server_settings_without_auth(&ctx.url, tls_config).await
+    }
 }
 
 /// Classify a TLS-layer failure and dispatch to the appropriate prompt.
@@ -340,14 +352,7 @@ async fn detect_with_tofu_fallback(
     ctx: &ConnectContext,
     tls_config: &TlsConfig,
 ) -> Result<DetectOrClient> {
-    let err = match crate::client::detect_server_settings(
-        &ctx.url,
-        &ctx.api_key,
-        ctx.email_hint(),
-        tls_config,
-    )
-    .await
-    {
+    let err = match detect_settings(ctx, tls_config).await {
         Ok(settings) => return Ok(DetectOrClient::Settings(settings)),
         Err(e) => e,
     };
@@ -399,7 +404,7 @@ fn resolve_connect_target(
         let ctx = ConnectContext {
             server_name: name.to_string(),
             url: srv.url.clone(),
-            api_key: srv.resolve_api_key(name)?,
+            api_key: srv.resolve_optional_api_key(name)?,
             email: srv.email.clone(),
             api_override,
             persist: false,
@@ -415,10 +420,16 @@ fn resolve_connect_target(
     let config = Config::load()?;
     let (server_name, srv) = config.resolve_server(server)?;
     let tls_config = srv.tls_config(server_name);
+    let api_key = srv.resolve_optional_api_key(server_name)?;
+    let cached_auth = if api_key.is_some() {
+        srv.auth_method
+    } else {
+        None
+    };
     let ctx = ConnectContext {
         server_name: server_name.to_string(),
         url: srv.url.clone(),
-        api_key: srv.resolve_api_key(server_name)?,
+        api_key,
         email: srv.email.clone(),
         api_override,
         persist: true,
@@ -426,15 +437,34 @@ fn resolve_connect_target(
     Ok(ConnectTarget {
         ctx,
         tls_config,
-        cached_auth: srv.auth_method,
+        cached_auth,
         cached_mode: srv.api_mode,
     })
 }
 
+async fn probe_cached_connection(
+    ctx: &ConnectContext,
+    tls_config: &TlsConfig,
+) -> Result<Option<BugzillaClient>> {
+    if tls_config.insecure {
+        return Ok(None);
+    }
+
+    if let Err(e) = probe_tls(&ctx.url, tls_config).await {
+        if let Some(client) = classify_and_handle_tls_failure(&e, ctx, tls_config).await? {
+            return Ok(Some(client));
+        }
+        // Non-TLS transport errors don't block: the actual command will hit
+        // the same condition and report it with full request context.
+    }
+
+    Ok(None)
+}
+
 /// Connect to a Bugzilla server with auto-configuration.
 ///
-/// On first connection to a server, detects auth method and API mode, then
-/// persists these settings to the config file for subsequent connections.
+/// On first connection to a server, detects the auth method when credentials
+/// exist and the API mode, then persists these settings to the config file.
 /// The server's configured email (if any) is stored in the client for
 /// Bugzilla 5.0 whoami fallback.
 ///
@@ -459,9 +489,9 @@ pub async fn connect_and_configure(
         );
     }
 
-    // Three cases: fully cached, partially cached (auth only), or uncached.
-    // An inline server is always uncached (no config entry), so it takes the
-    // detect path and persists nothing.
+    // Cached credentialed servers need auth + mode; cached anonymous servers
+    // need only mode. Inline servers are always uncached (no config entry), so
+    // they take the detect path and persist nothing.
     let (auth, resolved_mode) = match (cached_auth, cached_mode) {
         (Some(method), Some(mode)) => {
             // Even with full cache, surface TLS errors at connect-time so
@@ -470,19 +500,16 @@ pub async fn connect_and_configure(
             // pinned servers and custom-CA servers we still probe so a
             // rotated cert / issuer change is caught here rather than at
             // the first real API call.
-            if !tls_config.insecure {
-                if let Err(e) = probe_tls(&ctx.url, &tls_config).await {
-                    if let Some(client) =
-                        classify_and_handle_tls_failure(&e, &ctx, &tls_config).await?
-                    {
-                        return Ok(client);
-                    }
-                    // Non-TLS transport errors don't block: the actual
-                    // command will hit the same condition and report it
-                    // with full request context.
-                }
+            if let Some(client) = probe_cached_connection(&ctx, &tls_config).await? {
+                return Ok(client);
             }
-            (method, mode)
+            (Some(method), mode)
+        }
+        (None, Some(mode)) if ctx.api_key.is_none() => {
+            if let Some(client) = probe_cached_connection(&ctx, &tls_config).await? {
+                return Ok(client);
+            }
+            (None, mode)
         }
         (Some(method), None) => {
             tracing::debug!("auth_method cached but api_mode missing; re-detecting");
@@ -490,7 +517,7 @@ pub async fn connect_and_configure(
                 DetectOrClient::Client(client) => return Ok(client),
                 DetectOrClient::Settings(settings) => {
                     ctx.persist_settings(&settings, false)?;
-                    (method, settings.api_mode)
+                    (Some(method), settings.api_mode)
                 }
             }
         }

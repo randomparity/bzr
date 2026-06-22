@@ -1,6 +1,8 @@
 mod attachment;
 pub(crate) mod auth;
-pub(crate) use auth::{detect_server_settings, DetectedServerSettings};
+pub(crate) use auth::{
+    detect_server_settings, detect_server_settings_without_auth, DetectedServerSettings,
+};
 mod bug;
 mod classification;
 mod comment;

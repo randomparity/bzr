@@ -338,7 +338,7 @@ async fn detect_server_settings_returns_all_fields() {
     )
     .await
     .unwrap();
-    assert_eq!(detected.auth_method, AuthMethod::Header);
+    assert_eq!(detected.auth_method, Some(AuthMethod::Header));
     assert_eq!(detected.api_mode, ApiMode::Rest);
     assert_eq!(detected.server_version.as_deref(), Some("5.1.2"));
 }
@@ -386,7 +386,7 @@ async fn detect_server_settings_keeps_version_none_when_probe_fails() {
     )
     .await
     .unwrap();
-    assert_eq!(detected.auth_method, AuthMethod::Header);
+    assert_eq!(detected.auth_method, Some(AuthMethod::Header));
     assert_eq!(detected.api_mode, ApiMode::Hybrid);
     assert!(detected.server_version.is_none());
 }

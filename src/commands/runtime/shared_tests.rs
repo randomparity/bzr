@@ -16,7 +16,7 @@ fn connect_context(
     super::ConnectContext {
         server_name: server_name.to_string(),
         url: url.to_string(),
-        api_key: "test-key".to_string(),
+        api_key: Some("test-key".to_string()),
         email: None,
         api_override,
         persist: true,
@@ -167,6 +167,79 @@ api_key = "test-key"
 }
 
 #[tokio::test]
+async fn credentialless_named_server_persists_api_mode_without_auth_method() {
+    let _lock = ENV_LOCK.lock().await;
+    let server = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    write_credentialless_config(&tmp, &server.uri(), "");
+
+    Mock::given(method("GET"))
+        .and(path("/rest/version"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.1.2"})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let result = super::connect_and_configure(None, None).await;
+    assert!(
+        result.is_ok(),
+        "credentialless named server should connect anonymously: {:?}",
+        result.err()
+    );
+
+    let reloaded = crate::config::Config::load().unwrap();
+    let srv = &reloaded.servers["test"];
+    assert_eq!(srv.auth_method, None);
+    assert_eq!(srv.api_mode, Some(crate::types::ApiMode::Rest));
+    assert_eq!(srv.server_version.as_deref(), Some("5.1.2"));
+
+    let requests = server.received_requests().await.unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0]
+        .headers
+        .get(crate::http::AUTH_HEADER_NAME)
+        .is_none());
+    assert!(requests[0]
+        .url
+        .query_pairs()
+        .all(|(name, _)| name != crate::http::AUTH_QUERY_PARAM));
+}
+
+#[tokio::test]
+async fn credentialless_cached_mode_builds_anonymous_client() {
+    let _lock = ENV_LOCK.lock().await;
+    let server = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    write_credentialless_config(&tmp, &server.uri(), "api_mode = \"rest\"");
+
+    Mock::given(method("HEAD"))
+        .respond_with(ResponseTemplate::new(404))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let result = super::connect_and_configure(None, None).await;
+    assert!(
+        result.is_ok(),
+        "credentialless cached mode should build an anonymous client: {:?}",
+        result.err()
+    );
+
+    let requests = server.received_requests().await.unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0]
+        .headers
+        .get(crate::http::AUTH_HEADER_NAME)
+        .is_none());
+    assert!(requests[0]
+        .url
+        .query_pairs()
+        .all(|(name, _)| name != crate::http::AUTH_QUERY_PARAM));
+}
+
+#[tokio::test]
 async fn connect_client_resolves_env_backed_api_key() {
     let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
@@ -250,6 +323,55 @@ async fn inline_server_connects_without_config_and_persists_nothing() {
         !tmp.path().join("bzr").join("config.toml").exists(),
         "an inline connect must not create or write the config file"
     );
+}
+
+#[tokio::test]
+async fn inline_credentialless_server_connects_without_config() {
+    let _lock = ENV_LOCK.lock().await;
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    // SAFETY: tests are serialized via ENV_LOCK.
+    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    Mock::given(method("GET"))
+        .and(path("/rest/version"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.1.2"})),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    crate::commands::runtime::inline_server::set(Some(
+        crate::commands::runtime::inline_server::InlineServer {
+            url: mock.uri(),
+            api_key_env: None,
+            email: None,
+        },
+    ));
+    let result = super::connect_and_configure(None, None).await;
+    crate::commands::runtime::inline_server::set(None);
+
+    assert!(
+        result.is_ok(),
+        "inline credentialless server should connect with no config file: {:?}",
+        result.err()
+    );
+    assert!(
+        !tmp.path().join("bzr").join("config.toml").exists(),
+        "an inline connect must not create or write the config file"
+    );
+
+    let requests = mock.received_requests().await.unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0]
+        .headers
+        .get(crate::http::AUTH_HEADER_NAME)
+        .is_none());
+    assert!(requests[0]
+        .url
+        .query_pairs()
+        .all(|(name, _)| name != crate::http::AUTH_QUERY_PARAM));
 }
 
 /// An inline server whose API-key env var is unset fails with a clear config
@@ -403,7 +525,7 @@ async fn persist_detected_settings_skips_unknown_server() {
     write_config(&tmp, "https://example.test", "");
 
     let settings = crate::client::DetectedServerSettings {
-        auth_method: crate::types::AuthMethod::Header,
+        auth_method: Some(crate::types::AuthMethod::Header),
         api_mode: crate::types::ApiMode::Rest,
         server_version: Some("5.1".into()),
     };
@@ -435,6 +557,34 @@ api_key = "test-key"
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&config_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::set_permissions(
+            config_dir.join("config.toml"),
+            std::fs::Permissions::from_mode(0o600),
+        )
+        .unwrap();
+    }
+    // SAFETY: Tests are serialized via ENV_LOCK.
+    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+}
+
+fn write_credentialless_config(tmp: &tempfile::TempDir, server_url: &str, extra: &str) {
+    let config_dir = tmp.path().join("bzr");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    let config_content = format!(
+        r#"
+default_server = "test"
+
+[servers.test]
+url = "{server_url}"
+{extra}
+"#,
+    );
+    std::fs::write(config_dir.join("config.toml"), config_content).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
         std::fs::set_permissions(&config_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
         std::fs::set_permissions(
             config_dir.join("config.toml"),

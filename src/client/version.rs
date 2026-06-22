@@ -14,13 +14,6 @@ pub(super) async fn detect_version_and_mode(
     detect_version_and_mode_inner(http, base_url, Some((api_key, auth_method))).await
 }
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "Task 3 wires anonymous runtime detection to this helper"
-    )
-)]
 pub(super) async fn detect_version_and_mode_without_auth(
     http: &reqwest::Client,
     base_url: &str,
