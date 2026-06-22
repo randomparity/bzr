@@ -151,19 +151,17 @@ impl ServerConfig {
         self.validate_tls(server_name)
     }
 
-    pub fn credential_source(&self) -> Result<CredentialSource<'_>> {
+    pub fn credential_source(&self) -> Result<Option<CredentialSource<'_>>> {
         let count = usize::from(self.api_key.is_some())
             + usize::from(self.api_key_env.is_some())
             + usize::from(self.api_key_keyring.is_some());
         match count {
-            0 => Err(BzrError::config(
-                "server config must define one of 'api_key', 'api_key_env', or 'api_key_keyring'",
-            )),
+            0 => Ok(None),
             1 => {
                 if let Some(api_key) = self.api_key.as_deref() {
-                    Ok(CredentialSource::Inline(api_key))
+                    Ok(Some(CredentialSource::Inline(api_key)))
                 } else if let Some(var_name) = self.api_key_env.as_deref() {
-                    Ok(CredentialSource::EnvVar(var_name))
+                    Ok(Some(CredentialSource::EnvVar(var_name)))
                 } else {
                     let r = self.api_key_keyring.as_ref().ok_or_else(|| {
                         BzrError::config("internal: keyring credential unexpectedly missing")
@@ -173,10 +171,10 @@ impl ServerConfig {
                     // has the server name in scope. We cannot use
                     // KeyringRef::account_or_default here because that would
                     // require plumbing the server name through every caller.
-                    Ok(CredentialSource::Keyring {
+                    Ok(Some(CredentialSource::Keyring {
                         service: r.service_or_default(),
                         account: r.account.as_deref().unwrap_or(""),
-                    })
+                    }))
                 }
             }
             _ => Err(BzrError::config(
@@ -186,14 +184,14 @@ impl ServerConfig {
         }
     }
 
-    pub fn credential_source_kind(&self) -> Result<CredentialSourceKind> {
-        Ok(self.credential_source()?.kind())
+    pub fn credential_source_kind(&self) -> Result<Option<CredentialSourceKind>> {
+        Ok(self.credential_source()?.map(|source| source.kind()))
     }
 
-    pub fn resolve_api_key(&self, server_name: &str) -> Result<String> {
+    pub fn resolve_optional_api_key(&self, server_name: &str) -> Result<Option<String>> {
         match self.credential_source()? {
-            CredentialSource::Inline(api_key) => Ok(api_key.to_string()),
-            CredentialSource::EnvVar(var_name) => {
+            Some(CredentialSource::Inline(api_key)) => Ok(Some(api_key.to_string())),
+            Some(CredentialSource::EnvVar(var_name)) => {
                 let value = std::env::var(var_name).map_err(|_| {
                     BzrError::config(format!(
                         "server '{server_name}' uses API key env var '{var_name}', but it is not set"
@@ -204,9 +202,9 @@ impl ServerConfig {
                         "server '{server_name}' uses API key env var '{var_name}', but it is empty"
                     )));
                 }
-                Ok(value)
+                Ok(Some(value))
             }
-            CredentialSource::Keyring { service, account } => {
+            Some(CredentialSource::Keyring { service, account }) => {
                 // Empty `account` means "default to server_name" (see the
                 // sentinel explanation in credential_source()).
                 let account = if account.is_empty() {
@@ -214,9 +212,18 @@ impl ServerConfig {
                 } else {
                     account
                 };
-                crate::credentials::keyring::retrieve(service, account)
+                crate::credentials::keyring::retrieve(service, account).map(Some)
             }
+            None => Ok(None),
         }
+    }
+
+    pub fn resolve_api_key(&self, server_name: &str) -> Result<String> {
+        self.resolve_optional_api_key(server_name)?.ok_or_else(|| {
+            BzrError::config(format!(
+                "server '{server_name}' has no API key source configured"
+            ))
+        })
     }
 
     pub fn validate_tls(&self, server_name: &str) -> Result<()> {
@@ -309,9 +316,8 @@ impl Config {
     /// `update_locked` (which validates the post-mutation state) and by `load`.
     ///
     /// `pub(crate)` so `config remove-server`/`rename-server` can take an
-    /// advisory snapshot (existence, default pointer, keyring ref) without
-    /// `load`'s credential validator rejecting an unrelated credential-less
-    /// server — the legitimate state `unset-keyring` leaves on disk.
+    /// advisory snapshot (existence, default pointer, keyring ref) even when
+    /// some unrelated server has invalid fields.
     pub(crate) fn read_unvalidated() -> Result<Config> {
         let path = Self::path()?;
         match fs::read_to_string(&path) {
@@ -361,9 +367,8 @@ impl Config {
         Self::update_locked_inner(true, mutator)
     }
 
-    /// Like [`Self::update_locked`] but skips whole-config validation, for the
-    /// one caller (`unset-keyring`) that intentionally leaves a server without a
-    /// credential source.
+    /// Like [`Self::update_locked`] but skips whole-config validation for callers
+    /// that preserve existing invalid config while changing unrelated data.
     pub fn update_locked_without_validation(
         mutator: impl FnOnce(&mut Config) -> Result<()>,
     ) -> Result<Config> {
@@ -388,17 +393,12 @@ impl Config {
         LOCK_HELD.with(|held| held.set(true));
         let _guard = LockGuard { file };
 
-        // Reload WITHOUT validation. `Config::load` validates unconditionally and
-        // rejects a credential-less server (the state `unset-keyring` deliberately
-        // leaves on disk). Validating the *reload* would make `update_locked`
-        // itself fail just from reading such a config — in particular it would
-        // break `update_locked_without_validation` (which must operate on, and
-        // leave, a credential-less server). We validate the *post-mutation* state
-        // instead (when `validate` is true), matching `save()`'s "validate the
-        // whole config before writing" semantics. (Note: the whole-config
-        // validation still rejects a write while *any* server is credential-less;
-        // that pre-existing rule — also enforced by `Config::load` in every
-        // command — is unchanged here and is a separate concern from locking.)
+        // Reload WITHOUT validation. `Config::load` validates unconditionally;
+        // validating the reload would make `update_locked_without_validation`
+        // fail before a caller can repair or preserve unrelated invalid config.
+        // We validate only the post-mutation state when `validate` is true,
+        // matching `save()`'s "validate the whole config before writing"
+        // semantics.
         let mut config = Self::read_unvalidated()?;
         mutator(&mut config)?;
         if validate {
@@ -408,11 +408,10 @@ impl Config {
         Ok(config)
     }
 
-    /// Persist the config **without** running the credential-source validator.
+    /// Persist the config **without** running validation.
     ///
-    /// Used only in tests: seeds a credential-less server to exercise
-    /// `update_locked_without_validation`. Applies the same `0o600`/`0o700`
-    /// hardening as `save` so a recreated config file is never world-readable.
+    /// Used only in tests. Applies the same `0o600`/`0o700` hardening as `save`
+    /// so a recreated config file is never world-readable.
     #[cfg(test)]
     fn save_without_validation(&self) -> Result<()> {
         self.write_to_disk()

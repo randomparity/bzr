@@ -143,21 +143,16 @@ fn apply_network_tuning(cli: &cli::Cli) {
 }
 
 /// Build the inline server definition from the global `--server-url` flags, or
-/// `None` when no inline server was requested. Returns `Some` only when both
-/// the URL and its API-key env var are present; clap's `requires` guarantees
-/// they come as a pair, but this is robust if a `Cli` is constructed directly
-/// (as integration tests do).
+/// `None` when no inline server was requested. The API-key env var is optional
+/// for public read-only commands.
 fn resolve_inline_server(cli: &cli::Cli) -> Option<commands::runtime::inline_server::InlineServer> {
     cli.server_url
         .as_ref()
-        .zip(cli.server_api_key_env.as_ref())
-        .map(
-            |(url, api_key_env)| commands::runtime::inline_server::InlineServer {
-                url: url.clone(),
-                api_key_env: api_key_env.clone(),
-                email: cli.server_email.clone(),
-            },
-        )
+        .map(|url| commands::runtime::inline_server::InlineServer {
+            url: url.clone(),
+            api_key_env: cli.server_api_key_env.clone(),
+            email: cli.server_email.clone(),
+        })
 }
 
 /// Reject `--dry-run` on commands that don't honor it.

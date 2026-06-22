@@ -232,7 +232,7 @@ async fn inline_server_connects_without_config_and_persists_nothing() {
     crate::commands::runtime::inline_server::set(Some(
         crate::commands::runtime::inline_server::InlineServer {
             url: mock.uri(),
-            api_key_env: "BZR_INLINE_TEST_KEY".into(),
+            api_key_env: Some("BZR_INLINE_TEST_KEY".into()),
             email: None,
         },
     ));
@@ -267,7 +267,7 @@ async fn inline_server_missing_env_var_is_clean_error() {
     crate::commands::runtime::inline_server::set(Some(
         crate::commands::runtime::inline_server::InlineServer {
             url: "https://bugzilla.example.com".into(),
-            api_key_env: "BZR_INLINE_ABSENT_KEY".into(),
+            api_key_env: Some("BZR_INLINE_ABSENT_KEY".into()),
             email: None,
         },
     ));

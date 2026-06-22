@@ -384,7 +384,16 @@ fn resolve_connect_target(
 ) -> Result<ConnectTarget> {
     if let Some(inline) = crate::commands::runtime::inline_server::get() {
         let name = crate::commands::runtime::inline_server::INLINE_SERVER_NAME;
-        let srv = ServerConfig::from_url_with_env_key(inline.url, inline.api_key_env, inline.email);
+        let srv = match inline.api_key_env {
+            Some(api_key_env) => {
+                ServerConfig::from_url_with_env_key(inline.url, api_key_env, inline.email)
+            }
+            None => ServerConfig {
+                url: inline.url,
+                email: inline.email,
+                ..ServerConfig::default()
+            },
+        };
         srv.validate(name)?;
         let tls_config = srv.tls_config(name);
         let ctx = ConnectContext {

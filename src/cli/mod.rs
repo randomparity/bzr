@@ -90,9 +90,11 @@ pub struct Cli {
     ///
     /// Defines an ephemeral server for this one invocation: nothing is read
     /// from or written to the config file, so a fully stateless run needs no
-    /// `config set-server` first. Requires `--server-api-key-env`; conflicts
-    /// with `--server` (a named server and an inline one are mutually
-    /// exclusive). Pairs with `--config` for sandboxed throwaway runs.
+    /// `config set-server` first. `--server-api-key-env` is optional for
+    /// public read-only commands, but required for writes and identity-derived
+    /// commands. Conflicts with `--server` (a named server and an inline one
+    /// are mutually exclusive). Pairs with `--config` for sandboxed throwaway
+    /// runs.
     ///
     ///   bzr --server-url https://bz.example.com \
     ///     --server-api-key-env BZR_KEY bug view 123
@@ -101,7 +103,6 @@ pub struct Cli {
         value_name = "URL",
         global = true,
         conflicts_with = "server",
-        requires = "server_api_key_env",
         verbatim_doc_comment
     )]
     pub server_url: Option<String>,

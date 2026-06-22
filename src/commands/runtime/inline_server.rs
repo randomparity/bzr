@@ -18,13 +18,12 @@ use std::sync::RwLock;
 /// messages and any TLS prompt.
 pub const INLINE_SERVER_NAME: &str = "(inline)";
 
-/// An ad-hoc server defined entirely on the command line, with its API key
-/// sourced from an environment variable (never a literal flag, to keep the
-/// secret out of `argv`).
+/// An ad-hoc server defined entirely on the command line. The API key env var
+/// is optional for public read-only commands.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InlineServer {
     pub url: String,
-    pub api_key_env: String,
+    pub api_key_env: Option<String>,
     pub email: Option<String>,
 }
 

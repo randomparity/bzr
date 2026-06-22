@@ -351,6 +351,41 @@ async fn set_server_with_env_var_persists_env_source() {
     assert_eq!(server.api_key_env.as_deref(), Some("BZR_API_KEY"));
 }
 
+#[tokio::test]
+async fn set_server_allows_url_without_api_key_source() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
+    let (_lock, _tmp) = setup_config_env().await;
+
+    let result = execute(
+        &ConfigAction::SetServer {
+            name: "public".into(),
+            url: "https://public.example.com".into(),
+            api_key: None,
+            api_key_env: None,
+            email: None,
+            auth_method: None,
+            tls_insecure: false,
+            tls_ca_cert: None,
+            tls_pin_sha256: None,
+            tls_pin_now: false,
+            tls_pin_clear: false,
+        },
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "set-server failed: {result:?}");
+    let config = Config::load().unwrap();
+    let server = &config.servers["public"];
+    assert!(server.api_key.is_none());
+    assert!(server.api_key_env.is_none());
+    assert!(server.api_key_keyring.is_none());
+    assert!(server.credential_source().unwrap().is_none());
+}
+
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn set_keyring_stores_secret_and_rewrites_config() {
@@ -514,6 +549,44 @@ async fn migrate_to_keyring_from_keyring_errors_before_storing() {
 
     // Cleanup: the original entry still exists.
     crate::credentials::keyring::delete("bzr", "migrate-already-kr").unwrap();
+}
+
+#[tokio::test]
+async fn migrate_to_keyring_without_api_key_source_errors() {
+    let mut __cap_io = crate::test_helpers::CapturedIo::new();
+    let (_lock, _tmp) = setup_config_env().await;
+
+    Config::update_locked_without_validation(|config| {
+        config.servers.insert(
+            "public".into(),
+            ServerConfig {
+                url: "https://public.example.com".into(),
+                ..ServerConfig::default()
+            },
+        );
+        config.default_server = Some("public".into());
+        Ok(())
+    })
+    .unwrap();
+
+    let result = execute(
+        &ConfigAction::MigrateToKeyring {
+            name: "public".into(),
+            service: None,
+            account: None,
+            yes: true,
+        },
+        None,
+        OutputFormat::Json,
+        None,
+        &mut __cap_io.writers(),
+    )
+    .await;
+
+    assert!(matches!(
+        result,
+        Err(BzrError::Config(ref msg)) if msg.contains("no API key source")
+    ));
 }
 
 #[tokio::test]

@@ -111,6 +111,42 @@ fn config_view_from_config_shows_env_backed_keys_without_resolving() {
 }
 
 #[test]
+fn config_view_displays_missing_api_key_source_as_none() {
+    let mut servers = HashMap::new();
+    servers.insert(
+        "public".into(),
+        ServerConfig {
+            url: "https://bugzilla.example".into(),
+            email: None,
+            api_key: None,
+            api_key_env: None,
+            api_key_keyring: None,
+            auth_method: None,
+            api_mode: None,
+            server_version: None,
+            tls_insecure: false,
+            tls_ca_cert: None,
+            tls_pin_sha256: None,
+            tls_pin_issuer: None,
+            tls_pin_issuer_der: None,
+        },
+    );
+    let config = Config {
+        default_server: Some("public".into()),
+        servers,
+        queries: HashMap::new(),
+        templates: HashMap::new(),
+    };
+
+    let view = ConfigView::from_config(&config, Path::new("/tmp/bzr/config.toml"));
+    let server = &view.servers["public"];
+    let json: serde_json::Value = serde_json::to_value(server).unwrap();
+
+    assert_eq!(json["api_key"], "none");
+    assert_eq!(json["api_key_source"], "none");
+}
+
+#[test]
 fn server_display_info_keyring_source() {
     let srv = ServerConfig {
         url: "https://example.com".into(),

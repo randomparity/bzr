@@ -10,9 +10,10 @@ use crate::types::AuthMethod;
 pub enum ConfigAction {
     /// Add or update a named server in the local config.
     ///
-    /// `--url` is required. Exactly one of `--api-key` (inline) or
-    /// `--api-key-env` (env-var indirection) must be supplied; using
-    /// the OS keychain instead is a separate step
+    /// `--url` is required. `--api-key` (inline) and `--api-key-env`
+    /// (env-var indirection) are optional; omit both for public read-only
+    /// servers. Writes and identity-derived commands require one credential
+    /// source, and using the OS keychain is a separate step
     /// (`bzr config set-keyring`).
     ///
     /// TLS handling is mutually exclusive across these flags:
@@ -48,27 +49,20 @@ pub enum ConfigAction {
         url: String,
         /// API key, stored inline in the config file.
         ///
-        /// Mutually exclusive with `--api-key-env`; one of the two
-        /// is required (or use `bzr config set-keyring` to keep
-        /// the secret in the OS keychain instead). Inline keys can
-        /// leak via shell history, process args, or backup copies
-        /// of `config.toml` -- prefer `--api-key-env` or the
-        /// keyring for anything beyond a throwaway test setup.
-        #[arg(
-            long,
-            conflicts_with = "api_key_env",
-            required_unless_present = "api_key_env"
-        )]
+        /// Mutually exclusive with `--api-key-env`. Inline keys can leak via
+        /// shell history, process args, or backup copies of `config.toml` --
+        /// prefer `--api-key-env` or the keyring for anything beyond a
+        /// throwaway test setup.
+        #[arg(long, conflicts_with = "api_key_env")]
         api_key: Option<String>,
         /// Name of an environment variable that holds the API key.
         ///
-        /// Mutually exclusive with `--api-key`. The variable is
-        /// resolved at command time, not at `set-server` time, so
-        /// rotating the key only requires updating the env var
-        /// (or the secret store backing it). Variable names are
-        /// stored verbatim in the config file; the secret itself
-        /// is not.
-        #[arg(long, conflicts_with = "api_key", required_unless_present = "api_key")]
+        /// Mutually exclusive with `--api-key`. The variable is resolved at
+        /// command time, not at `set-server` time, so rotating the key only
+        /// requires updating the env var (or the secret store backing it).
+        /// Variable names are stored verbatim in the config file; the secret
+        /// itself is not.
+        #[arg(long, conflicts_with = "api_key")]
         api_key_env: Option<String>,
         /// Login email used for fallback auth on older Bugzilla servers.
         ///
@@ -248,9 +242,9 @@ pub enum ConfigAction {
     ///
     /// Deletes the keychain entry for `<server-name>` (or the
     /// service/account configured by `set-keyring`) and clears the
-    /// server's keyring credential reference. The server entry is
-    /// preserved with no API key source; re-run `set-server` or
-    /// `set-keyring` afterward to re-credential it.
+    /// server's keyring credential reference. The server entry is preserved
+    /// with no API key source, so public reads can still work; configure
+    /// `--api-key-env`, `--api-key`, or `set-keyring` before writes.
     ///
     /// Examples:
     ///
