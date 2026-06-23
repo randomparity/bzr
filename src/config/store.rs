@@ -8,12 +8,6 @@ use crate::error::{io_with_context, BzrError, Result};
 use super::Config;
 
 impl Config {
-    /// Resolve the path to the config file.
-    #[cfg(test)]
-    pub fn path() -> Result<PathBuf> {
-        Self::path_at(None)
-    }
-
     /// Resolve the config path for one invocation.
     ///
     /// Precedence: the explicit invocation path > `BZR_CONFIG` > the default
@@ -79,11 +73,6 @@ impl Config {
         }
     }
 
-    #[cfg(test)]
-    pub fn load() -> Result<Config> {
-        Self::load_at(None)
-    }
-
     pub fn load_at(path_override: Option<&Path>) -> Result<Config> {
         // Warn on insecure permissions only on an explicit load (preserves today's
         // behavior); `update_locked_at`'s internal reload uses `read_unvalidated`,
@@ -98,9 +87,9 @@ impl Config {
     }
 
     #[cfg(test)]
-    pub(super) fn save(&self) -> Result<()> {
+    pub(super) fn save_at(&self, path: &Path) -> Result<()> {
         self.validate()?;
-        self.write_to_disk()
+        self.write_to_disk_at(Some(path))
     }
 
     /// Apply `mutator` to the config under an exclusive advisory lock, with a
@@ -120,25 +109,11 @@ impl Config {
     ///
     /// Non-reentrant: a `mutator` that itself calls `update_locked` returns an
     /// error rather than self-deadlocking.
-    #[cfg(test)]
-    pub fn update_locked(mutator: impl FnOnce(&mut Config) -> Result<()>) -> Result<Config> {
-        Self::update_locked_at(None, mutator)
-    }
-
     pub fn update_locked_at(
         path_override: Option<&Path>,
         mutator: impl FnOnce(&mut Config) -> Result<()>,
     ) -> Result<Config> {
         Self::update_locked_inner(path_override, true, mutator)
-    }
-
-    /// Test-only no-argument wrapper around
-    /// [`Self::update_locked_without_validation_at`].
-    #[cfg(test)]
-    pub fn update_locked_without_validation(
-        mutator: impl FnOnce(&mut Config) -> Result<()>,
-    ) -> Result<Config> {
-        Self::update_locked_without_validation_at(None, mutator)
     }
 
     pub fn update_locked_without_validation_at(
@@ -187,8 +162,8 @@ impl Config {
     /// Used only in tests. Applies the same `0o600`/`0o700` hardening as `save`
     /// so a recreated config file is never world-readable.
     #[cfg(test)]
-    pub(super) fn save_without_validation(&self) -> Result<()> {
-        self.write_to_disk()
+    pub(super) fn save_without_validation_at(&self, path: &Path) -> Result<()> {
+        self.write_to_disk_at(Some(path))
     }
 
     /// Serialize and write the config to its on-disk path atomically:
@@ -196,11 +171,6 @@ impl Config {
     /// renamed over the target (atomic replace), and the directory is
     /// fsync'd (unix) so the rename survives a crash. A concurrent reader
     /// therefore always sees either the complete old or complete new file.
-    #[cfg(test)]
-    fn write_to_disk(&self) -> Result<()> {
-        self.write_to_disk_at(None)
-    }
-
     fn write_to_disk_at(&self, path_override: Option<&Path>) -> Result<()> {
         let _dir = Self::ensure_config_dir_at(path_override)?;
         let path = Self::path_at(path_override)?;

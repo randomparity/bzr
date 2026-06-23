@@ -1,8 +1,9 @@
 #![expect(clippy::unwrap_used)]
 
 use super::*;
-use crate::error::BzrError;
+use crate::error::{BzrError, Result};
 use crate::types::AuthMethod;
+use std::path::PathBuf;
 
 async fn setup_config_env() -> (tokio::sync::MutexGuard<'static, ()>, tempfile::TempDir) {
     let lock = crate::ENV_LOCK.lock().await;
@@ -12,6 +13,27 @@ async fn setup_config_env() -> (tokio::sync::MutexGuard<'static, ()>, tempfile::
     // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
     (lock, tmp)
+}
+
+fn current_config_path() -> PathBuf {
+    Config::path_at(None).unwrap()
+}
+
+fn load_config() -> Config {
+    let path = current_config_path();
+    Config::load_at(Some(&path)).unwrap()
+}
+
+fn update_config(mutator: impl FnOnce(&mut Config) -> Result<()>) -> Result<Config> {
+    let path = current_config_path();
+    Config::update_locked_at(Some(&path), mutator)
+}
+
+fn update_config_without_validation(
+    mutator: impl FnOnce(&mut Config) -> Result<()>,
+) -> Result<Config> {
+    let path = current_config_path();
+    Config::update_locked_without_validation_at(Some(&path), mutator)
 }
 
 /// Invoke `execute` with a `SetServer` action carrying an inline
@@ -65,7 +87,7 @@ async fn seed_keyring_secret(server_name: &str, secret: &str) {
 async fn set_default_on_empty_config_returns_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _tmp) = setup_config_env().await;
-    Config::update_locked(|c| {
+    update_config(|c| {
         *c = Config::default();
         Ok(())
     })
@@ -109,7 +131,7 @@ async fn first_set_server_auto_sets_default() {
     .await;
     let output = __io.out_str().to_string();
     result.unwrap();
-    let config = Config::load().unwrap();
+    let config = load_config();
     assert_eq!(config.default_server.as_deref(), Some("first"));
     assert!(config.servers.contains_key("first"));
 
@@ -164,7 +186,7 @@ async fn second_set_server_does_not_override_default() {
     )
     .await
     .unwrap();
-    let config = Config::load().unwrap();
+    let config = load_config();
     assert_eq!(
         config.default_server.as_deref(),
         Some("first"),
@@ -211,7 +233,7 @@ async fn set_server_update_preserves_existing_default() {
     assert_eq!(parsed["name"], "second");
     assert_eq!(parsed["action"], "updated");
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     assert_eq!(config.default_server.as_deref(), Some("first"));
     let server = &config.servers["second"];
     assert_eq!(server.url, "https://updated.example.com");
@@ -247,10 +269,7 @@ async fn set_default_persists_selected_server() {
     let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["name"], "second");
     assert_eq!(parsed["action"], "updated");
-    assert_eq!(
-        Config::load().unwrap().default_server.as_deref(),
-        Some("second")
-    );
+    assert_eq!(load_config().default_server.as_deref(), Some("second"));
 }
 
 #[tokio::test]
@@ -323,7 +342,7 @@ async fn set_server_with_env_var_persists_env_source() {
     .await
     .unwrap();
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     let server = &config.servers["prod"];
     assert_eq!(server.api_key, None);
     assert_eq!(server.api_key_env.as_deref(), Some("BZR_API_KEY"));
@@ -354,7 +373,7 @@ async fn set_server_allows_url_without_api_key_source() {
     .await;
 
     assert!(result.is_ok(), "set-server failed: {result:?}");
-    let config = Config::load().unwrap();
+    let config = load_config();
     let server = &config.servers["public"];
     assert!(server.api_key.is_none());
     assert!(server.api_key_env.is_none());
@@ -376,7 +395,7 @@ async fn set_keyring_stores_secret_and_rewrites_config() {
     seed_keyring_secret("prod", "new-keyring-value").await;
 
     // Config should have been rewritten: inline cleared, api_key_keyring set.
-    let config = Config::load().unwrap();
+    let config = load_config();
     let server = &config.servers["prod"];
     assert!(server.api_key.is_none());
     assert!(server.api_key_env.is_none());
@@ -416,7 +435,7 @@ async fn migrate_to_keyring_from_inline_rewrites_config() {
     .await
     .unwrap();
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     let server = &config.servers["migrate-inline"];
     assert!(server.api_key.is_none(), "inline key should be cleared");
     assert!(server.api_key_keyring.is_some());
@@ -470,7 +489,7 @@ async fn migrate_to_keyring_from_env_preserves_config() {
     .unwrap();
     unsafe { std::env::remove_var("BZR_MIGRATE_TEST_KEY") };
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     let server = &config.servers["migrate-env"];
     // Env source preserved — config.toml is NOT rewritten.
     assert_eq!(server.api_key_env.as_deref(), Some("BZR_MIGRATE_TEST_KEY"));
@@ -524,7 +543,7 @@ async fn migrate_to_keyring_without_api_key_source_errors() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, _tmp) = setup_config_env().await;
 
-    Config::update_locked_without_validation(|config| {
+    update_config_without_validation(|config| {
         config.servers.insert(
             "public".into(),
             ServerConfig {
@@ -610,7 +629,7 @@ async fn unset_keyring_removes_secret_and_clears_config() {
 
     // Reload config directly (bypass Config::load's validator — the
     // server intentionally has no credential source).
-    let path = Config::path().unwrap();
+    let path = current_config_path();
     let content = std::fs::read_to_string(&path).unwrap();
     let config: Config = toml::from_str(&content).unwrap();
     let server = &config.servers["unset-test"];
@@ -639,7 +658,7 @@ async fn run_action_json(action: ConfigAction) -> serde_json::Value {
 }
 
 fn load_config_unvalidated() -> Config {
-    let path = Config::path().unwrap();
+    let path = current_config_path();
     let content = std::fs::read_to_string(&path).unwrap();
     toml::from_str(&content).unwrap()
 }

@@ -5,10 +5,26 @@ use crate::cli::{
     QueryUpdateArgs, RunArgs, SaveArgs, ShowArgs,
 };
 use crate::config::Config;
+use crate::error::Result;
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
+use std::path::PathBuf;
 use wiremock::matchers::{method, path, query_param, query_param_is_missing};
 use wiremock::{Mock, ResponseTemplate};
+
+fn current_config_path() -> PathBuf {
+    Config::path_at(None).unwrap()
+}
+
+fn load_config() -> Config {
+    let path = current_config_path();
+    Config::load_at(Some(&path)).unwrap()
+}
+
+fn update_config(mutator: impl FnOnce(&mut Config) -> Result<()>) -> Result<Config> {
+    let path = current_config_path();
+    Config::update_locked_at(Some(&path), mutator)
+}
 
 fn save_action(name: &str) -> QueryAction {
     QueryAction::Save(SaveArgs {
@@ -629,7 +645,7 @@ async fn query_run_count_rejects_offset_and_paginate() {
 async fn query_run_count_ignores_saved_url_offset() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
-    Config::update_locked(|config| {
+    update_config(|config| {
         config.queries.insert(
             "count-offset-test".into(),
             crate::types::SavedQuery {
@@ -816,7 +832,7 @@ async fn query_save_existing_entry_reports_updated() {
     assert_eq!(parsed["name"], "existing");
     assert_eq!(parsed["action"], "updated");
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     let saved = &config.queries["existing"];
     assert_eq!(saved.quicksearch.as_deref(), Some("updated"));
     assert_eq!(saved.limit, Some(5));
@@ -1002,7 +1018,7 @@ async fn query_list_table_sorts_entries_by_name() {
     let _ = __io7.out_str().to_string();
     assert!(result.is_ok());
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     let mut names: Vec<&str> = config.queries.keys().map(String::as_str).collect();
     names.sort_unstable();
     assert_eq!(names, vec!["aaa", "zzz"]);
@@ -1043,7 +1059,7 @@ async fn query_run_with_server_override() {
     assert!(result.is_ok());
 
     // Patch the saved query to have a different server
-    Config::update_locked(|config| {
+    update_config(|config| {
         let query = config.queries.get_mut("server-test").unwrap();
         query.server = Some("other-server".into());
         Ok(())
@@ -1117,7 +1133,7 @@ async fn query_save_from_url() {
     let _output = __io_a17.out_str().to_string();
     assert!(result.is_ok(), "query save --from-url failed: {result:?}");
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     let saved = &config.queries["url-query"];
     assert_eq!(saved.kind, crate::types::QueryKind::Url);
     assert_eq!(saved.product, vec!["TestProduct"]);
@@ -1218,7 +1234,7 @@ async fn query_save_stores_canonical_date_forms() {
     let _ = __io8.out_str().to_string();
     result.unwrap();
 
-    let cfg = Config::load().unwrap();
+    let cfg = load_config();
     let q = cfg.queries.get("recent").unwrap();
     assert_eq!(q.creation_time.as_deref(), Some("2026-04-01T00:00:00Z"));
     assert_eq!(q.last_change_time.as_deref(), Some("2026-04-15T12:00:00Z"));
@@ -1270,7 +1286,7 @@ async fn query_save_accepts_date_only_query() {
     .await;
     let _ = __io9.out_str().to_string();
     result.unwrap();
-    let cfg = Config::load().unwrap();
+    let cfg = load_config();
     assert!(cfg.queries.contains_key("date-only"));
 }
 
@@ -1280,7 +1296,7 @@ async fn query_run_rejects_malformed_created_since_override() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
     // Pre-seed a saved query so the not-found branch doesn't fire first.
-    Config::update_locked(move |c| {
+    update_config(move |c| {
         c.queries.insert(
             "recent".into(),
             crate::types::SavedQuery {
@@ -1370,7 +1386,7 @@ async fn query_save_persists_158_field_filters() {
     let _output = __io_a18.out_str().to_string();
     assert!(result.is_ok(), "save failed: {result:?}");
 
-    let cfg = Config::load().unwrap();
+    let cfg = load_config();
     let q = cfg.queries.get("field-filters").unwrap();
     assert_eq!(q.whiteboard, vec!["needs-review"]);
     assert_eq!(q.target_milestone, vec!["5.0"]);
@@ -1677,7 +1693,7 @@ async fn query_save_persists_explicit_sort() {
     .await
     .unwrap();
 
-    let config = crate::config::Config::load().unwrap();
+    let config = load_config();
     let saved = config.queries.get("order-persist").unwrap();
     assert_eq!(
         saved.order.as_deref(),
@@ -1743,7 +1759,7 @@ async fn query_update_replaces_filter_keeps_rest() {
     }
     run_q(&a).await.unwrap();
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     let q = &config.queries["q"];
     assert_eq!(q.status, vec!["ASSIGNED".to_string()]);
     assert_eq!(q.product, vec!["Firefox".to_string()]); // untouched
@@ -1761,7 +1777,7 @@ async fn query_update_replaces_limit() {
     }
     run_q(&a).await.unwrap();
 
-    assert_eq!(Config::load().unwrap().queries["q"].limit, Some(100));
+    assert_eq!(load_config().queries["q"].limit, Some(100));
 }
 
 #[tokio::test]
@@ -1775,7 +1791,7 @@ async fn query_update_clear_resets_filter() {
     }
     run_q(&a).await.unwrap();
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     assert!(config.queries["q"].status.is_empty());
     assert_eq!(config.queries["q"].product, vec!["Firefox".to_string()]);
 }
@@ -1849,7 +1865,7 @@ async fn query_update_clear_wins_over_set() {
     }
     run_q(&a).await.unwrap();
     // status was both set and cleared -> cleared.
-    assert!(Config::load().unwrap().queries["q"].status.is_empty());
+    assert!(load_config().queries["q"].status.is_empty());
 }
 
 #[test]
@@ -1929,7 +1945,7 @@ async fn query_update_sets_dates_and_sort() {
     }
     run_q(&a).await.unwrap();
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     let q = &config.queries["q"];
     assert!(q.creation_time.is_some());
     assert!(q.last_change_time.is_some());
@@ -1973,7 +1989,7 @@ async fn query_update_from_url_replaces_existing_query() {
 
     run_q(&update).await.unwrap();
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     let q = &config.queries["web"];
     assert_eq!(q.kind, crate::types::QueryKind::Url);
     assert_eq!(q.product, vec!["NewProduct"]);
@@ -2017,7 +2033,7 @@ async fn query_update_only_product_is_a_change() {
     }
     run_q(&a).await.unwrap(); // must NOT fail with "no changes"
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     assert_eq!(
         config.queries["q"].product,
         vec!["Thunderbird".to_string()],
@@ -2038,7 +2054,7 @@ async fn query_update_only_component_is_a_change() {
     }
     run_q(&a).await.unwrap();
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     assert_eq!(
         config.queries["q"].component,
         vec!["General".to_string()],

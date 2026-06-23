@@ -833,7 +833,7 @@ async fn resolve_bug_urls_uses_configured_server() {
 
 #[tokio::test]
 async fn resolve_bug_urls_works_without_credentials() {
-    // A server with a URL but no api_key/env/keyring fails Config::load()
+    // A server with a URL but no api_key/env/keyring fails config loading.
     // validation; `--web` only needs the URL, so it must still resolve.
     let _lock = crate::ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();

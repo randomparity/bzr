@@ -6,6 +6,16 @@ use wiremock::{Mock, ResponseTemplate};
 use crate::cli::BugAction;
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
+use std::path::PathBuf;
+
+fn current_config_path() -> PathBuf {
+    crate::config::Config::path_at(None).unwrap()
+}
+
+fn load_config() -> crate::config::Config {
+    let path = current_config_path();
+    crate::config::Config::load_at(Some(&path)).unwrap()
+}
 
 fn from_url_action(url: String, save_as: Option<String>) -> BugAction {
     BugAction::Search(crate::cli::SearchArgs {
@@ -280,7 +290,7 @@ async fn handle_search_from_url_saves_query() {
     let _output = __io5.out_str().to_string();
     assert!(result.is_ok(), "from-url save failed: {result:?}");
 
-    let config = crate::config::Config::load().unwrap();
+    let config = load_config();
     let saved = config.queries.get("my-query").unwrap();
     assert_eq!(saved.kind, crate::types::QueryKind::Url);
     assert_eq!(saved.product, vec!["TestProduct"]);
@@ -314,7 +324,7 @@ async fn handle_search_from_url_auto_names_from_known_name() {
         "auto-name from known_name failed: {result:?}"
     );
 
-    let config = crate::config::Config::load().unwrap();
+    let config = load_config();
     assert!(
         config.queries.contains_key("my saved search"),
         "query should be saved as 'my saved search'"

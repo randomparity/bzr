@@ -7,6 +7,16 @@ use crate::error::BzrError;
 use crate::test_helpers::setup_test_env;
 use crate::tls::TlsConfig;
 use crate::ENV_LOCK;
+use std::path::PathBuf;
+
+fn current_config_path() -> PathBuf {
+    crate::config::Config::path_at(None).unwrap()
+}
+
+fn load_config() -> crate::config::Config {
+    let path = current_config_path();
+    crate::config::Config::load_at(Some(&path)).unwrap()
+}
 
 fn connect_context(
     server_name: &str,
@@ -184,7 +194,7 @@ api_key = "test-key"
     assert!(result.is_ok(), "connect_client should succeed");
 
     // Verify persistence: reload from disk
-    let reloaded = crate::config::Config::load().unwrap();
+    let reloaded = load_config();
     assert_eq!(
         reloaded.servers["test"].auth_method,
         Some(crate::types::AuthMethod::Header)
@@ -228,7 +238,7 @@ async fn credentialless_named_server_persists_api_mode_without_auth_method() {
         result.err()
     );
 
-    let reloaded = crate::config::Config::load().unwrap();
+    let reloaded = load_config();
     let srv = &reloaded.servers["test"];
     assert_eq!(srv.auth_method, None);
     assert_eq!(srv.api_mode, Some(crate::types::ApiMode::Rest));
@@ -594,7 +604,7 @@ async fn persist_detected_settings_skips_unknown_server() {
     assert!(result.is_ok());
 
     // The known server is untouched and no "nonexistent" server is created.
-    let reloaded = crate::config::Config::load().unwrap();
+    let reloaded = load_config();
     assert!(!reloaded.servers.contains_key("nonexistent"));
 }
 
@@ -745,7 +755,7 @@ async fn connect_client_partial_cache_preserves_cached_auth_method() {
         result.err()
     );
 
-    let reloaded = crate::config::Config::load().unwrap();
+    let reloaded = load_config();
     let srv = &reloaded.servers["test"];
     assert_eq!(
         srv.auth_method,
@@ -780,7 +790,7 @@ async fn connect_client_partial_cache_redetects_api_mode() {
     );
 
     // Verify api_mode + version got persisted but auth_method stayed Header
-    let reloaded = crate::config::Config::load().unwrap();
+    let reloaded = load_config();
     let srv = &reloaded.servers["test"];
     assert_eq!(srv.auth_method, Some(crate::types::AuthMethod::Header));
     assert_eq!(srv.api_mode, Some(crate::types::ApiMode::Rest));
@@ -804,7 +814,7 @@ async fn detect_and_build_client_persists_and_returns_client() {
     assert!(result.is_ok(), "detect_and_build_client should succeed");
 
     // Verify the settings were persisted.
-    let reloaded = crate::config::Config::load().unwrap();
+    let reloaded = load_config();
     let srv = &reloaded.servers["test"];
     assert_eq!(srv.auth_method, Some(crate::types::AuthMethod::Header));
     assert_eq!(srv.api_mode, Some(crate::types::ApiMode::Rest));

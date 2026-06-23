@@ -5,6 +5,16 @@ use crate::cli::{TemplateAction, TemplateFields};
 use crate::config::Config;
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
+use std::path::PathBuf;
+
+fn current_config_path() -> PathBuf {
+    Config::path_at(None).unwrap()
+}
+
+fn load_config() -> Config {
+    let path = current_config_path();
+    Config::load_at(Some(&path)).unwrap()
+}
 
 fn save_action(name: &str) -> TemplateAction {
     TemplateAction::Save {
@@ -255,7 +265,7 @@ async fn template_save_existing_entry_reports_updated_and_replaces_fields() {
     assert_eq!(parsed["name"], "existing");
     assert_eq!(parsed["action"], "updated");
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     let saved = &config.templates["existing"];
     assert_eq!(saved.product, None);
     assert_eq!(saved.component.as_deref(), Some("Updated"));
@@ -296,7 +306,7 @@ async fn template_delete_existing_removes_entry() {
     let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["name"], "delete-me");
     assert_eq!(parsed["action"], "deleted");
-    assert!(!Config::load().unwrap().templates.contains_key("delete-me"));
+    assert!(!load_config().templates.contains_key("delete-me"));
 }
 
 #[tokio::test]
@@ -360,10 +370,7 @@ async fn template_delete_table_prints_deleted_message() {
 
     let _output = __io6.out_str().to_string();
     assert!(result.is_ok());
-    assert!(!Config::load()
-        .unwrap()
-        .templates
-        .contains_key("table-delete"));
+    assert!(!load_config().templates.contains_key("table-delete"));
 }
 
 #[tokio::test]
@@ -395,7 +402,7 @@ async fn template_list_table_sorts_entries_by_name() {
     assert!(result.is_ok());
     assert!(output.is_empty() || output.contains("product="));
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     let mut names: Vec<&str> = config.templates.keys().map(String::as_str).collect();
     names.sort_unstable();
     assert_eq!(names, vec!["aaa", "zzz"]);
@@ -473,7 +480,7 @@ async fn template_update_merges_field() {
     .await
     .unwrap();
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     let t = &config.templates["t"];
     assert_eq!(t.severity.as_deref(), Some("blocker"));
     // Untouched fields are preserved.
@@ -498,7 +505,7 @@ async fn template_update_clear_resets_field() {
     .await
     .unwrap();
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     assert!(config.templates["t"].priority.is_none());
     assert_eq!(
         config.templates["t"].product.as_deref(),
@@ -529,7 +536,7 @@ async fn template_update_merges_and_clears_create_metadata_fields() {
     .await
     .unwrap();
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     let t = &config.templates["routing"];
     assert_eq!(t.url.as_deref(), Some("https://example.com/updated"));
     assert_eq!(t.whiteboard.as_deref(), Some("needs-routing"));
@@ -557,7 +564,7 @@ async fn template_update_merges_and_clears_create_metadata_fields() {
     .await
     .unwrap();
 
-    let config = Config::load().unwrap();
+    let config = load_config();
     let t = &config.templates["routing"];
     assert!(t.url.is_none());
     assert!(t.whiteboard.is_none());
@@ -641,7 +648,7 @@ async fn template_update_clear_wins_over_set() {
     // Set and clear the same field in one call: clear wins.
     let a = update_action("t", None, None, None, None, Some("blocker"), &["severity"]);
     run(&a).await.unwrap();
-    assert!(Config::load().unwrap().templates["t"].severity.is_none());
+    assert!(load_config().templates["t"].severity.is_none());
 }
 
 #[test]
