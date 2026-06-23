@@ -19,3 +19,7 @@ pub(super) async fn handle(
     );
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "remove_user_tests.rs"]
+mod tests;
