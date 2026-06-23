@@ -102,15 +102,97 @@ pub(super) fn validate_action(action: &BugAction) -> Result<()> {
     }
 }
 
-/// Reject `--alias` combined with multiple IDs (Bugzilla allows alias updates
-/// for a single bug only).
+/// Bug update fields after CLI flags or JSON input have been merged.
+pub(super) struct BugUpdateInput<'a> {
+    pub(super) ids: &'a [u64],
+    pub(super) status: Option<&'a str>,
+    pub(super) resolution: Option<&'a str>,
+    pub(super) dupe_of: Option<u64>,
+    pub(super) alias: Option<&'a str>,
+    pub(super) deadline: Option<&'a str>,
+    pub(super) estimated_time: Option<f64>,
+    pub(super) remaining_time: Option<f64>,
+    pub(super) work_time: Option<f64>,
+    pub(super) reset_assigned_to: bool,
+    pub(super) reset_qa_contact: bool,
+    pub(super) assignee: Option<&'a str>,
+    pub(super) priority: Option<&'a str>,
+    pub(super) severity: Option<&'a str>,
+    pub(super) summary: Option<&'a str>,
+    pub(super) whiteboard: Option<&'a str>,
+    pub(super) url: Option<&'a str>,
+    pub(super) target_milestone: Option<&'a str>,
+    pub(super) comment: Option<&'a str>,
+    pub(super) comment_file: Option<&'a std::path::Path>,
+    pub(super) comment_private: bool,
+    pub(super) flags: &'a [String],
+    pub(super) blocks_add: &'a [u64],
+    pub(super) blocks_remove: &'a [u64],
+    pub(super) depends_on_add: &'a [u64],
+    pub(super) depends_on_remove: &'a [u64],
+    pub(super) keywords_add: &'a [String],
+    pub(super) keywords_remove: &'a [String],
+    pub(super) cc_add: &'a [String],
+    pub(super) cc_remove: &'a [String],
+    pub(super) groups_add: &'a [String],
+    pub(super) groups_remove: &'a [String],
+    pub(super) see_also_add: &'a [String],
+    pub(super) see_also_remove: &'a [String],
+}
+
+impl<'a> From<&'a UpdateArgs> for BugUpdateInput<'a> {
+    fn from(args: &'a UpdateArgs) -> Self {
+        Self {
+            ids: &args.ids,
+            status: args.status.as_deref(),
+            resolution: args.resolution.as_deref(),
+            dupe_of: args.dupe_of,
+            alias: args.alias.as_deref(),
+            deadline: args.deadline.as_deref(),
+            estimated_time: args.estimated_time,
+            remaining_time: args.remaining_time,
+            work_time: args.work_time,
+            reset_assigned_to: args.reset_assigned_to,
+            reset_qa_contact: args.reset_qa_contact,
+            assignee: args.assignee.as_deref(),
+            priority: args.priority.as_deref(),
+            severity: args.severity.as_deref(),
+            summary: args.summary.as_deref(),
+            whiteboard: args.whiteboard.as_deref(),
+            url: args.url.as_deref(),
+            target_milestone: args.target_milestone.as_deref(),
+            comment: args.comment.as_deref(),
+            comment_file: args.comment_file.as_deref(),
+            comment_private: args.comment_private,
+            flags: &args.flag,
+            blocks_add: &args.blocks_add,
+            blocks_remove: &args.blocks_remove,
+            depends_on_add: &args.depends_on_add,
+            depends_on_remove: &args.depends_on_remove,
+            keywords_add: &args.keywords_add,
+            keywords_remove: &args.keywords_remove,
+            cc_add: &args.cc_add,
+            cc_remove: &args.cc_remove,
+            groups_add: &args.groups_add,
+            groups_remove: &args.groups_remove,
+            see_also_add: &args.see_also_add,
+            see_also_remove: &args.see_also_remove,
+        }
+    }
+}
+
 fn validate_args(args: &UpdateArgs) -> Result<()> {
-    if args.dupe_of.is_some() && (args.status.is_some() || args.resolution.is_some()) {
+    validate_input(&BugUpdateInput::from(args))
+}
+
+/// Reject invalid field combinations before building the API payload.
+fn validate_input(input: &BugUpdateInput<'_>) -> Result<()> {
+    if input.dupe_of.is_some() && (input.status.is_some() || input.resolution.is_some()) {
         return Err(crate::error::BzrError::InputValidation(
             "--dupe-of cannot be combined with --status or --resolution".into(),
         ));
     }
-    if args.alias.is_some() && args.ids.len() > 1 {
+    if input.alias.is_some() && input.ids.len() > 1 {
         return Err(crate::error::BzrError::InputValidation(
             "--alias can only be used when updating one bug".into(),
         ));
@@ -119,94 +201,57 @@ fn validate_args(args: &UpdateArgs) -> Result<()> {
 }
 
 pub(super) fn build_update_params(args: &UpdateArgs) -> Result<(Vec<u64>, UpdateBugParams)> {
-    validate_args(args)?;
+    build_update_params_from_input(&BugUpdateInput::from(args))
+}
 
-    let UpdateArgs {
-        from_json: _,
-        ids,
-        status,
-        resolution,
-        dupe_of,
-        alias,
-        deadline,
-        estimated_time,
-        remaining_time,
-        work_time,
-        reset_assigned_to,
-        reset_qa_contact,
-        assignee,
-        priority,
-        severity,
-        summary,
-        whiteboard,
-        url,
-        target_milestone,
-        flag,
-        blocks_add,
-        blocks_remove,
-        depends_on_add,
-        depends_on_remove,
-        keywords_add,
-        keywords_remove,
-        cc_add,
-        cc_remove,
-        groups_add,
-        groups_remove,
-        see_also_add,
-        see_also_remove,
-        comment,
-        comment_file,
-        comment_private,
-        expect_unchanged_since: _,
-    } = args;
+pub(super) fn build_update_params_from_input(
+    input: &BugUpdateInput<'_>,
+) -> Result<(Vec<u64>, UpdateBugParams)> {
+    validate_input(input)?;
 
-    let flags = crate::commands::runtime::flags::parse_flags(flag)?;
-    let deadline = crate::validation::parse_optional_date_only(deadline.as_deref(), "--deadline")?;
+    let flags = crate::commands::runtime::flags::parse_flags(input.flags)?;
+    let deadline = crate::validation::parse_optional_date_only(input.deadline, "--deadline")?;
     let params = UpdateBugParams {
-        status: status.clone(),
-        resolution: resolution.clone(),
-        dupe_of: *dupe_of,
-        alias: alias.clone(),
+        status: input.status.map(str::to_string),
+        resolution: input.resolution.map(str::to_string),
+        dupe_of: input.dupe_of,
+        alias: input.alias.map(str::to_string),
         deadline,
-        estimated_time: *estimated_time,
-        remaining_time: *remaining_time,
-        work_time: *work_time,
-        reset_assigned_to: *reset_assigned_to,
-        reset_qa_contact: *reset_qa_contact,
-        assigned_to: assignee.clone(),
-        priority: priority.clone(),
-        severity: severity.clone(),
-        summary: summary.clone(),
-        whiteboard: whiteboard.clone(),
-        url: url.clone(),
-        target_milestone: target_milestone.clone(),
+        estimated_time: input.estimated_time,
+        remaining_time: input.remaining_time,
+        work_time: input.work_time,
+        reset_assigned_to: input.reset_assigned_to,
+        reset_qa_contact: input.reset_qa_contact,
+        assigned_to: input.assignee.map(str::to_string),
+        priority: input.priority.map(str::to_string),
+        severity: input.severity.map(str::to_string),
+        summary: input.summary.map(str::to_string),
+        whiteboard: input.whiteboard.map(str::to_string),
+        url: input.url.map(str::to_string),
+        target_milestone: input.target_milestone.map(str::to_string),
         flags,
-        blocks: id_list_update(blocks_add, blocks_remove),
-        depends_on: id_list_update(depends_on_add, depends_on_remove),
+        blocks: id_list_update(input.blocks_add, input.blocks_remove),
+        depends_on: id_list_update(input.depends_on_add, input.depends_on_remove),
         keywords: string_list_update(
             FLAG_KEYWORDS_ADD,
-            keywords_add,
+            input.keywords_add,
             FLAG_KEYWORDS_REMOVE,
-            keywords_remove,
+            input.keywords_remove,
         )?,
-        cc: string_list_update(FLAG_CC_ADD, cc_add, FLAG_CC_REMOVE, cc_remove)?,
+        cc: string_list_update(FLAG_CC_ADD, input.cc_add, FLAG_CC_REMOVE, input.cc_remove)?,
         groups: string_list_update(
             FLAG_GROUPS_ADD,
-            groups_add,
+            input.groups_add,
             FLAG_GROUPS_REMOVE,
-            groups_remove,
+            input.groups_remove,
         )?,
         see_also: string_list_update(
             FLAG_SEE_ALSO_ADD,
-            see_also_add,
+            input.see_also_add,
             FLAG_SEE_ALSO_REMOVE,
-            see_also_remove,
+            input.see_also_remove,
         )?,
-        comment: resolve_comment(
-            comment.as_deref(),
-            comment_file.as_deref(),
-            *comment_private,
-        )?,
+        comment: resolve_comment(input.comment, input.comment_file, input.comment_private)?,
         comment_is_private: std::collections::HashMap::new(),
     };
     if params.is_empty() {
@@ -214,7 +259,7 @@ pub(super) fn build_update_params(args: &UpdateArgs) -> Result<(Vec<u64>, Update
             "no fields to update; specify at least one field to change".into(),
         ));
     }
-    Ok((ids.clone(), params))
+    Ok((input.ids.to_vec(), params))
 }
 
 async fn update_single(

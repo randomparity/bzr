@@ -211,57 +211,58 @@ fn object_ids(entry: &JsonUpdateBug, args: &UpdateArgs) -> Result<Vec<u64>> {
     })
 }
 
-fn update_args_from_json(entry: JsonUpdateBug, ids: Vec<u64>) -> UpdateArgs {
-    UpdateArgs {
-        from_json: None,
+fn update_input_from_json<'a>(
+    entry: &'a JsonUpdateBug,
+    ids: &'a [u64],
+) -> super::update::BugUpdateInput<'a> {
+    super::update::BugUpdateInput {
         ids,
-        status: entry.status,
-        resolution: entry.resolution,
+        status: entry.status.as_deref(),
+        resolution: entry.resolution.as_deref(),
         dupe_of: entry.dupe_of,
-        alias: entry.alias,
-        deadline: entry.deadline,
+        alias: entry.alias.as_deref(),
+        deadline: entry.deadline.as_deref(),
         estimated_time: entry.estimated_time,
         remaining_time: entry.remaining_time,
         work_time: entry.work_time,
         reset_assigned_to: entry.reset_assigned_to.unwrap_or(false),
         reset_qa_contact: entry.reset_qa_contact.unwrap_or(false),
-        assignee: entry.assignee,
-        priority: entry.priority,
-        severity: entry.severity,
-        summary: entry.summary,
-        whiteboard: entry.whiteboard,
-        url: entry.url,
-        target_milestone: entry.target_milestone,
-        comment: entry.comment,
-        comment_file: entry.comment_file,
+        assignee: entry.assignee.as_deref(),
+        priority: entry.priority.as_deref(),
+        severity: entry.severity.as_deref(),
+        summary: entry.summary.as_deref(),
+        whiteboard: entry.whiteboard.as_deref(),
+        url: entry.url.as_deref(),
+        target_milestone: entry.target_milestone.as_deref(),
+        comment: entry.comment.as_deref(),
+        comment_file: entry.comment_file.as_deref(),
         comment_private: entry.comment_private.unwrap_or(false),
-        flag: entry.flags,
-        blocks_add: entry.blocks_add,
-        blocks_remove: entry.blocks_remove,
-        depends_on_add: entry.depends_on_add,
-        depends_on_remove: entry.depends_on_remove,
-        keywords_add: entry.keywords_add,
-        keywords_remove: entry.keywords_remove,
-        cc_add: entry.cc_add,
-        cc_remove: entry.cc_remove,
-        groups_add: entry.groups_add,
-        groups_remove: entry.groups_remove,
-        see_also_add: entry.see_also_add,
-        see_also_remove: entry.see_also_remove,
-        expect_unchanged_since: entry.expect_unchanged_since,
+        flags: &entry.flags,
+        blocks_add: &entry.blocks_add,
+        blocks_remove: &entry.blocks_remove,
+        depends_on_add: &entry.depends_on_add,
+        depends_on_remove: &entry.depends_on_remove,
+        keywords_add: &entry.keywords_add,
+        keywords_remove: &entry.keywords_remove,
+        cc_add: &entry.cc_add,
+        cc_remove: &entry.cc_remove,
+        groups_add: &entry.groups_add,
+        groups_remove: &entry.groups_remove,
+        see_also_add: &entry.see_also_add,
+        see_also_remove: &entry.see_also_remove,
     }
 }
 
 fn build_from_json(
     entry: JsonUpdateBug,
     args: &UpdateArgs,
-    ids: Vec<u64>,
+    ids: &[u64],
 ) -> Result<(Vec<u64>, UpdateBugParams, Option<String>)> {
     reject_json_comment_file_stdin(&entry)?;
     let entry = overlay_cli(entry, args);
-    let update_args = update_args_from_json(entry, ids);
-    let expected = update_args.expect_unchanged_since.clone();
-    let (ids, params) = super::update::build_update_params(&update_args)?;
+    let expected = entry.expect_unchanged_since.clone();
+    let input = update_input_from_json(&entry, ids);
+    let (ids, params) = super::update::build_update_params_from_input(&input)?;
     Ok((ids, params, expected))
 }
 
@@ -273,7 +274,7 @@ fn build_array_request(
     let id = entry.id.ok_or_else(|| {
         crate::error::BzrError::InputValidation(format!("--from-json item {index}: id is required"))
     })?;
-    let (_ids, params, expect_unchanged_since) = build_from_json(entry, args, vec![id])?;
+    let (_ids, params, expect_unchanged_since) = build_from_json(entry, args, &[id])?;
     Ok(JsonUpdateRequest {
         id,
         expect_unchanged_since,
@@ -359,7 +360,7 @@ pub(super) async fn handle(
         JsonUpdateInput::One(entry) => {
             reject_cli_stdin_comment_source(args, arg, false)?;
             let ids = object_ids(&entry, args)?;
-            let (ids, params, expect_unchanged_since) = build_from_json(*entry, args, ids)?;
+            let (ids, params, expect_unchanged_since) = build_from_json(*entry, args, &ids)?;
             super::update::apply_checked(
                 client,
                 super::update::ApplyRequest {
