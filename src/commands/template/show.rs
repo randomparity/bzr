@@ -13,3 +13,7 @@ pub(super) fn handle(name: &str, ctx: &CommandContext, w: &mut Writers<'_>) -> R
     write_template_detail(name, template, ctx.format(), w.out);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "show_tests.rs"]
+mod tests;

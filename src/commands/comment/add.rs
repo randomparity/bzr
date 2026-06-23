@@ -49,3 +49,7 @@ pub(super) async fn handle(
     );
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "add_tests.rs"]
+mod tests;

@@ -65,3 +65,7 @@ pub(super) fn handle(
     write_template_saved(name, "Updated", ctx.format(), w.out);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "update_tests.rs"]
+mod tests;

@@ -17,3 +17,7 @@ pub(super) async fn handle(
     write_comments(&comments, ctx.format(), w.out);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "list_tests.rs"]
+mod tests;
