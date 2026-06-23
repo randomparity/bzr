@@ -1,5 +1,6 @@
 pub mod attachment;
 pub mod bug;
+pub(crate) mod bug_fields;
 pub mod classification;
 pub mod comment;
 pub mod completion;
@@ -11,6 +12,7 @@ pub mod product;
 pub mod query;
 pub mod runtime;
 pub mod schema;
+pub(crate) mod search_policy;
 pub mod server;
 pub mod template;
 pub mod user;

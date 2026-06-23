@@ -2,8 +2,9 @@ use std::io::Write;
 
 use crate::cli::SearchArgs;
 use crate::client::BugzillaClient;
-use crate::commands::bug::fields::{canonical_field_list, ColumnSpec};
+use crate::commands::bug_fields::{canonical_field_list, ColumnSpec};
 use crate::commands::runtime::context::CommandContext;
+use crate::commands::search_policy::{count_search_params, ensure_no_paging_with_count};
 use crate::error::Result;
 use crate::output::resources::bug::write_bugs;
 use crate::output::resources::query::write_query_saved;
@@ -147,7 +148,7 @@ pub(super) async fn handle(
 ) -> Result<()> {
     let format = ctx.format();
     let offset = args.page_args.offset;
-    super::ensure_no_paging_with_count(args.count, offset, args.page_args.paginate)?;
+    ensure_no_paging_with_count(args.count, offset, args.page_args.paginate)?;
 
     let spec = ColumnSpec::new(
         args.field_args.fields.as_deref(),
@@ -158,9 +159,7 @@ pub(super) async fn handle(
     crate::commands::runtime::paging::resolve_offset(&mut params, offset);
 
     if args.count {
-        let bugs = client
-            .search_bugs(&super::count_search_params(params))
-            .await?;
+        let bugs = client.search_bugs(&count_search_params(params)).await?;
         crate::output::result_types::write_count(bugs.len(), format, w.out);
     } else {
         let page =

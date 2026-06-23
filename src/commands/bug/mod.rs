@@ -1,7 +1,7 @@
 //! Bug subcommand handlers, split per-action.
 
 use crate::cli::BugAction;
-use crate::commands::bug::fields::{
+use crate::commands::bug_fields::{
     validate_json_field_selection, validate_table_columns, warn_unknown_fields, ColumnSpec,
 };
 use crate::commands::runtime::context::CommandContext;
@@ -12,7 +12,6 @@ use crate::types::OutputFormat;
 mod clone;
 mod create;
 mod create_json;
-pub(crate) mod fields;
 mod history;
 mod list;
 mod my;
@@ -36,37 +35,6 @@ fn bug_column_spec(action: &BugAction) -> Option<ColumnSpec<'_>> {
         field_args.fields.as_deref(),
         field_args.exclude_fields.as_deref(),
     ))
-}
-
-/// Rewrite search params for `--count`: fetch only IDs (smallest payload) and
-/// lift the row limit (`0` = all matches, bounded by the server's max-results)
-/// so the count reflects the full match set, not a page of it. Clear offsets
-/// that may have come from saved Bugzilla URLs for the same reason.
-pub(super) fn count_search_params(
-    mut params: crate::types::SearchParams,
-) -> crate::types::SearchParams {
-    params.include_fields = Some("id".to_string());
-    params.exclude_fields = None;
-    params.limit = Some(0);
-    params.offset = None;
-    params.raw_params.retain(|(key, _)| key != "offset");
-    params
-}
-
-/// Reject `--offset`/`--paginate` combined with `--count`. `--count` reports
-/// the full match total, so windowing or page-looping it is contradictory;
-/// fail fast (exit 7) rather than silently ignore the paging flags.
-pub(super) fn ensure_no_paging_with_count(
-    count: bool,
-    offset: Option<u32>,
-    paginate: bool,
-) -> Result<()> {
-    if count && (offset.is_some() || paginate) {
-        return Err(crate::error::BzrError::InputValidation(
-            "--count cannot be combined with --offset or --paginate".into(),
-        ));
-    }
-    Ok(())
 }
 
 /// Whether a bug action is a mutation that supports `--dry-run` (the create-,

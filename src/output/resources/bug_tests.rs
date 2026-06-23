@@ -1,7 +1,7 @@
 #![expect(clippy::unwrap_used)]
 
 use super::*;
-use crate::commands::bug::fields::{
+use crate::commands::bug_fields::{
     validate_json_field_selection, validate_table_columns, warn_unknown_fields,
 };
 use crate::types::{Bug, FieldChange, Flag, HistoryEntry};

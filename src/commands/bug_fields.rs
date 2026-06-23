@@ -86,5 +86,5 @@ pub(crate) fn warn_unknown_fields<E: Write + ?Sized>(spec: ColumnSpec<'_>, err: 
 }
 
 #[cfg(test)]
-#[path = "fields_tests.rs"]
+#[path = "bug_fields_tests.rs"]
 mod tests;

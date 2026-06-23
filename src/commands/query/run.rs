@@ -1,8 +1,9 @@
-use crate::commands::bug::fields::{
+use crate::commands::bug_fields::{
     canonical_field_list, validate_json_field_selection, validate_table_columns,
     warn_unknown_fields, ColumnSpec,
 };
 use crate::commands::runtime::context::CommandContext;
+use crate::commands::search_policy::{count_search_params, ensure_no_paging_with_count};
 use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::output::resources::bug::write_bugs;
@@ -30,7 +31,7 @@ pub(super) async fn handle(
         page_args: crate::cli::PageArgs { offset, paginate },
     } = args;
 
-    crate::commands::bug::ensure_no_paging_with_count(*count, *offset, *paginate)?;
+    ensure_no_paging_with_count(*count, *offset, *paginate)?;
 
     let creation_time_override =
         crate::validation::parse_optional_date(created_since.as_deref(), "--created-since")?;
@@ -76,9 +77,7 @@ pub(super) async fn handle(
 
     if *count {
         let client = crate::commands::runtime::shared::connect_and_configure(&run_ctx).await?;
-        let bugs = client
-            .search_bugs(&crate::commands::bug::count_search_params(params))
-            .await?;
+        let bugs = client.search_bugs(&count_search_params(params)).await?;
         crate::output::result_types::write_count(bugs.len(), format, w.out);
         return Ok(());
     }

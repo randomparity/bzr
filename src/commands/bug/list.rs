@@ -1,6 +1,7 @@
 use crate::cli::{FieldArgs, ListArgs};
 use crate::client::BugzillaClient;
-use crate::commands::bug::fields::{canonical_field_list, ColumnSpec};
+use crate::commands::bug_fields::{canonical_field_list, ColumnSpec};
+use crate::commands::search_policy::{count_search_params, ensure_no_paging_with_count};
 use crate::error::Result;
 use crate::output::resources::bug::write_bugs;
 use crate::output::writers::Writers;
@@ -31,7 +32,7 @@ pub(super) async fn handle(
         count,
     } = args;
 
-    super::ensure_no_paging_with_count(*count, *offset, *paginate)?;
+    ensure_no_paging_with_count(*count, *offset, *paginate)?;
 
     let creation_time = parse_optional_date(created_since.as_deref(), "--created-since")?;
     let last_change_time = parse_optional_date(changed_since.as_deref(), "--changed-since")?;
@@ -55,9 +56,7 @@ pub(super) async fn handle(
     filters.write_search_filters(&mut params);
     actor_filters.write_search_filters(&mut params);
     if *count {
-        let bugs = client
-            .search_bugs(&super::count_search_params(params))
-            .await?;
+        let bugs = client.search_bugs(&count_search_params(params)).await?;
         crate::output::result_types::write_count(bugs.len(), format, w.out);
         return Ok(());
     }

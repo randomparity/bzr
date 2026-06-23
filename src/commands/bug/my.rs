@@ -1,6 +1,7 @@
 use crate::cli::MyArgs;
 use crate::client::BugzillaClient;
-use crate::commands::bug::fields::{canonical_field_list, ColumnSpec};
+use crate::commands::bug_fields::{canonical_field_list, ColumnSpec};
+use crate::commands::search_policy::{count_search_params, ensure_no_paging_with_count};
 use crate::error::Result;
 use crate::output::resources::bug::write_bugs;
 use crate::output::writers::Writers;
@@ -15,7 +16,7 @@ pub(super) async fn handle(
 ) -> Result<()> {
     let offset = args.page_args.offset;
     let paginate = args.page_args.paginate;
-    super::ensure_no_paging_with_count(args.count, offset, paginate)?;
+    ensure_no_paging_with_count(args.count, offset, paginate)?;
 
     let fields = args.field_args.fields.as_deref();
     let exclude_fields = args.field_args.exclude_fields.as_deref();
@@ -30,7 +31,7 @@ pub(super) async fn handle(
     // `--count` needs every distinct match, so fetch IDs only and lift the
     // per-category limit; the dedup below then yields the true distinct count.
     if args.count {
-        base = super::count_search_params(base);
+        base = count_search_params(base);
     }
     let mut searches = Vec::new();
     if args.all || (!args.created && !args.cc) {
