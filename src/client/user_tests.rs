@@ -4,7 +4,7 @@ use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use super::super::{encode_path, UserDetailLevel, USER_FIELDS_DETAILED};
-use crate::client::test_helpers::test_client;
+use crate::client::test_helpers::{test_client, test_client_hybrid};
 use crate::types::{CreateUserParams, UpdateUserParams};
 
 #[tokio::test]
@@ -147,6 +147,41 @@ async fn create_user_forbidden() {
     };
     let err = client.create_user(&params).await.unwrap_err();
     assert!(err.to_string().contains("not authorized"));
+}
+
+#[tokio::test]
+async fn hybrid_create_user_api_error_does_not_fall_back() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/user"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "error": true,
+            "code": 51,
+            "message": "You are not authorized."
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_hybrid(&mock.uri());
+    let params = CreateUserParams {
+        email: "x@x.com".into(),
+        login: None,
+        full_name: None,
+        password: None,
+    };
+    let err = client.create_user(&params).await.unwrap_err();
+    assert!(
+        err.to_string().contains("not authorized"),
+        "expected auth error, got: {err}"
+    );
 }
 
 #[tokio::test]

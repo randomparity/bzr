@@ -58,10 +58,11 @@ impl BugzillaClient {
             ApiMode::XmlRpc => self.xmlrpc_client().create_user(params).await,
             ApiMode::Hybrid => match self.post_json_id("user", params).await {
                 Ok(id) => Ok(id),
-                Err(e) => {
+                Err(e) if e.is_transport_failure() => {
                     tracing::info!("REST user creation failed ({e}), retrying via XML-RPC");
                     self.xmlrpc_client().create_user(params).await
                 }
+                Err(e) => Err(e),
             },
         }
     }
