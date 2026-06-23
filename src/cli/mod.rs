@@ -39,11 +39,12 @@ use clap::{Parser, Subcommand};
 
 use crate::types::{ApiMode, OutputFormat};
 
-/// A command-line client for Bugzilla REST API servers.
+/// A command-line client for Bugzilla servers.
 ///
 /// bzr provides scriptable access to bugs, comments, attachments,
 /// products, components, users, and groups across one or more named
-/// Bugzilla servers. It is modeled on the GitHub CLI (`gh`): every
+/// Bugzilla servers over REST, XML-RPC, or hybrid API transport. It is
+/// modeled on the GitHub CLI (`gh`): every
 /// resource is a top-level subcommand, every action is a verb under
 /// that resource, and `--json` is supported on read paths so output
 /// can be consumed by downstream tools.

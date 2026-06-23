@@ -1,6 +1,6 @@
 # bzr CLI Reference
 
-Complete command reference for bzr, a CLI for Bugzilla REST API servers.
+Complete command reference for bzr, a CLI for Bugzilla servers.
 For installation and quick start, see [README.md](../README.md).
 
 ## Contents
