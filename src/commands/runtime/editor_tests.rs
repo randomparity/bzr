@@ -16,6 +16,16 @@ fn tempfile_writes_initial_content_and_cleans_up_on_drop() {
 }
 
 #[test]
+fn tempfile_uses_unique_paths_for_live_files_with_same_prefix() {
+    let first = super::create_tempfile("test-tempfile-unique", "first\n").unwrap();
+    let second = super::create_tempfile("test-tempfile-unique", "second\n").unwrap();
+
+    assert_ne!(first.path, second.path);
+    assert_eq!(std::fs::read_to_string(&first.path).unwrap(), "first\n");
+    assert_eq!(std::fs::read_to_string(&second.path).unwrap(), "second\n");
+}
+
+#[test]
 fn tempfile_create_error_names_temp_path() {
     let result = super::create_tempfile("missing-parent/test-tempfile", "hello\n");
     assert!(result.is_err(), "expected tempfile creation to fail");
