@@ -55,10 +55,13 @@ async fn probe_whoami(request: reqwest::RequestBuilder, method: AuthMethod) -> W
     };
 
     let status = resp.status();
-    let body = resp.text().await.unwrap_or_else(|e| {
-        tracing::warn!("failed to read whoami response body: {e}");
-        String::new()
-    });
+    let body = match resp.text().await {
+        Ok(body) => body,
+        Err(e) => {
+            tracing::warn!(error = %e, "whoami response read error");
+            return WhoamiOutcome::NetworkError(e);
+        }
+    };
     tracing::trace!(probe = "whoami", %method, %status, body, "auth probe response");
     if status.is_success() {
         if let Ok(parsed) = serde_json::from_str::<WhoamiProbeResponse>(&body) {
