@@ -9,3 +9,7 @@ pub(super) async fn handle(product: &str, ctx: &CommandContext, w: &mut Writers<
     write_components(&product.components, ctx.format(), w.out);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "list_tests.rs"]
+mod tests;

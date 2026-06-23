@@ -80,3 +80,7 @@ fn build_create_params(args: &CreateArgs<'_>) -> Result<CreateComponentParams> {
         )?,
     })
 }
+
+#[cfg(test)]
+#[path = "create_tests.rs"]
+mod tests;

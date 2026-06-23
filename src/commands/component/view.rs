@@ -22,3 +22,7 @@ pub(super) async fn handle(
     write_component(component, ctx.format(), w.out);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "view_tests.rs"]
+mod tests;

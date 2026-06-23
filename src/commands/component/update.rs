@@ -258,3 +258,7 @@ fn validate_update_params(params: &UpdateComponentParams) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "update_tests.rs"]
+mod tests;
