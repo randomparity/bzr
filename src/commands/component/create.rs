@@ -1,6 +1,7 @@
 use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::mutation::{self, Committed, DryRunPreview};
 use crate::error::Result;
-use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
+use crate::output::result_types::{ActionResult, ResourceKind};
 use crate::output::writers::Writers;
 use crate::types::component::CreateComponentParams;
 use serde::Deserialize;
@@ -27,31 +28,28 @@ pub(super) async fn handle(
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let format = ctx.format();
     let params = build_create_params(args)?;
-    if ctx.dry_run() {
-        let message = format!(
-            "Would create component '{}' in product '{}'",
-            params.name, params.product
-        );
-        write_result(
-            &DryRunResult::new(ResourceKind::Component, &[], &params),
-            &message,
-            format,
-            w.out,
-        );
-        return Ok(());
-    }
-
-    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
-    let id = client.create_component(&params).await?;
-    write_result(
-        &ActionResult::created(id, ResourceKind::Component),
-        &format!("Created component #{id} in product '{}'", params.product),
-        format,
-        w.out,
+    let message = format!(
+        "Would create component '{}' in product '{}'",
+        params.name, params.product
     );
-    Ok(())
+    mutation::run(
+        ctx,
+        w,
+        DryRunPreview {
+            resource: ResourceKind::Component,
+            params,
+            message,
+        },
+        |client, params| async move {
+            let id = client.create_component(&params).await?;
+            Ok(Committed {
+                result: ActionResult::created(id, ResourceKind::Component),
+                message: format!("Created component #{id} in product '{}'", params.product),
+            })
+        },
+    )
+    .await
 }
 
 fn build_create_params(args: &CreateArgs<'_>) -> Result<CreateComponentParams> {
