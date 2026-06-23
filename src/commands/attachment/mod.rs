@@ -16,7 +16,7 @@ use base64::Engine;
 #[cfg(test)]
 use download::{safe_basename, single_download_dest, write_one_attachment};
 #[cfg(test)]
-use upload::{guess_content_type, handle as upload};
+use upload::guess_content_type;
 
 pub(crate) fn requires_credentials(action: &AttachmentAction) -> Option<&'static str> {
     match action {
@@ -51,12 +51,11 @@ pub async fn execute(
 ) -> Result<()> {
     validate_action(action)?;
     let format = ctx.format();
-    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
 
     match action {
-        AttachmentAction::List { bug_id } => list::handle(&client, *bug_id, format, w).await?,
+        AttachmentAction::List { bug_id } => list::handle(ctx, *bug_id, format, w).await?,
         AttachmentAction::View { attachment_id } => {
-            view::handle(&client, *attachment_id, format, w).await?;
+            view::handle(ctx, *attachment_id, format, w).await?;
         }
         AttachmentAction::Download {
             ids,
@@ -65,20 +64,20 @@ pub async fn execute(
             out_dir,
         } => {
             download::handle(
-                &client,
                 download::DownloadArgs {
                     ids,
                     bug_ids,
                     out: out.as_deref(),
                     out_dir,
                 },
+                ctx,
                 format,
                 w,
             )
             .await?;
         }
-        AttachmentAction::Upload(args) => upload::handle(&client, args, format, w).await?,
-        AttachmentAction::Update(args) => update::handle(&client, args, format, w).await?,
+        AttachmentAction::Upload(args) => upload::handle(args, ctx, format, w).await?,
+        AttachmentAction::Update(args) => update::handle(args, ctx, format, w).await?,
     }
     Ok(())
 }

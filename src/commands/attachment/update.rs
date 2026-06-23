@@ -1,4 +1,4 @@
-use crate::client::BugzillaClient;
+use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::result_types::{write_result, ActionResult, ResourceKind};
 use crate::output::writers::Writers;
@@ -6,11 +6,26 @@ use crate::types::attachment::UpdateAttachmentParams;
 use crate::types::common::OutputFormat;
 
 pub(super) async fn handle(
-    client: &BugzillaClient,
     args: &crate::cli::AttachmentUpdateArgs,
+    ctx: &CommandContext,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let (id, params) = build_update_params(args)?;
+    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+    client.update_attachment(id, &params).await?;
+    write_result(
+        &ActionResult::updated(id, ResourceKind::Attachment),
+        &format!("Updated attachment #{id}"),
+        format,
+        w.out,
+    );
+    Ok(())
+}
+
+fn build_update_params(
+    args: &crate::cli::AttachmentUpdateArgs,
+) -> Result<(u64, UpdateAttachmentParams)> {
     let crate::cli::AttachmentUpdateArgs {
         id,
         summary,
@@ -35,12 +50,5 @@ pub(super) async fn handle(
         is_private: super::resolve_bool_flag(*private, *no_private),
         flags,
     };
-    client.update_attachment(*id, &params).await?;
-    write_result(
-        &ActionResult::updated(*id, ResourceKind::Attachment),
-        &format!("Updated attachment #{id}"),
-        format,
-        w.out,
-    );
-    Ok(())
+    Ok((*id, params))
 }

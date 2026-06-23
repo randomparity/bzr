@@ -8,6 +8,14 @@ use crate::cli::{AttachmentAction, AttachmentUpdateArgs, UploadArgs};
 use crate::test_helpers::{make_attachment, setup_test_env};
 use crate::types::OutputFormat;
 
+async fn setup_empty_config_env() -> (tokio::sync::MutexGuard<'static, ()>, tempfile::TempDir) {
+    let lock = crate::ENV_LOCK.lock().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    // SAFETY: Tests that mutate process environment hold ENV_LOCK.
+    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+    (lock, tmp)
+}
+
 #[tokio::test]
 async fn attachment_list_returns_attachments() {
     let (_lock, mock, _tmp) = setup_test_env().await;
@@ -121,17 +129,8 @@ async fn attachment_upload_api_error_propagates() {
 async fn attachment_upload_missing_source_names_role_and_path() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, tmp) = setup_test_env().await;
-    let client = super::super::runtime::shared::connect_and_configure(
-        &crate::commands::runtime::context::CommandContext::new(
-            None,
-            crate::types::OutputFormat::Json,
-            None,
-        ),
-    )
-    .await
-    .unwrap();
     let missing = tmp.path().join("missing-upload.txt");
-    let args = UploadArgs {
+    let action = AttachmentAction::Upload(UploadArgs {
         bug_id: 42,
         file: missing.to_string_lossy().into_owned(),
         summary: None,
@@ -144,17 +143,57 @@ async fn attachment_upload_missing_source_names_role_and_path() {
         comment_file: None,
         comment_private: false,
         flag: vec![],
-    };
+    });
 
-    let err = super::upload(&client, &args, OutputFormat::Json, &mut io.writers())
-        .await
-        .unwrap_err()
-        .to_string();
+    let err = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err()
+    .to_string();
     let missing = missing.to_string_lossy();
 
     assert!(
         err.contains("read attachment upload file") && err.contains(missing.as_ref()),
         "error should name upload role and path, got: {err}"
+    );
+}
+
+#[tokio::test]
+async fn attachment_upload_missing_source_fails_before_connect() {
+    let (_lock, tmp) = setup_empty_config_env().await;
+    let missing = tmp.path().join("missing-upload.txt");
+    let action = AttachmentAction::Upload(UploadArgs {
+        bug_id: 42,
+        file: missing.to_string_lossy().into_owned(),
+        summary: None,
+        content_type: None,
+        private: false,
+        no_private: false,
+        patch: false,
+        no_patch: false,
+        comment: None,
+        comment_file: None,
+        comment_private: false,
+        flag: vec![],
+    });
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err()
+    .to_string();
+    let missing = missing.to_string_lossy();
+
+    assert!(
+        err.contains("read attachment upload file") && err.contains(missing.as_ref()),
+        "local upload file error should win over config lookup, got: {err}"
     );
 }
 
@@ -636,6 +675,39 @@ async fn attachment_update_without_changes_is_rejected_before_put() {
     assert!(
         msg.contains("--summary") && msg.contains("--flag"),
         "error should suggest update flags: {msg}"
+    );
+}
+
+#[tokio::test]
+async fn attachment_update_invalid_flag_fails_before_connect() {
+    let (_lock, _tmp) = setup_empty_config_env().await;
+    let action = AttachmentAction::Update(AttachmentUpdateArgs {
+        id: 8,
+        summary: Some("new summary".into()),
+        file_name: None,
+        content_type: None,
+        obsolete: false,
+        no_obsolete: false,
+        patch: false,
+        no_patch: false,
+        private: false,
+        no_private: false,
+        flag: vec!["review".into()],
+    });
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err()
+    .to_string();
+
+    assert!(
+        err.contains("flag") || err.contains("status"),
+        "local flag parse error should win over config lookup, got: {err}"
     );
 }
 
@@ -1646,6 +1718,35 @@ async fn attachment_download_batch_bug_not_found_partial_failure() {
     assert_eq!(bugs[0]["status"], "ok");
     assert_eq!(bugs[1]["bug_id"], 99999);
     assert_eq!(bugs[1]["status"], "error");
+}
+
+#[tokio::test]
+async fn attachment_download_batch_creates_out_dir_before_connect() {
+    let (_lock, tmp) = setup_empty_config_env().await;
+    let out_dir = tmp.path().join("downloaded");
+    let action = AttachmentAction::Download {
+        ids: vec![9876],
+        bug_ids: vec![12345],
+        out: None,
+        out_dir: out_dir.to_string_lossy().into_owned(),
+    };
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(
+        result.is_err(),
+        "missing config should still fail after preflight"
+    );
+    assert!(
+        out_dir.is_dir(),
+        "batch download should create out_dir before connecting"
+    );
 }
 
 #[tokio::test]

@@ -3,6 +3,7 @@ use std::path::Path;
 use base64::Engine;
 
 use crate::client::BugzillaClient;
+use crate::commands::runtime::context::CommandContext;
 use crate::error::{io_with_context, Result};
 use crate::output::resources::attachment::{
     write_attachment_batch, AttachmentBatchResult, AttachmentDownloadResult, BatchSummary,
@@ -21,21 +22,36 @@ pub(super) struct DownloadArgs<'a> {
 }
 
 pub(super) async fn handle(
-    client: &BugzillaClient,
     args: DownloadArgs<'_>,
+    ctx: &CommandContext,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     if args.bug_ids.is_empty() && args.ids.len() == 1 {
-        download_single(client, args.ids[0], args.out, format, w).await
+        let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+        download_single(&client, args.ids[0], args.out, format, w).await
     } else {
+        ensure_batch_out_dir(args.out_dir)?;
+        let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
         let targets = BatchTargets {
             ids: args.ids,
             bug_ids: args.bug_ids,
             out_dir: args.out_dir,
         };
-        download_batch(client, targets, format, w).await
+        download_batch(&client, targets, format, w).await
     }
+}
+
+fn ensure_batch_out_dir(out_dir: &str) -> Result<()> {
+    std::fs::create_dir_all(out_dir).map_err(|e| {
+        io_with_context(
+            format!(
+                "failed to create attachment download directory '{}'",
+                Path::new(out_dir).display()
+            ),
+            &e,
+        )
+    })
 }
 
 fn ensure_batch_complete(succeeded: usize, failed: usize) -> Result<()> {
@@ -199,16 +215,6 @@ async fn download_batch(
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    std::fs::create_dir_all(targets.out_dir).map_err(|e| {
-        io_with_context(
-            format!(
-                "failed to create attachment download directory '{}'",
-                Path::new(targets.out_dir).display()
-            ),
-            &e,
-        )
-    })?;
-
     let mut bug_results: Vec<BugDownloadResult> = Vec::new();
     let mut attachment_results: Vec<AttachmentDownloadResult> = Vec::new();
 

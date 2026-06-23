@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::client::BugzillaClient;
+use crate::commands::runtime::context::CommandContext;
 use crate::error::{io_with_context, Result};
 use crate::output::result_types::{write_result, UploadResult};
 use crate::output::writers::Writers;
@@ -10,11 +11,37 @@ use crate::types::bug::UpdateBugParams;
 use crate::types::common::OutputFormat;
 
 pub(super) async fn handle(
-    client: &BugzillaClient,
     args: &crate::cli::UploadArgs,
+    ctx: &CommandContext,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let prepared = prepare_upload(args)?;
+    let bug_id = prepared.params.bug_id;
+    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+    let att_id = client.upload_attachment(&prepared.params).await?;
+    if prepared.comment_private {
+        flip_new_comment_private(&client, bug_id, att_id, w).await?;
+    }
+    write_result(
+        &UploadResult::new(att_id, bug_id, prepared.size),
+        &format!(
+            "Uploaded attachment #{att_id} to bug #{bug_id} ({} bytes)",
+            prepared.size,
+        ),
+        format,
+        w.out,
+    );
+    Ok(())
+}
+
+struct PreparedUpload {
+    params: UploadAttachmentParams,
+    size: usize,
+    comment_private: bool,
+}
+
+fn prepare_upload(args: &crate::cli::UploadArgs) -> Result<PreparedUpload> {
     let crate::cli::UploadArgs {
         bug_id,
         file,
@@ -65,17 +92,11 @@ pub(super) async fn handle(
         comment,
         is_patch,
     };
-    let att_id = client.upload_attachment(&upload_params).await?;
-    if *comment_private {
-        flip_new_comment_private(client, *bug_id, att_id, w).await?;
-    }
-    write_result(
-        &UploadResult::new(att_id, *bug_id, size),
-        &format!("Uploaded attachment #{att_id} to bug #{bug_id} ({size} bytes)"),
-        format,
-        w.out,
-    );
-    Ok(())
+    Ok(PreparedUpload {
+        params: upload_params,
+        size,
+        comment_private: *comment_private,
+    })
 }
 
 fn resolve_upload_comment(
