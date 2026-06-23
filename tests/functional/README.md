@@ -8,6 +8,8 @@ End-to-end tests that exercise `bzr` CLI commands against real Bugzilla containe
 - `jq`
 - `curl`
 - `cargo` + Rust toolchain
+- `python3` and `openssl` — only for the ad-hoc TLS phase; when either is
+  missing that phase skips cleanly (see the TLS Fixture section below)
 
 ## Quick Start
 
@@ -56,6 +58,7 @@ tests/functional/setup-bugzilla.sh stop
 | `BZR_FUNC_IMAGE` | `localhost/bzr-func-test-bz:latest` | Image name |
 | `BZR_FUNC_TIMEOUT` | `90` | Health check timeout in seconds |
 | `BZR_BIN` | `target/release/bzr` | Path to pre-built bzr binary (skips cargo build) |
+| `BZR_FUNC_TLS_PORT` | `BZR_FUNC_PORT + 1000` | Host port the TLS proxy listens on for the ad-hoc TLS phase |
 
 ## Test Structure
 
@@ -64,6 +67,7 @@ Tests run in dependency order across the phase files sourced by
 
 1. Build and isolated config setup
 2. Server/auth detection and fixture capability setup
+2c. Ad-hoc TLS trust flags over an HTTPS fixture (see below)
 3. Products and components
 4. Fields, classifications, users, and groups
 5. Bug create/read/update/search/paging/relationships/collision/clone workflows
@@ -76,9 +80,34 @@ The suite creates real Bugzilla data in the running container and reads it back
 through the CLI. Count and paging assertions use per-run unique whiteboard
 markers so repeated runs against an already-started container stay stable.
 
-TLS functional coverage for ad-hoc `--server-tls-*` flags is intentionally not
-part of this suite expansion. It needs an HTTPS fixture in front of Bugzilla and
-is tracked separately in GitHub issue #406.
+## TLS Fixture (ad-hoc `--server-tls-*` flags)
+
+Phase `02c-tls-inline` exercises the stateless TLS trust controls
+(`--server-tls-insecure`, `--server-tls-ca-cert`, `--server-tls-pin-sha256`,
+`--server-tls-pin-now`) against a real Bugzilla server over HTTPS.
+
+The Bugzilla containers serve HTTP only, so the phase starts a small
+TLS-terminating reverse proxy (`tests/functional/tls-proxy.py`, python3 stdlib)
+that fronts the running container:
+
+```
+bzr --(HTTPS, 127.0.0.1:$BZR_FUNC_TLS_PORT)--> tls-proxy.py --(HTTP, container)--> Bugzilla
+```
+
+`openssl` generates a throwaway CA and a leaf certificate (with an
+`IP:127.0.0.1` SAN so `--server-tls-ca-cert` passes hostname verification), and
+the leaf's `sha256//<base64>` pin is computed for the pin cases. The proxy and
+certs are created in a temp dir and torn down at the end of the phase.
+
+The phase is **default-safe**: it runs automatically when `python3`, `openssl`,
+and `curl` are present and skips cleanly otherwise, so `run-all-versions.sh`
+stays predictable on hosts without TLS tooling. It runs against the single
+container for the active `BZR_BZ_VERSION`.
+
+Note: a wrong `--server-tls-pin-sha256` is rejected with exit 5 (a transport
+error), not exit 13; the test asserts rejection without hard-coding the code.
+Clap-level mutual-exclusion and require-`--server-url` validation lives in
+`phases/17b-arg-validation.sh` (tests 125b/125c).
 
 ## Config Isolation
 

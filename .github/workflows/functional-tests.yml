@@ -25,7 +25,10 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y libdbus-1-dev pkg-config
+          # libdbus-1-dev/pkg-config: keyring default feature.
+          # python3/openssl: the ad-hoc TLS phase (02c-tls-inline) HTTPS fixture;
+          # absent them the phase skips, but install so the scheduled run exercises it.
+          sudo apt-get install -y libdbus-1-dev pkg-config python3 openssl
 
       - uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6e  # stable
 
