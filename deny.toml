@@ -3,6 +3,21 @@ version = 2
 yanked = "warn"
 ignore = []
 
+[licenses]
+confidence-threshold = 0.8
+allow = [
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+]
+exceptions = [
+    { allow = ["MPL-2.0"], crate = "colored@3.1.1" },
+    { allow = ["MPL-2.0"], crate = "option-ext@0.2.0" },
+    { allow = ["CDLA-Permissive-2.0"], crate = "webpki-roots@1.0.7" },
+]
+
 [bans]
 multiple-versions = "deny"
 wildcards = "allow"
