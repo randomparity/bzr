@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 use super::encode_path;
 use super::{BugzillaClient, UserDetailLevel, UserSearchResponse};
 use crate::error::{BzrError, Result};
-use crate::types::ApiMode;
+use crate::types::common::ApiMode;
+use crate::types::group::{CreateGroupParams, GroupInfo, UpdateGroupParams};
+use crate::types::user::BugzillaUser;
 
 #[derive(Serialize)]
 struct GroupMembershipBody {
@@ -17,8 +19,6 @@ struct GroupMembershipAction {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     remove: Vec<String>,
 }
-use crate::types::{BugzillaUser, CreateGroupParams, GroupInfo, UpdateGroupParams};
-
 #[derive(Deserialize)]
 struct GroupResponse {
     groups: Vec<GroupInfo>,

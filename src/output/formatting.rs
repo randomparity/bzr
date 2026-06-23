@@ -4,7 +4,7 @@ use colored::{ColoredString, Colorize};
 use serde::Serialize;
 use tabled::builder::Builder;
 
-use crate::types::{Flag, OutputFormat};
+use crate::types::common::{Flag, OutputFormat};
 
 // ── Formatting primitives ───────────────────────────────────────────
 

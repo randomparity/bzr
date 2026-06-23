@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::io::Write;
 
-use crate::types::{OutputFormat, QueryKind, SavedQuery};
+use crate::types::bug::{QueryKind, SavedQuery};
+use crate::types::common::OutputFormat;
 
 use crate::output::formatting::{
     write_field, write_formatted, write_list_field, write_optional_field,

@@ -66,8 +66,8 @@ pub fn make_attachment(
     file_name: &str,
     summary: &str,
     data: Option<String>,
-) -> crate::types::Attachment {
-    crate::types::Attachment {
+) -> crate::types::attachment::Attachment {
+    crate::types::attachment::Attachment {
         id,
         bug_id,
         file_name: file_name.into(),

@@ -1,5 +1,7 @@
 use clap::{Args, Subcommand};
 
+use crate::types::bug::Overrides;
+
 /// Argument IDs of the manually supplied filter flags on saved-query commands.
 /// Centralized so the mutual-exclusivity lists on `--from-url` / `--search`
 /// stay in sync when a filter flag is added or renamed (rather than
@@ -57,8 +59,8 @@ impl QueryRunFilterArgs {
         }
     }
 
-    pub(crate) fn overrides<'a>(&'a self, url: &'a [String]) -> crate::types::Overrides<'a> {
-        crate::types::Overrides {
+    pub(crate) fn overrides<'a>(&'a self, url: &'a [String]) -> Overrides<'a> {
+        Overrides {
             whiteboard: Self::slice_override(&self.whiteboard),
             target_milestone: Self::slice_override(&self.target_milestone),
             version: Self::slice_override(&self.version),
@@ -67,7 +69,7 @@ impl QueryRunFilterArgs {
             resolution: Self::slice_override(&self.resolution),
             qa_contact: Self::slice_override(&self.qa_contact),
             url: Self::slice_override(url),
-            ..crate::types::Overrides::default()
+            ..Overrides::default()
         }
     }
 }

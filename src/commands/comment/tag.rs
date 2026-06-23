@@ -2,7 +2,7 @@ use crate::commands::runtime::context::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::result_types::{write_result, TagResult};
 use crate::output::writers::Writers;
-use crate::types::UpdateCommentTagsParams;
+use crate::types::comment::UpdateCommentTagsParams;
 
 pub(super) async fn handle(
     comment_id: u64,

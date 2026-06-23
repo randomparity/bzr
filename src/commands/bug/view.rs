@@ -12,7 +12,8 @@ use crate::output::resources::bug::MultiBugRow;
 use crate::output::resources::bug::{bug_to_json, write_bug_detail, write_multi_bug_view};
 use crate::output::result_types::{write_result, BugViewFailure, MultiBugViewResult};
 use crate::output::writers::Writers;
-use crate::types::{Bug, OutputFormat};
+use crate::types::bug::Bug;
+use crate::types::common::OutputFormat;
 
 #[derive(Clone, Copy)]
 enum BugViewMode {

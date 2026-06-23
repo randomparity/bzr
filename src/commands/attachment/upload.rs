@@ -5,7 +5,9 @@ use crate::client::BugzillaClient;
 use crate::error::{io_with_context, Result};
 use crate::output::result_types::{write_result, UploadResult};
 use crate::output::writers::Writers;
-use crate::types::{OutputFormat, UploadAttachmentParams};
+use crate::types::attachment::UploadAttachmentParams;
+use crate::types::bug::UpdateBugParams;
+use crate::types::common::OutputFormat;
 
 pub(super) async fn handle(
     client: &BugzillaClient,
@@ -158,7 +160,7 @@ async fn flip_new_comment_private(
     };
     let mut map = HashMap::new();
     map.insert(comment_id, true);
-    let params = crate::types::UpdateBugParams {
+    let params = UpdateBugParams {
         comment_is_private: map,
         ..Default::default()
     };

@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::error::{BzrError, Result};
+use crate::types::common::Flag;
 use crate::xmlrpc::protocol::Value;
 
 /// Error message used whenever an XML-RPC method expects a top-level struct
@@ -86,13 +87,13 @@ pub(crate) fn get_str_array(m: &BTreeMap<String, Value>, key: &str) -> Vec<Strin
 /// Non-struct array elements are skipped; missing members default (name/status
 /// to empty, setter/requestee to `None`), matching the REST deserializer's
 /// tolerance.
-pub(crate) fn get_flags(m: &BTreeMap<String, Value>, key: &str) -> Vec<crate::types::Flag> {
+pub(crate) fn get_flags(m: &BTreeMap<String, Value>, key: &str) -> Vec<Flag> {
     m.get(key)
         .and_then(Value::as_array)
         .map(|arr| {
             arr.iter()
                 .filter_map(Value::as_struct)
-                .map(|fm| crate::types::Flag {
+                .map(|fm| Flag {
                     name: get_str(fm, "name").unwrap_or_default(),
                     status: get_str(fm, "status").unwrap_or_default(),
                     setter: get_nonempty_str(fm, "setter"),

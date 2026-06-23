@@ -5,7 +5,8 @@ use crate::commands::search_policy::{count_search_params, ensure_no_paging_with_
 use crate::error::Result;
 use crate::output::resources::bug::write_bugs;
 use crate::output::writers::Writers;
-use crate::types::{OutputFormat, SearchParams};
+use crate::types::bug::{Bug, SearchParams};
+use crate::types::common::OutputFormat;
 use crate::validation::parse_optional_date;
 
 pub(super) async fn handle(
@@ -24,7 +25,7 @@ pub(super) async fn handle(
 
     let whoami = client.whoami().await?;
     let email = whoami.name;
-    let mut all_bugs: Vec<crate::types::Bug> = Vec::new();
+    let mut all_bugs: Vec<Bug> = Vec::new();
     let mut seen_ids = std::collections::HashSet::new();
 
     let mut base = build_base_search_params(args)?;

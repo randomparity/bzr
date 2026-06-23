@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::error::{BzrError, Result};
+use crate::types::comment::Comment;
 use crate::xmlrpc::protocol::Value;
 use crate::xmlrpc::protocol::XmlRpcClient;
 use crate::xmlrpc::resources::mappers::{
@@ -13,7 +14,7 @@ impl XmlRpcClient {
         &self,
         bug_id: u64,
         since: Option<&str>,
-    ) -> Result<Vec<crate::types::Comment>> {
+    ) -> Result<Vec<Comment>> {
         let mut rpc_params = BTreeMap::new();
         let bug_id_value = xmlrpc_id(bug_id, "bug ID")?;
         rpc_params.insert("ids".into(), Value::Array(vec![bug_id_value]));
@@ -26,7 +27,7 @@ impl XmlRpcClient {
     }
 }
 
-fn extract_comments(response: &Value, bug_id: u64) -> Result<Vec<crate::types::Comment>> {
+fn extract_comments(response: &Value, bug_id: u64) -> Result<Vec<Comment>> {
     let Some(bug_entry) = lookup_bug_entry(response, bug_id)? else {
         return Ok(Vec::new());
     };
@@ -50,12 +51,12 @@ fn extract_comments(response: &Value, bug_id: u64) -> Result<Vec<crate::types::C
     Ok(comments)
 }
 
-fn value_to_comment(val: &Value) -> Result<crate::types::Comment> {
+fn value_to_comment(val: &Value) -> Result<Comment> {
     let m = val
         .as_struct()
         .ok_or_else(|| BzrError::XmlRpc("expected struct for comment".into()))?;
 
-    Ok(crate::types::Comment {
+    Ok(Comment {
         id: require_u64(m, "id", "comment")?,
         bug_id: get_u64(m, "bug_id").unwrap_or(0),
         text: get_str(m, "text").unwrap_or_default(),

@@ -5,7 +5,9 @@ use crate::commands::runtime::flags::parse_flags;
 use crate::error::Result;
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
-use crate::types::{CreateBugParams, OutputFormat};
+use crate::types::bug::CreateBugParams;
+use crate::types::comment::AddCommentParams;
+use crate::types::common::OutputFormat;
 use crate::validation::parse_optional_date_only;
 
 pub(super) async fn handle(
@@ -98,7 +100,7 @@ pub(super) async fn handle(
     // the clone succeeded and may re-clone, creating a duplicate). Warn and
     // continue rather than propagating.
     if !*no_comment {
-        let params = crate::types::AddCommentParams {
+        let params = AddCommentParams {
             text: format!("Cloned from bug #{}", source.id),
             is_private: false,
         };

@@ -4,7 +4,7 @@ use crate::commands::runtime::context::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::result_types::{write_result, ActionResult, ResourceKind};
 use crate::output::writers::Writers;
-use crate::types::AddCommentParams;
+use crate::types::comment::AddCommentParams;
 
 pub(super) struct AddArgs<'a> {
     pub(super) bug_id: u64,

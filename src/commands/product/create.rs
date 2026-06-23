@@ -4,7 +4,7 @@ use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
-use crate::types::CreateProductParams;
+use crate::types::product::CreateProductParams;
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]

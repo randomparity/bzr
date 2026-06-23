@@ -3,7 +3,9 @@ use crate::commands::runtime::context::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
-use crate::types::{OutputFormat, UpdateComponentParams};
+use crate::types::common::OutputFormat;
+use crate::types::component::UpdateComponentParams;
+use crate::types::product::Product;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Deserialize)]
@@ -228,11 +230,7 @@ async fn resolve_update_target_id(
     }
 }
 
-fn find_component_id(
-    product_data: &crate::types::Product,
-    product: &str,
-    component_name: &str,
-) -> Result<u64> {
+fn find_component_id(product_data: &Product, product: &str, component_name: &str) -> Result<u64> {
     let mut found = None;
     for component in &product_data.components {
         if component.name != component_name {

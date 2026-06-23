@@ -8,7 +8,7 @@ mod whoami;
 use reqwest::header::HeaderValue;
 
 use crate::error::{BzrError, Result};
-use crate::types::{ApiMode, AuthMethod};
+use crate::types::common::{ApiMode, AuthMethod};
 
 use self::valid_login::{detect_valid_login_auth, verify_header_auth_via_rest, ValidLoginOutcome};
 use self::whoami::{detect_whoami_auth, WhoamiOutcome};

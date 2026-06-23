@@ -3,7 +3,8 @@ use std::io::Write;
 use colored::Colorize;
 
 use crate::output::formatting::{write_divider, write_formatted};
-use crate::types::{Comment, OutputFormat};
+use crate::types::comment::Comment;
+use crate::types::common::OutputFormat;
 
 pub fn write_comments<W: Write + ?Sized>(comments: &[Comment], format: OutputFormat, out: &mut W) {
     write_formatted(comments, format, out, |comments, out| {

@@ -7,7 +7,8 @@ use crate::output::result_types::{
     write_result, ActionResult, BatchFailure, BatchResult, DryRunResult, ResourceKind,
 };
 use crate::output::writers::Writers;
-use crate::types::{IdListUpdate, OutputFormat, StringListUpdate, UpdateBugParams};
+use crate::types::bug::{CommentUpdate, IdListUpdate, StringListUpdate, UpdateBugParams};
+use crate::types::common::OutputFormat;
 use serde::Deserialize;
 
 const FLAG_KEYWORDS_ADD: &str = "--keywords-add";
@@ -69,7 +70,7 @@ pub(super) fn resolve_comment(
     comment: Option<&str>,
     comment_file: Option<&std::path::Path>,
     comment_private: bool,
-) -> Result<Option<crate::types::CommentUpdate>> {
+) -> Result<Option<CommentUpdate>> {
     let body = crate::commands::runtime::shared::materialize_optional_comment_body(
         comment,
         comment_file,
@@ -78,7 +79,7 @@ pub(super) fn resolve_comment(
     let Some(text) = body else {
         return Ok(None);
     };
-    Ok(Some(crate::types::CommentUpdate {
+    Ok(Some(CommentUpdate {
         body: text,
         is_private: comment_private,
     }))

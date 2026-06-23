@@ -2,7 +2,7 @@ use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::resources::product::write_products;
 use crate::output::writers::Writers;
-use crate::types::ProductListType;
+use crate::types::product::ProductListType;
 
 pub(super) async fn handle(
     list_type: ProductListType,

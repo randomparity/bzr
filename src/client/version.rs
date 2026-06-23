@@ -1,6 +1,6 @@
 use crate::bugzilla_auth::apply_auth;
 use crate::error::{BzrError, Result};
-use crate::types::{ApiMode, AuthMethod};
+use crate::types::common::{ApiMode, AuthMethod};
 
 #[derive(Debug, Clone, Copy)]
 enum SendErrorHandling {

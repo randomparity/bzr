@@ -3,7 +3,7 @@ use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::resources::field::{write_field_aliases, write_field_values};
 use crate::output::writers::Writers;
-use crate::types::OutputFormat;
+use crate::types::common::OutputFormat;
 
 pub async fn execute(
     action: &FieldAction,

@@ -16,7 +16,8 @@
 use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
 use crate::output::writers::Writers;
-use crate::types::{Bug, OutputFormat, SearchParams};
+use crate::types::bug::{Bug, SearchParams};
+use crate::types::common::OutputFormat;
 
 /// Backstop on the `--paginate` loop: a server that ignored `offset` would
 /// otherwise return a full page forever. Far above any real result set.

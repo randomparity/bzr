@@ -9,7 +9,8 @@ use crate::output::result_types::{
     write_result, BatchCreateResult, CreateFailure, DryRunResult, ResourceKind,
 };
 use crate::output::writers::Writers;
-use crate::types::{CreateBugParams, OutputFormat};
+use crate::types::bug::CreateBugParams;
+use crate::types::common::OutputFormat;
 
 /// One bug's worth of structured input for `bug create --from-json`. Keys match
 /// the create flag names; `deny_unknown_fields` rejects typos and keeps

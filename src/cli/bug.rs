@@ -1,6 +1,7 @@
 use clap::{Args, Subcommand};
 
-use crate::types::{FilterField, SavedQuery, SearchParams, SortDirection, FIELD_MAPPINGS};
+use crate::types::bug::{FilterField, SavedQuery, SearchParams, FIELD_MAPPINGS};
+use crate::types::common::SortDirection;
 
 /// Shared `--sort` / `--order` result ordering, flattened into the bug query
 /// subcommands (`list`, `search`, `my`) and `query run`. Absent `--sort`,

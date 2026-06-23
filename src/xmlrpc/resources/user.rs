@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::error::{BzrError, Result};
-use crate::types::CreateUserParams;
+use crate::types::user::CreateUserParams;
 use crate::xmlrpc::protocol::Value;
 use crate::xmlrpc::protocol::XmlRpcClient;
 use crate::xmlrpc::resources::mappers::{require_u64, EXPECTED_STRUCT_RESPONSE};

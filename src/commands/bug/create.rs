@@ -6,7 +6,8 @@ use crate::commands::runtime::editor;
 use crate::error::Result;
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
-use crate::types::{CreateBugParams, OutputFormat};
+use crate::types::bug::{BugTemplate, CreateBugParams};
+use crate::types::common::OutputFormat;
 
 const SENTINEL: &str = "# ------------------------ >8 ------------------------";
 
@@ -156,7 +157,7 @@ fn resolve_description(
 fn load_template(
     name: Option<&str>,
     config_path_override: Option<&std::path::Path>,
-) -> Result<Option<crate::types::BugTemplate>> {
+) -> Result<Option<BugTemplate>> {
     let Some(name) = name else { return Ok(None) };
     let config = crate::config::Config::load_at(config_path_override)?;
     let t = config
@@ -180,10 +181,7 @@ fn run_editor_flow(
     parse_editor_buffer(&raw)
 }
 
-fn merge_fields(
-    args: &CreateArgs,
-    tmpl: Option<&crate::types::BugTemplate>,
-) -> Result<MergedFields> {
+fn merge_fields(args: &CreateArgs, tmpl: Option<&BugTemplate>) -> Result<MergedFields> {
     let CreateArgs {
         product,
         component,
@@ -259,8 +257,8 @@ fn merge_fields(
 
 fn merge_template_vec(
     cli_values: &[String],
-    tmpl: Option<&crate::types::BugTemplate>,
-    template_values: impl FnOnce(&crate::types::BugTemplate) -> &[String],
+    tmpl: Option<&BugTemplate>,
+    template_values: impl FnOnce(&BugTemplate) -> &[String],
 ) -> Vec<String> {
     if cli_values.is_empty() {
         tmpl.map(template_values).unwrap_or_default().to_vec()

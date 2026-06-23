@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::error::{BzrError, Result};
-use crate::types::{GroupInfo, GroupMember};
+use crate::types::group::{GroupInfo, GroupMember};
 use crate::xmlrpc::protocol::Value;
 use crate::xmlrpc::protocol::XmlRpcClient;
 use crate::xmlrpc::resources::mappers::{

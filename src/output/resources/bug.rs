@@ -10,11 +10,13 @@ use crate::output::formatting::{
     write_formatted, write_json_family, write_list_field, write_optional_field,
     SUMMARY_TRUNCATE_WIDTH,
 };
-use crate::types::{
+use crate::types::bug::{Bug, HistoryEntry};
+use crate::types::bug_fields::{
     apply_exclude, canonical_excludes, canonical_field_list, default_selected_fields,
-    field_selected, partition_include, selected_custom_detail_fields, Bug, BugField, ColumnSpec,
-    HistoryEntry, OutputFormat, SelectedBugField,
+    field_selected, partition_include, selected_custom_detail_fields, BugField, ColumnSpec,
+    SelectedBugField,
 };
+use crate::types::common::OutputFormat;
 
 /// Bugzilla's sentinel for "no target milestone set". Suppressed in detail
 /// output so a bug without a milestone does not print a noise row.

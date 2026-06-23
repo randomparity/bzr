@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::io::Write;
 
-use crate::types::{BugTemplate, OutputFormat};
+use crate::types::bug::BugTemplate;
+use crate::types::common::OutputFormat;
 
 use crate::output::formatting::{
     write_field, write_formatted, write_list_field, write_optional_field,

@@ -4,7 +4,7 @@ use serde::Serialize;
 
 use crate::config::{CredentialSource, KeyringAccount};
 use crate::output::formatting::{mask_api_key, write_field, write_formatted, write_optional_field};
-use crate::types::{AuthMethod, OutputFormat};
+use crate::types::common::{AuthMethod, OutputFormat};
 
 fn auth_display(auth_method: Option<&AuthMethod>) -> String {
     auth_method.map_or_else(

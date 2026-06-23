@@ -9,7 +9,8 @@ use crate::output::result_types::{
     write_result, BatchFailure, BatchResult, DryRunResult, ResourceKind,
 };
 use crate::output::writers::Writers;
-use crate::types::{OutputFormat, UpdateBugParams};
+use crate::types::bug::UpdateBugParams;
+use crate::types::common::OutputFormat;
 
 #[derive(Debug, Serialize)]
 struct JsonUpdateRequest {

@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::commands::runtime::inline_server::InlineServer;
-use crate::types::{ApiMode, OutputFormat};
+use crate::types::common::{ApiMode, OutputFormat};
 
 /// Per-invocation command settings that must cross command/module boundaries.
 #[derive(Debug, Clone)]

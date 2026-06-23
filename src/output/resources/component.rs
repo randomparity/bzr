@@ -6,7 +6,8 @@ use crate::output::formatting::{
     truncate, write_field, write_formatted, write_optional_field, write_table_or_empty, TableSpec,
     DESCRIPTION_TRUNCATE_WIDTH,
 };
-use crate::types::{Component, OutputFormat};
+use crate::types::common::OutputFormat;
+use crate::types::component::Component;
 
 const COMPONENT_HEADERS: &[&str] = &["ID", "NAME", "DESCRIPTION", "ASSIGNEE", "ACTIVE"];
 

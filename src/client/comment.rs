@@ -3,7 +3,7 @@ use serde::Deserialize;
 use super::encode_path;
 use super::BugzillaClient;
 use crate::error::Result;
-use crate::types::{AddCommentParams, Comment, UpdateCommentTagsParams};
+use crate::types::comment::{AddCommentParams, Comment, UpdateCommentTagsParams};
 
 #[derive(Deserialize)]
 struct CommentResponse {
@@ -123,7 +123,7 @@ impl BugzillaClient {
         &self,
         bug_id: u64,
         since: Option<&str>,
-    ) -> Result<Vec<crate::types::Comment>> {
+    ) -> Result<Vec<Comment>> {
         self.get_comments_since_rest(bug_id, since).await
     }
 }

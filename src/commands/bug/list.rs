@@ -5,7 +5,8 @@ use crate::commands::search_policy::{count_search_params, ensure_no_paging_with_
 use crate::error::Result;
 use crate::output::resources::bug::write_bugs;
 use crate::output::writers::Writers;
-use crate::types::{OutputFormat, SearchParams};
+use crate::types::bug::SearchParams;
+use crate::types::common::OutputFormat;
 use crate::validation::parse_optional_date;
 
 pub(super) async fn handle(

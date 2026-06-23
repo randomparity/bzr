@@ -38,7 +38,7 @@ pub use user::UserAction;
 
 use clap::{Parser, Subcommand};
 
-use crate::types::{ApiMode, OutputFormat};
+use crate::types::common::{ApiMode, OutputFormat};
 
 /// A command-line client for Bugzilla servers.
 ///

@@ -2,7 +2,7 @@ use reqwest::header::HeaderValue;
 use serde::Deserialize;
 
 use crate::bugzilla_auth::{AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
-use crate::types::AuthMethod;
+use crate::types::common::AuthMethod;
 
 #[derive(Deserialize)]
 struct WhoamiProbeResponse {

@@ -8,7 +8,7 @@ use crate::commands::runtime::context::CommandContext;
 use crate::config::Config;
 use crate::error::Result;
 use crate::output::writers::Writers;
-use crate::types::SavedQuery;
+use crate::types::bug::SavedQuery;
 
 mod delete;
 mod list;

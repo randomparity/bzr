@@ -29,16 +29,16 @@ pub(crate) fn apply_auth_to_request(
 pub(crate) fn apply_auth(
     builder: reqwest::RequestBuilder,
     api_key: &str,
-    method: crate::types::AuthMethod,
+    method: crate::types::common::AuthMethod,
 ) -> crate::error::Result<reqwest::RequestBuilder> {
     match method {
-        crate::types::AuthMethod::Header => {
+        crate::types::common::AuthMethod::Header => {
             let val = reqwest::header::HeaderValue::from_str(api_key).map_err(|_| {
                 crate::error::BzrError::config("API key contains invalid header characters")
             })?;
             Ok(apply_auth_to_request(builder, Some(&val), None))
         }
-        crate::types::AuthMethod::QueryParam => {
+        crate::types::common::AuthMethod::QueryParam => {
             Ok(apply_auth_to_request(builder, None, Some(api_key)))
         }
     }

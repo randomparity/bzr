@@ -20,8 +20,8 @@ use serde::Deserialize;
 
 use crate::bugzilla_auth::{AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::error::{BzrError, Result};
-use crate::types::BugzillaUser;
-use crate::types::{ApiMode, AuthMethod};
+use crate::types::common::{ApiMode, AuthMethod};
+use crate::types::user::BugzillaUser;
 use crate::xmlrpc::protocol::XmlRpcClient;
 
 /// Default fields for user queries (basic info).

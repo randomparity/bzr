@@ -8,7 +8,7 @@ use crate::client::BugzillaClient;
 use crate::commands::runtime::context::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::writers::Writers;
-use crate::types::{CommentUpdate, UpdateBugParams};
+use crate::types::bug::{CommentUpdate, UpdateBugParams};
 
 /// Resolve the `CommentArgs` into an optional `CommentUpdate`, reusing the same
 /// stdin/file/private handling as `bug update`.

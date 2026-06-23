@@ -7,7 +7,7 @@ use crate::commands::bug_fields::{
 use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::writers::Writers;
-use crate::types::OutputFormat;
+use crate::types::common::OutputFormat;
 
 mod clone;
 mod create;

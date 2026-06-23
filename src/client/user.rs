@@ -1,7 +1,8 @@
 use super::encode_path;
 use super::{BugzillaClient, UserDetailLevel, UserSearchResponse};
 use crate::error::{BzrError, Result};
-use crate::types::{ApiMode, BugzillaUser, CreateUserParams, UpdateUserParams, WhoamiResponse};
+use crate::types::common::ApiMode;
+use crate::types::user::{BugzillaUser, CreateUserParams, UpdateUserParams, WhoamiResponse};
 
 impl BugzillaClient {
     pub async fn whoami(&self) -> Result<WhoamiResponse> {

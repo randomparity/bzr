@@ -4,7 +4,8 @@ use std::io::Write;
 use crate::output::formatting::{
     truncate, write_formatted, write_table_or_empty, TableSpec, DESCRIPTION_TRUNCATE_WIDTH,
 };
-use crate::types::{OutputFormat, Product};
+use crate::types::common::OutputFormat;
+use crate::types::product::Product;
 
 const PRODUCT_HEADERS: &[&str] = &["ID", "NAME", "DESCRIPTION", "COMPONENTS"];
 

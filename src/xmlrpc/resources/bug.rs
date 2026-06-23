@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::error::{BzrError, Result};
-use crate::types::{partition_filters, Bug, SearchParams, FIELD_MAPPINGS};
+use crate::types::bug::{partition_filters, Bug, SearchParams, FIELD_MAPPINGS};
 use crate::xmlrpc::protocol::Value;
 use crate::xmlrpc::protocol::XmlRpcClient;
 use crate::xmlrpc::resources::mappers::{

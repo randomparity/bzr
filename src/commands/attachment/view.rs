@@ -2,7 +2,7 @@ use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::resources::attachment::write_attachment;
 use crate::output::writers::Writers;
-use crate::types::OutputFormat;
+use crate::types::common::OutputFormat;
 
 pub(super) async fn handle(
     client: &BugzillaClient,

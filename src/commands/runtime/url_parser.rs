@@ -4,7 +4,7 @@ use url::Url;
 
 use crate::config::Config;
 use crate::error::{BzrError, Result};
-use crate::types::{QueryKind, SavedQuery, FIELD_MAPPINGS};
+use crate::types::bug::{FieldMapping, QueryKind, SavedQuery, FIELD_MAPPINGS};
 
 /// Parameters containing credentials that must not be stored or forwarded.
 const CREDENTIAL_PARAMS: &[&str] = &["bugzilla_api_key", "token", "api_key"];
@@ -18,7 +18,7 @@ enum ParamKind {
     KnownName,
     QueryBasedOn,
     Limit,
-    Mapped(&'static crate::types::FieldMapping),
+    Mapped(&'static FieldMapping),
     Credential,
     Raw,
 }

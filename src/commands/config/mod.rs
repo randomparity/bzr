@@ -20,7 +20,7 @@ mod show;
 #[cfg(test)]
 use crate::config::{Config, ServerConfig};
 #[cfg(test)]
-use crate::types::OutputFormat;
+use crate::types::common::OutputFormat;
 
 pub async fn execute(
     action: &ConfigAction,

@@ -8,7 +8,7 @@ use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::output::resources::bug::write_bugs;
 use crate::output::writers::Writers;
-use crate::types::OutputFormat;
+use crate::types::common::OutputFormat;
 
 pub(super) async fn handle(
     args: &crate::cli::RunArgs,

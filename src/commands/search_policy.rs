@@ -1,5 +1,5 @@
 use crate::error::{BzrError, Result};
-use crate::types::SearchParams;
+use crate::types::bug::SearchParams;
 
 /// Rewrite search params for `--count`: fetch only IDs and lift row limits so
 /// the count reflects the full match set rather than one page.

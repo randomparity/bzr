@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::error::{BzrError, Result};
+use crate::types::attachment::Attachment;
 use crate::xmlrpc::protocol::Value;
 use crate::xmlrpc::protocol::XmlRpcClient;
 use crate::xmlrpc::resources::mappers::{
@@ -25,7 +26,7 @@ const ATTACHMENT_LIST_FIELDS: &[&str] = &[
 ];
 
 impl XmlRpcClient {
-    pub async fn get_attachments(&self, bug_id: u64) -> Result<Vec<crate::types::Attachment>> {
+    pub async fn get_attachments(&self, bug_id: u64) -> Result<Vec<Attachment>> {
         let mut rpc_params = BTreeMap::new();
         let bug_id_value = xmlrpc_id(bug_id, "bug ID")?;
         rpc_params.insert("ids".into(), Value::Array(vec![bug_id_value]));
@@ -40,10 +41,7 @@ impl XmlRpcClient {
         extract_attachments(&result, bug_id)
     }
 
-    pub async fn get_attachment_by_id(
-        &self,
-        attachment_id: u64,
-    ) -> Result<crate::types::Attachment> {
+    pub async fn get_attachment_by_id(&self, attachment_id: u64) -> Result<Attachment> {
         let mut rpc_params = BTreeMap::new();
         let id_value = xmlrpc_id(attachment_id, "attachment ID")?;
         rpc_params.insert("attachment_ids".into(), Value::Array(vec![id_value]));
@@ -53,7 +51,7 @@ impl XmlRpcClient {
     }
 }
 
-fn extract_attachments(response: &Value, bug_id: u64) -> Result<Vec<crate::types::Attachment>> {
+fn extract_attachments(response: &Value, bug_id: u64) -> Result<Vec<Attachment>> {
     let Some(bug_entry) = lookup_bug_entry(response, bug_id)? else {
         return Ok(Vec::new());
     };
@@ -69,10 +67,7 @@ fn extract_attachments(response: &Value, bug_id: u64) -> Result<Vec<crate::types
     Ok(attachments)
 }
 
-fn extract_attachment_by_id(
-    response: &Value,
-    attachment_id: u64,
-) -> Result<crate::types::Attachment> {
+fn extract_attachment_by_id(response: &Value, attachment_id: u64) -> Result<Attachment> {
     let top = response
         .as_struct()
         .ok_or_else(|| BzrError::XmlRpc(EXPECTED_STRUCT_RESPONSE.into()))?;
@@ -95,7 +90,7 @@ fn extract_attachment_by_id(
     value_to_attachment(entry)
 }
 
-fn value_to_attachment(val: &Value) -> Result<crate::types::Attachment> {
+fn value_to_attachment(val: &Value) -> Result<Attachment> {
     let m = val
         .as_struct()
         .ok_or_else(|| BzrError::XmlRpc("expected struct for attachment".into()))?;
@@ -109,7 +104,7 @@ fn value_to_attachment(val: &Value) -> Result<crate::types::Attachment> {
         _ => None,
     };
 
-    Ok(crate::types::Attachment {
+    Ok(Attachment {
         // `id` is a primary key and must be present and non-negative; secondary
         // numeric fields (`bug_id`, `size`) default to 0 because off-spec
         // Bugzilla envelopes may omit them, and a zero is harmless for display.

@@ -6,7 +6,7 @@ use crate::cli::TemplateAction;
 use crate::commands::runtime::context::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::writers::Writers;
-use crate::types::BugTemplate;
+use crate::types::bug::BugTemplate;
 
 mod delete;
 mod list;

@@ -3,7 +3,7 @@ use serde::Deserialize;
 use super::encode_path;
 use super::BugzillaClient;
 use crate::error::{BzrError, Result};
-use crate::types::Classification;
+use crate::types::classification::Classification;
 
 #[derive(Deserialize)]
 struct ClassificationResponse {

@@ -2,7 +2,7 @@ use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
-use crate::types::CreateComponentParams;
+use crate::types::component::CreateComponentParams;
 use serde::Deserialize;
 
 pub(super) struct CreateArgs<'a> {

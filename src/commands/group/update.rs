@@ -4,7 +4,7 @@ use crate::commands::runtime::context::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
-use crate::types::UpdateGroupParams;
+use crate::types::group::UpdateGroupParams;
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]

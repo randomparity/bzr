@@ -6,7 +6,7 @@ use crate::commands::runtime::context::CommandContext;
 use crate::config::{Config, ServerConfig};
 use crate::error::{BzrError, Result};
 use crate::tls::TlsConfig;
-use crate::types::{ApiMode, AuthMethod};
+use crate::types::common::{ApiMode, AuthMethod};
 
 /// Persist detected server settings to config under the lock.
 /// Persists `auth_method` when `persist_auth` is true and detection produced
