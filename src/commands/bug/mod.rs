@@ -1,17 +1,18 @@
 //! Bug subcommand handlers, split per-action.
 
 use crate::cli::BugAction;
-use crate::commands::runtime::context::CommandContext;
-use crate::error::Result;
-use crate::output::resources::bug::{
+use crate::commands::bug::fields::{
     validate_json_field_selection, validate_table_columns, warn_unknown_fields, ColumnSpec,
 };
+use crate::commands::runtime::context::CommandContext;
+use crate::error::Result;
 use crate::output::writers::Writers;
 use crate::types::OutputFormat;
 
 mod clone;
 mod create;
 mod create_json;
+pub(crate) mod fields;
 mod history;
 mod list;
 mod my;

@@ -1,7 +1,11 @@
 #![expect(clippy::unwrap_used)]
 
 use super::*;
+use crate::commands::bug::fields::{
+    validate_json_field_selection, validate_table_columns, warn_unknown_fields,
+};
 use crate::types::{Bug, FieldChange, Flag, HistoryEntry};
+use crate::types::{ColumnSpec, BUG_FIELDS};
 
 fn review_flag(status: &str, requestee: Option<&str>) -> Flag {
     Flag {
@@ -1134,16 +1138,18 @@ fn columns_registry_is_one_to_one_with_bug_serde_keys() {
     let value = serde_json::to_value(&bug).unwrap();
     let serde_keys: std::collections::HashSet<String> =
         value.as_object().unwrap().keys().cloned().collect();
-    let registry_keys: std::collections::HashSet<String> =
-        COLUMNS.iter().map(|c| c.canonical().to_string()).collect();
+    let registry_keys: std::collections::HashSet<String> = BUG_FIELDS
+        .iter()
+        .map(|field| field.canonical().to_string())
+        .collect();
     assert_eq!(
         serde_keys, registry_keys,
-        "COLUMNS canonical names must be 1:1 with Bug's serde keys"
+        "BUG_FIELDS canonical names must be 1:1 with Bug's serde keys"
     );
     assert_eq!(
         registry_keys.len(),
-        COLUMNS.len(),
-        "no duplicate canonical names in COLUMNS"
+        BUG_FIELDS.len(),
+        "no duplicate canonical names in BUG_FIELDS"
     );
 }
 
@@ -1175,9 +1181,9 @@ fn validate_json_all_custom_include_ok() {
 
 #[test]
 fn validate_json_exclude_every_key_errs() {
-    let all = COLUMNS
+    let all = BUG_FIELDS
         .iter()
-        .map(BugColumn::canonical)
+        .map(|field| field.canonical())
         .collect::<Vec<_>>()
         .join(",");
     let spec = ColumnSpec {

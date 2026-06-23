@@ -1,5 +1,6 @@
 mod attachment;
 mod bug;
+mod bug_fields;
 mod classification;
 mod comment;
 mod common;
@@ -13,6 +14,12 @@ pub use bug::{
     partition_filters, Bug, BugTemplate, CommentUpdate, CreateBugParams, FieldChange, FieldMapping,
     FieldValue, FilterField, HistoryEntry, IdListUpdate, NegationOp, Overrides, QueryKind,
     SavedQuery, SearchParams, StatusTransition, StringListUpdate, UpdateBugParams, FIELD_MAPPINGS,
+};
+pub use bug_fields::ColumnSpec;
+pub(crate) use bug_fields::{
+    apply_exclude, canonical_excludes, canonical_field_list, default_selected_fields,
+    field_selected, partition_include, selected_custom_detail_fields, selected_keys, BugField,
+    SelectedBugField, BUG_FIELDS,
 };
 pub use classification::{Classification, ClassificationProduct};
 pub use comment::{AddCommentParams, Comment, UpdateCommentTagsParams};

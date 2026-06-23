@@ -1,7 +1,8 @@
 use crate::cli::MyArgs;
 use crate::client::BugzillaClient;
+use crate::commands::bug::fields::{canonical_field_list, ColumnSpec};
 use crate::error::Result;
-use crate::output::resources::bug::{canonical_field_list, write_bugs, ColumnSpec};
+use crate::output::resources::bug::write_bugs;
 use crate::output::writers::Writers;
 use crate::types::{OutputFormat, SearchParams};
 use crate::validation::parse_optional_date;

@@ -2,9 +2,10 @@ use std::io::Write;
 
 use crate::cli::SearchArgs;
 use crate::client::BugzillaClient;
+use crate::commands::bug::fields::{canonical_field_list, ColumnSpec};
 use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
-use crate::output::resources::bug::{canonical_field_list, write_bugs, ColumnSpec};
+use crate::output::resources::bug::write_bugs;
 use crate::output::resources::query::write_query_saved;
 use crate::output::writers::Writers;
 use crate::types::{OutputFormat, Overrides, SavedQuery, SearchParams};
