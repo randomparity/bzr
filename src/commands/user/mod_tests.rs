@@ -16,7 +16,7 @@ fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
 #[test]
 fn resolve_login_denied_text_disable_with_custom_text() {
     assert_eq!(
-        super::resolve_login_denied_text(Some(true), Some("Go away")),
+        super::update::resolve_login_denied_text(Some(true), Some("Go away")),
         Some("Go away".into())
     );
 }
@@ -24,7 +24,7 @@ fn resolve_login_denied_text_disable_with_custom_text() {
 #[test]
 fn resolve_login_denied_text_disable_without_custom_text_uses_default() {
     assert_eq!(
-        super::resolve_login_denied_text(Some(true), None),
+        super::update::resolve_login_denied_text(Some(true), None),
         Some("Account disabled".into())
     );
 }
@@ -32,20 +32,20 @@ fn resolve_login_denied_text_disable_without_custom_text_uses_default() {
 #[test]
 fn resolve_login_denied_text_enable_clears_to_empty_string() {
     assert_eq!(
-        super::resolve_login_denied_text(Some(false), None),
+        super::update::resolve_login_denied_text(Some(false), None),
         Some(String::new())
     );
     assert_eq!(
-        super::resolve_login_denied_text(Some(false), Some("ignored")),
+        super::update::resolve_login_denied_text(Some(false), Some("ignored")),
         Some(String::new())
     );
 }
 
 #[test]
 fn resolve_login_denied_text_unset_returns_none() {
-    assert_eq!(super::resolve_login_denied_text(None, None), None);
+    assert_eq!(super::update::resolve_login_denied_text(None, None), None);
     assert_eq!(
-        super::resolve_login_denied_text(None, Some("ignored")),
+        super::update::resolve_login_denied_text(None, Some("ignored")),
         None
     );
 }
