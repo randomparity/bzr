@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   crate-internal (`pub(crate)`). The `bzr` library crate's public surface is
   reduced to `cli::Cli` and `dispatch`; CLI behavior, flags, and output are
   unchanged. (#419)
+- Internal: the admin `product`, `component`, `group`, and `user` create/update
+  handlers now share a single `runtime::mutation::run` driver for the common
+  format/dry-run/connect/call/write flow. Request payloads, dry-run output,
+  mutation output, and error behavior are unchanged. (#420)
 
 ## [0.6.0] - 2026-06-22
 
