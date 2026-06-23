@@ -29,6 +29,22 @@ pub(super) const USER_FIELDS_BASIC: &str = "id,name,real_name,email,groups";
 /// Extended fields for detailed user queries.
 pub(super) const USER_FIELDS_DETAILED: &str = "id,name,real_name,email,can_login,groups";
 
+/// Field detail level for APIs that return users.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UserDetailLevel {
+    Basic,
+    Detailed,
+}
+
+impl UserDetailLevel {
+    const fn include_fields(self) -> &'static str {
+        match self {
+            Self::Basic => USER_FIELDS_BASIC,
+            Self::Detailed => USER_FIELDS_DETAILED,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 pub(super) struct UserSearchResponse {
     pub(super) users: Vec<BugzillaUser>,

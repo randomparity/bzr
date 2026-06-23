@@ -1,4 +1,5 @@
 use crate::cli::GroupAction;
+use crate::client::UserDetailLevel;
 use crate::commands::runtime::context::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::resources::group::write_group_info;
@@ -55,11 +56,11 @@ pub async fn execute(
         }
         GroupAction::ListUsers { group, details } => {
             let client = super::runtime::shared::connect_and_configure(ctx).await?;
-            let users = client.get_group_members(group, *details).await?;
-            let write = if *details {
-                write_users_detailed
-            } else {
-                write_users
+            let detail_level = user_detail_level(*details);
+            let users = client.get_group_members(group, detail_level).await?;
+            let write = match detail_level {
+                UserDetailLevel::Basic => write_users,
+                UserDetailLevel::Detailed => write_users_detailed,
             };
             write(&users, format, w.out);
         }
@@ -125,6 +126,14 @@ pub async fn execute(
         }
     }
     Ok(())
+}
+
+const fn user_detail_level(details: bool) -> UserDetailLevel {
+    if details {
+        UserDetailLevel::Detailed
+    } else {
+        UserDetailLevel::Basic
+    }
 }
 
 async fn create_group(

@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::encode_path;
-use super::BugzillaClient;
-use super::{UserSearchResponse, USER_FIELDS_BASIC, USER_FIELDS_DETAILED};
+use super::{BugzillaClient, UserDetailLevel, UserSearchResponse};
 use crate::error::{BzrError, Result};
 use crate::types::ApiMode;
 
@@ -29,13 +28,9 @@ impl BugzillaClient {
     pub async fn get_group_members(
         &self,
         group_name: &str,
-        detailed: bool,
+        detail_level: UserDetailLevel,
     ) -> Result<Vec<BugzillaUser>> {
-        let fields = if detailed {
-            USER_FIELDS_DETAILED
-        } else {
-            USER_FIELDS_BASIC
-        };
+        let fields = detail_level.include_fields();
         // Bugzilla 5.0 requires at least one of ids/names/match alongside
         // the group filter. Use a broad match pattern to list all members.
         let data: UserSearchResponse = self

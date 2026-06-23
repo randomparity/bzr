@@ -3,7 +3,7 @@
 use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use super::super::encode_path;
+use super::super::{encode_path, UserDetailLevel, USER_FIELDS_DETAILED};
 use crate::client::test_helpers::test_client;
 use crate::types::{CreateUserParams, UpdateUserParams};
 
@@ -43,7 +43,10 @@ async fn search_users_returns_matches() {
         .await;
 
     let client = test_client(&mock.uri());
-    let users = client.search_users("example", false).await.unwrap();
+    let users = client
+        .search_users("example", UserDetailLevel::Basic)
+        .await
+        .unwrap();
     assert_eq!(users.len(), 2);
     assert_eq!(users[0].name, "alice@example.com");
     assert_eq!(users[1].real_name.as_deref(), Some("Bob"));
@@ -59,7 +62,10 @@ async fn search_users_empty() {
         .await;
 
     let client = test_client(&mock.uri());
-    let users = client.search_users("nobody", false).await.unwrap();
+    let users = client
+        .search_users("nobody", UserDetailLevel::Basic)
+        .await
+        .unwrap();
     assert!(users.is_empty());
 }
 
@@ -69,7 +75,7 @@ async fn search_users_details_sends_include_fields() {
     Mock::given(method("GET"))
         .and(path("/rest/user"))
         .and(query_param("match", "alice"))
-        .and(query_param("include_fields", super::USER_FIELDS_DETAILED))
+        .and(query_param("include_fields", USER_FIELDS_DETAILED))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "users": [{
                 "id": 1,
@@ -84,7 +90,10 @@ async fn search_users_details_sends_include_fields() {
         .await;
 
     let client = test_client(&mock.uri());
-    let users = client.search_users("alice", true).await.unwrap();
+    let users = client
+        .search_users("alice", UserDetailLevel::Detailed)
+        .await
+        .unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].can_login, Some(true));
     assert_eq!(users[0].groups.len(), 1);

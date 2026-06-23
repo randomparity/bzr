@@ -1,4 +1,5 @@
 use crate::cli::UserAction;
+use crate::client::UserDetailLevel;
 use crate::commands::runtime::context::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::resources::user::{write_users, write_users_detailed};
@@ -54,11 +55,11 @@ pub async fn execute(action: &UserAction, ctx: &CommandContext, w: &mut Writers<
     match action {
         UserAction::Search { query, details } => {
             let client = super::runtime::shared::connect_and_configure(ctx).await?;
-            let users = client.search_users(query, *details).await?;
-            if *details {
-                write_users_detailed(&users, format, w.out);
-            } else {
-                write_users(&users, format, w.out);
+            let detail_level = user_detail_level(*details);
+            let users = client.search_users(query, detail_level).await?;
+            match detail_level {
+                UserDetailLevel::Basic => write_users(&users, format, w.out),
+                UserDetailLevel::Detailed => write_users_detailed(&users, format, w.out),
             }
         }
         UserAction::Create {
@@ -133,6 +134,14 @@ pub async fn execute(action: &UserAction, ctx: &CommandContext, w: &mut Writers<
         }
     }
     Ok(())
+}
+
+const fn user_detail_level(details: bool) -> UserDetailLevel {
+    if details {
+        UserDetailLevel::Detailed
+    } else {
+        UserDetailLevel::Basic
+    }
 }
 
 #[must_use]

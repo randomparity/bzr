@@ -1,5 +1,5 @@
 use super::encode_path;
-use super::{BugzillaClient, UserSearchResponse, USER_FIELDS_BASIC, USER_FIELDS_DETAILED};
+use super::{BugzillaClient, UserDetailLevel, UserSearchResponse};
 use crate::error::{BzrError, Result};
 use crate::types::{ApiMode, BugzillaUser, CreateUserParams, UpdateUserParams, WhoamiResponse};
 
@@ -40,12 +40,12 @@ impl BugzillaClient {
             })
     }
 
-    pub async fn search_users(&self, query: &str, detailed: bool) -> Result<Vec<BugzillaUser>> {
-        let fields = if detailed {
-            USER_FIELDS_DETAILED
-        } else {
-            USER_FIELDS_BASIC
-        };
+    pub async fn search_users(
+        &self,
+        query: &str,
+        detail_level: UserDetailLevel,
+    ) -> Result<Vec<BugzillaUser>> {
+        let fields = detail_level.include_fields();
         let data: UserSearchResponse = self
             .get_json_query("user", &[("match", query), ("include_fields", fields)])
             .await?;

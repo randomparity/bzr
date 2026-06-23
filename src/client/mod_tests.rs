@@ -173,7 +173,10 @@ async fn http_500_returns_error() {
         .await;
 
     let client = test_client(&mock.uri());
-    let err = client.search_users("anyone", false).await.unwrap_err();
+    let err = client
+        .search_users("anyone", UserDetailLevel::Basic)
+        .await
+        .unwrap_err();
     let msg = err.to_string();
     assert!(
         msg.contains("500") || msg.contains("Internal Server Error"),
@@ -211,7 +214,10 @@ async fn auth_fallback_header_to_query_param_on_401() {
         .await;
 
     let client = test_client(&mock.uri());
-    let users = client.search_users("alice", false).await.unwrap();
+    let users = client
+        .search_users("alice", UserDetailLevel::Basic)
+        .await
+        .unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].name, "alice@example.com");
 }
@@ -246,7 +252,10 @@ async fn auth_fallback_query_param_to_header_on_401() {
         .await;
 
     let client = test_client_query_param(&mock.uri());
-    let users = client.search_users("bob", false).await.unwrap();
+    let users = client
+        .search_users("bob", UserDetailLevel::Basic)
+        .await
+        .unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].name, "bob@example.com");
 }
@@ -265,7 +274,10 @@ async fn auth_fallback_both_fail_returns_original_error() {
         .await;
 
     let client = test_client(&mock.uri());
-    let err = client.search_users("anyone", false).await.unwrap_err();
+    let err = client
+        .search_users("anyone", UserDetailLevel::Basic)
+        .await
+        .unwrap_err();
     let msg = err.to_string();
     assert!(
         msg.contains("410") || msg.contains("log in"),
@@ -299,7 +311,10 @@ async fn anonymous_client_does_not_retry_401_with_alternate_auth() {
     })
     .unwrap();
 
-    let err = client.search_users("alice", false).await.unwrap_err();
+    let err = client
+        .search_users("alice", UserDetailLevel::Basic)
+        .await
+        .unwrap_err();
 
     assert!(err.to_string().contains("410"));
     assert_eq!(mock.received_requests().await.unwrap().len(), 1);
@@ -320,7 +335,10 @@ async fn non_401_errors_do_not_trigger_fallback() {
         .await;
 
     let client = test_client(&mock.uri());
-    let err = client.search_users("anyone", false).await.unwrap_err();
+    let err = client
+        .search_users("anyone", UserDetailLevel::Basic)
+        .await
+        .unwrap_err();
     assert!(err.to_string().contains("not authorized"));
 }
 
