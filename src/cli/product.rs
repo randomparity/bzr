@@ -129,3 +129,7 @@ pub enum ProductAction {
         is_open: Option<bool>,
     },
 }
+
+#[cfg(test)]
+#[path = "product_tests.rs"]
+mod tests;

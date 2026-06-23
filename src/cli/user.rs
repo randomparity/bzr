@@ -118,3 +118,7 @@ pub enum UserAction {
         login_denied_text: Option<String>,
     },
 }
+
+#[cfg(test)]
+#[path = "user_tests.rs"]
+mod tests;

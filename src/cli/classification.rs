@@ -47,3 +47,7 @@ pub enum ClassificationAction {
         name: String,
     },
 }
+
+#[cfg(test)]
+#[path = "classification_tests.rs"]
+mod tests;

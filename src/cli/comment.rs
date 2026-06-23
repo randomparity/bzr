@@ -124,3 +124,7 @@ pub enum CommentAction {
         query: String,
     },
 }
+
+#[cfg(test)]
+#[path = "comment_tests.rs"]
+mod tests;

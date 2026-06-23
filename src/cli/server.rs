@@ -24,3 +24,7 @@ pub enum ServerAction {
     #[command(verbatim_doc_comment)]
     Info,
 }
+
+#[cfg(test)]
+#[path = "server_tests.rs"]
+mod tests;
