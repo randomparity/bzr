@@ -349,3 +349,7 @@ pub enum ConfigAction {
         new: String,
     },
 }
+
+#[cfg(test)]
+#[path = "config_tests.rs"]
+mod tests;
