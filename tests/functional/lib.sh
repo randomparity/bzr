@@ -427,3 +427,105 @@ run_bugzilla_sql_file() {
     container=$(bugzilla_container_name)
     "$runtime" exec -i "$container" mysql -u root bugs <"$sql_file"
 }
+
+# ── TLS fixture (issue #406) ─────────────────────────────────────────
+# Front the HTTP-only Bugzilla container with HTTPS via a python3
+# TLS-terminating reverse proxy so the ad-hoc --server-tls-* trust flags can be
+# exercised end-to-end. State is published through globals consumed by
+# phases/02c-tls-inline.sh: TLS_PORT, TLS_CA_CERT, TLS_GOOD_PIN, TLS_FIXTURE_DIR,
+# TLS_FIXTURE_PID. See docs/superpowers/specs/2026-06-23-issue-406-*.md.
+TLS_FIXTURE_DIR=""
+TLS_FIXTURE_PID=""
+TLS_PORT=""
+TLS_CA_CERT=""
+TLS_GOOD_PIN=""
+
+# tls_tools_available — returns 0 iff the host tooling for the HTTPS fixture is
+# present. When it is not, the TLS phase skips cleanly so run-all-versions stays
+# predictable on hosts without TLS tooling.
+tls_tools_available() {
+    command -v python3 >/dev/null 2>&1 &&
+        command -v openssl >/dev/null 2>&1 &&
+        command -v curl >/dev/null 2>&1
+}
+
+# tls_fixture_start <backend_port> — generate a CA + leaf cert, compute the leaf
+# pin, launch the TLS reverse proxy in front of 127.0.0.1:<backend_port>, and
+# wait for it to accept TLS. Returns non-zero (after cleaning up) if the proxy
+# does not become ready, so the caller can fail the phase without hanging.
+tls_fixture_start() {
+    local backend_port="$1"
+    TLS_PORT="${BZR_FUNC_TLS_PORT:-$((backend_port + 1000))}"
+    TLS_FIXTURE_DIR=$(mktemp -d /tmp/bzr-func-tls.XXXXXX)
+    TLS_CA_CERT="$TLS_FIXTURE_DIR/ca.pem"
+
+    local ca_key="$TLS_FIXTURE_DIR/ca.key"
+    local key="$TLS_FIXTURE_DIR/server.key"
+    local crt="$TLS_FIXTURE_DIR/server.crt"
+    local csr="$TLS_FIXTURE_DIR/server.csr"
+    local ext="$TLS_FIXTURE_DIR/ext.cnf"
+
+    # Self-signed CA (trust anchor for the --server-tls-ca-cert case).
+    openssl req -x509 -newkey rsa:2048 -nodes \
+        -keyout "$ca_key" -out "$TLS_CA_CERT" \
+        -subj "/CN=bzr-func-test-ca" -days 2 \
+        -addext "basicConstraints=critical,CA:TRUE" \
+        -addext "keyUsage=critical,keyCertSign,cRLSign" >/dev/null 2>&1
+
+    # Leaf signed by the CA. The IP SAN lets --server-tls-ca-cert pass full
+    # hostname verification when connecting to https://127.0.0.1; serverAuth EKU
+    # is required by rustls.
+    openssl req -newkey rsa:2048 -nodes \
+        -keyout "$key" -out "$csr" -subj "/CN=127.0.0.1" >/dev/null 2>&1
+    cat >"$ext" <<'EOF'
+subjectAltName=IP:127.0.0.1,DNS:localhost
+basicConstraints=CA:FALSE
+keyUsage=digitalSignature,keyEncipherment
+extendedKeyUsage=serverAuth
+EOF
+    openssl x509 -req -in "$csr" -CA "$TLS_CA_CERT" -CAkey "$ca_key" \
+        -CAcreateserial -out "$crt" -days 2 -extfile "$ext" >/dev/null 2>&1
+
+    # Pin = sha256// + base64(SHA-256(leaf DER)), matching
+    # src/tls/fingerprint.rs::compute_fingerprint.
+    # shellcheck disable=SC2034 # consumed by phases/02c-tls-inline.sh
+    TLS_GOOD_PIN="sha256//$(openssl x509 -in "$crt" -outform DER |
+        openssl dgst -sha256 -binary | openssl base64 -A)"
+
+    python3 "$SCRIPT_DIR/tls-proxy.py" "$TLS_PORT" 127.0.0.1 "$backend_port" \
+        "$crt" "$key" >"$TLS_FIXTURE_DIR/proxy.log" 2>&1 &
+    TLS_FIXTURE_PID=$!
+    # Drop the proxy from job control so killing it in _tls_cleanup does not emit
+    # a "Terminated" job notice into the test output.
+    disown "$TLS_FIXTURE_PID" 2>/dev/null || true
+
+    local attempt=0
+    while [[ $attempt -lt 30 ]]; do
+        if curl -sk "https://127.0.0.1:${TLS_PORT}/rest/version" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+        attempt=$((attempt + 1))
+    done
+
+    echo "tls_fixture_start: proxy not ready on port ${TLS_PORT} after 30s" >&2
+    tail -5 "$TLS_FIXTURE_DIR/proxy.log" >&2 2>/dev/null || true
+    _tls_cleanup
+    return 1
+}
+
+# _tls_cleanup — stop the proxy and remove the temp certs. Idempotent and
+# set -u-safe: every variable is guarded, an absent/dead PID and an
+# already-removed dir are tolerated, and it is safe to call before
+# tls_fixture_start or more than once (it composes onto the EXIT trap).
+_tls_cleanup() {
+    if [[ -n "${TLS_FIXTURE_PID:-}" ]]; then
+        kill "$TLS_FIXTURE_PID" >/dev/null 2>&1 || true
+        TLS_FIXTURE_PID=""
+    fi
+    if [[ -n "${TLS_FIXTURE_DIR:-}" ]] && [[ -d "$TLS_FIXTURE_DIR" ]]; then
+        rm -rf "$TLS_FIXTURE_DIR"
+        TLS_FIXTURE_DIR=""
+    fi
+    return 0
+}
