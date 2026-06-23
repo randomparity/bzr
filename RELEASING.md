@@ -92,9 +92,14 @@ git push -u origin release/vX.Y.Z-prep
 
 The project blocks direct pushes to `main` (a pre-commit-style guardrail mirrored by the `Never push directly to main` rule). Release prep follows the same PR-based flow as feature work — see the v0.2.0 lineage (`git log --first-parent v0.2.0` shows the tag landed on `Merge pull request #131 from randomparity/release/v0.2.0-prep`).
 
-7. Open a `release: prep vX.Y.Z` PR against `main`. Wait for CI to go green, then merge it. The resulting merge commit on `main` is what you tag.
+7. Open a `release: prep vX.Y.Z` PR against `main`. Wait for CI to go green,
+   then merge it. The resulting merge commit on `main` is what you tag.
 
-8. Tag the merge commit and push the tag:
+8. Run the `Functional Tests` GitHub Actions workflow on `main` and wait for
+   success before tagging. It executes `tests/functional/run-all-versions.sh`
+   against the real Bugzilla bz50, bz52, and bz53 containers.
+
+9. Tag the merge commit and push the tag:
 
 ```bash
 git checkout main
@@ -182,11 +187,12 @@ Create the token from crates.io and store it in GitHub Actions secrets as:
 ## Recommended release order
 
 1. Open and merge the `release/vX.Y.Z-prep` PR to `main`
-2. Pull `main` locally and tag the merge commit (`git tag -a vX.Y.Z -m "bzr vX.Y.Z"`)
-3. Push the tag (`git push origin vX.Y.Z`)
-4. Confirm `release.yml` succeeds (preflight → manpages → build → release → installer-smoke → homebrew)
-5. Confirm `publish-crates.yml` succeeds (stable tags only)
-6. Verify installation from crates.io:
+2. Run the `Functional Tests` workflow on `main` and wait for success
+3. Pull `main` locally and tag the merge commit (`git tag -a vX.Y.Z -m "bzr vX.Y.Z"`)
+4. Push the tag (`git push origin vX.Y.Z`)
+5. Confirm `release.yml` succeeds (preflight → manpages → build → release → installer-smoke → homebrew)
+6. Confirm `publish-crates.yml` succeeds (stable tags only)
+7. Verify installation from crates.io:
 
 ```bash
 cargo install bzr --version X.Y.Z --locked
