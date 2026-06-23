@@ -405,6 +405,50 @@ async fn bug_update_from_json_array_partial_failure_exits_11() {
 }
 
 #[tokio::test]
+async fn bug_update_from_json_array_guard_failure_prevents_all_writes() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/1"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": [{"id": 1, "changes": {}}]})),
+        )
+        .mount(&mock)
+        .await;
+    mock_get_bug_lct(&mock, 2, "2026-06-21T12:00:01Z").await;
+
+    let json = r#"[
+        {"id":1,"status":"ASSIGNED"},
+        {
+            "id":2,
+            "status":"ASSIGNED",
+            "expect_unchanged_since":"2026-06-21T12:00:00Z"
+        }
+    ]"#;
+    let action = from_json_update_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    let err = result.unwrap_err();
+    assert!(matches!(
+        err,
+        crate::error::BzrError::BatchPartialFailure {
+            succeeded: 0,
+            failed: 1
+        }
+    ));
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["succeeded"], serde_json::json!([]));
+    assert_eq!(parsed["failed"][0]["id"], 2);
+    assert_eq!(received_put_count(&mock).await, 0);
+}
+
+#[tokio::test]
 async fn bug_update_from_json_comment_and_expect_guard() {
     let (_lock, mock, tmp) = setup_test_env().await;
     mock_get_bug_lct(&mock, 42, "2026-06-21T12:00:00Z").await;

@@ -304,20 +304,19 @@ async fn update_many_from_json(
         return Ok(());
     }
 
+    let preflight_failures = preflight_expect_unchanged_since(client, requests).await;
+    if !preflight_failures.is_empty() {
+        let batch = BatchResult::new(Vec::new(), preflight_failures);
+        let with_comment = requests
+            .iter()
+            .any(|request| request.params.comment.is_some());
+        super::update::write_batch_result(&batch, format, with_comment, w);
+        return super::update::ensure_batch_complete(batch.succeeded.len(), batch.failed.len());
+    }
+
     let mut succeeded = Vec::new();
     let mut failed = Vec::new();
     for request in requests {
-        if let Some(expected) = request.expect_unchanged_since.as_deref() {
-            if let Err(e) =
-                super::update::ensure_unchanged_since(client, &[request.id], expected).await
-            {
-                failed.push(BatchFailure {
-                    id: request.id,
-                    error: e.to_string(),
-                });
-                continue;
-            }
-        }
         match client.update_bug(request.id, &request.params).await {
             Ok(()) => succeeded.push(request.id),
             Err(e) => failed.push(BatchFailure {
@@ -333,6 +332,26 @@ async fn update_many_from_json(
         .any(|request| request.params.comment.is_some());
     super::update::write_batch_result(&batch, format, with_comment, w);
     super::update::ensure_batch_complete(batch.succeeded.len(), batch.failed.len())
+}
+
+async fn preflight_expect_unchanged_since(
+    client: &BugzillaClient,
+    requests: &[JsonUpdateRequest],
+) -> Vec<BatchFailure> {
+    let mut failed = Vec::new();
+    for request in requests {
+        let Some(expected) = request.expect_unchanged_since.as_deref() else {
+            continue;
+        };
+        if let Err(e) = super::update::ensure_unchanged_since(client, &[request.id], expected).await
+        {
+            failed.push(BatchFailure {
+                id: request.id,
+                error: e.to_string(),
+            });
+        }
+    }
+    failed
 }
 
 pub(super) async fn handle(
