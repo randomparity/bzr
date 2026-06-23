@@ -11,3 +11,7 @@ pub(super) fn handle(ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
     write_config(&view, ctx.format(), w.out);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "show_tests.rs"]
+mod tests;

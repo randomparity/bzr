@@ -17,11 +17,6 @@ mod set_default;
 mod set_server;
 mod show;
 
-#[cfg(test)]
-use crate::config::{Config, ServerConfig};
-#[cfg(test)]
-use crate::types::common::OutputFormat;
-
 pub async fn execute(
     action: &ConfigAction,
     ctx: &CommandContext,
@@ -87,7 +82,3 @@ pub async fn execute(
         }
     }
 }
-
-#[cfg(test)]
-#[path = "mod_tests.rs"]
-mod tests;

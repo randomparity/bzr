@@ -27,3 +27,7 @@ pub(super) fn handle(name: &str, ctx: &CommandContext, w: &mut Writers<'_>) -> R
     );
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "set_default_tests.rs"]
+mod tests;

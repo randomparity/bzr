@@ -131,3 +131,7 @@ pub(super) async fn handle(
     );
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "set_server_tests.rs"]
+mod tests;

@@ -77,3 +77,7 @@ pub(super) fn handle(
     );
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "rename_tests.rs"]
+mod tests;
