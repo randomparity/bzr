@@ -35,11 +35,6 @@ pub enum FilterField {
     Url,
 }
 
-/// Deserialize a string that may be null into an empty string.
-fn deserialize_null_string<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
-    Option::<String>::deserialize(d).map(Option::unwrap_or_default)
-}
-
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct Bug {
@@ -783,27 +778,6 @@ pub struct FieldChange {
     pub added: String,
     #[serde(default)]
     pub attachment_id: Option<u64>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[non_exhaustive]
-pub struct FieldValue {
-    /// Field value name. Null for the "default/unset" entry in some Bugzilla
-    /// field types (e.g. `bug_status` on Bugzilla 5.0 has a null-named entry).
-    #[serde(default, deserialize_with = "deserialize_null_string")]
-    pub name: String,
-    #[serde(default)]
-    pub sort_key: u64,
-    #[serde(default)]
-    pub is_active: bool,
-    #[serde(default)]
-    pub can_change_to: Option<Vec<StatusTransition>>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[non_exhaustive]
-pub struct StatusTransition {
-    pub name: String,
 }
 
 /// The kind of saved query — determines which fields are meaningful.

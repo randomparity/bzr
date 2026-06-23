@@ -36,7 +36,6 @@ pub(crate) mod credentials;
 #[cfg(feature = "test-helpers")]
 pub mod credentials;
 pub mod error;
-pub(crate) mod field_aliases;
 pub(crate) mod http;
 #[expect(clippy::expect_used)]
 pub mod output;

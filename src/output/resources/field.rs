@@ -3,8 +3,7 @@ use std::io::Write;
 use serde::Serialize;
 
 use crate::output::formatting::{write_formatted, write_table_records, yes_no};
-use crate::types::bug::FieldValue;
-use crate::types::common::OutputFormat;
+use crate::types::{FieldValue, OutputFormat};
 
 const FIELD_VALUE_HEADERS: &[&str] = &["NAME", "ACTIVE", "CAN CHANGE TO"];
 const FIELD_ALIAS_HEADERS: &[&str] = &["ALIAS", "API FIELD NAME"];

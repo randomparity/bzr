@@ -5,6 +5,7 @@ pub(crate) mod classification;
 pub(crate) mod comment;
 pub(crate) mod common;
 pub(crate) mod component;
+pub(crate) mod field;
 pub(crate) mod group;
 pub(crate) mod product;
 pub(crate) mod user;
@@ -12,8 +13,8 @@ pub(crate) mod user;
 pub use attachment::{Attachment, UpdateAttachmentParams, UploadAttachmentParams};
 pub use bug::{
     partition_filters, Bug, BugTemplate, CommentUpdate, CreateBugParams, FieldChange, FieldMapping,
-    FieldValue, FilterField, HistoryEntry, IdListUpdate, NegationOp, Overrides, QueryKind,
-    SavedQuery, SearchParams, StatusTransition, StringListUpdate, UpdateBugParams, FIELD_MAPPINGS,
+    FilterField, HistoryEntry, IdListUpdate, NegationOp, Overrides, QueryKind, SavedQuery,
+    SearchParams, StringListUpdate, UpdateBugParams, FIELD_MAPPINGS,
 };
 pub use bug_fields::ColumnSpec;
 pub use classification::{Classification, ClassificationProduct};
@@ -23,11 +24,14 @@ pub use common::{
     ServerExtensions, ServerInfoResponse, ServerVersion, SortDirection,
 };
 pub use component::{Component, CreateComponentParams, UpdateComponentParams};
+pub use field::{FieldValue, StatusTransition};
 pub use group::{CreateGroupParams, GroupInfo, GroupMember, UpdateGroupParams};
 pub use product::{
     CreateProductParams, Milestone, Product, ProductListType, UpdateProductParams, Version,
 };
 pub use user::{BugzillaUser, CreateUserParams, UpdateUserParams, UserGroup, WhoamiResponse};
+
+pub(crate) use field::{resolve_field_alias, FIELD_ALIASES};
 
 #[cfg(test)]
 #[path = "mod_tests.rs"]

@@ -3,7 +3,7 @@ use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::resources::field::{write_field_aliases, write_field_values};
 use crate::output::writers::Writers;
-use crate::types::common::OutputFormat;
+use crate::types::{OutputFormat, FIELD_ALIASES};
 
 pub async fn execute(
     action: &FieldAction,
@@ -13,7 +13,7 @@ pub async fn execute(
     let format = ctx.format();
     match action {
         FieldAction::Aliases => {
-            write_field_aliases(crate::field_aliases::FIELD_ALIASES, format, w.out);
+            write_field_aliases(FIELD_ALIASES, format, w.out);
             return Ok(());
         }
         FieldAction::List { name } => {

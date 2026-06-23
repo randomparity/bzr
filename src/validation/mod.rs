@@ -10,8 +10,7 @@ pub mod datetime;
 pub use datetime::{parse_date_only, parse_iso8601_or_date, timestamp_compare_key};
 
 use crate::error::Result;
-use crate::field_aliases::resolve_field_alias;
-use crate::types::common::SortDirection;
+use crate::types::{resolve_field_alias, SortDirection};
 
 /// Validate an optional search date flag.
 pub fn parse_optional_date(opt: Option<&str>, flag: &str) -> Result<Option<String>> {

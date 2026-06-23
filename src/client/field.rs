@@ -2,8 +2,7 @@ use serde::Deserialize;
 
 use super::BugzillaClient;
 use crate::error::{BzrError, Result};
-use crate::field_aliases::resolve_field_alias;
-use crate::types::bug::FieldValue;
+use crate::types::{resolve_field_alias, FieldValue};
 
 #[derive(Deserialize)]
 struct FieldBugResponse {

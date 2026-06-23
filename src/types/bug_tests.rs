@@ -195,22 +195,6 @@ fn partition_filters_empty() {
 }
 
 #[test]
-fn field_value_null_name_becomes_empty() {
-    let json = r#"{"name": null, "sort_key": 0, "is_active": true}"#;
-    let fv: FieldValue = serde_json::from_str(json).unwrap();
-    assert!(fv.name.is_empty());
-}
-
-#[test]
-fn field_value_with_name() {
-    let json = r#"{"name": "RESOLVED", "sort_key": 5, "is_active": true}"#;
-    let fv: FieldValue = serde_json::from_str(json).unwrap();
-    assert_eq!(fv.name, "RESOLVED");
-    assert_eq!(fv.sort_key, 5);
-    assert!(fv.is_active);
-}
-
-#[test]
 fn saved_query_list_roundtrips_json() {
     let query = SavedQuery {
         kind: QueryKind::List,

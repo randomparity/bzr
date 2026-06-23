@@ -5,7 +5,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::client::test_helpers::test_client;
 use crate::error::BzrError;
-use crate::field_aliases::resolve_field_alias;
+use crate::types::resolve_field_alias;
 
 #[test]
 fn resolve_field_alias_maps_status() {
