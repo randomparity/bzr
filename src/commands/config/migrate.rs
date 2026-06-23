@@ -104,3 +104,7 @@ pub(super) fn handle(
     );
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "migrate_tests.rs"]
+mod tests;

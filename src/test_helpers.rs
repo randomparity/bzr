@@ -77,6 +77,148 @@ pub async fn setup_empty_config_env() -> (tokio::sync::MutexGuard<'static, ()>, 
     (lock, tmp)
 }
 
+// ── Config command test support ──────────────────────────────────────
+//
+// Shared by the per-leaf `config/*_tests.rs` siblings. Config commands are
+// local-only (no network client), so these helpers never start a mock
+// server; they drive `config::execute` against an XDG root pointed at a
+// temp dir by `setup_empty_config_env`.
+
+/// Path to the config file under the active XDG test root.
+///
+/// # Panics
+///
+/// Panics if the config path cannot be resolved.
+#[expect(clippy::unwrap_used)]
+pub fn config_path() -> std::path::PathBuf {
+    crate::config::Config::path_at(None).unwrap()
+}
+
+/// Load and validate the config under the active test root.
+///
+/// # Panics
+///
+/// Panics if the config cannot be loaded or fails validation.
+#[expect(clippy::unwrap_used)]
+pub fn load_config() -> crate::config::Config {
+    crate::config::Config::load_at(Some(&config_path())).unwrap()
+}
+
+/// Load the config *without* validation — for asserting on-disk states the
+/// validator rejects, such as the credential-less server `unset-keyring`
+/// leaves behind.
+///
+/// # Panics
+///
+/// Panics if the config file cannot be read or parsed.
+#[expect(clippy::unwrap_used)]
+pub fn load_config_unvalidated() -> crate::config::Config {
+    let content = std::fs::read_to_string(config_path()).unwrap();
+    toml::from_str(&content).unwrap()
+}
+
+/// Apply a validated mutation to the config under the active test root.
+pub fn update_config(
+    mutator: impl FnOnce(&mut crate::config::Config) -> crate::error::Result<()>,
+) -> crate::error::Result<crate::config::Config> {
+    crate::config::Config::update_locked_at(Some(&config_path()), mutator)
+}
+
+/// Apply a mutation *without* whole-config validation.
+pub fn update_config_without_validation(
+    mutator: impl FnOnce(&mut crate::config::Config) -> crate::error::Result<()>,
+) -> crate::error::Result<crate::config::Config> {
+    crate::config::Config::update_locked_without_validation_at(Some(&config_path()), mutator)
+}
+
+/// Seed an inline-API-key server via `config set-server`.
+///
+/// # Panics
+///
+/// Panics if the `set-server` command returns an error.
+#[expect(clippy::unwrap_used)]
+pub async fn seed_inline_server(name: &str, url: &str, api_key: &str) {
+    let mut io = CapturedIo::new();
+    crate::commands::config::execute(
+        &crate::cli::ConfigAction::SetServer {
+            name: name.into(),
+            url: url.into(),
+            api_key: Some(api_key.into()),
+            api_key_env: None,
+            email: None,
+            auth_method: None,
+            tls_insecure: false,
+            tls_ca_cert: None,
+            tls_pin_sha256: None,
+            tls_pin_now: false,
+            tls_pin_clear: false,
+        },
+        &crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::common::OutputFormat::Json,
+            None,
+        ),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap();
+}
+
+/// Run a `ConfigAction`, capture stdout, and parse it as JSON.
+///
+/// # Panics
+///
+/// Panics if the command errors or its stdout is not valid JSON.
+#[expect(clippy::unwrap_used)]
+pub async fn run_config_action_json(action: crate::cli::ConfigAction) -> serde_json::Value {
+    let mut io = CapturedIo::new();
+    crate::commands::config::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::common::OutputFormat::Json,
+            None,
+        ),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap();
+    serde_json::from_str(io.out_str().trim()).unwrap()
+}
+
+/// Seed a keyring-backed secret for `server` by priming the
+/// `BZR_KEYRING_TEST_SECRET` test hook and running `set-keyring`. The caller
+/// must already hold `ENV_LOCK` (via `setup_empty_config_env`) and have
+/// installed the test store with `keyring::install_test_store()`.
+///
+/// # Panics
+///
+/// Panics if the `set-keyring` command returns an error.
+#[cfg(feature = "keyring")]
+#[expect(clippy::unwrap_used)]
+pub async fn seed_keyring_secret(server: &str, secret: &str) {
+    let mut io = CapturedIo::new();
+    // SAFETY: Serialized via ENV_LOCK held by the caller's setup.
+    unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", secret) };
+    crate::commands::config::execute(
+        &crate::cli::ConfigAction::SetKeyring {
+            name: server.into(),
+            service: None,
+            account: None,
+        },
+        &crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::common::OutputFormat::Json,
+            None,
+        ),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap();
+    // SAFETY: Serialized via ENV_LOCK held by the caller's setup.
+    unsafe { std::env::remove_var("BZR_KEYRING_TEST_SECRET") };
+}
+
 /// Build a full-shaped attachment fixture with common test defaults.
 pub fn make_attachment(
     id: u64,

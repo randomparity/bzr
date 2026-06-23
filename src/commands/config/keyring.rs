@@ -150,3 +150,7 @@ fn read_secret_from_prompt_or_env(_service: &str, _account: &str) -> crate::erro
             .into(),
     ))
 }
+
+#[cfg(test)]
+#[path = "keyring_tests.rs"]
+mod tests;
