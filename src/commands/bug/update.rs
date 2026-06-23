@@ -333,17 +333,15 @@ async fn update_batch(
 }
 
 pub(super) async fn handle(
-    client: &BugzillaClient,
     args: &UpdateArgs,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     if let Some(arg) = args.from_json.as_deref() {
-        return super::update_json::handle(client, args, arg, ctx, w).await;
+        return super::update_json::handle(args, arg, ctx, w).await;
     }
     let (ids, params) = build_update_params(args)?;
     apply_checked(
-        client,
         ApplyRequest {
             ids,
             params,
@@ -377,12 +375,30 @@ fn write_update_dry_run(
     );
 }
 
+async fn apply_connected(
+    client: &BugzillaClient,
+    ids: Vec<u64>,
+    params: UpdateBugParams,
+    ctx: &CommandContext,
+    w: &mut Writers<'_>,
+) -> Result<()> {
+    let format = ctx.format();
+    if !confirm_batch(ids.len(), ctx.assume_yes(), w)? {
+        let _ = writeln!(w.err, "Aborted; no changes made.");
+        return Ok(());
+    }
+    if ids.len() == 1 {
+        update_single(client, ids[0], &params, format, w).await
+    } else {
+        update_batch(client, &ids, &params, format, w).await
+    }
+}
+
 /// Apply an already-built `UpdateBugParams` to one or more bug IDs, dispatching
 /// to the single- or batch-update path. Shared by `bug update` and the
 /// convenience verbs (`resolve`/`close`/`reopen`/`dup`). Under `--dry-run`,
 /// previews the change without calling the write API.
 pub(super) async fn apply(
-    client: &BugzillaClient,
     ids: Vec<u64>,
     params: UpdateBugParams,
     ctx: &CommandContext,
@@ -393,15 +409,8 @@ pub(super) async fn apply(
         write_update_dry_run(&ids, &params, format, w);
         return Ok(());
     }
-    if !confirm_batch(ids.len(), ctx.assume_yes(), w)? {
-        let _ = writeln!(w.err, "Aborted; no changes made.");
-        return Ok(());
-    }
-    if ids.len() == 1 {
-        update_single(client, ids[0], &params, format, w).await
-    } else {
-        update_batch(client, &ids, &params, format, w).await
-    }
+    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+    apply_connected(&client, ids, params, ctx, w).await
 }
 
 pub(super) struct ApplyRequest<'a> {
@@ -415,17 +424,21 @@ pub(super) struct ApplyRequest<'a> {
 /// The guard is skipped under `--dry-run`, which performs no write and whose
 /// preview still uses the same payload validation path.
 pub(super) async fn apply_checked(
-    client: &BugzillaClient,
     request: ApplyRequest<'_>,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    if let Some(expected) = request.expect_unchanged_since {
-        if !ctx.dry_run() {
-            ensure_unchanged_since(client, &request.ids, expected).await?;
-        }
+    let format = ctx.format();
+    if ctx.dry_run() {
+        write_update_dry_run(&request.ids, &request.params, format, w);
+        return Ok(());
     }
-    apply(client, request.ids, request.params, ctx, w).await
+    if let Some(expected) = request.expect_unchanged_since {
+        let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+        ensure_unchanged_since(&client, &request.ids, expected).await?;
+        return apply_connected(&client, request.ids, request.params, ctx, w).await;
+    }
+    apply(request.ids, request.params, ctx, w).await
 }
 
 /// Optimistic-concurrency guard for `--expect-unchanged-since`: refuse the

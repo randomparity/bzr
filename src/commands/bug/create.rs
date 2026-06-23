@@ -1,7 +1,6 @@
 use std::io::IsTerminal;
 
 use crate::cli::CreateArgs;
-use crate::client::BugzillaClient;
 use crate::commands::runtime::context::CommandContext;
 use crate::commands::runtime::editor;
 use crate::error::Result;
@@ -271,7 +270,6 @@ fn merge_template_vec(
 /// Create one bug and report it (or preview under `--dry-run`). Shared by the
 /// flag/editor path and the `--from-json` single-object path.
 pub(super) async fn create_and_report(
-    client: &BugzillaClient,
     params: &CreateBugParams,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
@@ -281,6 +279,7 @@ pub(super) async fn create_and_report(
         write_create_dry_run(params, format, w);
         return Ok(());
     }
+    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
     let id = client.create_bug(params).await?;
     write_result(
         &ActionResult::created(id, ResourceKind::Bug),
@@ -292,7 +291,6 @@ pub(super) async fn create_and_report(
 }
 
 pub(super) async fn handle(
-    client: &BugzillaClient,
     args: &CreateArgs,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
@@ -310,7 +308,7 @@ pub(super) async fn handle(
     } = args;
 
     if let Some(arg) = from_json {
-        return super::create_json::handle(client, args, arg, ctx, w).await;
+        return super::create_json::handle(args, arg, ctx, w).await;
     }
 
     let resolved_description =
@@ -360,7 +358,7 @@ pub(super) async fn handle(
         groups: merged.groups,
         flags,
     };
-    create_and_report(client, &params, ctx, w).await
+    create_and_report(&params, ctx, w).await
 }
 
 /// Emit the would-be create payload without writing, marked `"action":"dry-run"`.

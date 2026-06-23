@@ -59,7 +59,6 @@ async fn validate_target_status(
 }
 
 pub(super) async fn resolve(
-    client: &BugzillaClient,
     args: &ResolveArgs,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
@@ -71,7 +70,6 @@ pub(super) async fn resolve(
         ..Default::default()
     };
     super::update::apply_checked(
-        client,
         super::update::ApplyRequest {
             ids: args.ids.clone(),
             params,
@@ -84,7 +82,6 @@ pub(super) async fn resolve(
 }
 
 pub(super) async fn close(
-    client: &BugzillaClient,
     args: &CloseArgs,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
@@ -92,7 +89,10 @@ pub(super) async fn close(
     // Resolve the comment (local validation) before the network status check so
     // a bad --comment-private combination fails without a round-trip.
     let comment = comment_update(&args.comment)?;
-    validate_target_status(client, &args.status, ctx).await?;
+    if !ctx.dry_run() {
+        let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+        validate_target_status(&client, &args.status, ctx).await?;
+    }
     let params = UpdateBugParams {
         status: Some(args.status.clone()),
         resolution: args.as_resolution.clone(),
@@ -100,7 +100,6 @@ pub(super) async fn close(
         ..Default::default()
     };
     super::update::apply_checked(
-        client,
         super::update::ApplyRequest {
             ids: args.ids.clone(),
             params,
@@ -113,20 +112,21 @@ pub(super) async fn close(
 }
 
 pub(super) async fn reopen(
-    client: &BugzillaClient,
     args: &ReopenArgs,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let comment = comment_update(&args.comment)?;
-    validate_target_status(client, &args.status, ctx).await?;
+    if !ctx.dry_run() {
+        let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+        validate_target_status(&client, &args.status, ctx).await?;
+    }
     let params = UpdateBugParams {
         status: Some(args.status.clone()),
         comment,
         ..Default::default()
     };
     super::update::apply_checked(
-        client,
         super::update::ApplyRequest {
             ids: args.ids.clone(),
             params,
@@ -138,19 +138,13 @@ pub(super) async fn reopen(
     .await
 }
 
-pub(super) async fn dup(
-    client: &BugzillaClient,
-    args: &DupArgs,
-    ctx: &CommandContext,
-    w: &mut Writers<'_>,
-) -> Result<()> {
+pub(super) async fn dup(args: &DupArgs, ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
     let params = UpdateBugParams {
         dupe_of: Some(args.target),
         comment: comment_update(&args.comment)?,
         ..Default::default()
     };
     super::update::apply_checked(
-        client,
         super::update::ApplyRequest {
             ids: vec![args.id],
             params,

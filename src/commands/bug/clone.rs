@@ -9,7 +9,6 @@ use crate::types::{CreateBugParams, OutputFormat};
 use crate::validation::parse_optional_date_only;
 
 pub(super) async fn handle(
-    client: &BugzillaClient,
     args: &CloneArgs,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
@@ -37,24 +36,15 @@ pub(super) async fn handle(
 
     let flags = parse_flags(&create_fields.flag)?;
     let deadline = parse_optional_date_only(create_fields.deadline.as_deref(), "--deadline")?;
+    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
 
     // Fetch source bug with all fields needed for cloning
     let source = client.get_bug(id, None, None).await?;
 
-    // Get description from comment #0
-    let clone_description = if description.is_some() {
-        description.clone()
-    } else {
-        let comments = client.get_comments_since(source.id, None).await?;
-        comments.into_iter().find(|c| c.count == 0).map(|c| c.text)
-    };
-
-    let source_product = source.product.ok_or_else(|| {
-        crate::error::BzrError::DataIntegrity("source bug missing product field".into())
-    })?;
-    let source_component = source.component.ok_or_else(|| {
-        crate::error::BzrError::DataIntegrity("source bug missing component field".into())
-    })?;
+    let clone_description =
+        resolve_source_description(&client, source.id, description.as_deref()).await?;
+    let source_product = required_source_field(source.product, "product")?;
+    let source_component = required_source_field(source.component, "component")?;
 
     let mut blocks = Vec::new();
     if *add_blocks {
@@ -129,6 +119,24 @@ pub(super) async fn handle(
         w.out,
     );
     Ok(())
+}
+
+async fn resolve_source_description(
+    client: &BugzillaClient,
+    source_id: u64,
+    explicit: Option<&str>,
+) -> Result<Option<String>> {
+    if let Some(description) = explicit {
+        return Ok(Some(description.to_string()));
+    }
+    let comments = client.get_comments_since(source_id, None).await?;
+    Ok(comments.into_iter().find(|c| c.count == 0).map(|c| c.text))
+}
+
+fn required_source_field(value: Option<String>, field: &str) -> Result<String> {
+    value.ok_or_else(|| {
+        crate::error::BzrError::DataIntegrity(format!("source bug missing {field} field"))
+    })
 }
 
 fn clone_list(

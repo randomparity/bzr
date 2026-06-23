@@ -289,7 +289,6 @@ fn write_json_array_dry_run(
 }
 
 async fn update_many_from_json(
-    client: &BugzillaClient,
     requests: &[JsonUpdateRequest],
     ctx: &CommandContext,
     w: &mut Writers<'_>,
@@ -304,7 +303,8 @@ async fn update_many_from_json(
         return Ok(());
     }
 
-    let preflight_failures = preflight_expect_unchanged_since(client, requests).await;
+    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+    let preflight_failures = preflight_expect_unchanged_since(&client, requests).await;
     if !preflight_failures.is_empty() {
         let batch = BatchResult::new(Vec::new(), preflight_failures);
         let with_comment = requests
@@ -355,7 +355,6 @@ async fn preflight_expect_unchanged_since(
 }
 
 pub(super) async fn handle(
-    client: &BugzillaClient,
     args: &UpdateArgs,
     arg: &str,
     ctx: &CommandContext,
@@ -370,7 +369,6 @@ pub(super) async fn handle(
             let ids = object_ids(&entry, args)?;
             let (ids, params, expect_unchanged_since) = build_from_json(*entry, args, &ids)?;
             super::update::apply_checked(
-                client,
                 super::update::ApplyRequest {
                     ids,
                     params,
@@ -397,7 +395,7 @@ pub(super) async fn handle(
             for (index, entry) in entries.into_iter().enumerate() {
                 requests.push(build_array_request(entry, args, index)?);
             }
-            update_many_from_json(client, &requests, ctx, w).await
+            update_many_from_json(&requests, ctx, w).await
         }
     }
 }
