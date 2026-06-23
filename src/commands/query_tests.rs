@@ -1,9 +1,9 @@
 #![expect(clippy::unwrap_used)]
 
-use crate::cli::query::{
-    DeleteArgs, QueryFilterArgs, QueryRunFilterArgs, RunArgs, SaveArgs, ShowArgs, UpdateArgs,
+use crate::cli::{
+    DeleteArgs, QueryAction, QueryFilterArgs, QueryRunFilterArgs, QueryUpdateArgs, RunArgs,
+    SaveArgs, ShowArgs,
 };
-use crate::cli::QueryAction;
 use crate::config::Config;
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
@@ -1741,7 +1741,7 @@ async fn query_save_persists_explicit_sort() {
 // ── Update (#315) ───────────────────────────────────────────────────
 
 fn empty_update(name: &str) -> QueryAction {
-    QueryAction::Update(UpdateArgs {
+    QueryAction::Update(QueryUpdateArgs {
         name: name.into(),
         from_url: None,
         search: None,
@@ -1784,7 +1784,7 @@ async fn query_update_replaces_filter_keeps_rest() {
     run_q(&save_action("q")).await.unwrap(); // product=Firefox, status=NEW, limit=25
 
     let mut a = empty_update("q");
-    if let QueryAction::Update(UpdateArgs { filters, .. }) = &mut a {
+    if let QueryAction::Update(QueryUpdateArgs { filters, .. }) = &mut a {
         filters.status = vec!["ASSIGNED".into()];
     }
     run_q(&a).await.unwrap();
@@ -1802,7 +1802,7 @@ async fn query_update_replaces_limit() {
     run_q(&save_action("q")).await.unwrap();
 
     let mut a = empty_update("q");
-    if let QueryAction::Update(UpdateArgs { limit, .. }) = &mut a {
+    if let QueryAction::Update(QueryUpdateArgs { limit, .. }) = &mut a {
         *limit = Some(100);
     }
     run_q(&a).await.unwrap();
@@ -1816,7 +1816,7 @@ async fn query_update_clear_resets_filter() {
     run_q(&save_action("q")).await.unwrap();
 
     let mut a = empty_update("q");
-    if let QueryAction::Update(UpdateArgs { clear, .. }) = &mut a {
+    if let QueryAction::Update(QueryUpdateArgs { clear, .. }) = &mut a {
         *clear = vec!["status".into()];
     }
     run_q(&a).await.unwrap();
@@ -1830,7 +1830,7 @@ async fn query_update_clear_resets_filter() {
 async fn query_update_unknown_query_errors() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
     let mut a = empty_update("missing");
-    if let QueryAction::Update(UpdateArgs { filters, .. }) = &mut a {
+    if let QueryAction::Update(QueryUpdateArgs { filters, .. }) = &mut a {
         filters.status = vec!["NEW".into()];
     }
     let err = run_q(&a).await.unwrap_err();
@@ -1850,7 +1850,7 @@ async fn query_update_unknown_clear_field_errors() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
     run_q(&save_action("q")).await.unwrap();
     let mut a = empty_update("q");
-    if let QueryAction::Update(UpdateArgs { clear, .. }) = &mut a {
+    if let QueryAction::Update(QueryUpdateArgs { clear, .. }) = &mut a {
         *clear = vec!["bogus".into()];
     }
     let err = run_q(&a).await.unwrap_err();
@@ -1865,7 +1865,7 @@ async fn query_update_clearing_all_filters_rejected() {
         .unwrap(); // only product
 
     let mut a = empty_update("q");
-    if let QueryAction::Update(UpdateArgs { clear, .. }) = &mut a {
+    if let QueryAction::Update(QueryUpdateArgs { clear, .. }) = &mut a {
         *clear = vec!["product".into()];
     }
     let err = run_q(&a).await.unwrap_err();
@@ -1877,7 +1877,7 @@ async fn query_update_bad_date_errors() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
     run_q(&save_action("q")).await.unwrap();
     let mut a = empty_update("q");
-    if let QueryAction::Update(UpdateArgs { created_since, .. }) = &mut a {
+    if let QueryAction::Update(QueryUpdateArgs { created_since, .. }) = &mut a {
         *created_since = Some("not-a-date".into());
     }
     assert!(run_q(&a).await.is_err());
@@ -1889,7 +1889,7 @@ async fn query_update_clear_wins_over_set() {
     run_q(&save_action("q")).await.unwrap(); // product=Firefox, status=NEW
 
     let mut a = empty_update("q");
-    if let QueryAction::Update(UpdateArgs { filters, clear, .. }) = &mut a {
+    if let QueryAction::Update(QueryUpdateArgs { filters, clear, .. }) = &mut a {
         filters.status = vec!["ASSIGNED".into()];
         *clear = vec!["status".into()];
     }
@@ -1962,7 +1962,7 @@ async fn query_update_sets_dates_and_sort() {
     run_q(&save_action("q")).await.unwrap();
 
     let mut a = empty_update("q");
-    if let QueryAction::Update(UpdateArgs {
+    if let QueryAction::Update(QueryUpdateArgs {
         created_since,
         changed_since,
         sort_args,
@@ -1997,7 +1997,7 @@ async fn query_update_from_url_replaces_existing_query() {
         mock.uri()
     );
     let mut update = empty_update("web");
-    if let QueryAction::Update(UpdateArgs {
+    if let QueryAction::Update(QueryUpdateArgs {
         from_url,
         limit,
         fields,
@@ -2058,7 +2058,7 @@ async fn query_update_only_product_is_a_change() {
     run_q(&save_action("q")).await.unwrap(); // product=Firefox, status=NEW
 
     let mut a = empty_update("q");
-    if let QueryAction::Update(UpdateArgs { filters, .. }) = &mut a {
+    if let QueryAction::Update(QueryUpdateArgs { filters, .. }) = &mut a {
         filters.product = vec!["Thunderbird".into()];
     }
     run_q(&a).await.unwrap(); // must NOT fail with "no changes"
@@ -2079,7 +2079,7 @@ async fn query_update_only_component_is_a_change() {
     run_q(&save_action("q")).await.unwrap();
 
     let mut a = empty_update("q");
-    if let QueryAction::Update(UpdateArgs { filters, .. }) = &mut a {
+    if let QueryAction::Update(QueryUpdateArgs { filters, .. }) = &mut a {
         filters.component = vec!["General".into()];
     }
     run_q(&a).await.unwrap();

@@ -85,11 +85,11 @@ pub async fn execute(
 
 async fn upload(
     client: &BugzillaClient,
-    args: &crate::cli::attachment::UploadArgs,
+    args: &crate::cli::UploadArgs,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let crate::cli::attachment::UploadArgs {
+    let crate::cli::UploadArgs {
         bug_id,
         file,
         summary,
@@ -177,11 +177,11 @@ fn resolve_upload_comment(
 
 async fn update(
     client: &BugzillaClient,
-    args: &crate::cli::attachment::UpdateArgs,
+    args: &crate::cli::AttachmentUpdateArgs,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let crate::cli::attachment::UpdateArgs {
+    let crate::cli::AttachmentUpdateArgs {
         id,
         summary,
         file_name,
@@ -239,7 +239,7 @@ async fn view_attachment(
 
 fn validate_action(action: &AttachmentAction) -> Result<()> {
     match action {
-        AttachmentAction::Upload(crate::cli::attachment::UploadArgs {
+        AttachmentAction::Upload(crate::cli::UploadArgs {
             comment_private: true,
             comment: None,
             comment_file: None,
@@ -269,7 +269,7 @@ fn validate_action(action: &AttachmentAction) -> Result<()> {
     }
 }
 
-fn update_has_changes(args: &crate::cli::attachment::UpdateArgs) -> bool {
+fn update_has_changes(args: &crate::cli::AttachmentUpdateArgs) -> bool {
     args.summary.is_some()
         || args.file_name.is_some()
         || args.content_type.is_some()

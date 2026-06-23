@@ -4,8 +4,7 @@ use super::*;
 use wiremock::matchers::{body_string_contains, method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
-use crate::cli::attachment::{UpdateArgs, UploadArgs};
-use crate::cli::AttachmentAction;
+use crate::cli::{AttachmentAction, AttachmentUpdateArgs, UploadArgs};
 use crate::test_helpers::{make_attachment, setup_test_env};
 use crate::types::OutputFormat;
 
@@ -467,7 +466,7 @@ async fn attachment_update_succeeds() {
         .mount(&mock)
         .await;
 
-    let action = AttachmentAction::Update(UpdateArgs {
+    let action = AttachmentAction::Update(AttachmentUpdateArgs {
         id: 99,
         summary: Some("Updated summary".into()),
         file_name: None,
@@ -511,7 +510,7 @@ async fn attachment_update_no_obsolete_sends_false() {
         .mount(&mock)
         .await;
 
-    let action = AttachmentAction::Update(UpdateArgs {
+    let action = AttachmentAction::Update(AttachmentUpdateArgs {
         id: 7,
         summary: None,
         file_name: None,
@@ -544,7 +543,7 @@ async fn attachment_update_unset_bools_are_omitted() {
         .mount(&mock)
         .await;
 
-    let action = AttachmentAction::Update(UpdateArgs {
+    let action = AttachmentAction::Update(AttachmentUpdateArgs {
         id: 8,
         summary: Some("only summary".into()),
         file_name: None,
@@ -579,7 +578,7 @@ async fn attachment_update_without_changes_is_rejected_before_put() {
         .mount(&mock)
         .await;
 
-    let action = AttachmentAction::Update(UpdateArgs {
+    let action = AttachmentAction::Update(AttachmentUpdateArgs {
         id: 8,
         summary: None,
         file_name: None,

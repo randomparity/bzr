@@ -74,11 +74,11 @@ fn saved_query_from_url(url_str: &str, overrides: UrlQueryOverrides<'_>) -> Resu
 }
 
 fn handle_save(
-    args: &crate::cli::query::SaveArgs,
+    args: &crate::cli::SaveArgs,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let crate::cli::query::SaveArgs {
+    let crate::cli::SaveArgs {
         name,
         from_url,
         search,
@@ -156,7 +156,7 @@ fn handle_list(format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
 }
 
 fn handle_show(
-    args: &crate::cli::query::ShowArgs,
+    args: &crate::cli::ShowArgs,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
@@ -171,7 +171,7 @@ fn handle_show(
 }
 
 fn handle_delete(
-    args: &crate::cli::query::DeleteArgs,
+    args: &crate::cli::DeleteArgs,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
@@ -229,11 +229,11 @@ fn clear_query_field(q: &mut SavedQuery, field: &str) -> Result<()> {
 /// no-op call).
 fn apply_query_updates(
     q: &mut SavedQuery,
-    args: &crate::cli::query::UpdateArgs,
+    args: &crate::cli::QueryUpdateArgs,
     creation_time: Option<&str>,
     last_change_time: Option<&str>,
 ) -> Result<bool> {
-    let crate::cli::query::UpdateArgs {
+    let crate::cli::QueryUpdateArgs {
         search,
         filters,
         url,
@@ -276,11 +276,11 @@ fn apply_query_updates(
 }
 
 fn handle_update(
-    args: &crate::cli::query::UpdateArgs,
+    args: &crate::cli::QueryUpdateArgs,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let crate::cli::query::UpdateArgs {
+    let crate::cli::QueryUpdateArgs {
         name,
         from_url,
         limit,
@@ -359,13 +359,13 @@ fn handle_update(
 }
 
 async fn handle_run(
-    args: &crate::cli::query::RunArgs,
+    args: &crate::cli::RunArgs,
     server: Option<&str>,
     format: OutputFormat,
     api: Option<crate::types::ApiMode>,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let crate::cli::query::RunArgs {
+    let crate::cli::RunArgs {
         name,
         limit,
         count,

@@ -1313,7 +1313,7 @@ async fn attachment_upload_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::AttachmentAction::Upload(bzr::cli::attachment::UploadArgs {
+    let action = bzr::cli::AttachmentAction::Upload(bzr::cli::UploadArgs {
         bug_id: 42,
         file: upload_file.to_string_lossy().into_owned(),
         summary: Some("Test upload".to_string()),
@@ -1360,7 +1360,7 @@ async fn attachment_upload_with_comment_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::AttachmentAction::Upload(bzr::cli::attachment::UploadArgs {
+    let action = bzr::cli::AttachmentAction::Upload(bzr::cli::UploadArgs {
         bug_id: 42,
         file: upload_file.to_string_lossy().into_owned(),
         summary: Some("Test upload".to_string()),
@@ -1406,7 +1406,7 @@ async fn attachment_upload_with_is_patch_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::AttachmentAction::Upload(bzr::cli::attachment::UploadArgs {
+    let action = bzr::cli::AttachmentAction::Upload(bzr::cli::UploadArgs {
         bug_id: 42,
         file: upload_file.to_string_lossy().into_owned(),
         summary: Some("Test patch".to_string()),
@@ -1475,7 +1475,7 @@ async fn attachment_upload_with_comment_private_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::AttachmentAction::Upload(bzr::cli::attachment::UploadArgs {
+    let action = bzr::cli::AttachmentAction::Upload(bzr::cli::UploadArgs {
         bug_id: 42,
         file: upload_file.to_string_lossy().into_owned(),
         summary: Some("test".into()),
@@ -1560,7 +1560,7 @@ async fn attachment_update_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::AttachmentAction::Update(bzr::cli::attachment::UpdateArgs {
+    let action = bzr::cli::AttachmentAction::Update(bzr::cli::AttachmentUpdateArgs {
         id: 99,
         summary: Some("Updated summary".to_string()),
         file_name: None,

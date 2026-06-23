@@ -1887,7 +1887,7 @@ fn parse_query_save_list_kind() {
     match cli.command {
         Commands::Query {
             action:
-                QueryAction::Save(super::query::SaveArgs {
+                QueryAction::Save(super::SaveArgs {
                     name,
                     filters,
                     limit,
@@ -1919,7 +1919,7 @@ fn parse_query_save_search_kind() {
     match cli.command {
         Commands::Query {
             action:
-                QueryAction::Save(super::query::SaveArgs {
+                QueryAction::Save(super::SaveArgs {
                     name,
                     search,
                     limit,
@@ -1939,7 +1939,7 @@ fn parse_query_run() {
     let cli = Cli::try_parse_from(["bzr", "query", "run", "firefox-new"]).unwrap();
     match cli.command {
         Commands::Query {
-            action: QueryAction::Run(super::query::RunArgs { name, limit, .. }),
+            action: QueryAction::Run(super::RunArgs { name, limit, .. }),
         } => {
             assert_eq!(name, "firefox-new");
             assert!(limit.is_none());
@@ -1953,7 +1953,7 @@ fn parse_query_run_with_limit_override() {
     let cli = Cli::try_parse_from(["bzr", "query", "run", "firefox-new", "--limit", "10"]).unwrap();
     match cli.command {
         Commands::Query {
-            action: QueryAction::Run(super::query::RunArgs { name, limit, .. }),
+            action: QueryAction::Run(super::RunArgs { name, limit, .. }),
         } => {
             assert_eq!(name, "firefox-new");
             assert_eq!(limit, Some(10));
@@ -1967,7 +1967,7 @@ fn parse_query_run_count() {
     let cli = Cli::try_parse_from(["bzr", "query", "run", "firefox-new", "--count"]).unwrap();
     match cli.command {
         Commands::Query {
-            action: QueryAction::Run(super::query::RunArgs { name, count, .. }),
+            action: QueryAction::Run(super::RunArgs { name, count, .. }),
         } => {
             assert_eq!(name, "firefox-new");
             assert!(count);
@@ -1992,7 +1992,7 @@ fn parse_query_show() {
     let cli = Cli::try_parse_from(["bzr", "query", "show", "firefox-new"]).unwrap();
     match cli.command {
         Commands::Query {
-            action: QueryAction::Show(super::query::ShowArgs { name }),
+            action: QueryAction::Show(super::ShowArgs { name }),
         } => {
             assert_eq!(name, "firefox-new");
         }
@@ -2005,7 +2005,7 @@ fn parse_query_delete() {
     let cli = Cli::try_parse_from(["bzr", "query", "delete", "firefox-new"]).unwrap();
     match cli.command {
         Commands::Query {
-            action: QueryAction::Delete(super::query::DeleteArgs { name }),
+            action: QueryAction::Delete(super::DeleteArgs { name }),
         } => {
             assert_eq!(name, "firefox-new");
         }
@@ -2204,7 +2204,7 @@ fn parse_attachment_upload_with_summary() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     bug_id,
                     file,
                     summary,
@@ -2233,7 +2233,7 @@ fn parse_attachment_upload_with_private_flag() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     bug_id, private, ..
                 }),
         } => {
@@ -2249,7 +2249,7 @@ fn parse_attachment_upload_without_private_defaults_to_false() {
     let cli = Cli::try_parse_from(["bzr", "attachment", "upload", "42", "f.txt"]).unwrap();
     match cli.command {
         Commands::Attachment {
-            action: AttachmentAction::Upload(super::attachment::UploadArgs { private, .. }),
+            action: AttachmentAction::Upload(super::UploadArgs { private, .. }),
         } => assert!(!private, "--private absent should default to false"),
         _ => panic!("expected Attachment Upload"),
     }
@@ -2270,7 +2270,7 @@ fn parse_attachment_upload_with_comment() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     bug_id,
                     file,
                     comment,
@@ -2300,7 +2300,7 @@ fn parse_attachment_upload_with_comment_dash() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     bug_id, comment, ..
                 }),
         } => {
@@ -2326,7 +2326,7 @@ fn parse_attachment_upload_with_comment_file() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     bug_id,
                     comment_file,
                     ..
@@ -2357,7 +2357,7 @@ fn parse_attachment_upload_with_comment_file_dash() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     bug_id,
                     comment_file,
                     ..
@@ -2394,7 +2394,7 @@ fn parse_attachment_upload_without_comment_defaults_to_none() {
     let cli = Cli::try_parse_from(["bzr", "attachment", "upload", "42", "f.txt"]).unwrap();
     match cli.command {
         Commands::Attachment {
-            action: AttachmentAction::Upload(super::attachment::UploadArgs { comment, .. }),
+            action: AttachmentAction::Upload(super::UploadArgs { comment, .. }),
         } => assert!(comment.is_none(), "--comment absent should default to None"),
         _ => panic!("expected Attachment Upload"),
     }
@@ -2407,7 +2407,7 @@ fn parse_attachment_upload_with_patch_flag() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     bug_id,
                     patch,
                     no_patch,
@@ -2428,7 +2428,7 @@ fn parse_attachment_upload_without_patch_defaults_to_false() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     patch, no_patch, ..
                 }),
         } => {
@@ -2448,7 +2448,7 @@ fn parse_attachment_no_patch_overrides_patch() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Update(super::attachment::UpdateArgs {
+                AttachmentAction::Update(super::AttachmentUpdateArgs {
                     patch, no_patch, ..
                 }),
         } => {
@@ -2486,7 +2486,7 @@ fn parse_attachment_upload_with_comment_private() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     bug_id,
                     comment,
                     comment_private,
@@ -2507,7 +2507,7 @@ fn parse_attachment_upload_without_comment_private_defaults_to_false() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     comment_private, ..
                 }),
         } => assert!(
@@ -2668,7 +2668,7 @@ fn query_save_parses_158_field_filters() {
     ])
     .unwrap();
     let Commands::Query {
-        action: QueryAction::Save(super::query::SaveArgs { filters, url, .. }),
+        action: QueryAction::Save(super::SaveArgs { filters, url, .. }),
     } = cli.command
     else {
         panic!("expected Query::Save variant");
@@ -2709,7 +2709,7 @@ fn query_run_parses_158_field_filter_overrides() {
     ])
     .unwrap();
     let Commands::Query {
-        action: QueryAction::Run(super::query::RunArgs { filters, url, .. }),
+        action: QueryAction::Run(super::RunArgs { filters, url, .. }),
     } = cli.command
     else {
         panic!("expected Query::Run variant");
@@ -2869,7 +2869,7 @@ fn parse_query_save_search_alone_is_accepted() {
     .unwrap();
     match cli.command {
         Commands::Query {
-            action: QueryAction::Save(super::query::SaveArgs { name, search, .. }),
+            action: QueryAction::Save(super::SaveArgs { name, search, .. }),
         } => {
             assert_eq!(name, "crashes");
             assert_eq!(search.as_deref(), Some("crash in tab"));
@@ -2951,7 +2951,7 @@ fn parse_query_update_accepts_from_url_with_refresh_overrides() {
     match cli.command {
         Commands::Query {
             action:
-                QueryAction::Update(super::query::UpdateArgs {
+                QueryAction::Update(super::QueryUpdateArgs {
                     name,
                     from_url,
                     limit,

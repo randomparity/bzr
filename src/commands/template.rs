@@ -136,11 +136,11 @@ fn clear_template_field(t: &mut BugTemplate, field: &str) -> Result<()> {
 /// flag replaces that field; `--clear <field>` resets it; omitted flags are
 /// left unchanged. Rejects a no-op call and a result with no fields set.
 fn handle_update(
-    args: &crate::cli::template::UpdateArgs,
+    args: &crate::cli::TemplateUpdateArgs,
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let crate::cli::template::UpdateArgs {
+    let crate::cli::TemplateUpdateArgs {
         name,
         fields,
         clear,

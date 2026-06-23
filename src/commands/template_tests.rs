@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used)]
 
-use crate::cli::template::UpdateArgs;
+use crate::cli::TemplateUpdateArgs;
 use crate::cli::{TemplateAction, TemplateFields};
 use crate::config::Config;
 use crate::test_helpers::setup_test_env;
@@ -464,7 +464,7 @@ fn update_action(
     severity: Option<&str>,
     clear: &[&str],
 ) -> TemplateAction {
-    TemplateAction::Update(UpdateArgs {
+    TemplateAction::Update(TemplateUpdateArgs {
         name: name.into(),
         fields: TemplateFields {
             product: product.map(Into::into),
@@ -539,7 +539,7 @@ async fn template_update_merges_and_clears_create_metadata_fields() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
     run(&save_action("routing")).await.unwrap();
 
-    run(&TemplateAction::Update(UpdateArgs {
+    run(&TemplateAction::Update(TemplateUpdateArgs {
         name: "routing".into(),
         fields: TemplateFields {
             url: Some("https://example.com/updated".into()),
@@ -568,7 +568,7 @@ async fn template_update_merges_and_clears_create_metadata_fields() {
     assert_eq!(t.groups, vec!["security"]);
     assert_eq!(t.flags, vec!["review+"]);
 
-    run(&TemplateAction::Update(UpdateArgs {
+    run(&TemplateAction::Update(TemplateUpdateArgs {
         name: "routing".into(),
         fields: TemplateFields::default(),
         clear: vec![

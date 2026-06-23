@@ -1,5 +1,5 @@
-pub mod attachment;
-pub mod bug;
+mod attachment;
+mod bug;
 mod classification;
 mod comment;
 mod component;
@@ -7,12 +7,12 @@ mod config;
 mod field;
 mod group;
 mod product;
-pub mod query;
+mod query;
 mod server;
-pub mod template;
+mod template;
 mod user;
 
-pub use attachment::AttachmentAction;
+pub use attachment::{AttachmentAction, UpdateArgs as AttachmentUpdateArgs, UploadArgs};
 pub use bug::{
     BugAction, CloneCreateFieldArgs, CommentArgs, CreateFieldArgs, FieldArgs, PageArgs, SortArgs,
 };
@@ -27,9 +27,12 @@ pub use config::ConfigAction;
 pub use field::FieldAction;
 pub use group::GroupAction;
 pub use product::ProductAction;
-pub use query::QueryAction;
+pub use query::{
+    DeleteArgs, QueryAction, QueryFilterArgs, QueryRunFilterArgs, RunArgs, SaveArgs, ShowArgs,
+    UpdateArgs as QueryUpdateArgs,
+};
 pub use server::ServerAction;
-pub use template::{TemplateAction, TemplateFields};
+pub use template::{TemplateAction, TemplateFields, UpdateArgs as TemplateUpdateArgs};
 pub use user::UserAction;
 
 use clap::{Parser, Subcommand};
