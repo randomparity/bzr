@@ -87,9 +87,35 @@ pre-configured, so no `--server` flag or auth round-trip is needed).
    (`BugAction::List(ListArgs { … })`) and call
    `bzr::commands::<resource>::execute(&action, &ctx, w)` migrate to the
    `dispatch_cli*` helpers with the equivalent argv. The wiremock mocks and
-   response assertions are unchanged; only the invocation changes. Each migrated
-   test exercises strictly more of the real path (arg parsing + context build +
-   dispatch) than the old direct-`execute` call.
+   response assertions are unchanged; only the invocation changes.
+
+   **The migration is not context-equivalent — verify each test individually.**
+   The old tests pass a *bare* context: `CommandContext::new(Some("test"), Json,
+   None)`, where `credential_requirement`, `retry_max`, `request_timeout`,
+   `dry_run`, and `assume_yes` all hold their defaults (in particular
+   `credential_requirement = None`, `context.rs:36`). `dispatch` instead routes
+   through `build_command_context` (`src/lib.rs:127`), which sets
+   `.with_credential_requirement(command_requires_credentials(&cli.command))`
+   plus retry/timeout/dry-run/assume-yes from the parsed flags.
+   `connect_and_configure` consults that field —
+   `if let Some(name) = command.credential_requirement() {
+   require_credentials_for_connection(…)? }` (`connection.rs:540`) — so a
+   migrated *write*-command test now traverses a credential-enforcement branch
+   the original skipped. It passes because `setup_config` writes
+   `api_key = "test-key"`, but this must be confirmed, not assumed.
+
+   Migration obligation, per test:
+   - Confirm the assertion outcome is unchanged: same `Ok`/`Err`, same
+     `wiremock` `expect(n)` match, same captured stdout/JSON.
+   - For credential-requiring commands, confirm the configured test creds
+     satisfy the now-active credential gate (they do under the default
+     `setup_test_env` config; a test that deliberately ran credential-free must
+     keep that intent — see R5).
+   - If an action carries a value the CLI layer rejects or normalizes at
+     parse/validation time (so the value reaching `execute` via `dispatch`
+     would differ from the hand-built action), do **not** force it through
+     `dispatch`; move that assertion into a `src/cli/*_tests.rs` parser unit
+     test instead.
 
 8. **Parser-structure assertions that name inner types**
    (e.g. `if let BugAction::List(ListArgs { .. })`,
@@ -125,15 +151,30 @@ pre-configured, so no `--server` flag or auth round-trip is needed).
   job stays green.
 - No change to any user-visible output, exit code, or parse behavior. The full
   test suite passing is the behavior-preservation proof.
+- No migrated test changes its pass/fail outcome: each test asserts the same
+  `Ok`/`Err`, the same `wiremock` `expect(n)` match, and the same captured
+  output before and after migration. A test whose outcome would flip under
+  `dispatch` is a defect in the migration, not an accepted change.
 
 ## Risks and mitigations
 
-- **R1 — argv→dispatch differs from direct execute (server/auth/context).**
-  Mitigation: the test config pre-resolves the `test` server with header auth and
-  `api_mode = "rest"`, so `build_command_context` + `connect_and_configure`
-  reach the same client the old tests used; the existing `dispatch_cli`-based
-  tests in the same file already prove this works. Any test that genuinely needs
-  a non-default context flag (timeout, dry-run) passes it as an argv flag.
+- **R1 — argv→dispatch context differs from direct execute.** `execute()` and
+  `dispatch` share the same `connect_and_configure` path, but the *context* they
+  pass differs: `dispatch` enriches it via `build_command_context`
+  (`credential_requirement`, retry, timeout, dry-run, assume-yes) where the old
+  tests passed a bare `CommandContext::new`. The concrete behavioral hinge is the
+  credential gate at `connection.rs:540`. Mitigation: the default
+  `setup_test_env` config supplies header auth + `api_key`, satisfying the gate;
+  the per-test migration obligation in item 7 requires confirming outcome
+  equality rather than assuming it. The existing `dispatch_cli`-based tests in
+  the same file already exercise this enriched path against the same config.
+- **R5 — a test deliberately ran a credential-requiring command without
+  credentials.** Such a test would now fail at the `connection.rs:540` gate.
+  Mitigation: audit for tests that assert a *non-auth* error from a
+  credential-requiring command under the default config; if any exist, keep
+  their original intent (e.g. by asserting the credential error explicitly, or
+  by leaving that specific assertion as a parser/unit test) rather than
+  silently absorbing the gate.
 - **R2 — a test asserted on something only reachable via the constructed
   action.** Mitigation: audit each migrated test; if a behavioral assertion is
   not expressible through dispatch, move that specific check into a
