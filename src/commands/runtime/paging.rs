@@ -14,7 +14,7 @@
 //! `truncated` is set deterministically and the surplus row trimmed away.
 
 use crate::client::BugzillaClient;
-use crate::error::Result;
+use crate::error::{BzrError, Result};
 use crate::output::writers::Writers;
 use crate::types::{Bug, OutputFormat, SearchParams};
 
@@ -46,8 +46,9 @@ pub(crate) struct Page {
 }
 
 /// Fetch results honoring `--offset`/`--paginate`. With `paginate`, returns
-/// every match (never truncated). Otherwise returns one window, with
-/// `truncated` set when the server had more rows than `limit`.
+/// every match or errors if the safety cap is reached before a short page.
+/// Otherwise returns one window, with `truncated` set when the server had more
+/// rows than `limit`.
 pub(crate) async fn fetch_page(
     client: &BugzillaClient,
     params: &SearchParams,
@@ -81,13 +82,21 @@ pub(crate) async fn fetch_page(
 /// return the accumulated matches. A zero/absent limit means the single
 /// unbounded request already returns everything (bounded by the server max).
 async fn fetch_all_pages(client: &BugzillaClient, params: &SearchParams) -> Result<Vec<Bug>> {
+    fetch_all_pages_with_cap(client, params, MAX_PAGES).await
+}
+
+async fn fetch_all_pages_with_cap(
+    client: &BugzillaClient,
+    params: &SearchParams,
+    max_pages: u32,
+) -> Result<Vec<Bug>> {
     let Some(page_size) = params.limit.filter(|l| *l > 0) else {
         return client.search_bugs(params).await;
     };
     let mut offset = params.offset.unwrap_or(0);
     let mut all = Vec::new();
     let mut reached_last_page = false;
-    for _ in 0..MAX_PAGES {
+    for _ in 0..max_pages {
         let mut p = params.clone();
         p.offset = Some(offset);
         let batch = client.search_bugs(&p).await?;
@@ -100,13 +109,10 @@ async fn fetch_all_pages(client: &BugzillaClient, params: &SearchParams) -> Resu
         offset = offset.saturating_add(page_size);
     }
     if !reached_last_page {
-        // Hit the safety cap without a short page — almost always a server that
-        // ignores `offset`. Surface it rather than silently returning a
-        // possibly-incomplete (and duplicate-laden) set.
-        tracing::warn!(
-            "--paginate stopped at the {MAX_PAGES}-page safety cap; \
-             results may be incomplete (the server may be ignoring offset)"
-        );
+        return Err(BzrError::InputValidation(format!(
+            "--paginate stopped at the {max_pages}-page safety cap before reaching a short page; \
+             the server may be ignoring offset, so results would be incomplete"
+        )));
     }
     Ok(all)
 }
