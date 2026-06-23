@@ -96,7 +96,7 @@ async fn resolve_client_and_params(
     };
 
     let config = crate::config::Config::load()?;
-    let parsed = crate::url_parser::parse_bugzilla_url(url_str, &config)?;
+    let parsed = crate::commands::runtime::url_parser::parse_bugzilla_url(url_str, &config)?;
     let effective_server = server.or(parsed.query.server.as_deref());
     let client =
         crate::commands::runtime::shared::connect_and_configure(effective_server, api).await?;

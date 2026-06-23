@@ -53,7 +53,7 @@ struct UrlQueryOverrides<'a> {
 
 fn saved_query_from_url(url_str: &str, overrides: UrlQueryOverrides<'_>) -> Result<SavedQuery> {
     let config = Config::load()?;
-    let parsed = crate::url_parser::parse_bugzilla_url(url_str, &config)?;
+    let parsed = crate::commands::runtime::url_parser::parse_bugzilla_url(url_str, &config)?;
     let mut query = parsed.query;
     query.limit = overrides.limit.or(query.limit);
     query.fields = overrides.fields.map(ToOwned::to_owned).or(query.fields);

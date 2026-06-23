@@ -47,10 +47,10 @@ fn classify_param(key: &str) -> ParamKind {
 /// Result of parsing a Bugzilla URL.
 #[derive(Debug)]
 #[non_exhaustive]
-pub struct ParsedUrl {
-    pub query: SavedQuery,
+pub(crate) struct ParsedUrl {
+    pub(crate) query: SavedQuery,
     /// Suggested name extracted from URL's `known_name` or `query_based_on` param.
-    pub suggested_name: Option<String>,
+    pub(crate) suggested_name: Option<String>,
 }
 
 /// Strip credential query parameters from a URL, returning the sanitized string.
@@ -102,7 +102,7 @@ fn strip_shell_backslashes(url: &str) -> String {
 /// Unrecognized parameters are stored in `raw_params` for verbatim
 /// passthrough to the REST API. Display/session params are ignored.
 /// Credential parameters are stripped from both `source_url` and `raw_params`.
-pub fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<ParsedUrl> {
+pub(crate) fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<ParsedUrl> {
     let cleaned = strip_shell_backslashes(url_str);
     let url =
         Url::parse(&cleaned).map_err(|e| BzrError::InputValidation(format!("invalid URL: {e}")))?;

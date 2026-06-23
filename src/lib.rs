@@ -43,10 +43,6 @@ pub mod output;
 pub(crate) mod tls;
 pub mod types;
 #[cfg(not(feature = "test-helpers"))]
-pub(crate) mod url_parser;
-#[cfg(feature = "test-helpers")]
-pub mod url_parser;
-#[cfg(not(feature = "test-helpers"))]
 pub(crate) mod validation;
 #[cfg(feature = "test-helpers")]
 pub mod validation;
