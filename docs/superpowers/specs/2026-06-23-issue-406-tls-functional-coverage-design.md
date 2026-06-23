@@ -72,10 +72,11 @@ running HTTP Bugzilla container:
 bzr  --(HTTPS, https://127.0.0.1:$TLS_PORT)-->  tls-proxy  --(HTTP, 127.0.0.1:$BZ_PORT)-->  Bugzilla container
 ```
 
-- **Proxy:** `python3` (stdlib `ssl` + `http.server` + `http.client`). Forwards
-  method, path+query, headers (minus hop-by-hop), and body verbatim to the HTTP
-  backend and streams the response back with a fixed `Content-Length`. ~40 lines,
-  no third-party packages.
+- **Proxy:** `python3` (stdlib `ssl` + `http.server` + `http.client`), built on
+  `ThreadingHTTPServer` so kept-alive / pooled / concurrent connections from reqwest
+  cannot deadlock a single-threaded handler. Forwards method, path+query, headers
+  (minus hop-by-hop), and body verbatim to the HTTP backend and streams the response
+  back with a fixed `Content-Length`. ~40 lines, no third-party packages.
 - **Certs:** generated with `openssl` — a self-signed CA and a leaf signed by it
   carrying `subjectAltName = IP:127.0.0.1, DNS:localhost`,
   `extendedKeyUsage = serverAuth`, `basicConstraints = CA:FALSE`. The IP SAN lets
@@ -129,11 +130,21 @@ references them in a comment.
 
 ### Determinism notes
 
+- **Readiness, not a fixed sleep.** After backgrounding the proxy, the phase polls
+  `curl -sk https://127.0.0.1:$TLS_PORT/rest/version` in a bounded retry loop
+  (mirroring `setup-bugzilla.sh::wait_for_ready`, ~30 × 1s). Only once the proxy
+  completes a TLS handshake and returns do the cases run. If it never comes up, the
+  phase fails fast with a diagnostic (proxy stderr tail) rather than hanging or
+  flaking on connection-refused — this is what keeps the scheduled run predictable.
 - All `bzr` invocations redirect stdin from `/dev/null` so the wrong-pin /
   TOFU-rotation prompts never block on a TTY when the suite is run interactively.
-- The proxy is started before the cases and torn down at end of phase; a
-  trap composed with the runner's existing `cleanup` (`trap 'cleanup; _tls_cleanup'
-  EXIT`) guarantees the proxy process and temp certs are removed even on early exit.
+- The proxy is started before the cases and torn down at end of phase. Cleanup is
+  also registered on the runner's `EXIT` trap, composed as `trap 'cleanup;
+  _tls_cleanup' EXIT`. `_tls_cleanup` is **idempotent and `set -u`-safe**: it guards
+  every variable with `${VAR:-}`, tolerates an absent/already-dead proxy PID and an
+  already-removed temp dir, so it is harmless whether the phase skipped before
+  assigning those vars, ran to completion (where it also tears down inline), or
+  exited early — and whether it fires once or twice.
 - The TLS port defaults to `$BZ_PORT + 1000` (overridable via `BZR_FUNC_TLS_PORT`)
   to avoid colliding with the published Bugzilla port.
 
