@@ -9,12 +9,22 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use super::*;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::{setup_isolated_env, write_config_to};
 use crate::types::OutputFormat;
+
+/// Parse a CLI invocation that selects config by explicit `--config <path>`
+/// (after the `bzr` arg0), so dispatch resolves config without `XDG_CONFIG_HOME`
+/// and the test needs no `ENV_LOCK`. `args` are the post-`bzr` arguments.
+fn cli_with_config(config_path: &std::path::Path, args: &[&str]) -> cli::Cli {
+    let config = config_path.to_string_lossy();
+    let mut argv = vec!["bzr", "--config", config.as_ref()];
+    argv.extend_from_slice(args);
+    cli::Cli::try_parse_from(argv).unwrap()
+}
 
 #[tokio::test]
 async fn dispatch_whoami_defaults_to_show_action() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/whoami"))
@@ -27,7 +37,7 @@ async fn dispatch_whoami_defaults_to_show_action() {
         .mount(&mock)
         .await;
 
-    let cli = cli::Cli::try_parse_from(["bzr", "--server", "test", "--json", "whoami"]).unwrap();
+    let cli = cli_with_config(&config_path, &["--server", "test", "--json", "whoami"]);
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = dispatch(&cli, OutputFormat::Json, &mut __io.writers()).await;
     let output = __io.out_str().to_string();
@@ -39,18 +49,19 @@ async fn dispatch_whoami_defaults_to_show_action() {
 
 #[tokio::test]
 async fn dispatch_routes_local_query_commands() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
-    let cli = cli::Cli::try_parse_from([
-        "bzr",
-        "--json",
-        "query",
-        "save",
-        "firefox-new",
-        "--product",
-        "Firefox",
-    ])
-    .unwrap();
+    let cli = cli_with_config(
+        &config_path,
+        &[
+            "--json",
+            "query",
+            "save",
+            "firefox-new",
+            "--product",
+            "Firefox",
+        ],
+    );
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = dispatch(&cli, OutputFormat::Json, &mut __io2.writers()).await;
     let output = __io2.out_str().to_string();
@@ -119,11 +130,11 @@ api_key = "secret"
 
 #[tokio::test]
 async fn dispatch_rejects_dry_run_on_unsupported_command() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     // --dry-run on a non-mutation command is rejected before any network I/O,
     // so a silently-ignored preview can never turn into a real write.
-    let cli = cli::Cli::try_parse_from(["bzr", "--server", "test", "--dry-run", "whoami"]).unwrap();
+    let cli = cli_with_config(&config_path, &["--server", "test", "--dry-run", "whoami"]);
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
 
@@ -135,26 +146,27 @@ async fn dispatch_rejects_dry_run_on_unsupported_command() {
 
 #[tokio::test]
 async fn dispatch_allows_dry_run_on_bug_update() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("PUT"))
         .respond_with(ResponseTemplate::new(200))
         .expect(0)
         .mount(&mock)
         .await;
 
-    let cli = cli::Cli::try_parse_from([
-        "bzr",
-        "--server",
-        "test",
-        "--json",
-        "--dry-run",
-        "bug",
-        "update",
-        "5",
-        "--status",
-        "RESOLVED",
-    ])
-    .unwrap();
+    let cli = cli_with_config(
+        &config_path,
+        &[
+            "--server",
+            "test",
+            "--json",
+            "--dry-run",
+            "bug",
+            "update",
+            "5",
+            "--status",
+            "RESOLVED",
+        ],
+    );
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
     let output = io.out_str().to_string();
@@ -167,27 +179,28 @@ async fn dispatch_allows_dry_run_on_bug_update() {
 
 #[tokio::test]
 async fn dispatch_allows_dry_run_on_admin_create() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("POST"))
         .respond_with(ResponseTemplate::new(200))
         .expect(0)
         .mount(&mock)
         .await;
 
-    let cli = cli::Cli::try_parse_from([
-        "bzr",
-        "--server",
-        "test",
-        "--json",
-        "--dry-run",
-        "product",
-        "create",
-        "--name",
-        "DryRun",
-        "--description",
-        "Preview",
-    ])
-    .unwrap();
+    let cli = cli_with_config(
+        &config_path,
+        &[
+            "--server",
+            "test",
+            "--json",
+            "--dry-run",
+            "product",
+            "create",
+            "--name",
+            "DryRun",
+            "--description",
+            "Preview",
+        ],
+    );
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
     let output = io.out_str().to_string();
@@ -200,10 +213,9 @@ async fn dispatch_allows_dry_run_on_admin_create() {
 
 #[tokio::test]
 async fn dispatch_allows_credentialless_dry_run_before_connect() {
-    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_public_config(&tmp, &mock.uri());
+    let config_path = write_public_config(&tmp, &mock.uri());
 
     Mock::given(method("POST"))
         .respond_with(ResponseTemplate::new(200))
@@ -211,20 +223,21 @@ async fn dispatch_allows_credentialless_dry_run_before_connect() {
         .mount(&mock)
         .await;
 
-    let cli = cli::Cli::try_parse_from([
-        "bzr",
-        "--server",
-        "public",
-        "--json",
-        "--dry-run",
-        "product",
-        "create",
-        "--name",
-        "DryRun",
-        "--description",
-        "Preview",
-    ])
-    .unwrap();
+    let cli = cli_with_config(
+        &config_path,
+        &[
+            "--server",
+            "public",
+            "--json",
+            "--dry-run",
+            "product",
+            "create",
+            "--name",
+            "DryRun",
+            "--description",
+            "Preview",
+        ],
+    );
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
     let output = io.out_str().to_string();
@@ -237,10 +250,9 @@ async fn dispatch_allows_credentialless_dry_run_before_connect() {
 
 #[tokio::test]
 async fn dispatch_validates_mutation_args_before_credentials() {
-    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_public_config(&tmp, &mock.uri());
+    let config_path = write_public_config(&tmp, &mock.uri());
     let json_path = tmp.path().join("product.json");
     std::fs::write(&json_path, "{}").unwrap();
     let json_arg = json_path.to_string_lossy().into_owned();
@@ -251,16 +263,17 @@ async fn dispatch_validates_mutation_args_before_credentials() {
         .mount(&mock)
         .await;
 
-    let cli = cli::Cli::try_parse_from([
-        "bzr",
-        "--server",
-        "public",
-        "product",
-        "create",
-        "--from-json",
-        json_arg.as_str(),
-    ])
-    .unwrap();
+    let cli = cli_with_config(
+        &config_path,
+        &[
+            "--server",
+            "public",
+            "product",
+            "create",
+            "--from-json",
+            json_arg.as_str(),
+        ],
+    );
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
 
@@ -273,21 +286,22 @@ async fn dispatch_validates_mutation_args_before_credentials() {
 
 #[tokio::test]
 async fn dispatch_rejects_dry_run_on_group_membership_mutation() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
-    let cli = cli::Cli::try_parse_from([
-        "bzr",
-        "--server",
-        "test",
-        "--dry-run",
-        "group",
-        "add-user",
-        "--group",
-        "editbugs",
-        "--user",
-        "alice@example.com",
-    ])
-    .unwrap();
+    let cli = cli_with_config(
+        &config_path,
+        &[
+            "--server",
+            "test",
+            "--dry-run",
+            "group",
+            "add-user",
+            "--group",
+            "editbugs",
+            "--user",
+            "alice@example.com",
+        ],
+    );
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
 
@@ -300,10 +314,9 @@ async fn dispatch_rejects_dry_run_on_group_membership_mutation() {
 
 #[tokio::test]
 async fn dispatch_rejects_write_without_credentials_before_network() {
-    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_public_config(&tmp, &mock.uri());
+    let config_path = write_public_config(&tmp, &mock.uri());
 
     Mock::given(method("POST"))
         .respond_with(ResponseTemplate::new(200))
@@ -311,10 +324,12 @@ async fn dispatch_rejects_write_without_credentials_before_network() {
         .mount(&mock)
         .await;
 
-    let cli = cli::Cli::try_parse_from([
-        "bzr", "--server", "public", "comment", "add", "1", "--body", "test",
-    ])
-    .unwrap();
+    let cli = cli_with_config(
+        &config_path,
+        &[
+            "--server", "public", "comment", "add", "1", "--body", "test",
+        ],
+    );
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
 
@@ -327,10 +342,9 @@ async fn dispatch_rejects_write_without_credentials_before_network() {
 
 #[tokio::test]
 async fn dispatch_rejects_bug_my_without_credentials() {
-    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_public_config(&tmp, &mock.uri());
+    let config_path = write_public_config(&tmp, &mock.uri());
 
     Mock::given(method("GET"))
         .and(path("/rest/whoami"))
@@ -339,7 +353,7 @@ async fn dispatch_rejects_bug_my_without_credentials() {
         .mount(&mock)
         .await;
 
-    let cli = cli::Cli::try_parse_from(["bzr", "--server", "public", "bug", "my"]).unwrap();
+    let cli = cli_with_config(&config_path, &["--server", "public", "bug", "my"]);
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
 
@@ -352,10 +366,9 @@ async fn dispatch_rejects_bug_my_without_credentials() {
 
 #[tokio::test]
 async fn dispatch_rejects_whoami_without_credentials() {
-    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_public_config(&tmp, &mock.uri());
+    let config_path = write_public_config(&tmp, &mock.uri());
 
     Mock::given(method("GET"))
         .and(path("/rest/whoami"))
@@ -364,7 +377,7 @@ async fn dispatch_rejects_whoami_without_credentials() {
         .mount(&mock)
         .await;
 
-    let cli = cli::Cli::try_parse_from(["bzr", "--server", "public", "whoami"]).unwrap();
+    let cli = cli_with_config(&config_path, &["--server", "public", "whoami"]);
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
 
@@ -377,12 +390,11 @@ async fn dispatch_rejects_whoami_without_credentials() {
 
 #[tokio::test]
 async fn dispatch_uses_current_invocation_context_for_validation_errors() {
-    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_public_config(&tmp, &mock.uri());
+    let config_path = write_public_config(&tmp, &mock.uri());
 
-    let cli = cli::Cli::try_parse_from(["bzr", "--server", "public", "whoami"]).unwrap();
+    let cli = cli_with_config(&config_path, &["--server", "public", "whoami"]);
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
 
@@ -395,8 +407,12 @@ async fn dispatch_uses_current_invocation_context_for_validation_errors() {
 
 #[tokio::test]
 async fn dispatch_rejects_inline_write_without_api_key_env_before_network() {
-    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    // Inline --server-url errors at credential validation before any
+    // connect/DNS, so no ENV_LOCK is needed. Point --config at an isolated
+    // (nonexistent) path so resolution can never touch the developer's config.
+    let config_path = tmp.path().join("bzr").join("config.toml");
 
     Mock::given(method("POST"))
         .respond_with(ResponseTemplate::new(200))
@@ -404,17 +420,19 @@ async fn dispatch_rejects_inline_write_without_api_key_env_before_network() {
         .mount(&mock)
         .await;
 
-    let cli = cli::Cli::try_parse_from([
-        "bzr",
-        "--server-url",
-        mock.uri().as_str(),
-        "comment",
-        "add",
-        "1",
-        "--body",
-        "test",
-    ])
-    .unwrap();
+    let uri = mock.uri();
+    let cli = cli_with_config(
+        &config_path,
+        &[
+            "--server-url",
+            &uri,
+            "comment",
+            "add",
+            "1",
+            "--body",
+            "test",
+        ],
+    );
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
 
@@ -427,10 +445,9 @@ async fn dispatch_rejects_inline_write_without_api_key_env_before_network() {
 
 #[tokio::test]
 async fn dispatch_allows_public_server_info_without_credentials() {
-    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_public_config(&tmp, &mock.uri());
+    let config_path = write_public_config(&tmp, &mock.uri());
 
     Mock::given(method("GET"))
         .and(path("/rest/version"))
@@ -447,8 +464,10 @@ async fn dispatch_allows_public_server_info_without_credentials() {
         .mount(&mock)
         .await;
 
-    let cli = cli::Cli::try_parse_from(["bzr", "--server", "public", "--json", "server", "info"])
-        .unwrap();
+    let cli = cli_with_config(
+        &config_path,
+        &["--server", "public", "--json", "server", "info"],
+    );
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
 
@@ -493,13 +512,23 @@ async fn assert_self_signed_inline_server_info_succeeds(
     expected_requests: usize,
     build_tls_args: impl FnOnce(&SelfSignedBugzillaServer, &tempfile::TempDir) -> Vec<String>,
 ) {
+    // Retains ENV_LOCK: this connects to https://localhost (to match the cert
+    // SAN), so it runs libc getaddrinfo("localhost"), which reads env outside
+    // Rust's serialized env lock. The lock keeps that C-side getenv from racing a
+    // concurrent set_var in another test. Config is selected by explicit
+    // --config (no XDG_CONFIG_HOME mutation).
     let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    // SAFETY: tests are serialized via ENV_LOCK.
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+    let config_path = tmp.path().join("bzr").join("config.toml");
 
     let server = spawn_self_signed_bugzilla_server(expected_requests);
-    let mut argv = vec!["bzr".into(), "--server-url".into(), server.url.clone()];
+    let mut argv = vec![
+        "bzr".into(),
+        "--config".into(),
+        config_path.to_string_lossy().into_owned(),
+        "--server-url".into(),
+        server.url.clone(),
+    ];
     argv.extend(build_tls_args(&server, &tmp));
     argv.extend(["--json".into(), "server".into(), "info".into()]);
     let argv = argv.iter().map(String::as_str).collect::<Vec<_>>();
@@ -513,14 +542,12 @@ async fn assert_self_signed_inline_server_info_succeeds(
         "ad-hoc TLS settings should connect to a self-signed server: {result:?}"
     );
     assert!(
-        !tmp.path().join("bzr").join("config.toml").exists(),
+        !config_path.exists(),
         "an inline TLS connect must not create or write the config file"
     );
 }
 
-fn write_public_config(tmp: &tempfile::TempDir, server_url: &str) {
-    let config_dir = tmp.path().join("bzr");
-    std::fs::create_dir_all(&config_dir).unwrap();
+fn write_public_config(tmp: &tempfile::TempDir, server_url: &str) -> std::path::PathBuf {
     let config_content = format!(
         r#"
 default_server = "public"
@@ -529,20 +556,7 @@ default_server = "public"
 url = "{server_url}"
 "#,
     );
-    std::fs::write(config_dir.join("config.toml"), config_content).unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-
-        std::fs::set_permissions(&config_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
-        std::fs::set_permissions(
-            config_dir.join("config.toml"),
-            std::fs::Permissions::from_mode(0o600),
-        )
-        .unwrap();
-    }
-    // SAFETY: Tests are serialized via ENV_LOCK.
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+    write_config_to(tmp, &config_content)
 }
 
 struct SelfSignedBugzillaServer {
