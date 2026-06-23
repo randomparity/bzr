@@ -4,12 +4,12 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::FieldAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 #[tokio::test]
 async fn field_list_returns_values() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/field/bug/bug_status"))
@@ -32,7 +32,8 @@ async fn field_list_returns_values() {
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a1.writers(),
     )
     .await;
@@ -45,7 +46,8 @@ async fn field_list_returns_values() {
 
 #[tokio::test]
 async fn field_aliases_succeeds_without_server() {
-    let _lock = crate::ENV_LOCK.lock().await;
+    // No ENV_LOCK: `FieldAction::Aliases` returns the static FIELD_ALIASES list
+    // and never loads config or reads the environment.
     let action = FieldAction::Aliases;
     let mut __io_a2 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
@@ -65,7 +67,7 @@ async fn field_aliases_succeeds_without_server() {
 
 #[tokio::test]
 async fn field_list_table_format_with_empty_values_prints_no_values_message() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/field/bug/bug_status"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -79,7 +81,8 @@ async fn field_list_table_format_with_empty_values_prints_no_values_message() {
     let mut __io_a3 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a3.writers(),
     )
     .await;
@@ -93,7 +96,7 @@ async fn field_list_table_format_with_empty_values_prints_no_values_message() {
 
 #[tokio::test]
 async fn field_list_json_format_with_empty_values_emits_empty_array() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/field/bug/bug_status"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -107,7 +110,8 @@ async fn field_list_json_format_with_empty_values_emits_empty_array() {
     let mut __io_a4 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a4.writers(),
     )
     .await;
@@ -124,7 +128,7 @@ async fn field_list_json_format_with_empty_values_emits_empty_array() {
 #[tokio::test]
 async fn field_list_http_500_returns_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/field/bug/bug_status"))
@@ -137,7 +141,8 @@ async fn field_list_http_500_returns_error() {
     };
     let result = super::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
