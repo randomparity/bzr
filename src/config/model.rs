@@ -112,16 +112,6 @@ impl CredentialSource<'_> {
     }
 }
 
-impl CredentialSourceKind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            CredentialSourceKind::Inline => "inline",
-            CredentialSourceKind::Env => "env",
-            CredentialSourceKind::Keyring => "keyring",
-        }
-    }
-}
-
 impl ServerConfig {
     /// Build an ephemeral server backed by an environment-variable credential,
     /// for the inline `--server-url` flow. The result is never written to disk:

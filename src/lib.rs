@@ -30,6 +30,9 @@ pub mod client;
 pub(crate) mod commands;
 #[cfg(feature = "test-helpers")]
 pub mod commands;
+#[cfg(not(feature = "test-helpers"))]
+pub(crate) mod config;
+#[cfg(feature = "test-helpers")]
 pub mod config;
 #[cfg(not(feature = "test-helpers"))]
 pub(crate) mod credentials;
