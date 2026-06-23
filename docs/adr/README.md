@@ -8,3 +8,4 @@ rejected.
 | ADR | Title | Status |
 |-----|-------|--------|
 | [0001](0001-cli-types-are-crate-internal.md) | clap-derived CLI types are crate-internal | Accepted |
+| [0002](0002-test-config-isolation-over-env-lock.md) | Per-test config-path isolation replaces the shared env lock | Accepted |
