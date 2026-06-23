@@ -988,9 +988,9 @@ fn build_update_params_rejects_empty_keyword() {
     });
     let err = super::build_update_params(as_update_args(&action)).unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::FLAG_KEYWORDS_ADD)),
+        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::payload::FLAG_KEYWORDS_ADD)),
         "expected InputValidation naming {}, got {err:?}",
-        super::FLAG_KEYWORDS_ADD
+        super::payload::FLAG_KEYWORDS_ADD
     );
 }
 
@@ -1002,9 +1002,9 @@ fn build_update_params_rejects_whitespace_only_cc() {
     });
     let err = super::build_update_params(as_update_args(&action)).unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::FLAG_CC_ADD)),
+        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::payload::FLAG_CC_ADD)),
         "expected InputValidation naming {}, got {err:?}",
-        super::FLAG_CC_ADD
+        super::payload::FLAG_CC_ADD
     );
 }
 
@@ -1016,9 +1016,9 @@ fn build_update_params_rejects_empty_groups_add() {
     });
     let err = super::build_update_params(as_update_args(&action)).unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::FLAG_GROUPS_ADD)),
+        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::payload::FLAG_GROUPS_ADD)),
         "expected InputValidation naming {}, got {err:?}",
-        super::FLAG_GROUPS_ADD
+        super::payload::FLAG_GROUPS_ADD
     );
 }
 
@@ -1030,9 +1030,9 @@ fn build_update_params_rejects_whitespace_only_see_also_remove() {
     });
     let err = super::build_update_params(as_update_args(&action)).unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::FLAG_SEE_ALSO_REMOVE)),
+        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(super::payload::FLAG_SEE_ALSO_REMOVE)),
         "expected InputValidation naming {}, got {err:?}",
-        super::FLAG_SEE_ALSO_REMOVE
+        super::payload::FLAG_SEE_ALSO_REMOVE
     );
 }
 
