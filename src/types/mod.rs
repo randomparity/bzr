@@ -15,7 +15,7 @@ pub use bug::{
     SavedQuery, SearchParams, StatusTransition, StringListUpdate, UpdateBugParams, FIELD_MAPPINGS,
 };
 pub use classification::{Classification, ClassificationProduct};
-pub use comment::{Comment, UpdateCommentTagsParams};
+pub use comment::{AddCommentParams, Comment, UpdateCommentTagsParams};
 pub use common::{
     ApiMode, AuthMethod, ExtensionInfo, Flag, FlagStatus, FlagUpdate, OutputFormat,
     ServerExtensions, ServerInfoResponse, ServerVersion, SortDirection,

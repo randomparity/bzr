@@ -108,10 +108,11 @@ pub(super) async fn handle(
     // the clone succeeded and may re-clone, creating a duplicate). Warn and
     // continue rather than propagating.
     if !*no_comment {
-        if let Err(e) = client
-            .add_comment(new_id, &format!("Cloned from bug #{}", source.id), false)
-            .await
-        {
+        let params = crate::types::AddCommentParams {
+            text: format!("Cloned from bug #{}", source.id),
+            is_private: false,
+        };
+        if let Err(e) = client.add_comment(new_id, &params).await {
             let _ = writeln!(
                 w.err,
                 "warning: created bug #{new_id} but failed to add the \

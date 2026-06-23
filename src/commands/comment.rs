@@ -9,7 +9,7 @@ use crate::output::result_types::{
     write_result, ActionResult, ResourceKind, SearchResult, TagResult,
 };
 use crate::output::writers::Writers;
-use crate::types::UpdateCommentTagsParams;
+use crate::types::{AddCommentParams, UpdateCommentTagsParams};
 
 pub(crate) fn requires_credentials(action: &CommentAction) -> Option<&'static str> {
     match action {
@@ -60,7 +60,11 @@ pub async fn execute(
                     "comment body requirement did not produce a body".into(),
                 ));
             };
-            let id = client.add_comment(*bug_id, &text, *private).await?;
+            let params = AddCommentParams {
+                text,
+                is_private: *private,
+            };
+            let id = client.add_comment(*bug_id, &params).await?;
             write_result(
                 &ActionResult::created(id, ResourceKind::Comment),
                 &format!("Added comment #{id} to bug #{bug_id}"),

@@ -9,6 +9,14 @@ pub struct UpdateCommentTagsParams {
     pub remove: Vec<String>,
 }
 
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct AddCommentParams {
+    #[serde(rename = "comment")]
+    pub text: String,
+    pub is_private: bool,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Comment {

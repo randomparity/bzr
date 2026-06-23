@@ -1,15 +1,9 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use super::encode_path;
 use super::BugzillaClient;
 use crate::error::Result;
-use crate::types::{Comment, UpdateCommentTagsParams};
-
-#[derive(Serialize)]
-struct AddCommentBody<'a> {
-    comment: &'a str,
-    is_private: bool,
-}
+use crate::types::{AddCommentParams, Comment, UpdateCommentTagsParams};
 
 #[derive(Deserialize)]
 struct CommentResponse {
@@ -115,15 +109,9 @@ impl BugzillaClient {
             .await
     }
 
-    pub async fn add_comment(&self, bug_id: u64, text: &str, is_private: bool) -> Result<u64> {
-        self.post_json_id(
-            &format!("bug/{bug_id}/comment"),
-            &AddCommentBody {
-                comment: text,
-                is_private,
-            },
-        )
-        .await
+    pub async fn add_comment(&self, bug_id: u64, params: &AddCommentParams) -> Result<u64> {
+        self.post_json_id(&format!("bug/{bug_id}/comment"), params)
+            .await
     }
 }
 
