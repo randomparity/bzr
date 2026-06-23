@@ -98,7 +98,7 @@ fn write_one(name: &str, w: &mut Writers<'_>) -> Result<()> {
 }
 
 /// List available schema names: one per line for table, a JSON array for
-/// `--json`, one name per line for `--output ndjson`.
+/// `--json`, one JSON string per line for `--output ndjson`.
 fn write_list(format: OutputFormat, w: &mut Writers<'_>) {
     let names = available_names();
     let table = names.join("\n");
