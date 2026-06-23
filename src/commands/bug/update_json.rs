@@ -1,69 +1,15 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::cli::UpdateArgs;
 use crate::client::BugzillaClient;
 use crate::commands::runtime::context::CommandContext;
 use crate::commands::runtime::from_json::JsonOneOrMany;
-use crate::commands::runtime::shared::{merge_set, merge_vec};
 use crate::error::Result;
 use crate::output::result_types::{
     write_result, BatchFailure, BatchResult, DryRunResult, ResourceKind,
 };
 use crate::output::writers::Writers;
 use crate::types::{OutputFormat, UpdateBugParams};
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct JsonUpdateBug {
-    id: Option<u64>,
-    status: Option<String>,
-    resolution: Option<String>,
-    dupe_of: Option<u64>,
-    alias: Option<String>,
-    deadline: Option<String>,
-    estimated_time: Option<f64>,
-    remaining_time: Option<f64>,
-    work_time: Option<f64>,
-    reset_assigned_to: Option<bool>,
-    reset_qa_contact: Option<bool>,
-    assignee: Option<String>,
-    priority: Option<String>,
-    severity: Option<String>,
-    summary: Option<String>,
-    whiteboard: Option<String>,
-    url: Option<String>,
-    target_milestone: Option<String>,
-    comment: Option<String>,
-    comment_file: Option<std::path::PathBuf>,
-    comment_private: Option<bool>,
-    #[serde(default)]
-    flags: Vec<String>,
-    #[serde(default)]
-    blocks_add: Vec<u64>,
-    #[serde(default)]
-    blocks_remove: Vec<u64>,
-    #[serde(default)]
-    depends_on_add: Vec<u64>,
-    #[serde(default)]
-    depends_on_remove: Vec<u64>,
-    #[serde(default)]
-    keywords_add: Vec<String>,
-    #[serde(default)]
-    keywords_remove: Vec<String>,
-    #[serde(default)]
-    cc_add: Vec<String>,
-    #[serde(default)]
-    cc_remove: Vec<String>,
-    #[serde(default)]
-    groups_add: Vec<String>,
-    #[serde(default)]
-    groups_remove: Vec<String>,
-    #[serde(default)]
-    see_also_add: Vec<String>,
-    #[serde(default)]
-    see_also_remove: Vec<String>,
-    expect_unchanged_since: Option<String>,
-}
 
 #[derive(Debug, Serialize)]
 struct JsonUpdateRequest {
@@ -74,78 +20,7 @@ struct JsonUpdateRequest {
     params: UpdateBugParams,
 }
 
-fn merge_copy<T: Copy>(target: &mut Option<T>, value: Option<T>) {
-    if let Some(value) = value {
-        *target = Some(value);
-    }
-}
-
-fn merge_bool_true(target: &mut Option<bool>, value: bool) {
-    if value {
-        *target = Some(true);
-    }
-}
-
-fn merge_path(target: &mut Option<std::path::PathBuf>, value: Option<&std::path::Path>) {
-    if let Some(value) = value {
-        *target = Some(value.to_path_buf());
-    }
-}
-
-fn merge_vec_u64(target: &mut Vec<u64>, value: &[u64]) {
-    if !value.is_empty() {
-        *target = value.to_vec();
-    }
-}
-
-fn overlay_cli(mut json: JsonUpdateBug, args: &UpdateArgs) -> JsonUpdateBug {
-    merge_set(&mut json.status, args.status.as_deref());
-    merge_set(&mut json.resolution, args.resolution.as_deref());
-    merge_copy(&mut json.dupe_of, args.dupe_of);
-    merge_set(&mut json.alias, args.alias.as_deref());
-    merge_set(&mut json.deadline, args.deadline.as_deref());
-    merge_copy(&mut json.estimated_time, args.estimated_time);
-    merge_copy(&mut json.remaining_time, args.remaining_time);
-    merge_copy(&mut json.work_time, args.work_time);
-    merge_bool_true(&mut json.reset_assigned_to, args.reset_assigned_to);
-    merge_bool_true(&mut json.reset_qa_contact, args.reset_qa_contact);
-    merge_set(&mut json.assignee, args.assignee.as_deref());
-    merge_set(&mut json.priority, args.priority.as_deref());
-    merge_set(&mut json.severity, args.severity.as_deref());
-    merge_set(&mut json.summary, args.summary.as_deref());
-    merge_set(&mut json.whiteboard, args.whiteboard.as_deref());
-    merge_set(&mut json.url, args.url.as_deref());
-    merge_set(&mut json.target_milestone, args.target_milestone.as_deref());
-    if let Some(comment) = args.comment.as_deref() {
-        json.comment = Some(comment.to_string());
-        json.comment_file = None;
-    }
-    if args.comment_file.is_some() {
-        json.comment = None;
-        merge_path(&mut json.comment_file, args.comment_file.as_deref());
-    }
-    merge_bool_true(&mut json.comment_private, args.comment_private);
-    merge_vec(&mut json.flags, &args.flag);
-    merge_vec_u64(&mut json.blocks_add, &args.blocks_add);
-    merge_vec_u64(&mut json.blocks_remove, &args.blocks_remove);
-    merge_vec_u64(&mut json.depends_on_add, &args.depends_on_add);
-    merge_vec_u64(&mut json.depends_on_remove, &args.depends_on_remove);
-    merge_vec(&mut json.keywords_add, &args.keywords_add);
-    merge_vec(&mut json.keywords_remove, &args.keywords_remove);
-    merge_vec(&mut json.cc_add, &args.cc_add);
-    merge_vec(&mut json.cc_remove, &args.cc_remove);
-    merge_vec(&mut json.groups_add, &args.groups_add);
-    merge_vec(&mut json.groups_remove, &args.groups_remove);
-    merge_vec(&mut json.see_also_add, &args.see_also_add);
-    merge_vec(&mut json.see_also_remove, &args.see_also_remove);
-    merge_set(
-        &mut json.expect_unchanged_since,
-        args.expect_unchanged_since.as_deref(),
-    );
-    json
-}
-
-fn reject_json_comment_file_stdin(entry: &JsonUpdateBug) -> Result<()> {
+fn reject_json_comment_file_stdin(entry: &super::update::BugUpdateDraft) -> Result<()> {
     if entry.comment_file.as_deref() == Some(std::path::Path::new("-")) {
         return Err(crate::error::BzrError::InputValidation(
             "--from-json comment_file cannot read from stdin; use comment text in JSON instead"
@@ -183,7 +58,7 @@ fn reject_cli_stdin_comment_source(
     Ok(())
 }
 
-fn object_ids(entry: &JsonUpdateBug, args: &UpdateArgs) -> Result<Vec<u64>> {
+fn object_ids(entry: &super::update::BugUpdateDraft, args: &UpdateArgs) -> Result<Vec<u64>> {
     if !args.ids.is_empty() {
         if entry.id.is_some() {
             return Err(crate::error::BzrError::InputValidation(
@@ -199,70 +74,27 @@ fn object_ids(entry: &JsonUpdateBug, args: &UpdateArgs) -> Result<Vec<u64>> {
     })
 }
 
-fn update_input_from_json<'a>(
-    entry: &'a JsonUpdateBug,
-    ids: &'a [u64],
-) -> super::update::BugUpdateInput<'a> {
-    super::update::BugUpdateInput {
-        ids,
-        status: entry.status.as_deref(),
-        resolution: entry.resolution.as_deref(),
-        dupe_of: entry.dupe_of,
-        alias: entry.alias.as_deref(),
-        deadline: entry.deadline.as_deref(),
-        estimated_time: entry.estimated_time,
-        remaining_time: entry.remaining_time,
-        work_time: entry.work_time,
-        reset_assigned_to: entry.reset_assigned_to.unwrap_or(false),
-        reset_qa_contact: entry.reset_qa_contact.unwrap_or(false),
-        assignee: entry.assignee.as_deref(),
-        priority: entry.priority.as_deref(),
-        severity: entry.severity.as_deref(),
-        summary: entry.summary.as_deref(),
-        whiteboard: entry.whiteboard.as_deref(),
-        url: entry.url.as_deref(),
-        target_milestone: entry.target_milestone.as_deref(),
-        comment: entry.comment.as_deref(),
-        comment_file: entry.comment_file.as_deref(),
-        comment_private: entry.comment_private.unwrap_or(false),
-        flags: &entry.flags,
-        blocks_add: &entry.blocks_add,
-        blocks_remove: &entry.blocks_remove,
-        depends_on_add: &entry.depends_on_add,
-        depends_on_remove: &entry.depends_on_remove,
-        keywords_add: &entry.keywords_add,
-        keywords_remove: &entry.keywords_remove,
-        cc_add: &entry.cc_add,
-        cc_remove: &entry.cc_remove,
-        groups_add: &entry.groups_add,
-        groups_remove: &entry.groups_remove,
-        see_also_add: &entry.see_also_add,
-        see_also_remove: &entry.see_also_remove,
-    }
-}
-
 fn build_from_json(
-    entry: JsonUpdateBug,
+    mut entry: super::update::BugUpdateDraft,
     args: &UpdateArgs,
-    ids: &[u64],
+    ids: Vec<u64>,
 ) -> Result<(Vec<u64>, UpdateBugParams, Option<String>)> {
     reject_json_comment_file_stdin(&entry)?;
-    let entry = overlay_cli(entry, args);
+    entry.overlay_cli(args);
     let expected = entry.expect_unchanged_since.clone();
-    let input = update_input_from_json(&entry, ids);
-    let (ids, params) = super::update::build_update_params_from_input(&input)?;
+    let (ids, params) = super::update::build_update_params_from_draft(ids, &entry)?;
     Ok((ids, params, expected))
 }
 
 fn build_array_request(
-    entry: JsonUpdateBug,
+    entry: super::update::BugUpdateDraft,
     args: &UpdateArgs,
     index: usize,
 ) -> Result<JsonUpdateRequest> {
     let id = entry.id.ok_or_else(|| {
         crate::error::BzrError::InputValidation(format!("--from-json item {index}: id is required"))
     })?;
-    let (_ids, params, expect_unchanged_since) = build_from_json(entry, args, &[id])?;
+    let (_ids, params, expect_unchanged_since) = build_from_json(entry, args, vec![id])?;
     Ok(JsonUpdateRequest {
         id,
         expect_unchanged_since,
@@ -363,11 +195,13 @@ pub(super) async fn handle(
     if arg == "-" && cli_comment_uses_stdin(args) {
         reject_cli_stdin_comment_source(args, arg, false)?;
     }
-    match crate::commands::runtime::from_json::read_one_or_many::<JsonUpdateBug>(arg)? {
+    match crate::commands::runtime::from_json::read_one_or_many::<super::update::BugUpdateDraft>(
+        arg,
+    )? {
         JsonOneOrMany::One(entry) => {
             reject_cli_stdin_comment_source(args, arg, false)?;
             let ids = object_ids(&entry, args)?;
-            let (ids, params, expect_unchanged_since) = build_from_json(*entry, args, &ids)?;
+            let (ids, params, expect_unchanged_since) = build_from_json(*entry, args, ids)?;
             super::update::apply_checked(
                 super::update::ApplyRequest {
                     ids,

@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use crate::commands::runtime::from_json::JsonOneOrMany;
 
-use super::JsonUpdateBug;
+use super::super::update::BugUpdateDraft;
 
 fn schema_value(name: &str) -> serde_json::Value {
     let (_, body) = crate::commands::schema::SCHEMAS
@@ -55,7 +55,7 @@ fn bug_update_input_schema_matches_parser_keys() {
             .keys()
             .cloned()
             .collect();
-    let parser_keys = parser_fields_from_unknown_error::<JsonUpdateBug>();
+    let parser_keys = parser_fields_from_unknown_error::<BugUpdateDraft>();
 
     assert_eq!(schema_keys, parser_keys);
 }
@@ -74,7 +74,7 @@ fn bug_update_input_schema_examples_parse() {
         let mut object = serde_json::Map::new();
         object.insert(key.clone(), example);
 
-        serde_json::from_value::<JsonUpdateBug>(serde_json::Value::Object(object))
+        serde_json::from_value::<BugUpdateDraft>(serde_json::Value::Object(object))
             .unwrap_or_else(|err| panic!("schema example for '{key}' did not parse: {err}"));
     }
 }
@@ -93,14 +93,14 @@ fn bug_update_input_schema_array_items_require_id() {
 #[test]
 fn parse_json_updates_object_and_array_shapes() {
     assert!(matches!(
-        crate::commands::runtime::from_json::parse_one_or_many::<JsonUpdateBug>(
+        crate::commands::runtime::from_json::parse_one_or_many::<BugUpdateDraft>(
             r#"{"id":1,"status":"ASSIGNED"}"#
         )
         .unwrap(),
         JsonOneOrMany::One(_)
     ));
 
-    match crate::commands::runtime::from_json::parse_one_or_many::<JsonUpdateBug>(
+    match crate::commands::runtime::from_json::parse_one_or_many::<BugUpdateDraft>(
         r#"[{"id":1,"status":"ASSIGNED"},{"id":2,"priority":"high"}]"#,
     )
     .unwrap()
@@ -110,7 +110,7 @@ fn parse_json_updates_object_and_array_shapes() {
     }
 
     assert!(matches!(
-        crate::commands::runtime::from_json::parse_one_or_many::<JsonUpdateBug>(
+        crate::commands::runtime::from_json::parse_one_or_many::<BugUpdateDraft>(
             r#"[{"id":1,"status":"ASSIGNED"}]"#
         )
         .unwrap(),
