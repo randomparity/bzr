@@ -124,12 +124,7 @@ fn read_interactive_line(prompt: &str) -> Result<Option<String>> {
     Ok(Some(input.trim().to_string()))
 }
 
-/// Parse a TOFU response from user input.
-///
-/// Returns:
-/// - `Some(true)` for "always" (persist the pin)
-/// - `Some(false)` for "y"/"yes" (trust once)
-/// - `None` for anything else (reject)
+// TOFU prompts accept y/yes for one-time trust and always for persisted trust.
 pub(crate) fn parse_tofu_response(input: &str) -> Option<bool> {
     match input.trim().to_ascii_lowercase().as_str() {
         "always" => Some(true),
@@ -138,14 +133,10 @@ pub(crate) fn parse_tofu_response(input: &str) -> Option<bool> {
     }
 }
 
-/// Return whether user input is an affirmative yes response.
-/// Returns `true` for "y" or "yes" (case-insensitive).
 pub(crate) fn is_yes_response(input: &str) -> bool {
     input.trim().eq_ignore_ascii_case("y") || input.trim().eq_ignore_ascii_case("yes")
 }
 
-/// Prompt the user to confirm pinning a certificate. Returns `false`
-/// if stdin is not a terminal.
 pub(crate) fn confirm_pin() -> Result<bool> {
     let input = read_interactive_line("Pin this certificate? [y/N] ")?;
     Ok(input.as_deref().is_some_and(is_yes_response))
