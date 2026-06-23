@@ -244,3 +244,7 @@ pub struct UpdateArgs {
     #[arg(long, value_name = "TIMESTAMP")]
     pub expect_unchanged_since: Option<String>,
 }
+
+#[cfg(test)]
+#[path = "update_tests.rs"]
+mod tests;

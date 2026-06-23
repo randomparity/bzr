@@ -85,3 +85,7 @@ pub struct ViewArgs {
     #[command(flatten)]
     pub field_args: FieldArgs,
 }
+
+#[cfg(test)]
+#[path = "view_tests.rs"]
+mod tests;

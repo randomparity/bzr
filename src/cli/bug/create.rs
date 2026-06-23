@@ -150,3 +150,7 @@ pub struct CreateArgs {
     #[command(flatten)]
     pub create_fields: CreateFieldArgs,
 }
+
+#[cfg(test)]
+#[path = "create_tests.rs"]
+mod tests;

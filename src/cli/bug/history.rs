@@ -25,3 +25,7 @@ pub struct HistoryArgs {
     #[arg(long)]
     pub since: Option<String>,
 }
+
+#[cfg(test)]
+#[path = "history_tests.rs"]
+mod tests;

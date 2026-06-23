@@ -99,3 +99,7 @@ pub struct ListArgs {
     #[arg(long, value_name = "DATE")]
     pub changed_since: Option<String>,
 }
+
+#[cfg(test)]
+#[path = "list_tests.rs"]
+mod tests;

@@ -131,3 +131,7 @@ pub struct DupArgs {
     #[command(flatten)]
     pub comment: CommentArgs,
 }
+
+#[cfg(test)]
+#[path = "verbs_tests.rs"]
+mod tests;
