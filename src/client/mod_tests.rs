@@ -724,6 +724,32 @@ async fn parse_json_includes_body_preview_on_invalid_json() {
 }
 
 #[tokio::test]
+async fn parse_json_invalid_json_handles_multibyte_debug_preview_boundary() {
+    let _guard = debug_logging_guard();
+    let mock = MockServer::start().await;
+    let body = multibyte_body_crossing_preview_boundary();
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/attachment"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(body))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_attachments(42).await.unwrap_err();
+    assert!(
+        matches!(&err, crate::error::BzrError::Deserialize(_)),
+        "invalid JSON should return a deserialize error, got: {err}"
+    );
+
+    let msg = err.to_string();
+    assert!(
+        msg.contains("body preview"),
+        "error should include body preview: {msg}"
+    );
+    assert!(msg.contains('…'), "preview should be truncated: {msg}");
+}
+
+#[tokio::test]
 async fn get_json_value_returns_parsed_value_without_typed_check() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
