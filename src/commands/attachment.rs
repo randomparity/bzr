@@ -6,7 +6,7 @@ use base64::Engine;
 use crate::cli::AttachmentAction;
 use crate::client::BugzillaClient;
 use crate::commands::runtime::context::CommandContext;
-use crate::error::{io_with_context, BzrError, Result};
+use crate::error::{io_with_context, Result};
 use crate::output::resources::attachment::{
     write_attachment, write_attachment_batch, write_attachments, AttachmentBatchResult,
     AttachmentDownloadResult, BatchSummary, BugDownloadResult, DownloadedFile, TargetStatus,
@@ -156,7 +156,9 @@ fn resolve_upload_comment(
     comment_file: Option<&Path>,
     comment_private: bool,
 ) -> Result<Option<String>> {
-    let body = super::runtime::shared::materialize_body_source(
+    let required_body_message =
+        comment_private.then_some("--comment-private requires --comment or --comment-file");
+    super::runtime::shared::materialize_non_empty_comment_body(
         super::runtime::shared::classify_body_source(
             comment,
             comment_file,
@@ -164,19 +166,8 @@ fn resolve_upload_comment(
             "--comment-file",
         )?,
         "--comment-file",
-    )?;
-    if body.is_none() && comment_private {
-        return Err(BzrError::InputValidation(
-            "--comment-private requires --comment or --comment-file".into(),
-        ));
-    }
-    let Some(text) = body else {
-        return Ok(None);
-    };
-    if text.trim().is_empty() {
-        return Err(BzrError::InputValidation("empty comment, aborting".into()));
-    }
-    Ok(Some(text))
+        required_body_message,
+    )
 }
 
 async fn update(

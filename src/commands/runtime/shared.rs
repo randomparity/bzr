@@ -653,6 +653,31 @@ pub(crate) fn materialize_body_source(
     }
 }
 
+/// Materialize an explicit comment body source and reject whitespace-only text.
+/// `required_body_message` turns an absent source into an input error for flags
+/// like `--comment-private` that only make sense with an explicit comment.
+pub(crate) fn materialize_non_empty_comment_body(
+    source: BodySource,
+    file_flag: &str,
+    required_body_message: Option<&str>,
+) -> Result<Option<String>> {
+    let Some(text) = materialize_body_source(source, file_flag)? else {
+        if let Some(message) = required_body_message {
+            return Err(BzrError::InputValidation(message.to_string()));
+        }
+        return Ok(None);
+    };
+    Ok(Some(require_non_empty_comment_body(text)?))
+}
+
+/// Return comment text when it has non-whitespace content.
+pub(crate) fn require_non_empty_comment_body(text: String) -> Result<String> {
+    if text.trim().is_empty() {
+        return Err(BzrError::InputValidation("empty comment, aborting".into()));
+    }
+    Ok(text)
+}
+
 /// Read a UTF-8 file, mapping any I/O error to an `InputValidation` error that
 /// names the originating CLI flag and the path. `flag` is the user-facing
 /// option name (e.g. `--description-file`) used to prefix the message.

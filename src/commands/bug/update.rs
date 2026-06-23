@@ -68,7 +68,9 @@ pub(super) fn resolve_comment(
     comment_file: Option<&std::path::Path>,
     comment_private: bool,
 ) -> Result<Option<crate::types::CommentUpdate>> {
-    let body = crate::commands::runtime::shared::materialize_body_source(
+    let required_body_message =
+        comment_private.then_some("--comment-private requires --comment or --comment-file");
+    let body = crate::commands::runtime::shared::materialize_non_empty_comment_body(
         crate::commands::runtime::shared::classify_body_source(
             comment,
             comment_file,
@@ -76,20 +78,11 @@ pub(super) fn resolve_comment(
             "--comment-file",
         )?,
         "--comment-file",
+        required_body_message,
     )?;
-    if body.is_none() && comment_private {
-        return Err(crate::error::BzrError::InputValidation(
-            "--comment-private requires --comment or --comment-file".into(),
-        ));
-    }
     let Some(text) = body else {
         return Ok(None);
     };
-    if text.trim().is_empty() {
-        return Err(crate::error::BzrError::InputValidation(
-            "empty comment, aborting".into(),
-        ));
-    }
     Ok(Some(crate::types::CommentUpdate {
         body: text,
         is_private: comment_private,

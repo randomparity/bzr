@@ -1186,7 +1186,9 @@ async fn cached_path_skips_probe_when_insecure() {
     );
 }
 
-use super::{classify_body_source, materialize_body_source, BodySource};
+use super::{
+    classify_body_source, materialize_body_source, materialize_non_empty_comment_body, BodySource,
+};
 
 #[test]
 fn classify_inline_literal() {
@@ -1284,4 +1286,50 @@ fn materialize_missing_file_is_input_validation() {
         BzrError::InputValidation(msg) => assert!(msg.contains("--body-file"), "{msg}"),
         other => panic!("expected InputValidation, got {other:?}"),
     }
+}
+
+#[test]
+fn materialize_non_empty_comment_body_accepts_literal() {
+    let got = materialize_non_empty_comment_body(
+        BodySource::Literal("hi".into()),
+        "--comment-file",
+        None,
+    )
+    .unwrap();
+    assert_eq!(got, Some("hi".to_string()));
+}
+
+#[test]
+fn materialize_non_empty_comment_body_allows_absent_optional_body() {
+    let got = materialize_non_empty_comment_body(BodySource::None, "--comment-file", None).unwrap();
+    assert_eq!(got, None);
+}
+
+#[test]
+fn materialize_non_empty_comment_body_rejects_required_private_body() {
+    let err = materialize_non_empty_comment_body(
+        BodySource::None,
+        "--comment-file",
+        Some("--comment-private requires --comment or --comment-file"),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        BzrError::InputValidation(ref msg)
+            if msg.contains("--comment-private") && msg.contains("--comment-file")
+    ));
+}
+
+#[test]
+fn materialize_non_empty_comment_body_rejects_whitespace() {
+    let err = materialize_non_empty_comment_body(
+        BodySource::Literal(" \n\t".into()),
+        "--comment-file",
+        None,
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        BzrError::InputValidation(ref msg) if msg.contains("empty comment")
+    ));
 }
