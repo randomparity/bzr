@@ -6,7 +6,7 @@ use crate::xmlrpc::protocol::Value;
 use crate::xmlrpc::protocol::XmlRpcClient;
 use crate::xmlrpc::resources::mappers::{
     get_datetime_str, get_flags, get_int_array, get_nonempty_str, get_str, get_str_array, get_u64,
-    require_u64, xmlrpc_value_to_json, EXPECTED_STRUCT_RESPONSE,
+    require_u64, xmlrpc_id, xmlrpc_value_to_json, EXPECTED_STRUCT_RESPONSE,
 };
 
 impl XmlRpcClient {
@@ -33,8 +33,11 @@ impl XmlRpcClient {
         }
 
         if !params.id.is_empty() {
-            #[expect(clippy::cast_possible_wrap, reason = "bug IDs fit in i64")]
-            let ids: Vec<Value> = params.id.iter().map(|id| Value::Int(*id as i64)).collect();
+            let ids: Vec<Value> = params
+                .id
+                .iter()
+                .map(|id| xmlrpc_id(*id, "bug ID"))
+                .collect::<Result<_>>()?;
             rpc_params.insert("ids".into(), Value::Array(ids));
         }
         if let Some(limit) = params.limit {

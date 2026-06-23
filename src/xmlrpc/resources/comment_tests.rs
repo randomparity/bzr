@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 
 use super::value_to_comment;
+use crate::error::BzrError;
 use crate::xmlrpc::protocol::Value;
 use crate::xmlrpc::protocol::XmlRpcClient;
 
@@ -97,6 +98,22 @@ async fn xmlrpc_get_comments_since_parses_full_response() {
     assert_eq!(comments[1].count, 1);
     assert!(comments[1].is_private);
     assert_eq!(comments[1].text, "private 1");
+}
+
+#[tokio::test]
+async fn xmlrpc_get_comments_since_rejects_bug_id_outside_xmlrpc_integer_range() {
+    let client = XmlRpcClient::new(reqwest::Client::new(), "http://127.0.0.1:1", None);
+
+    let err = client
+        .get_comments_since(u64::try_from(i64::MAX).unwrap() + 1, None)
+        .await
+        .unwrap_err();
+
+    assert!(matches!(
+        err,
+        BzrError::InputValidation(ref msg)
+            if msg.contains("bug ID") && msg.contains("XML-RPC signed integer range")
+    ));
 }
 
 #[tokio::test]

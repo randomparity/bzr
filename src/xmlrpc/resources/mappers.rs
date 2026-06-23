@@ -61,6 +61,15 @@ pub(crate) fn require_u64(m: &BTreeMap<String, Value>, key: &str, resource: &str
     u64::try_from(v).map_err(|_| BzrError::XmlRpc(format!("{resource} {key} is negative: {v}")))
 }
 
+pub(crate) fn xmlrpc_id(value: u64, label: &str) -> Result<Value> {
+    i64::try_from(value).map(Value::Int).map_err(|_| {
+        BzrError::InputValidation(format!(
+            "{label} {value} is outside the XML-RPC signed integer range 0..={}",
+            i64::MAX
+        ))
+    })
+}
+
 pub(crate) fn get_str_array(m: &BTreeMap<String, Value>, key: &str) -> Vec<String> {
     m.get(key)
         .and_then(Value::as_array)

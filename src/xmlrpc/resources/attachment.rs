@@ -5,7 +5,7 @@ use crate::xmlrpc::protocol::Value;
 use crate::xmlrpc::protocol::XmlRpcClient;
 use crate::xmlrpc::resources::mappers::{
     get_bool_flag, get_datetime_str, get_flags, get_nonempty_str, get_str, get_u64,
-    lookup_bug_entry, require_u64, EXPECTED_STRUCT_RESPONSE,
+    lookup_bug_entry, require_u64, xmlrpc_id, EXPECTED_STRUCT_RESPONSE,
 };
 
 const ATTACHMENT_LIST_FIELDS: &[&str] = &[
@@ -27,8 +27,7 @@ const ATTACHMENT_LIST_FIELDS: &[&str] = &[
 impl XmlRpcClient {
     pub async fn get_attachments(&self, bug_id: u64) -> Result<Vec<crate::types::Attachment>> {
         let mut rpc_params = BTreeMap::new();
-        #[expect(clippy::cast_possible_wrap, reason = "bug IDs fit in i64")]
-        let bug_id_value = Value::Int(bug_id as i64);
+        let bug_id_value = xmlrpc_id(bug_id, "bug ID")?;
         rpc_params.insert("ids".into(), Value::Array(vec![bug_id_value]));
         let include_fields = ATTACHMENT_LIST_FIELDS
             .iter()
@@ -46,8 +45,7 @@ impl XmlRpcClient {
         attachment_id: u64,
     ) -> Result<crate::types::Attachment> {
         let mut rpc_params = BTreeMap::new();
-        #[expect(clippy::cast_possible_wrap, reason = "attachment IDs fit in i64")]
-        let id_value = Value::Int(attachment_id as i64);
+        let id_value = xmlrpc_id(attachment_id, "attachment ID")?;
         rpc_params.insert("attachment_ids".into(), Value::Array(vec![id_value]));
 
         let result = self.call("Bug.attachments", rpc_params).await?;

@@ -77,6 +77,23 @@ async fn search_bugs_empty_result() {
 }
 
 #[tokio::test]
+async fn search_bugs_rejects_id_outside_xmlrpc_integer_range() {
+    let client = XmlRpcClient::new(test_http_client(), "http://127.0.0.1:1", None);
+    let params = SearchParams {
+        id: vec![u64::try_from(i64::MAX).unwrap() + 1],
+        ..Default::default()
+    };
+
+    let err = client.search_bugs(&params).await.unwrap_err();
+
+    assert!(matches!(
+        err,
+        BzrError::InputValidation(ref msg)
+            if msg.contains("bug ID") && msg.contains("XML-RPC signed integer range")
+    ));
+}
+
+#[tokio::test]
 async fn get_bug_by_id() {
     let mock = MockServer::start().await;
     Mock::given(method("POST"))

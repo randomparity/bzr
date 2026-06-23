@@ -5,7 +5,7 @@ use crate::xmlrpc::protocol::Value;
 use crate::xmlrpc::protocol::XmlRpcClient;
 use crate::xmlrpc::resources::mappers::{
     get_bool_flag, get_datetime_str, get_nonempty_str, get_str, get_u64, lookup_bug_entry,
-    require_u64,
+    require_u64, xmlrpc_id,
 };
 
 impl XmlRpcClient {
@@ -15,8 +15,7 @@ impl XmlRpcClient {
         since: Option<&str>,
     ) -> Result<Vec<crate::types::Comment>> {
         let mut rpc_params = BTreeMap::new();
-        #[expect(clippy::cast_possible_wrap, reason = "bug IDs fit in i64")]
-        let bug_id_value = Value::Int(bug_id as i64);
+        let bug_id_value = xmlrpc_id(bug_id, "bug ID")?;
         rpc_params.insert("ids".into(), Value::Array(vec![bug_id_value]));
         if let Some(s) = since {
             rpc_params.insert("new_since".into(), Value::from(s));

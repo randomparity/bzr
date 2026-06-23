@@ -121,6 +121,22 @@ async fn xmlrpc_get_attachments_requests_inline_data_field() {
 }
 
 #[tokio::test]
+async fn xmlrpc_get_attachments_rejects_bug_id_outside_xmlrpc_integer_range() {
+    let client = XmlRpcClient::new(test_http_client(), "http://127.0.0.1:1", None);
+
+    let err = client
+        .get_attachments(u64::try_from(i64::MAX).unwrap() + 1)
+        .await
+        .unwrap_err();
+
+    assert!(matches!(
+        err,
+        BzrError::InputValidation(ref msg)
+            if msg.contains("bug ID") && msg.contains("XML-RPC signed integer range")
+    ));
+}
+
+#[tokio::test]
 async fn xmlrpc_get_attachment_by_id_request_body_omits_exclude_fields() {
     use wiremock::matchers::body_string_contains;
     let mock = MockServer::start().await;
@@ -184,6 +200,22 @@ async fn xmlrpc_get_attachment_by_id_parses_response() {
     assert_eq!(attachment.id, 2002);
     assert!(attachment.is_private);
     assert_eq!(attachment.data.as_deref(), Some("YmVlZg=="));
+}
+
+#[tokio::test]
+async fn xmlrpc_get_attachment_by_id_rejects_id_outside_xmlrpc_integer_range() {
+    let client = XmlRpcClient::new(test_http_client(), "http://127.0.0.1:1", None);
+
+    let err = client
+        .get_attachment_by_id(u64::try_from(i64::MAX).unwrap() + 1)
+        .await
+        .unwrap_err();
+
+    assert!(matches!(
+        err,
+        BzrError::InputValidation(ref msg)
+            if msg.contains("attachment ID") && msg.contains("XML-RPC signed integer range")
+    ));
 }
 
 #[tokio::test]
