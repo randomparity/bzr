@@ -111,7 +111,7 @@ const CONTENT_TYPES: &[(&[&str], &str)] = &[
 ];
 
 pub(super) fn guess_content_type(filename: &str) -> &'static str {
-    let Some(ext) = filename.rsplit('.').next() else {
+    let Some(ext) = Path::new(filename).extension().and_then(|ext| ext.to_str()) else {
         return "application/octet-stream";
     };
     for (extensions, content_type) in CONTENT_TYPES {

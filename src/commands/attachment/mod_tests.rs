@@ -692,6 +692,7 @@ fn guess_content_type_diff() {
 fn guess_content_type_unknown() {
     assert_eq!(guess_content_type("file.xyz"), "application/octet-stream");
     assert_eq!(guess_content_type("noext"), "application/octet-stream");
+    assert_eq!(guess_content_type(".env"), "application/octet-stream");
 }
 
 #[test]
