@@ -300,3 +300,7 @@ pub enum AttachmentAction {
     #[command(verbatim_doc_comment)]
     Update(UpdateArgs),
 }
+
+#[cfg(test)]
+#[path = "attachment_tests.rs"]
+mod tests;
