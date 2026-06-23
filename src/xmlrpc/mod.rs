@@ -5,10 +5,6 @@
 pub(crate) mod protocol;
 mod resources;
 
-#[cfg(fuzzing)]
-#[doc(hidden)]
-pub use protocol::parse_response;
-
 #[cfg(test)]
 #[path = "mod_tests.rs"]
 mod tests;

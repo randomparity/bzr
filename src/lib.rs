@@ -55,11 +55,28 @@ pub mod xmlrpc;
 /// widening the public API in normal builds.
 #[cfg(fuzzing)]
 pub mod fuzz {
+    use crate::config::Config;
+
     /// Drive the best-effort issuer DER walkers on arbitrary bytes. Must
     /// terminate without panicking for any input.
     pub fn extract_issuer(data: &[u8]) {
         let _ = crate::tls::verifier::extract_issuer_der(data);
         let _ = crate::tls::verifier::extract_issuer_dn(data);
+    }
+
+    /// Drive Bugzilla flag parsing on arbitrary string lists.
+    pub fn parse_flags(input: &[String]) {
+        let _ = crate::commands::runtime::flags::parse_flags(input);
+    }
+
+    /// Drive Bugzilla URL import parsing on arbitrary strings.
+    pub fn parse_bugzilla_url(data: &str, config: &Config) {
+        let _ = crate::commands::runtime::url_parser::parse_bugzilla_url(data, config);
+    }
+
+    /// Drive XML-RPC response parsing on arbitrary strings.
+    pub fn parse_xmlrpc_response(data: &str) {
+        let _ = crate::xmlrpc::protocol::parse_response(data);
     }
 }
 
