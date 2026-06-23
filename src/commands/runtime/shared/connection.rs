@@ -13,7 +13,7 @@ use crate::types::{ApiMode, AuthMethod};
 ///
 /// If the server was concurrently removed from disk, this is a no-op (we do
 /// not resurrect a deleted server with detected settings) — logged, not silent.
-fn persist_detected_settings(
+pub(super) fn persist_detected_settings(
     server_name: &str,
     settings: &DetectedServerSettings,
     persist_auth: bool,
@@ -43,7 +43,7 @@ fn persist_detected_settings(
 ///
 /// Returns `true` when the error is a TLS certificate verification failure
 /// and no trust mechanism (insecure, CA cert, or pin) is already configured.
-fn should_offer_tofu(err: &BzrError, tls_config: &TlsConfig) -> bool {
+pub(super) fn should_offer_tofu(err: &BzrError, tls_config: &TlsConfig) -> bool {
     if !tls_uses_default_trust(tls_config) {
         return false;
     }
@@ -56,7 +56,7 @@ fn should_offer_tofu(err: &BzrError, tls_config: &TlsConfig) -> bool {
 /// When this returns `true`, TLS errors at first contact are eligible for
 /// the TOFU prompt; when `false`, the user has already expressed how they
 /// want the server's certificate verified and we don't override that.
-fn tls_uses_default_trust(tls_config: &TlsConfig) -> bool {
+pub(super) fn tls_uses_default_trust(tls_config: &TlsConfig) -> bool {
     !tls_config.insecure && tls_config.ca_cert_path.is_none() && tls_config.pin_sha256.is_none()
 }
 
@@ -77,7 +77,7 @@ fn tls_uses_default_trust(tls_config: &TlsConfig) -> bool {
 /// is purely to surface transport errors. Network/transport failures are
 /// returned as the original `BzrError::Http` so callers can classify them
 /// (TLS cert error, pin mismatch, etc.).
-async fn probe_tls(
+pub(super) async fn probe_tls(
     url: &str,
     tls_config: &TlsConfig,
     request_timeout: std::time::Duration,
@@ -91,25 +91,25 @@ async fn probe_tls(
 
 /// Extract the hostname from a URL string, falling back to the raw URL
 /// if parsing fails.
-fn extract_hostname(url: &str) -> String {
+pub(super) fn extract_hostname(url: &str) -> String {
     url::Url::parse(url)
         .ok()
         .and_then(|u| u.host_str().map(String::from))
         .unwrap_or_else(|| url.to_string())
 }
 
-struct ConnectContext {
-    server_name: String,
-    url: String,
-    api_key: Option<String>,
-    email: Option<String>,
-    api_override: Option<ApiMode>,
-    request_timeout: std::time::Duration,
-    retry_max: u32,
+pub(super) struct ConnectContext {
+    pub(super) server_name: String,
+    pub(super) url: String,
+    pub(super) api_key: Option<String>,
+    pub(super) email: Option<String>,
+    pub(super) api_override: Option<ApiMode>,
+    pub(super) request_timeout: std::time::Duration,
+    pub(super) retry_max: u32,
     /// Whether detected settings (and TOFU pins) may be written back to the
     /// config file. `false` for an inline `--server-url` server, which has no
     /// config entry and must leave the filesystem untouched.
-    persist: bool,
+    pub(super) persist: bool,
 }
 
 impl ConnectContext {
@@ -172,7 +172,7 @@ impl ConnectContext {
 // exclude_re does not reliably match `delete field` mutations on struct
 // expressions, so the function-level attribute is required.
 #[cfg_attr(test, mutants::skip)]
-async fn handle_tofu(ctx: &ConnectContext) -> Result<BugzillaClient> {
+pub(super) async fn handle_tofu(ctx: &ConnectContext) -> Result<BugzillaClient> {
     let hostname = ctx.hostname();
     let (fingerprint, issuer, issuer_der) =
         crate::tls::tofu::probe_server_cert(&ctx.url, ctx.request_timeout).await?;
@@ -233,7 +233,7 @@ async fn handle_tofu(ctx: &ConnectContext) -> Result<BugzillaClient> {
 /// prompt the user, and if accepted, update the pin and retry.
 // Mutation testing: same rationale as handle_tofu above.
 #[cfg_attr(test, mutants::skip)]
-async fn handle_pin_rotation(
+pub(super) async fn handle_pin_rotation(
     ctx: &ConnectContext,
     old_pin: &str,
     new_fingerprint: &str,
@@ -292,7 +292,7 @@ async fn handle_pin_rotation(
 
 /// Detect server settings and build a client, persisting the detected
 /// settings to config. Shared tail logic for TOFU and pin rotation flows.
-async fn detect_and_build_client(
+pub(super) async fn detect_and_build_client(
     ctx: &ConnectContext,
     tls_config: &TlsConfig,
 ) -> Result<BugzillaClient> {
@@ -334,7 +334,7 @@ async fn detect_settings(
 ///   it and let the actual command surface it with full context).
 /// - `Err(_)` — issuer changed (treated as a hard failure with a clear
 ///   remediation hint), or a downstream prompt/probe error.
-async fn classify_and_handle_tls_failure(
+pub(super) async fn classify_and_handle_tls_failure(
     err: &BzrError,
     ctx: &ConnectContext,
     tls_config: &TlsConfig,
@@ -370,7 +370,7 @@ async fn classify_and_handle_tls_failure(
 
 /// Run `detect_server_settings` and handle TLS errors with TOFU or
 /// pin rotation flows as appropriate.
-async fn detect_with_tofu_fallback(
+pub(super) async fn detect_with_tofu_fallback(
     ctx: &ConnectContext,
     tls_config: &TlsConfig,
 ) -> Result<DetectOrClient> {
@@ -386,7 +386,7 @@ async fn detect_with_tofu_fallback(
 
 /// Either detected settings (continue normal flow) or a fully-built
 /// client (TOFU/rotation handled everything).
-enum DetectOrClient {
+pub(super) enum DetectOrClient {
     Settings(DetectedServerSettings),
     Client(BugzillaClient),
 }
@@ -580,165 +580,3 @@ pub async fn connect_and_configure(command: &CommandContext) -> Result<BugzillaC
     let client = ctx.build_client(auth, api_mode, &tls_config)?;
     Ok(client)
 }
-
-/// Where a body string comes from. Pure result of classifying the
-/// inline + file flag pair; carries no I/O.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum BodySource {
-    /// A literal inline value (`--body "text"`).
-    Literal(String),
-    /// Read all of stdin (`--body -` or `--*-file -`).
-    Stdin,
-    /// Read a UTF-8 file (`--*-file PATH`, PATH != "-").
-    File(std::path::PathBuf),
-    /// Neither source supplied; the caller applies its own fallback.
-    None,
-}
-
-#[derive(Clone, Copy)]
-pub(crate) enum CommentBodyRequirement {
-    Optional,
-    RequiredWithFallback(fn() -> Result<String>),
-    PrivateRequiresBody,
-}
-
-impl CommentBodyRequirement {
-    pub(crate) fn optional_or_private_required(comment_private: bool) -> Self {
-        if comment_private {
-            Self::PrivateRequiresBody
-        } else {
-            Self::Optional
-        }
-    }
-}
-
-/// Classify an inline flag value and/or a `--*-file` path into a
-/// [`BodySource`], honouring the `-` = stdin convention for both. The two
-/// sources are mutually exclusive; clap `conflicts_with` makes the
-/// both-present case unreachable in normal use, but this guards regardless so
-/// correctness does not depend on the CLI layer. `inline_flag` / `file_flag`
-/// name the originating options for the mutual-exclusion error message.
-pub(crate) fn classify_body_source(
-    inline: Option<&str>,
-    file: Option<&std::path::Path>,
-    inline_flag: &str,
-    file_flag: &str,
-) -> Result<BodySource> {
-    match (inline, file) {
-        (Some(_), Some(_)) => Err(BzrError::InputValidation(format!(
-            "{inline_flag} and {file_flag} are mutually exclusive"
-        ))),
-        (Some("-"), None) => Ok(BodySource::Stdin),
-        (Some(s), None) => Ok(BodySource::Literal(s.to_string())),
-        (None, Some(path)) => {
-            if path == std::path::Path::new("-") {
-                Ok(BodySource::Stdin)
-            } else {
-                Ok(BodySource::File(path.to_path_buf()))
-            }
-        }
-        (None, None) => Ok(BodySource::None),
-    }
-}
-
-/// Read everything from `reader` into a `String`, mapping I/O failures
-/// (including non-UTF-8 input) to a `BzrError`.
-fn read_to_string_from(reader: &mut impl std::io::Read) -> Result<String> {
-    let mut buf = String::new();
-    reader.read_to_string(&mut buf)?;
-    Ok(buf)
-}
-
-/// Read all of stdin to a `String`. Shared by the `-` (dash) convention and
-/// the flag-omitted auto-stdin paths.
-pub(crate) fn read_stdin_to_string() -> Result<String> {
-    read_to_string_from(&mut std::io::stdin().lock())
-}
-
-/// Turn a classified [`BodySource`] into the actual body, or `Ok(None)` for
-/// [`BodySource::None`] so the caller applies its own fallback. This is the
-/// only place that performs stdin/file I/O for the explicit body flags.
-pub(crate) fn materialize_body_source(
-    source: BodySource,
-    file_flag: &str,
-) -> Result<Option<String>> {
-    match source {
-        BodySource::Literal(s) => Ok(Some(s)),
-        BodySource::Stdin => Ok(Some(read_stdin_to_string()?)),
-        BodySource::File(path) => Ok(Some(read_file_with_context(&path, file_flag)?)),
-        BodySource::None => Ok(None),
-    }
-}
-
-/// Materialize a comment body according to the command's body requirement.
-///
-/// Explicit sources always reject whitespace-only text. When no explicit source
-/// is present, `requirement` decides whether absence is allowed, should fall
-/// back to a command reader, or is a `--comment-private` usage error.
-pub(crate) fn materialize_comment_body(
-    source: BodySource,
-    file_flag: &str,
-    requirement: CommentBodyRequirement,
-) -> Result<Option<String>> {
-    let Some(text) = materialize_body_source(source, file_flag)? else {
-        return match requirement {
-            CommentBodyRequirement::Optional => Ok(None),
-            CommentBodyRequirement::RequiredWithFallback(read_fallback) => {
-                Ok(Some(require_non_empty_comment_body(read_fallback()?)?))
-            }
-            CommentBodyRequirement::PrivateRequiresBody => Err(BzrError::InputValidation(
-                "--comment-private requires --comment or --comment-file".to_string(),
-            )),
-        };
-    };
-    Ok(Some(require_non_empty_comment_body(text)?))
-}
-
-/// Return comment text when it has non-whitespace content.
-fn require_non_empty_comment_body(text: String) -> Result<String> {
-    if text.trim().is_empty() {
-        return Err(BzrError::InputValidation("empty comment, aborting".into()));
-    }
-    Ok(text)
-}
-
-/// Read a UTF-8 file, mapping any I/O error to an `InputValidation` error that
-/// names the originating CLI flag and the path. `flag` is the user-facing
-/// option name (e.g. `--description-file`) used to prefix the message.
-pub(crate) fn read_file_with_context(path: &std::path::Path, flag: &str) -> Result<String> {
-    std::fs::read_to_string(path).map_err(|e| {
-        BzrError::InputValidation(format!(
-            "{flag} could not be read ({}): {e}",
-            path.display()
-        ))
-    })
-}
-
-/// Overwrite `target` with `value` when an `Option` flag was supplied; an
-/// absent flag (`None`) leaves the existing value unchanged. Returns `true` if
-/// the flag was supplied (i.e. an assignment happened). Used by the in-place
-/// `update` merges for templates and saved queries.
-pub(crate) fn merge_set(target: &mut Option<String>, value: Option<&str>) -> bool {
-    if let Some(v) = value {
-        *target = Some(v.to_owned());
-        true
-    } else {
-        false
-    }
-}
-
-/// Overwrite `target` with `value` when a repeatable flag was supplied (a
-/// non-empty `Vec`); an empty `Vec` (absent flag) leaves it unchanged. Returns
-/// `true` if the flag was supplied.
-pub(crate) fn merge_vec(target: &mut Vec<String>, value: &[String]) -> bool {
-    if value.is_empty() {
-        false
-    } else {
-        *target = value.to_vec();
-        true
-    }
-}
-
-#[cfg(test)]
-#[path = "shared_tests.rs"]
-mod tests;
