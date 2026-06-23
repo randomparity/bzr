@@ -71,3 +71,7 @@ fn build_params(args: &CreateArgs<'_>) -> Result<CreateProductParams> {
         is_open: input.is_open.unwrap_or(true),
     })
 }
+
+#[cfg(test)]
+#[path = "create_tests.rs"]
+mod tests;

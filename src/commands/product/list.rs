@@ -14,3 +14,7 @@ pub(super) async fn handle(
     write_products(&products, ctx.format(), w.out);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "list_tests.rs"]
+mod tests;

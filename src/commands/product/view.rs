@@ -9,3 +9,7 @@ pub(super) async fn handle(name: &str, ctx: &CommandContext, w: &mut Writers<'_>
     write_product_detail(&product, ctx.format(), w.out);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "view_tests.rs"]
+mod tests;
