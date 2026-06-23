@@ -64,12 +64,6 @@ struct JsonUpdateBug {
     expect_unchanged_since: Option<String>,
 }
 
-#[derive(Debug)]
-enum JsonUpdateInput {
-    One(Box<JsonUpdateBug>),
-    Many(Vec<JsonUpdateBug>),
-}
-
 #[derive(Debug, Serialize)]
 struct JsonUpdateRequest {
     id: u64,
@@ -77,13 +71,6 @@ struct JsonUpdateRequest {
     expect_unchanged_since: Option<String>,
     #[serde(flatten)]
     params: UpdateBugParams,
-}
-
-fn read_json_updates(arg: &str) -> Result<JsonUpdateInput> {
-    match crate::commands::runtime::from_json::read_one_or_many(arg)? {
-        JsonOneOrMany::One(entry) => Ok(JsonUpdateInput::One(entry)),
-        JsonOneOrMany::Many(entries) => Ok(JsonUpdateInput::Many(entries)),
-    }
 }
 
 fn merge_copy<T: Copy>(target: &mut Option<T>, value: Option<T>) {
@@ -356,8 +343,8 @@ pub(super) async fn handle(
     if arg == "-" && cli_comment_uses_stdin(args) {
         reject_cli_stdin_comment_source(args, arg, false)?;
     }
-    match read_json_updates(arg)? {
-        JsonUpdateInput::One(entry) => {
+    match crate::commands::runtime::from_json::read_one_or_many::<JsonUpdateBug>(arg)? {
+        JsonOneOrMany::One(entry) => {
             reject_cli_stdin_comment_source(args, arg, false)?;
             let ids = object_ids(&entry, args)?;
             let (ids, params, expect_unchanged_since) = build_from_json(*entry, args, &ids)?;
@@ -373,7 +360,7 @@ pub(super) async fn handle(
             )
             .await
         }
-        JsonUpdateInput::Many(entries) => {
+        JsonOneOrMany::Many(entries) => {
             reject_cli_stdin_comment_source(args, arg, true)?;
             if !args.ids.is_empty() {
                 return Err(crate::error::BzrError::InputValidation(

@@ -1,6 +1,8 @@
-#![expect(clippy::panic)]
+#![expect(clippy::panic, clippy::unwrap_used)]
 
 use std::collections::BTreeSet;
+
+use crate::commands::runtime::from_json::JsonOneOrMany;
 
 use super::JsonUpdateBug;
 
@@ -86,4 +88,32 @@ fn bug_update_input_schema_array_items_require_id() {
         .unwrap_or_else(|| panic!("bug-update-input array item schema missing required list"));
 
     assert!(required.iter().any(|field| field.as_str() == Some("id")));
+}
+
+#[test]
+fn parse_json_updates_object_and_array_shapes() {
+    assert!(matches!(
+        crate::commands::runtime::from_json::parse_one_or_many::<JsonUpdateBug>(
+            r#"{"id":1,"status":"ASSIGNED"}"#
+        )
+        .unwrap(),
+        JsonOneOrMany::One(_)
+    ));
+
+    match crate::commands::runtime::from_json::parse_one_or_many::<JsonUpdateBug>(
+        r#"[{"id":1,"status":"ASSIGNED"},{"id":2,"priority":"high"}]"#,
+    )
+    .unwrap()
+    {
+        JsonOneOrMany::Many(v) => assert_eq!(v.len(), 2),
+        JsonOneOrMany::One(_) => panic!("array should parse as Many"),
+    }
+
+    assert!(matches!(
+        crate::commands::runtime::from_json::parse_one_or_many::<JsonUpdateBug>(
+            r#"[{"id":1,"status":"ASSIGNED"}]"#
+        )
+        .unwrap(),
+        JsonOneOrMany::Many(_)
+    ));
 }

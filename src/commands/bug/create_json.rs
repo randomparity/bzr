@@ -89,33 +89,6 @@ impl JsonCreateBug {
     }
 }
 
-/// Structured `--from-json` input, preserving the top-level shape so the
-/// output shape follows the *input* (a 1-element array is still a batch), not
-/// the element count.
-#[derive(Debug)]
-enum JsonInput {
-    /// A top-level object: one bug, single-result output. Boxed because a
-    /// `JsonCreateBug` is far larger than the `Many` vec handle.
-    One(Box<JsonCreateBug>),
-    /// A top-level array: one bug per element, partial-failure output.
-    Many(Vec<JsonCreateBug>),
-}
-
-fn read_json_bugs(arg: &str) -> Result<JsonInput> {
-    match crate::commands::runtime::from_json::read_one_or_many(arg)? {
-        JsonOneOrMany::One(entry) => Ok(JsonInput::One(entry)),
-        JsonOneOrMany::Many(entries) => Ok(JsonInput::Many(entries)),
-    }
-}
-
-#[cfg(test)]
-fn parse_json_bugs(raw: &str) -> Result<JsonInput> {
-    match crate::commands::runtime::from_json::parse_one_or_many(raw)? {
-        JsonOneOrMany::One(entry) => Ok(JsonInput::One(entry)),
-        JsonOneOrMany::Many(entries) => Ok(JsonInput::Many(entries)),
-    }
-}
-
 /// Resolve an explicit `--description`/`--description-file` for the JSON path.
 /// Unlike the interactive create flow, this does NOT auto-read stdin — only an
 /// explicitly-supplied value overrides the JSON `description`.
@@ -266,12 +239,12 @@ pub(super) async fn handle(
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    match read_json_bugs(arg)? {
-        JsonInput::One(entry) => {
+    match crate::commands::runtime::from_json::read_one_or_many::<JsonCreateBug>(arg)? {
+        JsonOneOrMany::One(entry) => {
             let params = overlay_cli(*entry, args)?.into_params()?;
             super::create::create_and_report(client, &params, format, w).await
         }
-        JsonInput::Many(entries) => {
+        JsonOneOrMany::Many(entries) => {
             if entries.is_empty() {
                 return Err(crate::error::BzrError::InputValidation(
                     "--from-json: empty array, nothing to create".into(),

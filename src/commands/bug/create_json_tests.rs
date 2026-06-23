@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::commands::runtime::from_json::JsonOneOrMany;
 use crate::error::BzrError;
 
 use super::JsonCreateBug;
@@ -100,14 +101,16 @@ fn bug_create_input_schema_documents_array_form() {
 }
 
 #[test]
-fn parse_json_bugs_rejects_non_object_scalar() {
-    let err = super::parse_json_bugs("42").unwrap_err();
+fn parse_one_or_many_rejects_non_object_scalar() {
+    let err =
+        crate::commands::runtime::from_json::parse_one_or_many::<JsonCreateBug>("42").unwrap_err();
     assert!(matches!(err, BzrError::InputValidation(_)));
 }
 
 #[test]
-fn parse_json_bugs_rejects_malformed_json() {
-    let err = super::parse_json_bugs("{not json").unwrap_err();
+fn parse_one_or_many_rejects_malformed_json() {
+    let err = crate::commands::runtime::from_json::parse_one_or_many::<JsonCreateBug>("{not json")
+        .unwrap_err();
     match err {
         BzrError::InputValidation(msg) => assert!(msg.contains("invalid JSON"), "{msg}"),
         other => panic!("expected InputValidation, got {other:?}"),
@@ -115,18 +118,28 @@ fn parse_json_bugs_rejects_malformed_json() {
 }
 
 #[test]
-fn parse_json_bugs_object_and_array_shapes() {
+fn parse_one_or_many_preserves_object_and_array_shapes() {
     assert!(matches!(
-        super::parse_json_bugs(r#"{"product":"P"}"#).unwrap(),
-        super::JsonInput::One(_)
+        crate::commands::runtime::from_json::parse_one_or_many::<JsonCreateBug>(
+            r#"{"product":"P"}"#
+        )
+        .unwrap(),
+        JsonOneOrMany::One(_)
     ));
-    match super::parse_json_bugs(r#"[{"product":"P"},{"product":"Q"}]"#).unwrap() {
-        super::JsonInput::Many(v) => assert_eq!(v.len(), 2),
-        super::JsonInput::One(_) => panic!("array should parse as Many"),
+    match crate::commands::runtime::from_json::parse_one_or_many::<JsonCreateBug>(
+        r#"[{"product":"P"},{"product":"Q"}]"#,
+    )
+    .unwrap()
+    {
+        JsonOneOrMany::Many(v) => assert_eq!(v.len(), 2),
+        JsonOneOrMany::One(_) => panic!("array should parse as Many"),
     }
     // A 1-element array stays Many, so output shape follows input shape.
     assert!(matches!(
-        super::parse_json_bugs(r#"[{"product":"P"}]"#).unwrap(),
-        super::JsonInput::Many(_)
+        crate::commands::runtime::from_json::parse_one_or_many::<JsonCreateBug>(
+            r#"[{"product":"P"}]"#
+        )
+        .unwrap(),
+        JsonOneOrMany::Many(_)
     ));
 }
