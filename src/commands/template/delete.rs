@@ -15,3 +15,7 @@ pub(super) fn handle(name: &str, ctx: &CommandContext, w: &mut Writers<'_>) -> R
     write_template_saved(name, "Deleted", ctx.format(), w.out);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "delete_tests.rs"]
+mod tests;

@@ -9,3 +9,7 @@ pub(super) fn handle(ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
     write_template_list(&config.templates, ctx.format(), w.out);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "list_tests.rs"]
+mod tests;
