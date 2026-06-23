@@ -55,7 +55,7 @@ pub struct BugzillaClient {
     auth: Option<PreparedAuth>,
     pub(super) api_key: Option<String>,
     pub(super) api_mode: ApiMode,
-    pub(super) xmlrpc: Option<XmlRpcClient>,
+    pub(super) xmlrpc: XmlRpcClient,
     /// Email hint for Bugzilla 5.0 compatibility (whoami fallback via user lookup).
     email_hint: Option<String>,
     /// Transient-retry budget (429 / 5xx / timeout). Captured from the global
@@ -196,7 +196,7 @@ impl BugzillaClient {
                  overriding configured header auth for XML-RPC calls"
             );
         }
-        let xmlrpc = Some(XmlRpcClient::new(http.clone(), base_url, credential));
+        let xmlrpc = XmlRpcClient::new(http.clone(), base_url, credential);
 
         tracing::debug!(base_url, ?auth_method, %api_mode, "created Bugzilla client");
 
@@ -224,12 +224,8 @@ impl BugzillaClient {
         format!("{}/rest/{}", self.base_url, path.trim_start_matches('/'))
     }
 
-    pub(super) fn xmlrpc_client(&self) -> Result<&XmlRpcClient> {
-        self.xmlrpc.as_ref().ok_or_else(|| {
-            BzrError::Config(
-                "XML-RPC client not initialized — set api_mode to 'xmlrpc' or 'hybrid'".into(),
-            )
-        })
+    pub(super) fn xmlrpc_client(&self) -> &XmlRpcClient {
+        &self.xmlrpc
     }
 
     /// Dispatch an operation across the detected API mode. In Hybrid mode the

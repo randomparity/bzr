@@ -68,11 +68,7 @@ impl BugzillaClient {
         self.dispatch_xmlrpc_first(
             &format!("comment list (bug {bug_id})"),
             || self.get_comments_since_rest(bug_id, since),
-            || async {
-                self.xmlrpc_client()?
-                    .get_comments_since(bug_id, since)
-                    .await
-            },
+            || async { self.xmlrpc_client().get_comments_since(bug_id, since).await },
         )
         .await
     }

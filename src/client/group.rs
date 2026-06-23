@@ -75,7 +75,7 @@ impl BugzillaClient {
 
     pub async fn get_group(&self, group: &str) -> Result<GroupInfo> {
         match self.api_mode {
-            ApiMode::XmlRpc => return self.xmlrpc_client()?.get_group(group).await,
+            ApiMode::XmlRpc => return self.xmlrpc_client().get_group(group).await,
             ApiMode::Rest | ApiMode::Hybrid => {}
         }
 
@@ -90,14 +90,14 @@ impl BugzillaClient {
                     "REST Group.get blocked (32610), \
                      falling back to XML-RPC"
                 );
-                self.xmlrpc_client()?.get_group(group).await
+                self.xmlrpc_client().get_group(group).await
             }
             Err(e) if self.api_mode == ApiMode::Hybrid && e.is_transport_failure() => {
                 tracing::info!(
                     "REST group lookup failed ({e}), \
                      retrying via XML-RPC"
                 );
-                self.xmlrpc_client()?.get_group(group).await
+                self.xmlrpc_client().get_group(group).await
             }
             Err(e) => Err(e),
         }

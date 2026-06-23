@@ -222,7 +222,7 @@ impl BugzillaClient {
         }
         match self.api_mode {
             ApiMode::Rest => self.search_bugs_rest(params).await,
-            ApiMode::XmlRpc => self.xmlrpc_client()?.search_bugs(params).await,
+            ApiMode::XmlRpc => self.xmlrpc_client().search_bugs(params).await,
             ApiMode::Hybrid => {
                 self.search_bugs_hybrid(params, XMLRPC_FALLBACK_TIMEOUT)
                     .await
@@ -256,7 +256,7 @@ impl BugzillaClient {
             "REST search returned empty with active structured filters, \
              retrying via XML-RPC"
         );
-        let xmlrpc = self.xmlrpc_client()?;
+        let xmlrpc = self.xmlrpc_client();
         if let Ok(result) = tokio::time::timeout(fallback_timeout, xmlrpc.search_bugs(params)).await
         {
             result
@@ -321,13 +321,13 @@ impl BugzillaClient {
         let (inc, exc) = force_id_fields(include_fields, exclude_fields);
         let (include_fields, exclude_fields) = (inc.as_deref(), exc.as_deref());
         match self.api_mode {
-            ApiMode::XmlRpc => self.xmlrpc_client()?.get_bug(id).await,
+            ApiMode::XmlRpc => self.xmlrpc_client().get_bug(id).await,
             ApiMode::Hybrid => {
                 let rest_result = self.get_bug_rest(id, include_fields, exclude_fields).await;
                 match &rest_result {
                     Err(e) if e.is_transport_failure() => {
                         tracing::info!("REST bug lookup failed, retrying via XML-RPC");
-                        self.xmlrpc_client()?.get_bug(id).await
+                        self.xmlrpc_client().get_bug(id).await
                     }
                     Err(BzrError::Api {
                         code: BUGZILLA_INTERNAL_ERROR,
@@ -340,7 +340,7 @@ impl BugzillaClient {
                             "REST bug lookup returned 100500, \
                              retrying via XML-RPC"
                         );
-                        self.xmlrpc_client()?.get_bug(id).await
+                        self.xmlrpc_client().get_bug(id).await
                     }
                     _ => rest_result,
                 }

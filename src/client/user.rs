@@ -55,12 +55,12 @@ impl BugzillaClient {
     pub async fn create_user(&self, params: &CreateUserParams) -> Result<u64> {
         match self.api_mode {
             ApiMode::Rest => self.post_json_id("user", params).await,
-            ApiMode::XmlRpc => self.xmlrpc_client()?.create_user(params).await,
+            ApiMode::XmlRpc => self.xmlrpc_client().create_user(params).await,
             ApiMode::Hybrid => match self.post_json_id("user", params).await {
                 Ok(id) => Ok(id),
                 Err(e) => {
                     tracing::info!("REST user creation failed ({e}), retrying via XML-RPC");
-                    self.xmlrpc_client()?.create_user(params).await
+                    self.xmlrpc_client().create_user(params).await
                 }
             },
         }
