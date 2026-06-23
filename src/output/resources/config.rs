@@ -2,7 +2,7 @@ use std::io::Write;
 
 use serde::Serialize;
 
-use crate::config::{CredentialSource, CredentialSourceKind};
+use crate::config::{CredentialSource, CredentialSourceKind, KeyringAccount};
 use crate::output::formatting::{mask_api_key, write_field, write_formatted, write_optional_field};
 use crate::types::{AuthMethod, OutputFormat};
 
@@ -40,10 +40,9 @@ impl ServerDisplayInfo {
                 (var_name.to_string(), CredentialSourceKind::Env.as_str())
             }
             Ok(Some(CredentialSource::Keyring { service, account })) => {
-                let display = if account.is_empty() {
-                    format!("{service}/<server-name>")
-                } else {
-                    format!("{service}/{account}")
+                let display = match account {
+                    KeyringAccount::Explicit(account) => format!("{service}/{account}"),
+                    KeyringAccount::ServerDefault => format!("{service}/<server-name>"),
                 };
                 (display, CredentialSourceKind::Keyring.as_str())
             }

@@ -463,8 +463,7 @@ fn credential_source_keyring_variant() {
     match server.credential_source().unwrap() {
         Some(CredentialSource::Keyring { service, account }) => {
             assert_eq!(service, "bzr");
-            // account defaults handled at resolve time via server_name
-            assert_eq!(account, "");
+            assert_eq!(account, KeyringAccount::ServerDefault);
         }
         other => panic!("expected Keyring variant, got {other:?}"),
     }
@@ -472,6 +471,35 @@ fn credential_source_keyring_variant() {
         server.credential_source_kind().unwrap(),
         Some(CredentialSourceKind::Keyring)
     );
+}
+
+#[test]
+fn credential_source_keyring_explicit_account_variant() {
+    let server = ServerConfig {
+        url: "https://example.com".into(),
+        api_key: None,
+        api_key_env: None,
+        api_key_keyring: Some(KeyringRef {
+            service: Some("custom".into()),
+            account: Some("acct".into()),
+        }),
+        email: None,
+        auth_method: None,
+        api_mode: None,
+        server_version: None,
+        tls_insecure: false,
+        tls_ca_cert: None,
+        tls_pin_sha256: None,
+        tls_pin_issuer: None,
+        tls_pin_issuer_der: None,
+    };
+    match server.credential_source().unwrap() {
+        Some(CredentialSource::Keyring { service, account }) => {
+            assert_eq!(service, "custom");
+            assert_eq!(account, KeyringAccount::Explicit("acct"));
+        }
+        other => panic!("expected Keyring variant, got {other:?}"),
+    }
 }
 
 #[test]

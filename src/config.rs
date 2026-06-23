@@ -95,7 +95,18 @@ pub enum CredentialSourceKind {
 pub enum CredentialSource<'a> {
     Inline(&'a str),
     EnvVar(&'a str),
-    Keyring { service: &'a str, account: &'a str },
+    Keyring {
+        service: &'a str,
+        account: KeyringAccount<'a>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyringAccount<'a> {
+    /// Use this exact keyring account string.
+    Explicit(&'a str),
+    /// Resolve the keyring account from the server name at lookup time.
+    ServerDefault,
 }
 
 impl CredentialSource<'_> {
@@ -166,14 +177,13 @@ impl ServerConfig {
                     let r = self.api_key_keyring.as_ref().ok_or_else(|| {
                         BzrError::config("internal: keyring credential unexpectedly missing")
                     })?;
-                    // Empty string means "default to the server_name"; the
-                    // real account is resolved in resolve_api_key() which
-                    // has the server name in scope. We cannot use
-                    // KeyringRef::account_or_default here because that would
-                    // require plumbing the server name through every caller.
+                    let account = r
+                        .account
+                        .as_deref()
+                        .map_or(KeyringAccount::ServerDefault, KeyringAccount::Explicit);
                     Ok(Some(CredentialSource::Keyring {
                         service: r.service_or_default(),
-                        account: r.account.as_deref().unwrap_or(""),
+                        account,
                     }))
                 }
             }
@@ -205,12 +215,9 @@ impl ServerConfig {
                 Ok(Some(value))
             }
             Some(CredentialSource::Keyring { service, account }) => {
-                // Empty `account` means "default to server_name" (see the
-                // sentinel explanation in credential_source()).
-                let account = if account.is_empty() {
-                    server_name
-                } else {
-                    account
+                let account = match account {
+                    KeyringAccount::Explicit(account) => account,
+                    KeyringAccount::ServerDefault => server_name,
                 };
                 crate::credentials::keyring::retrieve(service, account).map(Some)
             }
