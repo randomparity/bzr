@@ -390,3 +390,7 @@ pub enum QueryAction {
     #[command(verbatim_doc_comment)]
     Run(RunArgs),
 }
+
+#[cfg(test)]
+#[path = "query_tests.rs"]
+mod tests;
