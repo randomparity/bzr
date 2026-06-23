@@ -248,11 +248,7 @@ fn write_bug_detail_table(bug: &Bug, spec: ColumnSpec<'_>, out: &mut (impl Write
 
 fn write_id_list_field(out: &mut (impl Write + ?Sized), label: &str, ids: &[u64]) {
     if !ids.is_empty() {
-        let id_str = ids
-            .iter()
-            .map(std::string::ToString::to_string)
-            .collect::<Vec<_>>()
-            .join(", ");
+        let id_str = join_ids(ids);
         let _ = writeln!(out, "  {label:<12}  {id_str}");
     }
 }
