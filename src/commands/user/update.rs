@@ -1,8 +1,9 @@
 use serde::Deserialize;
 
 use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::mutation::{self, Committed, DryRunPreview};
 use crate::error::{BzrError, Result};
-use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
+use crate::output::result_types::{ActionResult, ResourceKind};
 use crate::output::writers::Writers;
 use crate::types::user::UpdateUserParams;
 
@@ -31,26 +32,24 @@ pub(super) async fn handle(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let (user, params) = build_params(args)?;
-    let format = ctx.format();
-    if ctx.dry_run() {
-        let message = format!("Would update user '{user}'");
-        write_result(
-            &DryRunResult::new(ResourceKind::User, &[], &params),
-            &message,
-            format,
-            w.out,
-        );
-        return Ok(());
-    }
-    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
-    client.update_user(&user, &params).await?;
-    write_result(
-        &ActionResult::updated_named(user.as_str(), None, ResourceKind::User),
-        &format!("Updated user '{user}'"),
-        format,
-        w.out,
-    );
-    Ok(())
+    let message = format!("Would update user '{user}'");
+    mutation::run(
+        ctx,
+        w,
+        DryRunPreview {
+            resource: ResourceKind::User,
+            params,
+            message,
+        },
+        move |client, params| async move {
+            client.update_user(&user, &params).await?;
+            Ok(Committed {
+                result: ActionResult::updated_named(user.as_str(), None, ResourceKind::User),
+                message: format!("Updated user '{user}'"),
+            })
+        },
+    )
+    .await
 }
 
 fn build_params(args: &UpdateArgs<'_>) -> Result<(String, UpdateUserParams)> {

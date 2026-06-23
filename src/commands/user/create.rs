@@ -1,8 +1,9 @@
 use serde::Deserialize;
 
 use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::mutation::{self, Committed, DryRunPreview};
 use crate::error::Result;
-use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
+use crate::output::result_types::{ActionResult, ResourceKind};
 use crate::output::writers::Writers;
 use crate::types::user::CreateUserParams;
 
@@ -29,26 +30,24 @@ pub(super) async fn handle(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let params = build_params(args)?;
-    let format = ctx.format();
-    if ctx.dry_run() {
-        let message = format!("Would create user '{}'", params.email);
-        write_result(
-            &DryRunResult::new(ResourceKind::User, &[], &params),
-            &message,
-            format,
-            w.out,
-        );
-        return Ok(());
-    }
-    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
-    let id = client.create_user(&params).await?;
-    write_result(
-        &ActionResult::created_named(id, params.email.as_str(), ResourceKind::User),
-        &format!("Created user #{id} ({})", params.email),
-        format,
-        w.out,
-    );
-    Ok(())
+    let message = format!("Would create user '{}'", params.email);
+    mutation::run(
+        ctx,
+        w,
+        DryRunPreview {
+            resource: ResourceKind::User,
+            params,
+            message,
+        },
+        |client, params| async move {
+            let id = client.create_user(&params).await?;
+            Ok(Committed {
+                result: ActionResult::created_named(id, params.email.as_str(), ResourceKind::User),
+                message: format!("Created user #{id} ({})", params.email),
+            })
+        },
+    )
+    .await
 }
 
 fn build_params(args: &CreateArgs<'_>) -> Result<CreateUserParams> {
