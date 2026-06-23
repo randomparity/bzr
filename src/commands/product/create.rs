@@ -24,17 +24,11 @@ pub(super) struct CreateArgs<'a> {
 }
 
 pub(super) async fn handle(
-    args: CreateArgs<'_>,
+    args: &CreateArgs<'_>,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let params = build_params(
-        args.from_json,
-        args.name,
-        args.description,
-        args.version,
-        args.is_open,
-    )?;
+    let params = build_params(args)?;
     let format = ctx.format();
     if ctx.dry_run() {
         let message = format!("Would create product '{}'", params.name);
@@ -57,22 +51,16 @@ pub(super) async fn handle(
     Ok(())
 }
 
-fn build_params(
-    from_json: Option<&str>,
-    name: Option<&str>,
-    description: Option<&str>,
-    version: Option<&str>,
-    is_open: Option<bool>,
-) -> Result<CreateProductParams> {
-    let mut input = if let Some(arg) = from_json {
+fn build_params(args: &CreateArgs<'_>) -> Result<CreateProductParams> {
+    let mut input = if let Some(arg) = args.from_json {
         crate::commands::runtime::from_json::read_object::<JsonCreateProduct>(arg)?
     } else {
         JsonCreateProduct::default()
     };
-    crate::commands::runtime::from_json::merge_string(&mut input.name, name);
-    crate::commands::runtime::from_json::merge_string(&mut input.description, description);
-    crate::commands::runtime::from_json::merge_string(&mut input.version, version);
-    crate::commands::runtime::from_json::merge_copy(&mut input.is_open, is_open);
+    crate::commands::runtime::from_json::merge_string(&mut input.name, args.name);
+    crate::commands::runtime::from_json::merge_string(&mut input.description, args.description);
+    crate::commands::runtime::from_json::merge_string(&mut input.version, args.version);
+    crate::commands::runtime::from_json::merge_copy(&mut input.is_open, args.is_open);
     Ok(CreateProductParams {
         name: crate::commands::runtime::from_json::required_string(input.name, "name")?,
         description: crate::commands::runtime::from_json::required_string(

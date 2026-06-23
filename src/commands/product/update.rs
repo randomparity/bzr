@@ -24,17 +24,11 @@ pub(super) struct UpdateArgs<'a> {
 }
 
 pub(super) async fn handle(
-    args: UpdateArgs<'_>,
+    args: &UpdateArgs<'_>,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let (name, params) = build_params(
-        args.from_json,
-        args.name,
-        args.description,
-        args.default_milestone,
-        args.is_open,
-    )?;
+    let (name, params) = build_params(args)?;
     let format = ctx.format();
     if ctx.dry_run() {
         let message = format!("Would update product '{name}'");
@@ -57,30 +51,24 @@ pub(super) async fn handle(
     Ok(())
 }
 
-fn build_params(
-    from_json: Option<&str>,
-    name: Option<&str>,
-    description: Option<&str>,
-    default_milestone: Option<&str>,
-    is_open: Option<bool>,
-) -> Result<(String, UpdateProductParams)> {
-    let mut input = if let Some(arg) = from_json {
+fn build_params(args: &UpdateArgs<'_>) -> Result<(String, UpdateProductParams)> {
+    let mut input = if let Some(arg) = args.from_json {
         crate::commands::runtime::from_json::read_object::<JsonUpdateProduct>(arg)?
     } else {
         JsonUpdateProduct::default()
     };
     let target = crate::commands::runtime::from_json::resolve_string_target(
-        name,
+        args.name,
         input.name.take(),
         "--from-json object cannot combine positional product name with JSON name",
         "--from-json object requires a product name",
     )?;
-    crate::commands::runtime::from_json::merge_string(&mut input.description, description);
+    crate::commands::runtime::from_json::merge_string(&mut input.description, args.description);
     crate::commands::runtime::from_json::merge_string(
         &mut input.default_milestone,
-        default_milestone,
+        args.default_milestone,
     );
-    crate::commands::runtime::from_json::merge_copy(&mut input.is_open, is_open);
+    crate::commands::runtime::from_json::merge_copy(&mut input.is_open, args.is_open);
     let params = UpdateProductParams {
         description: input.description,
         default_milestone: input.default_milestone,

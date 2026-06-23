@@ -22,11 +22,11 @@ pub(super) struct CreateArgs<'a> {
 }
 
 pub(super) async fn handle(
-    args: CreateArgs<'_>,
+    args: &CreateArgs<'_>,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let params = build_params(args.from_json, args.name, args.description, args.is_active)?;
+    let params = build_params(args)?;
     let format = ctx.format();
     if ctx.dry_run() {
         let message = format!("Would create group '{}'", params.name);
@@ -49,20 +49,15 @@ pub(super) async fn handle(
     Ok(())
 }
 
-fn build_params(
-    from_json: Option<&str>,
-    name: Option<&str>,
-    description: Option<&str>,
-    is_active: Option<bool>,
-) -> Result<CreateGroupParams> {
-    let mut input = if let Some(arg) = from_json {
+fn build_params(args: &CreateArgs<'_>) -> Result<CreateGroupParams> {
+    let mut input = if let Some(arg) = args.from_json {
         crate::commands::runtime::from_json::read_object::<JsonCreateGroup>(arg)?
     } else {
         JsonCreateGroup::default()
     };
-    crate::commands::runtime::from_json::merge_string(&mut input.name, name);
-    crate::commands::runtime::from_json::merge_string(&mut input.description, description);
-    crate::commands::runtime::from_json::merge_copy(&mut input.is_active, is_active);
+    crate::commands::runtime::from_json::merge_string(&mut input.name, args.name);
+    crate::commands::runtime::from_json::merge_string(&mut input.description, args.description);
+    crate::commands::runtime::from_json::merge_copy(&mut input.is_active, args.is_active);
     Ok(CreateGroupParams {
         name: crate::commands::runtime::from_json::required_string(input.name, "name")?,
         description: crate::commands::runtime::from_json::required_string(

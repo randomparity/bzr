@@ -25,18 +25,14 @@ pub async fn execute(
             version,
             is_open,
         } => {
-            create::handle(
-                create::CreateArgs {
-                    from_json: from_json.as_deref(),
-                    name: name.as_deref(),
-                    description: description.as_deref(),
-                    version: version.as_deref(),
-                    is_open: *is_open,
-                },
-                ctx,
-                w,
-            )
-            .await
+            let args = create::CreateArgs {
+                from_json: from_json.as_deref(),
+                name: name.as_deref(),
+                description: description.as_deref(),
+                version: version.as_deref(),
+                is_open: *is_open,
+            };
+            create::handle(&args, ctx, w).await
         }
         ProductAction::Update {
             from_json,
@@ -45,18 +41,14 @@ pub async fn execute(
             default_milestone,
             is_open,
         } => {
-            update::handle(
-                update::UpdateArgs {
-                    from_json: from_json.as_deref(),
-                    name: name.as_deref(),
-                    description: description.as_deref(),
-                    default_milestone: default_milestone.as_deref(),
-                    is_open: *is_open,
-                },
-                ctx,
-                w,
-            )
-            .await
+            let args = update::UpdateArgs {
+                from_json: from_json.as_deref(),
+                name: name.as_deref(),
+                description: description.as_deref(),
+                default_milestone: default_milestone.as_deref(),
+                is_open: *is_open,
+            };
+            update::handle(&args, ctx, w).await
         }
     }
 }

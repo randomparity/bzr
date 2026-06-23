@@ -24,17 +24,11 @@ pub(super) struct CreateArgs<'a> {
 }
 
 pub(super) async fn handle(
-    args: CreateArgs<'_>,
+    args: &CreateArgs<'_>,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let params = build_params(
-        args.from_json,
-        args.email,
-        args.login,
-        args.full_name,
-        args.password,
-    )?;
+    let params = build_params(args)?;
     let format = ctx.format();
     if ctx.dry_run() {
         let message = format!("Would create user '{}'", params.email);
@@ -57,22 +51,16 @@ pub(super) async fn handle(
     Ok(())
 }
 
-fn build_params(
-    from_json: Option<&str>,
-    email: Option<&str>,
-    login: Option<&str>,
-    full_name: Option<&str>,
-    password: Option<&str>,
-) -> Result<CreateUserParams> {
-    let mut input = if let Some(arg) = from_json {
+fn build_params(args: &CreateArgs<'_>) -> Result<CreateUserParams> {
+    let mut input = if let Some(arg) = args.from_json {
         crate::commands::runtime::from_json::read_object::<JsonCreateUser>(arg)?
     } else {
         JsonCreateUser::default()
     };
-    crate::commands::runtime::from_json::merge_string(&mut input.email, email);
-    crate::commands::runtime::from_json::merge_string(&mut input.login, login);
-    crate::commands::runtime::from_json::merge_string(&mut input.full_name, full_name);
-    crate::commands::runtime::from_json::merge_string(&mut input.password, password);
+    crate::commands::runtime::from_json::merge_string(&mut input.email, args.email);
+    crate::commands::runtime::from_json::merge_string(&mut input.login, args.login);
+    crate::commands::runtime::from_json::merge_string(&mut input.full_name, args.full_name);
+    crate::commands::runtime::from_json::merge_string(&mut input.password, args.password);
     Ok(CreateUserParams {
         email: crate::commands::runtime::from_json::required_string(input.email, "email")?,
         login: input.login,

@@ -41,7 +41,7 @@ pub async fn execute(
             description,
             default_assignee,
         } => {
-            let sources = update::UpdateParamSources {
+            let args = update::UpdateArgs {
                 from_json: from_json.as_deref(),
                 id: *id,
                 product: product.as_deref(),
@@ -50,7 +50,7 @@ pub async fn execute(
                 description: description.as_deref(),
                 default_assignee: default_assignee.as_deref(),
             };
-            update::handle(&sources, ctx, w).await
+            update::handle(&args, ctx, w).await
         }
     }
 }

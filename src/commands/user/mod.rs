@@ -19,18 +19,14 @@ pub async fn execute(action: &UserAction, ctx: &CommandContext, w: &mut Writers<
             full_name,
             password,
         } => {
-            create::handle(
-                create::CreateArgs {
-                    from_json: from_json.as_deref(),
-                    email: email.as_deref(),
-                    login: login.as_deref(),
-                    full_name: full_name.as_deref(),
-                    password: password.as_deref(),
-                },
-                ctx,
-                w,
-            )
-            .await
+            let args = create::CreateArgs {
+                from_json: from_json.as_deref(),
+                email: email.as_deref(),
+                login: login.as_deref(),
+                full_name: full_name.as_deref(),
+                password: password.as_deref(),
+            };
+            create::handle(&args, ctx, w).await
         }
         UserAction::Update {
             from_json,
@@ -40,19 +36,15 @@ pub async fn execute(action: &UserAction, ctx: &CommandContext, w: &mut Writers<
             disable_login,
             login_denied_text,
         } => {
-            update::handle(
-                from_json.as_deref(),
-                user.as_deref(),
-                update::UserUpdateCli {
-                    real_name: real_name.as_deref(),
-                    email: email.as_deref(),
-                    disable_login: *disable_login,
-                    login_denied_text: login_denied_text.as_deref(),
-                },
-                ctx,
-                w,
-            )
-            .await
+            let args = update::UpdateArgs {
+                from_json: from_json.as_deref(),
+                user: user.as_deref(),
+                real_name: real_name.as_deref(),
+                email: email.as_deref(),
+                disable_login: *disable_login,
+                login_denied_text: login_denied_text.as_deref(),
+            };
+            update::handle(&args, ctx, w).await
         }
     }
 }

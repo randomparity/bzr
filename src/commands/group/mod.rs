@@ -30,17 +30,13 @@ pub async fn execute(
             description,
             is_active,
         } => {
-            create::handle(
-                create::CreateArgs {
-                    from_json: from_json.as_deref(),
-                    name: name.as_deref(),
-                    description: description.as_deref(),
-                    is_active: *is_active,
-                },
-                ctx,
-                w,
-            )
-            .await
+            let args = create::CreateArgs {
+                from_json: from_json.as_deref(),
+                name: name.as_deref(),
+                description: description.as_deref(),
+                is_active: *is_active,
+            };
+            create::handle(&args, ctx, w).await
         }
         GroupAction::Update {
             from_json,
@@ -48,17 +44,13 @@ pub async fn execute(
             description,
             is_active,
         } => {
-            update::handle(
-                update::UpdateArgs {
-                    from_json: from_json.as_deref(),
-                    group: group.as_deref(),
-                    description: description.as_deref(),
-                    is_active: *is_active,
-                },
-                ctx,
-                w,
-            )
-            .await
+            let args = update::UpdateArgs {
+                from_json: from_json.as_deref(),
+                group: group.as_deref(),
+                description: description.as_deref(),
+                is_active: *is_active,
+            };
+            update::handle(&args, ctx, w).await
         }
     }
 }

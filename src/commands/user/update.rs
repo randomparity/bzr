@@ -16,8 +16,9 @@ struct JsonUpdateUser {
     login_denied_text: Option<String>,
 }
 
-#[derive(Clone, Copy)]
-pub(super) struct UserUpdateCli<'a> {
+pub(super) struct UpdateArgs<'a> {
+    pub(super) from_json: Option<&'a str>,
+    pub(super) user: Option<&'a str>,
     pub(super) real_name: Option<&'a str>,
     pub(super) email: Option<&'a str>,
     pub(super) disable_login: Option<bool>,
@@ -25,13 +26,11 @@ pub(super) struct UserUpdateCli<'a> {
 }
 
 pub(super) async fn handle(
-    from_json: Option<&str>,
-    user: Option<&str>,
-    cli: UserUpdateCli<'_>,
+    args: &UpdateArgs<'_>,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let (user, params) = build_params(from_json, user, cli)?;
+    let (user, params) = build_params(args)?;
     let format = ctx.format();
     if ctx.dry_run() {
         let message = format!("Would update user '{user}'");
@@ -54,28 +53,24 @@ pub(super) async fn handle(
     Ok(())
 }
 
-fn build_params(
-    from_json: Option<&str>,
-    user: Option<&str>,
-    cli: UserUpdateCli<'_>,
-) -> Result<(String, UpdateUserParams)> {
-    let mut input = if let Some(arg) = from_json {
+fn build_params(args: &UpdateArgs<'_>) -> Result<(String, UpdateUserParams)> {
+    let mut input = if let Some(arg) = args.from_json {
         crate::commands::runtime::from_json::read_object::<JsonUpdateUser>(arg)?
     } else {
         JsonUpdateUser::default()
     };
     let target = crate::commands::runtime::from_json::resolve_string_target(
-        user,
+        args.user,
         input.user.take(),
         "--from-json object cannot combine positional user with JSON user",
         "--from-json object requires a user",
     )?;
-    crate::commands::runtime::from_json::merge_string(&mut input.real_name, cli.real_name);
-    crate::commands::runtime::from_json::merge_string(&mut input.email, cli.email);
-    crate::commands::runtime::from_json::merge_copy(&mut input.disable_login, cli.disable_login);
+    crate::commands::runtime::from_json::merge_string(&mut input.real_name, args.real_name);
+    crate::commands::runtime::from_json::merge_string(&mut input.email, args.email);
+    crate::commands::runtime::from_json::merge_copy(&mut input.disable_login, args.disable_login);
     crate::commands::runtime::from_json::merge_string(
         &mut input.login_denied_text,
-        cli.login_denied_text,
+        args.login_denied_text,
     );
     let denied_text =
         resolve_login_denied_text(input.disable_login, input.login_denied_text.as_deref());

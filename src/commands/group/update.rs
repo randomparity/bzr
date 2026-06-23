@@ -22,12 +22,11 @@ pub(super) struct UpdateArgs<'a> {
 }
 
 pub(super) async fn handle(
-    args: UpdateArgs<'_>,
+    args: &UpdateArgs<'_>,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let (group, params) =
-        build_params(args.from_json, args.group, args.description, args.is_active)?;
+    let (group, params) = build_params(args)?;
     let format = ctx.format();
     if ctx.dry_run() {
         let message = format!("Would update group '{group}'");
@@ -50,25 +49,20 @@ pub(super) async fn handle(
     Ok(())
 }
 
-fn build_params(
-    from_json: Option<&str>,
-    group: Option<&str>,
-    description: Option<&str>,
-    is_active: Option<bool>,
-) -> Result<(String, UpdateGroupParams)> {
-    let mut input = if let Some(arg) = from_json {
+fn build_params(args: &UpdateArgs<'_>) -> Result<(String, UpdateGroupParams)> {
+    let mut input = if let Some(arg) = args.from_json {
         crate::commands::runtime::from_json::read_object::<JsonUpdateGroup>(arg)?
     } else {
         JsonUpdateGroup::default()
     };
     let target = crate::commands::runtime::from_json::resolve_string_target(
-        group,
+        args.group,
         input.group.take(),
         "--from-json object cannot combine positional group with JSON group",
         "--from-json object requires a group",
     )?;
-    crate::commands::runtime::from_json::merge_string(&mut input.description, description);
-    crate::commands::runtime::from_json::merge_copy(&mut input.is_active, is_active);
+    crate::commands::runtime::from_json::merge_string(&mut input.description, args.description);
+    crate::commands::runtime::from_json::merge_copy(&mut input.is_active, args.is_active);
     let params = UpdateGroupParams {
         description: input.description,
         is_active: input.is_active,

@@ -35,7 +35,7 @@ struct NamedComponentUpdateDryRun<'a> {
     params: &'a UpdateComponentParams,
 }
 
-pub(super) struct UpdateParamSources<'a> {
+pub(super) struct UpdateArgs<'a> {
     pub(super) from_json: Option<&'a str>,
     pub(super) id: Option<u64>,
     pub(super) product: Option<&'a str>,
@@ -60,12 +60,12 @@ struct NamedComponentTarget {
 }
 
 pub(super) async fn handle(
-    sources: &UpdateParamSources<'_>,
+    args: &UpdateArgs<'_>,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let format = ctx.format();
-    let update = build_update_input(sources)?;
+    let update = build_update_input(args)?;
     if ctx.dry_run() {
         write_update_dry_run(&update, format, w);
         return Ok(());
@@ -111,25 +111,25 @@ fn write_update_dry_run(update: &ComponentUpdateInput, format: OutputFormat, w: 
     }
 }
 
-fn build_update_input(sources: &UpdateParamSources<'_>) -> Result<ComponentUpdateInput> {
-    let mut input = if let Some(arg) = sources.from_json {
+fn build_update_input(args: &UpdateArgs<'_>) -> Result<ComponentUpdateInput> {
+    let mut input = if let Some(arg) = args.from_json {
         crate::commands::runtime::from_json::read_object::<JsonUpdateComponent>(arg)?
     } else {
         JsonUpdateComponent::default()
     };
     let target = resolve_update_target(UpdateTargetSources {
-        cli_id: sources.id,
+        cli_id: args.id,
         json_id: input.id.take(),
-        cli_product: sources.product,
-        cli_component: sources.component,
+        cli_product: args.product,
+        cli_component: args.component,
         json_product: input.product.take(),
         json_component: input.component.take(),
     })?;
-    crate::commands::runtime::from_json::merge_string(&mut input.name, sources.name);
-    crate::commands::runtime::from_json::merge_string(&mut input.description, sources.description);
+    crate::commands::runtime::from_json::merge_string(&mut input.name, args.name);
+    crate::commands::runtime::from_json::merge_string(&mut input.description, args.description);
     crate::commands::runtime::from_json::merge_string(
         &mut input.default_assignee,
-        sources.default_assignee,
+        args.default_assignee,
     );
     let params = UpdateComponentParams {
         name: input.name,
