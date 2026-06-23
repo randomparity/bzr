@@ -263,6 +263,10 @@ fn auth_method_from_str_valid() {
         AuthMethod::from_str("query_param").unwrap(),
         AuthMethod::QueryParam
     );
+    assert_eq!(
+        AuthMethod::from_str("query-param").unwrap(),
+        AuthMethod::QueryParam
+    );
 }
 
 #[test]

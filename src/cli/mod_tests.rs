@@ -655,6 +655,31 @@ fn parse_config_set_server_without_api_key_source() {
 }
 
 #[test]
+fn parse_config_set_server_auth_method_accepts_documented_query_param() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "config",
+        "set-server",
+        "prod",
+        "--url",
+        "https://bz.example.com",
+        "--auth-method",
+        "query-param",
+    ])
+    .unwrap();
+
+    assert!(matches!(
+        cli.command,
+        Commands::Config {
+            action: ConfigAction::SetServer {
+                auth_method: Some(crate::types::AuthMethod::QueryParam),
+                ..
+            }
+        }
+    ));
+}
+
+#[test]
 fn parse_unknown_command_fails() {
     let result = Cli::try_parse_from(["bzr", "nonexistent"]);
     assert!(result.is_err());
