@@ -84,3 +84,7 @@ pub struct CloneArgs {
     #[arg(long)]
     pub no_keywords: bool,
 }
+
+#[cfg(test)]
+#[path = "clone_tests.rs"]
+mod tests;

@@ -368,3 +368,7 @@ pub enum BugAction {
     #[command(long_about = verbs::DUP_LONG_ABOUT)]
     Dup(DupArgs),
 }
+
+#[cfg(test)]
+#[path = "mod_tests.rs"]
+mod tests;

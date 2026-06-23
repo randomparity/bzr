@@ -85,3 +85,7 @@ pub struct MyArgs {
     #[command(flatten)]
     pub page_args: PageArgs,
 }
+
+#[cfg(test)]
+#[path = "my_tests.rs"]
+mod tests;

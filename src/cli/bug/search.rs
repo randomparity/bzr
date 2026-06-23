@@ -83,3 +83,7 @@ pub struct SearchArgs {
     #[command(flatten)]
     pub page_args: PageArgs,
 }
+
+#[cfg(test)]
+#[path = "search_tests.rs"]
+mod tests;
