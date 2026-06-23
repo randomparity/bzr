@@ -2420,12 +2420,13 @@ async fn completion_rejects_unknown_shell() {
     assert!(parsed.is_err(), "clap should reject an unknown shell name");
 }
 
-/// #323: the redundant `show` subcommand was removed. Bare `whoami` parses
-/// to the unit `Commands::Whoami`, and `whoami show` is now rejected.
+/// #323: the redundant `show` subcommand was removed. Bare `whoami` parses,
+/// and `whoami show` is now rejected. (The parse routing to the `Whoami`
+/// command variant is asserted in `src/cli/mod_tests.rs::parse_whoami`, which
+/// can name the now crate-internal `Commands` type.)
 #[tokio::test]
 async fn whoami_bare_parses_and_show_subcommand_removed() {
-    let parsed = bzr::cli::Cli::try_parse_from(["bzr", "whoami"]).expect("bare whoami parses");
-    assert!(matches!(parsed.command, bzr::cli::Commands::Whoami));
+    bzr::cli::Cli::try_parse_from(["bzr", "whoami"]).expect("bare whoami parses");
 
     let show = bzr::cli::Cli::try_parse_from(["bzr", "whoami", "show"]);
     assert!(show.is_err(), "`whoami show` should no longer be accepted");
