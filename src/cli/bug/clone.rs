@@ -33,7 +33,7 @@ See bzr-bug-create(1) for filing a brand-new bug."#;
     clippy::struct_excessive_bools,
     reason = "clone uses independent CLI switches, not one state enum"
 )]
-pub struct CloneArgs {
+pub(crate) struct CloneArgs {
     /// Source bug ID or alias
     pub id: String,
     /// Override summary

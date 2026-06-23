@@ -5,7 +5,7 @@ use crate::output::resources::field::{write_field_aliases, write_field_values};
 use crate::output::writers::Writers;
 use crate::types::{OutputFormat, FIELD_ALIASES};
 
-pub async fn execute(
+pub(crate) async fn execute(
     action: &FieldAction,
     ctx: &CommandContext,
     w: &mut Writers<'_>,

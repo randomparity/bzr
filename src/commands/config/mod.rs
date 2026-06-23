@@ -17,7 +17,7 @@ mod set_default;
 mod set_server;
 mod show;
 
-pub async fn execute(
+pub(crate) async fn execute(
     action: &ConfigAction,
     ctx: &CommandContext,
     w: &mut Writers<'_>,

@@ -1,7 +1,7 @@
 use clap::Subcommand;
 
 #[derive(Subcommand)]
-pub enum ServerAction {
+pub(crate) enum ServerAction {
     /// Show the configured server's version, extensions, and capabilities.
     ///
     /// Prints the Bugzilla version string, the active API transport

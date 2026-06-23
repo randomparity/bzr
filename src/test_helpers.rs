@@ -166,11 +166,16 @@ pub async fn seed_inline_server(name: &str, url: &str, api_key: &str) {
 
 /// Run a `ConfigAction`, capture stdout, and parse it as JSON.
 ///
+/// Gated to `cfg(test)`: it takes the crate-internal `ConfigAction`, so only
+/// in-crate unit tests can call it (integration tests drive config through
+/// `dispatch`).
+///
 /// # Panics
 ///
 /// Panics if the command errors or its stdout is not valid JSON.
+#[cfg(test)]
 #[expect(clippy::unwrap_used)]
-pub async fn run_config_action_json(action: crate::cli::ConfigAction) -> serde_json::Value {
+pub(crate) async fn run_config_action_json(action: crate::cli::ConfigAction) -> serde_json::Value {
     let mut io = CapturedIo::new();
     crate::commands::config::execute(
         &action,

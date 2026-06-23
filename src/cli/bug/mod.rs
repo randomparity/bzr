@@ -14,22 +14,22 @@ mod update;
 mod verbs;
 mod view;
 
-pub use clone::CloneArgs;
-pub use create::CreateArgs;
-pub use history::HistoryArgs;
-pub use list::ListArgs;
-pub use my::MyArgs;
-pub use search::SearchArgs;
-pub use update::UpdateArgs;
-pub use verbs::{CloseArgs, DupArgs, ReopenArgs, ResolveArgs};
-pub use view::ViewArgs;
+pub(crate) use clone::CloneArgs;
+pub(crate) use create::CreateArgs;
+pub(crate) use history::HistoryArgs;
+pub(crate) use list::ListArgs;
+pub(crate) use my::MyArgs;
+pub(crate) use search::SearchArgs;
+pub(crate) use update::UpdateArgs;
+pub(crate) use verbs::{CloseArgs, DupArgs, ReopenArgs, ResolveArgs};
+pub(crate) use view::ViewArgs;
 
 /// Shared `--sort` / `--order` result ordering, flattened into the bug query
 /// subcommands (`list`, `search`, `my`) and `query run`. Absent `--sort`,
 /// results default to a stable `bug_id` order so identical runs are
 /// reproducible.
 #[derive(Args, Debug, Clone, Default)]
-pub struct SortArgs {
+pub(crate) struct SortArgs {
     /// Sort results by this field (e.g. `last_change_time`, `priority`,
     /// `bug_id`). Field-name aliases (`id`, `severity`, `status`, ...) are
     /// accepted. Absent, results are ordered by `bug_id` for determinism.
@@ -46,7 +46,7 @@ pub struct SortArgs {
 /// Bugzilla returns no total, so `--paginate` (loop all pages) is the path to
 /// full retrieval and `--offset` walks windows manually.
 #[derive(Args, Debug, Clone, Default)]
-pub struct PageArgs {
+pub(crate) struct PageArgs {
     /// Skip the first N matching bugs (manual paging past `--limit`).
     ///
     /// Page through a large result set by repeating with increasing offsets;
@@ -68,7 +68,7 @@ pub struct PageArgs {
 /// Grouped into one flattened struct so the `Create` variant stays readable
 /// and the set is defined once.
 #[derive(Args, Debug, Clone, Default)]
-pub struct CreateFieldArgs {
+pub(crate) struct CreateFieldArgs {
     /// Set an alias for the new bug.
     #[arg(long)]
     pub alias: Option<String>,
@@ -107,7 +107,7 @@ pub struct CreateFieldArgs {
 /// alias, and assigning a new unique alias while cloning is a narrower workflow
 /// than the metadata fields users commonly need to adjust.
 #[derive(Args, Debug, Clone, Default)]
-pub struct CloneCreateFieldArgs {
+pub(crate) struct CloneCreateFieldArgs {
     /// Override the URL field.
     #[arg(long)]
     pub url: Option<String>,
@@ -142,7 +142,7 @@ pub struct CloneCreateFieldArgs {
 /// the same `--comment` / `--comment-file` / `--comment-private` set `bug
 /// update` accepts.
 #[derive(Args, Debug, Clone, Default)]
-pub struct CommentArgs {
+pub(crate) struct CommentArgs {
     /// Post a comment atomically with the change.
     ///
     /// A value of `-` reads the comment from stdin. Mutually exclusive
@@ -163,7 +163,7 @@ pub struct CommentArgs {
 /// query subcommands (`list`, `view`, `search`, `my`) so the pair is defined
 /// once instead of repeated per variant.
 #[derive(Args, Debug, Clone, Default)]
-pub struct FieldArgs {
+pub(crate) struct FieldArgs {
     /// Fields to request from the server (comma-separated). In table output,
     /// selects which columns (or detail rows) to show, in order; under --json,
     /// the object contains only the selected fields (id only if requested).
@@ -180,7 +180,7 @@ pub struct FieldArgs {
 /// Bug filter flags with the same meaning across `bug list`, `bug my`, and
 /// saved-query commands.
 #[derive(Args, Debug, Clone, Default)]
-pub struct BugFilterArgs {
+pub(crate) struct BugFilterArgs {
     /// Filter by product (repeatable for OR; prefix with ! to exclude)
     #[arg(long)]
     pub product: Vec<String>,
@@ -257,7 +257,7 @@ impl BugFilterArgs {
 
 /// Bug actor filters shared by `bug list` and saved-query commands.
 #[derive(Args, Debug, Clone, Default)]
-pub struct BugActorFilterArgs {
+pub(crate) struct BugActorFilterArgs {
     /// Filter by assignee (repeatable for OR; prefix with ! to exclude)
     #[arg(long)]
     pub assignee: Vec<String>,
@@ -330,7 +330,7 @@ fn merge_saved_query_filter_values<'a>(
 }
 
 #[derive(Subcommand)]
-pub enum BugAction {
+pub(crate) enum BugAction {
     /// List bugs that match the given filters.
     #[command(long_about = list::LONG_ABOUT)]
     List(ListArgs),

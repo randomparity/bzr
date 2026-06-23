@@ -10,7 +10,7 @@ mod list;
 mod update;
 mod view;
 
-pub async fn execute(
+pub(crate) async fn execute(
     action: &ProductAction,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
@@ -54,7 +54,7 @@ pub async fn execute(
 }
 
 #[must_use]
-pub fn is_dry_runnable(action: &ProductAction) -> bool {
+pub(crate) fn is_dry_runnable(action: &ProductAction) -> bool {
     matches!(
         action,
         ProductAction::Create { .. } | ProductAction::Update { .. }

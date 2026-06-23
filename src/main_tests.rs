@@ -29,38 +29,17 @@ fn with_bzr_output<T>(value: Option<&str>, f: impl FnOnce() -> T) -> T {
     result
 }
 
-fn base_cli(command: Commands) -> Cli {
-    Cli {
-        server: None,
-        server_url: None,
-        server_api_key_env: None,
-        server_email: None,
-        server_tls_insecure: false,
-        server_tls_ca_cert: None,
-        server_tls_pin_sha256: None,
-        server_tls_pin_now: false,
-        output: None,
-        json: false,
-        config: None,
-        no_color: false,
-        quiet: false,
-        api: None,
-        timeout: None,
-        retry: None,
-        dry_run: false,
-        yes: false,
-        verbose: 0,
-        command,
-    }
-}
-
-fn dummy_command() -> Commands {
-    Commands::Whoami
+/// Parse a `Cli` with all flags at their defaults, for the `resolve_format`
+/// tests that only mutate public flag fields. Uses the real parser (rather
+/// than a struct literal) because the `command` field is crate-internal.
+fn base_cli() -> Cli {
+    use clap::Parser;
+    Cli::try_parse_from(["bzr", "whoami"]).expect("base cli parses")
 }
 
 #[test]
 fn resolve_format_json_flag() {
-    let mut cli = base_cli(dummy_command());
+    let mut cli = base_cli();
     cli.json = true;
     let fmt = resolve_format(&cli).expect("should resolve");
     assert_eq!(fmt, OutputFormat::Json);
@@ -68,7 +47,7 @@ fn resolve_format_json_flag() {
 
 #[test]
 fn resolve_format_output_json() {
-    let mut cli = base_cli(dummy_command());
+    let mut cli = base_cli();
     cli.output = Some(OutputFormat::Json);
     let fmt = resolve_format(&cli).expect("should resolve");
     assert_eq!(fmt, OutputFormat::Json);
@@ -76,7 +55,7 @@ fn resolve_format_output_json() {
 
 #[test]
 fn resolve_format_output_table() {
-    let mut cli = base_cli(dummy_command());
+    let mut cli = base_cli();
     cli.output = Some(OutputFormat::Table);
     let fmt = resolve_format(&cli).expect("should resolve");
     assert_eq!(fmt, OutputFormat::Table);
@@ -84,7 +63,7 @@ fn resolve_format_output_table() {
 
 #[test]
 fn resolve_format_json_overrides_output() {
-    let mut cli = base_cli(dummy_command());
+    let mut cli = base_cli();
     cli.json = true;
     cli.output = Some(OutputFormat::Table);
     let fmt = resolve_format(&cli).expect("should resolve");
@@ -94,7 +73,7 @@ fn resolve_format_json_overrides_output() {
 #[test]
 fn resolve_format_output_overrides_env() {
     with_bzr_output(Some("json"), || {
-        let mut cli = base_cli(dummy_command());
+        let mut cli = base_cli();
         cli.output = Some(OutputFormat::Table);
         let fmt = resolve_format(&cli).expect("should resolve");
         assert_eq!(fmt, OutputFormat::Table);
@@ -104,7 +83,7 @@ fn resolve_format_output_overrides_env() {
 #[test]
 fn resolve_format_json_overrides_env() {
     with_bzr_output(Some("table"), || {
-        let mut cli = base_cli(dummy_command());
+        let mut cli = base_cli();
         cli.json = true;
         let fmt = resolve_format(&cli).expect("should resolve");
         assert_eq!(fmt, OutputFormat::Json);
@@ -114,7 +93,7 @@ fn resolve_format_json_overrides_env() {
 #[test]
 fn resolve_format_env_json() {
     with_bzr_output(Some("json"), || {
-        let cli = base_cli(dummy_command());
+        let cli = base_cli();
         let fmt = resolve_format(&cli).expect("should resolve");
         assert_eq!(fmt, OutputFormat::Json);
     });
@@ -123,7 +102,7 @@ fn resolve_format_env_json() {
 #[test]
 fn resolve_format_invalid_env_returns_input_validation_error() {
     with_bzr_output(Some("xml"), || {
-        let cli = base_cli(dummy_command());
+        let cli = base_cli();
         let err = resolve_format(&cli).expect_err("invalid format should fail");
         assert!(matches!(err, BzrError::InputValidation(_)));
     });
@@ -171,7 +150,7 @@ fn resolve_format_falls_back_to_tty_detection() {
     // the is_terminal() branch. Output depends on whether stdout is a TTY
     // when tests run, but either way the call must succeed.
     with_bzr_output(None, || {
-        let cli = base_cli(dummy_command());
+        let cli = base_cli();
         let fmt = resolve_format(&cli).expect("should resolve");
         assert!(matches!(fmt, OutputFormat::Json | OutputFormat::Table));
     });

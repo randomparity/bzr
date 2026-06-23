@@ -1,7 +1,7 @@
 use clap::Subcommand;
 
 #[derive(Subcommand)]
-pub enum UserAction {
+pub(crate) enum UserAction {
     /// Search users by login, real name, or email substring.
     ///
     /// Returns matching user accounts. Default output shows login

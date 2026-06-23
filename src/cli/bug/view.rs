@@ -56,7 +56,7 @@ bzr-comment-list(1) for the full comment thread."#;
     clippy::doc_markdown,
     reason = "Bug.get should stay literal in CLI help"
 )]
-pub struct ViewArgs {
+pub(crate) struct ViewArgs {
     /// Bug ID(s) or alias(es). Aliases and numeric IDs may be mixed.
     #[arg(required = true, num_args = 1..)]
     pub ids: Vec<String>,

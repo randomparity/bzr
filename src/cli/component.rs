@@ -5,7 +5,7 @@ use clap::Subcommand;
     clippy::doc_markdown,
     reason = "doc examples are literal shell commands; wrapping URLs in <> or identifiers in backticks would degrade copy-paste UX"
 )]
-pub enum ComponentAction {
+pub(crate) enum ComponentAction {
     /// List a product's components.
     ///
     /// Reads the product's component set (the same data shown by

@@ -5,8 +5,6 @@ use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
 use bzr::cli::Cli;
-#[cfg(test)]
-use bzr::cli::Commands;
 use bzr::error::{self, BzrError};
 use bzr::types::OutputFormat;
 

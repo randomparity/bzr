@@ -12,29 +12,36 @@ mod server;
 mod template;
 mod user;
 
-pub use attachment::{AttachmentAction, UpdateArgs as AttachmentUpdateArgs, UploadArgs};
-pub use bug::{
-    BugAction, BugActorFilterArgs, BugFilterArgs, CloneCreateFieldArgs, CommentArgs,
-    CreateFieldArgs, FieldArgs, PageArgs, SortArgs,
+pub(crate) use attachment::{AttachmentAction, UpdateArgs as AttachmentUpdateArgs, UploadArgs};
+pub(crate) use bug::{
+    BugAction, BugActorFilterArgs, BugFilterArgs, CommentArgs, FieldArgs, PageArgs, SortArgs,
 };
-pub use bug::{
+pub(crate) use bug::{
     CloneArgs, CloseArgs, CreateArgs, DupArgs, HistoryArgs, ListArgs, MyArgs, ReopenArgs,
     ResolveArgs, SearchArgs, UpdateArgs, ViewArgs,
 };
-pub use classification::ClassificationAction;
-pub use comment::CommentAction;
-pub use component::ComponentAction;
-pub use config::ConfigAction;
-pub use field::FieldAction;
-pub use group::GroupAction;
-pub use product::ProductAction;
-pub use query::{
-    DeleteArgs, QueryAction, QueryRunFilterArgs, RunArgs, SaveArgs, ShowArgs,
-    UpdateArgs as QueryUpdateArgs,
+// Flattened create-field arg groups are referenced only by in-crate parser
+// tests (via `crate::cli::CreateFieldArgs`); gated so the re-export is not
+// dead code in non-test builds.
+#[cfg(test)]
+pub(crate) use bug::{CloneCreateFieldArgs, CreateFieldArgs};
+pub(crate) use classification::ClassificationAction;
+pub(crate) use comment::CommentAction;
+pub(crate) use component::ComponentAction;
+pub(crate) use config::ConfigAction;
+pub(crate) use field::FieldAction;
+pub(crate) use group::GroupAction;
+pub(crate) use product::ProductAction;
+pub(crate) use query::{
+    DeleteArgs, QueryAction, RunArgs, SaveArgs, ShowArgs, UpdateArgs as QueryUpdateArgs,
 };
-pub use server::ServerAction;
-pub use template::{TemplateAction, TemplateFields, UpdateArgs as TemplateUpdateArgs};
-pub use user::UserAction;
+// Referenced only by in-crate query parser tests (via
+// `crate::cli::QueryRunFilterArgs`); gated to avoid dead-code in non-test builds.
+#[cfg(test)]
+pub(crate) use query::QueryRunFilterArgs;
+pub(crate) use server::ServerAction;
+pub(crate) use template::{TemplateAction, TemplateFields, UpdateArgs as TemplateUpdateArgs};
+pub(crate) use user::UserAction;
 
 use clap::{Parser, Subcommand};
 
@@ -307,7 +314,7 @@ pub struct Cli {
     pub verbose: u8,
 
     #[command(subcommand)]
-    pub command: Commands,
+    pub(crate) command: Commands,
 }
 
 #[derive(Subcommand)]
@@ -315,7 +322,7 @@ pub struct Cli {
     clippy::doc_markdown,
     reason = "doc examples are literal shell commands; wrapping URLs in <> or identifiers in backticks would degrade copy-paste UX"
 )]
-pub enum Commands {
+pub(crate) enum Commands {
     /// Operate on bugs: list, view, search, create, clone, update, history.
     ///
     /// The `bug` group is the most commonly used part of bzr. Public read

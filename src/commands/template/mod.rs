@@ -18,7 +18,7 @@ mod update;
     clippy::unused_async,
     reason = "async for signature consistency with sibling execute fns"
 )]
-pub async fn execute(
+pub(crate) async fn execute(
     action: &TemplateAction,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
