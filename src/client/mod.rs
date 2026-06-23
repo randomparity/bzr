@@ -472,6 +472,11 @@ impl BugzillaClient {
     }
 
     fn apply_alternate_auth(&self, builder: RequestBuilder) -> Result<RequestBuilder> {
+        let mut request = builder.build()?;
+        request.headers_mut().remove(AUTH_HEADER_NAME);
+        strip_auth_query_param(request.url_mut());
+        let builder = RequestBuilder::from_parts(self.http.clone(), request);
+
         match (&self.auth, self.api_key.as_deref()) {
             (Some(PreparedAuth::Header(_)), Some(api_key)) => {
                 Ok(builder.query(&[(AUTH_QUERY_PARAM, api_key)]))
@@ -705,6 +710,33 @@ impl BugzillaClient {
         }
         Ok(response)
     }
+}
+
+fn strip_auth_query_param(url: &mut reqwest::Url) {
+    let mut removed = false;
+    let pairs = url
+        .query_pairs()
+        .filter_map(|(name, value)| {
+            if name == AUTH_QUERY_PARAM {
+                removed = true;
+                None
+            } else {
+                Some((name.into_owned(), value.into_owned()))
+            }
+        })
+        .collect::<Vec<_>>();
+
+    if !removed {
+        return;
+    }
+    if pairs.is_empty() {
+        url.set_query(None);
+        return;
+    }
+
+    url.query_pairs_mut()
+        .clear()
+        .extend_pairs(pairs.iter().map(|(name, value)| (name, value)));
 }
 
 /// Maximum length of the body excerpt embedded in deserialization errors.

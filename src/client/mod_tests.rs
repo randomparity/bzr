@@ -21,6 +21,17 @@ fn multibyte_body_crossing_preview_boundary() -> String {
     body
 }
 
+fn has_no_auth_header(req: &wiremock::Request) -> bool {
+    !req.headers
+        .contains_key(crate::bugzilla_auth::AUTH_HEADER_NAME)
+}
+
+fn has_no_auth_query_param(req: &wiremock::Request) -> bool {
+    req.url
+        .query_pairs()
+        .all(|(name, _)| name != crate::bugzilla_auth::AUTH_QUERY_PARAM)
+}
+
 #[test]
 fn safe_url_strips_query_params() {
     let url = reqwest::Url::parse(&format!(
@@ -209,6 +220,7 @@ async fn auth_fallback_header_to_query_param_on_401() {
             crate::bugzilla_auth::AUTH_QUERY_PARAM,
             "test-key",
         ))
+        .and(has_no_auth_header)
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "users": [{"id": 1, "name": "alice@example.com"}]
         })))
@@ -247,6 +259,7 @@ async fn auth_fallback_query_param_to_header_on_401() {
             crate::bugzilla_auth::AUTH_HEADER_NAME,
             "test-key",
         ))
+        .and(has_no_auth_query_param)
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "users": [{"id": 2, "name": "bob@example.com"}]
         })))
