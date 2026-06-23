@@ -1,10 +1,10 @@
 use crate::cli::ComponentAction;
 use crate::client::BugzillaClient;
+use crate::commands::runtime::context::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::resources::component::{write_component, write_components};
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
-use crate::types::ApiMode;
 use crate::types::OutputFormat;
 use crate::types::{CreateComponentParams, UpdateComponentParams};
 use serde::Deserialize;
@@ -65,19 +65,18 @@ struct NamedComponentTarget {
 
 pub async fn execute(
     action: &ComponentAction,
-    server: Option<&str>,
-    format: OutputFormat,
-    api: Option<ApiMode>,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let format = ctx.format();
     match action {
         ComponentAction::List { product } => {
-            let client = super::runtime::shared::connect_and_configure(server, api).await?;
+            let client = super::runtime::shared::connect_and_configure(ctx).await?;
             let product = client.get_product(product).await?;
             write_components(&product.components, format, w.out);
         }
         ComponentAction::View { product, name } => {
-            let client = super::runtime::shared::connect_and_configure(server, api).await?;
+            let client = super::runtime::shared::connect_and_configure(ctx).await?;
             let product = client.get_product(product).await?;
             let component = product
                 .components
@@ -103,7 +102,7 @@ pub async fn execute(
                 description.as_deref(),
                 default_assignee.as_deref(),
             )?;
-            if super::runtime::dry_run::enabled() {
+            if ctx.dry_run() {
                 let message = format!(
                     "Would create component '{}' in product '{}'",
                     params.name, params.product
@@ -116,7 +115,7 @@ pub async fn execute(
                 );
                 return Ok(());
             }
-            let client = super::runtime::shared::connect_and_configure(server, api).await?;
+            let client = super::runtime::shared::connect_and_configure(ctx).await?;
             let id = client.create_component(&params).await?;
             write_result(
                 &ActionResult::created(id, ResourceKind::Component),
@@ -143,7 +142,7 @@ pub async fn execute(
                 description: description.as_deref(),
                 default_assignee: default_assignee.as_deref(),
             };
-            execute_update(&sources, server, format, api, w).await?;
+            execute_update(&sources, ctx, w).await?;
         }
     }
     Ok(())
@@ -151,21 +150,20 @@ pub async fn execute(
 
 async fn execute_update(
     sources: &UpdateParamSources<'_>,
-    server: Option<&str>,
-    format: OutputFormat,
-    api: Option<ApiMode>,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let format = ctx.format();
     let update = build_update_input(sources)?;
-    if super::runtime::dry_run::enabled() {
+    if ctx.dry_run() {
         if let ComponentUpdateTarget::Id(id) = &update.target {
             write_update_dry_run(*id, &update.params, format, w);
             return Ok(());
         }
     }
-    let client = super::runtime::shared::connect_and_configure(server, api).await?;
+    let client = super::runtime::shared::connect_and_configure(ctx).await?;
     let id = resolve_update_target_id(&client, &update.target).await?;
-    if super::runtime::dry_run::enabled() {
+    if ctx.dry_run() {
         write_update_dry_run(id, &update.params, format, w);
         return Ok(());
     }

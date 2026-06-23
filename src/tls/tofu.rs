@@ -66,7 +66,10 @@ impl ServerCertVerifier for CertCapture {
 /// SEQUENCE, or `None` if DER extraction fails.
 ///
 /// No authentication headers are sent — only a HEAD request is made.
-pub(crate) async fn probe_server_cert(url: &str) -> Result<(String, String, Option<String>)> {
+pub(crate) async fn probe_server_cert(
+    url: &str,
+    request_timeout: std::time::Duration,
+) -> Result<(String, String, Option<String>)> {
     let provider = super::default_provider();
 
     let capture = Arc::new(CertCapture {
@@ -86,7 +89,7 @@ pub(crate) async fn probe_server_cert(url: &str) -> Result<(String, String, Opti
     let client = reqwest::Client::builder()
         .use_preconfigured_tls(tls_config)
         .connect_timeout(crate::http::CONNECT_TIMEOUT)
-        .timeout(crate::http::REQUEST_TIMEOUT)
+        .timeout(request_timeout)
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| BzrError::config(format!("failed to build TLS probe client: {e}")))?;

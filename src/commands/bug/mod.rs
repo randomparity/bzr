@@ -1,12 +1,13 @@
 //! Bug subcommand handlers, split per-action.
 
 use crate::cli::BugAction;
+use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::resources::bug::{
     validate_json_field_selection, validate_table_columns, warn_unknown_fields, ColumnSpec,
 };
 use crate::output::writers::Writers;
-use crate::types::{ApiMode, OutputFormat};
+use crate::types::OutputFormat;
 
 mod clone;
 mod create;
@@ -100,13 +101,8 @@ pub(crate) fn requires_credentials(action: &BugAction) -> Option<&'static str> {
 }
 
 /// Dispatch bug actions to their respective handlers.
-pub async fn execute(
-    action: &BugAction,
-    server: Option<&str>,
-    format: OutputFormat,
-    api: Option<ApiMode>,
-    w: &mut Writers<'_>,
-) -> Result<()> {
+pub async fn execute(action: &BugAction, ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
+    let format = ctx.format();
     update::validate_action(action)?;
 
     // `--web` resolves the bug's URL from local config and opens (or prints)
@@ -114,7 +110,7 @@ pub async fn execute(
     // of the connect/validate machinery below.
     if let BugAction::View(args) = action {
         if args.web {
-            return view::handle_web(&args.ids, server, w);
+            return view::handle_web(&args.ids, ctx.server(), w);
         }
     }
 
@@ -151,23 +147,23 @@ pub async fn execute(
     // server from the URL hostname. Skip the shared connect to avoid double
     // auth/version detection on every `bug search` invocation.
     if let BugAction::Search(args) = action {
-        return search::handle(args, server, format, api, w).await;
+        return search::handle(args, ctx, w).await;
     }
 
-    let client = crate::commands::runtime::shared::connect_and_configure(server, api).await?;
+    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
 
     match action {
         BugAction::List(args) => list::handle(&client, args, format, w).await,
         BugAction::View(args) => view::handle(&client, args, format, w).await,
         BugAction::History(args) => history::handle(&client, args, format, w).await,
         BugAction::My(args) => my::handle(&client, args, format, w).await,
-        BugAction::Create(args) => create::handle(&client, args, format, w).await,
-        BugAction::Clone(args) => clone::handle(&client, args, format, w).await,
-        BugAction::Update(args) => update::handle(&client, args, format, w).await,
-        BugAction::Resolve(a) => verbs::resolve(&client, a, format, w).await,
-        BugAction::Close(a) => verbs::close(&client, a, format, w).await,
-        BugAction::Reopen(a) => verbs::reopen(&client, a, format, w).await,
-        BugAction::Dup(a) => verbs::dup(&client, a, format, w).await,
+        BugAction::Create(args) => create::handle(&client, args, ctx, w).await,
+        BugAction::Clone(args) => clone::handle(&client, args, ctx, w).await,
+        BugAction::Update(args) => update::handle(&client, args, ctx, w).await,
+        BugAction::Resolve(a) => verbs::resolve(&client, a, ctx, w).await,
+        BugAction::Close(a) => verbs::close(&client, a, ctx, w).await,
+        BugAction::Reopen(a) => verbs::reopen(&client, a, ctx, w).await,
+        BugAction::Dup(a) => verbs::dup(&client, a, ctx, w).await,
         BugAction::Search(_) => unreachable!("handled above"),
     }
 }

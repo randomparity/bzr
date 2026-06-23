@@ -1,10 +1,9 @@
 use crate::cli::ProductAction;
+use crate::commands::runtime::context::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::resources::product::{write_product_detail, write_products};
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
-use crate::types::ApiMode;
-use crate::types::OutputFormat;
 use crate::types::{CreateProductParams, UpdateProductParams};
 use serde::Deserialize;
 
@@ -28,19 +27,18 @@ struct JsonUpdateProduct {
 
 pub async fn execute(
     action: &ProductAction,
-    server: Option<&str>,
-    format: OutputFormat,
-    api: Option<ApiMode>,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let format = ctx.format();
     match action {
         ProductAction::List { r#type } => {
-            let client = super::runtime::shared::connect_and_configure(server, api).await?;
+            let client = super::runtime::shared::connect_and_configure(ctx).await?;
             let products = client.list_products_by_type(*r#type).await?;
             write_products(&products, format, w.out);
         }
         ProductAction::View { name } => {
-            let client = super::runtime::shared::connect_and_configure(server, api).await?;
+            let client = super::runtime::shared::connect_and_configure(ctx).await?;
             let product = client.get_product(name).await?;
             write_product_detail(&product, format, w.out);
         }
@@ -58,7 +56,7 @@ pub async fn execute(
                 version.as_deref(),
                 *is_open,
             )?;
-            if super::runtime::dry_run::enabled() {
+            if ctx.dry_run() {
                 let message = format!("Would create product '{}'", params.name);
                 write_result(
                     &DryRunResult::new(ResourceKind::Product, &[], &params),
@@ -68,7 +66,7 @@ pub async fn execute(
                 );
                 return Ok(());
             }
-            let client = super::runtime::shared::connect_and_configure(server, api).await?;
+            let client = super::runtime::shared::connect_and_configure(ctx).await?;
             let id = client.create_product(&params).await?;
             write_result(
                 &ActionResult::created_named(id, params.name.as_str(), ResourceKind::Product),
@@ -91,7 +89,7 @@ pub async fn execute(
                 default_milestone.as_deref(),
                 *is_open,
             )?;
-            if super::runtime::dry_run::enabled() {
+            if ctx.dry_run() {
                 let message = format!("Would update product '{name}'");
                 write_result(
                     &DryRunResult::new(ResourceKind::Product, &[], &params),
@@ -101,7 +99,7 @@ pub async fn execute(
                 );
                 return Ok(());
             }
-            let client = super::runtime::shared::connect_and_configure(server, api).await?;
+            let client = super::runtime::shared::connect_and_configure(ctx).await?;
             client.update_product(&name, &params).await?;
             write_result(
                 &ActionResult::updated_named(name.as_str(), None, ResourceKind::Product),

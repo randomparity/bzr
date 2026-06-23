@@ -8,6 +8,7 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use crate::cli::ConfigAction;
+use crate::commands::runtime::context::CommandContext;
 use crate::config::{Config, ServerConfig};
 use crate::error::Result;
 use crate::output::resources::config::{write_config, ConfigView};
@@ -17,11 +18,10 @@ use crate::types::OutputFormat;
 
 pub async fn execute(
     action: &ConfigAction,
-    _server: Option<&str>,
-    format: OutputFormat,
-    _api: Option<crate::types::ApiMode>,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let format = ctx.format();
     match action {
         ConfigAction::SetServer {
             name,
@@ -51,6 +51,7 @@ pub async fn execute(
                     tls_pin_clear: *tls_pin_clear,
                 },
                 format,
+                ctx.request_timeout(),
                 w,
             )
             .await
@@ -247,6 +248,7 @@ struct SetServerArgs<'a> {
 async fn set_server(
     args: &SetServerArgs<'_>,
     format: OutputFormat,
+    request_timeout: std::time::Duration,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let SetServerArgs {
@@ -305,7 +307,7 @@ async fn set_server(
     // Handle --tls-pin-now: probe the server cert and ask user to confirm.
     if tls_pin_now {
         let (fingerprint, issuer, issuer_der) =
-            crate::tls::tofu::probe_server_cert(&server_config.url).await?;
+            crate::tls::tofu::probe_server_cert(&server_config.url, request_timeout).await?;
         let _ = writeln!(w.err, "Certificate fingerprint: {fingerprint}");
         let _ = writeln!(w.err, "Issuer:                  {issuer}");
         let confirmed = crate::tls::tofu::confirm_pin()?;

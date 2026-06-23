@@ -58,8 +58,7 @@ pub struct BugzillaClient {
     pub(super) xmlrpc: XmlRpcClient,
     /// Email hint for Bugzilla 5.0 compatibility (whoami fallback via user lookup).
     email_hint: Option<String>,
-    /// Transient-retry budget (429 / 5xx / timeout). Captured from the global
-    /// `--retry` setting at construction; 0 disables retries.
+    /// Transient-retry budget (429 / 5xx / timeout). 0 disables retries.
     retry_max: u32,
 }
 
@@ -73,6 +72,8 @@ pub struct BugzillaClientConfig<'a> {
     pub api_mode: ApiMode,
     pub email_hint: Option<&'a str>,
     pub tls_config: &'a crate::tls::TlsConfig,
+    pub request_timeout: std::time::Duration,
+    pub retry_max: u32,
 }
 
 /// Generic response for endpoints that return a single `id` field.
@@ -161,6 +162,8 @@ impl BugzillaClient {
             api_mode,
             email_hint,
             tls_config,
+            request_timeout,
+            retry_max,
         } = config;
 
         let auth = match (credential, auth_method) {
@@ -185,7 +188,7 @@ impl BugzillaClient {
             }
         };
 
-        let http = crate::tls::build_tls_client(tls_config)?;
+        let http = crate::tls::build_tls_client(tls_config, request_timeout)?;
 
         // Always construct the XML-RPC client — even in REST mode, some
         // methods (e.g. Group.get on Bugzilla 5.3+) require XML-RPC fallback
@@ -208,7 +211,7 @@ impl BugzillaClient {
             api_mode,
             xmlrpc,
             email_hint: email_hint.map(String::from),
-            retry_max: crate::http::retry_max(),
+            retry_max,
         })
     }
 

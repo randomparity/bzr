@@ -1,5 +1,6 @@
 use crate::cli::CloneArgs;
 use crate::client::BugzillaClient;
+use crate::commands::runtime::context::CommandContext;
 use crate::commands::runtime::flags::parse_flags;
 use crate::error::Result;
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
@@ -10,9 +11,10 @@ use crate::validation::parse_optional_date_only;
 pub(super) async fn handle(
     client: &BugzillaClient,
     args: &CloneArgs,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let format = ctx.format();
     let CloneArgs {
         id,
         summary,
@@ -93,7 +95,7 @@ pub(super) async fn handle(
         ..Default::default()
     };
 
-    if crate::commands::runtime::dry_run::enabled() {
+    if ctx.dry_run() {
         write_clone_dry_run(source.id, &params, format, w);
         return Ok(());
     }

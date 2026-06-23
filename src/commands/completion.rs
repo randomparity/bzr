@@ -7,9 +7,9 @@ use clap::CommandFactory;
 use clap_complete::{generate, Shell};
 
 use crate::cli::Cli;
+use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::writers::Writers;
-use crate::types::{ApiMode, OutputFormat};
 
 /// Write a completion script for `shell` to stdout.
 ///
@@ -19,13 +19,7 @@ use crate::types::{ApiMode, OutputFormat};
     clippy::unused_async,
     reason = "command handlers share the async dispatch signature"
 )]
-pub async fn execute(
-    shell: Shell,
-    _server: Option<&str>,
-    _format: OutputFormat,
-    _api: Option<ApiMode>,
-    w: &mut Writers<'_>,
-) -> Result<()> {
+pub async fn execute(shell: Shell, _ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
     let mut cmd = Cli::command();
     let bin_name = cmd.get_name().to_string();
     generate(shell, &mut cmd, bin_name, &mut w.out);

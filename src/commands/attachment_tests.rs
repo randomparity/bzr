@@ -38,9 +38,7 @@ async fn attachment_list_returns_attachments() {
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a1.writers(),
     )
     .await;
@@ -66,9 +64,7 @@ async fn attachment_list_api_error_propagates() {
     let action = AttachmentAction::List { bug_id: 999 };
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -109,9 +105,7 @@ async fn attachment_upload_api_error_propagates() {
     });
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -127,9 +121,15 @@ async fn attachment_upload_api_error_propagates() {
 async fn attachment_upload_missing_source_names_role_and_path() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let (_lock, _mock, tmp) = setup_test_env().await;
-    let client = super::super::runtime::shared::connect_and_configure(None, None)
-        .await
-        .unwrap();
+    let client = super::super::runtime::shared::connect_and_configure(
+        &crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ),
+    )
+    .await
+    .unwrap();
     let missing = tmp.path().join("missing-upload.txt");
     let args = UploadArgs {
         bug_id: 42,
@@ -181,9 +181,7 @@ async fn attachment_download_api_error_propagates() {
     };
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -220,9 +218,7 @@ async fn attachment_upload_returns_id() {
     let mut __io_a2 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a2.writers(),
     )
     .await;
@@ -265,9 +261,7 @@ async fn attachment_upload_with_comment_includes_comment_in_request() {
     });
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -312,9 +306,7 @@ async fn attachment_upload_with_comment_file_includes_comment_in_request() {
     });
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -348,9 +340,7 @@ async fn attachment_upload_rejects_whitespace_comment() {
     });
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -386,9 +376,7 @@ async fn attachment_upload_rejects_whitespace_comment_file() {
     });
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -432,9 +420,7 @@ async fn attachment_upload_with_is_patch_defaults_content_type_to_text_plain() {
     });
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -477,9 +463,7 @@ async fn attachment_upload_is_patch_with_explicit_content_type_keeps_content_typ
     });
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -517,9 +501,7 @@ async fn attachment_update_succeeds() {
     let mut __io_a3 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a3.writers(),
     )
     .await;
@@ -559,7 +541,12 @@ async fn attachment_update_no_obsolete_sends_false() {
         flag: vec![],
     });
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "update --no-obsolete failed: {result:?}");
 }
 
@@ -592,7 +579,12 @@ async fn attachment_update_unset_bools_are_omitted() {
         flag: vec![],
     });
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
     assert!(result.is_ok());
     // Confirm the request the mock matched carried no tri-state keys.
     let reqs = mock.received_requests().await.unwrap();
@@ -627,7 +619,12 @@ async fn attachment_update_without_changes_is_rejected_before_put() {
         flag: vec![],
     });
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     let err = result.unwrap_err();
     assert_eq!(err.exit_code(), 7);
@@ -765,9 +762,7 @@ async fn attachment_upload_with_comment_private_flips_privacy() {
     });
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -836,9 +831,7 @@ async fn attachment_upload_comment_private_with_comment_file_flips_privacy() {
     });
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -871,9 +864,7 @@ async fn attachment_upload_comment_private_without_comment_is_input_error() {
     });
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -933,9 +924,7 @@ async fn attachment_upload_comment_private_partial_failure_propagates_error() {
     });
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -990,9 +979,7 @@ async fn attachment_upload_comment_private_no_matching_comment_is_data_integrity
     });
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1013,9 +1000,7 @@ async fn attachment_download_validation_rejects_no_ids_no_bugs() {
     };
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1038,9 +1023,7 @@ async fn attachment_download_validation_rejects_out_with_multiple_ids() {
     };
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1059,9 +1042,15 @@ fn b64(bytes: &[u8]) -> String {
 #[tokio::test]
 async fn write_one_attachment_writes_inline_data_with_att_id_prefix() {
     let (_lock, _mock, tmp) = setup_test_env().await;
-    let client = super::super::runtime::shared::connect_and_configure(None, None)
-        .await
-        .unwrap();
+    let client = super::super::runtime::shared::connect_and_configure(
+        &crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ),
+    )
+    .await
+    .unwrap();
 
     let mut att = make_attachment(
         9876,
@@ -1109,9 +1098,15 @@ async fn write_one_attachment_falls_back_when_data_missing() {
         .mount(&mock)
         .await;
 
-    let client = super::super::runtime::shared::connect_and_configure(None, None)
-        .await
-        .unwrap();
+    let client = super::super::runtime::shared::connect_and_configure(
+        &crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ),
+    )
+    .await
+    .unwrap();
 
     let mut att = make_attachment(9876, 12345, "patch.diff", "Fix patch", None);
     att.size = 11;
@@ -1129,9 +1124,15 @@ async fn write_one_attachment_falls_back_when_data_missing() {
 #[tokio::test]
 async fn write_one_attachment_overwrites_existing_file() {
     let (_lock, _mock, tmp) = setup_test_env().await;
-    let client = super::super::runtime::shared::connect_and_configure(None, None)
-        .await
-        .unwrap();
+    let client = super::super::runtime::shared::connect_and_configure(
+        &crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ),
+    )
+    .await
+    .unwrap();
 
     let dir = tmp.path().join("12345");
     std::fs::create_dir_all(&dir).unwrap();
@@ -1152,9 +1153,15 @@ async fn write_one_attachment_overwrites_existing_file() {
 #[tokio::test]
 async fn write_one_attachment_create_dir_error_names_destination() {
     let (_lock, _mock, tmp) = setup_test_env().await;
-    let client = super::super::runtime::shared::connect_and_configure(None, None)
-        .await
-        .unwrap();
+    let client = super::super::runtime::shared::connect_and_configure(
+        &crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ),
+    )
+    .await
+    .unwrap();
     let out_file = tmp.path().join("not-a-directory");
     std::fs::write(&out_file, b"file").unwrap();
     let att = make_attachment(
@@ -1264,9 +1271,7 @@ async fn attachment_download_batch_per_bug_writes_per_bug_subdir() {
 
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a4.writers(),
     )
     .await;
@@ -1331,9 +1336,11 @@ async fn attachment_download_batch_hybrid_uses_xmlrpc_inline_data_without_fallba
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        Some(crate::types::ApiMode::Hybrid),
+        &crate::commands::runtime::context::CommandContext::new(
+            None,
+            OutputFormat::Json,
+            Some(crate::types::ApiMode::Hybrid),
+        ),
         &mut io.writers(),
     )
     .await;
@@ -1377,7 +1384,12 @@ async fn attachment_download_batch_collision_filenames_resolved_by_att_id_prefix
 
     let mut __io = crate::test_helpers::CapturedIo::new();
 
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut __io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
 
     let _ = __io.out_str().to_string();
     assert!(result.is_ok(), "expected ok, got {result:?}");
@@ -1425,9 +1437,7 @@ async fn attachment_download_batch_mixed_bug_and_positional_ids() {
 
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a5.writers(),
     )
     .await;
@@ -1470,9 +1480,7 @@ async fn attachment_download_batch_empty_bug_zero_files_success() {
 
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a6.writers(),
     )
     .await;
@@ -1511,9 +1519,7 @@ async fn attachment_download_batch_legacy_single_id_unchanged() {
 
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a7.writers(),
     )
     .await;
@@ -1558,7 +1564,12 @@ async fn attachment_download_single_out_dash_streams_bytes_without_result() {
     };
     let mut io = crate::test_helpers::CapturedIo::new();
 
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     let wrote_dash_file = dash_path.exists();
     if wrote_dash_file {
@@ -1615,9 +1626,7 @@ async fn attachment_download_batch_bug_not_found_partial_failure() {
 
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a8.writers(),
     )
     .await;
@@ -1662,9 +1671,7 @@ async fn attachment_download_batch_all_targets_fail_still_exit_11() {
     };
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1703,9 +1710,7 @@ async fn attachment_download_batch_obsolete_attachments_included() {
 
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io2.writers(),
     )
     .await;
@@ -1755,9 +1760,7 @@ async fn attachment_download_batch_data_missing_falls_back_via_get() {
 
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io3.writers(),
     )
     .await;
@@ -1784,9 +1787,7 @@ async fn attachment_download_batch_top_level_out_dir_unwritable_fails_fast() {
     };
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1799,9 +1800,15 @@ async fn attachment_download_batch_top_level_out_dir_unwritable_fails_fast() {
 #[tokio::test]
 async fn write_one_attachment_invalid_base64_returns_data_integrity() {
     let (_lock, _mock, tmp) = setup_test_env().await;
-    let client = super::super::runtime::shared::connect_and_configure(None, None)
-        .await
-        .unwrap();
+    let client = super::super::runtime::shared::connect_and_configure(
+        &crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ),
+    )
+    .await
+    .unwrap();
 
     let mut att = make_attachment(
         9876,
@@ -1860,9 +1867,15 @@ fn single_download_dest_sanitizes_server_filename_when_no_out() {
 #[tokio::test]
 async fn write_one_attachment_sanitizes_server_filename_with_separators() {
     let (_lock, _mock, tmp) = setup_test_env().await;
-    let client = super::super::runtime::shared::connect_and_configure(None, None)
-        .await
-        .unwrap();
+    let client = super::super::runtime::shared::connect_and_configure(
+        &crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ),
+    )
+    .await
+    .unwrap();
 
     let att = make_attachment(7, 42, "sub/dir/escape.txt", "evil", Some(b64(b"data")));
     let out_dir = tmp.path().to_string_lossy().into_owned();
@@ -1906,7 +1919,12 @@ async fn attachment_view_returns_metadata_without_data() {
         attachment_id: 9876,
     };
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut __io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "view should succeed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
     assert_eq!(parsed["id"], 9876);
@@ -1951,9 +1969,7 @@ async fn attachment_view_table_renders_metadata() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io.writers(),
     )
     .await;

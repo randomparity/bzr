@@ -1,5 +1,6 @@
 use crate::cli::{BugAction, UpdateArgs};
 use crate::client::BugzillaClient;
+use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::result_types::{
     write_result, ActionResult, BatchFailure, BatchResult, DryRunResult, ResourceKind,
@@ -348,11 +349,11 @@ async fn update_batch(
 pub(super) async fn handle(
     client: &BugzillaClient,
     args: &UpdateArgs,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     if let Some(arg) = args.from_json.as_deref() {
-        return super::update_json::handle(client, args, arg, format, w).await;
+        return super::update_json::handle(client, args, arg, ctx, w).await;
     }
     let (ids, params) = build_update_params(args)?;
     apply_checked(
@@ -362,7 +363,7 @@ pub(super) async fn handle(
             params,
             expect_unchanged_since: args.expect_unchanged_since.as_deref(),
         },
-        format,
+        ctx,
         w,
     )
     .await
@@ -398,14 +399,15 @@ pub(super) async fn apply(
     client: &BugzillaClient,
     ids: Vec<u64>,
     params: UpdateBugParams,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    if crate::commands::runtime::dry_run::enabled() {
+    let format = ctx.format();
+    if ctx.dry_run() {
         write_update_dry_run(&ids, &params, format, w);
         return Ok(());
     }
-    if !confirm_batch(ids.len(), w)? {
+    if !confirm_batch(ids.len(), ctx.assume_yes(), w)? {
         let _ = writeln!(w.err, "Aborted; no changes made.");
         return Ok(());
     }
@@ -429,15 +431,15 @@ pub(super) struct ApplyRequest<'a> {
 pub(super) async fn apply_checked(
     client: &BugzillaClient,
     request: ApplyRequest<'_>,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     if let Some(expected) = request.expect_unchanged_since {
-        if !crate::commands::runtime::dry_run::enabled() {
+        if !ctx.dry_run() {
             ensure_unchanged_since(client, &request.ids, expected).await?;
         }
     }
-    apply(client, request.ids, request.params, format, w).await
+    apply(client, request.ids, request.params, ctx, w).await
 }
 
 /// Optimistic-concurrency guard for `--expect-unchanged-since`: refuse the
@@ -486,14 +488,10 @@ pub(super) async fn ensure_unchanged_since(
 /// stdin/TTY into the testable [`crate::commands::runtime::confirm`] primitives. The
 /// `should_prompt` gate is checked first, so stdin is locked only when a prompt
 /// is actually shown. Returns whether to proceed.
-pub(super) fn confirm_batch(count: usize, w: &mut Writers<'_>) -> Result<bool> {
+pub(super) fn confirm_batch(count: usize, assume_yes: bool, w: &mut Writers<'_>) -> Result<bool> {
     use std::io::IsTerminal;
     let is_tty = std::io::stdin().is_terminal();
-    if !crate::commands::runtime::confirm::should_prompt(
-        count,
-        crate::commands::runtime::confirm::yes(),
-        is_tty,
-    ) {
+    if !crate::commands::runtime::confirm::should_prompt(count, assume_yes, is_tty) {
         return Ok(true);
     }
     let stdin = std::io::stdin();

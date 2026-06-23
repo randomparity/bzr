@@ -181,9 +181,7 @@ async fn query_save_and_show() {
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a1.writers(),
     )
     .await;
@@ -196,9 +194,7 @@ async fn query_save_and_show() {
     let mut __io_a2 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a2.writers(),
     )
     .await;
@@ -247,7 +243,12 @@ async fn query_save_persists_every_field() {
         sort_args: crate::cli::SortArgs::default(),
     });
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut __io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
     let _ = __io.out_str().to_string();
     result.unwrap();
 
@@ -257,9 +258,7 @@ async fn query_save_persists_every_field() {
     let mut __io_a3 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a3.writers(),
     )
     .await;
@@ -288,9 +287,7 @@ async fn query_list_emits_saved_query_names() {
 
     let result = super::execute(
         &save_action("listed-query"),
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io2.writers(),
     )
     .await;
@@ -302,9 +299,7 @@ async fn query_list_emits_saved_query_names() {
 
     let result = super::execute(
         &QueryAction::List,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io3.writers(),
     )
     .await;
@@ -325,9 +320,7 @@ async fn query_save_search_kind() {
     let mut __io_a4 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a4.writers(),
     )
     .await;
@@ -340,9 +333,7 @@ async fn query_save_search_kind() {
     let mut __io_a5 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a5.writers(),
     )
     .await;
@@ -362,9 +353,7 @@ async fn query_save_requires_filter() {
     let action = empty_save_action("empty", None);
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -386,9 +375,7 @@ async fn query_delete_unknown_errors() {
     });
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -408,9 +395,7 @@ async fn query_list_empty() {
     let mut __io_a6 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a6.writers(),
     )
     .await;
@@ -427,9 +412,7 @@ async fn query_run_executes_saved_query() {
     let mut __io_a7 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &save_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a7.writers(),
     )
     .await;
@@ -456,9 +439,7 @@ async fn query_run_executes_saved_query() {
     let mut __io_a8 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &run_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a8.writers(),
     )
     .await;
@@ -483,9 +464,7 @@ async fn query_run_honors_saved_custom_fields() {
     let mut save_io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &save_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut save_io.writers(),
     )
     .await;
@@ -505,9 +484,7 @@ async fn query_run_honors_saved_custom_fields() {
     let mut run_io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &run_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut run_io.writers(),
     )
     .await;
@@ -527,9 +504,7 @@ async fn query_run_count_json_emits_count_object() {
     let mut save_io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &save_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut save_io.writers(),
     )
     .await;
@@ -552,9 +527,7 @@ async fn query_run_count_json_emits_count_object() {
     let mut run_io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut run_io.writers(),
     )
     .await;
@@ -572,9 +545,7 @@ async fn query_run_count_table_prints_integer_only() {
     let mut save_io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &save_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut save_io.writers(),
     )
     .await;
@@ -594,9 +565,7 @@ async fn query_run_count_table_prints_integer_only() {
     let mut run_io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut run_io.writers(),
     )
     .await;
@@ -627,9 +596,7 @@ async fn query_run_count_rejects_offset_and_paginate() {
         let mut run_io = crate::test_helpers::CapturedIo::new();
         let result = super::execute(
             &action,
-            None,
-            OutputFormat::Json,
-            None,
+            &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
             &mut run_io.writers(),
         )
         .await;
@@ -683,9 +650,7 @@ async fn query_run_count_ignores_saved_url_offset() {
     let mut run_io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut run_io.writers(),
     )
     .await;
@@ -703,9 +668,7 @@ async fn query_run_with_limit_override() {
     let mut __io_a9 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &save_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a9.writers(),
     )
     .await;
@@ -745,9 +708,7 @@ async fn query_run_with_limit_override() {
     let mut __io_a10 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &run_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a10.writers(),
     )
     .await;
@@ -791,9 +752,7 @@ async fn query_save_existing_entry_reports_updated() {
     let mut __io_a11 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &save_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a11.writers(),
     )
     .await;
@@ -832,9 +791,7 @@ async fn query_save_existing_entry_reports_updated() {
     let mut __io4 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &update_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io4.writers(),
     )
     .await;
@@ -861,9 +818,7 @@ async fn query_delete_removes_saved_query() {
     let mut __io_a12 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &save_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a12.writers(),
     )
     .await;
@@ -876,9 +831,7 @@ async fn query_delete_removes_saved_query() {
     let mut __io5 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &delete_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io5.writers(),
     )
     .await;
@@ -892,9 +845,7 @@ async fn query_delete_removes_saved_query() {
     });
     let err = super::execute(
         &show_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await
@@ -938,9 +889,7 @@ async fn query_run_applies_field_overrides() {
     let mut __io_a13 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &save_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a13.writers(),
     )
     .await;
@@ -981,9 +930,7 @@ async fn query_run_applies_field_overrides() {
     let mut __io_a14 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &run_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a14.writers(),
     )
     .await;
@@ -999,9 +946,7 @@ async fn query_run_unknown_errors() {
     let action = run_action("nonexistent");
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1021,9 +966,7 @@ async fn query_list_table_sorts_entries_by_name() {
         let mut __io6 = crate::test_helpers::CapturedIo::new();
         let result = super::execute(
             &save_action(name),
-            None,
-            OutputFormat::Json,
-            None,
+            &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
             &mut __io6.writers(),
         )
         .await;
@@ -1035,9 +978,7 @@ async fn query_list_table_sorts_entries_by_name() {
 
     let result = super::execute(
         &QueryAction::List,
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io7.writers(),
     )
     .await;
@@ -1060,9 +1001,7 @@ async fn query_show_unknown_errors() {
         &QueryAction::Show(ShowArgs {
             name: "missing".into(),
         }),
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await
@@ -1080,9 +1019,7 @@ async fn query_run_with_server_override() {
     let mut __io_a15 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &save_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a15.writers(),
     )
     .await;
@@ -1131,9 +1068,7 @@ async fn query_run_with_server_override() {
     let mut __io_a16 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &run_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a16.writers(),
     )
     .await;
@@ -1159,9 +1094,7 @@ async fn query_save_from_url() {
     let mut __io_a17 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a17.writers(),
     )
     .await;
@@ -1213,9 +1146,7 @@ async fn query_save_rejects_malformed_created_since() {
 
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1260,9 +1191,7 @@ async fn query_save_stores_canonical_date_forms() {
     let mut __io8 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io8.writers(),
     )
     .await;
@@ -1313,9 +1242,7 @@ async fn query_save_accepts_date_only_query() {
     let mut __io9 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io9.writers(),
     )
     .await;
@@ -1367,9 +1294,7 @@ async fn query_run_rejects_malformed_created_since_override() {
     });
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1414,9 +1339,7 @@ async fn query_save_persists_158_field_filters() {
     let mut __io_a18 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a18.writers(),
     )
     .await;
@@ -1475,9 +1398,7 @@ async fn query_save_accepts_whiteboard_only_filter() {
     let mut __io_a19 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a19.writers(),
     )
     .await;
@@ -1525,9 +1446,7 @@ async fn query_run_overrides_replace_saved_field_filters() {
     let mut __io_a20 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &save_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a20.writers(),
     )
     .await;
@@ -1569,9 +1488,7 @@ async fn query_run_overrides_replace_saved_field_filters() {
     let mut __io_a21 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &run_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a21.writers(),
     )
     .await;
@@ -1615,9 +1532,7 @@ async fn query_run_empty_override_keeps_saved_field_filter() {
     let mut __io_a22 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &save_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a22.writers(),
     )
     .await;
@@ -1637,9 +1552,7 @@ async fn query_run_empty_override_keeps_saved_field_filter() {
     let mut __io_a23 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &run_action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a23.writers(),
     )
     .await;
@@ -1653,9 +1566,7 @@ async fn query_run_sends_default_bug_id_order() {
     let save = product_save_action("order-default", "TestProduct", 10);
     super::execute(
         &save,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut crate::test_helpers::CapturedIo::new().writers(),
     )
     .await
@@ -1671,7 +1582,12 @@ async fn query_run_sends_default_bug_id_order() {
 
     let run = run_action("order-default");
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&run, None, OutputFormat::Json, None, &mut __io.writers()).await;
+    let result = super::execute(
+        &run,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
     assert!(
         result.is_ok(),
         "run with default order should succeed: {result:?}"
@@ -1684,9 +1600,7 @@ async fn query_run_sort_override_takes_precedence() {
     let save = product_save_action("order-override", "TestProduct", 10);
     super::execute(
         &save,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut crate::test_helpers::CapturedIo::new().writers(),
     )
     .await
@@ -1705,7 +1619,12 @@ async fn query_run_sort_override_takes_precedence() {
         sort_args.sort = Some("priority".to_string());
     }
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&run, None, OutputFormat::Json, None, &mut __io.writers()).await;
+    let result = super::execute(
+        &run,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
     assert!(
         result.is_ok(),
         "run with --sort override should succeed: {result:?}"
@@ -1722,9 +1641,7 @@ async fn query_save_persists_explicit_sort() {
     }
     super::execute(
         &save,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut crate::test_helpers::CapturedIo::new().writers(),
     )
     .await
@@ -1775,7 +1692,12 @@ fn empty_update(name: &str) -> QueryAction {
 
 async fn run_q(action: &QueryAction) -> crate::error::Result<()> {
     let mut io = crate::test_helpers::CapturedIo::new();
-    super::execute(action, None, OutputFormat::Json, None, &mut io.writers()).await
+    super::execute(
+        action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
 }
 
 #[tokio::test]

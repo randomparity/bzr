@@ -5,9 +5,10 @@
 
 use crate::cli::{CloseArgs, CommentArgs, DupArgs, ReopenArgs, ResolveArgs};
 use crate::client::BugzillaClient;
+use crate::commands::runtime::context::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::writers::Writers;
-use crate::types::{CommentUpdate, OutputFormat, UpdateBugParams};
+use crate::types::{CommentUpdate, UpdateBugParams};
 
 /// Resolve the `CommentArgs` into an optional `CommentUpdate`, reusing the same
 /// stdin/file/private handling as `bug update`.
@@ -28,8 +29,12 @@ fn comment_update(args: &CommentArgs) -> Result<Option<CommentUpdate>> {
 /// legality of the transition from the bug's current status is still left to
 /// the server. Skipped under `--dry-run`, which performs no mutation and whose
 /// preview already shows the status that would be sent.
-async fn validate_target_status(client: &BugzillaClient, status: &str) -> Result<()> {
-    if crate::commands::runtime::dry_run::enabled() {
+async fn validate_target_status(
+    client: &BugzillaClient,
+    status: &str,
+    ctx: &CommandContext,
+) -> Result<()> {
+    if ctx.dry_run() {
         return Ok(());
     }
     if status.trim().is_empty() {
@@ -56,7 +61,7 @@ async fn validate_target_status(client: &BugzillaClient, status: &str) -> Result
 pub(super) async fn resolve(
     client: &BugzillaClient,
     args: &ResolveArgs,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let params = UpdateBugParams {
@@ -72,7 +77,7 @@ pub(super) async fn resolve(
             params,
             expect_unchanged_since: args.expect_unchanged_since.as_deref(),
         },
-        format,
+        ctx,
         w,
     )
     .await
@@ -81,13 +86,13 @@ pub(super) async fn resolve(
 pub(super) async fn close(
     client: &BugzillaClient,
     args: &CloseArgs,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     // Resolve the comment (local validation) before the network status check so
     // a bad --comment-private combination fails without a round-trip.
     let comment = comment_update(&args.comment)?;
-    validate_target_status(client, &args.status).await?;
+    validate_target_status(client, &args.status, ctx).await?;
     let params = UpdateBugParams {
         status: Some(args.status.clone()),
         resolution: args.as_resolution.clone(),
@@ -101,7 +106,7 @@ pub(super) async fn close(
             params,
             expect_unchanged_since: args.expect_unchanged_since.as_deref(),
         },
-        format,
+        ctx,
         w,
     )
     .await
@@ -110,11 +115,11 @@ pub(super) async fn close(
 pub(super) async fn reopen(
     client: &BugzillaClient,
     args: &ReopenArgs,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let comment = comment_update(&args.comment)?;
-    validate_target_status(client, &args.status).await?;
+    validate_target_status(client, &args.status, ctx).await?;
     let params = UpdateBugParams {
         status: Some(args.status.clone()),
         comment,
@@ -127,7 +132,7 @@ pub(super) async fn reopen(
             params,
             expect_unchanged_since: args.expect_unchanged_since.as_deref(),
         },
-        format,
+        ctx,
         w,
     )
     .await
@@ -136,7 +141,7 @@ pub(super) async fn reopen(
 pub(super) async fn dup(
     client: &BugzillaClient,
     args: &DupArgs,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let params = UpdateBugParams {
@@ -151,7 +156,7 @@ pub(super) async fn dup(
             params,
             expect_unchanged_since: args.expect_unchanged_since.as_deref(),
         },
-        format,
+        ctx,
         w,
     )
     .await

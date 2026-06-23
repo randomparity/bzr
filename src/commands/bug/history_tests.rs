@@ -27,9 +27,7 @@ async fn bug_history_empty_prints_no_history_message() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io.writers(),
     )
     .await;
@@ -52,9 +50,7 @@ async fn bug_history_rejects_malformed_since_with_exit_code_7() {
     });
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __cap_io.writers(),
     )
     .await;

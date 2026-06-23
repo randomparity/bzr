@@ -3,6 +3,7 @@
 //! Template operations are pure local file I/O — no network client needed.
 
 use crate::cli::TemplateAction;
+use crate::commands::runtime::context::CommandContext;
 use crate::commands::runtime::shared::{merge_set, merge_vec};
 use crate::config::Config;
 use crate::error::{BzrError, Result};
@@ -19,11 +20,10 @@ use crate::types::OutputFormat;
 )]
 pub async fn execute(
     action: &TemplateAction,
-    _server: Option<&str>,
-    format: OutputFormat,
-    _api: Option<crate::types::ApiMode>,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let format = ctx.format();
     match action {
         TemplateAction::Save { name, fields } => {
             let mut template = fields.to_template();

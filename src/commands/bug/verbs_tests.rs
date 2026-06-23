@@ -44,9 +44,12 @@ async fn run_verb_expecting_body(action: BugAction, id: u64, body: serde_json::V
         .await;
 
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "verb failed: {:?}", result.err());
 }
 
@@ -64,9 +67,12 @@ async fn run_status_verb(action: BugAction, id: u64, body: serde_json::Value, st
         .await;
 
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "verb failed: {:?}", result.err());
 }
 
@@ -88,9 +94,12 @@ async fn run_verb_collision_expecting_no_write(action: BugAction, id: u64) {
         .await;
 
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         matches!(result, Err(crate::error::BzrError::MidAirCollision { .. })),
@@ -134,7 +143,6 @@ async fn resolve_dry_run_makes_no_write() {
         .expect(0)
         .mount(&mock)
         .await;
-    crate::commands::runtime::dry_run::set(true);
 
     let action = BugAction::Resolve(ResolveArgs {
         ids: vec![5],
@@ -143,11 +151,14 @@ async fn resolve_dry_run_makes_no_write() {
         comment: CommentArgs::default(),
     });
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
     let output = io.out_str().to_string();
-    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok(), "dry-run resolve failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
@@ -268,9 +279,12 @@ async fn bug_verbs_expect_unchanged_since_match_writes_update() {
         comment: CommentArgs::default(),
     });
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(result.is_ok(), "guarded resolve failed: {result:?}");
 }
@@ -355,10 +369,13 @@ async fn reopen_unknown_status_is_rejected() {
 
     let action = BugAction::Reopen(reopen_args(vec![3], "REOPENED"));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let err =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await
-            .unwrap_err();
+    let err = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err();
     assert!(
         matches!(&err, crate::error::BzrError::InputValidation(m)
             if m.contains("REOPENED") && m.contains("CONFIRMED")),
@@ -380,10 +397,13 @@ async fn close_wrong_case_status_is_rejected() {
 
     let action = BugAction::Close(close_args(vec![9], "verified", None));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let err =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await
-            .unwrap_err();
+    let err = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err();
     assert!(
         matches!(&err, crate::error::BzrError::InputValidation(m) if m.contains("verified")),
         "got {err:?}"
@@ -406,16 +426,18 @@ async fn reopen_dry_run_skips_validation_and_write() {
         .expect(0)
         .mount(&mock)
         .await;
-    crate::commands::runtime::dry_run::set(true);
 
     // REOPENED is not in DEFAULT_STATUSES, but dry-run skips validation.
     let action = BugAction::Reopen(reopen_args(vec![3], "REOPENED"));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
     let output = io.out_str().to_string();
-    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok(), "dry-run reopen failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
@@ -481,9 +503,12 @@ async fn resolve_batch_updates_each_id() {
         comment: CommentArgs::default(),
     });
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "batch resolve failed: {:?}", result.err());
     let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
     // Batch JSON shape from update_batch / BatchResult.
@@ -507,9 +532,12 @@ async fn close_private_comment_without_body_is_rejected() {
         },
     });
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
     let err = result.unwrap_err();
     assert!(
         matches!(&err, crate::error::BzrError::InputValidation(m) if m.contains("--comment-private")),

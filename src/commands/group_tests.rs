@@ -38,9 +38,7 @@ async fn group_view_returns_info() {
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a1.writers(),
     )
     .await;
@@ -73,9 +71,7 @@ async fn group_create_sends_post() {
     let mut __io_a2 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a2.writers(),
     )
     .await;
@@ -111,7 +107,12 @@ async fn group_create_from_json_sends_merged_body() {
         is_active: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(result.is_ok(), "group create from JSON failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
@@ -136,10 +137,14 @@ async fn group_create_dry_run_makes_no_write_and_marks_payload() {
         description: Some("A test group".into()),
         is_active: Some(true),
     };
-    crate::commands::runtime::dry_run::set(true);
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
-    crate::commands::runtime::dry_run::set(false);
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(result.is_ok(), "dry-run group create failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
@@ -172,9 +177,7 @@ async fn group_update_sends_put() {
     };
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -207,7 +210,12 @@ async fn group_update_from_json_uses_json_target() {
         is_active: Some(false),
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(result.is_ok(), "group update from JSON failed: {result:?}");
 }
@@ -224,7 +232,12 @@ async fn group_update_from_json_rejects_positional_and_json_target() {
         is_active: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
@@ -245,7 +258,12 @@ async fn group_from_json_rejects_unknown_field() {
         is_active: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
@@ -265,7 +283,12 @@ async fn group_from_json_rejects_array_shape() {
         is_active: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
@@ -294,10 +317,14 @@ async fn group_update_dry_run_makes_no_write_and_marks_payload() {
         description: Some("Updated description".into()),
         is_active: Some(false),
     };
-    crate::commands::runtime::dry_run::set(true);
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
-    crate::commands::runtime::dry_run::set(false);
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(result.is_ok(), "dry-run group update failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
@@ -318,7 +345,12 @@ async fn group_update_without_fields_is_rejected() {
         is_active: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
@@ -349,9 +381,7 @@ async fn group_add_user_sends_put() {
     };
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -379,9 +409,7 @@ async fn group_remove_user_sends_put() {
     };
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -410,9 +438,7 @@ async fn group_list_users_returns_members() {
     };
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -440,9 +466,7 @@ async fn group_list_users_with_details() {
     };
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -468,9 +492,7 @@ async fn group_view_http_500_returns_error() {
     };
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -498,9 +520,7 @@ async fn group_view_malformed_json_returns_error() {
     };
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;

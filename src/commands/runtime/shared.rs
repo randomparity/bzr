@@ -1,5 +1,6 @@
 use crate::client::BugzillaClient;
 use crate::client::DetectedServerSettings;
+use crate::commands::runtime::context::CommandContext;
 use crate::config::{Config, ServerConfig};
 use crate::error::{BzrError, Result};
 use crate::tls::TlsConfig;
@@ -76,8 +77,12 @@ fn tls_uses_default_trust(tls_config: &TlsConfig) -> bool {
 /// is purely to surface transport errors. Network/transport failures are
 /// returned as the original `BzrError::Http` so callers can classify them
 /// (TLS cert error, pin mismatch, etc.).
-async fn probe_tls(url: &str, tls_config: &TlsConfig) -> Result<()> {
-    let client = crate::tls::build_probe_client(tls_config)?;
+async fn probe_tls(
+    url: &str,
+    tls_config: &TlsConfig,
+    request_timeout: std::time::Duration,
+) -> Result<()> {
+    let client = crate::tls::build_probe_client(tls_config, request_timeout)?;
     match client.head(url).send().await {
         Ok(_) => Ok(()),
         Err(e) => Err(BzrError::Http(e)),
@@ -99,6 +104,8 @@ struct ConnectContext {
     api_key: Option<String>,
     email: Option<String>,
     api_override: Option<ApiMode>,
+    request_timeout: std::time::Duration,
+    retry_max: u32,
     /// Whether detected settings (and TOFU pins) may be written back to the
     /// config file. `false` for an inline `--server-url` server, which has no
     /// config entry and must leave the filesystem untouched.
@@ -152,6 +159,8 @@ impl ConnectContext {
             api_mode,
             email_hint: self.email_hint(),
             tls_config,
+            request_timeout: self.request_timeout,
+            retry_max: self.retry_max,
         })
     }
 }
@@ -165,7 +174,8 @@ impl ConnectContext {
 #[cfg_attr(test, mutants::skip)]
 async fn handle_tofu(ctx: &ConnectContext) -> Result<BugzillaClient> {
     let hostname = ctx.hostname();
-    let (fingerprint, issuer, issuer_der) = crate::tls::tofu::probe_server_cert(&ctx.url).await?;
+    let (fingerprint, issuer, issuer_der) =
+        crate::tls::tofu::probe_server_cert(&ctx.url, ctx.request_timeout).await?;
 
     let decision =
         crate::tls::tofu::prompt_tofu(&ctx.server_name, &hostname, &fingerprint, &issuer)?;
@@ -297,9 +307,21 @@ async fn detect_settings(
     tls_config: &TlsConfig,
 ) -> Result<DetectedServerSettings> {
     if let Some(api_key) = ctx.api_key.as_deref() {
-        crate::client::detect_server_settings(&ctx.url, api_key, ctx.email_hint(), tls_config).await
+        crate::client::detect_server_settings(
+            &ctx.url,
+            api_key,
+            ctx.email_hint(),
+            tls_config,
+            ctx.request_timeout,
+        )
+        .await
     } else {
-        crate::client::detect_server_settings_without_auth(&ctx.url, tls_config).await
+        crate::client::detect_server_settings_without_auth(
+            &ctx.url,
+            tls_config,
+            ctx.request_timeout,
+        )
+        .await
     }
 }
 
@@ -380,29 +402,29 @@ struct ConnectTarget {
     pin_current_cert: bool,
 }
 
-/// Resolve the connection target. When an inline server is set (global
-/// `--server-url`), builds an ephemeral, never-persisted target and skips the
-/// config file entirely — so a fully stateless invocation needs no config.
-/// Otherwise loads config and resolves the named (or default) server.
-fn resolve_connect_target(
-    server: Option<&str>,
-    api_override: Option<ApiMode>,
-) -> Result<ConnectTarget> {
-    if let Some(inline) = crate::commands::runtime::inline_server::get() {
+/// Resolve the connection target. When an inline server is set on the command
+/// context, builds an ephemeral, never-persisted target and skips the config
+/// file entirely — so a fully stateless invocation needs no config. Otherwise
+/// loads config and resolves the named (or default) server.
+fn resolve_connect_target(command: &CommandContext) -> Result<ConnectTarget> {
+    let api_override = command.api();
+    if let Some(inline) = command.inline_server() {
         let name = crate::commands::runtime::inline_server::INLINE_SERVER_NAME;
-        let mut srv = match inline.api_key_env {
-            Some(api_key_env) => {
-                ServerConfig::from_url_with_env_key(inline.url, api_key_env, inline.email)
-            }
+        let mut srv = match inline.api_key_env.as_ref() {
+            Some(api_key_env) => ServerConfig::from_url_with_env_key(
+                inline.url.clone(),
+                api_key_env.clone(),
+                inline.email.clone(),
+            ),
             None => ServerConfig {
-                url: inline.url,
-                email: inline.email,
+                url: inline.url.clone(),
+                email: inline.email.clone(),
                 ..ServerConfig::default()
             },
         };
         srv.tls_insecure = inline.tls.insecure;
-        srv.tls_ca_cert = inline.tls.ca_cert_path;
-        srv.tls_pin_sha256 = inline.tls.pin_sha256;
+        srv.tls_ca_cert.clone_from(&inline.tls.ca_cert_path);
+        srv.tls_pin_sha256.clone_from(&inline.tls.pin_sha256);
         srv.validate(name)?;
         let tls_config = srv.tls_config(name);
         let ctx = ConnectContext {
@@ -411,6 +433,8 @@ fn resolve_connect_target(
             api_key: srv.resolve_optional_api_key(name)?,
             email: srv.email.clone(),
             api_override,
+            request_timeout: command.request_timeout(),
+            retry_max: command.retry_max(),
             persist: false,
         };
         return Ok(ConnectTarget {
@@ -423,7 +447,7 @@ fn resolve_connect_target(
     }
 
     let config = Config::load()?;
-    let (server_name, srv) = config.resolve_server(server)?;
+    let (server_name, srv) = config.resolve_server(command.server())?;
     let tls_config = srv.tls_config(server_name);
     let api_key = srv.resolve_optional_api_key(server_name)?;
     let cached_auth = if api_key.is_some() {
@@ -437,6 +461,8 @@ fn resolve_connect_target(
         api_key,
         email: srv.email.clone(),
         api_override,
+        request_timeout: command.request_timeout(),
+        retry_max: command.retry_max(),
         persist: true,
     };
     Ok(ConnectTarget {
@@ -452,7 +478,8 @@ async fn pin_current_cert_for_session(
     ctx: &ConnectContext,
     tls_config: &mut TlsConfig,
 ) -> Result<()> {
-    let (fingerprint, _issuer, issuer_der) = crate::tls::tofu::probe_server_cert(&ctx.url).await?;
+    let (fingerprint, _issuer, issuer_der) =
+        crate::tls::tofu::probe_server_cert(&ctx.url, ctx.request_timeout).await?;
     tls_config.pin_sha256 = Some(fingerprint);
     tls_config.pin_issuer_der = issuer_der;
     tls_config.server_name = Some(ctx.server_name.clone());
@@ -467,7 +494,7 @@ async fn probe_cached_connection(
         return Ok(None);
     }
 
-    if let Err(e) = probe_tls(&ctx.url, tls_config).await {
+    if let Err(e) = probe_tls(&ctx.url, tls_config, ctx.request_timeout).await {
         if let Some(client) = classify_and_handle_tls_failure(&e, ctx, tls_config).await? {
             return Ok(Some(client));
         }
@@ -488,17 +515,14 @@ async fn probe_cached_connection(
 /// When a TLS certificate error occurs and no trust mechanism is configured,
 /// offers an interactive TOFU (trust-on-first-use) prompt. When a pinned
 /// certificate has rotated, offers a rotation prompt.
-pub async fn connect_and_configure(
-    server: Option<&str>,
-    api_override: Option<ApiMode>,
-) -> Result<BugzillaClient> {
+pub async fn connect_and_configure(command: &CommandContext) -> Result<BugzillaClient> {
     let ConnectTarget {
         ctx,
         mut tls_config,
         cached_auth,
         cached_mode,
         pin_current_cert,
-    } = resolve_connect_target(server, api_override)?;
+    } = resolve_connect_target(command)?;
 
     if pin_current_cert {
         pin_current_cert_for_session(&ctx, &mut tls_config).await?;
@@ -552,7 +576,7 @@ pub async fn connect_and_configure(
         },
     };
 
-    let api_mode = api_override.unwrap_or(resolved_mode);
+    let api_mode = command.api().unwrap_or(resolved_mode);
     let client = ctx.build_client(auth, api_mode, &tls_config)?;
     Ok(client)
 }

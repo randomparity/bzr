@@ -1,10 +1,9 @@
 use crate::cli::UserAction;
+use crate::commands::runtime::context::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::resources::user::{write_users, write_users_detailed};
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
-use crate::types::ApiMode;
-use crate::types::OutputFormat;
 use crate::types::{CreateUserParams, UpdateUserParams};
 use serde::Deserialize;
 
@@ -50,16 +49,11 @@ fn resolve_login_denied_text(disable: Option<bool>, custom_text: Option<&str>) -
     }
 }
 
-pub async fn execute(
-    action: &UserAction,
-    server: Option<&str>,
-    format: OutputFormat,
-    api: Option<ApiMode>,
-    w: &mut Writers<'_>,
-) -> Result<()> {
+pub async fn execute(action: &UserAction, ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
+    let format = ctx.format();
     match action {
         UserAction::Search { query, details } => {
-            let client = super::runtime::shared::connect_and_configure(server, api).await?;
+            let client = super::runtime::shared::connect_and_configure(ctx).await?;
             let users = client.search_users(query, *details).await?;
             if *details {
                 write_users_detailed(&users, format, w.out);
@@ -81,7 +75,7 @@ pub async fn execute(
                 full_name.as_deref(),
                 password.as_deref(),
             )?;
-            if super::runtime::dry_run::enabled() {
+            if ctx.dry_run() {
                 let message = format!("Would create user '{}'", params.email);
                 write_result(
                     &DryRunResult::new(ResourceKind::User, &[], &params),
@@ -91,7 +85,7 @@ pub async fn execute(
                 );
                 return Ok(());
             }
-            let client = super::runtime::shared::connect_and_configure(server, api).await?;
+            let client = super::runtime::shared::connect_and_configure(ctx).await?;
             let id = client.create_user(&params).await?;
             write_result(
                 &ActionResult::created_named(id, params.email.as_str(), ResourceKind::User),
@@ -118,7 +112,7 @@ pub async fn execute(
                     login_denied_text: login_denied_text.as_deref(),
                 },
             )?;
-            if super::runtime::dry_run::enabled() {
+            if ctx.dry_run() {
                 let message = format!("Would update user '{user}'");
                 write_result(
                     &DryRunResult::new(ResourceKind::User, &[], &params),
@@ -128,7 +122,7 @@ pub async fn execute(
                 );
                 return Ok(());
             }
-            let client = super::runtime::shared::connect_and_configure(server, api).await?;
+            let client = super::runtime::shared::connect_and_configure(ctx).await?;
             client.update_user(&user, &params).await?;
             write_result(
                 &ActionResult::updated_named(user.as_str(), None, ResourceKind::User),

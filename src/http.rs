@@ -1,52 +1,15 @@
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::RwLock;
 use std::time::Duration;
 
 /// Kept short (10s) to fail fast on unreachable servers.
 pub(crate) const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Per-request ceiling (30s) — covers large attachment downloads. Overridable
-/// per invocation via `--timeout` / `BZR_TIMEOUT` (see [`request_timeout`]).
+/// per invocation via `--timeout` / `BZR_TIMEOUT`.
 pub(crate) const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
-
-/// Process-wide request-timeout override, set once from `--timeout` /
-/// `BZR_TIMEOUT` before any client is built. `None` keeps [`REQUEST_TIMEOUT`].
-static REQUEST_TIMEOUT_OVERRIDE: RwLock<Option<Duration>> = RwLock::new(None);
-/// Process-wide retry budget for transient (429 / 5xx / timeout) failures, set
-/// from `--retry`. 0 (the default) disables retries.
-static RETRY_MAX: AtomicU32 = AtomicU32::new(0);
 
 /// Base unit for exponential backoff between transient retries.
 const RETRY_BACKOFF_BASE: Duration = Duration::from_millis(500);
 /// Upper bound on any single backoff sleep, including a server `Retry-After`.
 const RETRY_BACKOFF_CAP: Duration = Duration::from_secs(30);
-
-/// Install the request-timeout override (seconds). Called once at startup,
-/// before any [`crate::client::BugzillaClient`] is constructed.
-pub fn set_request_timeout_secs(secs: Option<u64>) {
-    let dur = secs.map(Duration::from_secs);
-    if let Ok(mut guard) = REQUEST_TIMEOUT_OVERRIDE.write() {
-        *guard = dur;
-    }
-}
-
-/// The effective per-request timeout: the override if set, else the default.
-pub(crate) fn request_timeout() -> Duration {
-    REQUEST_TIMEOUT_OVERRIDE
-        .read()
-        .ok()
-        .and_then(|g| *g)
-        .unwrap_or(REQUEST_TIMEOUT)
-}
-
-/// Install the transient-retry budget. Called once at startup.
-pub fn set_retry_max(n: u32) {
-    RETRY_MAX.store(n, Ordering::Relaxed);
-}
-
-/// The configured transient-retry budget (0 = retries disabled).
-pub(crate) fn retry_max() -> u32 {
-    RETRY_MAX.load(Ordering::Relaxed)
-}
 
 /// Resolve the request-timeout override from the `--timeout` flag and the
 /// `BZR_TIMEOUT` environment value. The flag wins (already validated `>= 1` by

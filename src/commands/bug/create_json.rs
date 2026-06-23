@@ -2,6 +2,7 @@ use serde::Deserialize;
 
 use crate::cli::CreateArgs;
 use crate::client::BugzillaClient;
+use crate::commands::runtime::context::CommandContext;
 use crate::commands::runtime::from_json::JsonOneOrMany;
 use crate::commands::runtime::shared::{merge_set, merge_vec};
 use crate::error::Result;
@@ -194,10 +195,11 @@ fn write_batch_create(result: &BatchCreateResult, format: OutputFormat, w: &mut 
 async fn create_batch_from_json(
     client: &BugzillaClient,
     params_list: &[CreateBugParams],
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    if crate::commands::runtime::dry_run::enabled() {
+    let format = ctx.format();
+    if ctx.dry_run() {
         // One coherent object for the whole batch (N pretty-printed objects
         // would not be valid JSON); `changes` carries the array of params.
         write_result(
@@ -236,13 +238,13 @@ pub(super) async fn handle(
     client: &BugzillaClient,
     args: &CreateArgs,
     arg: &str,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     match crate::commands::runtime::from_json::read_one_or_many::<JsonCreateBug>(arg)? {
         JsonOneOrMany::One(entry) => {
             let params = overlay_cli(*entry, args)?.into_params()?;
-            super::create::create_and_report(client, &params, format, w).await
+            super::create::create_and_report(client, &params, ctx, w).await
         }
         JsonOneOrMany::Many(entries) => {
             if entries.is_empty() {
@@ -254,7 +256,7 @@ pub(super) async fn handle(
             for entry in entries {
                 params_list.push(overlay_cli(entry, args)?.into_params()?);
             }
-            create_batch_from_json(client, &params_list, format, w).await
+            create_batch_from_json(client, &params_list, ctx, w).await
         }
     }
 }

@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::cli::UpdateArgs;
 use crate::client::BugzillaClient;
+use crate::commands::runtime::context::CommandContext;
 use crate::commands::runtime::from_json::JsonOneOrMany;
 use crate::commands::runtime::shared::{merge_set, merge_vec};
 use crate::error::Result;
@@ -290,14 +291,15 @@ fn write_json_array_dry_run(
 async fn update_many_from_json(
     client: &BugzillaClient,
     requests: &[JsonUpdateRequest],
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    if crate::commands::runtime::dry_run::enabled() {
+    let format = ctx.format();
+    if ctx.dry_run() {
         write_json_array_dry_run(requests, format, w);
         return Ok(());
     }
-    if !super::update::confirm_batch(requests.len(), w)? {
+    if !super::update::confirm_batch(requests.len(), ctx.assume_yes(), w)? {
         let _ = writeln!(w.err, "Aborted; no changes made.");
         return Ok(());
     }
@@ -337,7 +339,7 @@ pub(super) async fn handle(
     client: &BugzillaClient,
     args: &UpdateArgs,
     arg: &str,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     if arg == "-" && cli_comment_uses_stdin(args) {
@@ -355,7 +357,7 @@ pub(super) async fn handle(
                     params,
                     expect_unchanged_since: expect_unchanged_since.as_deref(),
                 },
-                format,
+                ctx,
                 w,
             )
             .await
@@ -376,7 +378,7 @@ pub(super) async fn handle(
             for (index, entry) in entries.into_iter().enumerate() {
                 requests.push(build_array_request(entry, args, index)?);
             }
-            update_many_from_json(client, &requests, format, w).await
+            update_many_from_json(client, &requests, ctx, w).await
         }
     }
 }

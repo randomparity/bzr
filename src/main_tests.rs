@@ -254,9 +254,13 @@ async fn schema_from_command(name: &str) -> serde_json::Value {
     let mut err = Vec::new();
     let mut writers = bzr::output::writers::Writers::new(&mut out, &mut err);
 
-    bzr::commands::schema::execute(Some(name), None, OutputFormat::Json, None, &mut writers)
-        .await
-        .expect("schema must be published");
+    bzr::commands::schema::execute(
+        Some(name),
+        &bzr::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut writers,
+    )
+    .await
+    .expect("schema must be published");
 
     serde_json::from_slice(&out).expect("schema output must be valid JSON")
 }

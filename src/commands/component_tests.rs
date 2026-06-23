@@ -74,7 +74,12 @@ async fn component_list_returns_components() {
         product: "MyApp".into(),
     };
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut __io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "list should succeed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
     assert_eq!(parsed.as_array().unwrap().len(), 2);
@@ -91,7 +96,12 @@ async fn component_view_returns_one_component() {
         name: "Frontend".into(),
     };
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut __io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "view should succeed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
     assert_eq!(parsed["id"], 11);
@@ -108,7 +118,12 @@ async fn component_view_unknown_name_is_not_found() {
         name: "Nonexistent".into(),
     };
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut __io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
     assert!(matches!(
         result,
         Err(BzrError::NotFound {
@@ -138,9 +153,7 @@ async fn component_create_succeeds() {
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a1.writers(),
     )
     .await;
@@ -168,10 +181,14 @@ async fn component_create_dry_run_makes_no_write_and_marks_payload() {
         description: Some("Backend component".to_string()),
         default_assignee: Some("dev@test.com".to_string()),
     };
-    crate::commands::runtime::dry_run::set(true);
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
-    crate::commands::runtime::dry_run::set(false);
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         result.is_ok(),
@@ -210,7 +227,12 @@ async fn component_create_from_json_sends_merged_body() {
         default_assignee: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         result.is_ok(),
@@ -240,9 +262,7 @@ async fn component_create_http_500_returns_error() {
     };
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -271,9 +291,7 @@ async fn component_update_succeeds() {
     let mut __io_a2 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a2.writers(),
     )
     .await;
@@ -307,7 +325,12 @@ async fn component_update_by_product_and_component_resolves_id() {
         default_assignee: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         result.is_ok(),
@@ -342,7 +365,12 @@ async fn component_update_from_json_uses_product_component_target() {
         default_assignee: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         result.is_ok(),
@@ -363,7 +391,12 @@ async fn component_update_rejects_id_and_product_component_target() {
         default_assignee: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         matches!(result, Err(BzrError::InputValidation(ref msg))
@@ -385,7 +418,12 @@ async fn component_update_rejects_product_without_component() {
         default_assignee: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         matches!(result, Err(BzrError::InputValidation(ref msg))
@@ -409,7 +447,12 @@ async fn component_update_named_target_unknown_component_is_not_found() {
         default_assignee: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         matches!(result, Err(BzrError::NotFound { resource: "component", ref id })
@@ -433,7 +476,12 @@ async fn component_update_named_target_duplicate_component_is_ambiguous() {
         default_assignee: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         matches!(result, Err(BzrError::InputValidation(ref msg))
@@ -462,10 +510,14 @@ async fn component_update_dry_run_makes_no_write_and_marks_payload() {
         description: None,
         default_assignee: Some("owner@test.com".to_string()),
     };
-    crate::commands::runtime::dry_run::set(true);
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
-    crate::commands::runtime::dry_run::set(false);
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         result.is_ok(),
@@ -506,7 +558,12 @@ async fn component_update_from_json_uses_json_target() {
         default_assignee: Some("owner@test.com".to_string()),
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         result.is_ok(),
@@ -528,7 +585,12 @@ async fn component_update_from_json_rejects_positional_and_json_target() {
         default_assignee: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
@@ -551,7 +613,12 @@ async fn component_update_from_json_rejects_id_and_product_component_target() {
         default_assignee: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         matches!(result, Err(BzrError::InputValidation(ref msg))
@@ -574,7 +641,12 @@ async fn component_update_from_json_rejects_partial_product_component_target() {
         default_assignee: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         matches!(result, Err(BzrError::InputValidation(ref msg))
@@ -595,7 +667,12 @@ async fn component_from_json_rejects_unknown_field() {
         default_assignee: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
@@ -618,9 +695,11 @@ async fn component_from_json_missing_required_field_names_cli_flag() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        Some("missing"),
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(
+            Some("missing"),
+            OutputFormat::Json,
+            None,
+        ),
         &mut io.writers(),
     )
     .await;
@@ -644,7 +723,12 @@ async fn component_from_json_rejects_array_shape() {
         default_assignee: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
@@ -666,7 +750,12 @@ async fn component_update_without_fields_is_rejected() {
         default_assignee: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))

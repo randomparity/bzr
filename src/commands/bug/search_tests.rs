@@ -44,9 +44,12 @@ async fn handle_search_from_url_executes() {
 
     let mut __io = crate::test_helpers::CapturedIo::new();
 
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
 
     let output = __io.out_str().to_string();
     assert!(result.is_ok(), "from-url search failed: {result:?}");
@@ -79,9 +82,12 @@ async fn handle_search_from_url_with_custom_fields_emits_custom_field() {
     field_args.fields = Some("id,cf_release".into());
 
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
 
     assert!(result.is_ok(), "from-url custom search failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
@@ -118,9 +124,12 @@ async fn handle_search_from_url_does_not_infer_custom_fields_from_columnlist() {
     let action = from_url_action(url, None);
 
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
 
     assert!(
         result.is_ok(),
@@ -151,9 +160,7 @@ async fn handle_search_from_url_preserves_url_limit_when_cli_unset() {
 
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io2.writers(),
     )
     .await;
@@ -198,9 +205,7 @@ async fn handle_search_quicksearch_passes_limit_and_field_filters() {
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io3.writers(),
     )
     .await;
@@ -237,9 +242,7 @@ async fn handle_search_from_url_passes_raw_params() {
 
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io4.writers(),
     )
     .await;
@@ -269,9 +272,7 @@ async fn handle_search_from_url_saves_query() {
 
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io5.writers(),
     )
     .await;
@@ -303,9 +304,7 @@ async fn handle_search_from_url_auto_names_from_known_name() {
     let mut __io6 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io6.writers(),
     )
     .await;
@@ -333,9 +332,7 @@ async fn handle_search_save_as_no_name_no_known_name_errors() {
     let mut __io7 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io7.writers(),
     )
     .await;
@@ -373,9 +370,12 @@ async fn bug_search_quicksearch_sends_default_order() {
         count: false,
     });
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "quicksearch should succeed: {result:?}");
 }
 
@@ -397,9 +397,12 @@ async fn bug_search_from_url_sort_overrides_url_order() {
         sort_args.order = crate::types::SortDirection::Desc;
     }
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
     assert!(
         result.is_ok(),
         "from-url with --sort should succeed: {result:?}"
@@ -436,9 +439,12 @@ async fn handle_search_count_emits_count_object() {
         count: true,
     });
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "search --count failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
     assert_eq!(parsed["count"], 4);
@@ -469,9 +475,12 @@ async fn from_url_offset_in_url_is_overridden_by_cli_offset_not_duplicated() {
     }
 
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "{result:?}");
 
     let requests = mock.received_requests().await.unwrap();
@@ -517,9 +526,12 @@ async fn from_url_offset_with_paginate_sends_single_offset_per_page() {
     }
 
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "{result:?}");
 
     let requests = mock.received_requests().await.unwrap();

@@ -71,7 +71,11 @@ fn prompt_rotation_returns_false_non_interactive() {
 
 #[tokio::test]
 async fn probe_server_cert_returns_error_for_unreachable() {
-    let result = probe_server_cert("https://127.0.0.1:1/unreachable").await;
+    let result = probe_server_cert(
+        "https://127.0.0.1:1/unreachable",
+        crate::http::REQUEST_TIMEOUT,
+    )
+    .await;
     assert!(result.is_err(), "should fail for unreachable server");
 }
 

@@ -8,10 +8,11 @@
 //! input parsers against them, so a contract change fails CI until the schema is
 //! updated.
 
+use crate::commands::runtime::context::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::result_types::write_result;
 use crate::output::writers::Writers;
-use crate::types::{ApiMode, OutputFormat};
+use crate::types::OutputFormat;
 
 /// Build the `(name, embedded-json)` registry from a bare list of schema names,
 /// deriving each `schemas/<name>.json` path so a name is written exactly once.
@@ -73,13 +74,8 @@ fn find(name: &str) -> Option<&'static str> {
     clippy::unused_async,
     reason = "command handlers share the async dispatch signature"
 )]
-pub async fn execute(
-    name: Option<&str>,
-    _server: Option<&str>,
-    format: OutputFormat,
-    _api: Option<ApiMode>,
-    w: &mut Writers<'_>,
-) -> Result<()> {
+pub async fn execute(name: Option<&str>, ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
+    let format = ctx.format();
     let Some(name) = name else {
         write_list(format, w);
         return Ok(());

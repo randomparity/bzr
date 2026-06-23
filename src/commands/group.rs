@@ -1,4 +1,5 @@
 use crate::cli::GroupAction;
+use crate::commands::runtime::context::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::resources::group::write_group_info;
 use crate::output::resources::user::{write_users, write_users_detailed};
@@ -6,8 +7,6 @@ use crate::output::result_types::{
     write_result, ActionResult, DryRunResult, MembershipResult, ResourceKind,
 };
 use crate::output::writers::Writers;
-use crate::types::ApiMode;
-use crate::types::OutputFormat;
 use crate::types::{CreateGroupParams, UpdateGroupParams};
 use serde::Deserialize;
 
@@ -29,14 +28,13 @@ struct JsonUpdateGroup {
 
 pub async fn execute(
     action: &GroupAction,
-    server: Option<&str>,
-    format: OutputFormat,
-    api: Option<ApiMode>,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let format = ctx.format();
     match action {
         GroupAction::AddUser { group, user } => {
-            let client = super::runtime::shared::connect_and_configure(server, api).await?;
+            let client = super::runtime::shared::connect_and_configure(ctx).await?;
             client.add_user_to_group(user, group).await?;
             write_result(
                 &MembershipResult::added(user.as_str(), group.as_str()),
@@ -46,7 +44,7 @@ pub async fn execute(
             );
         }
         GroupAction::RemoveUser { group, user } => {
-            let client = super::runtime::shared::connect_and_configure(server, api).await?;
+            let client = super::runtime::shared::connect_and_configure(ctx).await?;
             client.remove_user_from_group(user, group).await?;
             write_result(
                 &MembershipResult::removed(user.as_str(), group.as_str()),
@@ -56,7 +54,7 @@ pub async fn execute(
             );
         }
         GroupAction::ListUsers { group, details } => {
-            let client = super::runtime::shared::connect_and_configure(server, api).await?;
+            let client = super::runtime::shared::connect_and_configure(ctx).await?;
             let users = client.get_group_members(group, *details).await?;
             let write = if *details {
                 write_users_detailed
@@ -66,7 +64,7 @@ pub async fn execute(
             write(&users, format, w.out);
         }
         GroupAction::View { group } => {
-            let client = super::runtime::shared::connect_and_configure(server, api).await?;
+            let client = super::runtime::shared::connect_and_configure(ctx).await?;
             let info = client.get_group(group).await?;
             write_group_info(&info, format, w.out);
         }
@@ -82,7 +80,7 @@ pub async fn execute(
                 description.as_deref(),
                 *is_active,
             )?;
-            if super::runtime::dry_run::enabled() {
+            if ctx.dry_run() {
                 let message = format!("Would create group '{}'", params.name);
                 write_result(
                     &DryRunResult::new(ResourceKind::Group, &[], &params),
@@ -92,7 +90,7 @@ pub async fn execute(
                 );
                 return Ok(());
             }
-            create_group(&params, server, format, api, w).await?;
+            create_group(&params, ctx, w).await?;
         }
         GroupAction::Update {
             from_json,
@@ -106,7 +104,7 @@ pub async fn execute(
                 description.as_deref(),
                 *is_active,
             )?;
-            if super::runtime::dry_run::enabled() {
+            if ctx.dry_run() {
                 let message = format!("Would update group '{group}'");
                 write_result(
                     &DryRunResult::new(ResourceKind::Group, &[], &params),
@@ -116,7 +114,7 @@ pub async fn execute(
                 );
                 return Ok(());
             }
-            let client = super::runtime::shared::connect_and_configure(server, api).await?;
+            let client = super::runtime::shared::connect_and_configure(ctx).await?;
             client.update_group(&group, &params).await?;
             write_result(
                 &ActionResult::updated_named(group.as_str(), None, ResourceKind::Group),
@@ -131,12 +129,11 @@ pub async fn execute(
 
 async fn create_group(
     params: &CreateGroupParams,
-    server: Option<&str>,
-    format: OutputFormat,
-    api: Option<ApiMode>,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let client = super::runtime::shared::connect_and_configure(server, api).await?;
+    let format = ctx.format();
+    let client = super::runtime::shared::connect_and_configure(ctx).await?;
     let id = client.create_group(params).await?;
     write_result(
         &ActionResult::created_named(id, params.name.as_str(), ResourceKind::Group),

@@ -39,8 +39,9 @@ pub async fn detect_server_settings(
     api_key: &str,
     email: Option<&str>,
     tls_config: &crate::tls::TlsConfig,
+    request_timeout: std::time::Duration,
 ) -> Result<DetectedServerSettings> {
-    let http = crate::tls::build_tls_client(tls_config)?;
+    let http = crate::tls::build_tls_client(tls_config, request_timeout)?;
 
     let method = detect_auth_method(&http, url, api_key, email).await?;
     let (version, api_mode) = detect_version_and_mode(&http, url, api_key, method).await;
@@ -66,8 +67,9 @@ pub async fn detect_server_settings(
 pub async fn detect_server_settings_without_auth(
     url: &str,
     tls_config: &crate::tls::TlsConfig,
+    request_timeout: std::time::Duration,
 ) -> Result<DetectedServerSettings> {
-    let http = crate::tls::build_tls_client(tls_config)?;
+    let http = crate::tls::build_tls_client(tls_config, request_timeout)?;
     let (version, api_mode) = detect_version_and_mode_without_auth_checked(&http, url).await?;
 
     tracing::info!(

@@ -40,6 +40,8 @@ fn new_trims_trailing_slash_and_keeps_email_hint() {
         api_mode: ApiMode::Rest,
         email_hint: Some("user@example.com"),
         tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
     })
     .unwrap();
 
@@ -77,6 +79,8 @@ async fn anonymous_client_sends_no_api_key_header_or_query() {
         api_mode: ApiMode::Rest,
         email_hint: None,
         tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
     })
     .unwrap();
 
@@ -104,6 +108,8 @@ fn alternate_auth_rejects_invalid_header_characters() {
         api_mode: ApiMode::Rest,
         email_hint: None,
         tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
     })
     .unwrap();
 
@@ -288,6 +294,8 @@ async fn anonymous_client_does_not_retry_401_with_alternate_auth() {
         api_mode: ApiMode::Rest,
         email_hint: None,
         tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
     })
     .unwrap();
 

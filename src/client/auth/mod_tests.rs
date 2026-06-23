@@ -254,7 +254,12 @@ async fn non_tls_network_error_defaults_to_header() {
 async fn anonymous_detection_propagates_tls_certificate_errors() {
     let (url, handle) = spawn_self_signed_https_server();
 
-    let result = detect_server_settings_without_auth(&url, &crate::tls::TlsConfig::default()).await;
+    let result = detect_server_settings_without_auth(
+        &url,
+        &crate::tls::TlsConfig::default(),
+        crate::http::REQUEST_TIMEOUT,
+    )
+    .await;
     handle.join().unwrap();
 
     assert!(
@@ -398,6 +403,7 @@ async fn detect_server_settings_returns_all_fields() {
         "test-key",
         None,
         &crate::tls::TlsConfig::default(),
+        crate::http::REQUEST_TIMEOUT,
     )
     .await
     .unwrap();
@@ -446,6 +452,7 @@ async fn detect_server_settings_keeps_version_none_when_probe_fails() {
         "test-key",
         None,
         &crate::tls::TlsConfig::default(),
+        crate::http::REQUEST_TIMEOUT,
     )
     .await
     .unwrap();

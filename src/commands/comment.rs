@@ -1,6 +1,7 @@
 use std::io::IsTerminal;
 
 use crate::cli::CommentAction;
+use crate::commands::runtime::context::CommandContext;
 use crate::commands::runtime::editor;
 use crate::error::{BzrError, Result};
 use crate::output::resources::comment::write_comments;
@@ -8,8 +9,7 @@ use crate::output::result_types::{
     write_result, ActionResult, ResourceKind, SearchResult, TagResult,
 };
 use crate::output::writers::Writers;
-use crate::types::ApiMode;
-use crate::types::{OutputFormat, UpdateCommentTagsParams};
+use crate::types::UpdateCommentTagsParams;
 
 pub(crate) fn requires_credentials(action: &CommentAction) -> Option<&'static str> {
     match action {
@@ -21,13 +21,12 @@ pub(crate) fn requires_credentials(action: &CommentAction) -> Option<&'static st
 
 pub async fn execute(
     action: &CommentAction,
-    server: Option<&str>,
-    format: OutputFormat,
-    api: Option<ApiMode>,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     validate_action(action)?;
-    let client = super::runtime::shared::connect_and_configure(server, api).await?;
+    let format = ctx.format();
+    let client = super::runtime::shared::connect_and_configure(ctx).await?;
 
     match action {
         CommentAction::List { bug_id, since } => {

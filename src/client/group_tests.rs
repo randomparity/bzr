@@ -378,6 +378,8 @@ async fn xmlrpc_mode_get_group_bypasses_rest() {
         api_mode: ApiMode::XmlRpc,
         email_hint: None,
         tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
     })
     .unwrap();
 

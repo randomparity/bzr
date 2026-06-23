@@ -39,7 +39,11 @@ fn is_connect_tls_error_false_without_tls_keyword() {
 
 #[tokio::test]
 async fn tls_hint_no_hint_for_non_tls_error() {
-    let client = crate::tls::build_tls_client(&crate::tls::TlsConfig::default()).unwrap();
+    let client = crate::tls::build_tls_client(
+        &crate::tls::TlsConfig::default(),
+        crate::http::REQUEST_TIMEOUT,
+    )
+    .unwrap();
     let err = client
         .get("http://127.0.0.1:1/nope")
         .send()

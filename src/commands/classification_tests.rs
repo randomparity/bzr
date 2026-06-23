@@ -30,9 +30,7 @@ async fn classification_view_returns_data() {
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a1.writers(),
     )
     .await;
@@ -59,9 +57,7 @@ async fn classification_view_http_500_returns_error() {
     };
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -100,9 +96,7 @@ async fn classification_list_returns_sorted_json() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &ClassificationAction::List,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -135,9 +129,7 @@ async fn classification_list_notes_disabled_when_only_unclassified() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &ClassificationAction::List,
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io.writers(),
     )
     .await;

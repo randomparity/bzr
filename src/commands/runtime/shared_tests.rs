@@ -19,6 +19,8 @@ fn connect_context(
         api_key: Some("test-key".to_string()),
         email: None,
         api_override,
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
         persist: true,
     }
 }
@@ -34,7 +36,13 @@ async fn connect_client_returns_client() {
         .mount(&mock)
         .await;
 
-    let result = super::connect_and_configure(None, None).await;
+    let result =
+        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ))
+        .await;
     assert!(result.is_ok());
 }
 
@@ -70,7 +78,13 @@ email = "user@example.com"
         .mount(&mock)
         .await;
 
-    let result = super::connect_and_configure(None, None).await;
+    let result =
+        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ))
+        .await;
     assert!(
         result.is_ok(),
         "connect_client with email config should succeed"
@@ -88,7 +102,13 @@ async fn connect_client_api_override_applies() {
         .await;
 
     // Override with XmlRpc mode — connect should still succeed
-    let result = super::connect_and_configure(None, Some(crate::types::ApiMode::XmlRpc)).await;
+    let result =
+        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            Some(crate::types::ApiMode::XmlRpc),
+        ))
+        .await;
     assert!(result.is_ok());
 }
 
@@ -103,7 +123,13 @@ async fn connect_client_missing_server_fails() {
     // SAFETY: Tests are serialized via ENV_LOCK.
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
-    let result = super::connect_and_configure(None, None).await;
+    let result =
+        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ))
+        .await;
     assert!(result.is_err());
 }
 
@@ -147,7 +173,13 @@ api_key = "test-key"
     // SAFETY: Tests are serialized via ENV_LOCK.
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
-    let result = super::connect_and_configure(None, None).await;
+    let result =
+        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ))
+        .await;
     assert!(result.is_ok(), "connect_client should succeed");
 
     // Verify persistence: reload from disk
@@ -182,7 +214,13 @@ async fn credentialless_named_server_persists_api_mode_without_auth_method() {
         .mount(&server)
         .await;
 
-    let result = super::connect_and_configure(None, None).await;
+    let result =
+        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ))
+        .await;
     assert!(
         result.is_ok(),
         "credentialless named server should connect anonymously: {:?}",
@@ -220,7 +258,13 @@ async fn credentialless_cached_mode_builds_anonymous_client() {
         .mount(&server)
         .await;
 
-    let result = super::connect_and_configure(None, None).await;
+    let result =
+        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ))
+        .await;
     assert!(
         result.is_ok(),
         "credentialless cached mode should build an anonymous client: {:?}",
@@ -283,7 +327,13 @@ api_mode = "rest"
         .mount(&mock)
         .await;
 
-    let result = super::connect_and_configure(None, None).await;
+    let result =
+        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ))
+        .await;
     assert!(result.is_ok(), "env-backed config should succeed");
 }
 
@@ -302,18 +352,19 @@ async fn inline_server_connects_without_config_and_persists_nothing() {
     }
     mount_detection_mocks(&mock).await;
 
-    crate::commands::runtime::inline_server::set(Some(
-        crate::commands::runtime::inline_server::InlineServer {
-            url: mock.uri(),
-            api_key_env: Some("BZR_INLINE_TEST_KEY".into()),
-            email: None,
-            tls: crate::commands::runtime::inline_server::InlineTlsOptions::default(),
-        },
-    ));
-    let result = super::connect_and_configure(None, None).await;
-    // Reset before any assertion can unwind, so the inline definition never
-    // leaks into a sibling test that expects config-based resolution.
-    crate::commands::runtime::inline_server::set(None);
+    let inline = crate::commands::runtime::inline_server::InlineServer {
+        url: mock.uri(),
+        api_key_env: Some("BZR_INLINE_TEST_KEY".into()),
+        email: None,
+        tls: crate::commands::runtime::inline_server::InlineTlsOptions::default(),
+    };
+    let ctx = crate::commands::runtime::context::CommandContext::new(
+        None,
+        crate::types::OutputFormat::Json,
+        None,
+    )
+    .with_inline_server(Some(inline));
+    let result = super::connect_and_configure(&ctx).await;
 
     assert!(
         result.is_ok(),
@@ -343,16 +394,19 @@ async fn inline_credentialless_server_connects_without_config() {
         .mount(&mock)
         .await;
 
-    crate::commands::runtime::inline_server::set(Some(
-        crate::commands::runtime::inline_server::InlineServer {
-            url: mock.uri(),
-            api_key_env: None,
-            email: None,
-            tls: crate::commands::runtime::inline_server::InlineTlsOptions::default(),
-        },
-    ));
-    let result = super::connect_and_configure(None, None).await;
-    crate::commands::runtime::inline_server::set(None);
+    let inline = crate::commands::runtime::inline_server::InlineServer {
+        url: mock.uri(),
+        api_key_env: None,
+        email: None,
+        tls: crate::commands::runtime::inline_server::InlineTlsOptions::default(),
+    };
+    let ctx = crate::commands::runtime::context::CommandContext::new(
+        None,
+        crate::types::OutputFormat::Json,
+        None,
+    )
+    .with_inline_server(Some(inline));
+    let result = super::connect_and_configure(&ctx).await;
 
     assert!(
         result.is_ok(),
@@ -388,16 +442,19 @@ async fn inline_server_missing_env_var_is_clean_error() {
         std::env::remove_var("BZR_INLINE_ABSENT_KEY");
     }
 
-    crate::commands::runtime::inline_server::set(Some(
-        crate::commands::runtime::inline_server::InlineServer {
-            url: "https://bugzilla.example.com".into(),
-            api_key_env: Some("BZR_INLINE_ABSENT_KEY".into()),
-            email: None,
-            tls: crate::commands::runtime::inline_server::InlineTlsOptions::default(),
-        },
-    ));
-    let result = super::connect_and_configure(None, None).await;
-    crate::commands::runtime::inline_server::set(None);
+    let inline = crate::commands::runtime::inline_server::InlineServer {
+        url: "https://bugzilla.example.com".into(),
+        api_key_env: Some("BZR_INLINE_ABSENT_KEY".into()),
+        email: None,
+        tls: crate::commands::runtime::inline_server::InlineTlsOptions::default(),
+    };
+    let ctx = crate::commands::runtime::context::CommandContext::new(
+        None,
+        crate::types::OutputFormat::Json,
+        None,
+    )
+    .with_inline_server(Some(inline));
+    let result = super::connect_and_configure(&ctx).await;
 
     match result {
         Err(BzrError::Config(msg)) => {
@@ -629,7 +686,13 @@ async fn connect_client_with_tls_insecure_warns_and_succeeds() {
     );
     mount_detection_mocks(&mock).await;
 
-    let result = super::connect_and_configure(None, None).await;
+    let result =
+        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ))
+        .await;
     assert!(result.is_ok(), "tls_insecure should still build a client");
 }
 
@@ -668,7 +731,13 @@ async fn connect_client_partial_cache_preserves_cached_auth_method() {
         .mount(&mock)
         .await;
 
-    let result = super::connect_and_configure(None, None).await;
+    let result =
+        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ))
+        .await;
     assert!(
         result.is_ok(),
         "partial-cache with disagreeing detection should succeed: {:?}",
@@ -697,7 +766,13 @@ async fn connect_client_partial_cache_redetects_api_mode() {
     write_config(&tmp, &mock.uri(), "auth_method = \"header\"");
     mount_detection_mocks(&mock).await;
 
-    let result = super::connect_and_configure(None, None).await;
+    let result =
+        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ))
+        .await;
     assert!(
         result.is_ok(),
         "partial-cache path should re-detect api_mode and succeed"
@@ -901,7 +976,13 @@ async fn cached_path_probes_tls_when_default_trust() {
         .mount(&mock)
         .await;
 
-    let result = super::connect_and_configure(None, None).await;
+    let result =
+        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ))
+        .await;
     assert!(
         result.is_ok(),
         "cached path with default trust should still succeed after probe"
@@ -933,7 +1014,13 @@ async fn cached_path_probes_tls_when_pinned() {
         .mount(&mock)
         .await;
 
-    let result = super::connect_and_configure(None, None).await;
+    let result =
+        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ))
+        .await;
     assert!(
         result.is_ok(),
         "cached path with pinned cert should still succeed after probe"
@@ -972,7 +1059,13 @@ async fn cached_path_probe_does_not_follow_redirects() {
         .mount(&secondary)
         .await;
 
-    let result = super::connect_and_configure(None, None).await;
+    let result =
+        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ))
+        .await;
     assert!(
         result.is_ok(),
         "probe should treat 301 as connect-success and not chase redirects"
@@ -1016,7 +1109,12 @@ async fn classify_and_handle_tls_failure_returns_none_for_non_tls_error() {
 #[tokio::test]
 async fn probe_tls_returns_err_on_unreachable_address() {
     let tls_config = TlsConfig::default();
-    let result = super::probe_tls("http://127.0.0.1:1/unreachable", &tls_config).await;
+    let result = super::probe_tls(
+        "http://127.0.0.1:1/unreachable",
+        &tls_config,
+        crate::http::REQUEST_TIMEOUT,
+    )
+    .await;
     match result {
         Err(BzrError::Http(_)) => {}
         Err(other) => panic!("expected Http error, got {other:?}"),
@@ -1042,7 +1140,13 @@ async fn cached_path_proceeds_when_probe_fails_on_non_tls_error() {
         "auth_method = \"header\"\napi_mode = \"rest\"",
     );
 
-    let result = super::connect_and_configure(None, None).await;
+    let result =
+        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ))
+        .await;
     assert!(
         result.is_ok(),
         "non-TLS probe failures must not block the cached path"
@@ -1069,7 +1173,13 @@ async fn cached_path_skips_probe_when_insecure() {
         .mount(&mock)
         .await;
 
-    let result = super::connect_and_configure(None, None).await;
+    let result =
+        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ))
+        .await;
     assert!(
         result.is_ok(),
         "cached path with insecure flag should skip probe"

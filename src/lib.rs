@@ -73,76 +73,31 @@ pub async fn dispatch(
     format: types::OutputFormat,
     w: &mut output::writers::Writers<'_>,
 ) -> error::Result<()> {
-    apply_network_tuning(cli);
-    install_runtime_globals(cli);
-    if let Err(err) = ensure_dispatch_allowed(cli) {
-        clear_runtime_globals();
-        return Err(err);
-    }
-
-    let api = cli.api;
-    let server = cli.server.as_deref();
+    let ctx = build_command_context(cli, format);
+    ensure_dispatch_allowed(cli)?;
 
     match &cli.command {
-        cli::Commands::Bug { action } => {
-            commands::bug::execute(action, server, format, api, w).await
-        }
-        cli::Commands::Comment { action } => {
-            commands::comment::execute(action, server, format, api, w).await
-        }
+        cli::Commands::Bug { action } => commands::bug::execute(action, &ctx, w).await,
+        cli::Commands::Comment { action } => commands::comment::execute(action, &ctx, w).await,
         cli::Commands::Attachment { action } => {
-            commands::attachment::execute(action, server, format, api, w).await
+            commands::attachment::execute(action, &ctx, w).await
         }
-        cli::Commands::Config { action } => {
-            commands::config::execute(action, server, format, api, w).await
-        }
-        cli::Commands::Product { action } => {
-            commands::product::execute(action, server, format, api, w).await
-        }
-        cli::Commands::Field { action } => {
-            commands::field::execute(action, server, format, api, w).await
-        }
-        cli::Commands::User { action } => {
-            commands::user::execute(action, server, format, api, w).await
-        }
-        cli::Commands::Group { action } => {
-            commands::group::execute(action, server, format, api, w).await
-        }
-        cli::Commands::Whoami => commands::whoami::execute(server, format, api, w).await,
-        cli::Commands::Server { action } => {
-            commands::server::execute(action, server, format, api, w).await
-        }
+        cli::Commands::Config { action } => commands::config::execute(action, &ctx, w).await,
+        cli::Commands::Product { action } => commands::product::execute(action, &ctx, w).await,
+        cli::Commands::Field { action } => commands::field::execute(action, &ctx, w).await,
+        cli::Commands::User { action } => commands::user::execute(action, &ctx, w).await,
+        cli::Commands::Group { action } => commands::group::execute(action, &ctx, w).await,
+        cli::Commands::Whoami => commands::whoami::execute(&ctx, w).await,
+        cli::Commands::Server { action } => commands::server::execute(action, &ctx, w).await,
         cli::Commands::Classification { action } => {
-            commands::classification::execute(action, server, format, api, w).await
+            commands::classification::execute(action, &ctx, w).await
         }
-        cli::Commands::Component { action } => {
-            commands::component::execute(action, server, format, api, w).await
-        }
-        cli::Commands::Template { action } => {
-            commands::template::execute(action, server, format, api, w).await
-        }
-        cli::Commands::Query { action } => {
-            commands::query::execute(action, server, format, api, w).await
-        }
-        cli::Commands::Completion { shell } => {
-            commands::completion::execute(*shell, server, format, api, w).await
-        }
-        cli::Commands::Schema { name } => {
-            commands::schema::execute(name.as_deref(), server, format, api, w).await
-        }
+        cli::Commands::Component { action } => commands::component::execute(action, &ctx, w).await,
+        cli::Commands::Template { action } => commands::template::execute(action, &ctx, w).await,
+        cli::Commands::Query { action } => commands::query::execute(action, &ctx, w).await,
+        cli::Commands::Completion { shell } => commands::completion::execute(*shell, &ctx, w).await,
+        cli::Commands::Schema { name } => commands::schema::execute(name.as_deref(), &ctx, w).await,
     }
-}
-
-fn install_runtime_globals(cli: &cli::Cli) {
-    commands::runtime::dry_run::set(cli.dry_run);
-    commands::runtime::confirm::set_yes(cli.yes);
-    commands::runtime::inline_server::set(resolve_inline_server(cli));
-}
-
-fn clear_runtime_globals() {
-    commands::runtime::dry_run::set(false);
-    commands::runtime::confirm::set_yes(false);
-    commands::runtime::inline_server::set(None);
 }
 
 fn ensure_dispatch_allowed(cli: &cli::Cli) -> error::Result<()> {
@@ -150,16 +105,11 @@ fn ensure_dispatch_allowed(cli: &cli::Cli) -> error::Result<()> {
     ensure_credentials_for_command(cli)
 }
 
-/// Install process-wide network tuning from the global flags before any client
-/// is built: the request timeout (`--timeout`, falling back to `BZR_TIMEOUT`)
-/// and the transient-retry budget (`--retry`). An invalid `BZR_TIMEOUT` is
-/// ignored with a warning so the built-in default stands.
-///
-/// This mutates process-global state, so `dispatch` is not safe to call
-/// concurrently from one process with differing `--timeout`/`--retry` values
-/// (the CLI runs a single dispatch per process, so this is not a concern in
-/// practice; tests exercise per-client retry overrides instead).
-fn apply_network_tuning(cli: &cli::Cli) {
+/// Build the explicit command context from global CLI flags.
+fn build_command_context(
+    cli: &cli::Cli,
+    format: types::OutputFormat,
+) -> commands::runtime::context::CommandContext {
     let env_timeout = std::env::var("BZR_TIMEOUT").ok();
     if cli.timeout.is_none() {
         if let Some(raw) = &env_timeout {
@@ -170,11 +120,14 @@ fn apply_network_tuning(cli: &cli::Cli) {
             }
         }
     }
-    http::set_request_timeout_secs(http::resolve_timeout_secs(
-        cli.timeout,
-        env_timeout.as_deref(),
-    ));
-    http::set_retry_max(cli.retry.unwrap_or(0));
+    let request_timeout = http::resolve_timeout_secs(cli.timeout, env_timeout.as_deref())
+        .map_or(http::REQUEST_TIMEOUT, std::time::Duration::from_secs);
+    commands::runtime::context::CommandContext::new(cli.server.as_deref(), format, cli.api)
+        .with_dry_run(cli.dry_run)
+        .with_assume_yes(cli.yes)
+        .with_inline_server(resolve_inline_server(cli))
+        .with_request_timeout(request_timeout)
+        .with_retry_max(cli.retry.unwrap_or(0))
 }
 
 /// Build the inline server definition from the global `--server-url` flags, or

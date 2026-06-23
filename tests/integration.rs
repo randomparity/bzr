@@ -71,9 +71,11 @@ async fn bug_list_integration() {
     let mut __io = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io.writers(),
     )
     .await;
@@ -116,9 +118,11 @@ async fn bug_list_changed_since_canonicalizes_bare_date_on_wire() {
     let mut __io2 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io2.writers(),
     )
     .await;
@@ -158,9 +162,11 @@ async fn bug_view_integration() {
     let mut __io3 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io3.writers(),
     )
     .await;
@@ -201,9 +207,11 @@ async fn bug_search_integration() {
     let mut __io4 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io4.writers(),
     )
     .await;
@@ -246,9 +254,11 @@ async fn bug_create_integration() {
     let mut __io5 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io5.writers(),
     )
     .await;
@@ -286,9 +296,11 @@ async fn comment_list_integration() {
     let mut __io6 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::comment::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io6.writers(),
     )
     .await;
@@ -324,9 +336,11 @@ async fn comment_add_body_file_posts_file_contents() {
     let mut __io_bf = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::comment::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io_bf.writers(),
     )
     .await;
@@ -375,9 +389,11 @@ async fn whoami_integration() {
     let mut __io7 = bzr::test_helpers::CapturedIo::new();
 
     let result = bzr::commands::whoami::execute(
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io7.writers(),
     )
     .await;
@@ -419,9 +435,11 @@ async fn product_list_integration() {
     let mut __io8 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::product::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io8.writers(),
     )
     .await;
@@ -458,9 +476,11 @@ async fn server_info_integration() {
     let mut __io9 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::server::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io9.writers(),
     )
     .await;
@@ -496,9 +516,11 @@ async fn field_list_integration() {
     let mut __io10 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::field::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io10.writers(),
     )
     .await;
@@ -535,9 +557,11 @@ async fn classification_view_integration() {
     let mut __io11 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::classification::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io11.writers(),
     )
     .await;
@@ -578,9 +602,11 @@ async fn user_search_integration() {
     let mut __io12 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::user::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io12.writers(),
     )
     .await;
@@ -619,9 +645,11 @@ async fn group_view_integration() {
     let mut __io13 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::group::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io13.writers(),
     )
     .await;
@@ -655,9 +683,11 @@ async fn component_create_integration() {
     let mut __io14 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::component::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io14.writers(),
     )
     .await;
@@ -698,9 +728,11 @@ async fn attachment_list_integration() {
     let mut __io15 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::attachment::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io15.writers(),
     )
     .await;
@@ -736,9 +768,11 @@ api_key = "key-1234567890"
     let action = bzr::cli::ConfigAction::Show;
     let result = bzr::commands::config::execute(
         &action,
-        None,
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            None,
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -755,9 +789,11 @@ async fn command_with_unknown_server_returns_error() {
     let action = empty_list_action();
     let result = bzr::commands::bug::execute(
         &action,
-        Some("nonexistent"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("nonexistent"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -793,9 +829,11 @@ async fn api_error_propagates() {
     });
     let result = bzr::commands::bug::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -835,9 +873,11 @@ async fn bug_history_integration() {
     let mut __io16 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io16.writers(),
     )
     .await;
@@ -912,9 +952,11 @@ async fn bug_update_integration() {
     let mut __io17 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io17.writers(),
     )
     .await;
@@ -993,9 +1035,11 @@ async fn bug_update_scalar_parity_fields_integration() {
     let mut io = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut io.writers(),
     )
     .await;
@@ -1067,9 +1111,11 @@ async fn bug_update_with_comment_integration() {
     let mut __io18 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io18.writers(),
     )
     .await;
@@ -1102,9 +1148,11 @@ async fn comment_add_integration() {
     let mut __io19 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::comment::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io19.writers(),
     )
     .await;
@@ -1135,9 +1183,11 @@ async fn comment_tag_integration() {
     };
     let result = bzr::commands::comment::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1163,9 +1213,11 @@ async fn comment_search_tags_integration() {
     };
     let result = bzr::commands::comment::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1210,9 +1262,11 @@ async fn attachment_download_integration() {
     };
     let result = bzr::commands::attachment::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1275,9 +1329,11 @@ async fn attachment_download_bulk_per_bug_integration() {
     };
     let result = bzr::commands::attachment::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1329,9 +1385,11 @@ async fn attachment_upload_integration() {
     });
     let result = bzr::commands::attachment::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1376,9 +1434,11 @@ async fn attachment_upload_with_comment_integration() {
     });
     let result = bzr::commands::attachment::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1422,9 +1482,11 @@ async fn attachment_upload_with_is_patch_integration() {
     });
     let result = bzr::commands::attachment::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1491,9 +1553,11 @@ async fn attachment_upload_with_comment_private_integration() {
     });
     let result = bzr::commands::attachment::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1532,9 +1596,11 @@ async fn attachment_list_returns_is_patch_field_integration() {
     let mut __io20 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::attachment::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io20.writers(),
     )
     .await;
@@ -1575,9 +1641,11 @@ async fn attachment_update_integration() {
     });
     let result = bzr::commands::attachment::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1612,9 +1680,11 @@ async fn component_update_integration() {
     };
     let result = bzr::commands::component::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1648,9 +1718,11 @@ async fn product_view_integration() {
     };
     let result = bzr::commands::product::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1680,9 +1752,11 @@ async fn product_create_integration() {
     };
     let result = bzr::commands::product::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1714,9 +1788,11 @@ async fn product_update_integration() {
     };
     let result = bzr::commands::product::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1746,9 +1822,11 @@ async fn user_create_integration() {
     };
     let result = bzr::commands::user::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1781,9 +1859,11 @@ async fn user_update_integration() {
     };
     let result = bzr::commands::user::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1812,9 +1892,11 @@ async fn group_create_integration() {
     };
     let result = bzr::commands::group::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1845,9 +1927,11 @@ async fn group_update_integration() {
     };
     let result = bzr::commands::group::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1876,9 +1960,11 @@ async fn group_add_user_integration() {
     };
     let result = bzr::commands::group::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1907,9 +1993,11 @@ async fn group_remove_user_integration() {
     };
     let result = bzr::commands::group::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1947,9 +2035,11 @@ async fn group_list_users_integration() {
     };
     let result = bzr::commands::group::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1991,9 +2081,11 @@ async fn config_set_server_integration() {
     };
     let result = bzr::commands::config::execute(
         &action,
-        None,
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            None,
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -2023,9 +2115,11 @@ async fn config_set_default_integration() {
     };
     let result = bzr::commands::config::execute(
         &action,
-        None,
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            None,
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __cap_io.writers(),
     )
     .await;
@@ -2578,9 +2672,11 @@ async fn bug_list_issue_158_mixed_positive_and_negation_reaches_wire() {
     let mut __io24 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
         &action,
-        Some("test"),
-        bzr::types::OutputFormat::Json,
-        None,
+        &bzr::commands::runtime::context::CommandContext::new(
+            Some("test"),
+            bzr::types::OutputFormat::Json,
+            None,
+        ),
         &mut __io24.writers(),
     )
     .await;

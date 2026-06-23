@@ -15,12 +15,6 @@ pub async fn setup_test_env() -> (
     tempfile::TempDir,
 ) {
     let lock = super::ENV_LOCK.lock().await;
-    // Reset process-global mutation switches to the test baseline so a prior
-    // test cannot leak `--dry-run`/`--yes` into one that expects real writes
-    // or an interactive prompt.
-    super::commands::runtime::dry_run::set(false);
-    super::commands::runtime::confirm::set_yes(false);
-    super::commands::runtime::inline_server::set(None);
     let mock = wiremock::MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());

@@ -2,11 +2,12 @@ use std::io::Write;
 
 use crate::cli::SearchArgs;
 use crate::client::BugzillaClient;
+use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::resources::bug::{canonical_field_list, write_bugs, ColumnSpec};
 use crate::output::resources::query::write_query_saved;
 use crate::output::writers::Writers;
-use crate::types::{ApiMode, OutputFormat, Overrides, SavedQuery, SearchParams};
+use crate::types::{OutputFormat, Overrides, SavedQuery, SearchParams};
 
 /// The client plus the query to run, and any `--save-as` query to persist
 /// afterwards. Produced by [`resolve_client_and_params`] from either the
@@ -66,11 +67,7 @@ fn build_params_from_url(
 
 /// Resolve the search client and query from `--from-url` (which may target a
 /// different server, parsed from the URL host) or from a quicksearch string.
-async fn resolve_client_and_params(
-    args: &SearchArgs,
-    server: Option<&str>,
-    api: Option<ApiMode>,
-) -> Result<SearchPlan> {
+async fn resolve_client_and_params(args: &SearchArgs, ctx: &CommandContext) -> Result<SearchPlan> {
     let fields = args.field_args.fields.as_deref();
     let exclude_fields = args.field_args.exclude_fields.as_deref();
 
@@ -80,7 +77,7 @@ async fn resolve_client_and_params(
                 "either a search query or --from-url is required".into(),
             )
         })?;
-        let client = crate::commands::runtime::shared::connect_and_configure(server, api).await?;
+        let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
         let params = SearchParams {
             quicksearch: Some(query_str.to_string()),
             limit: Some(args.limit.unwrap_or(DEFAULT_SEARCH_LIMIT)),
@@ -97,9 +94,9 @@ async fn resolve_client_and_params(
 
     let config = crate::config::Config::load()?;
     let parsed = crate::commands::runtime::url_parser::parse_bugzilla_url(url_str, &config)?;
-    let effective_server = server.or(parsed.query.server.as_deref());
-    let client =
-        crate::commands::runtime::shared::connect_and_configure(effective_server, api).await?;
+    let effective_server = ctx.server().or(parsed.query.server.as_deref());
+    let url_ctx = ctx.with_server(effective_server);
+    let client = crate::commands::runtime::shared::connect_and_configure(&url_ctx).await?;
     let save_info = resolve_save_info(args.save_as.as_ref(), parsed.suggested_name, &parsed.query)?;
     let mut params = build_params_from_url(
         parsed.query,
@@ -143,11 +140,10 @@ fn persist_saved_query(
 /// `--from-url` may resolve a different server from the URL hostname.
 pub(super) async fn handle(
     args: &SearchArgs,
-    server: Option<&str>,
-    format: OutputFormat,
-    api: Option<ApiMode>,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let format = ctx.format();
     let offset = args.page_args.offset;
     super::ensure_no_paging_with_count(args.count, offset, args.page_args.paginate)?;
 
@@ -156,7 +152,7 @@ pub(super) async fn handle(
         args.field_args.exclude_fields.as_deref(),
     );
 
-    let (client, mut params, save_info) = resolve_client_and_params(args, server, api).await?;
+    let (client, mut params, save_info) = resolve_client_and_params(args, ctx).await?;
     crate::commands::runtime::paging::resolve_offset(&mut params, offset);
 
     if args.count {

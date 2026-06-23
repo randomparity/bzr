@@ -1,20 +1,14 @@
 //! Whoami command — shows the authenticated user's identity.
 
+use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::resources::user::write_whoami;
 use crate::output::writers::Writers;
-use crate::types::ApiMode;
-use crate::types::OutputFormat;
 
-pub async fn execute(
-    server: Option<&str>,
-    format: OutputFormat,
-    api: Option<ApiMode>,
-    w: &mut Writers<'_>,
-) -> Result<()> {
-    let client = super::runtime::shared::connect_and_configure(server, api).await?;
+pub async fn execute(ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
+    let client = super::runtime::shared::connect_and_configure(ctx).await?;
     let whoami = client.whoami().await?;
-    write_whoami(&whoami, format, w.out);
+    write_whoami(&whoami, ctx.format(), w.out);
     Ok(())
 }
 

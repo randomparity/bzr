@@ -41,9 +41,7 @@ async fn product_list_returns_products() {
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a1.writers(),
     )
     .await;
@@ -69,9 +67,7 @@ async fn product_list_http_500_returns_error() {
     };
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -109,9 +105,7 @@ async fn product_view_returns_detail() {
     let mut __io_a2 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a2.writers(),
     )
     .await;
@@ -142,9 +136,7 @@ async fn product_create_returns_id() {
     let mut __io_a3 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a3.writers(),
     )
     .await;
@@ -172,10 +164,14 @@ async fn product_create_dry_run_makes_no_write_and_marks_payload() {
         version: Some("1.0".to_string()),
         is_open: Some(true),
     };
-    crate::commands::runtime::dry_run::set(true);
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
-    crate::commands::runtime::dry_run::set(false);
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(result.is_ok(), "dry-run product create failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
@@ -211,7 +207,12 @@ async fn product_create_from_json_sends_merged_body() {
         is_open: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         result.is_ok(),
@@ -244,9 +245,7 @@ async fn product_update_succeeds() {
     let mut __io_a4 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a4.writers(),
     )
     .await;
@@ -276,17 +275,18 @@ async fn product_update_dry_run_makes_no_write_and_marks_payload() {
         default_milestone: None,
         is_open: Some(false),
     };
-    crate::commands::runtime::dry_run::set(true);
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        Some("missing"),
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(
+            Some("missing"),
+            OutputFormat::Json,
+            None,
+        )
+        .with_dry_run(true),
         &mut io.writers(),
     )
     .await;
-    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok(), "dry-run product update failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
@@ -324,7 +324,12 @@ async fn product_update_from_json_uses_json_target() {
         is_open: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         result.is_ok(),
@@ -344,7 +349,12 @@ async fn product_update_from_json_rejects_positional_and_json_target() {
         is_open: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
@@ -367,9 +377,11 @@ async fn product_from_json_rejects_unknown_field() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        Some("missing"),
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(
+            Some("missing"),
+            OutputFormat::Json,
+            None,
+        ),
         &mut io.writers(),
     )
     .await;
@@ -392,7 +404,12 @@ async fn product_from_json_rejects_array_shape() {
         is_open: None,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
@@ -414,9 +431,11 @@ async fn product_update_without_fields_is_rejected() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        Some("missing"),
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(
+            Some("missing"),
+            OutputFormat::Json,
+            None,
+        ),
         &mut io.writers(),
     )
     .await;

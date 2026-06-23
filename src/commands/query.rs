@@ -4,6 +4,7 @@
 //! Only `run` requires a network client.
 
 use crate::cli::QueryAction;
+use crate::commands::runtime::context::CommandContext;
 use crate::commands::runtime::shared::{merge_set, merge_vec};
 use crate::config::Config;
 use crate::error::{BzrError, Result};
@@ -17,18 +18,17 @@ use crate::types::{OutputFormat, QueryKind, SavedQuery};
 
 pub async fn execute(
     action: &QueryAction,
-    server: Option<&str>,
-    format: OutputFormat,
-    api: Option<crate::types::ApiMode>,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let format = ctx.format();
     match action {
         QueryAction::Save(args) => handle_save(args, format, w),
         QueryAction::List => handle_list(format, w),
         QueryAction::Show(args) => handle_show(args, format, w),
         QueryAction::Update(args) => handle_update(args, format, w),
         QueryAction::Delete(args) => handle_delete(args, format, w),
-        QueryAction::Run(args) => handle_run(args, server, format, api, w).await,
+        QueryAction::Run(args) => handle_run(args, ctx, w).await,
     }
 }
 
@@ -360,11 +360,10 @@ fn handle_update(
 
 async fn handle_run(
     args: &crate::cli::RunArgs,
-    server: Option<&str>,
-    format: OutputFormat,
-    api: Option<crate::types::ApiMode>,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let format = ctx.format();
     let crate::cli::RunArgs {
         name,
         limit,
@@ -393,9 +392,11 @@ async fn handle_run(
         .get(name.as_str())
         .ok_or_else(|| BzrError::config(format!("query '{name}' not found")))?;
 
-    let effective_server = server
+    let effective_server = ctx
+        .server()
         .or(server_override.as_deref())
         .or(saved.server.as_deref());
+    let run_ctx = ctx.with_server(effective_server);
 
     let mut params = saved.to_search_params();
     let mut overrides = filters.overrides(url);
@@ -423,7 +424,7 @@ async fn handle_run(
     }
 
     if *count {
-        let client = super::runtime::shared::connect_and_configure(effective_server, api).await?;
+        let client = super::runtime::shared::connect_and_configure(&run_ctx).await?;
         let bugs = client
             .search_bugs(&super::bug::count_search_params(params))
             .await?;
@@ -445,7 +446,7 @@ async fn handle_run(
         }
     }
 
-    let client = super::runtime::shared::connect_and_configure(effective_server, api).await?;
+    let client = super::runtime::shared::connect_and_configure(&run_ctx).await?;
     let page = crate::commands::runtime::paging::fetch_page(&client, &params, *paginate).await?;
     write_bugs(&page.bugs, spec, format, w.out, w.err);
     crate::commands::runtime::paging::write_truncation_note(

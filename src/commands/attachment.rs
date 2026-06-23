@@ -5,6 +5,7 @@ use base64::Engine;
 
 use crate::cli::AttachmentAction;
 use crate::client::BugzillaClient;
+use crate::commands::runtime::context::CommandContext;
 use crate::error::{io_with_context, BzrError, Result};
 use crate::output::resources::attachment::{
     write_attachment, write_attachment_batch, write_attachments, AttachmentBatchResult,
@@ -14,7 +15,6 @@ use crate::output::result_types::{
     write_result, ActionResult, DownloadResult, ResourceKind, UploadResult,
 };
 use crate::output::writers::Writers;
-use crate::types::ApiMode;
 use crate::types::Attachment;
 use crate::types::OutputFormat;
 use crate::types::{UpdateAttachmentParams, UploadAttachmentParams};
@@ -47,13 +47,12 @@ fn resolve_bool_flag(yes: bool, no: bool) -> Option<bool> {
 
 pub async fn execute(
     action: &AttachmentAction,
-    server: Option<&str>,
-    format: OutputFormat,
-    api: Option<ApiMode>,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     validate_action(action)?;
-    let client = super::runtime::shared::connect_and_configure(server, api).await?;
+    let format = ctx.format();
+    let client = super::runtime::shared::connect_and_configure(ctx).await?;
 
     match action {
         AttachmentAction::List { bug_id } => list_attachments(&client, *bug_id, format, w).await?,

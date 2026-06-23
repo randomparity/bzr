@@ -2,17 +2,11 @@
 //!
 //! The global `--server-url` / `--server-api-key-env` / `--server-email` flags
 //! let a single command run against a Bugzilla instance that was never written
-//! to any config file. The parsed definition is stashed here as process-global
-//! state (set once in `dispatch`, before any client is built) and read by
-//! `crate::commands::runtime::shared::connect_and_configure`, mirroring the pattern
-//! used for `--dry-run` and `--yes`.
-//!
-//! Test callers that set this must hold `ENV_LOCK` and reset it to `None`
-//! before releasing the lock, so the inline definition cannot leak into a
-//! sibling test that expects config-based resolution.
+//! to any config file. The parsed definition is carried by
+//! [`crate::commands::runtime::context::CommandContext`] and consumed by
+//! `crate::commands::runtime::shared::connect_and_configure`.
 
 use std::path::PathBuf;
-use std::sync::RwLock;
 
 /// Synthetic server name for an inline server. Parenthesized so it can never
 /// collide with a real (TOML-table) config server name; shown in error
@@ -37,23 +31,6 @@ pub struct InlineServer {
     pub api_key_env: Option<String>,
     pub email: Option<String>,
     pub tls: InlineTlsOptions,
-}
-
-static INLINE: RwLock<Option<InlineServer>> = RwLock::new(None);
-
-/// Install (or clear) the inline server definition. Called once from
-/// `dispatch` after argument parsing; `None` clears it.
-pub fn set(inline: Option<InlineServer>) {
-    if let Ok(mut guard) = INLINE.write() {
-        *guard = inline;
-    }
-}
-
-/// The inline server definition for this invocation, if `--server-url` was
-/// given. Returns an owned clone so callers don't hold the lock.
-#[must_use]
-pub fn get() -> Option<InlineServer> {
-    INLINE.read().ok().and_then(|guard| guard.clone())
 }
 
 #[cfg(test)]

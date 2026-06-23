@@ -370,9 +370,13 @@ fn every_schema_is_wellformed_and_named_draft_2020_12() {
 
 async fn run(name: Option<&str>, format: crate::types::OutputFormat) -> (CapturedIo, bool) {
     let mut io = CapturedIo::new();
-    let ok = super::execute(name, None, format, None, &mut io.writers())
-        .await
-        .is_ok();
+    let ok = super::execute(
+        name,
+        &crate::commands::runtime::context::CommandContext::new(None, format, None),
+        &mut io.writers(),
+    )
+    .await
+    .is_ok();
     (io, ok)
 }
 

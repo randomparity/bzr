@@ -27,9 +27,7 @@ async fn template_save_and_show() {
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a1.writers(),
     )
     .await;
@@ -43,9 +41,7 @@ async fn template_save_and_show() {
     let mut __io_a2 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a2.writers(),
     )
     .await;
@@ -69,9 +65,7 @@ async fn template_save_requires_field() {
     };
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -97,7 +91,12 @@ async fn template_save_with_single_field_succeeds() {
         },
     };
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(&action, None, OutputFormat::Json, None, &mut __io.writers()).await;
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
     let _ = __io.out_str().to_string();
     assert!(
         result.is_ok(),
@@ -126,9 +125,7 @@ async fn template_save_and_show_create_metadata_fields() {
     let mut save_io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut save_io.writers(),
     )
     .await;
@@ -140,9 +137,7 @@ async fn template_save_and_show_create_metadata_fields() {
         &TemplateAction::Show {
             name: "routing".into(),
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut show_io.writers(),
     )
     .await;
@@ -173,9 +168,7 @@ async fn template_save_rejects_malformed_deadline() {
     };
     let err = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut cap_io.writers(),
     )
     .await
@@ -194,9 +187,7 @@ async fn template_delete_unknown_errors() {
     };
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -216,9 +207,7 @@ async fn template_list_empty() {
     let mut __io_a3 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a3.writers(),
     )
     .await;
@@ -234,9 +223,7 @@ async fn template_save_existing_entry_reports_updated_and_replaces_fields() {
 
     let result = super::execute(
         &save_action("existing"),
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io2.writers(),
     )
     .await;
@@ -257,9 +244,7 @@ async fn template_save_existing_entry_reports_updated_and_replaces_fields() {
     let mut __io_a4 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &update,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a4.writers(),
     )
     .await;
@@ -286,9 +271,7 @@ async fn template_delete_existing_removes_entry() {
 
     let result = super::execute(
         &save_action("delete-me"),
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io3.writers(),
     )
     .await;
@@ -302,9 +285,7 @@ async fn template_delete_existing_removes_entry() {
         &TemplateAction::Delete {
             name: "delete-me".into(),
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io4.writers(),
     )
     .await;
@@ -325,9 +306,7 @@ async fn template_delete_json_matches_domain_mutation_output() {
     let mut save_io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &save_action("delete-json-shape"),
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut save_io.writers(),
     )
     .await;
@@ -339,9 +318,7 @@ async fn template_delete_json_matches_domain_mutation_output() {
         &TemplateAction::Delete {
             name: "delete-json-shape".into(),
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut delete_io.writers(),
     )
     .await;
@@ -362,9 +339,7 @@ async fn template_delete_table_prints_deleted_message() {
 
     let result = super::execute(
         &save_action("table-delete"),
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io5.writers(),
     )
     .await;
@@ -378,9 +353,7 @@ async fn template_delete_table_prints_deleted_message() {
         &TemplateAction::Delete {
             name: "table-delete".into(),
         },
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io6.writers(),
     )
     .await;
@@ -401,9 +374,7 @@ async fn template_list_table_sorts_entries_by_name() {
         let mut __io7 = crate::test_helpers::CapturedIo::new();
         let result = super::execute(
             &save_action(name),
-            None,
-            OutputFormat::Json,
-            None,
+            &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
             &mut __io7.writers(),
         )
         .await;
@@ -415,9 +386,7 @@ async fn template_list_table_sorts_entries_by_name() {
 
     let result = super::execute(
         &TemplateAction::List,
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io8.writers(),
     )
     .await;
@@ -441,9 +410,7 @@ async fn template_show_unknown_errors() {
         &TemplateAction::Show {
             name: "missing".into(),
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await
@@ -480,7 +447,12 @@ fn update_action(
 
 async fn run(action: &TemplateAction) -> crate::error::Result<String> {
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result = super::execute(action, None, OutputFormat::Json, None, &mut io.writers()).await;
+    let result = super::execute(
+        action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
     result.map(|()| io.out_str().to_string())
 }
 

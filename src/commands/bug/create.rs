@@ -2,6 +2,7 @@ use std::io::IsTerminal;
 
 use crate::cli::CreateArgs;
 use crate::client::BugzillaClient;
+use crate::commands::runtime::context::CommandContext;
 use crate::commands::runtime::editor;
 use crate::error::Result;
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
@@ -269,10 +270,11 @@ fn merge_template_vec(
 pub(super) async fn create_and_report(
     client: &BugzillaClient,
     params: &CreateBugParams,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    if crate::commands::runtime::dry_run::enabled() {
+    let format = ctx.format();
+    if ctx.dry_run() {
         write_create_dry_run(params, format, w);
         return Ok(());
     }
@@ -289,7 +291,7 @@ pub(super) async fn create_and_report(
 pub(super) async fn handle(
     client: &BugzillaClient,
     args: &CreateArgs,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let CreateArgs {
@@ -305,7 +307,7 @@ pub(super) async fn handle(
     } = args;
 
     if let Some(arg) = from_json {
-        return super::create_json::handle(client, args, arg, format, w).await;
+        return super::create_json::handle(client, args, arg, ctx, w).await;
     }
 
     let resolved_description =
@@ -355,7 +357,7 @@ pub(super) async fn handle(
         groups: merged.groups,
         flags,
     };
-    create_and_report(client, &params, format, w).await
+    create_and_report(client, &params, ctx, w).await
 }
 
 /// Emit the would-be create payload without writing, marked `"action":"dry-run"`.

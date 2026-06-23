@@ -32,9 +32,7 @@ async fn seed_inline_server(name: &str, url: &str, api_key: &str) {
             tls_pin_now: false,
             tls_pin_clear: false,
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await
@@ -54,9 +52,7 @@ async fn seed_keyring_secret(server_name: &str, secret: &str) {
             service: None,
             account: None,
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await
@@ -78,9 +74,7 @@ async fn set_default_on_empty_config_returns_error() {
         &ConfigAction::SetDefault {
             name: "nonexistent".into(),
         },
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -109,9 +103,7 @@ async fn first_set_server_auto_sets_default() {
             tls_pin_now: false,
             tls_pin_clear: false,
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -147,9 +139,7 @@ async fn second_set_server_does_not_override_default() {
             tls_pin_now: false,
             tls_pin_clear: false,
         },
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __cap_io.writers(),
     )
     .await
@@ -169,9 +159,7 @@ async fn second_set_server_does_not_override_default() {
             tls_pin_now: false,
             tls_pin_clear: false,
         },
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __cap_io.writers(),
     )
     .await
@@ -211,9 +199,7 @@ async fn set_server_update_preserves_existing_default() {
             tls_pin_now: false,
             tls_pin_clear: false,
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io2.writers(),
     )
     .await;
@@ -250,9 +236,7 @@ async fn set_default_persists_selected_server() {
         &ConfigAction::SetDefault {
             name: "second".into(),
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io3.writers(),
     )
     .await;
@@ -287,9 +271,7 @@ async fn show_json_includes_populated_server_details() {
             tls_pin_now: false,
             tls_pin_clear: false,
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await
@@ -299,9 +281,7 @@ async fn show_json_includes_populated_server_details() {
 
     let result = execute(
         &ConfigAction::Show,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a1.writers(),
     )
     .await;
@@ -337,9 +317,7 @@ async fn set_server_with_env_var_persists_env_source() {
             tls_pin_now: false,
             tls_pin_clear: false,
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await
@@ -370,9 +348,7 @@ async fn set_server_allows_url_without_api_key_source() {
             tls_pin_now: false,
             tls_pin_clear: false,
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -434,9 +410,7 @@ async fn migrate_to_keyring_from_inline_rewrites_config() {
             account: None,
             yes: true,
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await
@@ -476,9 +450,7 @@ async fn migrate_to_keyring_from_env_preserves_config() {
             tls_pin_now: false,
             tls_pin_clear: false,
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await
@@ -491,9 +463,7 @@ async fn migrate_to_keyring_from_env_preserves_config() {
             account: None,
             yes: true,
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await
@@ -532,9 +502,7 @@ async fn migrate_to_keyring_from_keyring_errors_before_storing() {
             account: None,
             yes: true,
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -576,9 +544,7 @@ async fn migrate_to_keyring_without_api_key_source_errors() {
             account: None,
             yes: true,
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -608,9 +574,7 @@ async fn migrate_to_keyring_without_yes_errors() {
             account: None,
             yes: false,
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -638,9 +602,7 @@ async fn unset_keyring_removes_secret_and_clears_config() {
         &ConfigAction::UnsetKeyring {
             name: "unset-test".into(),
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await
@@ -667,9 +629,7 @@ async fn run_action_json(action: ConfigAction) -> serde_json::Value {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
     execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await
@@ -694,9 +654,7 @@ async fn remove_server_deletes_non_default_entry() {
         &ConfigAction::SetDefault {
             name: "keep".into(),
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut crate::test_helpers::CapturedIo::new().writers(),
     )
     .await
@@ -726,9 +684,7 @@ async fn remove_server_missing_errors() {
         &ConfigAction::RemoveServer {
             name: "ghost".into(),
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -744,9 +700,7 @@ async fn remove_server_default_with_others_refuses() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let result = execute(
         &ConfigAction::RemoveServer { name: "a".into() },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -844,9 +798,7 @@ async fn rename_server_old_missing_errors() {
             old: "ghost".into(),
             new: "new".into(),
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -864,9 +816,7 @@ async fn rename_server_new_exists_errors() {
             old: "a".into(),
             new: "b".into(),
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -913,9 +863,7 @@ async fn remove_server_succeeds_with_other_credential_less_server() {
         &ConfigAction::UnsetKeyring {
             name: "keepme".into(),
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut crate::test_helpers::CapturedIo::new().writers(),
     )
     .await
@@ -926,9 +874,7 @@ async fn remove_server_succeeds_with_other_credential_less_server() {
         &ConfigAction::RemoveServer {
             name: "dropme".into(),
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -955,9 +901,7 @@ async fn rename_server_succeeds_with_other_credential_less_server() {
         &ConfigAction::UnsetKeyring {
             name: "keepme".into(),
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut crate::test_helpers::CapturedIo::new().writers(),
     )
     .await
@@ -969,9 +913,7 @@ async fn rename_server_succeeds_with_other_credential_less_server() {
             old: "rename-me".into(),
             new: "renamed".into(),
         },
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;

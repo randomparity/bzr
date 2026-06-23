@@ -5,7 +5,12 @@ use crate::types::OutputFormat;
 
 async fn script_for(shell: Shell) -> String {
     let mut io = CapturedIo::new();
-    let result = super::execute(shell, None, OutputFormat::Table, None, &mut io.writers()).await;
+    let result = super::execute(
+        shell,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &mut io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "completion generation should succeed");
     io.out_str().to_string()
 }
