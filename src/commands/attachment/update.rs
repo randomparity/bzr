@@ -52,3 +52,7 @@ fn build_update_params(
     };
     Ok((*id, params))
 }
+
+#[cfg(test)]
+#[path = "update_tests.rs"]
+mod tests;
