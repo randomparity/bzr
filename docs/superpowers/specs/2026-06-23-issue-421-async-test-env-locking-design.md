@@ -38,9 +38,37 @@ config call site (verified: `resolve_connect_target` at
   `CommandContext::new(..).with_config_path_override(Some(config_path))`.
 - **`dispatch`-level tests** add `--config <config_path>` to the parsed argv.
 
-Either way `path_at` returns before reading any env var, so the test needs no
-`XDG_CONFIG_HOME` and no lock, and is safe to run concurrently with tests that
-still mutate the env (those never observe the explicit path).
+Either way `path_at` returns before reading `BZR_CONFIG` or `XDG_CONFIG_HOME`, so
+the test needs no `XDG_CONFIG_HOME` and no lock.
+
+### Concurrency safety (why dropping the lock is sound)
+
+The retained env-mutating tests (and the ~100 out-of-scope `setup_test_env`
+tests) still `set_var`/`remove_var` under `ENV_LOCK`, while migrated tests run
+lock-free. This is safe for two independent reasons:
+
+1. **No value cross-talk.** With an explicit config path, a migrated test reads
+   neither `XDG_CONFIG_HOME` nor `BZR_CONFIG`. The only process-env it reads is
+   `BZR_TIMEOUT` (in `build_command_context`, dispatch-level only) and any proxy
+   vars reqwest consults at client-build time. **No test in the suite writes
+   `BZR_TIMEOUT` or proxy vars** (verified by grepping every `set_var`/`remove_var`
+   target), so the values a migrated test reads are deterministic regardless of
+   what a concurrent writer sets. Writers only touch disjoint variables
+   (`XDG_CONFIG_HOME`, `BZR_*` api-key/keyring vars, `EDITOR`, `DISPLAY`, …).
+2. **No data race on `environ`.** Rust's `std::env::var`/`set_var`/`remove_var`
+   serialize through libstd's internal env lock, so concurrent Rust-side env
+   access is not a data race even across threads (the edition-2024 `unsafe`
+   marking reflects the C-FFI/signal hazard, not removal of that lock). All env
+   access in this test process is pure-Rust `std::env`; the only non-Rust env
+   reads would be libc `getenv` inside `getaddrinfo`, which is avoided because
+   wiremock binds `127.0.0.1` (numeric host, no name resolution). This residual
+   is pre-existing — any current non-locked env read already shares it — and is
+   not introduced by this change.
+
+A `tokio::sync::RwLock` read/write split (migrated tests take a read guard,
+mutators take a write guard) was rejected: a read guard held across the network
+awaits is still a guard held across await points, so it would not clear the
+desloppify finding this issue exists to fix.
 
 ## Helper changes (`src/test_helpers.rs`)
 
@@ -105,8 +133,18 @@ Add, without removing the existing `setup_test_env` / `setup_empty_config_env`
 - Flagged async tests no longer hold a guard across awaits except the documented
   env-mutating tests; each retained lock has a comment naming the variable.
 - Migrated tests pass the config by explicit path.
-- `cargo test` passes; the migrated tests pass under repeated runs
-  (`--test-threads` high) to catch ordering assumptions.
+- **Structural invariant (checkable, not statistical):** after the change, the
+  only `ENV_LOCK.lock()` acquisitions in the four files are the four documented
+  env-mutating tests (`connect_client_resolves_env_backed_api_key`,
+  `inline_server_connects_without_config_and_persists_nothing`,
+  `inline_server_missing_env_var_is_clean_error`,
+  `dispatch_applies_config_flag_without_global_override`); every other test in
+  the four files acquires no lock. Verify by grepping `ENV_LOCK` in the four
+  files and confirming the count and the names.
+- `cargo test` passes. To surface any ordering assumption, the **full** suite
+  (not just the migrated subset — the relevant interaction is migrated-reader vs.
+  writer in another file) runs green three times at `--test-threads=16`:
+  `for i in 1 2 3; do cargo test -- --test-threads=16 || break; done`.
 - `cargo clippy --all-targets --all-features -- -D warnings` clean;
   `make check-test-layout` and `make check-no-spawn` pass.
 
