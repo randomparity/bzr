@@ -446,6 +446,39 @@ async fn reopen_dry_run_skips_validation_and_write() {
 }
 
 #[tokio::test]
+async fn close_dry_run_rejects_empty_status_without_network() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/field/bug/bug_status"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(status_field_body(DEFAULT_STATUSES)))
+        .expect(0)
+        .mount(&mock)
+        .await;
+    Mock::given(method("PUT"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::Close(close_args(vec![9], " ", None));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err();
+
+    assert!(
+        matches!(&err, crate::error::BzrError::InputValidation(m)
+            if m.contains("--status cannot be empty")),
+        "got {err:?}"
+    );
+}
+
+#[tokio::test]
 async fn dup_sends_dupe_of() {
     let action = BugAction::Dup(DupArgs {
         id: 12,

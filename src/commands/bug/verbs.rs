@@ -20,6 +20,15 @@ fn comment_update(args: &CommentArgs) -> Result<Option<CommentUpdate>> {
     )
 }
 
+/// Reject locally invalid `close` / `reopen` status values before any dry-run
+/// or server lookup path.
+fn validate_target_status_value(status: &str) -> Result<()> {
+    if status.trim().is_empty() {
+        return Err(BzrError::InputValidation("--status cannot be empty".into()));
+    }
+    Ok(())
+}
+
 /// Confirm the `close` / `reopen` target status exists on the server before
 /// writing, so an unknown status fails with an actionable client-side error
 /// (exit 7) rather than the server's opaque "no status named X" API error.
@@ -27,19 +36,10 @@ fn comment_update(args: &CommentArgs) -> Result<Option<CommentUpdate>> {
 /// The match is exact and case-sensitive against the names the server returns
 /// (Bugzilla statuses are uppercase). The check proves the status *exists*; the
 /// legality of the transition from the bug's current status is still left to
-/// the server. Skipped under `--dry-run`, which performs no mutation and whose
-/// preview already shows the status that would be sent.
-async fn validate_target_status(
-    client: &BugzillaClient,
-    status: &str,
-    ctx: &CommandContext,
-) -> Result<()> {
-    if ctx.dry_run() {
-        return Ok(());
-    }
-    if status.trim().is_empty() {
-        return Err(BzrError::InputValidation("--status cannot be empty".into()));
-    }
+/// the server. Callers skip this lookup under `--dry-run`, which performs no
+/// mutation and whose preview already shows the status that would be sent.
+async fn validate_target_status(client: &BugzillaClient, status: &str) -> Result<()> {
+    validate_target_status_value(status)?;
     let values = client.get_field_values("status").await?;
     if values
         .iter()
@@ -89,9 +89,10 @@ pub(super) async fn close(
     // Resolve the comment (local validation) before the network status check so
     // a bad --comment-private combination fails without a round-trip.
     let comment = comment_update(&args.comment)?;
+    validate_target_status_value(&args.status)?;
     if !ctx.dry_run() {
         let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
-        validate_target_status(&client, &args.status, ctx).await?;
+        validate_target_status(&client, &args.status).await?;
     }
     let params = UpdateBugParams {
         status: Some(args.status.clone()),
@@ -117,9 +118,10 @@ pub(super) async fn reopen(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let comment = comment_update(&args.comment)?;
+    validate_target_status_value(&args.status)?;
     if !ctx.dry_run() {
         let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
-        validate_target_status(&client, &args.status, ctx).await?;
+        validate_target_status(&client, &args.status).await?;
     }
     let params = UpdateBugParams {
         status: Some(args.status.clone()),
