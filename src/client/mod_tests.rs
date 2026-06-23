@@ -6,6 +6,21 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use super::*;
 use test_helpers::{test_client, test_client_query_param};
 
+fn debug_logging_guard() -> tracing::dispatcher::DefaultGuard {
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .with_writer(std::io::sink)
+        .finish();
+    tracing::subscriber::set_default(subscriber)
+}
+
+fn multibyte_body_crossing_preview_boundary() -> String {
+    let mut body = "a".repeat(super::BODY_PREVIEW_MAX_BYTES - 1);
+    body.push('é');
+    body.push_str(" trailing");
+    body
+}
+
 #[test]
 fn safe_url_strips_query_params() {
     let url = reqwest::Url::parse(&format!(
@@ -366,6 +381,50 @@ async fn api_error_with_string_code_parsed_correctly() {
     assert!(
         matches!(&err, crate::error::BzrError::Api { code: 32610, .. }),
         "expected Api error with code 32610, got: {err}"
+    );
+}
+
+#[test]
+fn parse_body_to_value_handles_multibyte_debug_preview_boundary() {
+    let _guard = debug_logging_guard();
+    let body = multibyte_body_crossing_preview_boundary();
+
+    let err = BugzillaClient::parse_body_to_value(&body, "https://bugzilla.example/rest/bug")
+        .unwrap_err();
+
+    assert!(
+        matches!(err, crate::error::BzrError::Deserialize(_)),
+        "invalid JSON should return a deserialize error, got: {err}"
+    );
+}
+
+#[tokio::test]
+async fn http_error_preview_handles_multibyte_debug_preview_boundary() {
+    let _guard = debug_logging_guard();
+    let mock = MockServer::start().await;
+    let body = multibyte_body_crossing_preview_boundary();
+    Mock::given(method("GET"))
+        .and(path("/rest/group"))
+        .respond_with(ResponseTemplate::new(500).set_body_string(body.clone()))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let resp = client
+        .http
+        .get(format!("{}/rest/group", mock.uri()))
+        .send()
+        .await
+        .unwrap();
+    let err = client.check_response_status(resp).await.unwrap_err();
+
+    assert!(
+        matches!(
+            &err,
+            crate::error::BzrError::HttpStatus { status: 500, body: returned }
+                if returned == &body
+        ),
+        "expected HTTP 500 with original body, got: {err}"
     );
 }
 

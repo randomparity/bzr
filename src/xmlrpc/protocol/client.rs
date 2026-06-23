@@ -61,7 +61,14 @@ impl XmlRpcClient {
                 Ok(body) => body,
                 Err(e) => format!("<failed to read response body: {e}>"),
             };
-            tracing::debug!(%status, body = &body[..body.len().min(512)], "XML-RPC HTTP error");
+            tracing::debug!(
+                %status,
+                body = crate::http::utf8_prefix(
+                    &body,
+                    crate::http::DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES,
+                ),
+                "XML-RPC HTTP error"
+            );
             return Err(BzrError::HttpStatus {
                 status: status.as_u16(),
                 body,

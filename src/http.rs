@@ -5,6 +5,8 @@ pub(crate) const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Per-request ceiling (30s) — covers large attachment downloads. Overridable
 /// per invocation via `--timeout` / `BZR_TIMEOUT`.
 pub(crate) const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+/// Shared byte cap for short diagnostic response-body previews.
+pub(crate) const DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES: usize = 512;
 
 /// Base unit for exponential backoff between transient retries.
 const RETRY_BACKOFF_BASE: Duration = Duration::from_millis(500);
@@ -54,6 +56,15 @@ pub(crate) fn should_retry_transport(err: &reqwest::Error, safe: bool) -> bool {
 /// than pulling in a date-parsing dependency for it.
 pub(crate) fn parse_retry_after(value: &str) -> Option<Duration> {
     value.trim().parse::<u64>().ok().map(Duration::from_secs)
+}
+
+/// Return the longest prefix at or below `max_bytes` without splitting UTF-8.
+pub(crate) fn utf8_prefix(body: &str, max_bytes: usize) -> &str {
+    let mut end = body.len().min(max_bytes);
+    while !body.is_char_boundary(end) {
+        end -= 1;
+    }
+    &body[..end]
 }
 
 /// Backoff before retry `attempt` (0-based): `RETRY_BACKOFF_BASE * 2^attempt`,

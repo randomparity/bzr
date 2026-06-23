@@ -13,6 +13,21 @@ fn test_http_client() -> reqwest::Client {
     reqwest::Client::new()
 }
 
+fn debug_logging_guard() -> tracing::dispatcher::DefaultGuard {
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .with_writer(std::io::sink)
+        .finish();
+    tracing::subscriber::set_default(subscriber)
+}
+
+fn multibyte_body_crossing_preview_boundary() -> String {
+    let mut body = "a".repeat(511);
+    body.push('é');
+    body.push_str(" trailing");
+    body
+}
+
 fn spawn_truncated_http_error_server() -> (String, std::thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -84,6 +99,29 @@ async fn http_error_maps_to_xmlrpc_error() {
     let err = client.get_bug("1").await.unwrap_err();
     let msg = err.to_string();
     assert!(msg.contains("500"), "should contain status code: {msg}");
+}
+
+#[tokio::test]
+async fn http_error_preview_handles_multibyte_debug_preview_boundary() {
+    let _guard = debug_logging_guard();
+    let mock = MockServer::start().await;
+    let body = multibyte_body_crossing_preview_boundary();
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(500).set_body_string(body.clone()))
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
+    let err = client.call("Bug.get", BTreeMap::new()).await.unwrap_err();
+
+    assert!(
+        matches!(
+            &err,
+            BzrError::HttpStatus { status: 500, body: returned } if returned == &body
+        ),
+        "expected HTTP 500 with original body, got: {err}"
+    );
 }
 
 #[tokio::test]

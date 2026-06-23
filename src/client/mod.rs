@@ -524,7 +524,7 @@ impl BugzillaClient {
     fn parse_body_to_value(body: &str, safe_url: &str) -> Result<serde_json::Value> {
         tracing::trace!(
             url = safe_url,
-            body = &body[..body.len().min(BODY_TRACE_MAX_BYTES)],
+            body = crate::http::utf8_prefix(body, BODY_TRACE_MAX_BYTES),
             "response body"
         );
 
@@ -532,7 +532,7 @@ impl BugzillaClient {
             tracing::debug!(
                 url = safe_url,
                 error = %e,
-                body_preview = &body[..body.len().min(BODY_PREVIEW_MAX_BYTES)],
+                body_preview = crate::http::utf8_prefix(body, BODY_PREVIEW_MAX_BYTES),
                 "JSON deserialization failed"
             );
             BzrError::Deserialize(format!(
@@ -687,7 +687,7 @@ impl BugzillaClient {
             };
             tracing::debug!(
                 %status,
-                body = &body[..body.len().min(512)],
+                body = crate::http::utf8_prefix(&body, BODY_PREVIEW_MAX_BYTES),
                 "API error response"
             );
             if let Ok(err) = serde_json::from_str::<ErrorResponse>(&body) {
@@ -710,7 +710,7 @@ impl BugzillaClient {
 /// Maximum length of the body excerpt embedded in deserialization errors.
 /// 512 bytes is enough to capture the top-level keys of any realistic
 /// Bugzilla envelope while keeping the error message human-scaled.
-const BODY_PREVIEW_MAX_BYTES: usize = 512;
+const BODY_PREVIEW_MAX_BYTES: usize = crate::http::DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES;
 
 /// Maximum length of the response body logged at `trace` level. Larger than
 /// [`BODY_PREVIEW_MAX_BYTES`] because trace logs are opt-in diagnostics where
@@ -727,15 +727,10 @@ const BODY_TRACE_MAX_BYTES: usize = 2048;
 ///
 /// Called by `parse_json` when deserializing JSON fails.
 fn format_body_preview(body: &str) -> String {
-    let truncated_end = body
-        .char_indices()
-        .take_while(|(i, _)| *i < BODY_PREVIEW_MAX_BYTES)
-        .last()
-        .map_or(0, |(i, c)| i + c.len_utf8());
-
-    let mut preview = String::with_capacity(truncated_end + 4);
-    preview.push_str(&body[..truncated_end]);
-    if truncated_end < body.len() {
+    let prefix = crate::http::utf8_prefix(body, BODY_PREVIEW_MAX_BYTES);
+    let mut preview = String::with_capacity(prefix.len() + 4);
+    preview.push_str(prefix);
+    if prefix.len() < body.len() {
         preview.push('…');
     }
 
