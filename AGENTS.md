@@ -25,13 +25,21 @@ Git hooks: `make install-hooks` installs a pre-commit hook (`cargo fmt --check` 
 
 ## Architecture
 
-Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches `Commands` enum → delegates to `commands/*.rs::execute()` → which loads `Config`, resolves auth, builds `BugzillaClient`, calls API, and formats output.
+Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches the
+`Commands` enum → delegates to resource modules under `commands/` → those load
+`Config`, resolve auth, build `BugzillaClient`, call the API, and format output.
 
 ### Key modules
 
 - **`cli/`** — clap derive structs split into per-resource submodules. `mod.rs` defines `Cli`, `Commands`, and re-exports all `*Action` enums. Per-resource files (`bug.rs`, `comment.rs`, `attachment.rs`, `config.rs`, `product.rs`, `field.rs`, `user.rs`, `group.rs`, `server.rs`, `classification.rs`, `component.rs`, `template.rs`, `query.rs`) each define one action enum.
 - **`client/`** — `BugzillaClient` wraps reqwest for Bugzilla REST API. Split into per-resource submodules (`bug.rs`, `attachment.rs`, `comment.rs`, `product.rs`, `user.rs`, `group.rs`, `component.rs`, `classification.rs`, `field.rs`, `server.rs`). `auth/` submodule handles auth detection (split into `whoami.rs` and `valid_login.rs` probing strategies with `mod.rs` as orchestrator). `version.rs` handles version detection and API mode determination. Public data types live in `types/`.
-- **`config.rs`** — `Config` and `ServerConfig` structs. TOML file at `~/.config/bzr/config.toml`. Multiple named servers with a default. Uses `AuthMethod` and `ApiMode` from `types/common.rs`; `AuthMethod` (`Header`/`QueryParam`) persisted per-server.
+- **`config/`** — configuration subsystem for `~/.config/bzr/config.toml`.
+  `model.rs` owns the persisted domain model (`Config`, `ServerConfig`,
+  credential source types, saved templates, and saved queries). `store.rs`
+  owns path resolution (`--config`/`BZR_CONFIG`/XDG default), advisory locking,
+  unvalidated reads, validation-on-load, atomic persistence, stale temp cleanup,
+  and permissions hardening. Multiple named servers share one default; per-server
+  auth/API/TLS detection state is persisted here.
 - **`error.rs`** — `BzrError` enum (thiserror) with 18 variants: `Http`, `Config`, `Api`, `Io`, `TomlParse`, `TomlSerialize`, `XmlRpc`, `NotFound`, `HttpStatus`, `InputValidation`, `Deserialize`, `Auth`, `DataIntegrity`, `BatchPartialFailure`, `Keyring`, `PinMismatch`, `IssuerChanged`, `MidAirCollision`. Each variant has a distinct `exit_code()` and `error_type()`. `Result<T>` type alias.
 - **`output/`** — `mod.rs` is deliberately *not* a re-export facade: command modules import each writer from its owning leaf module so unused facade exports don't accumulate as output formats change. `formatting.rs` holds formatting primitives (`write_formatted`, `write_json_family`, field helpers). `result_types.rs` holds mutation result types (`ActionResult`, `ResourceKind`, `MembershipResult`, etc.) and the shared `write_result`/`write_saved`/`write_count` helpers. `writers.rs` defines the `Writers` stdout/stderr bundle. Per-resource writers live under `output/resources/` (`bug.rs`, `comment.rs`, `attachment.rs`, `product.rs`, `classification.rs`, `component.rs`, `user.rs`, `group.rs`, `field.rs`, `server.rs`, `config.rs`, `template.rs`, `query.rs`), each handling one domain type. Uses `tabled` for tables, `colored` for status colors.
 - **`commands/`** — Resource command submodules expose async
@@ -41,8 +49,8 @@ Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches `Com
   server, output format, API mode, dry-run, confirmation, inline-server,
   config-path, timeout, and retry settings. Network commands follow the
   pattern: load config → resolve auth → connect client → call API → print
-  output. Local-only commands such as `config.rs` use the same context boundary
-  but do local I/O, while `whoami.rs` has no action enum. Cross-cutting command
+  output. Local-only commands under `commands/config/` use the same context
+  boundary but do local I/O, while `whoami.rs` has no action enum. Cross-cutting command
   infrastructure lives under `commands/runtime/`: `runtime::shared` provides
   `connect_and_configure()` (config load + auth detection + client construction)
   and body-source helpers; `runtime::context` owns per-invocation flags;
