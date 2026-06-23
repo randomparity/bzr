@@ -249,12 +249,13 @@ fn format_dispatch_error_ndjson_renders_compact_json_object() {
     assert_eq!(parsed["error"]["exit_code"], err.exit_code());
 }
 
-fn schema_from_command(name: &str) -> serde_json::Value {
+async fn schema_from_command(name: &str) -> serde_json::Value {
     let mut out = Vec::new();
     let mut err = Vec::new();
     let mut writers = bzr::output::writers::Writers::new(&mut out, &mut err);
 
-    bzr::commands::schema::execute(Some(name), OutputFormat::Json, &mut writers)
+    bzr::commands::schema::execute(Some(name), None, OutputFormat::Json, None, &mut writers)
+        .await
         .expect("schema must be published");
 
     serde_json::from_slice(&out).expect("schema output must be valid JSON")
@@ -322,9 +323,9 @@ fn assert_error_matches_schema(schema: &serde_json::Value, value: &serde_json::V
     );
 }
 
-#[test]
-fn format_dispatch_error_json_family_matches_published_schema() {
-    let schema = schema_from_command("error");
+#[tokio::test]
+async fn format_dispatch_error_json_family_matches_published_schema() {
+    let schema = schema_from_command("error").await;
     let errors = [
         BzrError::InputValidation("bad input".into()),
         BzrError::MidAirCollision {

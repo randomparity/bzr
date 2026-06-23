@@ -1,17 +1,18 @@
 use clap_complete::Shell;
 
 use crate::test_helpers::CapturedIo;
+use crate::types::OutputFormat;
 
-fn script_for(shell: Shell) -> String {
+async fn script_for(shell: Shell) -> String {
     let mut io = CapturedIo::new();
-    let result = super::execute(shell, &mut io.writers());
+    let result = super::execute(shell, None, OutputFormat::Table, None, &mut io.writers()).await;
     assert!(result.is_ok(), "completion generation should succeed");
     io.out_str().to_string()
 }
 
-#[test]
-fn bash_script_is_nonempty_and_names_binary() {
-    let script = script_for(Shell::Bash);
+#[tokio::test]
+async fn bash_script_is_nonempty_and_names_binary() {
+    let script = script_for(Shell::Bash).await;
     assert!(!script.is_empty(), "bash script should not be empty");
     assert!(
         script.contains("bzr"),
@@ -23,9 +24,9 @@ fn bash_script_is_nonempty_and_names_binary() {
     );
 }
 
-#[test]
-fn zsh_script_is_nonempty_and_names_binary() {
-    let script = script_for(Shell::Zsh);
+#[tokio::test]
+async fn zsh_script_is_nonempty_and_names_binary() {
+    let script = script_for(Shell::Zsh).await;
     assert!(!script.is_empty(), "zsh script should not be empty");
     assert!(script.contains("bzr"), "zsh script should reference bzr");
     assert!(
@@ -34,9 +35,9 @@ fn zsh_script_is_nonempty_and_names_binary() {
     );
 }
 
-#[test]
-fn fish_script_is_nonempty_and_names_binary() {
-    let script = script_for(Shell::Fish);
+#[tokio::test]
+async fn fish_script_is_nonempty_and_names_binary() {
+    let script = script_for(Shell::Fish).await;
     assert!(!script.is_empty(), "fish script should not be empty");
     assert!(
         script.contains("bzr"),
@@ -44,9 +45,9 @@ fn fish_script_is_nonempty_and_names_binary() {
     );
 }
 
-#[test]
-fn powershell_script_is_nonempty_and_names_binary() {
-    let script = script_for(Shell::PowerShell);
+#[tokio::test]
+async fn powershell_script_is_nonempty_and_names_binary() {
+    let script = script_for(Shell::PowerShell).await;
     assert!(!script.is_empty(), "powershell script should not be empty");
     assert!(
         script.contains("bzr"),

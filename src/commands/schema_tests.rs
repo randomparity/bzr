@@ -368,23 +368,25 @@ fn every_schema_is_wellformed_and_named_draft_2020_12() {
 
 // ── Command behavior ─────────────────────────────────────────────────
 
-fn run(name: Option<&str>, format: crate::types::OutputFormat) -> (CapturedIo, bool) {
+async fn run(name: Option<&str>, format: crate::types::OutputFormat) -> (CapturedIo, bool) {
     let mut io = CapturedIo::new();
-    let ok = super::execute(name, format, &mut io.writers()).is_ok();
+    let ok = super::execute(name, None, format, None, &mut io.writers())
+        .await
+        .is_ok();
     (io, ok)
 }
 
-#[test]
-fn execute_prints_named_schema_verbatim() {
-    let (io, ok) = run(Some("bug"), crate::types::OutputFormat::Json);
+#[tokio::test]
+async fn execute_prints_named_schema_verbatim() {
+    let (io, ok) = run(Some("bug"), crate::types::OutputFormat::Json).await;
     assert!(ok);
     let parsed: Value = serde_json::from_str(io.out_str()).unwrap();
     assert_eq!(parsed.get("title").and_then(Value::as_str), Some("Bug"));
 }
 
-#[test]
-fn execute_unknown_schema_errors_with_available_list() {
-    let (io, ok) = run(Some("nope"), crate::types::OutputFormat::Json);
+#[tokio::test]
+async fn execute_unknown_schema_errors_with_available_list() {
+    let (io, ok) = run(Some("nope"), crate::types::OutputFormat::Json).await;
     assert!(!ok);
     assert!(
         io.out_str().is_empty(),
@@ -392,9 +394,9 @@ fn execute_unknown_schema_errors_with_available_list() {
     );
 }
 
-#[test]
-fn execute_list_json_is_array_of_names() {
-    let (io, ok) = run(None, crate::types::OutputFormat::Json);
+#[tokio::test]
+async fn execute_list_json_is_array_of_names() {
+    let (io, ok) = run(None, crate::types::OutputFormat::Json).await;
     assert!(ok);
     let parsed: Value = serde_json::from_str(io.out_str()).unwrap();
     let names = parsed.as_array().unwrap();
@@ -413,9 +415,9 @@ fn execute_list_json_is_array_of_names() {
     assert!(names.iter().any(|n| n == "batch-result"));
 }
 
-#[test]
-fn execute_list_ndjson_is_one_name_per_line() {
-    let (io, ok) = run(None, crate::types::OutputFormat::Ndjson);
+#[tokio::test]
+async fn execute_list_ndjson_is_one_name_per_line() {
+    let (io, ok) = run(None, crate::types::OutputFormat::Ndjson).await;
     assert!(ok);
     let lines: Vec<&str> = io.out_str().lines().collect();
     assert_eq!(lines.len(), SCHEMAS.len());
@@ -426,9 +428,9 @@ fn execute_list_ndjson_is_one_name_per_line() {
     }
 }
 
-#[test]
-fn execute_list_table_is_one_name_per_line() {
-    let (io, ok) = run(None, crate::types::OutputFormat::Table);
+#[tokio::test]
+async fn execute_list_table_is_one_name_per_line() {
+    let (io, ok) = run(None, crate::types::OutputFormat::Table).await;
     assert!(ok);
     assert_eq!(io.out_str().lines().count(), SCHEMAS.len());
 }

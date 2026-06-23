@@ -11,7 +11,7 @@
 use crate::error::{BzrError, Result};
 use crate::output::result_types::write_result;
 use crate::output::writers::Writers;
-use crate::types::OutputFormat;
+use crate::types::{ApiMode, OutputFormat};
 
 /// Build the `(name, embedded-json)` registry from a bare list of schema names,
 /// deriving each `schemas/<name>.json` path so a name is written exactly once.
@@ -69,7 +69,17 @@ fn find(name: &str) -> Option<&'static str> {
 
 /// Print a published JSON Schema, or the list of available schema names when
 /// `name` is `None`.
-pub fn execute(name: Option<&str>, format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
+#[expect(
+    clippy::unused_async,
+    reason = "command handlers share the async dispatch signature"
+)]
+pub async fn execute(
+    name: Option<&str>,
+    _server: Option<&str>,
+    format: OutputFormat,
+    _api: Option<ApiMode>,
+    w: &mut Writers<'_>,
+) -> Result<()> {
     let Some(name) = name else {
         write_list(format, w);
         return Ok(());
