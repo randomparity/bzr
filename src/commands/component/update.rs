@@ -4,7 +4,7 @@ use crate::error::{BzrError, Result};
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
 use crate::types::{OutputFormat, UpdateComponentParams};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -25,6 +25,14 @@ enum ComponentUpdateTarget {
 struct ComponentUpdateInput {
     target: ComponentUpdateTarget,
     params: UpdateComponentParams,
+}
+
+#[derive(Debug, Serialize)]
+struct NamedComponentUpdateDryRun<'a> {
+    product: &'a str,
+    component: &'a str,
+    #[serde(flatten)]
+    params: &'a UpdateComponentParams,
 }
 
 pub(super) struct UpdateParamSources<'a> {
@@ -59,17 +67,11 @@ pub(super) async fn handle(
     let format = ctx.format();
     let update = build_update_input(sources)?;
     if ctx.dry_run() {
-        if let ComponentUpdateTarget::Id(id) = &update.target {
-            write_update_dry_run(*id, &update.params, format, w);
-            return Ok(());
-        }
+        write_update_dry_run(&update, format, w);
+        return Ok(());
     }
     let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
     let id = resolve_update_target_id(&client, &update.target).await?;
-    if ctx.dry_run() {
-        write_update_dry_run(id, &update.params, format, w);
-        return Ok(());
-    }
     client.update_component(id, &update.params).await?;
     write_result(
         &ActionResult::updated(id, ResourceKind::Component),
@@ -80,20 +82,33 @@ pub(super) async fn handle(
     Ok(())
 }
 
-fn write_update_dry_run(
-    id: u64,
-    params: &UpdateComponentParams,
-    format: OutputFormat,
-    w: &mut Writers<'_>,
-) {
-    let ids = [id];
-    let message = format!("Would update component #{id}");
-    write_result(
-        &DryRunResult::new(ResourceKind::Component, &ids, params),
-        &message,
-        format,
-        w.out,
-    );
+fn write_update_dry_run(update: &ComponentUpdateInput, format: OutputFormat, w: &mut Writers<'_>) {
+    match &update.target {
+        ComponentUpdateTarget::Id(id) => {
+            let ids = [*id];
+            let message = format!("Would update component #{id}");
+            write_result(
+                &DryRunResult::new(ResourceKind::Component, &ids, &update.params),
+                &message,
+                format,
+                w.out,
+            );
+        }
+        ComponentUpdateTarget::Named { product, component } => {
+            let message = format!("Would update component '{component}' in product '{product}'");
+            let payload = NamedComponentUpdateDryRun {
+                product,
+                component,
+                params: &update.params,
+            };
+            write_result(
+                &DryRunResult::new(ResourceKind::Component, &[], &payload),
+                &message,
+                format,
+                w.out,
+            );
+        }
+    }
 }
 
 fn build_update_input(sources: &UpdateParamSources<'_>) -> Result<ComponentUpdateInput> {

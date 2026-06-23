@@ -532,6 +532,54 @@ async fn component_update_dry_run_makes_no_write_and_marks_payload() {
 }
 
 #[tokio::test]
+async fn component_update_named_dry_run_makes_no_read_or_write_and_marks_target() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/product"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+        .expect(0)
+        .mount(&mock)
+        .await;
+    Mock::given(method("PUT"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 10})))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let action = ComponentAction::Update {
+        from_json: None,
+        id: None,
+        product: Some("MyApp".to_string()),
+        component: Some("Backend".to_string()),
+        name: Some("Renamed".to_string()),
+        description: Some("Updated".to_string()),
+        default_assignee: None,
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(
+        result.is_ok(),
+        "named dry-run component update failed: {result:?}"
+    );
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["resource"], "component");
+    assert_eq!(parsed["action"], "dry-run");
+    assert_eq!(parsed["ids"], serde_json::json!([]));
+    assert_eq!(parsed["changes"]["product"], "MyApp");
+    assert_eq!(parsed["changes"]["component"], "Backend");
+    assert_eq!(parsed["changes"]["name"], "Renamed");
+    assert_eq!(parsed["changes"]["description"], "Updated");
+}
+
+#[tokio::test]
 async fn component_update_from_json_uses_json_target() {
     let (_lock, mock, tmp) = setup_test_env().await;
 
