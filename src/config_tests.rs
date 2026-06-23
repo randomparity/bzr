@@ -896,6 +896,22 @@ fn save_preserves_fresh_temp_files_of_concurrent_writers() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn fsync_parent_dir_errors_when_parent_cannot_be_opened() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let parent = tmp.path().join("missing-parent");
+    let path = parent.join("config.toml");
+
+    let err = super::fsync_parent_dir(&path).unwrap_err().to_string();
+    let parent = parent.to_string_lossy();
+
+    assert!(
+        err.contains("open config parent directory") && err.contains(parent.as_ref()),
+        "error should name parent directory and failed operation, got: {err}"
+    );
+}
+
 #[test]
 fn update_locked_preserves_disjoint_concurrent_edits() {
     let _lock = crate::ENV_LOCK.blocking_lock();

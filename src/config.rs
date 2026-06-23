@@ -497,8 +497,7 @@ fn atomic_write(path: &std::path::Path, content: &str) -> Result<()> {
         let _ = fs::remove_file(&tmp);
         return Err(e.into());
     }
-    fsync_parent_dir(path);
-    Ok(())
+    fsync_parent_dir(path)
 }
 
 #[cfg(test)]
@@ -664,16 +663,28 @@ fn create_new_private(tmp: &std::path::Path) -> std::io::Result<fs::File> {
 }
 
 #[cfg(unix)]
-fn fsync_parent_dir(path: &std::path::Path) {
-    if let Some(dir) = path.parent() {
-        if let Ok(handle) = fs::File::open(dir) {
-            let _ = handle.sync_all();
-        }
-    }
+fn fsync_parent_dir(path: &std::path::Path) -> Result<()> {
+    let Some(dir) = path.parent() else {
+        return Ok(());
+    };
+    let handle = fs::File::open(dir).map_err(|e| {
+        BzrError::config(format!(
+            "failed to open config parent directory '{}' for fsync: {e}",
+            dir.display()
+        ))
+    })?;
+    handle.sync_all().map_err(|e| {
+        BzrError::config(format!(
+            "failed to fsync config parent directory '{}': {e}",
+            dir.display()
+        ))
+    })
 }
 
 #[cfg(not(unix))]
-fn fsync_parent_dir(_path: &std::path::Path) {}
+fn fsync_parent_dir(_path: &std::path::Path) -> Result<()> {
+    Ok(())
+}
 
 /// How old a temp sibling must be before the reaper treats it as a
 /// crash orphan. Comfortably longer than any single atomic write, so a
