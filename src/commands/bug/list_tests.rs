@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::BugAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::{setup_test_env, HasBooleanChartTriples};
 use crate::types::OutputFormat;
 
 fn empty_list_action() -> BugAction {
@@ -283,17 +283,13 @@ async fn bug_list_mixed_positive_notequals_notsubstring() {
     // wire with the right operator.
     let (_lock, mock, _tmp) = setup_test_env().await;
 
-    // FIELD_MAPPINGS iterates whiteboard (idx 7) before resolution
-    // (idx 12), so whiteboard gets f1 and resolution gets f2.
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
         .and(query_param("product", "P"))
-        .and(query_param("f1", "status_whiteboard"))
-        .and(query_param("o1", "notsubstring"))
-        .and(query_param("v1", "wip"))
-        .and(query_param("f2", "resolution"))
-        .and(query_param("o2", "notequals"))
-        .and(query_param("v2", "FIXED"))
+        .and(HasBooleanChartTriples::new(&[
+            ("status_whiteboard", "notsubstring", "wip"),
+            ("resolution", "notequals", "FIXED"),
+        ]))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
         .expect(1)
         .mount(&mock)

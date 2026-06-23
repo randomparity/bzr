@@ -6,7 +6,7 @@
 
 #![expect(clippy::unwrap_used, clippy::expect_used)]
 
-use bzr::test_helpers::setup_test_env;
+use bzr::test_helpers::{setup_test_env, HasBooleanChartTriples};
 use bzr::ENV_LOCK;
 
 use clap::Parser;
@@ -2623,21 +2623,15 @@ async fn bug_list_issue_158_mixed_positive_and_negation_reaches_wire() {
     // (notequals), --whiteboard '!wip' (notsubstring) all reach the
     // wire correctly. Exercises the full pipeline:
     // BugAction → SearchParams → REST encoder → wiremock.
-    //
-    // Note: FIELD_MAPPINGS iterates whiteboard (idx 7) before
-    // resolution (idx 12), so whiteboard gets f1 and resolution
-    // gets f2.
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
         .and(query_param("product", "P"))
-        .and(query_param("f1", "status_whiteboard"))
-        .and(query_param("o1", "notsubstring"))
-        .and(query_param("v1", "wip"))
-        .and(query_param("f2", "resolution"))
-        .and(query_param("o2", "notequals"))
-        .and(query_param("v2", "FIXED"))
+        .and(HasBooleanChartTriples::new(&[
+            ("status_whiteboard", "notsubstring", "wip"),
+            ("resolution", "notequals", "FIXED"),
+        ]))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
         .expect(1)
         .mount(&mock)
@@ -2668,9 +2662,8 @@ async fn bug_list_issue_158_mixed_positive_and_negation_reaches_wire() {
     let _output = __io24.out_str().to_string();
     assert!(result.is_ok(), "bug list should succeed: {result:?}");
     // wiremock's `expect(1)` enforces that exactly one request matched
-    // every query-param matcher above; if any operator or value were
-    // wrong, the matcher would miss and the response would be a 404,
-    // causing `result` to be `Err`.
+    // every matcher above; if any operator or value were wrong, the matcher
+    // would miss and the response would be a 404, causing `result` to be `Err`.
 }
 
 /// Guards the #206 `--json` prose against misleading phrasings. `--json` now
