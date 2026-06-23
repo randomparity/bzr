@@ -4,12 +4,17 @@ use crate::commands::runtime::context::CommandContext;
 use crate::commands::runtime::shared::{merge_set, merge_vec};
 use crate::error::Result;
 use crate::output::result_types::{
-    write_result, ActionResult, BatchFailure, BatchResult, DryRunResult, ResourceKind,
+    write_result, ActionResult, BatchFailure, BatchResult, ResourceKind,
 };
 use crate::output::writers::Writers;
 use crate::types::bug::{CommentUpdate, IdListUpdate, StringListUpdate, UpdateBugParams};
 use crate::types::common::OutputFormat;
 use serde::Deserialize;
+
+mod output;
+
+pub(super) use output::write_batch_result;
+use output::{comment_suffix, write_update_dry_run};
 
 const FLAG_KEYWORDS_ADD: &str = "--keywords-add";
 const FLAG_KEYWORDS_REMOVE: &str = "--keywords-remove";
@@ -19,16 +24,6 @@ const FLAG_GROUPS_ADD: &str = "--groups-add";
 const FLAG_GROUPS_REMOVE: &str = "--groups-remove";
 const FLAG_SEE_ALSO_ADD: &str = "--see-also-add";
 const FLAG_SEE_ALSO_REMOVE: &str = "--see-also-remove";
-
-const COMMENT_SUFFIX: &str = " (with comment)";
-
-fn comment_suffix(present: bool) -> &'static str {
-    if present {
-        COMMENT_SUFFIX
-    } else {
-        ""
-    }
-}
 
 fn clean_string_list(field: &str, values: &[String]) -> Result<Vec<String>> {
     let mut out = Vec::with_capacity(values.len());
@@ -364,30 +359,6 @@ async fn update_single(
     Ok(())
 }
 
-pub(super) fn write_batch_result(
-    batch: &BatchResult,
-    format: OutputFormat,
-    with_comment: bool,
-    w: &mut Writers<'_>,
-) {
-    match format {
-        OutputFormat::Json | OutputFormat::Ndjson => {
-            write_result(batch, "", format, w.out);
-        }
-        OutputFormat::Table => {
-            if !batch.succeeded.is_empty() {
-                let ids_str: Vec<String> =
-                    batch.succeeded.iter().map(|id| format!("#{id}")).collect();
-                let suffix = comment_suffix(with_comment);
-                let _ = writeln!(w.out, "Updated bugs: {}{suffix}", ids_str.join(", "));
-            }
-            for f in &batch.failed {
-                let _ = writeln!(w.err, "Failed to update bug #{}: {}", f.id, f.error);
-            }
-        }
-    }
-}
-
 /// The shared exit-11 gate for batch mutations: returns `BatchPartialFailure`
 /// (exit 11) when any element failed, else `Ok(())`. Used by batch `bug update`
 /// and batch `bug create --from-json`.
@@ -441,28 +412,6 @@ pub(super) async fn handle(
         w,
     )
     .await
-}
-
-/// Emit the would-be update without writing: the affected IDs and the payload
-/// that would be sent, marked `"action":"dry-run"`. Shared by `bug update` and
-/// the convenience verbs.
-fn write_update_dry_run(
-    ids: &[u64],
-    params: &UpdateBugParams,
-    format: OutputFormat,
-    w: &mut Writers<'_>,
-) {
-    let ids_str: Vec<String> = ids.iter().map(|id| format!("#{id}")).collect();
-    let suffix = comment_suffix(params.comment.is_some());
-    write_result(
-        &DryRunResult::new(ResourceKind::Bug, ids, params),
-        &format!(
-            "Dry run: would update bug(s) {}{suffix} (no changes made)",
-            ids_str.join(", ")
-        ),
-        format,
-        w.out,
-    );
 }
 
 async fn apply_connected(
