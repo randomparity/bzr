@@ -1187,8 +1187,8 @@ async fn cached_path_skips_probe_when_insecure() {
 }
 
 use super::{
-    classify_body_source, materialize_body_source, materialize_comment_body, BodySource,
-    CommentBodyRequirement,
+    classify_body_source, materialize_body_source, materialize_comment_body,
+    materialize_optional_comment_body, BodySource, CommentBodyRequirement,
 };
 
 fn fallback_comment_body() -> crate::error::Result<String> {
@@ -1327,6 +1327,22 @@ fn materialize_comment_body_allows_absent_optional_body() {
     )
     .unwrap();
     assert_eq!(got, None);
+}
+
+#[test]
+fn materialize_optional_comment_body_accepts_comment_flag() {
+    let got = materialize_optional_comment_body(Some("hi"), None, false).unwrap();
+    assert_eq!(got, Some("hi".to_string()));
+}
+
+#[test]
+fn materialize_optional_comment_body_rejects_private_without_body() {
+    let err = materialize_optional_comment_body(None, None, true).unwrap_err();
+    assert!(matches!(
+        err,
+        BzrError::InputValidation(ref msg)
+            if msg.contains("--comment-private") && msg.contains("--comment-file")
+    ));
 }
 
 #[test]

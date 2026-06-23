@@ -22,7 +22,7 @@ pub(crate) enum CommentBodyRequirement {
 }
 
 impl CommentBodyRequirement {
-    pub(crate) fn optional_or_private_required(comment_private: bool) -> Self {
+    fn optional_or_private_required(comment_private: bool) -> Self {
         if comment_private {
             Self::PrivateRequiresBody
         } else {
@@ -111,6 +111,19 @@ pub(crate) fn materialize_comment_body(
         };
     };
     Ok(Some(require_non_empty_comment_body(text)?))
+}
+
+/// Materialize optional `--comment` / `--comment-file` input.
+pub(crate) fn materialize_optional_comment_body(
+    comment: Option<&str>,
+    comment_file: Option<&std::path::Path>,
+    comment_private: bool,
+) -> Result<Option<String>> {
+    materialize_comment_body(
+        classify_body_source(comment, comment_file, "--comment", "--comment-file")?,
+        "--comment-file",
+        CommentBodyRequirement::optional_or_private_required(comment_private),
+    )
 }
 
 /// Return comment text when it has non-whitespace content.

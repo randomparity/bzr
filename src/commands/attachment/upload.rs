@@ -81,17 +81,10 @@ fn resolve_upload_comment(
     comment_file: Option<&Path>,
     comment_private: bool,
 ) -> Result<Option<String>> {
-    crate::commands::runtime::shared::materialize_comment_body(
-        crate::commands::runtime::shared::classify_body_source(
-            comment,
-            comment_file,
-            "--comment",
-            "--comment-file",
-        )?,
-        "--comment-file",
-        crate::commands::runtime::shared::CommentBodyRequirement::optional_or_private_required(
-            comment_private,
-        ),
+    crate::commands::runtime::shared::materialize_optional_comment_body(
+        comment,
+        comment_file,
+        comment_private,
     )
 }
 
