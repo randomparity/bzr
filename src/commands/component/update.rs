@@ -1,22 +1,10 @@
-use crate::cli::ComponentAction;
 use crate::client::BugzillaClient;
 use crate::commands::runtime::context::CommandContext;
 use crate::error::{BzrError, Result};
-use crate::output::resources::component::{write_component, write_components};
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
-use crate::types::OutputFormat;
-use crate::types::{CreateComponentParams, UpdateComponentParams};
+use crate::types::{OutputFormat, UpdateComponentParams};
 use serde::Deserialize;
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct JsonCreateComponent {
-    product: Option<String>,
-    name: Option<String>,
-    description: Option<String>,
-    default_assignee: Option<String>,
-}
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -39,14 +27,14 @@ struct ComponentUpdateInput {
     params: UpdateComponentParams,
 }
 
-struct UpdateParamSources<'a> {
-    from_json: Option<&'a str>,
-    id: Option<u64>,
-    product: Option<&'a str>,
-    component: Option<&'a str>,
-    name: Option<&'a str>,
-    description: Option<&'a str>,
-    default_assignee: Option<&'a str>,
+pub(super) struct UpdateParamSources<'a> {
+    pub(super) from_json: Option<&'a str>,
+    pub(super) id: Option<u64>,
+    pub(super) product: Option<&'a str>,
+    pub(super) component: Option<&'a str>,
+    pub(super) name: Option<&'a str>,
+    pub(super) description: Option<&'a str>,
+    pub(super) default_assignee: Option<&'a str>,
 }
 
 struct UpdateTargetSources<'a> {
@@ -63,92 +51,7 @@ struct NamedComponentTarget {
     component: String,
 }
 
-pub async fn execute(
-    action: &ComponentAction,
-    ctx: &CommandContext,
-    w: &mut Writers<'_>,
-) -> Result<()> {
-    let format = ctx.format();
-    match action {
-        ComponentAction::List { product } => {
-            let client = super::runtime::shared::connect_and_configure(ctx).await?;
-            let product = client.get_product(product).await?;
-            write_components(&product.components, format, w.out);
-        }
-        ComponentAction::View { product, name } => {
-            let client = super::runtime::shared::connect_and_configure(ctx).await?;
-            let product = client.get_product(product).await?;
-            let component = product
-                .components
-                .iter()
-                .find(|c| c.name == *name)
-                .ok_or_else(|| BzrError::NotFound {
-                    resource: "component",
-                    id: name.clone(),
-                })?;
-            write_component(component, format, w.out);
-        }
-        ComponentAction::Create {
-            from_json,
-            product,
-            name,
-            description,
-            default_assignee,
-        } => {
-            let params = build_create_params(
-                from_json.as_deref(),
-                product.as_deref(),
-                name.as_deref(),
-                description.as_deref(),
-                default_assignee.as_deref(),
-            )?;
-            if ctx.dry_run() {
-                let message = format!(
-                    "Would create component '{}' in product '{}'",
-                    params.name, params.product
-                );
-                write_result(
-                    &DryRunResult::new(ResourceKind::Component, &[], &params),
-                    &message,
-                    format,
-                    w.out,
-                );
-                return Ok(());
-            }
-            let client = super::runtime::shared::connect_and_configure(ctx).await?;
-            let id = client.create_component(&params).await?;
-            write_result(
-                &ActionResult::created(id, ResourceKind::Component),
-                &format!("Created component #{id} in product '{}'", params.product),
-                format,
-                w.out,
-            );
-        }
-        ComponentAction::Update {
-            from_json,
-            id,
-            product,
-            component,
-            name,
-            description,
-            default_assignee,
-        } => {
-            let sources = UpdateParamSources {
-                from_json: from_json.as_deref(),
-                id: *id,
-                product: product.as_deref(),
-                component: component.as_deref(),
-                name: name.as_deref(),
-                description: description.as_deref(),
-                default_assignee: default_assignee.as_deref(),
-            };
-            execute_update(&sources, ctx, w).await?;
-        }
-    }
-    Ok(())
-}
-
-async fn execute_update(
+pub(super) async fn handle(
     sources: &UpdateParamSources<'_>,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
@@ -161,7 +64,7 @@ async fn execute_update(
             return Ok(());
         }
     }
-    let client = super::runtime::shared::connect_and_configure(ctx).await?;
+    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
     let id = resolve_update_target_id(&client, &update.target).await?;
     if ctx.dry_run() {
         write_update_dry_run(id, &update.params, format, w);
@@ -193,52 +96,9 @@ fn write_update_dry_run(
     );
 }
 
-#[must_use]
-pub fn is_dry_runnable(action: &ComponentAction) -> bool {
-    matches!(
-        action,
-        ComponentAction::Create { .. } | ComponentAction::Update { .. }
-    )
-}
-
-pub(crate) fn requires_credentials(action: &ComponentAction) -> Option<&'static str> {
-    match action {
-        ComponentAction::List { .. } | ComponentAction::View { .. } => None,
-        ComponentAction::Create { .. } => Some("component create"),
-        ComponentAction::Update { .. } => Some("component update"),
-    }
-}
-
-fn build_create_params(
-    from_json: Option<&str>,
-    product: Option<&str>,
-    name: Option<&str>,
-    description: Option<&str>,
-    default_assignee: Option<&str>,
-) -> Result<CreateComponentParams> {
-    let mut input = if let Some(arg) = from_json {
-        super::runtime::from_json::read_object::<JsonCreateComponent>(arg)?
-    } else {
-        JsonCreateComponent::default()
-    };
-    super::runtime::from_json::merge_string(&mut input.product, product);
-    super::runtime::from_json::merge_string(&mut input.name, name);
-    super::runtime::from_json::merge_string(&mut input.description, description);
-    super::runtime::from_json::merge_string(&mut input.default_assignee, default_assignee);
-    Ok(CreateComponentParams {
-        product: super::runtime::from_json::required_string(input.product, "product")?,
-        name: super::runtime::from_json::required_string(input.name, "name")?,
-        description: super::runtime::from_json::required_string(input.description, "description")?,
-        default_assignee: super::runtime::from_json::required_string(
-            input.default_assignee,
-            "default_assignee",
-        )?,
-    })
-}
-
 fn build_update_input(sources: &UpdateParamSources<'_>) -> Result<ComponentUpdateInput> {
     let mut input = if let Some(arg) = sources.from_json {
-        super::runtime::from_json::read_object::<JsonUpdateComponent>(arg)?
+        crate::commands::runtime::from_json::read_object::<JsonUpdateComponent>(arg)?
     } else {
         JsonUpdateComponent::default()
     };
@@ -250,9 +110,12 @@ fn build_update_input(sources: &UpdateParamSources<'_>) -> Result<ComponentUpdat
         json_product: input.product.take(),
         json_component: input.component.take(),
     })?;
-    super::runtime::from_json::merge_string(&mut input.name, sources.name);
-    super::runtime::from_json::merge_string(&mut input.description, sources.description);
-    super::runtime::from_json::merge_string(&mut input.default_assignee, sources.default_assignee);
+    crate::commands::runtime::from_json::merge_string(&mut input.name, sources.name);
+    crate::commands::runtime::from_json::merge_string(&mut input.description, sources.description);
+    crate::commands::runtime::from_json::merge_string(
+        &mut input.default_assignee,
+        sources.default_assignee,
+    );
     let params = UpdateComponentParams {
         name: input.name,
         description: input.description,
@@ -382,7 +245,3 @@ fn validate_update_params(params: &UpdateComponentParams) -> Result<()> {
     }
     Ok(())
 }
-
-#[cfg(test)]
-#[path = "component_tests.rs"]
-mod tests;
