@@ -62,8 +62,20 @@ dry-run rendering and for a pre-call resolution step — i.e. it would become th
   JSON), and error behavior are **unchanged** for every migrated handler —
   verified by the existing `create_tests.rs` / `update_tests.rs` suites passing
   without weakening or deleting any assertion.
-- The shared seam is covered by its own focused tests (dry-run path emits the
-  preview and skips connect; commit path runs `execute` and writes its result).
+- The shared seam is covered by tests split along its only cheap-to-isolate
+  boundary. `run` calls `connect_and_configure(ctx)` internally, so only the
+  dry-run path (which returns before connect) is unit-testable in isolation:
+  - **Seam unit test (`mutation_tests.rs`):** drives `run` with
+    `ctx.dry_run() == true` and an `execute` closure that flips a flag / panics
+    if ever called, asserting (a) the params preview is written, (b) `execute`
+    is never invoked, and (c) no connection is attempted. The commit path's own
+    `write_result(&committed.result, …)` line is exercised via a direct unit
+    test of the `Committed` construction where practical, but is **not** driven
+    through `run` (that would require a live connection).
+  - **Commit-path coverage:** delegated to the existing per-resource
+    `create_tests.rs` / `update_tests.rs`, which already drive each full handler
+    (including the connect + API call + success output) through the wiremock +
+    isolated-config harness. These suites must pass unchanged.
 - Resource-specific param building and validation stay in each handler,
   unchanged.
 - No broad generic command framework: the seam handles only the linear
