@@ -5,7 +5,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::client::test_helpers::test_client;
 use crate::error::BzrError;
-use crate::field_aliases::resolve_field_alias;
+use crate::types::resolve_field_alias;
 
 #[test]
 fn resolve_field_alias_maps_status() {
@@ -72,7 +72,7 @@ async fn get_field_values_returns_values() {
     let client = test_client(&mock.uri());
     let values = client.get_field_values("status").await.unwrap();
     assert_eq!(values.len(), 2);
-    assert_eq!(values[0].name, "NEW");
+    assert_eq!(values[0].name.as_deref(), Some("NEW"));
     let transitions = values[0].can_change_to.as_ref().unwrap();
     assert_eq!(transitions.len(), 2);
     assert_eq!(transitions[0].name, "ASSIGNED");
@@ -97,7 +97,7 @@ async fn get_field_values_resolves_severity_alias() {
     let client = test_client(&mock.uri());
     let values = client.get_field_values("severity").await.unwrap();
     assert_eq!(values.len(), 2);
-    assert_eq!(values[0].name, "blocker");
+    assert_eq!(values[0].name.as_deref(), Some("blocker"));
 }
 
 #[tokio::test]

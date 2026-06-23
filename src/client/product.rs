@@ -3,7 +3,7 @@ use serde::Deserialize;
 use super::encode_path;
 use super::BugzillaClient;
 use crate::error::{BzrError, Result};
-use crate::types::{CreateProductParams, Product, ProductListType, UpdateProductParams};
+use crate::types::product::{CreateProductParams, Product, ProductListType, UpdateProductParams};
 
 #[derive(Deserialize)]
 struct ProductAccessibleResponse {

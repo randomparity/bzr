@@ -1,10 +1,11 @@
 use clap::{Args, Subcommand};
 
-/// Argument IDs of the structured filter flags on saved-query commands.
+use crate::types::bug::Overrides;
+
+/// Argument IDs of the manually supplied filter flags on saved-query commands.
 /// Centralized so the mutual-exclusivity lists on `--from-url` / `--search`
 /// stay in sync when a filter flag is added or renamed (rather than
-/// hand-maintaining two literal lists). Keep in lockstep with the `Vec<String>`
-/// filter fields on `SaveArgs` and `UpdateArgs`.
+/// hand-maintaining two literal lists).
 const FILTER_FLAG_ARGS: [&str; 15] = [
     "product",
     "component",
@@ -22,6 +23,56 @@ const FILTER_FLAG_ARGS: [&str; 15] = [
     "qa_contact",
     "url",
 ];
+
+/// Per-run overrides for the saved-query filters that `query run` supports.
+#[derive(Debug, Default, Args)]
+pub struct QueryRunFilterArgs {
+    /// Override the saved Whiteboard filter for this run.
+    #[arg(long)]
+    pub whiteboard: Vec<String>,
+    /// Override the saved Target Milestone filter.
+    #[arg(long)]
+    pub target_milestone: Vec<String>,
+    /// Override the saved Version filter.
+    #[arg(long)]
+    pub version: Vec<String>,
+    /// Override the saved Operating System filter.
+    #[arg(long)]
+    pub op_sys: Vec<String>,
+    /// Override the saved Platform filter.
+    #[arg(long)]
+    pub platform: Vec<String>,
+    /// Override the saved Resolution filter.
+    #[arg(long)]
+    pub resolution: Vec<String>,
+    /// Override the saved QA Contact filter.
+    #[arg(long)]
+    pub qa_contact: Vec<String>,
+}
+
+impl QueryRunFilterArgs {
+    fn slice_override(values: &[String]) -> Option<&[String]> {
+        if values.is_empty() {
+            None
+        } else {
+            Some(values)
+        }
+    }
+
+    pub(crate) fn overrides<'a>(&'a self, url: &'a [String]) -> Overrides<'a> {
+        Overrides {
+            whiteboard: Self::slice_override(&self.whiteboard),
+            target_milestone: Self::slice_override(&self.target_milestone),
+            version: Self::slice_override(&self.version),
+            op_sys: Self::slice_override(&self.op_sys),
+            platform: Self::slice_override(&self.platform),
+            resolution: Self::slice_override(&self.resolution),
+            qa_contact: Self::slice_override(&self.qa_contact),
+            url: Self::slice_override(url),
+            ..Overrides::default()
+        }
+    }
+}
 
 /// Arguments for `query save`.
 #[derive(Debug, Args)]
@@ -44,27 +95,10 @@ pub struct SaveArgs {
     /// against the configured server.
     #[arg(long, conflicts_with_all = FILTER_FLAG_ARGS)]
     pub search: Option<String>,
-    /// Filter by product (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub product: Vec<String>,
-    /// Filter by component (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub component: Vec<String>,
-    /// Filter by status (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub status: Vec<String>,
-    /// Filter by assignee (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub assignee: Vec<String>,
-    /// Filter by creator (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub creator: Vec<String>,
-    /// Filter by priority (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub priority: Vec<String>,
-    /// Filter by severity (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub severity: Vec<String>,
+    #[command(flatten)]
+    pub filters: crate::cli::BugFilterArgs,
+    #[command(flatten)]
+    pub actor_filters: crate::cli::BugActorFilterArgs,
     /// Max number of results
     #[arg(long)]
     pub limit: Option<u32>,
@@ -86,30 +120,6 @@ pub struct SaveArgs {
     /// Accepts the same forms as `bzr bug list --changed-since`.
     #[arg(long, value_name = "DATE")]
     pub changed_since: Option<String>,
-    /// Filter by Status Whiteboard substring (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub whiteboard: Vec<String>,
-    /// Filter by Target Milestone (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub target_milestone: Vec<String>,
-    /// Filter by Version (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub version: Vec<String>,
-    /// Filter by Operating System (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub op_sys: Vec<String>,
-    /// Filter by Platform (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub platform: Vec<String>,
-    /// Filter by Resolution (repeatable for OR; prefix with ! to exclude); empty matches open bugs
-    #[arg(long)]
-    pub resolution: Vec<String>,
-    /// Filter by QA Contact login (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub qa_contact: Vec<String>,
-    /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub url: Vec<String>,
     #[command(flatten)]
     pub sort_args: crate::cli::SortArgs,
 }
@@ -144,27 +154,10 @@ pub struct UpdateArgs {
     /// Replace the free-text search
     #[arg(long)]
     pub search: Option<String>,
-    /// Replace the product filter (repeatable)
-    #[arg(long)]
-    pub product: Vec<String>,
-    /// Replace the component filter (repeatable)
-    #[arg(long)]
-    pub component: Vec<String>,
-    /// Replace the status filter (repeatable)
-    #[arg(long)]
-    pub status: Vec<String>,
-    /// Replace the assignee filter (repeatable)
-    #[arg(long)]
-    pub assignee: Vec<String>,
-    /// Replace the creator filter (repeatable)
-    #[arg(long)]
-    pub creator: Vec<String>,
-    /// Replace the priority filter (repeatable)
-    #[arg(long)]
-    pub priority: Vec<String>,
-    /// Replace the severity filter (repeatable)
-    #[arg(long)]
-    pub severity: Vec<String>,
+    #[command(flatten)]
+    pub filters: crate::cli::BugFilterArgs,
+    #[command(flatten)]
+    pub actor_filters: crate::cli::BugActorFilterArgs,
     /// Replace the saved limit
     #[arg(long)]
     pub limit: Option<u32>,
@@ -180,30 +173,6 @@ pub struct UpdateArgs {
     /// Replace the saved `last_change_time` filter
     #[arg(long, value_name = "DATE")]
     pub changed_since: Option<String>,
-    /// Replace the Status Whiteboard filter (repeatable)
-    #[arg(long)]
-    pub whiteboard: Vec<String>,
-    /// Replace the Target Milestone filter (repeatable)
-    #[arg(long)]
-    pub target_milestone: Vec<String>,
-    /// Replace the Version filter (repeatable)
-    #[arg(long)]
-    pub version: Vec<String>,
-    /// Replace the Operating System filter (repeatable)
-    #[arg(long)]
-    pub op_sys: Vec<String>,
-    /// Replace the Platform filter (repeatable)
-    #[arg(long)]
-    pub platform: Vec<String>,
-    /// Replace the Resolution filter (repeatable)
-    #[arg(long)]
-    pub resolution: Vec<String>,
-    /// Replace the QA Contact filter (repeatable)
-    #[arg(long)]
-    pub qa_contact: Vec<String>,
-    /// Replace the URL filter (repeatable)
-    #[arg(long)]
-    pub url: Vec<String>,
     /// Reset a field to unset (repeatable). Names match the long flags.
     #[arg(long, value_name = "FIELD")]
     pub clear: Vec<String>,
@@ -250,27 +219,8 @@ pub struct RunArgs {
     /// Same accepted forms as `bzr bug list --changed-since`.
     #[arg(long, value_name = "DATE")]
     pub changed_since: Option<String>,
-    /// Override the saved Whiteboard filter for this run.
-    #[arg(long)]
-    pub whiteboard: Vec<String>,
-    /// Override the saved Target Milestone filter.
-    #[arg(long)]
-    pub target_milestone: Vec<String>,
-    /// Override the saved Version filter.
-    #[arg(long)]
-    pub version: Vec<String>,
-    /// Override the saved Operating System filter.
-    #[arg(long)]
-    pub op_sys: Vec<String>,
-    /// Override the saved Platform filter.
-    #[arg(long)]
-    pub platform: Vec<String>,
-    /// Override the saved Resolution filter.
-    #[arg(long)]
-    pub resolution: Vec<String>,
-    /// Override the saved QA Contact filter.
-    #[arg(long)]
-    pub qa_contact: Vec<String>,
+    #[command(flatten)]
+    pub filters: QueryRunFilterArgs,
     /// Override the saved URL filter.
     #[arg(long)]
     pub url: Vec<String>,

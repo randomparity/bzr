@@ -62,6 +62,62 @@ async fn dispatch_routes_local_query_commands() {
 }
 
 #[tokio::test]
+async fn dispatch_applies_config_flag_without_global_override() {
+    let _lock = ENV_LOCK.lock().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let xdg_home = tmp.path().join("xdg");
+    let explicit_dir = tmp.path().join("explicit");
+    std::fs::create_dir_all(&explicit_dir).unwrap();
+    let explicit_config = explicit_dir.join("config.toml");
+    std::fs::write(
+        &explicit_config,
+        r#"
+default_server = "alternate"
+
+[servers.alternate]
+url = "https://bugzilla.example.test"
+api_key = "secret"
+"#,
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        std::fs::set_permissions(&explicit_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::set_permissions(&explicit_config, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    // SAFETY: tests that mutate process environment hold ENV_LOCK.
+    unsafe {
+        std::env::remove_var("BZR_CONFIG");
+        std::env::set_var("XDG_CONFIG_HOME", xdg_home);
+    };
+
+    let config_arg = explicit_config.to_string_lossy().into_owned();
+    let cli = cli::Cli::try_parse_from([
+        "bzr",
+        "--config",
+        config_arg.as_str(),
+        "--json",
+        "config",
+        "show",
+    ])
+    .unwrap();
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
+    let output = io.out_str().to_string();
+
+    assert!(result.is_ok(), "dispatch failed: {result:?}");
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    assert_eq!(parsed["config_file"], explicit_config.display().to_string());
+    assert_eq!(parsed["default_server"], "alternate");
+    assert_eq!(
+        parsed["servers"]["alternate"]["url"],
+        "https://bugzilla.example.test"
+    );
+}
+
+#[tokio::test]
 async fn dispatch_rejects_dry_run_on_unsupported_command() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
@@ -75,8 +131,6 @@ async fn dispatch_rejects_dry_run_on_unsupported_command() {
         result,
         Err(error::BzrError::InputValidation(ref msg)) if msg.contains("--dry-run")
     ));
-    // The reject must not leak dry-run state into a later command.
-    assert!(!commands::runtime::dry_run::enabled());
 }
 
 #[tokio::test]
@@ -142,6 +196,79 @@ async fn dispatch_allows_dry_run_on_admin_create() {
     let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["resource"], "product");
     assert_eq!(parsed["action"], "dry-run");
+}
+
+#[tokio::test]
+async fn dispatch_allows_credentialless_dry_run_before_connect() {
+    let _lock = ENV_LOCK.lock().await;
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    write_public_config(&tmp, &mock.uri());
+
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let cli = cli::Cli::try_parse_from([
+        "bzr",
+        "--server",
+        "public",
+        "--json",
+        "--dry-run",
+        "product",
+        "create",
+        "--name",
+        "DryRun",
+        "--description",
+        "Preview",
+    ])
+    .unwrap();
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
+    let output = io.out_str().to_string();
+
+    assert!(result.is_ok(), "credentialless dry-run failed: {result:?}");
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    assert_eq!(parsed["resource"], "product");
+    assert_eq!(parsed["action"], "dry-run");
+}
+
+#[tokio::test]
+async fn dispatch_validates_mutation_args_before_credentials() {
+    let _lock = ENV_LOCK.lock().await;
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    write_public_config(&tmp, &mock.uri());
+    let json_path = tmp.path().join("product.json");
+    std::fs::write(&json_path, "{}").unwrap();
+    let json_arg = json_path.to_string_lossy().into_owned();
+
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let cli = cli::Cli::try_parse_from([
+        "bzr",
+        "--server",
+        "public",
+        "product",
+        "create",
+        "--from-json",
+        json_arg.as_str(),
+    ])
+    .unwrap();
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
+
+    assert!(matches!(
+        result,
+        Err(error::BzrError::InputValidation(ref msg))
+            if msg.contains("'name' is required")
+    ));
 }
 
 #[tokio::test]
@@ -236,6 +363,24 @@ async fn dispatch_rejects_whoami_without_credentials() {
         .expect(0)
         .mount(&mock)
         .await;
+
+    let cli = cli::Cli::try_parse_from(["bzr", "--server", "public", "whoami"]).unwrap();
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
+
+    assert!(matches!(
+        result,
+        Err(error::BzrError::Config(ref msg))
+            if msg.contains("whoami") && msg.contains("credentials")
+    ));
+}
+
+#[tokio::test]
+async fn dispatch_uses_current_invocation_context_for_validation_errors() {
+    let _lock = ENV_LOCK.lock().await;
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    write_public_config(&tmp, &mock.uri());
 
     let cli = cli::Cli::try_parse_from(["bzr", "--server", "public", "whoami"]).unwrap();
     let mut io = crate::test_helpers::CapturedIo::new();
@@ -361,7 +506,6 @@ async fn assert_self_signed_inline_server_info_succeeds(
     let cli = cli::Cli::try_parse_from(argv).unwrap();
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
-    commands::runtime::inline_server::set(None);
     server.handle.join().unwrap();
 
     assert!(

@@ -1,9 +1,14 @@
 use crate::cli::{FieldArgs, ListArgs};
 use crate::client::BugzillaClient;
+use crate::commands::bug::search_support::fields::{canonical_field_list, ColumnSpec};
+use crate::commands::bug::search_support::policy::{
+    count_search_params, ensure_no_paging_with_count,
+};
 use crate::error::Result;
-use crate::output::resources::bug::{canonical_field_list, write_bugs, ColumnSpec};
+use crate::output::resources::bug::write_bugs;
 use crate::output::writers::Writers;
-use crate::types::{OutputFormat, SearchParams};
+use crate::types::bug::SearchParams;
+use crate::types::common::OutputFormat;
 use crate::validation::parse_optional_date;
 
 pub(super) async fn handle(
@@ -13,13 +18,8 @@ pub(super) async fn handle(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let ListArgs {
-        product,
-        component,
-        status,
-        assignee,
-        creator,
-        priority,
-        severity,
+        filters,
+        actor_filters,
         id,
         alias,
         summary,
@@ -30,32 +30,17 @@ pub(super) async fn handle(
         },
         created_since,
         changed_since,
-        whiteboard,
-        target_milestone,
-        version,
-        op_sys,
-        platform,
-        resolution,
-        qa_contact,
-        url,
         sort_args,
         page_args: crate::cli::PageArgs { offset, paginate },
         count,
     } = args;
 
-    super::ensure_no_paging_with_count(*count, *offset, *paginate)?;
+    ensure_no_paging_with_count(*count, *offset, *paginate)?;
 
     let creation_time = parse_optional_date(created_since.as_deref(), "--created-since")?;
     let last_change_time = parse_optional_date(changed_since.as_deref(), "--changed-since")?;
 
-    let params = SearchParams {
-        product: product.clone(),
-        component: component.clone(),
-        status: status.clone(),
-        assigned_to: assignee.clone(),
-        creator: creator.clone(),
-        priority: priority.clone(),
-        severity: severity.clone(),
+    let mut params = SearchParams {
         id: id.clone(),
         alias: alias.clone(),
         summary: summary.clone(),
@@ -65,24 +50,16 @@ pub(super) async fn handle(
         exclude_fields: canonical_field_list(exclude_fields.as_deref()),
         creation_time,
         last_change_time,
-        whiteboard: whiteboard.clone(),
-        target_milestone: target_milestone.clone(),
-        version: version.clone(),
-        op_sys: op_sys.clone(),
-        platform: platform.clone(),
-        resolution: resolution.clone(),
-        qa_contact: qa_contact.clone(),
-        url: url.clone(),
         order: Some(crate::validation::build_order(
             sort_args.sort.as_deref(),
             sort_args.order,
         )),
         ..Default::default()
     };
+    filters.write_search_filters(&mut params);
+    actor_filters.write_search_filters(&mut params);
     if *count {
-        let bugs = client
-            .search_bugs(&super::count_search_params(params))
-            .await?;
+        let bugs = client.search_bugs(&count_search_params(params)).await?;
         crate::output::result_types::write_count(bugs.len(), format, w.out);
         return Ok(());
     }

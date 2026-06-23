@@ -4,15 +4,16 @@ use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 
 use crate::cli::{FieldArgs, ViewArgs};
 use crate::client::BugzillaClient;
+use crate::commands::bug::search_support::fields::{canonical_field_list, ColumnSpec};
+use crate::commands::runtime::context::CommandContext;
 use crate::config::Config;
 use crate::error::{BzrError, Result};
-use crate::output::resources::bug::{
-    bug_to_json, canonical_field_list, write_bug_detail, write_multi_bug_view, ColumnSpec,
-    MultiBugRow,
-};
+use crate::output::resources::bug::MultiBugRow;
+use crate::output::resources::bug::{bug_to_json, write_bug_detail, write_multi_bug_view};
 use crate::output::result_types::{write_result, BugViewFailure, MultiBugViewResult};
 use crate::output::writers::Writers;
-use crate::types::{Bug, OutputFormat};
+use crate::types::bug::Bug;
+use crate::types::common::OutputFormat;
 
 #[derive(Clone, Copy)]
 enum BugViewMode {
@@ -110,8 +111,8 @@ pub(super) async fn handle(
 
 /// Handle `bug view --web`: resolve each ID's web page URL from local config
 /// and open it in the browser, or print it when running headless / non-TTY.
-pub(super) fn handle_web(ids: &[String], server: Option<&str>, w: &mut Writers<'_>) -> Result<()> {
-    let urls = resolve_bug_urls(ids, server)?;
+pub(super) fn handle_web(ids: &[String], ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
+    let urls = resolve_bug_urls(ids, ctx)?;
     // Open a browser only with both a terminal stdout and a display; anything
     // else (pipe, redirect, headless) prints the URL instead.
     let interactive = std::io::stdout().is_terminal() && has_display();
@@ -123,9 +124,9 @@ pub(super) fn handle_web(ids: &[String], server: Option<&str>, w: &mut Writers<'
 /// base URL. Pure local config read — no network, no auth. Uses the
 /// unvalidated config so opening a bug page never depends on credentials being
 /// set (here or on any other server entry); only the server's URL is needed.
-fn resolve_bug_urls(ids: &[String], server: Option<&str>) -> Result<Vec<String>> {
-    let config = Config::read_unvalidated()?;
-    let (_name, srv) = config.resolve_server(server)?;
+fn resolve_bug_urls(ids: &[String], ctx: &CommandContext) -> Result<Vec<String>> {
+    let config = Config::read_unvalidated_at(ctx.config_path_override())?;
+    let (_name, srv) = config.resolve_server(ctx.server())?;
     Ok(ids.iter().map(|id| bug_web_url(&srv.url, id)).collect())
 }
 

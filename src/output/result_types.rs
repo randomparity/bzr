@@ -3,7 +3,8 @@ use std::io::Write;
 use serde::Serialize;
 
 use super::formatting::write_json_family;
-use crate::types::OutputFormat;
+use crate::types::bug::Bug;
+use crate::types::common::OutputFormat;
 
 // ── Result output ───────────────────────────────────────────────────
 
@@ -371,7 +372,7 @@ impl BatchCreateResult {
 #[derive(Debug, Serialize)]
 #[non_exhaustive]
 pub struct MultiBugViewResult {
-    pub bugs: Vec<crate::types::Bug>,
+    pub bugs: Vec<Bug>,
     pub failed: Vec<BugViewFailure>,
 }
 

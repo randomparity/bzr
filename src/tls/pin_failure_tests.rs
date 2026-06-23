@@ -22,23 +22,6 @@ fn classifies_pin_mismatch_chain_into_typed_error() {
 }
 
 #[test]
-fn classifies_legacy_issuer_change_chain_into_typed_error() {
-    let chain = "error sending request: ISSUER_CHANGED for test: \
-                 expected \"CN=Good\", got \"CN=Bad\"";
-    let failure = classify_chain(chain);
-
-    let Some(TlsPinFailure::IssuerChanged {
-        expected_issuer,
-        actual_issuer,
-    }) = failure
-    else {
-        panic!("expected issuer changed failure");
-    };
-    assert_eq!(expected_issuer, "CN=Good");
-    assert_eq!(actual_issuer, "CN=Bad");
-}
-
-#[test]
 fn classifies_der_issuer_change_chain_into_typed_error() {
     let chain = "error sending request: ISSUER_CHANGED for test: issuer DER mismatch \
                  (expected 64 bytes, got 65 bytes)";

@@ -6,114 +6,42 @@ use super::{
     ServerAction, TemplateAction, UserAction,
 };
 use crate::types::{ApiMode, ProductListType};
-use clap::{CommandFactory as _, Parser as _};
+use clap::{Command, CommandFactory as _, Parser as _};
 
-/// Doc-comment coverage for items already converted to multi-paragraph
-/// `long_about` per docs/dev/cli-doc-style.md. Phase 1 + 2a of the
-/// CLI doc-expansion plan; extend as phases 2b/2c land. When this list
-/// covers every leaf subcommand, drop the explicit list and walk the
-/// command tree instead.
-const COVERED_PATHS: &[&[&str]] = &[
-    // Phase 1: top-level + 14 group variants
-    &[],
-    &["bug"],
-    &["comment"],
-    &["attachment"],
-    &["config"],
-    &["product"],
-    &["field"],
-    &["user"],
-    &["group"],
-    &["whoami"],
-    &["server"],
-    &["classification"],
-    &["component"],
-    &["template"],
-    &["query"],
-    // Phase 2a: bug.rs actions
-    &["bug", "list"],
-    &["bug", "view"],
-    &["bug", "search"],
-    &["bug", "history"],
-    &["bug", "create"],
-    &["bug", "my"],
-    &["bug", "clone"],
-    &["bug", "update"],
-    // Phase 2a: config.rs actions
-    &["config", "set-server"],
-    &["config", "set-default"],
-    &["config", "show"],
-    &["config", "set-keyring"],
-    &["config", "unset-keyring"],
-    &["config", "migrate-to-keyring"],
-    // Phase 2a: query.rs actions
-    &["query", "save"],
-    &["query", "list"],
-    &["query", "show"],
-    &["query", "delete"],
-    &["query", "run"],
-    // Phase 2b: attachment.rs actions
-    &["attachment", "list"],
-    &["attachment", "download"],
-    &["attachment", "upload"],
-    &["attachment", "update"],
-    // Phase 2b: comment.rs actions
-    &["comment", "list"],
-    &["comment", "add"],
-    &["comment", "tag"],
-    &["comment", "search-tags"],
-    // Phase 2b: user.rs actions
-    &["user", "search"],
-    &["user", "create"],
-    &["user", "update"],
-    // Phase 2b: group.rs actions
-    &["group", "add-user"],
-    &["group", "remove-user"],
-    &["group", "list-users"],
-    &["group", "view"],
-    &["group", "create"],
-    &["group", "update"],
-    // Phase 2b: product.rs actions
-    &["product", "list"],
-    &["product", "view"],
-    &["product", "create"],
-    &["product", "update"],
-    // Phase 2b: template.rs actions
-    &["template", "save"],
-    &["template", "list"],
-    &["template", "show"],
-    &["template", "delete"],
-    // Phase 2b: component.rs actions
-    &["component", "create"],
-    &["component", "update"],
-    // Phase 2c: trivial files
-    &["server", "info"],
-    &["classification", "view"],
-    &["field", "aliases"],
-    &["field", "list"],
-];
+fn display_command_path(path: &[String]) -> String {
+    if path.is_empty() {
+        "bzr".to_string()
+    } else {
+        format!("bzr {}", path.join(" "))
+    }
+}
+
+fn assert_long_about_coverage(command: &Command, path: &mut Vec<String>) {
+    let command_path = display_command_path(path);
+    let about = command.get_about().map(ToString::to_string);
+    let long_about = command.get_long_about().map(ToString::to_string);
+    assert!(
+        long_about.is_some(),
+        "command `{command_path}` is missing long_about \
+         (multi-paragraph doc comment required)"
+    );
+    assert_ne!(
+        about, long_about,
+        "command `{command_path}` has long_about identical to about \
+         (single-paragraph doc -- expand to multi-paragraph per docs/dev/cli-doc-style.md)"
+    );
+
+    for subcommand in command.get_subcommands() {
+        path.push(subcommand.get_name().to_string());
+        assert_long_about_coverage(subcommand, path);
+        path.pop();
+    }
+}
 
 #[test]
 fn cli_doc_long_about_coverage() {
     let cmd = Cli::command();
-    for path in COVERED_PATHS {
-        let mut current = &cmd;
-        for &name in *path {
-            let next = current.get_subcommands().find(|c| c.get_name() == name);
-            current =
-                next.unwrap_or_else(|| panic!("subcommand path {path:?} not found in clap tree"));
-        }
-        let about = current.get_about().map(ToString::to_string);
-        let long_about = current.get_long_about().map(ToString::to_string);
-        assert!(
-            long_about.is_some(),
-            "subcommand path {path:?} is missing long_about (multi-paragraph doc comment required)"
-        );
-        assert_ne!(
-            about, long_about,
-            "subcommand path {path:?} has long_about identical to about (single-paragraph doc -- expand to multi-paragraph per docs/dev/cli-doc-style.md)"
-        );
-    }
+    assert_long_about_coverage(&cmd, &mut Vec::new());
 }
 
 #[test]
@@ -720,6 +648,31 @@ fn parse_config_set_server_without_api_key_source() {
             action: ConfigAction::SetServer {
                 api_key: None,
                 api_key_env: None,
+                ..
+            }
+        }
+    ));
+}
+
+#[test]
+fn parse_config_set_server_auth_method_accepts_documented_query_param() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "config",
+        "set-server",
+        "prod",
+        "--url",
+        "https://bz.example.com",
+        "--auth-method",
+        "query-param",
+    ])
+    .unwrap();
+
+    assert!(matches!(
+        cli.command,
+        Commands::Config {
+            action: ConfigAction::SetServer {
+                auth_method: Some(crate::types::AuthMethod::QueryParam),
                 ..
             }
         }
@@ -1496,6 +1449,23 @@ fn quiet_help_mentions_tracing_is_suppressed() {
 }
 
 #[test]
+fn migrate_to_keyring_help_requires_yes_without_prompt_text() {
+    let mut command = Cli::command();
+    let Some(config) = command.find_subcommand_mut("config") else {
+        panic!("config subcommand exists");
+    };
+    let Some(migrate) = config.find_subcommand_mut("migrate-to-keyring") else {
+        panic!("config migrate-to-keyring subcommand exists");
+    };
+    let help = migrate.render_long_help().to_string();
+
+    assert!(help.contains("`--yes`"), "{help}");
+    assert!(help.contains("required to confirm"), "{help}");
+    assert!(!help.contains("confirmation prompt"), "{help}");
+    assert!(!help.contains("waits for a"), "{help}");
+}
+
+#[test]
 fn parse_api_override() {
     let cli = Cli::try_parse_from(["bzr", "--api", "xmlrpc", "whoami"]).unwrap();
     assert_eq!(cli.api, Some(ApiMode::XmlRpc));
@@ -1533,22 +1503,19 @@ fn parse_bug_list_with_filters() {
         "Firefox",
         "--status",
         "NEW",
+        "--url",
+        "github.com/foo",
         "--limit",
         "25",
     ])
     .unwrap();
     match cli.command {
         Commands::Bug {
-            action:
-                BugAction::List(super::ListArgs {
-                    product,
-                    status,
-                    limit,
-                    ..
-                }),
+            action: BugAction::List(super::ListArgs { filters, limit, .. }),
         } => {
-            assert_eq!(product, vec!["Firefox"]);
-            assert_eq!(status, vec!["NEW"]);
+            assert_eq!(filters.product, vec!["Firefox"]);
+            assert_eq!(filters.status, vec!["NEW"]);
+            assert_eq!(filters.url, vec!["github.com/foo"]);
             assert_eq!(limit, 25);
         }
         _ => panic!("expected Bug List"),
@@ -1653,40 +1620,29 @@ fn bug_my_parses_shared_filter_set() {
     let Commands::Bug {
         action:
             BugAction::My(super::MyArgs {
-                product,
-                component,
-                priority,
-                severity,
+                filters,
                 created_since,
                 changed_since,
-                whiteboard,
-                target_milestone,
-                version,
-                op_sys,
-                platform,
-                resolution,
-                qa_contact,
-                url,
                 ..
             }),
     } = cli.command
     else {
         panic!("expected Bug My");
     };
-    assert_eq!(product, vec!["Core"]);
-    assert_eq!(component, vec!["Networking"]);
-    assert_eq!(priority, vec!["P1"]);
-    assert_eq!(severity, vec!["S2"]);
+    assert_eq!(filters.product, vec!["Core"]);
+    assert_eq!(filters.component, vec!["Networking"]);
+    assert_eq!(filters.priority, vec!["P1"]);
+    assert_eq!(filters.severity, vec!["S2"]);
     assert_eq!(created_since.as_deref(), Some("2026-04-01"));
     assert_eq!(changed_since.as_deref(), Some("2026-04-15T12:00:00Z"));
-    assert_eq!(whiteboard, vec!["needs-review"]);
-    assert_eq!(target_milestone, vec!["5.0"]);
-    assert_eq!(version, vec!["9.4"]);
-    assert_eq!(op_sys, vec!["Linux"]);
-    assert_eq!(platform, vec!["x86_64"]);
-    assert_eq!(resolution, vec!["FIXED"]);
-    assert_eq!(qa_contact, vec!["qa@example.com"]);
-    assert_eq!(url, vec!["github.com/foo"]);
+    assert_eq!(filters.whiteboard, vec!["needs-review"]);
+    assert_eq!(filters.target_milestone, vec!["5.0"]);
+    assert_eq!(filters.version, vec!["9.4"]);
+    assert_eq!(filters.op_sys, vec!["Linux"]);
+    assert_eq!(filters.platform, vec!["x86_64"]);
+    assert_eq!(filters.resolution, vec!["FIXED"]);
+    assert_eq!(filters.qa_contact, vec!["qa@example.com"]);
+    assert_eq!(filters.url, vec!["github.com/foo"]);
 }
 
 #[test]
@@ -1887,17 +1843,16 @@ fn parse_query_save_list_kind() {
     match cli.command {
         Commands::Query {
             action:
-                QueryAction::Save(super::query::SaveArgs {
+                QueryAction::Save(super::SaveArgs {
                     name,
-                    product,
-                    status,
+                    filters,
                     limit,
                     ..
                 }),
         } => {
             assert_eq!(name, "firefox-new");
-            assert_eq!(product, vec!["Firefox"]);
-            assert_eq!(status, vec!["NEW"]);
+            assert_eq!(filters.product, vec!["Firefox"]);
+            assert_eq!(filters.status, vec!["NEW"]);
             assert_eq!(limit, Some(25));
         }
         _ => panic!("expected Query Save"),
@@ -1920,7 +1875,7 @@ fn parse_query_save_search_kind() {
     match cli.command {
         Commands::Query {
             action:
-                QueryAction::Save(super::query::SaveArgs {
+                QueryAction::Save(super::SaveArgs {
                     name,
                     search,
                     limit,
@@ -1940,7 +1895,7 @@ fn parse_query_run() {
     let cli = Cli::try_parse_from(["bzr", "query", "run", "firefox-new"]).unwrap();
     match cli.command {
         Commands::Query {
-            action: QueryAction::Run(super::query::RunArgs { name, limit, .. }),
+            action: QueryAction::Run(super::RunArgs { name, limit, .. }),
         } => {
             assert_eq!(name, "firefox-new");
             assert!(limit.is_none());
@@ -1954,7 +1909,7 @@ fn parse_query_run_with_limit_override() {
     let cli = Cli::try_parse_from(["bzr", "query", "run", "firefox-new", "--limit", "10"]).unwrap();
     match cli.command {
         Commands::Query {
-            action: QueryAction::Run(super::query::RunArgs { name, limit, .. }),
+            action: QueryAction::Run(super::RunArgs { name, limit, .. }),
         } => {
             assert_eq!(name, "firefox-new");
             assert_eq!(limit, Some(10));
@@ -1968,7 +1923,7 @@ fn parse_query_run_count() {
     let cli = Cli::try_parse_from(["bzr", "query", "run", "firefox-new", "--count"]).unwrap();
     match cli.command {
         Commands::Query {
-            action: QueryAction::Run(super::query::RunArgs { name, count, .. }),
+            action: QueryAction::Run(super::RunArgs { name, count, .. }),
         } => {
             assert_eq!(name, "firefox-new");
             assert!(count);
@@ -1993,7 +1948,7 @@ fn parse_query_show() {
     let cli = Cli::try_parse_from(["bzr", "query", "show", "firefox-new"]).unwrap();
     match cli.command {
         Commands::Query {
-            action: QueryAction::Show(super::query::ShowArgs { name }),
+            action: QueryAction::Show(super::ShowArgs { name }),
         } => {
             assert_eq!(name, "firefox-new");
         }
@@ -2006,7 +1961,7 @@ fn parse_query_delete() {
     let cli = Cli::try_parse_from(["bzr", "query", "delete", "firefox-new"]).unwrap();
     match cli.command {
         Commands::Query {
-            action: QueryAction::Delete(super::query::DeleteArgs { name }),
+            action: QueryAction::Delete(super::DeleteArgs { name }),
         } => {
             assert_eq!(name, "firefox-new");
         }
@@ -2205,7 +2160,7 @@ fn parse_attachment_upload_with_summary() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     bug_id,
                     file,
                     summary,
@@ -2234,7 +2189,7 @@ fn parse_attachment_upload_with_private_flag() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     bug_id, private, ..
                 }),
         } => {
@@ -2250,7 +2205,7 @@ fn parse_attachment_upload_without_private_defaults_to_false() {
     let cli = Cli::try_parse_from(["bzr", "attachment", "upload", "42", "f.txt"]).unwrap();
     match cli.command {
         Commands::Attachment {
-            action: AttachmentAction::Upload(super::attachment::UploadArgs { private, .. }),
+            action: AttachmentAction::Upload(super::UploadArgs { private, .. }),
         } => assert!(!private, "--private absent should default to false"),
         _ => panic!("expected Attachment Upload"),
     }
@@ -2271,7 +2226,7 @@ fn parse_attachment_upload_with_comment() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     bug_id,
                     file,
                     comment,
@@ -2301,7 +2256,7 @@ fn parse_attachment_upload_with_comment_dash() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     bug_id, comment, ..
                 }),
         } => {
@@ -2327,7 +2282,7 @@ fn parse_attachment_upload_with_comment_file() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     bug_id,
                     comment_file,
                     ..
@@ -2358,7 +2313,7 @@ fn parse_attachment_upload_with_comment_file_dash() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     bug_id,
                     comment_file,
                     ..
@@ -2395,7 +2350,7 @@ fn parse_attachment_upload_without_comment_defaults_to_none() {
     let cli = Cli::try_parse_from(["bzr", "attachment", "upload", "42", "f.txt"]).unwrap();
     match cli.command {
         Commands::Attachment {
-            action: AttachmentAction::Upload(super::attachment::UploadArgs { comment, .. }),
+            action: AttachmentAction::Upload(super::UploadArgs { comment, .. }),
         } => assert!(comment.is_none(), "--comment absent should default to None"),
         _ => panic!("expected Attachment Upload"),
     }
@@ -2408,7 +2363,7 @@ fn parse_attachment_upload_with_patch_flag() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     bug_id,
                     patch,
                     no_patch,
@@ -2429,7 +2384,7 @@ fn parse_attachment_upload_without_patch_defaults_to_false() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     patch, no_patch, ..
                 }),
         } => {
@@ -2449,7 +2404,7 @@ fn parse_attachment_no_patch_overrides_patch() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Update(super::attachment::UpdateArgs {
+                AttachmentAction::Update(super::AttachmentUpdateArgs {
                     patch, no_patch, ..
                 }),
         } => {
@@ -2487,7 +2442,7 @@ fn parse_attachment_upload_with_comment_private() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     bug_id,
                     comment,
                     comment_private,
@@ -2508,7 +2463,7 @@ fn parse_attachment_upload_without_comment_private_defaults_to_false() {
     match cli.command {
         Commands::Attachment {
             action:
-                AttachmentAction::Upload(super::attachment::UploadArgs {
+                AttachmentAction::Upload(super::UploadArgs {
                     comment_private, ..
                 }),
         } => assert!(
@@ -2584,30 +2539,19 @@ fn bug_list_parses_158_field_filters() {
     ])
     .unwrap();
     let Commands::Bug {
-        action:
-            BugAction::List(super::ListArgs {
-                whiteboard,
-                target_milestone,
-                version,
-                op_sys,
-                platform,
-                resolution,
-                qa_contact,
-                url,
-                ..
-            }),
+        action: BugAction::List(super::ListArgs { filters, .. }),
     } = cli.command
     else {
         panic!("expected Bug::List variant");
     };
-    assert_eq!(whiteboard, vec!["wip"]);
-    assert_eq!(target_milestone, vec!["5.0"]);
-    assert_eq!(version, vec!["9.4"]);
-    assert_eq!(op_sys, vec!["Linux"]);
-    assert_eq!(platform, vec!["x86_64"]);
-    assert_eq!(resolution, vec!["FIXED"]);
-    assert_eq!(qa_contact, vec!["qa@example.com"]);
-    assert_eq!(url, vec!["github.com/foo"]);
+    assert_eq!(filters.whiteboard, vec!["wip"]);
+    assert_eq!(filters.target_milestone, vec!["5.0"]);
+    assert_eq!(filters.version, vec!["9.4"]);
+    assert_eq!(filters.op_sys, vec!["Linux"]);
+    assert_eq!(filters.platform, vec!["x86_64"]);
+    assert_eq!(filters.resolution, vec!["FIXED"]);
+    assert_eq!(filters.qa_contact, vec!["qa@example.com"]);
+    assert_eq!(filters.url, vec!["github.com/foo"]);
 }
 
 #[test]
@@ -2623,24 +2567,24 @@ fn bug_list_parses_repeated_whiteboard() {
     ])
     .unwrap();
     let Commands::Bug {
-        action: BugAction::List(super::ListArgs { whiteboard, .. }),
+        action: BugAction::List(super::ListArgs { filters, .. }),
     } = cli.command
     else {
         panic!("expected Bug::List variant");
     };
-    assert_eq!(whiteboard, vec!["wip", "review"]);
+    assert_eq!(filters.whiteboard, vec!["wip", "review"]);
 }
 
 #[test]
 fn bug_list_parses_negated_whiteboard() {
     let cli = Cli::try_parse_from(["bzr", "bug", "list", "--whiteboard", "!wip"]).unwrap();
     let Commands::Bug {
-        action: BugAction::List(super::ListArgs { whiteboard, .. }),
+        action: BugAction::List(super::ListArgs { filters, .. }),
     } = cli.command
     else {
         panic!("expected Bug::List variant");
     };
-    assert_eq!(whiteboard, vec!["!wip"]);
+    assert_eq!(filters.whiteboard, vec!["!wip"]);
 }
 
 #[test]
@@ -2669,30 +2613,19 @@ fn query_save_parses_158_field_filters() {
     ])
     .unwrap();
     let Commands::Query {
-        action:
-            QueryAction::Save(super::query::SaveArgs {
-                whiteboard,
-                target_milestone,
-                version,
-                op_sys,
-                platform,
-                resolution,
-                qa_contact,
-                url,
-                ..
-            }),
+        action: QueryAction::Save(super::SaveArgs { filters, .. }),
     } = cli.command
     else {
         panic!("expected Query::Save variant");
     };
-    assert_eq!(whiteboard, vec!["wip"]);
-    assert_eq!(target_milestone, vec!["5.0"]);
-    assert_eq!(version, vec!["9.4"]);
-    assert_eq!(op_sys, vec!["Linux"]);
-    assert_eq!(platform, vec!["x86_64"]);
-    assert_eq!(resolution, vec!["FIXED"]);
-    assert_eq!(qa_contact, vec!["qa@example.com"]);
-    assert_eq!(url, vec!["github.com/foo"]);
+    assert_eq!(filters.whiteboard, vec!["wip"]);
+    assert_eq!(filters.target_milestone, vec!["5.0"]);
+    assert_eq!(filters.version, vec!["9.4"]);
+    assert_eq!(filters.op_sys, vec!["Linux"]);
+    assert_eq!(filters.platform, vec!["x86_64"]);
+    assert_eq!(filters.resolution, vec!["FIXED"]);
+    assert_eq!(filters.qa_contact, vec!["qa@example.com"]);
+    assert_eq!(filters.url, vec!["github.com/foo"]);
 }
 
 #[test]
@@ -2721,29 +2654,18 @@ fn query_run_parses_158_field_filter_overrides() {
     ])
     .unwrap();
     let Commands::Query {
-        action:
-            QueryAction::Run(super::query::RunArgs {
-                whiteboard,
-                target_milestone,
-                version,
-                op_sys,
-                platform,
-                resolution,
-                qa_contact,
-                url,
-                ..
-            }),
+        action: QueryAction::Run(super::RunArgs { filters, url, .. }),
     } = cli.command
     else {
         panic!("expected Query::Run variant");
     };
-    assert_eq!(whiteboard, vec!["overridden"]);
-    assert_eq!(target_milestone, vec!["6.0"]);
-    assert_eq!(version, vec!["10.0"]);
-    assert_eq!(op_sys, vec!["Windows"]);
-    assert_eq!(platform, vec!["arm64"]);
-    assert_eq!(resolution, vec!["WONTFIX"]);
-    assert_eq!(qa_contact, vec!["newqa@example.com"]);
+    assert_eq!(filters.whiteboard, vec!["overridden"]);
+    assert_eq!(filters.target_milestone, vec!["6.0"]);
+    assert_eq!(filters.version, vec!["10.0"]);
+    assert_eq!(filters.op_sys, vec!["Windows"]);
+    assert_eq!(filters.platform, vec!["arm64"]);
+    assert_eq!(filters.resolution, vec!["WONTFIX"]);
+    assert_eq!(filters.qa_contact, vec!["newqa@example.com"]);
     assert_eq!(url, vec!["gitlab.com/x"]);
 }
 
@@ -2892,7 +2814,7 @@ fn parse_query_save_search_alone_is_accepted() {
     .unwrap();
     match cli.command {
         Commands::Query {
-            action: QueryAction::Save(super::query::SaveArgs { name, search, .. }),
+            action: QueryAction::Save(super::SaveArgs { name, search, .. }),
         } => {
             assert_eq!(name, "crashes");
             assert_eq!(search.as_deref(), Some("crash in tab"));
@@ -2974,7 +2896,7 @@ fn parse_query_update_accepts_from_url_with_refresh_overrides() {
     match cli.command {
         Commands::Query {
             action:
-                QueryAction::Update(super::query::UpdateArgs {
+                QueryAction::Update(super::QueryUpdateArgs {
                     name,
                     from_url,
                     limit,

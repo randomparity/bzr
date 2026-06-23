@@ -5,7 +5,8 @@ use colored::Colorize;
 use crate::output::formatting::{
     opt_yes_no, write_field, write_formatted, write_optional_field, write_table_or_empty, TableSpec,
 };
-use crate::types::{BugzillaUser, OutputFormat, WhoamiResponse};
+use crate::types::common::OutputFormat;
+use crate::types::user::{BugzillaUser, WhoamiResponse};
 
 const USER_HEADERS: &[&str] = &["ID", "NAME", "REAL NAME", "EMAIL"];
 const DETAILED_USER_HEADERS: &[&str] = &["ID", "NAME", "REAL NAME", "EMAIL", "CAN LOGIN", "GROUPS"];

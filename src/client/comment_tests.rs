@@ -220,7 +220,11 @@ async fn add_comment_private_sets_is_private_in_body() {
         .await;
 
     let client = test_client(&mock.uri());
-    let id = client.add_comment(42, "secret", true).await.unwrap();
+    let params = crate::types::AddCommentParams {
+        text: "secret".into(),
+        is_private: true,
+    };
+    let id = client.add_comment(42, &params).await.unwrap();
     assert_eq!(id, 999);
 }
 
@@ -238,7 +242,11 @@ async fn add_comment_public_sets_is_private_false() {
         .await;
 
     let client = test_client(&mock.uri());
-    let id = client.add_comment(42, "public", false).await.unwrap();
+    let params = crate::types::AddCommentParams {
+        text: "public".into(),
+        is_private: false,
+    };
+    let id = client.add_comment(42, &params).await.unwrap();
     assert_eq!(id, 1000);
 }
 

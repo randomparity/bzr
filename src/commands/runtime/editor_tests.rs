@@ -16,6 +16,28 @@ fn tempfile_writes_initial_content_and_cleans_up_on_drop() {
 }
 
 #[test]
+fn tempfile_uses_unique_paths_for_live_files_with_same_prefix() {
+    let first = super::create_tempfile("test-tempfile-unique", "first\n").unwrap();
+    let second = super::create_tempfile("test-tempfile-unique", "second\n").unwrap();
+
+    assert_ne!(first.path, second.path);
+    assert_eq!(std::fs::read_to_string(&first.path).unwrap(), "first\n");
+    assert_eq!(std::fs::read_to_string(&second.path).unwrap(), "second\n");
+}
+
+#[test]
+fn tempfile_create_error_names_temp_path() {
+    let result = super::create_tempfile("missing-parent/test-tempfile", "hello\n");
+    assert!(result.is_err(), "expected tempfile creation to fail");
+    let err = result.err().unwrap().to_string();
+
+    assert!(
+        err.contains("create editor temp file") && err.contains("missing-parent"),
+        "error should name temp file path, got: {err}"
+    );
+}
+
+#[test]
 fn launch_returns_post_edit_content_via_fake_editor() {
     let _guard = crate::ENV_LOCK.blocking_lock();
     let script_dir = std::env::temp_dir();
@@ -39,6 +61,35 @@ fn launch_returns_post_edit_content_via_fake_editor() {
         }
     }
     let _ = std::fs::remove_file(&script);
+}
+
+#[test]
+fn launch_error_names_editor_command() {
+    let _guard = crate::ENV_LOCK.blocking_lock();
+    let missing_editor =
+        std::env::temp_dir().join(format!("bzr-missing-editor-{}", std::process::id()));
+    let prev = std::env::var("EDITOR").ok();
+    // SAFETY: ENV_LOCK guarantees no other thread is reading or writing the environment for the lifetime of `_guard`.
+    unsafe { std::env::set_var("EDITOR", &missing_editor) };
+
+    let err = super::launch("initial\n", "test-missing-editor")
+        .unwrap_err()
+        .to_string();
+
+    // SAFETY: ENV_LOCK guarantees no other thread is reading or writing the environment for the lifetime of `_guard`.
+    unsafe {
+        if let Some(p) = prev {
+            std::env::set_var("EDITOR", p);
+        } else {
+            std::env::remove_var("EDITOR");
+        }
+    }
+    let missing_editor = missing_editor.to_string_lossy();
+
+    assert!(
+        err.contains("launch editor") && err.contains(missing_editor.as_ref()),
+        "error should name editor command, got: {err}"
+    );
 }
 
 #[test]

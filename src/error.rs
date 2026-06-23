@@ -78,6 +78,13 @@ pub enum BzrError {
 
 pub type Result<T> = std::result::Result<T, BzrError>;
 
+pub(crate) fn io_with_context(context: impl fmt::Display, error: &std::io::Error) -> BzrError {
+    BzrError::Io(std::io::Error::new(
+        error.kind(),
+        format!("{context}: {error}"),
+    ))
+}
+
 // Error type constants for type-safe error classification
 const ERROR_TYPE_CONFIG: &str = "config";
 const ERROR_TYPE_API: &str = "api";
@@ -137,9 +144,9 @@ pub(crate) fn format_error_chain(err: &dyn std::error::Error) -> String {
 /// Format a reqwest error for display: redact API keys and add TLS hints.
 fn format_http_error(err: &reqwest::Error) -> String {
     let chain = format_error_chain(err);
-    let mut msg = crate::http::redact_api_key(&chain);
-    if crate::http::is_connect_tls_error(err.is_connect(), &chain) {
-        msg.push_str(crate::http::TLS_HINT);
+    let mut msg = crate::bugzilla_auth::redact_api_key(&chain);
+    if crate::tls::is_connect_tls_error(err.is_connect(), &chain) {
+        msg.push_str(crate::tls::TLS_HINT);
     }
     msg
 }

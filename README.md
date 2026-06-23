@@ -7,7 +7,11 @@
 [![MSRV: 1.89](https://img.shields.io/badge/MSRV-1.89-blue.svg)](https://blog.rust-lang.org/2025/06/26/Rust-1.89.0/)
 [![crates.io](https://img.shields.io/crates/v/bzr.svg)](https://crates.io/crates/bzr)
 
-A command-line interface for Bugzilla servers, written in Rust. Inspired by the GitHub CLI (`gh`), `bzr` lets you search, view, create, and update bugs, manage comments and attachments, and switch between multiple Bugzilla instances — all from your terminal.
+A command-line interface for Bugzilla servers, written in Rust. Inspired by the
+GitHub CLI (`gh`), `bzr` lets you search, view, create, and update bugs, manage
+comments and attachments, switch between multiple Bugzilla instances, and use
+REST, XML-RPC, or hybrid API transport as each server requires — all from your
+terminal.
 
 > **A note on the name.** `bzr` was historically the command for [GNU Bazaar](https://en.wikipedia.org/wiki/GNU_Bazaar), a version-control system. Bazaar's last release was in 2016, Canonical [announced its retirement in 2025](https://blog.launchpad.net/general/phasing-out-bazaar-code-hosting), and its maintained successor **Breezy renamed its command to `brz`** — so the `bzr` name is effectively being vacated by the VCS world. This project keeps `bzr` (it reads as "Bugzilla" the way `gh` reads as "GitHub"). If you also have GNU Bazaar/Breezy installed and want to keep using `bzr` for it, alias this tool instead, e.g. `alias bz=bzr`. See [the decision record](docs/decisions/0001-bzr-command-name.md) for the full rationale.
 
@@ -475,15 +479,17 @@ CA in the trust store is later compromised.
 
 - `--tls-ca-cert <path>`: pin a custom CA certificate (PEM file). The
   server must present a chain that verifies against this CA.
-- `--tls-pin-sha256 <hex>`: pin the SHA-256 fingerprint of the server's
-  leaf certificate Subject Public Key Info (SPKI). The server must
-  present a leaf certificate whose SPKI matches this fingerprint.
+- `--tls-pin-sha256 <pin>`: pin the SHA-256 fingerprint of the server's
+  leaf certificate in `sha256//<base64>` format. The server must present
+  a leaf certificate whose DER bytes hash to this fingerprint.
 
 ### Trust on first use
 
 If you don't already know the pin, use `--tls-pin-now`. `bzr` connects
-once, captures the leaf certificate's SPKI fingerprint, prints it, and
-prompts before storing it:
+once, captures the leaf certificate fingerprint, prints it, and prompts
+before storing it. When issuer DER can be extracted, `bzr` also stores a
+DER-backed issuer guard so future issuer changes can be reported as
+`IssuerChanged`; the human-readable `tls_pin_issuer` is display-only.
 
 ```sh
 bzr config set-server my-bz --url https://bugzilla.example.com --tls-pin-now

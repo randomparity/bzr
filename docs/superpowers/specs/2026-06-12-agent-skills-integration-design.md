@@ -70,7 +70,7 @@ bzr/
 ├── install.ps1                     # UNCHANGED — bzr binary installer (Windows)
 ├── agent-skills/                   # NEW — self-contained skill artifact
 │   ├── README.md                   # adapted from bzr-skill README (in-repo paths)
-│   ├── VERSION                     # skill-set version (0.1.0), distinct from crate version
+│   ├── VERSION                     # lockstep bzr version; matches Cargo.toml
 │   ├── install.sh                  # skill installer (POSIX sh, set -eu)
 │   ├── install.ps1                 # Windows parity
 │   ├── skills/
@@ -107,19 +107,23 @@ the re-pinned strings are unchanged.
 
 ## Versioning Model
 
-Two independent version concepts, kept separate:
+The active in-repo contract is lockstep with the CLI:
 
-- **`agent-skills/VERSION`** — the skill-set's own version (starts at `0.1.0`).
-  The installer stamps it into each `.bzr-skill-managed` sentinel and `--list`
-  compares it for staleness. It does **not** track the crate version.
-- **bzr-surface pin** — the `bzr` version the command surface was authored and
-  verified against. Recorded as a content fact in
-  `skills/bzr-reference/reference/commands.{md,yml}` and the `SKILL.md` "authored
-  against bzr X.Y.Z" lines. Re-pinned from `0.4.2` to **`0.4.4`** (latest stable
-  release; the repo is at `0.4.5-dev`).
+- **`agent-skills/VERSION`** matches the crate version in `Cargo.toml`. The
+  installer stamps it into each `.bzr-skill-managed` sentinel and `--list`
+  compares it for staleness, so installed skills are stale whenever the checked
+  out `bzr` version changes.
+- **bzr-surface pin** uses the same version string in
+  `skills/bzr-reference/reference/commands.{md,yml}` and the `SKILL.md`
+  "authored against bzr X.Y.Z" lines.
 
-Re-pin work:
-- Update every "0.4.2" reference in `agent-skills/skills/**` to `0.4.4`.
+This supersedes the standalone `bzr-skill` version model carried into the
+initial integration plan. The 0.5.0 refresh moved the skill package into
+lockstep with the tool version.
+
+Re-pin work when `Cargo.toml` changes:
+- Update `agent-skills/VERSION` to the crate version.
+- Update the authored-against references in `agent-skills/skills/**`.
 - Reconcile `commands.yml` against the **locally built** binary so the drift
   check produces **no ERROR lines** (a listed verb the binary lacks is an error;
   a binary verb not listed is an acceptable warning). Build with `cargo build`

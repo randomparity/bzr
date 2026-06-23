@@ -25,21 +25,54 @@ Git hooks: `make install-hooks` installs a pre-commit hook (`cargo fmt --check` 
 
 ## Architecture
 
-Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches `Commands` enum → delegates to `commands/*.rs::execute()` → which loads `Config`, resolves auth, builds `BugzillaClient`, calls API, and formats output.
+Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches the
+`Commands` enum → delegates to resource modules under `commands/` → those load
+`Config`, resolve auth, build `BugzillaClient`, call the API, and format output.
 
 ### Key modules
 
 - **`cli/`** — clap derive structs split into per-resource submodules. `mod.rs` defines `Cli`, `Commands`, and re-exports all `*Action` enums. Per-resource files (`bug.rs`, `comment.rs`, `attachment.rs`, `config.rs`, `product.rs`, `field.rs`, `user.rs`, `group.rs`, `server.rs`, `classification.rs`, `component.rs`, `template.rs`, `query.rs`) each define one action enum.
 - **`client/`** — `BugzillaClient` wraps reqwest for Bugzilla REST API. Split into per-resource submodules (`bug.rs`, `attachment.rs`, `comment.rs`, `product.rs`, `user.rs`, `group.rs`, `component.rs`, `classification.rs`, `field.rs`, `server.rs`). `auth/` submodule handles auth detection (split into `whoami.rs` and `valid_login.rs` probing strategies with `mod.rs` as orchestrator). `version.rs` handles version detection and API mode determination. Public data types live in `types/`.
-- **`config.rs`** — `Config` and `ServerConfig` structs. TOML file at `~/.config/bzr/config.toml`. Multiple named servers with a default. Uses `AuthMethod` and `ApiMode` from `types/common.rs`; `AuthMethod` (`Header`/`QueryParam`) persisted per-server.
+- **`config/`** — configuration subsystem for `~/.config/bzr/config.toml`.
+  `model.rs` owns the persisted domain model (`Config`, `ServerConfig`,
+  credential source types, saved templates, and saved queries). `store.rs`
+  owns path resolution (`--config`/`BZR_CONFIG`/XDG default), advisory locking,
+  unvalidated reads, validation-on-load, atomic persistence, stale temp cleanup,
+  and permissions hardening. Multiple named servers share one default; per-server
+  auth/API/TLS detection state is persisted here.
 - **`error.rs`** — `BzrError` enum (thiserror) with 18 variants: `Http`, `Config`, `Api`, `Io`, `TomlParse`, `TomlSerialize`, `XmlRpc`, `NotFound`, `HttpStatus`, `InputValidation`, `Deserialize`, `Auth`, `DataIntegrity`, `BatchPartialFailure`, `Keyring`, `PinMismatch`, `IssuerChanged`, `MidAirCollision`. Each variant has a distinct `exit_code()` and `error_type()`. `Result<T>` type alias.
 - **`output/`** — `mod.rs` is deliberately *not* a re-export facade: command modules import each writer from its owning leaf module so unused facade exports don't accumulate as output formats change. `formatting.rs` holds formatting primitives (`write_formatted`, `write_json_family`, field helpers). `result_types.rs` holds mutation result types (`ActionResult`, `ResourceKind`, `MembershipResult`, etc.) and the shared `write_result`/`write_saved`/`write_count` helpers. `writers.rs` defines the `Writers` stdout/stderr bundle. Per-resource writers live under `output/resources/` (`bug.rs`, `comment.rs`, `attachment.rs`, `product.rs`, `classification.rs`, `component.rs`, `user.rs`, `group.rs`, `field.rs`, `server.rs`, `config.rs`, `template.rs`, `query.rs`), each handling one domain type. Uses `tabled` for tables, `colored` for status colors.
-- **`commands/`** — Each network command submodule has an async `execute()` function taking `(action, server, format, api, w)` (where `w: &mut Writers` bundles the stdout/stderr sinks) and following the pattern: load config → resolve auth → connect client → call API → print output. Two exceptions: `config.rs` shares the same async signature but does local I/O only (it ignores the `server`/`api` params) and `whoami.rs` has no action enum (no subcommands). Cross-cutting command infrastructure lives under `commands/runtime/`: `runtime::shared` provides `connect_and_configure()` (config load + auth detection + client construction) and the body-source helpers; `runtime::flags` handles Bugzilla flag syntax parsing; `runtime::{dry_run,confirm,inline_server}` hold process-global flags set in dispatch; `runtime::paging` drives search pagination; `runtime::editor` invokes `$EDITOR`. See `src/commands/mod.rs` for the complete list of command modules.
+- **`commands/`** — Resource command submodules expose async
+  `execute(action, &CommandContext, &mut Writers)` entry points (where `Writers`
+  bundles stdout/stderr). `lib.rs::dispatch()` builds one `CommandContext` for
+  the invocation and passes it across command boundaries; the context carries
+  server, output format, API mode, dry-run, confirmation, inline-server,
+  config-path, timeout, and retry settings. Network commands follow the
+  pattern: load config → resolve auth → connect client → call API → print
+  output. Local-only commands under `commands/config/` use the same context
+  boundary but do local I/O, while `whoami.rs` has no action enum. Cross-cutting command
+  infrastructure lives under `commands/runtime/`: `runtime::shared` provides
+  `connect_and_configure()` (config load + auth detection + client construction)
+  and body-source helpers; `runtime::context` owns per-invocation flags;
+  `runtime::confirm` handles batch prompts; `runtime::inline_server` models
+  inline server configuration; `runtime::flags` handles Bugzilla flag syntax
+  parsing; `runtime::paging` drives search pagination; `runtime::editor`
+  invokes `$EDITOR`. See `src/commands/mod.rs` for the complete list of command
+  modules.
 
 ### Conventions
 
-- User-facing output should use `writeln!(io::stdout(), …)` / `writeln!(io::stderr(), …)` rather than `println!`/`eprintln!`. Two reasons: (a) `print_stdout`/`print_stderr` are denied project-wide, so every `println!` site needs an `#[expect(clippy::print_stdout)]` escape hatch; (b) `test_helpers::capture_stdout` redirects fd 1 via `dup2`, which captures `writeln!(io::stdout(), …)` but **not** `println!` — `println!` goes through cargo test's per-test stdout-capture (a thread-local installed by `set_output_capture`) and bypasses fd 1 entirely. Mixing the two in the same function silently breaks `capture_stdout` tests. The helpers in `src/output/formatting.rs` already follow this convention; new output code should match. Discard the `Result` with `let _ = writeln!(…)` if the function isn't already in a context that allows `.expect()`.
-- `#[expect(clippy::print_stdout)]` is used to allow `println!` in the few remaining sites that haven't been migrated to `writeln!`, since `print_stdout` is denied project-wide.
+- User-facing CLI output should go through `Writers` (`w.out`/`w.err`) and the
+  output helpers, which ultimately use `writeln!(io::stdout(), …)` /
+  `writeln!(io::stderr(), …)` rather than `println!`/`eprintln!`. This keeps
+  command output testable with `test_helpers::capture_stdout`, which redirects
+  fd 1 via `dup2`; `println!` goes through cargo test's per-test stdout capture
+  and bypasses fd 1. Discard the `Result` with `let _ = writeln!(…)` if the
+  function isn't already in a context that allows `.expect()`.
+- Direct `println!`/`eprintln!` is reserved for non-CLI process integration:
+  Cargo directives in `build.rs` and `xtask` status output. Do not add
+  `#[expect(clippy::print_stdout)]` or `#[expect(clippy::print_stderr)]` in
+  `src/`; use `Writers` for user output and `tracing` for diagnostics.
 - Logging uses `tracing` (not println). Verbosity: `-v`=info, `-vv`=debug, `-vvv`=trace. `RUST_LOG` env var overrides.
 - URLs are sanitized via `safe_url()` in debug logs to avoid leaking API keys in query params.
 - Tests use `wiremock` for HTTP mocking. Unit tests live in sibling `<name>_tests.rs` files linked from each source file via `#[cfg(test)] #[path = "<name>_tests.rs"] mod tests;` — inline `mod tests { ... }` blocks are **not permitted** in `src/` and `make check-test-layout` enforces this in CI. The reasons are twofold: (1) SonarCloud's CPD scanner is configured to exclude `**/*_tests.rs` (see `sonar-project.properties`), so test-fixture boilerplate stays out of the duplication metric without forcing bad abstractions; (2) it keeps production source files focused. There is no size threshold — even tiny test mods get their own sibling. Test-helpers modules used only by tests follow the same separation (e.g. `src/client/test_helpers.rs`). Sibling files start with the appropriate file-level inner attribute (`#![expect(clippy::unwrap_used)]`, or whatever the original outer attribute was — including combined forms like `#![expect(clippy::unwrap_used, clippy::panic)]`); siblings whose tests don't trigger the lint omit it. Integration tests live in `tests/integration.rs` and functional tests in `tests/functional/`. All API tests require `#[tokio::test]` (the runtime is tokio). See `docs/superpowers/specs/2026-05-05-test-sibling-migration-design.md` for full rationale.

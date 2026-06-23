@@ -52,21 +52,12 @@ fn parse_pin_mismatch_details(chain: &str) -> Option<(String, String, String)> {
 
 fn parse_issuer_changed_details(chain: &str) -> Option<(String, String)> {
     let rest = chain.get(chain.find("ISSUER_CHANGED")?..)?;
-    if rest.contains("issuer DER mismatch") {
-        return Some((
+    rest.contains("issuer DER mismatch").then(|| {
+        (
             "pinned issuer DER".to_string(),
             "presented issuer DER".to_string(),
-        ));
-    }
-    let expected_start = rest.find("expected \"")? + "expected \"".len();
-    let after_expected = &rest[expected_start..];
-    let expected_end = after_expected.find('"')?;
-    let expected = after_expected[..expected_end].to_string();
-    let got_start = after_expected[expected_end..].find("got \"")? + expected_end + "got \"".len();
-    let after_got = &after_expected[got_start..];
-    let got_end = after_got.find('"')?;
-    let actual = after_got[..got_end].to_string();
-    Some((expected, actual))
+        )
+    })
 }
 
 #[cfg(test)]

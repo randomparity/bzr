@@ -1,6 +1,6 @@
 use super::BugzillaClient;
 use crate::error::Result;
-use crate::types::{ServerExtensions, ServerInfoResponse, ServerVersion};
+use crate::types::common::{ServerExtensions, ServerInfoResponse, ServerVersion};
 
 impl BugzillaClient {
     /// Fetch version and extensions from the server (two sequential requests).

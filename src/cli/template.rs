@@ -1,4 +1,4 @@
-use crate::types::BugTemplate;
+use crate::types::template::BugTemplate;
 use clap::{Args, Subcommand};
 
 /// The default-field flags shared by `template save` and `template update`.

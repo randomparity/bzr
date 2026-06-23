@@ -1,15 +1,11 @@
 #![expect(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::collections::BTreeSet;
-
 use wiremock::matchers::{body_json, body_partial_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::BugAction;
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
-
-use super::JsonUpdateBug;
 
 /// Borrow the inner `UpdateArgs` from a `BugAction::Update` test fixture.
 fn as_update_args(action: &BugAction) -> &crate::cli::UpdateArgs {
@@ -161,90 +157,6 @@ fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
     path.to_string_lossy().into_owned()
 }
 
-fn schema_value(name: &str) -> serde_json::Value {
-    let (_, body) = crate::commands::schema::SCHEMAS
-        .iter()
-        .find(|(schema_name, _)| *schema_name == name)
-        .unwrap_or_else(|| panic!("schema '{name}' is not registered"));
-    serde_json::from_str(body).unwrap_or_else(|err| panic!("schema '{name}' is invalid: {err}"))
-}
-
-fn schema_object_properties(
-    name: &str,
-    def_name: &str,
-) -> serde_json::Map<String, serde_json::Value> {
-    let pointer = format!("/$defs/{def_name}/properties");
-    schema_value(name)
-        .pointer(&pointer)
-        .and_then(serde_json::Value::as_object)
-        .unwrap_or_else(|| panic!("schema '{name}' missing {pointer}"))
-        .clone()
-}
-
-fn parser_fields_from_unknown_error<T>() -> BTreeSet<String>
-where
-    T: serde::de::DeserializeOwned,
-{
-    let err = match serde_json::from_value::<T>(serde_json::json!({
-        "__bzr_unknown_field__": true,
-    })) {
-        Ok(_) => panic!("unknown sentinel field unexpectedly parsed"),
-        Err(err) => err.to_string(),
-    };
-    let expected = err
-        .split_once("expected ")
-        .unwrap_or_else(|| panic!("serde error did not list expected fields: {err}"))
-        .1;
-    expected
-        .split('`')
-        .skip(1)
-        .step_by(2)
-        .map(ToString::to_string)
-        .collect()
-}
-
-#[test]
-fn bug_update_input_schema_matches_parser_keys() {
-    let schema_keys: BTreeSet<String> =
-        schema_object_properties("bug-update-input", "bugUpdateInputObject")
-            .keys()
-            .cloned()
-            .collect();
-    let parser_keys = parser_fields_from_unknown_error::<JsonUpdateBug>();
-
-    assert_eq!(schema_keys, parser_keys);
-}
-
-#[test]
-fn bug_update_input_schema_examples_parse() {
-    for (key, property_schema) in
-        schema_object_properties("bug-update-input", "bugUpdateInputObject")
-    {
-        let example = property_schema
-            .get("examples")
-            .and_then(serde_json::Value::as_array)
-            .and_then(|examples| examples.first())
-            .unwrap_or_else(|| panic!("bug-update-input property '{key}' missing example"))
-            .clone();
-        let mut object = serde_json::Map::new();
-        object.insert(key.clone(), example);
-
-        serde_json::from_value::<JsonUpdateBug>(serde_json::Value::Object(object))
-            .unwrap_or_else(|err| panic!("schema example for '{key}' did not parse: {err}"));
-    }
-}
-
-#[test]
-fn bug_update_input_schema_array_items_require_id() {
-    let schema = schema_value("bug-update-input");
-    let required = schema
-        .pointer("/$defs/bugUpdateInputArrayItem/allOf/1/required")
-        .and_then(serde_json::Value::as_array)
-        .unwrap_or_else(|| panic!("bug-update-input array item schema missing required list"));
-
-    assert!(required.iter().any(|field| field.as_str() == Some("id")));
-}
-
 #[tokio::test]
 async fn bug_update_from_json_object_uses_positional_id() {
     let (_lock, mock, tmp) = setup_test_env().await;
@@ -262,9 +174,12 @@ async fn bug_update_from_json_object_uses_positional_id() {
     let json = r#"{"status":"ASSIGNED"}"#;
     let action = from_json_update_action_with_ids(vec![42], &write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         result.is_ok(),
@@ -295,9 +210,12 @@ async fn bug_update_from_json_cli_flag_overrides_json_field() {
         *status = Some("ASSIGNED".into());
     }
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         result.is_ok(),
@@ -336,9 +254,12 @@ async fn bug_update_from_json_list_fields_use_add_remove_shapes() {
     }"#;
     let action = from_json_update_action_with_ids(vec![42], &write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(result.is_ok(), "JSON list deltas should update: {result:?}");
 }
@@ -370,9 +291,12 @@ async fn bug_update_from_json_array_batches_per_id() {
     let json = r#"[{"id":1,"status":"ASSIGNED"},{"id":2,"priority":"high"}]"#;
     let action = from_json_update_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(result.is_ok(), "array update should succeed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
@@ -397,9 +321,12 @@ async fn bug_update_from_json_single_element_array_returns_batch_shape() {
     let json = r#"[{"id":8,"status":"ASSIGNED"}]"#;
     let action = from_json_update_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         result.is_ok(),
@@ -426,12 +353,14 @@ async fn bug_update_from_json_array_dry_run_emits_single_object_and_no_write() {
 
     let json = r#"[{"id":1,"status":"ASSIGNED"},{"id":2,"priority":"high"}]"#;
     let action = from_json_update_action(&write_json_file(&tmp, json));
-    crate::commands::runtime::dry_run::set(true);
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
-    crate::commands::runtime::dry_run::set(false);
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(result.is_ok(), "array dry-run should succeed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
@@ -455,9 +384,12 @@ async fn bug_update_from_json_array_partial_failure_exits_11() {
     let json = r#"[{"id":1,"status":"ASSIGNED"},{"id":2,"status":"ASSIGNED"}]"#;
     let action = from_json_update_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     let err = result.unwrap_err();
     assert!(matches!(
@@ -470,6 +402,50 @@ async fn bug_update_from_json_array_partial_failure_exits_11() {
     let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
     assert_eq!(parsed["succeeded"], serde_json::json!([1]));
     assert_eq!(parsed["failed"][0]["id"], 2);
+}
+
+#[tokio::test]
+async fn bug_update_from_json_array_guard_failure_prevents_all_writes() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/1"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": [{"id": 1, "changes": {}}]})),
+        )
+        .mount(&mock)
+        .await;
+    mock_get_bug_lct(&mock, 2, "2026-06-21T12:00:01Z").await;
+
+    let json = r#"[
+        {"id":1,"status":"ASSIGNED"},
+        {
+            "id":2,
+            "status":"ASSIGNED",
+            "expect_unchanged_since":"2026-06-21T12:00:00Z"
+        }
+    ]"#;
+    let action = from_json_update_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    let err = result.unwrap_err();
+    assert!(matches!(
+        err,
+        crate::error::BzrError::BatchPartialFailure {
+            succeeded: 0,
+            failed: 1
+        }
+    ));
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["succeeded"], serde_json::json!([]));
+    assert_eq!(parsed["failed"][0]["id"], 2);
+    assert_eq!(received_put_count(&mock).await, 0);
 }
 
 #[tokio::test]
@@ -502,9 +478,12 @@ async fn bug_update_from_json_comment_and_expect_guard() {
     }"#;
     let action = from_json_update_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         result.is_ok(),
@@ -518,10 +497,13 @@ async fn bug_update_from_json_rejects_unknown_field() {
     let json = r#"{"id":42,"status":"ASSIGNED","bogus":true}"#;
     let action = from_json_update_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let err =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await
-            .unwrap_err();
+    let err = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err();
 
     assert!(
         matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("bogus") || msg.contains("unknown field")),
@@ -535,10 +517,13 @@ async fn bug_update_from_json_rejects_empty_array() {
     let (_lock, mock, tmp) = setup_test_env().await;
     let action = from_json_update_action(&write_json_file(&tmp, "[]"));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let err =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await
-            .unwrap_err();
+    let err = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err();
 
     assert!(
         matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("empty array")),
@@ -553,10 +538,13 @@ async fn bug_update_from_json_rejects_array_item_without_id() {
     let json = r#"[{"status":"ASSIGNED"}]"#;
     let action = from_json_update_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let err =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await
-            .unwrap_err();
+    let err = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err();
 
     assert!(
         matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("id is required")),
@@ -571,10 +559,13 @@ async fn bug_update_from_json_rejects_object_without_target_id() {
     let json = r#"{"status":"ASSIGNED"}"#;
     let action = from_json_update_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let err =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await
-            .unwrap_err();
+    let err = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err();
 
     assert!(
         matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("requires positional IDs") && msg.contains("id field")),
@@ -589,10 +580,13 @@ async fn bug_update_from_json_rejects_mixed_positional_and_json_id() {
     let json = r#"{"id":42,"status":"ASSIGNED"}"#;
     let action = from_json_update_action_with_ids(vec![43], &write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let err =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await
-            .unwrap_err();
+    let err = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err();
 
     assert!(
         matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("id") && msg.contains("positional")),
@@ -607,10 +601,13 @@ async fn bug_update_from_json_rejects_dupe_of_with_status() {
     let json = r#"{"id":42,"dupe_of":99,"status":"RESOLVED"}"#;
     let action = from_json_update_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let err =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await
-            .unwrap_err();
+    let err = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err();
 
     assert!(
         matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("--dupe-of") && msg.contains("--status")),
@@ -625,10 +622,13 @@ async fn bug_update_from_json_rejects_json_comment_file_stdin() {
     let json = r#"{"id":42,"status":"ASSIGNED","comment_file":"-"}"#;
     let action = from_json_update_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let err =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await
-            .unwrap_err();
+    let err = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err();
 
     assert!(
         matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("comment_file") && msg.contains("stdin")),
@@ -638,15 +638,59 @@ async fn bug_update_from_json_rejects_json_comment_file_stdin() {
 }
 
 #[tokio::test]
+async fn bug_update_from_json_cli_comment_overrides_json_comment_file_stdin() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/42"))
+        .and(body_partial_json(serde_json::json!({
+            "status": "ASSIGNED",
+            "comment": {
+                "body": "ready",
+            },
+        })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": [{"id": 42, "changes": {}}]})),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{"id":42,"status":"ASSIGNED","comment_file":"-"}"#;
+    let mut action = from_json_update_action(&write_json_file(&tmp, json));
+    let BugAction::Update(args) = &mut action else {
+        panic!("expected update action");
+    };
+    args.comment = Some("ready".into());
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(
+        result.is_ok(),
+        "CLI comment should override JSON comment_file stdin: {result:?}"
+    );
+    assert_eq!(received_put_count(&mock).await, 1);
+}
+
+#[tokio::test]
 async fn bug_update_sends_put() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     mock_put_bug_ok(&mock, 42).await;
 
     let action = make_update_action(vec![42]);
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
     let output = __io.out_str().to_string();
     assert!(result.is_ok());
     let parsed: serde_json::Value =
@@ -663,9 +707,12 @@ async fn bug_update_alias_multiple_ids_rejected_before_connect() {
     *update_ids_mut(&mut action).expect("expected update action") = vec![42, 43];
 
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(matches!(
         result,
@@ -695,9 +742,12 @@ async fn bug_update_sends_dupe_of_body() {
 
     let action = make_update_action_with_dupe_of(42, 99);
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(result.is_ok());
 }
@@ -726,9 +776,12 @@ async fn bug_update_sends_url_and_target_milestone_body() {
         ..Default::default()
     });
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(result.is_ok());
 }
@@ -751,9 +804,7 @@ async fn bug_update_batch_mixed_results() {
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io2.writers(),
     )
     .await;
@@ -783,9 +834,7 @@ async fn bug_update_batch_table_format_all_succeed() {
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io3.writers(),
     )
     .await;
@@ -1136,9 +1185,7 @@ async fn bug_update_table_output_with_comment_single() {
     let mut __io4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io4.writers(),
     )
     .await;
@@ -1159,9 +1206,7 @@ async fn bug_update_table_output_no_comment_single() {
     let mut __io5 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io5.writers(),
     )
     .await;
@@ -1184,9 +1229,7 @@ async fn bug_update_table_output_with_comment_batch_all_succeed() {
     let mut __io6 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io6.writers(),
     )
     .await;
@@ -1205,9 +1248,7 @@ async fn bug_update_json_output_unchanged_with_comment() {
     let mut __io7 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io7.writers(),
     )
     .await;
@@ -1259,9 +1300,12 @@ async fn bug_update_large_batch_auto_proceeds_when_not_a_tty() {
 
     let action = make_update_action(ids.clone());
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
     let output = io.out_str().to_string();
 
     assert!(result.is_ok(), "large batch should proceed: {result:?}");
@@ -1280,9 +1324,12 @@ async fn bug_update_expect_unchanged_proceeds_when_timestamp_matches() {
 
     let action = update_action_expect_unchanged(vec![42], "2026-06-19T12:00:00Z");
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
     let output = io.out_str().to_string();
 
     assert!(
@@ -1304,9 +1351,12 @@ async fn bug_update_expect_unchanged_matches_across_timestamp_formats() {
 
     let action = update_action_expect_unchanged(vec![42], "2026-06-19T12:00:00Z");
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         result.is_ok(),
@@ -1323,9 +1373,12 @@ async fn bug_update_expect_unchanged_detects_collision_and_skips_write() {
     // The bug last changed at 12:00 but we expected it unchanged since 10:00.
     let action = update_action_expect_unchanged(vec![42], "2026-06-19T10:00:00Z");
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     let err = result.unwrap_err();
     assert!(
@@ -1344,9 +1397,12 @@ async fn bug_update_expect_unchanged_batch_aborts_all_on_any_collision() {
 
     let action = update_action_expect_unchanged(vec![1, 2], "2026-06-19T12:00:00Z");
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     // Bug 2's collision aborts the whole batch before any write (forbid_put).
     assert!(matches!(
@@ -1364,9 +1420,12 @@ async fn bug_update_expect_unchanged_rejects_unparseable_expected_value() {
 
     let action = update_action_expect_unchanged(vec![42], "yesterday");
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     let err = result.unwrap_err();
     assert!(
@@ -1392,9 +1451,12 @@ async fn bug_update_expect_unchanged_errors_when_server_omits_last_change_time()
 
     let action = update_action_expect_unchanged(vec![42], "2026-06-19T12:00:00Z");
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     let err = result.unwrap_err();
     assert!(
@@ -1415,9 +1477,12 @@ async fn bug_update_expect_unchanged_errors_when_server_last_change_time_is_garb
 
     let action = update_action_expect_unchanged(vec![42], "2026-06-19T12:00:00Z");
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     let err = result.unwrap_err();
     assert!(
@@ -1443,15 +1508,17 @@ async fn forbid_put(mock: &wiremock::MockServer) {
 async fn bug_update_dry_run_makes_no_write_and_marks_payload() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     forbid_put(&mock).await;
-    crate::commands::runtime::dry_run::set(true);
 
     let action = make_update_action(vec![42]);
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
     let output = io.out_str().to_string();
-    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok(), "dry-run update failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
@@ -1466,15 +1533,17 @@ async fn bug_update_dry_run_makes_no_write_and_marks_payload() {
 async fn bug_update_dry_run_batch_lists_all_ids() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     forbid_put(&mock).await;
-    crate::commands::runtime::dry_run::set(true);
 
     let action = make_update_action(vec![1, 2, 3]);
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
     let output = io.out_str().to_string();
-    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok());
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
@@ -1486,15 +1555,17 @@ async fn bug_update_dry_run_batch_lists_all_ids() {
 async fn bug_update_dry_run_table_prints_human_preview() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     forbid_put(&mock).await;
-    crate::commands::runtime::dry_run::set(true);
 
     let action = make_update_action(vec![7, 8]);
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Table, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
     let output = io.out_str().to_string();
-    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok(), "dry-run update (table) failed: {result:?}");
     assert!(
@@ -1507,14 +1578,16 @@ async fn bug_update_dry_run_table_prints_human_preview() {
 async fn bug_update_dry_run_still_validates_empty_update() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     forbid_put(&mock).await;
-    crate::commands::runtime::dry_run::set(true);
 
     let action = make_empty_update_action(vec![42]);
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
-    crate::commands::runtime::dry_run::set(false);
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(matches!(
         result,

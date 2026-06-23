@@ -8,12 +8,39 @@ mod whoami;
 use reqwest::header::HeaderValue;
 
 use crate::error::{BzrError, Result};
-use crate::types::{ApiMode, AuthMethod};
+use crate::types::common::{ApiMode, AuthMethod};
 
 use self::valid_login::{detect_valid_login_auth, verify_header_auth_via_rest, ValidLoginOutcome};
 use self::whoami::{detect_whoami_auth, WhoamiOutcome};
 
 use super::version::{detect_version_and_mode, detect_version_and_mode_without_auth_checked};
+
+#[derive(Debug, Clone)]
+pub(super) struct MalformedProbeResponse {
+    probe: &'static str,
+    method: AuthMethod,
+    error: String,
+}
+
+impl MalformedProbeResponse {
+    fn new(probe: &'static str, method: AuthMethod, error: impl std::fmt::Display) -> Self {
+        Self {
+            probe,
+            method,
+            error: error.to_string(),
+        }
+    }
+}
+
+impl std::fmt::Display for MalformedProbeResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} {} probe returned malformed 200 response: {}",
+            self.probe, self.method, self.error
+        )
+    }
+}
 
 /// Result of server settings detection -- auth method, API mode, and
 /// optionally the server version string. Returned by [`detect_server_settings`]
@@ -39,8 +66,9 @@ pub async fn detect_server_settings(
     api_key: &str,
     email: Option<&str>,
     tls_config: &crate::tls::TlsConfig,
+    request_timeout: std::time::Duration,
 ) -> Result<DetectedServerSettings> {
-    let http = crate::tls::build_tls_client(tls_config)?;
+    let http = crate::tls::build_tls_client(tls_config, request_timeout)?;
 
     let method = detect_auth_method(&http, url, api_key, email).await?;
     let (version, api_mode) = detect_version_and_mode(&http, url, api_key, method).await;
@@ -66,8 +94,9 @@ pub async fn detect_server_settings(
 pub async fn detect_server_settings_without_auth(
     url: &str,
     tls_config: &crate::tls::TlsConfig,
+    request_timeout: std::time::Duration,
 ) -> Result<DetectedServerSettings> {
-    let http = crate::tls::build_tls_client(tls_config)?;
+    let http = crate::tls::build_tls_client(tls_config, request_timeout)?;
     let (version, api_mode) = detect_version_and_mode_without_auth_checked(&http, url).await?;
 
     tracing::info!(
@@ -84,14 +113,14 @@ pub async fn detect_server_settings_without_auth(
 }
 
 /// Log a probe's `send()` error, surfacing TLS-certificate problems at `warn`
-/// with a [`crate::http::tls_hint`] and routing all other transport errors to
+/// with a [`crate::tls::tls_hint`] and routing all other transport errors to
 /// `debug`. Shared by the `whoami` and `valid_login` probes so their
 /// network-error handling cannot drift apart (the cause of TD-002).
 fn log_probe_send_error(probe: &str, method: AuthMethod, e: &reqwest::Error) {
-    if crate::http::is_tls_cert_error(e) {
+    if crate::tls::is_tls_cert_error(e) {
         tracing::warn!(
             "{}",
-            crate::http::tls_hint(&format!("{probe} {method} request failed: {e:#}"), e)
+            crate::tls::tls_hint(&format!("{probe} {method} request failed: {e:#}"), e)
         );
     } else {
         tracing::debug!("{probe} {method} request failed: {e:#}");
@@ -108,13 +137,23 @@ fn log_probe_send_error(probe: &str, method: AuthMethod, e: &reqwest::Error) {
 /// the real request (which has the transient-retry budget) may still succeed, so
 /// a single detection-time blip must not fail the whole invocation.
 fn network_error_outcome(e: reqwest::Error) -> Result<AuthMethod> {
-    if crate::http::is_tls_cert_error(&e) {
+    if crate::tls::is_tls_cert_error(&e) {
         return Err(BzrError::Http(e));
     }
     tracing::warn!(
         "could not reach server during auth detection ({e:#}); defaulting to header auth"
     );
     Ok(AuthMethod::Header)
+}
+
+fn auth_detection_error(hint: &str, malformed: Option<MalformedProbeResponse>) -> BzrError {
+    let mut message = hint.to_owned();
+    if let Some(malformed) = malformed {
+        message.push_str(" Last malformed auth probe: ");
+        message.push_str(&malformed.to_string());
+        message.push('.');
+    }
+    BzrError::Auth(message)
 }
 
 async fn detect_auth_method(
@@ -135,6 +174,8 @@ async fn detect_auth_method(
     let key_header = HeaderValue::from_str(api_key)
         .map_err(|_| BzrError::config("invalid API key characters"))?;
 
+    let mut malformed_response = None;
+
     // Try whoami endpoint first (Bugzilla 5.1+). A TLS-certificate failure is
     // propagated so the connection layer can offer TOFU / pin-rotation; other
     // transport errors fall back to header auth (see network_error_outcome).
@@ -146,7 +187,11 @@ async fn detect_auth_method(
             tracing::info!("falling back to rest/valid_login for older Bugzilla");
             true
         }
-        WhoamiOutcome::AuthRejected | WhoamiOutcome::UnparseableResponse => false,
+        WhoamiOutcome::AuthRejected => false,
+        WhoamiOutcome::MalformedResponse(error) => {
+            malformed_response.get_or_insert(error);
+            false
+        }
     };
 
     // Fall back to valid_login endpoint (Bugzilla 5.0+, requires email)
@@ -170,6 +215,9 @@ async fn detect_auth_method(
             }
             ValidLoginOutcome::NetworkError(e) => return network_error_outcome(e),
             ValidLoginOutcome::AuthRejected => {}
+            ValidLoginOutcome::MalformedResponse(error) => {
+                malformed_response.get_or_insert(error);
+            }
         }
     }
 
@@ -184,7 +232,7 @@ async fn detect_auth_method(
         "auth detection failed: could not authenticate with the \
          server. Check your API key and server URL."
     };
-    Err(BzrError::Auth(hint.into()))
+    Err(auth_detection_error(hint, malformed_response))
 }
 
 #[cfg(test)]

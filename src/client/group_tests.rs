@@ -4,6 +4,7 @@ use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use super::super::encode_path;
+use super::super::UserDetailLevel;
 use super::super::USER_FIELDS_BASIC;
 use crate::client::test_helpers::{test_client, test_client_hybrid};
 use crate::error::BzrError;
@@ -37,7 +38,10 @@ async fn get_group_members_returns_users() {
         .await;
 
     let client = test_client(&mock.uri());
-    let users = client.get_group_members("admin", false).await.unwrap();
+    let users = client
+        .get_group_members("admin", UserDetailLevel::Basic)
+        .await
+        .unwrap();
     assert_eq!(users.len(), 2);
     assert_eq!(users[0].name, "alice@example.com");
 }
@@ -69,7 +73,10 @@ async fn get_group_members_details_sends_include_fields() {
         .await;
 
     let client = test_client(&mock.uri());
-    let users = client.get_group_members("admin", true).await.unwrap();
+    let users = client
+        .get_group_members("admin", UserDetailLevel::Detailed)
+        .await
+        .unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].name, "alice@example.com");
     assert_eq!(users[0].groups.len(), 1);
@@ -89,7 +96,10 @@ async fn get_group_members_empty() {
         .await;
 
     let client = test_client(&mock.uri());
-    let users = client.get_group_members("nobody", false).await.unwrap();
+    let users = client
+        .get_group_members("nobody", UserDetailLevel::Basic)
+        .await
+        .unwrap();
     assert!(users.is_empty());
 }
 
@@ -110,7 +120,7 @@ async fn get_group_members_api_error() {
 
     let client = test_client(&mock.uri());
     let err = client
-        .get_group_members("nonexistent", false)
+        .get_group_members("nonexistent", UserDetailLevel::Basic)
         .await
         .unwrap_err();
     let msg = err.to_string();
@@ -378,6 +388,8 @@ async fn xmlrpc_mode_get_group_bypasses_rest() {
         api_mode: ApiMode::XmlRpc,
         email_hint: None,
         tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
     })
     .unwrap();
 

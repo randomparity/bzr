@@ -1,20 +1,18 @@
 //! Library crate backing the `bzr` command-line tool.
 //!
 //! `bzr` ships as a CLI binary (`main.rs`); this library is the binary's
-//! implementation, factored into modules so the binary and the integration
-//! tests in `tests/` (which compile as a separate crate and therefore need
-//! `pub` access) exercise exactly the same code paths.
+//! implementation, factored into modules so the binary and tests exercise
+//! exactly the same code paths.
 //!
 //! ## Public boundary
 //!
 //! The intended entry point is [`dispatch`], which runs a parsed
-//! [`cli::Cli`]. The resource modules ([`cli`], [`client`], [`commands`],
-//! [`config`], [`types`], …) are published only to support the binary and the
-//! integration-test harness — they are an internal surface, not a
-//! stability-guaranteed API for external consumers, and may change between
-//! releases. Genuinely test-only items (`ENV_LOCK`, `test_helpers`) are
-//! gated behind `cfg(test)` / the `test-helpers` feature and never compile
-//! into a normal release build.
+//! [`cli::Cli`]. Public modules support CLI parsing, configuration, output,
+//! and error reporting around that entry point. Implementation modules are
+//! crate-private in normal builds; the `test-helpers` feature widens selected
+//! modules for the integration-test harness only. Genuinely test-only items
+//! (`ENV_LOCK`, `test_helpers`) are gated behind `cfg(test)` / the
+//! `test-helpers` feature and never compile into a normal release build.
 #![expect(
     clippy::missing_errors_doc,
     clippy::must_use_candidate,
@@ -22,20 +20,34 @@
     reason = "internal surface for the binary and integration tests, not external consumers"
 )]
 
+pub(crate) mod bugzilla_auth;
 pub mod cli;
+#[cfg(not(feature = "test-helpers"))]
+pub(crate) mod client;
+#[cfg(feature = "test-helpers")]
 pub mod client;
+#[cfg(not(feature = "test-helpers"))]
+pub(crate) mod commands;
+#[cfg(feature = "test-helpers")]
 pub mod commands;
 pub mod config;
+#[cfg(not(feature = "test-helpers"))]
+pub(crate) mod credentials;
+#[cfg(feature = "test-helpers")]
 pub mod credentials;
 pub mod error;
-pub(crate) mod field_aliases;
 pub(crate) mod http;
 #[expect(clippy::expect_used)]
 pub mod output;
 pub(crate) mod tls;
 pub mod types;
-pub mod url_parser;
+#[cfg(not(feature = "test-helpers"))]
+pub(crate) mod validation;
+#[cfg(feature = "test-helpers")]
 pub mod validation;
+#[cfg(not(feature = "test-helpers"))]
+pub(crate) mod xmlrpc;
+#[cfg(feature = "test-helpers")]
 pub mod xmlrpc;
 
 /// Fuzz-only entry points. Gated behind `cfg(fuzzing)` so they expose the
@@ -43,11 +55,28 @@ pub mod xmlrpc;
 /// widening the public API in normal builds.
 #[cfg(fuzzing)]
 pub mod fuzz {
+    use crate::config::Config;
+
     /// Drive the best-effort issuer DER walkers on arbitrary bytes. Must
     /// terminate without panicking for any input.
     pub fn extract_issuer(data: &[u8]) {
         let _ = crate::tls::verifier::extract_issuer_der(data);
         let _ = crate::tls::verifier::extract_issuer_dn(data);
+    }
+
+    /// Drive Bugzilla flag parsing on arbitrary string lists.
+    pub fn parse_flags(input: &[String]) {
+        let _ = crate::commands::runtime::flags::parse_flags(input);
+    }
+
+    /// Drive Bugzilla URL import parsing on arbitrary strings.
+    pub fn parse_bugzilla_url(data: &str, config: &Config) {
+        let _ = crate::commands::runtime::url_parser::parse_bugzilla_url(data, config);
+    }
+
+    /// Drive XML-RPC response parsing on arbitrary strings.
+    pub fn parse_xmlrpc_response(data: &str) {
+        let _ = crate::xmlrpc::protocol::parse_response(data);
     }
 }
 
@@ -60,72 +89,45 @@ pub async fn dispatch(
     format: types::OutputFormat,
     w: &mut output::writers::Writers<'_>,
 ) -> error::Result<()> {
-    apply_network_tuning(cli);
-    ensure_dry_run_supported(cli)?;
-    ensure_credentials_for_command(cli)?;
-    commands::runtime::dry_run::set(cli.dry_run);
-    commands::runtime::confirm::set_yes(cli.yes);
-    commands::runtime::inline_server::set(resolve_inline_server(cli));
-
-    let api = cli.api;
-    let server = cli.server.as_deref();
+    let ctx = build_command_context(cli, format);
+    ensure_dispatch_allowed(cli, &ctx)?;
 
     match &cli.command {
-        cli::Commands::Bug { action } => {
-            commands::bug::execute(action, server, format, api, w).await
-        }
-        cli::Commands::Comment { action } => {
-            commands::comment::execute(action, server, format, api, w).await
-        }
+        cli::Commands::Bug { action } => commands::bug::execute(action, &ctx, w).await,
+        cli::Commands::Comment { action } => commands::comment::execute(action, &ctx, w).await,
         cli::Commands::Attachment { action } => {
-            commands::attachment::execute(action, server, format, api, w).await
+            commands::attachment::execute(action, &ctx, w).await
         }
-        cli::Commands::Config { action } => {
-            commands::config::execute(action, server, format, api, w).await
-        }
-        cli::Commands::Product { action } => {
-            commands::product::execute(action, server, format, api, w).await
-        }
-        cli::Commands::Field { action } => {
-            commands::field::execute(action, server, format, api, w).await
-        }
-        cli::Commands::User { action } => {
-            commands::user::execute(action, server, format, api, w).await
-        }
-        cli::Commands::Group { action } => {
-            commands::group::execute(action, server, format, api, w).await
-        }
-        cli::Commands::Whoami => commands::whoami::execute(server, format, api, w).await,
-        cli::Commands::Server { action } => {
-            commands::server::execute(action, server, format, api, w).await
-        }
+        cli::Commands::Config { action } => commands::config::execute(action, &ctx, w).await,
+        cli::Commands::Product { action } => commands::product::execute(action, &ctx, w).await,
+        cli::Commands::Field { action } => commands::field::execute(action, &ctx, w).await,
+        cli::Commands::User { action } => commands::user::execute(action, &ctx, w).await,
+        cli::Commands::Group { action } => commands::group::execute(action, &ctx, w).await,
+        cli::Commands::Whoami => commands::whoami::execute(&ctx, w).await,
+        cli::Commands::Server { action } => commands::server::execute(action, &ctx, w).await,
         cli::Commands::Classification { action } => {
-            commands::classification::execute(action, server, format, api, w).await
+            commands::classification::execute(action, &ctx, w).await
         }
-        cli::Commands::Component { action } => {
-            commands::component::execute(action, server, format, api, w).await
-        }
-        cli::Commands::Template { action } => {
-            commands::template::execute(action, server, format, api, w).await
-        }
-        cli::Commands::Query { action } => {
-            commands::query::execute(action, server, format, api, w).await
-        }
-        cli::Commands::Completion { shell } => commands::completion::execute(*shell, w),
-        cli::Commands::Schema { name } => commands::schema::execute(name.as_deref(), format, w),
+        cli::Commands::Component { action } => commands::component::execute(action, &ctx, w).await,
+        cli::Commands::Template { action } => commands::template::execute(action, &ctx, w).await,
+        cli::Commands::Query { action } => commands::query::execute(action, &ctx, w).await,
+        cli::Commands::Completion { shell } => commands::completion::execute(*shell, &ctx, w).await,
+        cli::Commands::Schema { name } => commands::schema::execute(name.as_deref(), &ctx, w).await,
     }
 }
 
-/// Install process-wide network tuning from the global flags before any client
-/// is built: the request timeout (`--timeout`, falling back to `BZR_TIMEOUT`)
-/// and the transient-retry budget (`--retry`). An invalid `BZR_TIMEOUT` is
-/// ignored with a warning so the built-in default stands.
-///
-/// This mutates process-global state, so `dispatch` is not safe to call
-/// concurrently from one process with differing `--timeout`/`--retry` values
-/// (the CLI runs a single dispatch per process, so this is not a concern in
-/// practice; tests exercise per-client retry overrides instead).
-fn apply_network_tuning(cli: &cli::Cli) {
+fn ensure_dispatch_allowed(
+    cli: &cli::Cli,
+    _ctx: &commands::runtime::context::CommandContext,
+) -> error::Result<()> {
+    ensure_dry_run_supported(cli)
+}
+
+/// Build the explicit command context from global CLI flags.
+fn build_command_context(
+    cli: &cli::Cli,
+    format: types::OutputFormat,
+) -> commands::runtime::context::CommandContext {
     let env_timeout = std::env::var("BZR_TIMEOUT").ok();
     if cli.timeout.is_none() {
         if let Some(raw) = &env_timeout {
@@ -136,11 +138,16 @@ fn apply_network_tuning(cli: &cli::Cli) {
             }
         }
     }
-    http::set_request_timeout_secs(http::resolve_timeout_secs(
-        cli.timeout,
-        env_timeout.as_deref(),
-    ));
-    http::set_retry_max(cli.retry.unwrap_or(0));
+    let request_timeout = http::resolve_timeout_secs(cli.timeout, env_timeout.as_deref())
+        .map_or(http::REQUEST_TIMEOUT, std::time::Duration::from_secs);
+    commands::runtime::context::CommandContext::new(cli.server.as_deref(), format, cli.api)
+        .with_dry_run(cli.dry_run)
+        .with_assume_yes(cli.yes)
+        .with_inline_server(resolve_inline_server(cli))
+        .with_config_path_override(cli.config.clone())
+        .with_request_timeout(request_timeout)
+        .with_retry_max(cli.retry.unwrap_or(0))
+        .with_credential_requirement(command_requires_credentials(&cli.command))
 }
 
 /// Build the inline server definition from the global `--server-url` flags, or
@@ -190,19 +197,6 @@ fn ensure_dry_run_supported(cli: &cli::Cli) -> error::Result<()> {
     ))
 }
 
-fn ensure_credentials_for_command(cli: &cli::Cli) -> error::Result<()> {
-    let Some(command_name) = command_requires_credentials(&cli.command) else {
-        return Ok(());
-    };
-    if active_server_has_credentials(cli)? {
-        return Ok(());
-    }
-    Err(error::BzrError::Config(format!(
-        "{command_name} requires credentials; configure api_key, api_key_env, \
-         api_key_keyring, or pass --server-api-key-env with --server-url"
-    )))
-}
-
 fn command_requires_credentials(command: &cli::Commands) -> Option<&'static str> {
     match command {
         cli::Commands::Bug { action } => commands::bug::requires_credentials(action),
@@ -215,16 +209,6 @@ fn command_requires_credentials(command: &cli::Commands) -> Option<&'static str>
         cli::Commands::Whoami => Some("whoami"),
         _ => None,
     }
-}
-
-fn active_server_has_credentials(cli: &cli::Cli) -> error::Result<bool> {
-    if cli.server_url.is_some() {
-        return Ok(cli.server_api_key_env.is_some());
-    }
-
-    let config = config::Config::load()?;
-    let (_, server) = config.resolve_server(cli.server.as_deref())?;
-    Ok(server.credential_source()?.is_some())
 }
 
 /// Shared mutex for tests that modify the process-global `XDG_CONFIG_HOME` env var.

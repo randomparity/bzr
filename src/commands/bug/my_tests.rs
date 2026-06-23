@@ -46,7 +46,6 @@ async fn bug_my_returns_assigned_by_default() {
         created: false,
         cc: false,
         all: false,
-        status: vec![],
         limit: 50,
         field_args: crate::cli::FieldArgs {
             fields: None,
@@ -57,9 +56,12 @@ async fn bug_my_returns_assigned_by_default() {
         ..Default::default()
     });
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
     let output = __io.out_str().to_string();
     assert!(result.is_ok(), "bug my failed: {result:?}");
     let parsed: serde_json::Value =
@@ -91,7 +93,10 @@ async fn bug_my_passes_status_limit_and_field_filters() {
         created: false,
         cc: false,
         all: false,
-        status: vec!["NEW".into()],
+        filters: crate::cli::BugFilterArgs {
+            status: vec!["NEW".into()],
+            ..Default::default()
+        },
         limit: 7,
         field_args: crate::cli::FieldArgs {
             fields: Some("id,summary".into()),
@@ -104,9 +109,7 @@ async fn bug_my_passes_status_limit_and_field_filters() {
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io2.writers(),
     )
     .await;
@@ -148,7 +151,6 @@ async fn bug_my_all_passes_shared_filters_to_each_category() {
         created: false,
         cc: false,
         all: true,
-        status: vec![],
         limit: 50,
         field_args: crate::cli::FieldArgs {
             fields: None,
@@ -156,25 +158,31 @@ async fn bug_my_all_passes_shared_filters_to_each_category() {
         },
         sort_args: crate::cli::SortArgs::default(),
         count: false,
-        product: vec!["Core".into()],
-        component: vec!["Networking".into()],
-        priority: vec!["P1".into()],
-        severity: vec!["S2".into()],
+        filters: crate::cli::BugFilterArgs {
+            product: vec!["Core".into()],
+            component: vec!["Networking".into()],
+            priority: vec!["P1".into()],
+            severity: vec!["S2".into()],
+            whiteboard: vec!["needs-review".into()],
+            target_milestone: vec!["5.0".into()],
+            version: vec!["9.4".into()],
+            op_sys: vec!["Linux".into()],
+            platform: vec!["x86_64".into()],
+            resolution: vec!["FIXED".into()],
+            qa_contact: vec!["qa@example.com".into()],
+            url: vec!["github.com/foo".into()],
+            ..Default::default()
+        },
         created_since: Some("2026-04-01".into()),
         changed_since: Some("2026-04-15T12:00:00Z".into()),
-        whiteboard: vec!["needs-review".into()],
-        target_milestone: vec!["5.0".into()],
-        version: vec!["9.4".into()],
-        op_sys: vec!["Linux".into()],
-        platform: vec!["x86_64".into()],
-        resolution: vec!["FIXED".into()],
-        qa_contact: vec!["qa@example.com".into()],
-        url: vec!["github.com/foo".into()],
     });
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
     assert!(
         result.is_ok(),
         "bug my --all with shared filters failed: {result:?}"
@@ -201,7 +209,6 @@ async fn bug_my_created_only_runs_creator_search_not_assigned() {
         created: true,
         cc: false,
         all: false,
-        status: vec![],
         limit: 50,
         field_args: crate::cli::FieldArgs {
             fields: None,
@@ -214,9 +221,7 @@ async fn bug_my_created_only_runs_creator_search_not_assigned() {
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io3.writers(),
     )
     .await;
@@ -243,7 +248,6 @@ async fn bug_my_cc_only_runs_cc_search_not_assigned_or_creator() {
         created: false,
         cc: true,
         all: false,
-        status: vec![],
         limit: 50,
         field_args: crate::cli::FieldArgs {
             fields: None,
@@ -256,9 +260,7 @@ async fn bug_my_cc_only_runs_cc_search_not_assigned_or_creator() {
     let mut __io4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io4.writers(),
     )
     .await;
@@ -292,7 +294,6 @@ async fn bug_my_all_deduplicates() {
         created: false,
         cc: false,
         all: true,
-        status: vec![],
         limit: 50,
         field_args: crate::cli::FieldArgs {
             fields: None,
@@ -305,9 +306,7 @@ async fn bug_my_all_deduplicates() {
     let mut __io5 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io5.writers(),
     )
     .await;
@@ -342,7 +341,6 @@ async fn bug_my_all_count_reports_distinct_total() {
         created: false,
         cc: false,
         all: true,
-        status: vec![],
         limit: 50,
         field_args: crate::cli::FieldArgs {
             fields: None,
@@ -353,9 +351,12 @@ async fn bug_my_all_count_reports_distinct_total() {
         ..Default::default()
     });
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "my --all --count failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
     // Three searches each return ids {1,2}; deduped distinct count is 2.

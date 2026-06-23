@@ -7,7 +7,13 @@ fn bool_from_int_or_bool<'de, D: Deserializer<'de>>(d: D) -> Result<bool, D::Err
     let v = serde_json::Value::deserialize(d)?;
     match v {
         serde_json::Value::Bool(b) => Ok(b),
-        serde_json::Value::Number(n) => Ok(n.as_u64() != Some(0)),
+        serde_json::Value::Number(n) => match n.as_u64() {
+            Some(0) => Ok(false),
+            Some(1) => Ok(true),
+            _ => Err(serde::de::Error::custom(format!(
+                "expected bool or 0/1 integer, got {n}"
+            ))),
+        },
         other => Err(serde::de::Error::custom(format!(
             "expected bool or integer, got {other}"
         ))),

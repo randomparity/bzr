@@ -107,9 +107,12 @@ async fn bug_clone_copies_fields() {
 
     let action = BugAction::Clone(clone_args("100"));
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
     let output = __io.out_str().to_string();
     assert!(result.is_ok(), "bug clone failed: {result:?}");
     let parsed: serde_json::Value =
@@ -168,9 +171,12 @@ async fn bug_clone_reports_id_when_comment_post_fails() {
 
     let action = BugAction::Clone(clone_args("100"));
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
 
     // The clone (bug creation) succeeded, so the command must succeed and the
     // new bug ID must be reported — otherwise the user can't tell a bug was
@@ -251,9 +257,7 @@ async fn bug_clone_no_comment_skips_comment() {
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io2.writers(),
     )
     .await;
@@ -264,7 +268,6 @@ async fn bug_clone_no_comment_skips_comment() {
 #[tokio::test]
 async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
     let (_lock, mock, _tmp) = setup_test_env().await;
-    crate::commands::runtime::dry_run::set(true);
 
     // Source fetch (GET) is allowed in a dry run; it builds the would-be payload.
     Mock::given(method("GET"))
@@ -307,11 +310,14 @@ async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
 
     let action = BugAction::Clone(clone_args("100"));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
     let output = io.out_str().to_string();
-    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok(), "dry-run clone failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
@@ -336,7 +342,6 @@ async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
 #[tokio::test]
 async fn bug_clone_dry_run_applies_create_metadata_overrides() {
     let (_lock, mock, _tmp) = setup_test_env().await;
-    crate::commands::runtime::dry_run::set(true);
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/100"))
@@ -388,11 +393,14 @@ async fn bug_clone_dry_run_applies_create_metadata_overrides() {
     };
     let action = BugAction::Clone(args);
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
     let output = io.out_str().to_string();
-    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok(), "dry-run clone failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();

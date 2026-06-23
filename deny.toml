@@ -3,10 +3,39 @@ version = 2
 yanked = "warn"
 ignore = []
 
+[licenses]
+confidence-threshold = 0.8
+allow = [
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+]
+exceptions = [
+    { allow = ["MPL-2.0"], crate = "colored@3.1.1" },
+    { allow = ["MPL-2.0"], crate = "option-ext@0.2.0" },
+    { allow = ["CDLA-Permissive-2.0"], crate = "webpki-roots@1.0.7" },
+]
+
 [bans]
-multiple-versions = "warn"
+multiple-versions = "deny"
 wildcards = "allow"
 highlight = "all"
+skip = [
+    # `dirs` -> `dirs-sys` -> `redox_users` and `rustls` -> `ring` still use
+    # getrandom 0.2, while test-only randomness (`proptest`, `tempfile`) is on
+    # getrandom 0.3. The duplicate is accepted until those upstream stacks
+    # converge; keep 0.3.4 as the canonical lockfile line.
+    { name = "getrandom", version = "0.2.17" },
+
+    # Windows support crates split across ecosystem release trains:
+    # ring/rpassword use 0.52, dbus uses 0.59, and the rest of the current
+    # graph has moved to 0.61. Keep 0.61.2 canonical and fail on any new
+    # windows-sys line or patch drift in these accepted older transitive lines.
+    { name = "windows-sys", version = "0.52.0" },
+    { name = "windows-sys", version = "0.59.0" },
+]
 
 [sources]
 unknown-registry = "deny"

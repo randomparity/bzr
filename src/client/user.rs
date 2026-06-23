@@ -1,7 +1,8 @@
 use super::encode_path;
-use super::{BugzillaClient, UserSearchResponse, USER_FIELDS_BASIC, USER_FIELDS_DETAILED};
+use super::{BugzillaClient, UserDetailLevel, UserSearchResponse};
 use crate::error::{BzrError, Result};
-use crate::types::{ApiMode, BugzillaUser, CreateUserParams, UpdateUserParams, WhoamiResponse};
+use crate::types::common::ApiMode;
+use crate::types::user::{BugzillaUser, CreateUserParams, UpdateUserParams, WhoamiResponse};
 
 impl BugzillaClient {
     pub async fn whoami(&self) -> Result<WhoamiResponse> {
@@ -40,12 +41,12 @@ impl BugzillaClient {
             })
     }
 
-    pub async fn search_users(&self, query: &str, detailed: bool) -> Result<Vec<BugzillaUser>> {
-        let fields = if detailed {
-            USER_FIELDS_DETAILED
-        } else {
-            USER_FIELDS_BASIC
-        };
+    pub async fn search_users(
+        &self,
+        query: &str,
+        detail_level: UserDetailLevel,
+    ) -> Result<Vec<BugzillaUser>> {
+        let fields = detail_level.include_fields();
         let data: UserSearchResponse = self
             .get_json_query("user", &[("match", query), ("include_fields", fields)])
             .await?;
@@ -55,13 +56,14 @@ impl BugzillaClient {
     pub async fn create_user(&self, params: &CreateUserParams) -> Result<u64> {
         match self.api_mode {
             ApiMode::Rest => self.post_json_id("user", params).await,
-            ApiMode::XmlRpc => self.xmlrpc_client()?.create_user(params).await,
+            ApiMode::XmlRpc => self.xmlrpc_client().create_user(params).await,
             ApiMode::Hybrid => match self.post_json_id("user", params).await {
                 Ok(id) => Ok(id),
-                Err(e) => {
+                Err(e) if e.is_transport_failure() => {
                     tracing::info!("REST user creation failed ({e}), retrying via XML-RPC");
-                    self.xmlrpc_client()?.create_user(params).await
+                    self.xmlrpc_client().create_user(params).await
                 }
+                Err(e) => Err(e),
             },
         }
     }

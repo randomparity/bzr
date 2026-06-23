@@ -3,7 +3,8 @@ use serde::Deserialize;
 
 use super::BugzillaClient;
 use crate::error::{BzrError, Result};
-use crate::types::{ApiMode, Attachment, UpdateAttachmentParams, UploadAttachmentParams};
+use crate::types::attachment::{Attachment, UpdateAttachmentParams, UploadAttachmentParams};
+use crate::types::common::ApiMode;
 
 #[derive(Deserialize)]
 struct AttachmentBugResponse {
@@ -67,7 +68,7 @@ impl BugzillaClient {
         self.dispatch_xmlrpc_first(
             &format!("attachment list (bug {bug_id})"),
             || self.get_attachments_rest(bug_id),
-            || async { self.xmlrpc_client()?.get_attachments(bug_id).await },
+            || async { self.xmlrpc_client().get_attachments(bug_id).await },
         )
         .await
     }
@@ -94,7 +95,7 @@ impl BugzillaClient {
             &format!("attachment fetch (id {attachment_id})"),
             || self.get_attachment_rest(attachment_id),
             || async {
-                self.xmlrpc_client()?
+                self.xmlrpc_client()
                     .get_attachment_by_id(attachment_id)
                     .await
             },

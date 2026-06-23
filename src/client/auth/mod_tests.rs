@@ -8,9 +8,9 @@ use wiremock::matchers::{header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use super::*;
+use crate::bugzilla_auth::AUTH_HEADER_NAME;
 use crate::client::test_helpers::test_http_client;
 use crate::error::BzrError;
-use crate::http::AUTH_HEADER_NAME;
 
 fn spawn_self_signed_https_server() -> (String, std::thread::JoinHandle<()>) {
     let params = rcgen::CertificateParams::new(vec!["localhost".to_owned()]).unwrap();
@@ -70,7 +70,10 @@ async fn falls_back_to_query_param() {
 
     Mock::given(method("GET"))
         .and(path("/rest/whoami"))
-        .and(query_param(crate::http::AUTH_QUERY_PARAM, "test-key"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 7})))
         .mount(&server)
         .await;
@@ -134,7 +137,10 @@ async fn valid_login_query_param_but_header_works_on_api() {
     Mock::given(method("GET"))
         .and(path("/rest/valid_login"))
         .and(query_param("login", "user@example.com"))
-        .and(query_param(crate::http::AUTH_QUERY_PARAM, "test-key"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": true})))
         .mount(&server)
         .await;
@@ -182,7 +188,10 @@ async fn valid_login_query_param_and_header_fails_on_api() {
     Mock::given(method("GET"))
         .and(path("/rest/valid_login"))
         .and(query_param("login", "user@example.com"))
-        .and(query_param(crate::http::AUTH_QUERY_PARAM, "test-key"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": true})))
         .mount(&server)
         .await;
@@ -226,6 +235,48 @@ async fn whoami_401_no_email_gives_api_key_error() {
 }
 
 #[tokio::test]
+async fn whoami_malformed_200_adds_parse_context_to_auth_error() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .and(header(AUTH_HEADER_NAME, "test-key"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("not json"))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    let result = detect_auth_method(&test_http_client(), &server.uri(), "test-key", None).await;
+    assert!(matches!(result, Err(BzrError::Auth(_))));
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("whoami"),
+        "should name the malformed probe, got: {err}"
+    );
+    assert!(
+        err.contains("header"),
+        "should name the malformed auth method, got: {err}"
+    );
+    assert!(
+        err.contains("malformed"),
+        "should describe the malformed response, got: {err}"
+    );
+    assert!(
+        err.contains("expected"),
+        "should include the parser error, got: {err}"
+    );
+}
+
+#[tokio::test]
 async fn non_tls_network_error_defaults_to_header() {
     // A plain transport failure (connection refused — not a TLS cert error)
     // falls back to header auth rather than aborting: detection isn't retried,
@@ -245,7 +296,12 @@ async fn non_tls_network_error_defaults_to_header() {
 async fn anonymous_detection_propagates_tls_certificate_errors() {
     let (url, handle) = spawn_self_signed_https_server();
 
-    let result = detect_server_settings_without_auth(&url, &crate::tls::TlsConfig::default()).await;
+    let result = detect_server_settings_without_auth(
+        &url,
+        &crate::tls::TlsConfig::default(),
+        crate::http::REQUEST_TIMEOUT,
+    )
+    .await;
     handle.join().unwrap();
 
     assert!(
@@ -256,7 +312,7 @@ async fn anonymous_detection_propagates_tls_certificate_errors() {
         return;
     };
     assert!(
-        crate::http::is_tls_cert_error(&err),
+        crate::tls::is_tls_cert_error(&err),
         "anonymous detection should surface TLS cert errors, got: {err:#}"
     );
 }
@@ -307,6 +363,62 @@ async fn valid_login_accepts_integer_result() {
     .await
     .unwrap();
     assert_eq!(result, AuthMethod::Header);
+}
+
+#[tokio::test]
+async fn valid_login_malformed_200_adds_parse_context_to_auth_error() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/valid_login"))
+        .and(query_param("login", "user@example.com"))
+        .and(header(AUTH_HEADER_NAME, "test-key"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("not json"))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/valid_login"))
+        .and(query_param("login", "user@example.com"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    let result = detect_auth_method(
+        &test_http_client(),
+        &server.uri(),
+        "test-key",
+        Some("user@example.com"),
+    )
+    .await;
+    assert!(matches!(result, Err(BzrError::Auth(_))));
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("valid_login"),
+        "should name the malformed probe, got: {err}"
+    );
+    assert!(
+        err.contains("header"),
+        "should name the malformed auth method, got: {err}"
+    );
+    assert!(
+        err.contains("malformed"),
+        "should describe the malformed response, got: {err}"
+    );
+    assert!(
+        err.contains("expected"),
+        "should include the parser error, got: {err}"
+    );
 }
 
 #[tokio::test]
@@ -389,6 +501,7 @@ async fn detect_server_settings_returns_all_fields() {
         "test-key",
         None,
         &crate::tls::TlsConfig::default(),
+        crate::http::REQUEST_TIMEOUT,
     )
     .await
     .unwrap();
@@ -437,6 +550,7 @@ async fn detect_server_settings_keeps_version_none_when_probe_fails() {
         "test-key",
         None,
         &crate::tls::TlsConfig::default(),
+        crate::http::REQUEST_TIMEOUT,
     )
     .await
     .unwrap();

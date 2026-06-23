@@ -3,7 +3,7 @@ use serde::Deserialize;
 use super::encode_path;
 use super::BugzillaClient;
 use crate::error::{BzrError, Result};
-use crate::types::Classification;
+use crate::types::classification::Classification;
 
 #[derive(Deserialize)]
 struct ClassificationResponse {
@@ -35,10 +35,10 @@ impl BugzillaClient {
         let values = self.get_field_values("classification").await?;
         let mut classifications = Vec::with_capacity(values.len());
         for value in values {
-            if value.name.is_empty() {
+            let Some(name) = value.name.as_deref().filter(|name| !name.is_empty()) else {
                 continue;
-            }
-            classifications.push(self.get_classification(&value.name).await?);
+            };
+            classifications.push(self.get_classification(name).await?);
         }
         classifications.sort_by(|a, b| {
             a.sort_key

@@ -1,20 +1,24 @@
 //! Bug subcommand handlers, split per-action.
 
 use crate::cli::BugAction;
-use crate::error::Result;
-use crate::output::resources::bug::{
+use crate::commands::bug::search_support::fields::{
     validate_json_field_selection, validate_table_columns, warn_unknown_fields, ColumnSpec,
 };
+use crate::commands::runtime::context::CommandContext;
+use crate::error::Result;
 use crate::output::writers::Writers;
-use crate::types::{ApiMode, OutputFormat};
+use crate::types::common::OutputFormat;
 
 mod clone;
 mod create;
+mod create_json;
 mod history;
 mod list;
 mod my;
 mod search;
+pub(crate) mod search_support;
 mod update;
+mod update_json;
 mod verbs;
 mod view;
 
@@ -32,37 +36,6 @@ fn bug_column_spec(action: &BugAction) -> Option<ColumnSpec<'_>> {
         field_args.fields.as_deref(),
         field_args.exclude_fields.as_deref(),
     ))
-}
-
-/// Rewrite search params for `--count`: fetch only IDs (smallest payload) and
-/// lift the row limit (`0` = all matches, bounded by the server's max-results)
-/// so the count reflects the full match set, not a page of it. Clear offsets
-/// that may have come from saved Bugzilla URLs for the same reason.
-pub(super) fn count_search_params(
-    mut params: crate::types::SearchParams,
-) -> crate::types::SearchParams {
-    params.include_fields = Some("id".to_string());
-    params.exclude_fields = None;
-    params.limit = Some(0);
-    params.offset = None;
-    params.raw_params.retain(|(key, _)| key != "offset");
-    params
-}
-
-/// Reject `--offset`/`--paginate` combined with `--count`. `--count` reports
-/// the full match total, so windowing or page-looping it is contradictory;
-/// fail fast (exit 7) rather than silently ignore the paging flags.
-pub(super) fn ensure_no_paging_with_count(
-    count: bool,
-    offset: Option<u32>,
-    paginate: bool,
-) -> Result<()> {
-    if count && (offset.is_some() || paginate) {
-        return Err(crate::error::BzrError::InputValidation(
-            "--count cannot be combined with --offset or --paginate".into(),
-        ));
-    }
-    Ok(())
 }
 
 /// Whether a bug action is a mutation that supports `--dry-run` (the create-,
@@ -98,13 +71,8 @@ pub(crate) fn requires_credentials(action: &BugAction) -> Option<&'static str> {
 }
 
 /// Dispatch bug actions to their respective handlers.
-pub async fn execute(
-    action: &BugAction,
-    server: Option<&str>,
-    format: OutputFormat,
-    api: Option<ApiMode>,
-    w: &mut Writers<'_>,
-) -> Result<()> {
+pub async fn execute(action: &BugAction, ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
+    let format = ctx.format();
     update::validate_action(action)?;
 
     // `--web` resolves the bug's URL from local config and opens (or prints)
@@ -112,7 +80,7 @@ pub async fn execute(
     // of the connect/validate machinery below.
     if let BugAction::View(args) = action {
         if args.web {
-            return view::handle_web(&args.ids, server, w);
+            return view::handle_web(&args.ids, ctx, w);
         }
     }
 
@@ -149,23 +117,33 @@ pub async fn execute(
     // server from the URL hostname. Skip the shared connect to avoid double
     // auth/version detection on every `bug search` invocation.
     if let BugAction::Search(args) = action {
-        return search::handle(args, server, format, api, w).await;
+        return search::handle(args, ctx, w).await;
     }
 
-    let client = crate::commands::runtime::shared::connect_and_configure(server, api).await?;
-
     match action {
-        BugAction::List(args) => list::handle(&client, args, format, w).await,
-        BugAction::View(args) => view::handle(&client, args, format, w).await,
-        BugAction::History(args) => history::handle(&client, args, format, w).await,
-        BugAction::My(args) => my::handle(&client, args, format, w).await,
-        BugAction::Create(args) => create::handle(&client, args, format, w).await,
-        BugAction::Clone(args) => clone::handle(&client, args, format, w).await,
-        BugAction::Update(args) => update::handle(&client, args, format, w).await,
-        BugAction::Resolve(a) => verbs::resolve(&client, a, format, w).await,
-        BugAction::Close(a) => verbs::close(&client, a, format, w).await,
-        BugAction::Reopen(a) => verbs::reopen(&client, a, format, w).await,
-        BugAction::Dup(a) => verbs::dup(&client, a, format, w).await,
+        BugAction::List(args) => {
+            let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+            list::handle(&client, args, format, w).await
+        }
+        BugAction::View(args) => {
+            let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+            view::handle(&client, args, format, w).await
+        }
+        BugAction::History(args) => {
+            let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+            history::handle(&client, args, format, w).await
+        }
+        BugAction::My(args) => {
+            let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+            my::handle(&client, args, format, w).await
+        }
+        BugAction::Create(args) => create::handle(args, ctx, w).await,
+        BugAction::Clone(args) => clone::handle(args, ctx, w).await,
+        BugAction::Update(args) => update::handle(args, ctx, w).await,
+        BugAction::Resolve(a) => verbs::resolve(a, ctx, w).await,
+        BugAction::Close(a) => verbs::close(a, ctx, w).await,
+        BugAction::Reopen(a) => verbs::reopen(a, ctx, w).await,
+        BugAction::Dup(a) => verbs::dup(a, ctx, w).await,
         BugAction::Search(_) => unreachable!("handled above"),
     }
 }

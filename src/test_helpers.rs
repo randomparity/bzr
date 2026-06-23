@@ -2,6 +2,8 @@
 //!
 //! Tests that set `XDG_CONFIG_HOME` must hold `ENV_LOCK` to avoid races.
 
+use std::collections::{BTreeMap, BTreeSet};
+
 /// Acquire `ENV_LOCK`, start a mock server, create a temp dir, and configure it.
 /// Returns the guard, mock server, and temp dir (all must stay alive for the test).
 ///
@@ -15,12 +17,6 @@ pub async fn setup_test_env() -> (
     tempfile::TempDir,
 ) {
     let lock = super::ENV_LOCK.lock().await;
-    // Reset process-global mutation switches to the test baseline so a prior
-    // test cannot leak `--dry-run`/`--yes` into one that expects real writes
-    // or an interactive prompt.
-    super::commands::runtime::dry_run::set(false);
-    super::commands::runtime::confirm::set_yes(false);
-    super::commands::runtime::inline_server::set(None);
     let mock = wiremock::MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
@@ -70,8 +66,8 @@ pub fn make_attachment(
     file_name: &str,
     summary: &str,
     data: Option<String>,
-) -> crate::types::Attachment {
-    crate::types::Attachment {
+) -> crate::types::attachment::Attachment {
+    crate::types::attachment::Attachment {
         id,
         bug_id,
         file_name: file_name.into(),
@@ -126,6 +122,100 @@ impl CapturedIo {
 impl Default for CapturedIo {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct BooleanChartTriple {
+    field: String,
+    operator: String,
+    value: String,
+}
+
+impl BooleanChartTriple {
+    fn new(field: &str, operator: &str, value: &str) -> Self {
+        Self {
+            field: field.to_string(),
+            operator: operator.to_string(),
+            value: value.to_string(),
+        }
+    }
+}
+
+#[derive(Default)]
+struct BooleanChartParts {
+    field: Option<String>,
+    operator: Option<String>,
+    value: Option<String>,
+}
+
+pub struct HasBooleanChartTriples {
+    expected: BTreeSet<BooleanChartTriple>,
+}
+
+impl HasBooleanChartTriples {
+    pub fn new(expected: &[(&str, &str, &str)]) -> Self {
+        Self {
+            expected: expected
+                .iter()
+                .map(|(field, operator, value)| BooleanChartTriple::new(field, operator, value))
+                .collect(),
+        }
+    }
+}
+
+impl wiremock::Match for HasBooleanChartTriples {
+    fn matches(&self, request: &wiremock::Request) -> bool {
+        let actual = boolean_chart_triples(request);
+        self.expected.iter().all(|triple| actual.contains(triple))
+    }
+}
+
+fn boolean_chart_triples(request: &wiremock::Request) -> BTreeSet<BooleanChartTriple> {
+    let mut parts_by_index = BTreeMap::<String, BooleanChartParts>::new();
+    for (key, value) in request.url.query_pairs() {
+        let Some((part, index)) = boolean_chart_key_part(&key) else {
+            continue;
+        };
+        let parts = parts_by_index.entry(index.to_string()).or_default();
+        match part {
+            'f' => parts.field = Some(value.into_owned()),
+            'o' => parts.operator = Some(value.into_owned()),
+            'v' => parts.value = Some(value.into_owned()),
+            _ => {}
+        }
+    }
+
+    parts_by_index
+        .into_values()
+        .filter_map(|parts| {
+            Some(BooleanChartTriple {
+                field: parts.field?,
+                operator: parts.operator?,
+                value: parts.value?,
+            })
+        })
+        .collect()
+}
+
+fn boolean_chart_key_part(key: &str) -> Option<(char, &str)> {
+    if let Some(index) = key.strip_prefix('f') {
+        return valid_boolean_chart_index(index).map(|index| ('f', index));
+    }
+    if let Some(index) = key.strip_prefix('o') {
+        return valid_boolean_chart_index(index).map(|index| ('o', index));
+    }
+    if let Some(index) = key.strip_prefix('v') {
+        return valid_boolean_chart_index(index).map(|index| ('v', index));
+    }
+    None
+}
+
+fn valid_boolean_chart_index(index: &str) -> Option<&str> {
+    if !index.is_empty() && index.chars().all(|c| c.is_ascii_digit()) {
+        Some(index)
+    } else {
+        None
     }
 }
 

@@ -1,6 +1,6 @@
 use super::BugzillaClient;
 use crate::error::Result;
-use crate::types::{CreateComponentParams, UpdateComponentParams};
+use crate::types::component::{CreateComponentParams, UpdateComponentParams};
 
 impl BugzillaClient {
     pub async fn create_component(&self, params: &CreateComponentParams) -> Result<u64> {

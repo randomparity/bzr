@@ -1,10 +1,13 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+pub(crate) mod error;
 pub(crate) mod fingerprint;
 pub(crate) mod pin_failure;
 pub(crate) mod tofu;
 pub(crate) mod verifier;
+
+pub(crate) use error::{is_connect_tls_error, is_tls_cert_error, tls_hint, TLS_HINT};
 
 /// Get the default crypto provider, falling back to ring.
 pub(crate) fn default_provider() -> Arc<rustls::crypto::CryptoProvider> {
@@ -98,10 +101,13 @@ fn same_host_redirect_policy() -> reqwest::redirect::Policy {
 /// Used for real API calls; follows only same-host redirects so the API
 /// key header cannot leak to a redirect-target host (see
 /// [`same_host_redirect_policy`]).
-pub fn build_tls_client(config: &TlsConfig) -> crate::error::Result<reqwest::Client> {
+pub fn build_tls_client(
+    config: &TlsConfig,
+    request_timeout: std::time::Duration,
+) -> crate::error::Result<reqwest::Client> {
     let builder = reqwest::Client::builder()
         .connect_timeout(crate::http::CONNECT_TIMEOUT)
-        .timeout(crate::http::request_timeout())
+        .timeout(request_timeout)
         .redirect(same_host_redirect_policy());
     apply_tls_verification(builder, config)?
         .build()
@@ -116,10 +122,13 @@ pub fn build_tls_client(config: &TlsConfig) -> crate::error::Result<reqwest::Cli
 /// TLS error (or pin mismatch) for an endpoint the user did not
 /// configure, and any subsequent prompt would describe one host while
 /// trusting another.
-pub(crate) fn build_probe_client(config: &TlsConfig) -> crate::error::Result<reqwest::Client> {
+pub(crate) fn build_probe_client(
+    config: &TlsConfig,
+    request_timeout: std::time::Duration,
+) -> crate::error::Result<reqwest::Client> {
     let builder = reqwest::Client::builder()
         .connect_timeout(crate::http::CONNECT_TIMEOUT)
-        .timeout(crate::http::request_timeout())
+        .timeout(request_timeout)
         .redirect(reqwest::redirect::Policy::none());
     apply_tls_verification(builder, config)?
         .build()

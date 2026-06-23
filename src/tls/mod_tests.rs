@@ -4,7 +4,7 @@ use super::*;
 
 #[test]
 fn build_tls_client_default_succeeds() {
-    let client = build_tls_client(&TlsConfig::default());
+    let client = build_tls_client(&TlsConfig::default(), crate::http::REQUEST_TIMEOUT);
     assert!(client.is_ok());
 }
 
@@ -14,7 +14,7 @@ fn build_tls_client_insecure_succeeds() {
         insecure: true,
         ..Default::default()
     };
-    assert!(build_tls_client(&config).is_ok());
+    assert!(build_tls_client(&config, crate::http::REQUEST_TIMEOUT).is_ok());
 }
 
 #[test]
@@ -24,7 +24,7 @@ fn build_tls_client_pinned_succeeds() {
         server_name: Some("test".into()),
         ..Default::default()
     };
-    assert!(build_tls_client(&config).is_ok());
+    assert!(build_tls_client(&config, crate::http::REQUEST_TIMEOUT).is_ok());
 }
 
 #[test]
@@ -33,7 +33,7 @@ fn build_tls_client_bad_pin_fails() {
         pin_sha256: Some("not-a-valid-pin".into()),
         ..Default::default()
     };
-    assert!(build_tls_client(&config).is_err());
+    assert!(build_tls_client(&config, crate::http::REQUEST_TIMEOUT).is_err());
 }
 
 #[test]
@@ -42,7 +42,7 @@ fn build_tls_client_missing_ca_cert_fails() {
         ca_cert_path: Some("/nonexistent/ca.pem".into()),
         ..Default::default()
     };
-    let err = build_tls_client(&config).unwrap_err();
+    let err = build_tls_client(&config, crate::http::REQUEST_TIMEOUT).unwrap_err();
     assert!(
         err.to_string().contains("failed to read"),
         "should report missing file: {err}"
@@ -77,21 +77,19 @@ async fn cross_host_redirect_pair() -> (wiremock::MockServer, wiremock::MockServ
 #[tokio::test]
 async fn api_key_header_not_forwarded_across_cross_host_redirect() {
     let (origin, target) = cross_host_redirect_pair().await;
-    let client = build_tls_client(&TlsConfig::default()).unwrap();
+    let client = build_tls_client(&TlsConfig::default(), crate::http::REQUEST_TIMEOUT).unwrap();
 
-    // Mirror the real client's header-auth attach (http::apply_auth_to_request).
+    // Mirror the real client's header-auth attach.
     let _ = client
         .get(format!("{}/start", origin.uri()))
-        .header(crate::http::AUTH_HEADER_NAME, "SECRET-API-KEY")
+        .header(crate::bugzilla_auth::AUTH_HEADER_NAME, "SECRET-API-KEY")
         .send()
         .await;
 
-    let leaked = target
-        .received_requests()
-        .await
-        .unwrap()
-        .iter()
-        .any(|r| r.headers.contains_key(crate::http::AUTH_HEADER_NAME));
+    let leaked = target.received_requests().await.unwrap().iter().any(|r| {
+        r.headers
+            .contains_key(crate::bugzilla_auth::AUTH_HEADER_NAME)
+    });
     assert!(
         !leaked,
         "API key header must not be forwarded to a different host across a redirect"
@@ -101,18 +99,18 @@ async fn api_key_header_not_forwarded_across_cross_host_redirect() {
 #[tokio::test]
 async fn api_key_query_param_not_forwarded_across_cross_host_redirect() {
     let (origin, target) = cross_host_redirect_pair().await;
-    let client = build_tls_client(&TlsConfig::default()).unwrap();
+    let client = build_tls_client(&TlsConfig::default(), crate::http::REQUEST_TIMEOUT).unwrap();
 
     let _ = client
         .get(format!("{}/start", origin.uri()))
-        .query(&[(crate::http::AUTH_QUERY_PARAM, "SECRET-QP-KEY")])
+        .query(&[(crate::bugzilla_auth::AUTH_QUERY_PARAM, "SECRET-QP-KEY")])
         .send()
         .await;
 
     let leaked = target.received_requests().await.unwrap().iter().any(|r| {
         r.url
             .query()
-            .is_some_and(|q| q.contains(crate::http::AUTH_QUERY_PARAM))
+            .is_some_and(|q| q.contains(crate::bugzilla_auth::AUTH_QUERY_PARAM))
     });
     assert!(
         !leaked,
@@ -138,17 +136,19 @@ async fn same_host_redirect_is_followed_with_credentials() {
         .mount(&server)
         .await;
 
-    let client = build_tls_client(&TlsConfig::default()).unwrap();
+    let client = build_tls_client(&TlsConfig::default(), crate::http::REQUEST_TIMEOUT).unwrap();
     let resp = client
         .get(format!("{}/start", server.uri()))
-        .header(crate::http::AUTH_HEADER_NAME, "SECRET-API-KEY")
+        .header(crate::bugzilla_auth::AUTH_HEADER_NAME, "SECRET-API-KEY")
         .send()
         .await
         .unwrap();
     assert_eq!(resp.status(), 200, "same-host redirect should be followed");
 
     let landed_with_key = server.received_requests().await.unwrap().iter().any(|r| {
-        r.url.path() == "/landed" && r.headers.contains_key(crate::http::AUTH_HEADER_NAME)
+        r.url.path() == "/landed"
+            && r.headers
+                .contains_key(crate::bugzilla_auth::AUTH_HEADER_NAME)
     });
     assert!(
         landed_with_key,

@@ -5,9 +5,10 @@
 
 use crate::cli::{CloseArgs, CommentArgs, DupArgs, ReopenArgs, ResolveArgs};
 use crate::client::BugzillaClient;
+use crate::commands::runtime::context::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::writers::Writers;
-use crate::types::{CommentUpdate, OutputFormat, UpdateBugParams};
+use crate::types::bug::{CommentUpdate, UpdateBugParams};
 
 /// Resolve the `CommentArgs` into an optional `CommentUpdate`, reusing the same
 /// stdin/file/private handling as `bug update`.
@@ -19,6 +20,15 @@ fn comment_update(args: &CommentArgs) -> Result<Option<CommentUpdate>> {
     )
 }
 
+/// Reject locally invalid `close` / `reopen` status values before any dry-run
+/// or server lookup path.
+fn validate_target_status_value(status: &str) -> Result<()> {
+    if status.trim().is_empty() {
+        return Err(BzrError::InputValidation("--status cannot be empty".into()));
+    }
+    Ok(())
+}
+
 /// Confirm the `close` / `reopen` target status exists on the server before
 /// writing, so an unknown status fails with an actionable client-side error
 /// (exit 7) rather than the server's opaque "no status named X" API error.
@@ -26,25 +36,17 @@ fn comment_update(args: &CommentArgs) -> Result<Option<CommentUpdate>> {
 /// The match is exact and case-sensitive against the names the server returns
 /// (Bugzilla statuses are uppercase). The check proves the status *exists*; the
 /// legality of the transition from the bug's current status is still left to
-/// the server. Skipped under `--dry-run`, which performs no mutation and whose
-/// preview already shows the status that would be sent.
+/// the server. Callers skip this lookup under `--dry-run`, which performs no
+/// mutation and whose preview already shows the status that would be sent.
 async fn validate_target_status(client: &BugzillaClient, status: &str) -> Result<()> {
-    if crate::commands::runtime::dry_run::enabled() {
-        return Ok(());
-    }
-    if status.trim().is_empty() {
-        return Err(BzrError::InputValidation("--status cannot be empty".into()));
-    }
+    validate_target_status_value(status)?;
     let values = client.get_field_values("status").await?;
-    if values
-        .iter()
-        .any(|v| !v.name.is_empty() && v.name == status)
-    {
+    if values.iter().any(|v| v.name.as_deref() == Some(status)) {
         return Ok(());
     }
     let valid: Vec<&str> = values
         .iter()
-        .map(|v| v.name.as_str())
+        .filter_map(|v| v.name.as_deref())
         .filter(|n| !n.is_empty())
         .collect();
     Err(BzrError::InputValidation(format!(
@@ -54,9 +56,8 @@ async fn validate_target_status(client: &BugzillaClient, status: &str) -> Result
 }
 
 pub(super) async fn resolve(
-    client: &BugzillaClient,
     args: &ResolveArgs,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let params = UpdateBugParams {
@@ -66,92 +67,83 @@ pub(super) async fn resolve(
         ..Default::default()
     };
     super::update::apply_checked(
-        client,
         super::update::ApplyRequest {
             ids: args.ids.clone(),
             params,
             expect_unchanged_since: args.expect_unchanged_since.as_deref(),
         },
-        format,
+        ctx,
         w,
     )
     .await
 }
 
 pub(super) async fn close(
-    client: &BugzillaClient,
     args: &CloseArgs,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     // Resolve the comment (local validation) before the network status check so
     // a bad --comment-private combination fails without a round-trip.
     let comment = comment_update(&args.comment)?;
-    validate_target_status(client, &args.status).await?;
+    validate_target_status_value(&args.status)?;
     let params = UpdateBugParams {
         status: Some(args.status.clone()),
         resolution: args.as_resolution.clone(),
         comment,
         ..Default::default()
     };
-    super::update::apply_checked(
-        client,
-        super::update::ApplyRequest {
-            ids: args.ids.clone(),
-            params,
-            expect_unchanged_since: args.expect_unchanged_since.as_deref(),
-        },
-        format,
-        w,
-    )
-    .await
+    let request = super::update::ApplyRequest {
+        ids: args.ids.clone(),
+        params,
+        expect_unchanged_since: args.expect_unchanged_since.as_deref(),
+    };
+    if ctx.dry_run() {
+        return super::update::apply_checked(request, ctx, w).await;
+    }
+    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+    validate_target_status(&client, &args.status).await?;
+    super::update::apply_checked_connected(&client, request, ctx, w).await
 }
 
 pub(super) async fn reopen(
-    client: &BugzillaClient,
     args: &ReopenArgs,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let comment = comment_update(&args.comment)?;
-    validate_target_status(client, &args.status).await?;
+    validate_target_status_value(&args.status)?;
     let params = UpdateBugParams {
         status: Some(args.status.clone()),
         comment,
         ..Default::default()
     };
-    super::update::apply_checked(
-        client,
-        super::update::ApplyRequest {
-            ids: args.ids.clone(),
-            params,
-            expect_unchanged_since: args.expect_unchanged_since.as_deref(),
-        },
-        format,
-        w,
-    )
-    .await
+    let request = super::update::ApplyRequest {
+        ids: args.ids.clone(),
+        params,
+        expect_unchanged_since: args.expect_unchanged_since.as_deref(),
+    };
+    if ctx.dry_run() {
+        return super::update::apply_checked(request, ctx, w).await;
+    }
+    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+    validate_target_status(&client, &args.status).await?;
+    super::update::apply_checked_connected(&client, request, ctx, w).await
 }
 
-pub(super) async fn dup(
-    client: &BugzillaClient,
-    args: &DupArgs,
-    format: OutputFormat,
-    w: &mut Writers<'_>,
-) -> Result<()> {
+pub(super) async fn dup(args: &DupArgs, ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
     let params = UpdateBugParams {
         dupe_of: Some(args.target),
         comment: comment_update(&args.comment)?,
         ..Default::default()
     };
     super::update::apply_checked(
-        client,
         super::update::ApplyRequest {
             ids: vec![args.id],
             params,
             expect_unchanged_since: args.expect_unchanged_since.as_deref(),
         },
-        format,
+        ctx,
         w,
     )
     .await

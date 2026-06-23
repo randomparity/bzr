@@ -6,11 +6,37 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use super::*;
 use test_helpers::{test_client, test_client_query_param};
 
+fn debug_logging_guard() -> tracing::dispatcher::DefaultGuard {
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .with_writer(std::io::sink)
+        .finish();
+    tracing::subscriber::set_default(subscriber)
+}
+
+fn multibyte_body_crossing_preview_boundary() -> String {
+    let mut body = "a".repeat(super::BODY_PREVIEW_MAX_BYTES - 1);
+    body.push('é');
+    body.push_str(" trailing");
+    body
+}
+
+fn has_no_auth_header(req: &wiremock::Request) -> bool {
+    !req.headers
+        .contains_key(crate::bugzilla_auth::AUTH_HEADER_NAME)
+}
+
+fn has_no_auth_query_param(req: &wiremock::Request) -> bool {
+    req.url
+        .query_pairs()
+        .all(|(name, _)| name != crate::bugzilla_auth::AUTH_QUERY_PARAM)
+}
+
 #[test]
 fn safe_url_strips_query_params() {
     let url = reqwest::Url::parse(&format!(
         "https://bugzilla.example.com/rest/bug/1?{}=secret",
-        crate::http::AUTH_QUERY_PARAM
+        crate::bugzilla_auth::AUTH_QUERY_PARAM
     ))
     .unwrap();
     let safe = BugzillaClient::safe_url(&url);
@@ -40,6 +66,8 @@ fn new_trims_trailing_slash_and_keeps_email_hint() {
         api_mode: ApiMode::Rest,
         email_hint: Some("user@example.com"),
         tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
     })
     .unwrap();
 
@@ -77,6 +105,8 @@ async fn anonymous_client_sends_no_api_key_header_or_query() {
         api_mode: ApiMode::Rest,
         email_hint: None,
         tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
     })
     .unwrap();
 
@@ -87,12 +117,12 @@ async fn anonymous_client_sends_no_api_key_header_or_query() {
     assert_eq!(requests.len(), 1);
     assert!(requests[0]
         .headers
-        .get(crate::http::AUTH_HEADER_NAME)
+        .get(crate::bugzilla_auth::AUTH_HEADER_NAME)
         .is_none());
     assert!(requests[0]
         .url
         .query_pairs()
-        .all(|(name, _)| name != crate::http::AUTH_QUERY_PARAM));
+        .all(|(name, _)| name != crate::bugzilla_auth::AUTH_QUERY_PARAM));
 }
 
 #[test]
@@ -104,6 +134,8 @@ fn alternate_auth_rejects_invalid_header_characters() {
         api_mode: ApiMode::Rest,
         email_hint: None,
         tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
     })
     .unwrap();
 
@@ -167,7 +199,10 @@ async fn http_500_returns_error() {
         .await;
 
     let client = test_client(&mock.uri());
-    let err = client.search_users("anyone", false).await.unwrap_err();
+    let err = client
+        .search_users("anyone", UserDetailLevel::Basic)
+        .await
+        .unwrap_err();
     let msg = err.to_string();
     assert!(
         msg.contains("500") || msg.contains("Internal Server Error"),
@@ -181,7 +216,11 @@ async fn auth_fallback_header_to_query_param_on_401() {
     // Success response requires query param auth (registered first)
     Mock::given(method("GET"))
         .and(path("/rest/user"))
-        .and(query_param(crate::http::AUTH_QUERY_PARAM, "test-key"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
+        .and(has_no_auth_header)
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "users": [{"id": 1, "name": "alice@example.com"}]
         })))
@@ -202,7 +241,10 @@ async fn auth_fallback_header_to_query_param_on_401() {
         .await;
 
     let client = test_client(&mock.uri());
-    let users = client.search_users("alice", false).await.unwrap();
+    let users = client
+        .search_users("alice", UserDetailLevel::Basic)
+        .await
+        .unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].name, "alice@example.com");
 }
@@ -214,9 +256,10 @@ async fn auth_fallback_query_param_to_header_on_401() {
     Mock::given(method("GET"))
         .and(path("/rest/user"))
         .and(wiremock::matchers::header(
-            crate::http::AUTH_HEADER_NAME,
+            crate::bugzilla_auth::AUTH_HEADER_NAME,
             "test-key",
         ))
+        .and(has_no_auth_query_param)
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "users": [{"id": 2, "name": "bob@example.com"}]
         })))
@@ -237,7 +280,10 @@ async fn auth_fallback_query_param_to_header_on_401() {
         .await;
 
     let client = test_client_query_param(&mock.uri());
-    let users = client.search_users("bob", false).await.unwrap();
+    let users = client
+        .search_users("bob", UserDetailLevel::Basic)
+        .await
+        .unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].name, "bob@example.com");
 }
@@ -256,7 +302,10 @@ async fn auth_fallback_both_fail_returns_original_error() {
         .await;
 
     let client = test_client(&mock.uri());
-    let err = client.search_users("anyone", false).await.unwrap_err();
+    let err = client
+        .search_users("anyone", UserDetailLevel::Basic)
+        .await
+        .unwrap_err();
     let msg = err.to_string();
     assert!(
         msg.contains("410") || msg.contains("log in"),
@@ -285,10 +334,15 @@ async fn anonymous_client_does_not_retry_401_with_alternate_auth() {
         api_mode: ApiMode::Rest,
         email_hint: None,
         tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
     })
     .unwrap();
 
-    let err = client.search_users("alice", false).await.unwrap_err();
+    let err = client
+        .search_users("alice", UserDetailLevel::Basic)
+        .await
+        .unwrap_err();
 
     assert!(err.to_string().contains("410"));
     assert_eq!(mock.received_requests().await.unwrap().len(), 1);
@@ -309,7 +363,10 @@ async fn non_401_errors_do_not_trigger_fallback() {
         .await;
 
     let client = test_client(&mock.uri());
-    let err = client.search_users("anyone", false).await.unwrap_err();
+    let err = client
+        .search_users("anyone", UserDetailLevel::Basic)
+        .await
+        .unwrap_err();
     assert!(err.to_string().contains("not authorized"));
 }
 
@@ -337,6 +394,50 @@ async fn api_error_with_string_code_parsed_correctly() {
     assert!(
         matches!(&err, crate::error::BzrError::Api { code: 32610, .. }),
         "expected Api error with code 32610, got: {err}"
+    );
+}
+
+#[test]
+fn parse_body_to_value_handles_multibyte_debug_preview_boundary() {
+    let _guard = debug_logging_guard();
+    let body = multibyte_body_crossing_preview_boundary();
+
+    let err = BugzillaClient::parse_body_to_value(&body, "https://bugzilla.example/rest/bug")
+        .unwrap_err();
+
+    assert!(
+        matches!(err, crate::error::BzrError::Deserialize(_)),
+        "invalid JSON should return a deserialize error, got: {err}"
+    );
+}
+
+#[tokio::test]
+async fn http_error_preview_handles_multibyte_debug_preview_boundary() {
+    let _guard = debug_logging_guard();
+    let mock = MockServer::start().await;
+    let body = multibyte_body_crossing_preview_boundary();
+    Mock::given(method("GET"))
+        .and(path("/rest/group"))
+        .respond_with(ResponseTemplate::new(500).set_body_string(body.clone()))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let resp = client
+        .http
+        .get(format!("{}/rest/group", mock.uri()))
+        .send()
+        .await
+        .unwrap();
+    let err = client.check_response_status(resp).await.unwrap_err();
+
+    assert!(
+        matches!(
+            &err,
+            crate::error::BzrError::HttpStatus { status: 500, body: returned }
+                if returned == &body
+        ),
+        "expected HTTP 500 with original body, got: {err}"
     );
 }
 
@@ -633,6 +734,32 @@ async fn parse_json_includes_body_preview_on_invalid_json() {
         msg.contains("not valid json"),
         "preview should contain raw body: {msg}"
     );
+}
+
+#[tokio::test]
+async fn parse_json_invalid_json_handles_multibyte_debug_preview_boundary() {
+    let _guard = debug_logging_guard();
+    let mock = MockServer::start().await;
+    let body = multibyte_body_crossing_preview_boundary();
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/attachment"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(body))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_attachments(42).await.unwrap_err();
+    assert!(
+        matches!(&err, crate::error::BzrError::Deserialize(_)),
+        "invalid JSON should return a deserialize error, got: {err}"
+    );
+
+    let msg = err.to_string();
+    assert!(
+        msg.contains("body preview"),
+        "error should include body preview: {msg}"
+    );
+    assert!(msg.contains('…'), "preview should be truncated: {msg}");
 }
 
 #[tokio::test]

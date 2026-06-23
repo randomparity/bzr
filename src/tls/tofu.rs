@@ -66,7 +66,10 @@ impl ServerCertVerifier for CertCapture {
 /// SEQUENCE, or `None` if DER extraction fails.
 ///
 /// No authentication headers are sent — only a HEAD request is made.
-pub(crate) async fn probe_server_cert(url: &str) -> Result<(String, String, Option<String>)> {
+pub(crate) async fn probe_server_cert(
+    url: &str,
+    request_timeout: std::time::Duration,
+) -> Result<(String, String, Option<String>)> {
     let provider = super::default_provider();
 
     let capture = Arc::new(CertCapture {
@@ -86,14 +89,12 @@ pub(crate) async fn probe_server_cert(url: &str) -> Result<(String, String, Opti
     let client = reqwest::Client::builder()
         .use_preconfigured_tls(tls_config)
         .connect_timeout(crate::http::CONNECT_TIMEOUT)
-        .timeout(crate::http::REQUEST_TIMEOUT)
+        .timeout(request_timeout)
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| BzrError::config(format!("failed to build TLS probe client: {e}")))?;
 
-    client.head(url).send().await.map_err(|e| {
-        BzrError::config(format!("failed to probe server certificate at {url}: {e}"))
-    })?;
+    client.head(url).send().await?;
 
     let (der, issuer) = capture
         .captured
@@ -121,12 +122,7 @@ fn read_interactive_line(prompt: &str) -> Result<Option<String>> {
     Ok(Some(input.trim().to_string()))
 }
 
-/// Parse a TOFU response from user input.
-///
-/// Returns:
-/// - `Some(true)` for "always" (persist the pin)
-/// - `Some(false)` for "y"/"yes" (trust once)
-/// - `None` for anything else (reject)
+// TOFU prompts accept y/yes for one-time trust and always for persisted trust.
 pub(crate) fn parse_tofu_response(input: &str) -> Option<bool> {
     match input.trim().to_ascii_lowercase().as_str() {
         "always" => Some(true),
@@ -135,14 +131,10 @@ pub(crate) fn parse_tofu_response(input: &str) -> Option<bool> {
     }
 }
 
-/// Return whether user input is an affirmative yes response.
-/// Returns `true` for "y" or "yes" (case-insensitive).
 pub(crate) fn is_yes_response(input: &str) -> bool {
     input.trim().eq_ignore_ascii_case("y") || input.trim().eq_ignore_ascii_case("yes")
 }
 
-/// Prompt the user to confirm pinning a certificate. Returns `false`
-/// if stdin is not a terminal.
 pub(crate) fn confirm_pin() -> Result<bool> {
     let input = read_interactive_line("Pin this certificate? [y/N] ")?;
     Ok(input.as_deref().is_some_and(is_yes_response))

@@ -17,9 +17,9 @@ impl FromStr for AuthMethod {
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
             "header" => Ok(AuthMethod::Header),
-            "query_param" => Ok(AuthMethod::QueryParam),
+            "query_param" | "query-param" => Ok(AuthMethod::QueryParam),
             _ => Err(format!(
-                "invalid auth method '{s}': expected 'header' or 'query_param'"
+                "invalid auth method '{s}': expected 'header', 'query_param', or 'query-param'"
             )),
         }
     }

@@ -1,6 +1,6 @@
 use clap::Subcommand;
 
-use crate::types::ProductListType;
+use crate::types::product::ProductListType;
 
 #[derive(Subcommand)]
 #[expect(

@@ -1,18 +1,16 @@
 use crate::cli::ClassificationAction;
+use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::resources::classification::{write_classification, write_classifications};
 use crate::output::writers::Writers;
-use crate::types::ApiMode;
-use crate::types::OutputFormat;
 
 pub async fn execute(
     action: &ClassificationAction,
-    server: Option<&str>,
-    format: OutputFormat,
-    api: Option<ApiMode>,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let client = super::runtime::shared::connect_and_configure(server, api).await?;
+    let format = ctx.format();
+    let client = super::runtime::shared::connect_and_configure(ctx).await?;
 
     match action {
         ClassificationAction::List => {

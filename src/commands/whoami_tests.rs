@@ -23,7 +23,11 @@ async fn whoami_returns_user_info() {
 
     let mut __io = crate::test_helpers::CapturedIo::new();
 
-    let result = super::execute(None, OutputFormat::Json, None, &mut __io.writers()).await;
+    let result = super::execute(
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
 
     let output = __io.out_str().to_string();
     assert!(result.is_ok());
@@ -45,6 +49,10 @@ async fn whoami_http_500_returns_error() {
         .mount(&mock)
         .await;
 
-    let result = super::execute(None, OutputFormat::Json, None, &mut __cap_io.writers()).await;
+    let result = super::execute(
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __cap_io.writers(),
+    )
+    .await;
     assert!(result.is_err());
 }

@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
 
 use super::encode_path;
-use super::BugzillaClient;
-use super::{UserSearchResponse, USER_FIELDS_BASIC, USER_FIELDS_DETAILED};
+use super::{BugzillaClient, UserDetailLevel, UserSearchResponse};
 use crate::error::{BzrError, Result};
-use crate::types::ApiMode;
+use crate::types::common::ApiMode;
+use crate::types::group::{CreateGroupParams, GroupInfo, UpdateGroupParams};
+use crate::types::user::BugzillaUser;
 
 #[derive(Serialize)]
 struct GroupMembershipBody {
@@ -18,8 +19,6 @@ struct GroupMembershipAction {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     remove: Vec<String>,
 }
-use crate::types::{BugzillaUser, CreateGroupParams, GroupInfo, UpdateGroupParams};
-
 #[derive(Deserialize)]
 struct GroupResponse {
     groups: Vec<GroupInfo>,
@@ -29,13 +28,9 @@ impl BugzillaClient {
     pub async fn get_group_members(
         &self,
         group_name: &str,
-        detailed: bool,
+        detail_level: UserDetailLevel,
     ) -> Result<Vec<BugzillaUser>> {
-        let fields = if detailed {
-            USER_FIELDS_DETAILED
-        } else {
-            USER_FIELDS_BASIC
-        };
+        let fields = detail_level.include_fields();
         // Bugzilla 5.0 requires at least one of ids/names/match alongside
         // the group filter. Use a broad match pattern to list all members.
         let data: UserSearchResponse = self
@@ -75,7 +70,7 @@ impl BugzillaClient {
 
     pub async fn get_group(&self, group: &str) -> Result<GroupInfo> {
         match self.api_mode {
-            ApiMode::XmlRpc => return self.xmlrpc_client()?.get_group(group).await,
+            ApiMode::XmlRpc => return self.xmlrpc_client().get_group(group).await,
             ApiMode::Rest | ApiMode::Hybrid => {}
         }
 
@@ -90,14 +85,14 @@ impl BugzillaClient {
                     "REST Group.get blocked (32610), \
                      falling back to XML-RPC"
                 );
-                self.xmlrpc_client()?.get_group(group).await
+                self.xmlrpc_client().get_group(group).await
             }
             Err(e) if self.api_mode == ApiMode::Hybrid && e.is_transport_failure() => {
                 tracing::info!(
                     "REST group lookup failed ({e}), \
                      retrying via XML-RPC"
                 );
-                self.xmlrpc_client()?.get_group(group).await
+                self.xmlrpc_client().get_group(group).await
             }
             Err(e) => Err(e),
         }

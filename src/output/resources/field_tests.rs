@@ -25,7 +25,7 @@ fn write_field_values_json_empty() {
 #[test]
 fn write_field_values_json_with_transitions() {
     let values = vec![FieldValue {
-        name: "NEW".into(),
+        name: Some("NEW".into()),
         sort_key: 0,
         is_active: true,
         can_change_to: Some(vec![
@@ -50,7 +50,7 @@ fn write_field_values_json_with_transitions() {
 fn write_field_values_json_active_and_inactive() {
     let values = vec![
         FieldValue {
-            name: "NEW".into(),
+            name: Some("NEW".into()),
             sort_key: 0,
             is_active: true,
             can_change_to: Some(vec![StatusTransition {
@@ -58,7 +58,7 @@ fn write_field_values_json_active_and_inactive() {
             }]),
         },
         FieldValue {
-            name: "CLOSED".into(),
+            name: Some("CLOSED".into()),
             sort_key: 1,
             is_active: false,
             can_change_to: None,
@@ -110,7 +110,7 @@ fn write_field_values_json_empty_renders_empty_array() {
 fn write_field_values_table_renders_transitions_and_inactive() {
     let values = vec![
         FieldValue {
-            name: "NEW".into(),
+            name: Some("NEW".into()),
             sort_key: 0,
             is_active: true,
             can_change_to: Some(vec![
@@ -123,7 +123,7 @@ fn write_field_values_table_renders_transitions_and_inactive() {
             ]),
         },
         FieldValue {
-            name: "CLOSED".into(),
+            name: Some("CLOSED".into()),
             sort_key: 1,
             is_active: false,
             can_change_to: None,
@@ -138,9 +138,23 @@ fn write_field_values_table_renders_transitions_and_inactive() {
 }
 
 #[test]
+fn write_field_values_table_renders_blank_for_null_name() {
+    let values = vec![FieldValue {
+        name: None,
+        sort_key: 0,
+        is_active: true,
+        can_change_to: None,
+    }];
+    let output = capture_values(OutputFormat::Table, &values);
+    assert!(output.contains("Yes"));
+    assert!(!output.contains("None"));
+    assert!(!output.contains("null"));
+}
+
+#[test]
 fn write_field_values_table_handles_unicode_value_name() {
     let values = vec![FieldValue {
-        name: "résolu".into(),
+        name: Some("résolu".into()),
         sort_key: 0,
         is_active: true,
         can_change_to: Some(vec![StatusTransition {
@@ -155,7 +169,7 @@ fn write_field_values_table_handles_unicode_value_name() {
 #[test]
 fn write_field_values_json_via_write() {
     let values = vec![FieldValue {
-        name: "NEW".into(),
+        name: Some("NEW".into()),
         sort_key: 0,
         is_active: true,
         can_change_to: Some(vec![StatusTransition {

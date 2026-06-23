@@ -3,7 +3,7 @@
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use super::{fetch_page, resolve_offset, write_truncation_note, Page};
+use super::{fetch_all_pages_with_cap, fetch_page, resolve_offset, write_truncation_note, Page};
 use crate::client::test_helpers::test_client;
 use crate::types::{Bug, OutputFormat, SearchParams};
 
@@ -241,5 +241,29 @@ async fn fetch_page_paginate_zero_limit_makes_single_unbounded_request() {
         page.bugs.len(),
         1,
         "a single unbounded request returns the one page as-is"
+    );
+}
+
+#[tokio::test]
+async fn fetch_all_pages_errors_when_safety_cap_reached_without_short_page() {
+    let mock = MockServer::start().await;
+    for off in ["0", "2"] {
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("offset", off))
+            .respond_with(ResponseTemplate::new(200).set_body_json(bugs_body(2)))
+            .mount(&mock)
+            .await;
+    }
+
+    let client = test_client(&mock.uri());
+    let err = fetch_all_pages_with_cap(&client, &params_with_limit(2), 2)
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(&err, crate::error::BzrError::InputValidation(msg)
+            if msg.contains("--paginate") && msg.contains("safety cap")),
+        "cap exhaustion should fail instead of returning incomplete results: {err:?}"
     );
 }

@@ -21,7 +21,7 @@ fn field_value_record(value: &FieldValue) -> Vec<String> {
         })
         .unwrap_or_default();
     vec![
-        value.name.clone(),
+        value.name.clone().unwrap_or_default(),
         yes_no(value.is_active).into(),
         transitions,
     ]

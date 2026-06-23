@@ -10,23 +10,14 @@ pub mod datetime;
 pub use datetime::{parse_date_only, parse_iso8601_or_date, timestamp_compare_key};
 
 use crate::error::Result;
-use crate::field_aliases::resolve_field_alias;
-use crate::types::SortDirection;
+use crate::types::{resolve_field_alias, SortDirection};
 
-/// Validate an optional date string for use as a Bugzilla search filter.
-///
-/// `None` is passed through unchanged; `Some(s)` is canonicalized via
-/// [`parse_iso8601_or_date`]. Wraps the common
-/// `opt.as_deref().map(|s| parse_iso8601_or_date(s, flag)).transpose()`
-/// idiom used at every CLI date-flag site.
+/// Validate an optional search date flag.
 pub fn parse_optional_date(opt: Option<&str>, flag: &str) -> Result<Option<String>> {
     opt.map(|s| parse_iso8601_or_date(s, flag)).transpose()
 }
 
-/// Validate an optional bare `YYYY-MM-DD` date for a date-only field.
-///
-/// `None` is passed through unchanged; `Some(s)` is validated via
-/// [`parse_date_only`] and returned verbatim (no datetime expansion).
+/// Validate an optional date-only flag.
 pub fn parse_optional_date_only(opt: Option<&str>, flag: &str) -> Result<Option<String>> {
     opt.map(|s| parse_date_only(s, flag)).transpose()
 }

@@ -4,14 +4,14 @@ use colored::Colorize;
 use serde::Serialize;
 
 use crate::output::formatting::write_formatted;
-use crate::types::{OutputFormat, ServerInfoResponse};
+use crate::types::common::{ExtensionInfo, OutputFormat, ServerInfoResponse};
 
 /// Combined server information for display.
 #[derive(Serialize)]
 #[non_exhaustive]
 struct ServerInfo<'a> {
     version: &'a str,
-    extensions: &'a std::collections::HashMap<String, crate::types::ExtensionInfo>,
+    extensions: &'a std::collections::HashMap<String, ExtensionInfo>,
 }
 
 impl<'a> From<&'a ServerInfoResponse> for ServerInfo<'a> {

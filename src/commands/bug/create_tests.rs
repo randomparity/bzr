@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used, clippy::panic)]
 
-use std::{collections::BTreeSet, io::Write};
+use std::io::Write;
 
 use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, ResponseTemplate};
@@ -9,8 +9,6 @@ use crate::cli::{BugAction, TemplateAction, TemplateFields};
 use crate::error::BzrError;
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
-
-use super::JsonCreateBug;
 
 fn create_action() -> BugAction {
     BugAction::Create(crate::cli::CreateArgs {
@@ -33,99 +31,6 @@ fn create_action() -> BugAction {
     })
 }
 
-fn schema_value(name: &str) -> serde_json::Value {
-    let (_, body) = crate::commands::schema::SCHEMAS
-        .iter()
-        .find(|(schema_name, _)| *schema_name == name)
-        .unwrap_or_else(|| panic!("schema '{name}' is not registered"));
-    serde_json::from_str(body).unwrap_or_else(|err| panic!("schema '{name}' is invalid: {err}"))
-}
-
-fn schema_object_properties(
-    name: &str,
-    def_name: &str,
-) -> serde_json::Map<String, serde_json::Value> {
-    let pointer = format!("/$defs/{def_name}/properties");
-    schema_value(name)
-        .pointer(&pointer)
-        .and_then(serde_json::Value::as_object)
-        .unwrap_or_else(|| panic!("schema '{name}' missing {pointer}"))
-        .clone()
-}
-
-fn parser_fields_from_unknown_error<T>() -> BTreeSet<String>
-where
-    T: serde::de::DeserializeOwned,
-{
-    let err = match serde_json::from_value::<T>(serde_json::json!({
-        "__bzr_unknown_field__": true,
-    })) {
-        Ok(_) => panic!("unknown sentinel field unexpectedly parsed"),
-        Err(err) => err.to_string(),
-    };
-    let expected = err
-        .split_once("expected ")
-        .unwrap_or_else(|| panic!("serde error did not list expected fields: {err}"))
-        .1;
-    expected
-        .split('`')
-        .skip(1)
-        .step_by(2)
-        .map(ToString::to_string)
-        .collect()
-}
-
-#[test]
-fn bug_create_input_schema_matches_parser_keys() {
-    let schema_keys: BTreeSet<String> =
-        schema_object_properties("bug-create-input", "bugCreateInputObject")
-            .keys()
-            .cloned()
-            .collect();
-    let parser_keys = parser_fields_from_unknown_error::<JsonCreateBug>();
-
-    assert_eq!(schema_keys, parser_keys);
-}
-
-#[test]
-fn bug_create_input_schema_examples_parse() {
-    for (key, property_schema) in
-        schema_object_properties("bug-create-input", "bugCreateInputObject")
-    {
-        let example = property_schema
-            .get("examples")
-            .and_then(serde_json::Value::as_array)
-            .and_then(|examples| examples.first())
-            .unwrap_or_else(|| panic!("bug-create-input property '{key}' missing example"))
-            .clone();
-        let mut object = serde_json::Map::new();
-        object.insert(key.clone(), example);
-
-        serde_json::from_value::<JsonCreateBug>(serde_json::Value::Object(object))
-            .unwrap_or_else(|err| panic!("schema example for '{key}' did not parse: {err}"));
-    }
-}
-
-#[test]
-fn bug_create_input_schema_documents_array_form() {
-    let schema = schema_value("bug-create-input");
-    let one_of = schema
-        .get("oneOf")
-        .and_then(serde_json::Value::as_array)
-        .unwrap_or_else(|| panic!("bug-create-input schema missing oneOf"));
-    let array_branch = one_of
-        .iter()
-        .find(|branch| branch.get("type").and_then(serde_json::Value::as_str) == Some("array"))
-        .unwrap_or_else(|| panic!("bug-create-input schema does not document array input"));
-
-    assert_eq!(
-        array_branch
-            .get("minItems")
-            .and_then(serde_json::Value::as_u64),
-        Some(1)
-    );
-}
-
 #[tokio::test]
 async fn bug_create_sends_post() {
     let (_lock, mock, _tmp) = setup_test_env().await;
@@ -141,9 +46,7 @@ async fn bug_create_sends_post() {
 
     let result = crate::commands::bug::execute(
         &create_action(),
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -167,19 +70,16 @@ async fn bug_create_dry_run_makes_no_write_and_marks_payload() {
         .expect(0)
         .mount(&mock)
         .await;
-    crate::commands::runtime::dry_run::set(true);
 
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &create_action(),
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
         &mut io.writers(),
     )
     .await;
     let output = io.out_str().to_string();
-    crate::commands::runtime::dry_run::set(false);
 
     assert!(result.is_ok(), "dry-run create failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
@@ -247,9 +147,12 @@ async fn bug_create_sends_parity_fields_in_body() {
     });
 
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
     assert!(
         result.is_ok(),
         "create with parity fields failed: {result:?}"
@@ -284,9 +187,12 @@ async fn bug_create_rejects_malformed_deadline() {
         },
     });
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
     let err = result.unwrap_err();
     assert!(
         matches!(&err, BzrError::InputValidation(msg) if msg.contains("--deadline")),
@@ -319,9 +225,7 @@ async fn bug_create_missing_product_returns_input_validation() {
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io2.writers(),
     )
     .await;
@@ -358,9 +262,7 @@ async fn bug_create_missing_component_returns_input_validation() {
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io3.writers(),
     )
     .await;
@@ -397,9 +299,7 @@ async fn bug_create_with_unknown_template_errors() {
     let mut __io4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io4.writers(),
     )
     .await;
@@ -431,9 +331,7 @@ async fn bug_create_with_template_fills_missing_fields() {
     let mut __io5 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &save,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io5.writers(),
     )
     .await;
@@ -473,9 +371,7 @@ async fn bug_create_with_template_fills_missing_fields() {
     let mut __io6 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io6.writers(),
     )
     .await;
@@ -513,16 +409,13 @@ async fn bug_create_template_applies_create_metadata_defaults() {
     let mut save_io = crate::test_helpers::CapturedIo::new();
     crate::commands::template::execute(
         &save,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut save_io.writers(),
     )
     .await
     .unwrap();
     let _ = save_io.out_str().to_string();
 
-    crate::commands::runtime::dry_run::set(true);
     let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
         template: Some("routing".into()),
@@ -542,10 +435,13 @@ async fn bug_create_template_applies_create_metadata_defaults() {
         create_fields: crate::cli::CreateFieldArgs::default(),
     });
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
-    crate::commands::runtime::dry_run::set(false);
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "template create dry-run failed: {result:?}");
 
     let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
@@ -585,16 +481,13 @@ async fn bug_create_cli_create_metadata_overrides_template() {
     let mut save_io = crate::test_helpers::CapturedIo::new();
     crate::commands::template::execute(
         &save,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut save_io.writers(),
     )
     .await
     .unwrap();
     let _ = save_io.out_str().to_string();
 
-    crate::commands::runtime::dry_run::set(true);
     let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
         template: Some("routing".into()),
@@ -624,10 +517,13 @@ async fn bug_create_cli_create_metadata_overrides_template() {
         },
     });
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
-    crate::commands::runtime::dry_run::set(false);
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
     assert!(result.is_ok(), "template create dry-run failed: {result:?}");
 
     let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
@@ -680,9 +576,7 @@ async fn bug_create_reads_description_from_file() {
     let mut __io7 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io7.writers(),
     )
     .await;
@@ -716,9 +610,7 @@ async fn bug_create_description_file_missing_returns_input_validation() {
     let mut __io8 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io8.writers(),
     )
     .await;
@@ -759,9 +651,7 @@ async fn bug_create_description_file_non_utf8_returns_input_validation() {
     let mut __io9 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io9.writers(),
     )
     .await;
@@ -799,9 +689,7 @@ async fn bug_create_missing_summary_without_editor_flow_is_rejected() {
     let mut __io10 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io10.writers(),
     )
     .await;
@@ -1024,9 +912,7 @@ async fn bug_create_editor_flow_resolves_via_editor_when_stdin_is_tty() {
 
     let result = crate::commands::bug::execute(
         &editor_action_no_summary_no_description(),
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io11.writers(),
     )
     .await;
@@ -1084,9 +970,7 @@ async fn bug_create_editor_branch_unreachable_when_stdin_piped() {
 
     let result = crate::commands::bug::execute(
         &editor_action_no_summary_no_description(),
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io12.writers(),
     )
     .await;
@@ -1128,9 +1012,7 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
     let mut __io13 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &save,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io13.writers(),
     )
     .await;
@@ -1162,9 +1044,7 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
     let mut __io14 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io14.writers(),
     )
     .await;
@@ -1237,9 +1117,12 @@ async fn from_json_single_object_files_a_bug() {
     let json = r#"{"product":"P","component":"C","summary":"S"}"#;
     let action = from_json_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(
         result.is_ok(),
@@ -1264,9 +1147,12 @@ async fn from_json_array_batch_creates_one_per_element() {
                    {"product":"P","component":"C","summary":"two"}]"#;
     let action = from_json_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(result.is_ok(), "array should batch-create: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
@@ -1299,9 +1185,12 @@ async fn from_json_array_partial_failure_exits_11() {
                    {"product":"P","component":"Bad","summary":"bad"}]"#;
     let action = from_json_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     let err = result.unwrap_err();
     assert!(
@@ -1338,9 +1227,12 @@ async fn from_json_cli_flag_overrides_json_field() {
         *product = Some("FromCli".into());
     }
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
     assert!(
         result.is_ok(),
         "CLI override should win and create: {result:?}"
@@ -1353,10 +1245,13 @@ async fn from_json_rejects_unknown_field() {
     let json = r#"{"product":"P","component":"C","summary":"S","bogus":1}"#;
     let action = from_json_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let err =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await
-            .unwrap_err();
+    let err = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err();
     match err {
         BzrError::InputValidation(msg) => assert!(
             msg.contains("bogus") || msg.contains("unknown field"),
@@ -1373,46 +1268,17 @@ async fn from_json_missing_required_field_errors() {
     let json = r#"{"product":"P","component":"C"}"#;
     let action = from_json_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let err =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await
-            .unwrap_err();
+    let err = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err();
     match err {
         BzrError::InputValidation(msg) => assert!(msg.contains("summary"), "names field: {msg}"),
         other => panic!("expected InputValidation, got {other:?}"),
     }
-}
-
-#[test]
-fn parse_json_bugs_rejects_non_object_scalar() {
-    let err = super::parse_json_bugs("42").unwrap_err();
-    assert!(matches!(err, BzrError::InputValidation(_)));
-}
-
-#[test]
-fn parse_json_bugs_rejects_malformed_json() {
-    let err = super::parse_json_bugs("{not json").unwrap_err();
-    match err {
-        BzrError::InputValidation(msg) => assert!(msg.contains("invalid JSON"), "{msg}"),
-        other => panic!("expected InputValidation, got {other:?}"),
-    }
-}
-
-#[test]
-fn parse_json_bugs_object_and_array_shapes() {
-    assert!(matches!(
-        super::parse_json_bugs(r#"{"product":"P"}"#).unwrap(),
-        super::JsonInput::One(_)
-    ));
-    match super::parse_json_bugs(r#"[{"product":"P"},{"product":"Q"}]"#).unwrap() {
-        super::JsonInput::Many(v) => assert_eq!(v.len(), 2),
-        super::JsonInput::One(_) => panic!("array should parse as Many"),
-    }
-    // A 1-element array stays Many, so output shape follows input shape.
-    assert!(matches!(
-        super::parse_json_bugs(r#"[{"product":"P"}]"#).unwrap(),
-        super::JsonInput::Many(_)
-    ));
 }
 
 #[tokio::test]
@@ -1430,9 +1296,12 @@ async fn from_json_single_element_array_returns_batch_shape() {
     let json = r#"[{"product":"P","component":"C","summary":"S"}]"#;
     let action = from_json_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(result.is_ok(), "1-element array should create: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
@@ -1458,12 +1327,14 @@ async fn from_json_batch_dry_run_emits_single_object_and_no_write() {
     let json = r#"[{"product":"P","component":"C","summary":"one"},
                    {"product":"P","component":"C","summary":"two"}]"#;
     let action = from_json_action(&write_json_file(&tmp, json));
-    crate::commands::runtime::dry_run::set(true);
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
-    crate::commands::runtime::dry_run::set(false);
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
 
     assert!(result.is_ok(), "batch dry-run should succeed: {result:?}");
     // The whole batch is ONE valid JSON object whose changes is the array.
@@ -1598,9 +1469,12 @@ async fn from_json_cli_description_overrides_json_description() {
         *description = Some("cli-desc".into());
     }
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
     assert!(
         result.is_ok(),
         "CLI --description must override the JSON description on the wire: {result:?}"
@@ -1626,9 +1500,12 @@ async fn from_json_preserves_blocks_and_depends_on_without_cli_override() {
         r#"{"product":"P","component":"C","summary":"S","blocks":[10,20],"depends_on":[30]}"#;
     let action = from_json_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
     assert!(
         result.is_ok(),
         "JSON blocks/depends_on must reach the wire unchanged: {result:?}"
@@ -1652,9 +1529,12 @@ async fn from_json_batch_table_lists_created_ids() {
                    {"product":"P","component":"C","summary":"two"}]"#;
     let action = from_json_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Table, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &mut io.writers(),
+    )
+    .await;
     assert!(
         result.is_ok(),
         "table batch create should succeed: {result:?}"

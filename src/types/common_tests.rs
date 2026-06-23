@@ -140,6 +140,10 @@ fn auth_method_from_str() {
         "query_param".parse::<AuthMethod>().unwrap(),
         AuthMethod::QueryParam
     );
+    assert_eq!(
+        "query-param".parse::<AuthMethod>().unwrap(),
+        AuthMethod::QueryParam
+    );
     assert!("bogus".parse::<AuthMethod>().is_err());
 }
 

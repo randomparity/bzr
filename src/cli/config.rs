@@ -1,6 +1,6 @@
 use clap::Subcommand;
 
-use crate::types::AuthMethod;
+use crate::types::common::AuthMethod;
 
 #[derive(Subcommand)]
 #[expect(
@@ -111,10 +111,9 @@ pub enum ConfigAction {
         tls_ca_cert: Option<String>,
         /// Pin a certificate fingerprint in `sha256//<base64>` format.
         ///
-        /// The exact format used by curl's `--pinnedpubkey`. Once
-        /// pinned, every subsequent connection to this server
-        /// must present a leaf certificate whose SHA-256 hash
-        /// matches; mismatches exit with code 13. Mutually
+        /// Once pinned, every subsequent connection to this server
+        /// must present a leaf certificate whose DER bytes hash to
+        /// this fingerprint; mismatches exit with code 13. Mutually
         /// exclusive with `--tls-insecure`, `--tls-ca-cert`,
         /// `--tls-pin-now`, and `--tls-pin-clear`. Use
         /// `--tls-pin-now` to capture the current cert
@@ -277,8 +276,8 @@ pub enum ConfigAction {
     ///
     /// Examples:
     ///
-    ///   bzr config migrate-to-keyring prod
-    ///   bzr config migrate-to-keyring staging --yes
+    ///   bzr config migrate-to-keyring prod --yes
+    ///   bzr config migrate-to-keyring staging --service bzr --yes
     ///
     /// See bzr-config-set-keyring(1) for storing a fresh key
     /// (without reading from the existing config) and
@@ -293,12 +292,10 @@ pub enum ConfigAction {
         /// Override the keyring account name (defaults to the server name).
         #[arg(long)]
         account: Option<String>,
-        /// Skip the confirmation prompt before migrating.
+        /// Acknowledge and run the migration.
         ///
-        /// Without this flag, the command prints the source of
-        /// the existing key (inline vs. env var) and waits for a
-        /// `y` on stdin before writing to the keychain. Useful
-        /// for scripted migrations across many servers.
+        /// The command exits before reading or writing keychain state unless
+        /// this flag is present.
         #[arg(long)]
         yes: bool,
     },

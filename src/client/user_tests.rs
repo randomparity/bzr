@@ -3,8 +3,8 @@
 use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use super::super::encode_path;
-use crate::client::test_helpers::test_client;
+use super::super::{encode_path, UserDetailLevel, USER_FIELDS_DETAILED};
+use crate::client::test_helpers::{test_client, test_client_hybrid};
 use crate::types::{CreateUserParams, UpdateUserParams};
 
 #[tokio::test]
@@ -43,7 +43,10 @@ async fn search_users_returns_matches() {
         .await;
 
     let client = test_client(&mock.uri());
-    let users = client.search_users("example", false).await.unwrap();
+    let users = client
+        .search_users("example", UserDetailLevel::Basic)
+        .await
+        .unwrap();
     assert_eq!(users.len(), 2);
     assert_eq!(users[0].name, "alice@example.com");
     assert_eq!(users[1].real_name.as_deref(), Some("Bob"));
@@ -59,7 +62,10 @@ async fn search_users_empty() {
         .await;
 
     let client = test_client(&mock.uri());
-    let users = client.search_users("nobody", false).await.unwrap();
+    let users = client
+        .search_users("nobody", UserDetailLevel::Basic)
+        .await
+        .unwrap();
     assert!(users.is_empty());
 }
 
@@ -69,7 +75,7 @@ async fn search_users_details_sends_include_fields() {
     Mock::given(method("GET"))
         .and(path("/rest/user"))
         .and(query_param("match", "alice"))
-        .and(query_param("include_fields", super::USER_FIELDS_DETAILED))
+        .and(query_param("include_fields", USER_FIELDS_DETAILED))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "users": [{
                 "id": 1,
@@ -84,7 +90,10 @@ async fn search_users_details_sends_include_fields() {
         .await;
 
     let client = test_client(&mock.uri());
-    let users = client.search_users("alice", true).await.unwrap();
+    let users = client
+        .search_users("alice", UserDetailLevel::Detailed)
+        .await
+        .unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].can_login, Some(true));
     assert_eq!(users[0].groups.len(), 1);
@@ -138,6 +147,41 @@ async fn create_user_forbidden() {
     };
     let err = client.create_user(&params).await.unwrap_err();
     assert!(err.to_string().contains("not authorized"));
+}
+
+#[tokio::test]
+async fn hybrid_create_user_api_error_does_not_fall_back() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/user"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "error": true,
+            "code": 51,
+            "message": "You are not authorized."
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_hybrid(&mock.uri());
+    let params = CreateUserParams {
+        email: "x@x.com".into(),
+        login: None,
+        full_name: None,
+        password: None,
+    };
+    let err = client.create_user(&params).await.unwrap_err();
+    assert!(
+        err.to_string().contains("not authorized"),
+        "expected auth error, got: {err}"
+    );
 }
 
 #[tokio::test]

@@ -5,7 +5,8 @@ use colored::Colorize;
 use crate::output::formatting::{
     truncate, write_formatted, write_table_or_empty, TableSpec, DESCRIPTION_TRUNCATE_WIDTH,
 };
-use crate::types::{Classification, OutputFormat};
+use crate::types::classification::Classification;
+use crate::types::common::OutputFormat;
 
 const CLASSIFICATION_HEADERS: &[&str] = &["ID", "NAME", "DESCRIPTION", "PRODUCTS"];
 

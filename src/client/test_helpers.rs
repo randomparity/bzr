@@ -3,7 +3,11 @@
 use super::*;
 
 pub fn test_http_client() -> reqwest::Client {
-    crate::tls::build_tls_client(&crate::tls::TlsConfig::default()).unwrap()
+    crate::tls::build_tls_client(
+        &crate::tls::TlsConfig::default(),
+        crate::http::REQUEST_TIMEOUT,
+    )
+    .unwrap()
 }
 
 pub fn test_client(base_url: &str) -> BugzillaClient {
@@ -14,6 +18,8 @@ pub fn test_client(base_url: &str) -> BugzillaClient {
         api_mode: ApiMode::Rest,
         email_hint: None,
         tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
     })
     .unwrap()
 }
@@ -26,6 +32,8 @@ pub fn test_client_hybrid(base_url: &str) -> BugzillaClient {
         api_mode: ApiMode::Hybrid,
         email_hint: None,
         tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
     })
     .unwrap()
 }
@@ -38,6 +46,8 @@ pub fn test_client_query_param(base_url: &str) -> BugzillaClient {
         api_mode: ApiMode::Rest,
         email_hint: None,
         tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
     })
     .unwrap()
 }
@@ -50,6 +60,8 @@ pub fn test_client_xmlrpc(base_url: &str) -> BugzillaClient {
         api_mode: ApiMode::XmlRpc,
         email_hint: None,
         tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
     })
     .unwrap()
 }

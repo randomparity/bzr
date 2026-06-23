@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 use std::io::Write;
 
-use crate::types::{OutputFormat, QueryKind, SavedQuery};
+use crate::types::common::OutputFormat;
+use crate::types::query::{QueryKind, SavedQuery};
 
 use crate::output::formatting::{
     write_field, write_formatted, write_list_field, write_optional_field,
 };
 
-fn kind_label(kind: &QueryKind) -> &'static str {
+fn kind_label(kind: QueryKind) -> &'static str {
     match kind {
         QueryKind::List => "list",
         QueryKind::Search => "search",
@@ -19,28 +20,28 @@ fn query_saved_message(name: &str, verb: &str) -> String {
     format!("{verb} query '{name}'")
 }
 
-fn query_summary_line(name: &str, q: &SavedQuery) -> String {
-    let mut parts = vec![format!("kind={}", kind_label(&q.kind))];
-    if !q.product.is_empty() {
-        parts.push(format!("product={}", q.product.join(",")));
+fn query_summary_line(name: &str, query: &SavedQuery) -> String {
+    let mut parts = vec![format!("kind={}", kind_label(query.kind()))];
+    if !query.product.is_empty() {
+        parts.push(format!("product={}", query.product.join(",")));
     }
-    if !q.status.is_empty() {
-        parts.push(format!("status={}", q.status.join(",")));
+    if !query.status.is_empty() {
+        parts.push(format!("status={}", query.status.join(",")));
     }
-    if let Some(qs) = &q.quicksearch {
+    if let Some(qs) = &query.quicksearch {
         parts.push(format!("search=\"{qs}\""));
     }
-    if let Some(ct) = &q.creation_time {
+    if let Some(ct) = &query.creation_time {
         parts.push(format!("created>={ct}"));
     }
-    if let Some(lct) = &q.last_change_time {
+    if let Some(lct) = &query.last_change_time {
         parts.push(format!("changed>={lct}"));
     }
-    if let Some(limit) = q.limit {
+    if let Some(limit) = query.limit {
         parts.push(format!("limit={limit}"));
     }
-    if !q.raw_params.is_empty() {
-        parts.push(format!("{} raw params", q.raw_params.len()));
+    if !query.raw_params.is_empty() {
+        parts.push(format!("{} raw params", query.raw_params.len()));
     }
     format!("{name} ({})", parts.join(", "))
 }
@@ -94,7 +95,7 @@ pub fn write_query_detail<W: Write + ?Sized>(
     let view = QueryView { name, query };
     write_formatted(&view, format, out, |view, out| {
         write_field(out, "Name", view.name);
-        write_field(out, "Kind", kind_label(&view.query.kind));
+        write_field(out, "Kind", kind_label(view.query.kind()));
         write_optional_field(out, "Source URL", view.query.source_url.as_deref());
         write_optional_field(out, "Server", view.query.server.as_deref());
         write_list_field(out, "Product", &view.query.product);

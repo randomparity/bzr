@@ -15,5 +15,5 @@ api_key = "dummy"
     )
     .expect("static TOML config is always valid");
 
-    let _ = bzr::url_parser::parse_bugzilla_url(data, &config);
+    bzr::fuzz::parse_bugzilla_url(data, &config);
 });

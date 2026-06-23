@@ -5,34 +5,16 @@
 //! interactive TTY. `--yes`/`-y` bypasses the prompt, and non-interactive runs
 //! (piped stdin, agents) auto-bypass so they are never blocked.
 //!
-//! `--yes` is a global flag installed once per process by `dispatch` (the same
-//! pattern as `--dry-run` and the network-tuning globals), so it does not need
-//! threading through every handler signature. See [`crate::commands::runtime::dry_run`].
+//! The parsed `--yes` value is carried on
+//! [`crate::commands::runtime::context::CommandContext`], so command handlers
+//! can make prompt decisions without consulting process-global state.
 
 use std::io::{BufRead, Write};
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::error::Result;
 
 /// Batches strictly larger than this prompt for confirmation at a TTY.
 pub const BATCH_THRESHOLD: usize = 10;
-
-static ASSUME_YES: AtomicBool = AtomicBool::new(false);
-
-/// Install the assume-yes state from the global `--yes` flag.
-///
-/// Production calls this once, from `dispatch`. Test-side callers must hold
-/// `ENV_LOCK` (as `setup_test_env` does) so they serialize with the mutation
-/// tests; otherwise a parallel test could observe a foreign value.
-pub fn set_yes(assume_yes: bool) {
-    ASSUME_YES.store(assume_yes, Ordering::Relaxed);
-}
-
-/// Whether `--yes` was given (skip all confirmation prompts).
-#[must_use]
-pub fn yes() -> bool {
-    ASSUME_YES.load(Ordering::Relaxed)
-}
 
 /// Whether a batch of `count` items needs an interactive confirmation prompt.
 /// A prompt is needed only above the threshold, when `--yes` was not given, and

@@ -69,9 +69,7 @@ async fn view_single_unchanged_table() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io.writers(),
     )
     .await;
@@ -96,9 +94,7 @@ async fn view_single_unchanged_json() {
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io2.writers(),
     )
     .await;
@@ -132,9 +128,12 @@ async fn view_single_json_custom_only_field_omits_forced_id() {
     field_args.fields = Some("cf_release".into());
 
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
 
     assert!(result.is_ok(), "single view custom JSON failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
@@ -168,9 +167,7 @@ async fn view_single_table_renders_requested_custom_row() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io.writers(),
     )
     .await;
@@ -206,9 +203,7 @@ async fn view_single_table_warns_for_unknown_field() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io.writers(),
     )
     .await;
@@ -237,9 +232,7 @@ async fn view_single_failure_propagates() {
     let action = make_view_action(&["999999"], false);
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -266,9 +259,7 @@ async fn view_multi_strict_all_succeed_table() {
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io3.writers(),
     )
     .await;
@@ -304,9 +295,7 @@ async fn view_multi_strict_failure_emits_no_partial_table() {
     let mut __io4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io4.writers(),
     )
     .await;
@@ -335,9 +324,7 @@ async fn view_multi_strict_json_all_succeed_emits_wrapped_shape() {
     let mut __io5 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io5.writers(),
     )
     .await;
@@ -378,9 +365,12 @@ async fn view_multi_strict_json_projects_custom_fields_inside_wrapper() {
     field_args.fields = Some("id,cf_release".into());
 
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Json, None, &mut __io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
 
     assert!(result.is_ok(), "multi view custom JSON failed: {result:?}");
     let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
@@ -412,9 +402,7 @@ async fn view_multi_strict_json_failure_emits_no_partial_json() {
     let mut __io6 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io6.writers(),
     )
     .await;
@@ -454,9 +442,7 @@ async fn view_multi_permissive_partial_table() {
     let mut __io7 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Table,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io7.writers(),
     )
     .await;
@@ -497,9 +483,7 @@ async fn view_multi_permissive_json_shape() {
     let mut __io8 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io8.writers(),
     )
     .await;
@@ -538,9 +522,7 @@ async fn view_multi_permissive_all_fail_returns_empty_bugs() {
     let mut __io9 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io9.writers(),
     )
     .await;
@@ -572,9 +554,7 @@ async fn view_multi_permissive_with_alias_preserves_id_string() {
     let mut __io10 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io10.writers(),
     )
     .await;
@@ -597,9 +577,7 @@ async fn view_permissive_single_id_rejected() {
     let action = make_view_action(&["42"], true);
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -635,9 +613,7 @@ async fn view_multi_permissive_transport_error_bails() {
     let action = make_view_action(&["1", "2", "3"], true);
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -675,9 +651,7 @@ async fn view_multi_permissive_api_session_wide_bails() {
     let action = make_view_action(&["1", "2", "3"], true);
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -707,9 +681,7 @@ async fn view_multi_permissive_api_102_suppressed() {
     let mut __io11 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io11.writers(),
     )
     .await;
@@ -750,9 +722,7 @@ async fn view_multi_permissive_api_410_bails() {
     let action = make_view_action(&["1", "2", "3"], true);
     let result = crate::commands::bug::execute(
         &action,
-        None,
-        OutputFormat::Json,
-        None,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -852,7 +822,9 @@ fn emit_web_interactive_failure_falls_back_to_print() {
 async fn resolve_bug_urls_uses_configured_server() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     let ids = vec!["42".to_string(), "99".to_string()];
-    let urls = super::resolve_bug_urls(&ids, None).unwrap();
+    let ctx =
+        crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None);
+    let urls = super::resolve_bug_urls(&ids, &ctx).unwrap();
     assert_eq!(urls.len(), 2);
     assert!(urls[0].starts_with(&mock.uri()));
     assert!(urls[0].ends_with("/show_bug.cgi?id=42"));
@@ -861,7 +833,7 @@ async fn resolve_bug_urls_uses_configured_server() {
 
 #[tokio::test]
 async fn resolve_bug_urls_works_without_credentials() {
-    // A server with a URL but no api_key/env/keyring fails Config::load()
+    // A server with a URL but no api_key/env/keyring fails config loading.
     // validation; `--web` only needs the URL, so it must still resolve.
     let _lock = crate::ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
@@ -876,7 +848,9 @@ async fn resolve_bug_urls_works_without_credentials() {
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let ids = vec!["7".to_string()];
-    let urls = super::resolve_bug_urls(&ids, None).unwrap();
+    let ctx =
+        crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None);
+    let urls = super::resolve_bug_urls(&ids, &ctx).unwrap();
     assert_eq!(urls, vec!["https://bz.example.com/show_bug.cgi?id=7"]);
 }
 
@@ -952,9 +926,12 @@ async fn execute_web_prints_url_when_fd1_not_a_tty() {
     unsafe { dup2(redirect.as_file().as_raw_fd(), 1) };
 
     let mut io = crate::test_helpers::CapturedIo::new();
-    let result =
-        crate::commands::bug::execute(&action, None, OutputFormat::Table, None, &mut io.writers())
-            .await;
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &mut io.writers(),
+    )
+    .await;
 
     // SAFETY: restore fd 1 before reading results / yielding to other tests.
     unsafe {

@@ -1,18 +1,21 @@
 use crate::cli::CloneArgs;
 use crate::client::BugzillaClient;
+use crate::commands::runtime::context::CommandContext;
 use crate::commands::runtime::flags::parse_flags;
 use crate::error::Result;
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
-use crate::types::{CreateBugParams, OutputFormat};
+use crate::types::bug::CreateBugParams;
+use crate::types::comment::AddCommentParams;
+use crate::types::common::OutputFormat;
 use crate::validation::parse_optional_date_only;
 
 pub(super) async fn handle(
-    client: &BugzillaClient,
     args: &CloneArgs,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let format = ctx.format();
     let CloneArgs {
         id,
         summary,
@@ -35,24 +38,15 @@ pub(super) async fn handle(
 
     let flags = parse_flags(&create_fields.flag)?;
     let deadline = parse_optional_date_only(create_fields.deadline.as_deref(), "--deadline")?;
+    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
 
     // Fetch source bug with all fields needed for cloning
     let source = client.get_bug(id, None, None).await?;
 
-    // Get description from comment #0
-    let clone_description = if description.is_some() {
-        description.clone()
-    } else {
-        let comments = client.get_comments_since(source.id, None).await?;
-        comments.into_iter().find(|c| c.count == 0).map(|c| c.text)
-    };
-
-    let source_product = source.product.ok_or_else(|| {
-        crate::error::BzrError::DataIntegrity("source bug missing product field".into())
-    })?;
-    let source_component = source.component.ok_or_else(|| {
-        crate::error::BzrError::DataIntegrity("source bug missing component field".into())
-    })?;
+    let clone_description =
+        resolve_source_description(&client, source.id, description.as_deref()).await?;
+    let source_product = required_source_field(source.product, "product")?;
+    let source_component = required_source_field(source.component, "component")?;
 
     let mut blocks = Vec::new();
     if *add_blocks {
@@ -93,7 +87,7 @@ pub(super) async fn handle(
         ..Default::default()
     };
 
-    if crate::commands::runtime::dry_run::enabled() {
+    if ctx.dry_run() {
         write_clone_dry_run(source.id, &params, format, w);
         return Ok(());
     }
@@ -106,10 +100,11 @@ pub(super) async fn handle(
     // the clone succeeded and may re-clone, creating a duplicate). Warn and
     // continue rather than propagating.
     if !*no_comment {
-        if let Err(e) = client
-            .add_comment(new_id, &format!("Cloned from bug #{}", source.id), false)
-            .await
-        {
+        let params = AddCommentParams {
+            text: format!("Cloned from bug #{}", source.id),
+            is_private: false,
+        };
+        if let Err(e) = client.add_comment(new_id, &params).await {
             let _ = writeln!(
                 w.err,
                 "warning: created bug #{new_id} but failed to add the \
@@ -126,6 +121,24 @@ pub(super) async fn handle(
         w.out,
     );
     Ok(())
+}
+
+async fn resolve_source_description(
+    client: &BugzillaClient,
+    source_id: u64,
+    explicit: Option<&str>,
+) -> Result<Option<String>> {
+    if let Some(description) = explicit {
+        return Ok(Some(description.to_string()));
+    }
+    let comments = client.get_comments_since(source_id, None).await?;
+    Ok(comments.into_iter().find(|c| c.count == 0).map(|c| c.text))
+}
+
+fn required_source_field(value: Option<String>, field: &str) -> Result<String> {
+    value.ok_or_else(|| {
+        crate::error::BzrError::DataIntegrity(format!("source bug missing {field} field"))
+    })
 }
 
 fn clone_list(

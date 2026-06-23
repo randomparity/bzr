@@ -18,16 +18,32 @@ use reqwest::header::HeaderValue;
 use reqwest::RequestBuilder;
 use serde::Deserialize;
 
+use crate::bugzilla_auth::{AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::error::{BzrError, Result};
-use crate::http::{AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
-use crate::types::BugzillaUser;
-use crate::types::{ApiMode, AuthMethod};
-use crate::xmlrpc::client::XmlRpcClient;
+use crate::types::common::{ApiMode, AuthMethod};
+use crate::types::user::BugzillaUser;
+use crate::xmlrpc::protocol::XmlRpcClient;
 
 /// Default fields for user queries (basic info).
 pub(super) const USER_FIELDS_BASIC: &str = "id,name,real_name,email,groups";
 /// Extended fields for detailed user queries.
 pub(super) const USER_FIELDS_DETAILED: &str = "id,name,real_name,email,can_login,groups";
+
+/// Field detail level for APIs that return users.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UserDetailLevel {
+    Basic,
+    Detailed,
+}
+
+impl UserDetailLevel {
+    const fn include_fields(self) -> &'static str {
+        match self {
+            Self::Basic => USER_FIELDS_BASIC,
+            Self::Detailed => USER_FIELDS_DETAILED,
+        }
+    }
+}
 
 #[derive(Deserialize)]
 pub(super) struct UserSearchResponse {
@@ -55,11 +71,10 @@ pub struct BugzillaClient {
     auth: Option<PreparedAuth>,
     pub(super) api_key: Option<String>,
     pub(super) api_mode: ApiMode,
-    pub(super) xmlrpc: Option<XmlRpcClient>,
+    pub(super) xmlrpc: XmlRpcClient,
     /// Email hint for Bugzilla 5.0 compatibility (whoami fallback via user lookup).
     email_hint: Option<String>,
-    /// Transient-retry budget (429 / 5xx / timeout). Captured from the global
-    /// `--retry` setting at construction; 0 disables retries.
+    /// Transient-retry budget (429 / 5xx / timeout). 0 disables retries.
     retry_max: u32,
 }
 
@@ -73,6 +88,8 @@ pub struct BugzillaClientConfig<'a> {
     pub api_mode: ApiMode,
     pub email_hint: Option<&'a str>,
     pub tls_config: &'a crate::tls::TlsConfig,
+    pub request_timeout: std::time::Duration,
+    pub retry_max: u32,
 }
 
 /// Generic response for endpoints that return a single `id` field.
@@ -161,6 +178,8 @@ impl BugzillaClient {
             api_mode,
             email_hint,
             tls_config,
+            request_timeout,
+            retry_max,
         } = config;
 
         let auth = match (credential, auth_method) {
@@ -185,7 +204,7 @@ impl BugzillaClient {
             }
         };
 
-        let http = crate::tls::build_tls_client(tls_config)?;
+        let http = crate::tls::build_tls_client(tls_config, request_timeout)?;
 
         // Always construct the XML-RPC client — even in REST mode, some
         // methods (e.g. Group.get on Bugzilla 5.3+) require XML-RPC fallback
@@ -196,7 +215,7 @@ impl BugzillaClient {
                  overriding configured header auth for XML-RPC calls"
             );
         }
-        let xmlrpc = Some(XmlRpcClient::new(http.clone(), base_url, credential));
+        let xmlrpc = XmlRpcClient::new(http.clone(), base_url, credential);
 
         tracing::debug!(base_url, ?auth_method, %api_mode, "created Bugzilla client");
 
@@ -208,7 +227,7 @@ impl BugzillaClient {
             api_mode,
             xmlrpc,
             email_hint: email_hint.map(String::from),
-            retry_max: crate::http::retry_max(),
+            retry_max,
         })
     }
 
@@ -224,12 +243,8 @@ impl BugzillaClient {
         format!("{}/rest/{}", self.base_url, path.trim_start_matches('/'))
     }
 
-    pub(super) fn xmlrpc_client(&self) -> Result<&XmlRpcClient> {
-        self.xmlrpc.as_ref().ok_or_else(|| {
-            BzrError::Config(
-                "XML-RPC client not initialized — set api_mode to 'xmlrpc' or 'hybrid'".into(),
-            )
-        })
+    pub(super) fn xmlrpc_client(&self) -> &XmlRpcClient {
+        &self.xmlrpc
     }
 
     /// Dispatch an operation across the detected API mode. In Hybrid mode the
@@ -328,10 +343,10 @@ impl BugzillaClient {
     pub(super) fn apply_auth(&self, builder: RequestBuilder) -> RequestBuilder {
         match &self.auth {
             Some(PreparedAuth::Header(value)) => {
-                crate::http::apply_auth_to_request(builder, Some(value), None)
+                crate::bugzilla_auth::apply_auth_to_request(builder, Some(value), None)
             }
             Some(PreparedAuth::QueryParam(key)) => {
-                crate::http::apply_auth_to_request(builder, None, Some(key))
+                crate::bugzilla_auth::apply_auth_to_request(builder, None, Some(key))
             }
             None => builder,
         }
@@ -457,6 +472,11 @@ impl BugzillaClient {
     }
 
     fn apply_alternate_auth(&self, builder: RequestBuilder) -> Result<RequestBuilder> {
+        let mut request = builder.build()?;
+        request.headers_mut().remove(AUTH_HEADER_NAME);
+        strip_auth_query_param(request.url_mut());
+        let builder = RequestBuilder::from_parts(self.http.clone(), request);
+
         match (&self.auth, self.api_key.as_deref()) {
             (Some(PreparedAuth::Header(_)), Some(api_key)) => {
                 Ok(builder.query(&[(AUTH_QUERY_PARAM, api_key)]))
@@ -509,7 +529,7 @@ impl BugzillaClient {
     fn parse_body_to_value(body: &str, safe_url: &str) -> Result<serde_json::Value> {
         tracing::trace!(
             url = safe_url,
-            body = &body[..body.len().min(BODY_TRACE_MAX_BYTES)],
+            body = crate::http::utf8_prefix(body, BODY_TRACE_MAX_BYTES),
             "response body"
         );
 
@@ -517,7 +537,7 @@ impl BugzillaClient {
             tracing::debug!(
                 url = safe_url,
                 error = %e,
-                body_preview = &body[..body.len().min(BODY_PREVIEW_MAX_BYTES)],
+                body_preview = crate::http::utf8_prefix(body, BODY_PREVIEW_MAX_BYTES),
                 "JSON deserialization failed"
             );
             BzrError::Deserialize(format!(
@@ -672,7 +692,7 @@ impl BugzillaClient {
             };
             tracing::debug!(
                 %status,
-                body = &body[..body.len().min(512)],
+                body = crate::http::utf8_prefix(&body, BODY_PREVIEW_MAX_BYTES),
                 "API error response"
             );
             if let Ok(err) = serde_json::from_str::<ErrorResponse>(&body) {
@@ -692,10 +712,37 @@ impl BugzillaClient {
     }
 }
 
+fn strip_auth_query_param(url: &mut reqwest::Url) {
+    let mut removed = false;
+    let pairs = url
+        .query_pairs()
+        .filter_map(|(name, value)| {
+            if name == AUTH_QUERY_PARAM {
+                removed = true;
+                None
+            } else {
+                Some((name.into_owned(), value.into_owned()))
+            }
+        })
+        .collect::<Vec<_>>();
+
+    if !removed {
+        return;
+    }
+    if pairs.is_empty() {
+        url.set_query(None);
+        return;
+    }
+
+    url.query_pairs_mut()
+        .clear()
+        .extend_pairs(pairs.iter().map(|(name, value)| (name, value)));
+}
+
 /// Maximum length of the body excerpt embedded in deserialization errors.
 /// 512 bytes is enough to capture the top-level keys of any realistic
 /// Bugzilla envelope while keeping the error message human-scaled.
-const BODY_PREVIEW_MAX_BYTES: usize = 512;
+const BODY_PREVIEW_MAX_BYTES: usize = crate::http::DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES;
 
 /// Maximum length of the response body logged at `trace` level. Larger than
 /// [`BODY_PREVIEW_MAX_BYTES`] because trace logs are opt-in diagnostics where
@@ -706,21 +753,16 @@ const BODY_TRACE_MAX_BYTES: usize = 2048;
 ///
 /// Truncates to [`BODY_PREVIEW_MAX_BYTES`] on a UTF-8 char boundary,
 /// appends `…` when truncated, runs the result through
-/// [`crate::http::redact_api_key`] to strip echoed-back API keys, and
+/// [`crate::bugzilla_auth::redact_api_key`] to strip echoed-back API keys, and
 /// collapses internal newlines and tabs to single spaces so the preview
 /// stays on one line beneath the main error.
 ///
 /// Called by `parse_json` when deserializing JSON fails.
 fn format_body_preview(body: &str) -> String {
-    let truncated_end = body
-        .char_indices()
-        .take_while(|(i, _)| *i < BODY_PREVIEW_MAX_BYTES)
-        .last()
-        .map_or(0, |(i, c)| i + c.len_utf8());
-
-    let mut preview = String::with_capacity(truncated_end + 4);
-    preview.push_str(&body[..truncated_end]);
-    if truncated_end < body.len() {
+    let prefix = crate::http::utf8_prefix(body, BODY_PREVIEW_MAX_BYTES);
+    let mut preview = String::with_capacity(prefix.len() + 4);
+    preview.push_str(prefix);
+    if prefix.len() < body.len() {
         preview.push('…');
     }
 
@@ -736,7 +778,7 @@ fn format_body_preview(body: &str) -> String {
         })
         .collect();
 
-    crate::http::redact_api_key(&collapsed)
+    crate::bugzilla_auth::redact_api_key(&collapsed)
 }
 
 #[cfg(test)]

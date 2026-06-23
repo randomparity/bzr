@@ -1,5 +1,5 @@
-pub mod attachment;
-pub mod bug;
+mod attachment;
+mod bug;
 mod classification;
 mod comment;
 mod component;
@@ -7,14 +7,15 @@ mod config;
 mod field;
 mod group;
 mod product;
-pub mod query;
+mod query;
 mod server;
-pub mod template;
+mod template;
 mod user;
 
-pub use attachment::AttachmentAction;
+pub use attachment::{AttachmentAction, UpdateArgs as AttachmentUpdateArgs, UploadArgs};
 pub use bug::{
-    BugAction, CloneCreateFieldArgs, CommentArgs, CreateFieldArgs, FieldArgs, PageArgs, SortArgs,
+    BugAction, BugActorFilterArgs, BugFilterArgs, CloneCreateFieldArgs, CommentArgs,
+    CreateFieldArgs, FieldArgs, PageArgs, SortArgs,
 };
 pub use bug::{
     CloneArgs, CloseArgs, CreateArgs, DupArgs, HistoryArgs, ListArgs, MyArgs, ReopenArgs,
@@ -27,20 +28,24 @@ pub use config::ConfigAction;
 pub use field::FieldAction;
 pub use group::GroupAction;
 pub use product::ProductAction;
-pub use query::QueryAction;
+pub use query::{
+    DeleteArgs, QueryAction, QueryRunFilterArgs, RunArgs, SaveArgs, ShowArgs,
+    UpdateArgs as QueryUpdateArgs,
+};
 pub use server::ServerAction;
-pub use template::{TemplateAction, TemplateFields};
+pub use template::{TemplateAction, TemplateFields, UpdateArgs as TemplateUpdateArgs};
 pub use user::UserAction;
 
 use clap::{Parser, Subcommand};
 
-use crate::types::{ApiMode, OutputFormat};
+use crate::types::common::{ApiMode, OutputFormat};
 
-/// A command-line client for Bugzilla REST API servers.
+/// A command-line client for Bugzilla servers.
 ///
 /// bzr provides scriptable access to bugs, comments, attachments,
 /// products, components, users, and groups across one or more named
-/// Bugzilla servers. It is modeled on the GitHub CLI (`gh`): every
+/// Bugzilla servers over REST, XML-RPC, or hybrid API transport. It is
+/// modeled on the GitHub CLI (`gh`): every
 /// resource is a top-level subcommand, every action is a verb under
 /// that resource, and `--json` is supported on read paths so output
 /// can be consumed by downstream tools.
@@ -98,7 +103,7 @@ pub struct Cli {
     /// are mutually exclusive). Pairs with `--config` for sandboxed throwaway
     /// runs.
     ///
-    ///   bzr --server-url https://bz.example.com \
+    ///   bzr --server-url <https://bz.example.com> \
     ///     --server-api-key-env BZR_KEY bug view 123
     #[arg(
         long,

@@ -21,9 +21,6 @@ use bzr::types::OutputFormat;
 async fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    // Apply the global --config override before anything reads the config.
-    bzr::config::Config::set_path_override(cli.config.clone());
-
     let filter =
         match tracing_filter_directive(cli.quiet, cli.verbose, std::env::var("RUST_LOG").is_ok()) {
             Some(directive) => EnvFilter::new(directive),

@@ -2,5 +2,5 @@
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &str| {
-    let _ = bzr::xmlrpc::parse_response(data);
+    bzr::fuzz::parse_xmlrpc_response(data);
 });

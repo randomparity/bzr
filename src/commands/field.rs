@@ -1,24 +1,23 @@
 use crate::cli::FieldAction;
+use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::resources::field::{write_field_aliases, write_field_values};
 use crate::output::writers::Writers;
-use crate::types::ApiMode;
-use crate::types::OutputFormat;
+use crate::types::{OutputFormat, FIELD_ALIASES};
 
 pub async fn execute(
     action: &FieldAction,
-    server: Option<&str>,
-    format: OutputFormat,
-    api: Option<ApiMode>,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let format = ctx.format();
     match action {
         FieldAction::Aliases => {
-            write_field_aliases(crate::field_aliases::FIELD_ALIASES, format, w.out);
+            write_field_aliases(FIELD_ALIASES, format, w.out);
             return Ok(());
         }
         FieldAction::List { name } => {
-            let client = super::runtime::shared::connect_and_configure(server, api).await?;
+            let client = super::runtime::shared::connect_and_configure(ctx).await?;
             let values = client.get_field_values(name).await?;
             if values.is_empty() && format == OutputFormat::Table {
                 let _ = writeln!(w.out, "No values for field '{name}'.");
