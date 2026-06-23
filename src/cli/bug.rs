@@ -1,6 +1,6 @@
 use clap::{Args, Subcommand};
 
-use crate::types::SortDirection;
+use crate::types::{FilterField, SavedQuery, SearchParams, SortDirection};
 
 /// Shared `--sort` / `--order` result ordering, flattened into the bug query
 /// subcommands (`list`, `search`, `my`) and `query run`. Absent `--sort`,
@@ -155,9 +155,10 @@ pub struct FieldArgs {
     pub exclude_fields: Option<String>,
 }
 
-/// Arguments for `bug list`.
-#[derive(Args, Debug, Default)]
-pub struct ListArgs {
+/// Bug filter flags with the same meaning across `bug list`, `bug my`, and
+/// saved-query commands.
+#[derive(Args, Debug, Clone, Default)]
+pub struct BugFilterArgs {
     /// Filter by product (repeatable for OR; prefix with ! to exclude)
     #[arg(long)]
     pub product: Vec<String>,
@@ -167,18 +168,130 @@ pub struct ListArgs {
     /// Filter by status (repeatable for OR; prefix with ! to exclude)
     #[arg(long)]
     pub status: Vec<String>,
-    /// Filter by assignee (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub assignee: Vec<String>,
-    /// Filter by creator (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub creator: Vec<String>,
     /// Filter by priority (repeatable for OR; prefix with ! to exclude)
     #[arg(long)]
     pub priority: Vec<String>,
     /// Filter by severity (repeatable for OR; prefix with ! to exclude)
     #[arg(long)]
     pub severity: Vec<String>,
+    /// Filter by Status Whiteboard substring (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub whiteboard: Vec<String>,
+    /// Filter by Target Milestone (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub target_milestone: Vec<String>,
+    /// Filter by Version (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub version: Vec<String>,
+    /// Filter by Operating System (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub op_sys: Vec<String>,
+    /// Filter by Platform (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub platform: Vec<String>,
+    /// Filter by Resolution (repeatable for OR; prefix with ! to exclude); empty matches open bugs
+    #[arg(long)]
+    pub resolution: Vec<String>,
+    /// Filter by QA Contact login (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub qa_contact: Vec<String>,
+}
+
+impl BugFilterArgs {
+    fn filter_values(&self) -> [(FilterField, &[String]); 12] {
+        [
+            (FilterField::Product, self.product.as_slice()),
+            (FilterField::Component, self.component.as_slice()),
+            (FilterField::Status, self.status.as_slice()),
+            (FilterField::Priority, self.priority.as_slice()),
+            (FilterField::Severity, self.severity.as_slice()),
+            (FilterField::Whiteboard, self.whiteboard.as_slice()),
+            (
+                FilterField::TargetMilestone,
+                self.target_milestone.as_slice(),
+            ),
+            (FilterField::Version, self.version.as_slice()),
+            (FilterField::OpSys, self.op_sys.as_slice()),
+            (FilterField::Platform, self.platform.as_slice()),
+            (FilterField::Resolution, self.resolution.as_slice()),
+            (FilterField::QaContact, self.qa_contact.as_slice()),
+        ]
+    }
+
+    pub(crate) fn write_search_filters(&self, params: &mut SearchParams) {
+        for (field, values) in self.filter_values() {
+            *params.get_field_mut(field) = values.to_vec();
+        }
+    }
+
+    pub(crate) fn write_saved_query_filters(&self, query: &mut SavedQuery) {
+        for (field, values) in self.filter_values() {
+            *query.get_field_mut(field) = values.to_vec();
+        }
+    }
+
+    pub(crate) fn merge_saved_query_filters(&self, query: &mut SavedQuery) -> bool {
+        let mut changed = false;
+        for (field, values) in self.filter_values() {
+            if !values.is_empty() {
+                *query.get_field_mut(field) = values.to_vec();
+                changed = true;
+            }
+        }
+        changed
+    }
+}
+
+/// Bug actor filters shared by `bug list` and saved-query commands.
+#[derive(Args, Debug, Clone, Default)]
+pub struct BugActorFilterArgs {
+    /// Filter by assignee (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub assignee: Vec<String>,
+    /// Filter by creator (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub creator: Vec<String>,
+}
+
+impl BugActorFilterArgs {
+    fn filter_values(&self) -> [(FilterField, &[String]); 2] {
+        [
+            (FilterField::AssignedTo, self.assignee.as_slice()),
+            (FilterField::Creator, self.creator.as_slice()),
+        ]
+    }
+
+    pub(crate) fn write_search_filters(&self, params: &mut SearchParams) {
+        for (field, values) in self.filter_values() {
+            *params.get_field_mut(field) = values.to_vec();
+        }
+    }
+
+    pub(crate) fn write_saved_query_filters(&self, query: &mut SavedQuery) {
+        for (field, values) in self.filter_values() {
+            *query.get_field_mut(field) = values.to_vec();
+        }
+    }
+
+    pub(crate) fn merge_saved_query_filters(&self, query: &mut SavedQuery) -> bool {
+        let mut changed = false;
+        for (field, values) in self.filter_values() {
+            if !values.is_empty() {
+                *query.get_field_mut(field) = values.to_vec();
+                changed = true;
+            }
+        }
+        changed
+    }
+}
+
+/// Arguments for `bug list`.
+#[derive(Args, Debug, Default)]
+pub struct ListArgs {
+    #[command(flatten)]
+    pub filters: BugFilterArgs,
+    #[command(flatten)]
+    pub actor_filters: BugActorFilterArgs,
     /// Filter by bug IDs
     #[arg(long)]
     pub id: Vec<u64>,
@@ -217,27 +330,6 @@ pub struct ListArgs {
     /// Same accepted forms as `--created-since`.
     #[arg(long, value_name = "DATE")]
     pub changed_since: Option<String>,
-    /// Filter by Status Whiteboard substring (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub whiteboard: Vec<String>,
-    /// Filter by Target Milestone (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub target_milestone: Vec<String>,
-    /// Filter by Version (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub version: Vec<String>,
-    /// Filter by Operating System (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub op_sys: Vec<String>,
-    /// Filter by Platform (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub platform: Vec<String>,
-    /// Filter by Resolution (repeatable for OR; prefix with ! to exclude); empty matches open bugs
-    #[arg(long)]
-    pub resolution: Vec<String>,
-    /// Filter by QA Contact login (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub qa_contact: Vec<String>,
     /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude)
     #[arg(long)]
     pub url: Vec<String>,
@@ -446,21 +538,8 @@ pub struct MyArgs {
     /// per category, so the total can be up to 3x the limit.
     #[arg(long, conflicts_with_all = ["created", "cc"])]
     pub all: bool,
-    /// Filter by status (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub status: Vec<String>,
-    /// Filter by product (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub product: Vec<String>,
-    /// Filter by component (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub component: Vec<String>,
-    /// Filter by priority (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub priority: Vec<String>,
-    /// Filter by severity (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub severity: Vec<String>,
+    #[command(flatten)]
+    pub filters: BugFilterArgs,
     /// Filter to bugs created at or after this date.
     ///
     /// Accepts `YYYY-MM-DD` (interpreted as 00:00:00 UTC),
@@ -473,27 +552,6 @@ pub struct MyArgs {
     /// Same accepted forms as `--created-since`.
     #[arg(long, value_name = "DATE")]
     pub changed_since: Option<String>,
-    /// Filter by Status Whiteboard substring (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub whiteboard: Vec<String>,
-    /// Filter by Target Milestone (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub target_milestone: Vec<String>,
-    /// Filter by Version (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub version: Vec<String>,
-    /// Filter by Operating System (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub op_sys: Vec<String>,
-    /// Filter by Platform (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub platform: Vec<String>,
-    /// Filter by Resolution (repeatable for OR; prefix with ! to exclude); empty matches open bugs
-    #[arg(long)]
-    pub resolution: Vec<String>,
-    /// Filter by QA Contact login (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub qa_contact: Vec<String>,
     /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude)
     #[arg(long)]
     pub url: Vec<String>,

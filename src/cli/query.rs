@@ -22,118 +22,6 @@ const FILTER_FLAG_ARGS: [&str; 15] = [
     "url",
 ];
 
-/// Structured multi-value filters shared by saved-query save/update.
-#[derive(Debug, Default, Args)]
-pub struct QueryFilterArgs {
-    /// Filter by product (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub product: Vec<String>,
-    /// Filter by component (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub component: Vec<String>,
-    /// Filter by status (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub status: Vec<String>,
-    /// Filter by assignee (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub assignee: Vec<String>,
-    /// Filter by creator (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub creator: Vec<String>,
-    /// Filter by priority (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub priority: Vec<String>,
-    /// Filter by severity (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub severity: Vec<String>,
-    /// Filter by Status Whiteboard substring (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub whiteboard: Vec<String>,
-    /// Filter by Target Milestone (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub target_milestone: Vec<String>,
-    /// Filter by Version (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub version: Vec<String>,
-    /// Filter by Operating System (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub op_sys: Vec<String>,
-    /// Filter by Platform (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub platform: Vec<String>,
-    /// Filter by Resolution (repeatable for OR; prefix with ! to exclude); empty matches open bugs
-    #[arg(long)]
-    pub resolution: Vec<String>,
-    /// Filter by QA Contact login (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub qa_contact: Vec<String>,
-}
-
-impl QueryFilterArgs {
-    fn saved_filter_values(&self) -> [(crate::types::FilterField, &[String]); 14] {
-        [
-            (crate::types::FilterField::Product, self.product.as_slice()),
-            (
-                crate::types::FilterField::Component,
-                self.component.as_slice(),
-            ),
-            (crate::types::FilterField::Status, self.status.as_slice()),
-            (
-                crate::types::FilterField::AssignedTo,
-                self.assignee.as_slice(),
-            ),
-            (crate::types::FilterField::Creator, self.creator.as_slice()),
-            (
-                crate::types::FilterField::Priority,
-                self.priority.as_slice(),
-            ),
-            (
-                crate::types::FilterField::Severity,
-                self.severity.as_slice(),
-            ),
-            (
-                crate::types::FilterField::Whiteboard,
-                self.whiteboard.as_slice(),
-            ),
-            (
-                crate::types::FilterField::TargetMilestone,
-                self.target_milestone.as_slice(),
-            ),
-            (crate::types::FilterField::Version, self.version.as_slice()),
-            (crate::types::FilterField::OpSys, self.op_sys.as_slice()),
-            (
-                crate::types::FilterField::Platform,
-                self.platform.as_slice(),
-            ),
-            (
-                crate::types::FilterField::Resolution,
-                self.resolution.as_slice(),
-            ),
-            (
-                crate::types::FilterField::QaContact,
-                self.qa_contact.as_slice(),
-            ),
-        ]
-    }
-
-    pub(crate) fn write_saved_query_filters(&self, query: &mut crate::types::SavedQuery) {
-        for (field, values) in self.saved_filter_values() {
-            *query.get_field_mut(field) = values.to_vec();
-        }
-    }
-
-    pub(crate) fn merge_saved_query_filters(&self, query: &mut crate::types::SavedQuery) -> bool {
-        let mut changed = false;
-        for (field, values) in self.saved_filter_values() {
-            if !values.is_empty() {
-                *query.get_field_mut(field) = values.to_vec();
-                changed = true;
-            }
-        }
-        changed
-    }
-}
-
 /// Per-run overrides for the saved-query filters that `query run` supports.
 #[derive(Debug, Default, Args)]
 pub struct QueryRunFilterArgs {
@@ -206,7 +94,9 @@ pub struct SaveArgs {
     #[arg(long, conflicts_with_all = FILTER_FLAG_ARGS)]
     pub search: Option<String>,
     #[command(flatten)]
-    pub filters: QueryFilterArgs,
+    pub filters: crate::cli::BugFilterArgs,
+    #[command(flatten)]
+    pub actor_filters: crate::cli::BugActorFilterArgs,
     /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude)
     #[arg(long)]
     pub url: Vec<String>,
@@ -266,7 +156,9 @@ pub struct UpdateArgs {
     #[arg(long)]
     pub search: Option<String>,
     #[command(flatten)]
-    pub filters: QueryFilterArgs,
+    pub filters: crate::cli::BugFilterArgs,
+    #[command(flatten)]
+    pub actor_filters: crate::cli::BugActorFilterArgs,
     /// Replace the URL filter (repeatable)
     #[arg(long)]
     pub url: Vec<String>,

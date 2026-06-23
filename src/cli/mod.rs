@@ -14,7 +14,8 @@ mod user;
 
 pub use attachment::{AttachmentAction, UpdateArgs as AttachmentUpdateArgs, UploadArgs};
 pub use bug::{
-    BugAction, CloneCreateFieldArgs, CommentArgs, CreateFieldArgs, FieldArgs, PageArgs, SortArgs,
+    BugAction, BugActorFilterArgs, BugFilterArgs, CloneCreateFieldArgs, CommentArgs,
+    CreateFieldArgs, FieldArgs, PageArgs, SortArgs,
 };
 pub use bug::{
     CloneArgs, CloseArgs, CreateArgs, DupArgs, HistoryArgs, ListArgs, MyArgs, ReopenArgs,
@@ -28,7 +29,7 @@ pub use field::FieldAction;
 pub use group::GroupAction;
 pub use product::ProductAction;
 pub use query::{
-    DeleteArgs, QueryAction, QueryFilterArgs, QueryRunFilterArgs, RunArgs, SaveArgs, ShowArgs,
+    DeleteArgs, QueryAction, QueryRunFilterArgs, RunArgs, SaveArgs, ShowArgs,
     UpdateArgs as QueryUpdateArgs,
 };
 pub use server::ServerAction;

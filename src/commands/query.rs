@@ -83,6 +83,7 @@ fn handle_save(
         from_url,
         search,
         filters,
+        actor_filters,
         url,
         limit,
         fields,
@@ -128,6 +129,7 @@ fn handle_save(
             ..SavedQuery::default()
         };
         filters.write_saved_query_filters(&mut query);
+        actor_filters.write_saved_query_filters(&mut query);
         query
     };
 
@@ -236,6 +238,7 @@ fn apply_query_updates(
     let crate::cli::QueryUpdateArgs {
         search,
         filters,
+        actor_filters,
         url,
         limit,
         fields,
@@ -248,6 +251,7 @@ fn apply_query_updates(
     } = args;
     let mut changed = false;
     changed |= filters.merge_saved_query_filters(q);
+    changed |= actor_filters.merge_saved_query_filters(q);
     changed |= merge_vec(&mut q.url, url);
     changed |= merge_set(&mut q.quicksearch, search.as_deref());
     changed |= merge_set(&mut q.fields, fields.as_deref());

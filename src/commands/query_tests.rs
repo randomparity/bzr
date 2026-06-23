@@ -1,8 +1,8 @@
 #![expect(clippy::unwrap_used)]
 
 use crate::cli::{
-    DeleteArgs, QueryAction, QueryFilterArgs, QueryRunFilterArgs, QueryUpdateArgs, RunArgs,
-    SaveArgs, ShowArgs,
+    BugActorFilterArgs, BugFilterArgs, DeleteArgs, QueryAction, QueryRunFilterArgs,
+    QueryUpdateArgs, RunArgs, SaveArgs, ShowArgs,
 };
 use crate::config::Config;
 use crate::test_helpers::setup_test_env;
@@ -15,12 +15,10 @@ fn save_action(name: &str) -> QueryAction {
         name: name.into(),
         from_url: None,
         search: None,
-        filters: QueryFilterArgs {
+        filters: BugFilterArgs {
             product: vec!["Firefox".into()],
             component: vec![],
             status: vec!["NEW".into()],
-            assignee: vec![],
-            creator: vec![],
             priority: vec![],
             severity: vec![],
             whiteboard: vec![],
@@ -30,6 +28,10 @@ fn save_action(name: &str) -> QueryAction {
             platform: vec![],
             resolution: vec![],
             qa_contact: vec![],
+        },
+        actor_filters: BugActorFilterArgs {
+            assignee: vec![],
+            creator: vec![],
         },
         url: vec![],
         limit: Some(25),
@@ -48,12 +50,10 @@ fn product_save_action(name: &str, product: &str, limit: u32) -> QueryAction {
         name: name.into(),
         from_url: None,
         search: None,
-        filters: QueryFilterArgs {
+        filters: BugFilterArgs {
             product: vec![product.into()],
             component: vec![],
             status: vec![],
-            assignee: vec![],
-            creator: vec![],
             priority: vec![],
             severity: vec![],
             whiteboard: vec![],
@@ -63,6 +63,10 @@ fn product_save_action(name: &str, product: &str, limit: u32) -> QueryAction {
             platform: vec![],
             resolution: vec![],
             qa_contact: vec![],
+        },
+        actor_filters: BugActorFilterArgs {
+            assignee: vec![],
+            creator: vec![],
         },
         url: vec![],
         limit: Some(limit),
@@ -80,12 +84,10 @@ fn empty_save_action(name: &str, search: Option<String>) -> QueryAction {
         name: name.into(),
         from_url: None,
         search,
-        filters: QueryFilterArgs {
+        filters: BugFilterArgs {
             product: vec![],
             component: vec![],
             status: vec![],
-            assignee: vec![],
-            creator: vec![],
             priority: vec![],
             severity: vec![],
             whiteboard: vec![],
@@ -95,6 +97,10 @@ fn empty_save_action(name: &str, search: Option<String>) -> QueryAction {
             platform: vec![],
             resolution: vec![],
             qa_contact: vec![],
+        },
+        actor_filters: BugActorFilterArgs {
+            assignee: vec![],
+            creator: vec![],
         },
         url: vec![],
         limit: None,
@@ -112,12 +118,10 @@ fn url_save_action(name: &str, url: String) -> QueryAction {
         name: name.into(),
         from_url: Some(url),
         search: None,
-        filters: QueryFilterArgs {
+        filters: BugFilterArgs {
             product: vec![],
             component: vec![],
             status: vec![],
-            assignee: vec![],
-            creator: vec![],
             priority: vec![],
             severity: vec![],
             whiteboard: vec![],
@@ -127,6 +131,10 @@ fn url_save_action(name: &str, url: String) -> QueryAction {
             platform: vec![],
             resolution: vec![],
             qa_contact: vec![],
+        },
+        actor_filters: BugActorFilterArgs {
+            assignee: vec![],
+            creator: vec![],
         },
         url: vec![],
         limit: None,
@@ -217,12 +225,10 @@ async fn query_save_persists_every_field() {
         name: "comprehensive".into(),
         from_url: None,
         search: None,
-        filters: QueryFilterArgs {
+        filters: BugFilterArgs {
             product: vec!["Firefox".into()],
             component: vec!["General".into()],
             status: vec!["NEW".into()],
-            assignee: vec!["dev@test.com".into()],
-            creator: vec!["reporter@test.com".into()],
             priority: vec!["P1".into()],
             severity: vec!["major".into()],
             whiteboard: vec![],
@@ -232,6 +238,10 @@ async fn query_save_persists_every_field() {
             platform: vec![],
             resolution: vec![],
             qa_contact: vec![],
+        },
+        actor_filters: BugActorFilterArgs {
+            assignee: vec!["dev@test.com".into()],
+            creator: vec!["reporter@test.com".into()],
         },
         url: vec![],
         limit: Some(7),
@@ -724,12 +734,10 @@ async fn query_save_existing_entry_reports_updated() {
         name: "existing".into(),
         from_url: None,
         search: None,
-        filters: QueryFilterArgs {
+        filters: BugFilterArgs {
             product: vec!["Firefox".into()],
             component: vec![],
             status: vec!["NEW".into()],
-            assignee: vec![],
-            creator: vec![],
             priority: vec![],
             severity: vec![],
             whiteboard: vec![],
@@ -739,6 +747,10 @@ async fn query_save_existing_entry_reports_updated() {
             platform: vec![],
             resolution: vec![],
             qa_contact: vec![],
+        },
+        actor_filters: BugActorFilterArgs {
+            assignee: vec![],
+            creator: vec![],
         },
         url: vec![],
         limit: Some(10),
@@ -763,12 +775,10 @@ async fn query_save_existing_entry_reports_updated() {
         name: "existing".into(),
         from_url: None,
         search: Some("updated".into()),
-        filters: QueryFilterArgs {
+        filters: BugFilterArgs {
             product: vec![],
             component: vec![],
             status: vec![],
-            assignee: vec![],
-            creator: vec![],
             priority: vec![],
             severity: vec![],
             whiteboard: vec![],
@@ -778,6 +788,10 @@ async fn query_save_existing_entry_reports_updated() {
             platform: vec![],
             resolution: vec![],
             qa_contact: vec![],
+        },
+        actor_filters: BugActorFilterArgs {
+            assignee: vec![],
+            creator: vec![],
         },
         url: vec![],
         limit: Some(5),
@@ -861,12 +875,10 @@ async fn query_run_applies_field_overrides() {
         name: "fields-test".into(),
         from_url: None,
         search: None,
-        filters: QueryFilterArgs {
+        filters: BugFilterArgs {
             product: vec!["TestProduct".into()],
             component: vec![],
             status: vec![],
-            assignee: vec![],
-            creator: vec![],
             priority: vec![],
             severity: vec![],
             whiteboard: vec![],
@@ -876,6 +888,10 @@ async fn query_run_applies_field_overrides() {
             platform: vec![],
             resolution: vec![],
             qa_contact: vec![],
+        },
+        actor_filters: BugActorFilterArgs {
+            assignee: vec![],
+            creator: vec![],
         },
         url: vec![],
         limit: Some(10),
@@ -1118,12 +1134,10 @@ async fn query_save_rejects_malformed_created_since() {
         name: "bad".into(),
         from_url: None,
         search: None,
-        filters: QueryFilterArgs {
+        filters: BugFilterArgs {
             product: vec!["Firefox".into()],
             component: vec![],
             status: vec![],
-            assignee: vec![],
-            creator: vec![],
             priority: vec![],
             severity: vec![],
             whiteboard: vec![],
@@ -1133,6 +1147,10 @@ async fn query_save_rejects_malformed_created_since() {
             platform: vec![],
             resolution: vec![],
             qa_contact: vec![],
+        },
+        actor_filters: BugActorFilterArgs {
+            assignee: vec![],
+            creator: vec![],
         },
         url: vec![],
         limit: None,
@@ -1163,12 +1181,10 @@ async fn query_save_stores_canonical_date_forms() {
         name: "recent".into(),
         from_url: None,
         search: None,
-        filters: QueryFilterArgs {
+        filters: BugFilterArgs {
             product: vec!["Firefox".into()],
             component: vec![],
             status: vec![],
-            assignee: vec![],
-            creator: vec![],
             priority: vec![],
             severity: vec![],
             whiteboard: vec![],
@@ -1178,6 +1194,10 @@ async fn query_save_stores_canonical_date_forms() {
             platform: vec![],
             resolution: vec![],
             qa_contact: vec![],
+        },
+        actor_filters: BugActorFilterArgs {
+            assignee: vec![],
+            creator: vec![],
         },
         url: vec![],
         limit: None,
@@ -1214,12 +1234,10 @@ async fn query_save_accepts_date_only_query() {
         name: "date-only".into(),
         from_url: None,
         search: None,
-        filters: QueryFilterArgs {
+        filters: BugFilterArgs {
             product: vec![],
             component: vec![],
             status: vec![],
-            assignee: vec![],
-            creator: vec![],
             priority: vec![],
             severity: vec![],
             whiteboard: vec![],
@@ -1229,6 +1247,10 @@ async fn query_save_accepts_date_only_query() {
             platform: vec![],
             resolution: vec![],
             qa_contact: vec![],
+        },
+        actor_filters: BugActorFilterArgs {
+            assignee: vec![],
+            creator: vec![],
         },
         url: vec![],
         limit: None,
@@ -1311,12 +1333,10 @@ async fn query_save_persists_158_field_filters() {
         name: "field-filters".into(),
         from_url: None,
         search: None,
-        filters: QueryFilterArgs {
+        filters: BugFilterArgs {
             product: vec![],
             component: vec![],
             status: vec![],
-            assignee: vec![],
-            creator: vec![],
             priority: vec![],
             severity: vec![],
             whiteboard: vec!["needs-review".into()],
@@ -1326,6 +1346,10 @@ async fn query_save_persists_158_field_filters() {
             platform: vec!["x86_64".into()],
             resolution: vec!["FIXED".into()],
             qa_contact: vec!["qa@example.com".into()],
+        },
+        actor_filters: BugActorFilterArgs {
+            assignee: vec![],
+            creator: vec![],
         },
         url: vec!["github.com/foo".into()],
         limit: None,
@@ -1370,12 +1394,10 @@ async fn query_save_accepts_whiteboard_only_filter() {
         name: "wb-only".into(),
         from_url: None,
         search: None,
-        filters: QueryFilterArgs {
+        filters: BugFilterArgs {
             product: vec![],
             component: vec![],
             status: vec![],
-            assignee: vec![],
-            creator: vec![],
             priority: vec![],
             severity: vec![],
             whiteboard: vec!["wip".into()],
@@ -1385,6 +1407,10 @@ async fn query_save_accepts_whiteboard_only_filter() {
             platform: vec![],
             resolution: vec![],
             qa_contact: vec![],
+        },
+        actor_filters: BugActorFilterArgs {
+            assignee: vec![],
+            creator: vec![],
         },
         url: vec![],
         limit: None,
@@ -1418,12 +1444,10 @@ async fn query_run_overrides_replace_saved_field_filters() {
         name: "field-override-test".into(),
         from_url: None,
         search: None,
-        filters: QueryFilterArgs {
+        filters: BugFilterArgs {
             product: vec![],
             component: vec![],
             status: vec![],
-            assignee: vec![],
-            creator: vec![],
             priority: vec![],
             severity: vec![],
             whiteboard: vec!["original".into()],
@@ -1433,6 +1457,10 @@ async fn query_run_overrides_replace_saved_field_filters() {
             platform: vec![],
             resolution: vec!["FIXED".into()],
             qa_contact: vec![],
+        },
+        actor_filters: BugActorFilterArgs {
+            assignee: vec![],
+            creator: vec![],
         },
         url: vec![],
         limit: None,
@@ -1504,12 +1532,10 @@ async fn query_run_empty_override_keeps_saved_field_filter() {
         name: "saved-wb".into(),
         from_url: None,
         search: None,
-        filters: QueryFilterArgs {
+        filters: BugFilterArgs {
             product: vec![],
             component: vec![],
             status: vec![],
-            assignee: vec![],
-            creator: vec![],
             priority: vec![],
             severity: vec![],
             whiteboard: vec!["original".into()],
@@ -1519,6 +1545,10 @@ async fn query_run_empty_override_keeps_saved_field_filter() {
             platform: vec![],
             resolution: vec![],
             qa_contact: vec![],
+        },
+        actor_filters: BugActorFilterArgs {
+            assignee: vec![],
+            creator: vec![],
         },
         url: vec![],
         limit: None,
@@ -1662,12 +1692,10 @@ fn empty_update(name: &str) -> QueryAction {
         name: name.into(),
         from_url: None,
         search: None,
-        filters: QueryFilterArgs {
+        filters: BugFilterArgs {
             product: vec![],
             component: vec![],
             status: vec![],
-            assignee: vec![],
-            creator: vec![],
             priority: vec![],
             severity: vec![],
             whiteboard: vec![],
@@ -1677,6 +1705,10 @@ fn empty_update(name: &str) -> QueryAction {
             platform: vec![],
             resolution: vec![],
             qa_contact: vec![],
+        },
+        actor_filters: BugActorFilterArgs {
+            assignee: vec![],
+            creator: vec![],
         },
         url: vec![],
         limit: None,

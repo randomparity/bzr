@@ -94,13 +94,24 @@ async fn bug_list_passes_every_field_through_to_search_params() {
         .await;
 
     let action = BugAction::List(crate::cli::ListArgs {
-        product: vec!["Firefox".into()],
-        component: vec!["General".into()],
-        status: vec!["NEW".into()],
-        assignee: vec!["dev@test.com".into()],
-        creator: vec!["reporter@test.com".into()],
-        priority: vec!["P1".into()],
-        severity: vec!["major".into()],
+        filters: crate::cli::BugFilterArgs {
+            product: vec!["Firefox".into()],
+            component: vec!["General".into()],
+            status: vec!["NEW".into()],
+            priority: vec!["P1".into()],
+            severity: vec!["major".into()],
+            whiteboard: vec!["needs-review".into()],
+            target_milestone: vec!["5.0".into()],
+            version: vec!["9.4".into()],
+            op_sys: vec!["Linux".into()],
+            platform: vec!["x86_64".into()],
+            resolution: vec!["FIXED".into()],
+            qa_contact: vec!["qa@test.com".into()],
+        },
+        actor_filters: crate::cli::BugActorFilterArgs {
+            assignee: vec!["dev@test.com".into()],
+            creator: vec!["reporter@test.com".into()],
+        },
         id: vec![42],
         alias: Some("my-alias".into()),
         summary: Some("kernel panic".into()),
@@ -111,13 +122,6 @@ async fn bug_list_passes_every_field_through_to_search_params() {
         },
         created_since: Some("2026-04-01".into()),
         changed_since: Some("2026-04-15T00:00:00Z".into()),
-        whiteboard: vec!["needs-review".into()],
-        target_milestone: vec!["5.0".into()],
-        version: vec!["9.4".into()],
-        op_sys: vec!["Linux".into()],
-        platform: vec!["x86_64".into()],
-        resolution: vec!["FIXED".into()],
-        qa_contact: vec!["qa@test.com".into()],
         url: vec!["github.com/foo".into()],
         ..Default::default()
     });
@@ -298,15 +302,13 @@ async fn bug_list_mixed_positive_notequals_notsubstring() {
     let mut action = empty_list_action();
     if let BugAction::List(crate::cli::ListArgs {
         page_args: _,
-        product,
-        resolution,
-        whiteboard,
+        filters,
         ..
     }) = &mut action
     {
-        *product = vec!["P".into()];
-        *resolution = vec!["!FIXED".into()];
-        *whiteboard = vec!["!wip".into()];
+        filters.product = vec!["P".into()];
+        filters.resolution = vec!["!FIXED".into()];
+        filters.whiteboard = vec!["!wip".into()];
     }
     let result = crate::commands::bug::execute(
         &action,

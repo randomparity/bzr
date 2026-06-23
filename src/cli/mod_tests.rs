@@ -1467,16 +1467,10 @@ fn parse_bug_list_with_filters() {
     .unwrap();
     match cli.command {
         Commands::Bug {
-            action:
-                BugAction::List(super::ListArgs {
-                    product,
-                    status,
-                    limit,
-                    ..
-                }),
+            action: BugAction::List(super::ListArgs { filters, limit, .. }),
         } => {
-            assert_eq!(product, vec!["Firefox"]);
-            assert_eq!(status, vec!["NEW"]);
+            assert_eq!(filters.product, vec!["Firefox"]);
+            assert_eq!(filters.status, vec!["NEW"]);
             assert_eq!(limit, 25);
         }
         _ => panic!("expected Bug List"),
@@ -1581,19 +1575,9 @@ fn bug_my_parses_shared_filter_set() {
     let Commands::Bug {
         action:
             BugAction::My(super::MyArgs {
-                product,
-                component,
-                priority,
-                severity,
+                filters,
                 created_since,
                 changed_since,
-                whiteboard,
-                target_milestone,
-                version,
-                op_sys,
-                platform,
-                resolution,
-                qa_contact,
                 url,
                 ..
             }),
@@ -1601,19 +1585,19 @@ fn bug_my_parses_shared_filter_set() {
     else {
         panic!("expected Bug My");
     };
-    assert_eq!(product, vec!["Core"]);
-    assert_eq!(component, vec!["Networking"]);
-    assert_eq!(priority, vec!["P1"]);
-    assert_eq!(severity, vec!["S2"]);
+    assert_eq!(filters.product, vec!["Core"]);
+    assert_eq!(filters.component, vec!["Networking"]);
+    assert_eq!(filters.priority, vec!["P1"]);
+    assert_eq!(filters.severity, vec!["S2"]);
     assert_eq!(created_since.as_deref(), Some("2026-04-01"));
     assert_eq!(changed_since.as_deref(), Some("2026-04-15T12:00:00Z"));
-    assert_eq!(whiteboard, vec!["needs-review"]);
-    assert_eq!(target_milestone, vec!["5.0"]);
-    assert_eq!(version, vec!["9.4"]);
-    assert_eq!(op_sys, vec!["Linux"]);
-    assert_eq!(platform, vec!["x86_64"]);
-    assert_eq!(resolution, vec!["FIXED"]);
-    assert_eq!(qa_contact, vec!["qa@example.com"]);
+    assert_eq!(filters.whiteboard, vec!["needs-review"]);
+    assert_eq!(filters.target_milestone, vec!["5.0"]);
+    assert_eq!(filters.version, vec!["9.4"]);
+    assert_eq!(filters.op_sys, vec!["Linux"]);
+    assert_eq!(filters.platform, vec!["x86_64"]);
+    assert_eq!(filters.resolution, vec!["FIXED"]);
+    assert_eq!(filters.qa_contact, vec!["qa@example.com"]);
     assert_eq!(url, vec!["github.com/foo"]);
 }
 
@@ -2511,29 +2495,18 @@ fn bug_list_parses_158_field_filters() {
     ])
     .unwrap();
     let Commands::Bug {
-        action:
-            BugAction::List(super::ListArgs {
-                whiteboard,
-                target_milestone,
-                version,
-                op_sys,
-                platform,
-                resolution,
-                qa_contact,
-                url,
-                ..
-            }),
+        action: BugAction::List(super::ListArgs { filters, url, .. }),
     } = cli.command
     else {
         panic!("expected Bug::List variant");
     };
-    assert_eq!(whiteboard, vec!["wip"]);
-    assert_eq!(target_milestone, vec!["5.0"]);
-    assert_eq!(version, vec!["9.4"]);
-    assert_eq!(op_sys, vec!["Linux"]);
-    assert_eq!(platform, vec!["x86_64"]);
-    assert_eq!(resolution, vec!["FIXED"]);
-    assert_eq!(qa_contact, vec!["qa@example.com"]);
+    assert_eq!(filters.whiteboard, vec!["wip"]);
+    assert_eq!(filters.target_milestone, vec!["5.0"]);
+    assert_eq!(filters.version, vec!["9.4"]);
+    assert_eq!(filters.op_sys, vec!["Linux"]);
+    assert_eq!(filters.platform, vec!["x86_64"]);
+    assert_eq!(filters.resolution, vec!["FIXED"]);
+    assert_eq!(filters.qa_contact, vec!["qa@example.com"]);
     assert_eq!(url, vec!["github.com/foo"]);
 }
 
@@ -2550,24 +2523,24 @@ fn bug_list_parses_repeated_whiteboard() {
     ])
     .unwrap();
     let Commands::Bug {
-        action: BugAction::List(super::ListArgs { whiteboard, .. }),
+        action: BugAction::List(super::ListArgs { filters, .. }),
     } = cli.command
     else {
         panic!("expected Bug::List variant");
     };
-    assert_eq!(whiteboard, vec!["wip", "review"]);
+    assert_eq!(filters.whiteboard, vec!["wip", "review"]);
 }
 
 #[test]
 fn bug_list_parses_negated_whiteboard() {
     let cli = Cli::try_parse_from(["bzr", "bug", "list", "--whiteboard", "!wip"]).unwrap();
     let Commands::Bug {
-        action: BugAction::List(super::ListArgs { whiteboard, .. }),
+        action: BugAction::List(super::ListArgs { filters, .. }),
     } = cli.command
     else {
         panic!("expected Bug::List variant");
     };
-    assert_eq!(whiteboard, vec!["!wip"]);
+    assert_eq!(filters.whiteboard, vec!["!wip"]);
 }
 
 #[test]

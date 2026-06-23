@@ -87,32 +87,22 @@ fn build_base_search_params(args: &MyArgs) -> Result<SearchParams> {
     let creation_time = parse_optional_date(args.created_since.as_deref(), "--created-since")?;
     let last_change_time = parse_optional_date(args.changed_since.as_deref(), "--changed-since")?;
 
-    Ok(SearchParams {
-        product: args.product.clone(),
-        component: args.component.clone(),
-        status: args.status.clone(),
-        priority: args.priority.clone(),
-        severity: args.severity.clone(),
+    let mut params = SearchParams {
         limit: Some(args.limit),
         offset: args.page_args.offset,
         include_fields: canonical_field_list(args.field_args.fields.as_deref()),
         exclude_fields: canonical_field_list(args.field_args.exclude_fields.as_deref()),
         creation_time,
         last_change_time,
-        whiteboard: args.whiteboard.clone(),
-        target_milestone: args.target_milestone.clone(),
-        version: args.version.clone(),
-        op_sys: args.op_sys.clone(),
-        platform: args.platform.clone(),
-        resolution: args.resolution.clone(),
-        qa_contact: args.qa_contact.clone(),
         url: args.url.clone(),
         order: Some(crate::validation::build_order(
             args.sort_args.sort.as_deref(),
             args.sort_args.order,
         )),
         ..Default::default()
-    })
+    };
+    args.filters.write_search_filters(&mut params);
+    Ok(params)
 }
 
 #[cfg(test)]

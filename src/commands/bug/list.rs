@@ -13,13 +13,8 @@ pub(super) async fn handle(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let ListArgs {
-        product,
-        component,
-        status,
-        assignee,
-        creator,
-        priority,
-        severity,
+        filters,
+        actor_filters,
         id,
         alias,
         summary,
@@ -30,13 +25,6 @@ pub(super) async fn handle(
         },
         created_since,
         changed_since,
-        whiteboard,
-        target_milestone,
-        version,
-        op_sys,
-        platform,
-        resolution,
-        qa_contact,
         url,
         sort_args,
         page_args: crate::cli::PageArgs { offset, paginate },
@@ -48,14 +36,7 @@ pub(super) async fn handle(
     let creation_time = parse_optional_date(created_since.as_deref(), "--created-since")?;
     let last_change_time = parse_optional_date(changed_since.as_deref(), "--changed-since")?;
 
-    let params = SearchParams {
-        product: product.clone(),
-        component: component.clone(),
-        status: status.clone(),
-        assigned_to: assignee.clone(),
-        creator: creator.clone(),
-        priority: priority.clone(),
-        severity: severity.clone(),
+    let mut params = SearchParams {
         id: id.clone(),
         alias: alias.clone(),
         summary: summary.clone(),
@@ -65,13 +46,6 @@ pub(super) async fn handle(
         exclude_fields: canonical_field_list(exclude_fields.as_deref()),
         creation_time,
         last_change_time,
-        whiteboard: whiteboard.clone(),
-        target_milestone: target_milestone.clone(),
-        version: version.clone(),
-        op_sys: op_sys.clone(),
-        platform: platform.clone(),
-        resolution: resolution.clone(),
-        qa_contact: qa_contact.clone(),
         url: url.clone(),
         order: Some(crate::validation::build_order(
             sort_args.sort.as_deref(),
@@ -79,6 +53,8 @@ pub(super) async fn handle(
         )),
         ..Default::default()
     };
+    filters.write_search_filters(&mut params);
+    actor_filters.write_search_filters(&mut params);
     if *count {
         let bugs = client
             .search_bugs(&super::count_search_params(params))

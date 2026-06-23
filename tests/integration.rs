@@ -20,13 +20,8 @@ use wiremock::{Mock, ResponseTemplate};
 fn empty_list_action() -> bzr::cli::BugAction {
     bzr::cli::BugAction::List(bzr::cli::ListArgs {
         page_args: bzr::cli::PageArgs::default(),
-        product: vec![],
-        component: vec![],
-        status: vec![],
-        assignee: vec![],
-        creator: vec![],
-        priority: vec![],
-        severity: vec![],
+        filters: bzr::cli::BugFilterArgs::default(),
+        actor_filters: bzr::cli::BugActorFilterArgs::default(),
         id: vec![],
         alias: None,
         summary: None,
@@ -37,13 +32,6 @@ fn empty_list_action() -> bzr::cli::BugAction {
         },
         created_since: None,
         changed_since: None,
-        whiteboard: vec![],
-        target_milestone: vec![],
-        version: vec![],
-        op_sys: vec![],
-        platform: vec![],
-        resolution: vec![],
-        qa_contact: vec![],
         url: vec![],
         sort_args: bzr::cli::SortArgs::default(),
         count: false,
@@ -107,12 +95,12 @@ async fn bug_list_changed_since_canonicalizes_bare_date_on_wire() {
     let mut action = empty_list_action();
     if let bzr::cli::BugAction::List(bzr::cli::ListArgs {
         page_args: _,
-        product,
+        filters,
         changed_since,
         ..
     }) = &mut action
     {
-        *product = vec!["Firefox".into()];
+        filters.product = vec!["Firefox".into()];
         *changed_since = Some("2026-04-01".into());
     }
     let mut __io2 = bzr::test_helpers::CapturedIo::new();
@@ -2659,15 +2647,13 @@ async fn bug_list_issue_158_mixed_positive_and_negation_reaches_wire() {
     let mut action = empty_list_action();
     if let bzr::cli::BugAction::List(bzr::cli::ListArgs {
         page_args: _,
-        product,
-        whiteboard,
-        resolution,
+        filters,
         ..
     }) = &mut action
     {
-        *product = vec!["P".into()];
-        *whiteboard = vec!["!wip".into()];
-        *resolution = vec!["!FIXED".into()];
+        filters.product = vec!["P".into()];
+        filters.whiteboard = vec!["!wip".into()];
+        filters.resolution = vec!["!FIXED".into()];
     }
     let mut __io24 = bzr::test_helpers::CapturedIo::new();
     let result = bzr::commands::bug::execute(
