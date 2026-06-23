@@ -129,9 +129,6 @@ fn overlay_cli(mut json: JsonCreateBug, args: &CreateArgs) -> Result<JsonCreateB
         create_fields,
         ..
     } = args;
-    // `merge_set`/`merge_vec` overwrite the target when the CLI flag was
-    // supplied (a `Some` scalar / non-empty repeatable), else leave the JSON
-    // value — exactly the "CLI wins" precedence.
     merge_set(&mut json.product, product.as_deref());
     merge_set(&mut json.component, component.as_deref());
     merge_set(&mut json.summary, summary.as_deref());
