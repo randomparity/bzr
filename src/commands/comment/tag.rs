@@ -36,3 +36,7 @@ pub(super) async fn handle(
     );
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tag_tests.rs"]
+mod tests;

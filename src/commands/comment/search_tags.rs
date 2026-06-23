@@ -21,3 +21,7 @@ pub(super) async fn handle(query: &str, ctx: &CommandContext, w: &mut Writers<'_
     );
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "search_tags_tests.rs"]
+mod tests;
