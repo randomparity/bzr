@@ -201,3 +201,7 @@ fn warn_partial(att_id: u64, err: &crate::error::BzrError, w: &mut Writers<'_>) 
         "  the comment was created public; mark it private via the Bugzilla web UI or with elevated credentials",
     );
 }
+
+#[cfg(test)]
+#[path = "upload_tests.rs"]
+mod tests;

@@ -11,13 +11,6 @@ mod update;
 mod upload;
 mod view;
 
-#[cfg(test)]
-use base64::Engine;
-#[cfg(test)]
-use download::{safe_basename, single_download_dest, write_one_attachment};
-#[cfg(test)]
-use upload::guess_content_type;
-
 pub(crate) fn requires_credentials(action: &AttachmentAction) -> Option<&'static str> {
     match action {
         AttachmentAction::List { .. }

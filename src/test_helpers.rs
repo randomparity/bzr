@@ -59,6 +59,24 @@ api_mode = "rest"
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 }
 
+/// Acquire `ENV_LOCK` and point `XDG_CONFIG_HOME` at an empty temp dir (no
+/// config written). Use this to exercise paths that must fail *before* config
+/// load / network connect: a missing config makes any `connect_and_configure`
+/// fail, so a test that still expects a local validation/IO error proves that
+/// error wins the ordering race.
+///
+/// # Panics
+///
+/// Panics if the temp directory cannot be created.
+#[expect(clippy::unwrap_used)]
+pub async fn setup_empty_config_env() -> (tokio::sync::MutexGuard<'static, ()>, tempfile::TempDir) {
+    let lock = super::ENV_LOCK.lock().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    // SAFETY: Tests that mutate process environment hold ENV_LOCK.
+    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+    (lock, tmp)
+}
+
 /// Build a full-shaped attachment fixture with common test defaults.
 pub fn make_attachment(
     id: u64,

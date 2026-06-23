@@ -326,3 +326,7 @@ async fn download_attachment_target(
         },
     }
 }
+
+#[cfg(test)]
+#[path = "download_tests.rs"]
+mod tests;
