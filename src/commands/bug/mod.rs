@@ -16,6 +16,7 @@ mod list;
 mod my;
 mod search;
 mod update;
+mod update_json;
 mod verbs;
 mod view;
 
