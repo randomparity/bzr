@@ -2,16 +2,20 @@ use serde::de::DeserializeOwned;
 
 use crate::error::{BzrError, Result};
 
+#[derive(Debug)]
+pub(crate) enum JsonOneOrMany<T> {
+    One(Box<T>),
+    Many(Vec<T>),
+}
+
 pub(crate) fn read_object<T: DeserializeOwned>(arg: &str) -> Result<T> {
-    let raw = if arg == "-" {
-        crate::commands::runtime::shared::read_stdin_to_string()?
-    } else {
-        crate::commands::runtime::shared::read_file_with_context(
-            std::path::Path::new(arg),
-            "--from-json",
-        )?
-    };
+    let raw = read_raw(arg)?;
     parse_object(&raw)
+}
+
+pub(crate) fn read_one_or_many<T: DeserializeOwned>(arg: &str) -> Result<JsonOneOrMany<T>> {
+    let raw = read_raw(arg)?;
+    parse_one_or_many(&raw)
 }
 
 pub(crate) fn merge_string(target: &mut Option<String>, value: Option<&str>) {
@@ -49,6 +53,17 @@ pub(crate) fn resolve_string_target(
     }
 }
 
+fn read_raw(arg: &str) -> Result<String> {
+    if arg == "-" {
+        crate::commands::runtime::shared::read_stdin_to_string()
+    } else {
+        crate::commands::runtime::shared::read_file_with_context(
+            std::path::Path::new(arg),
+            "--from-json",
+        )
+    }
+}
+
 fn parse_object<T: DeserializeOwned>(raw: &str) -> Result<T> {
     let value: serde_json::Value = serde_json::from_str(raw)
         .map_err(|e| BzrError::InputValidation(format!("--from-json: invalid JSON: {e}")))?;
@@ -57,6 +72,33 @@ fn parse_object<T: DeserializeOwned>(raw: &str) -> Result<T> {
             .map_err(|e| BzrError::InputValidation(format!("--from-json: {e}"))),
         _ => Err(BzrError::InputValidation(
             "--from-json expects a JSON object".into(),
+        )),
+    }
+}
+
+pub(crate) fn parse_one_or_many<T: DeserializeOwned>(raw: &str) -> Result<JsonOneOrMany<T>> {
+    let value: serde_json::Value = serde_json::from_str(raw)
+        .map_err(|e| BzrError::InputValidation(format!("--from-json: invalid JSON: {e}")))?;
+    match value {
+        serde_json::Value::Object(_) => {
+            let one = serde_json::from_value(value)
+                .map_err(|e| BzrError::InputValidation(format!("--from-json: {e}")))?;
+            Ok(JsonOneOrMany::One(Box::new(one)))
+        }
+        serde_json::Value::Array(items) => {
+            let entries = items
+                .into_iter()
+                .enumerate()
+                .map(|(i, v)| {
+                    serde_json::from_value(v).map_err(|e| {
+                        BzrError::InputValidation(format!("--from-json item {i}: {e}"))
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            Ok(JsonOneOrMany::Many(entries))
+        }
+        _ => Err(BzrError::InputValidation(
+            "--from-json expects a JSON object or an array of objects".into(),
         )),
     }
 }

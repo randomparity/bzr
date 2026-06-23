@@ -2,6 +2,7 @@ use serde::Deserialize;
 
 use crate::cli::CreateArgs;
 use crate::client::BugzillaClient;
+use crate::commands::runtime::from_json::JsonOneOrMany;
 use crate::commands::runtime::shared::{merge_set, merge_vec};
 use crate::error::Result;
 use crate::output::result_types::{
@@ -100,49 +101,18 @@ enum JsonInput {
     Many(Vec<JsonCreateBug>),
 }
 
-/// Read the `--from-json` argument: `-` is stdin, anything else a file path.
-fn read_from_json(arg: &str) -> Result<String> {
-    if arg == "-" {
-        crate::commands::runtime::shared::read_stdin_to_string()
-    } else {
-        crate::commands::runtime::shared::read_file_with_context(
-            std::path::Path::new(arg),
-            "--from-json",
-        )
+fn read_json_bugs(arg: &str) -> Result<JsonInput> {
+    match crate::commands::runtime::from_json::read_one_or_many(arg)? {
+        JsonOneOrMany::One(entry) => Ok(JsonInput::One(entry)),
+        JsonOneOrMany::Many(entries) => Ok(JsonInput::Many(entries)),
     }
 }
 
-/// Parse the raw `--from-json` text. A top-level object is one bug; a top-level
-/// array is one bug per element (even when it holds one). Any other shape, or
-/// malformed JSON, is a clean input error naming the offending position.
+#[cfg(test)]
 fn parse_json_bugs(raw: &str) -> Result<JsonInput> {
-    let value: serde_json::Value = serde_json::from_str(raw).map_err(|e| {
-        crate::error::BzrError::InputValidation(format!("--from-json: invalid JSON: {e}"))
-    })?;
-    match value {
-        serde_json::Value::Array(items) => {
-            let entries = items
-                .into_iter()
-                .enumerate()
-                .map(|(i, v)| {
-                    serde_json::from_value(v).map_err(|e| {
-                        crate::error::BzrError::InputValidation(format!(
-                            "--from-json item {i}: {e}"
-                        ))
-                    })
-                })
-                .collect::<Result<Vec<_>>>()?;
-            Ok(JsonInput::Many(entries))
-        }
-        serde_json::Value::Object(_) => {
-            let one = serde_json::from_value(value).map_err(|e| {
-                crate::error::BzrError::InputValidation(format!("--from-json: {e}"))
-            })?;
-            Ok(JsonInput::One(Box::new(one)))
-        }
-        _ => Err(crate::error::BzrError::InputValidation(
-            "--from-json expects a JSON object or an array of objects".into(),
-        )),
+    match crate::commands::runtime::from_json::parse_one_or_many(raw)? {
+        JsonOneOrMany::One(entry) => Ok(JsonInput::One(entry)),
+        JsonOneOrMany::Many(entries) => Ok(JsonInput::Many(entries)),
     }
 }
 
@@ -296,8 +266,7 @@ pub(super) async fn handle(
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let raw = read_from_json(arg)?;
-    match parse_json_bugs(&raw)? {
+    match read_json_bugs(arg)? {
         JsonInput::One(entry) => {
             let params = overlay_cli(*entry, args)?.into_params()?;
             super::create::create_and_report(client, &params, format, w).await

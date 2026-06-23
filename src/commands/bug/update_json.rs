@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::cli::UpdateArgs;
 use crate::client::BugzillaClient;
+use crate::commands::runtime::from_json::JsonOneOrMany;
 use crate::commands::runtime::shared::{merge_set, merge_vec};
 use crate::error::Result;
 use crate::output::result_types::{
@@ -78,45 +79,10 @@ struct JsonUpdateRequest {
     params: UpdateBugParams,
 }
 
-fn read_from_json(arg: &str) -> Result<String> {
-    if arg == "-" {
-        crate::commands::runtime::shared::read_stdin_to_string()
-    } else {
-        crate::commands::runtime::shared::read_file_with_context(
-            std::path::Path::new(arg),
-            "--from-json",
-        )
-    }
-}
-
-fn parse_json_updates(raw: &str) -> Result<JsonUpdateInput> {
-    let value: serde_json::Value = serde_json::from_str(raw).map_err(|e| {
-        crate::error::BzrError::InputValidation(format!("--from-json: invalid JSON: {e}"))
-    })?;
-    match value {
-        serde_json::Value::Array(items) => {
-            let entries = items
-                .into_iter()
-                .enumerate()
-                .map(|(i, v)| {
-                    serde_json::from_value(v).map_err(|e| {
-                        crate::error::BzrError::InputValidation(format!(
-                            "--from-json item {i}: {e}"
-                        ))
-                    })
-                })
-                .collect::<Result<Vec<_>>>()?;
-            Ok(JsonUpdateInput::Many(entries))
-        }
-        serde_json::Value::Object(_) => {
-            let one = serde_json::from_value(value).map_err(|e| {
-                crate::error::BzrError::InputValidation(format!("--from-json: {e}"))
-            })?;
-            Ok(JsonUpdateInput::One(Box::new(one)))
-        }
-        _ => Err(crate::error::BzrError::InputValidation(
-            "--from-json expects a JSON object or an array of objects".into(),
-        )),
+fn read_json_updates(arg: &str) -> Result<JsonUpdateInput> {
+    match crate::commands::runtime::from_json::read_one_or_many(arg)? {
+        JsonOneOrMany::One(entry) => Ok(JsonUpdateInput::One(entry)),
+        JsonOneOrMany::Many(entries) => Ok(JsonUpdateInput::Many(entries)),
     }
 }
 
@@ -389,8 +355,7 @@ pub(super) async fn handle(
     if arg == "-" && cli_comment_uses_stdin(args) {
         reject_cli_stdin_comment_source(args, arg, false)?;
     }
-    let raw = read_from_json(arg)?;
-    match parse_json_updates(&raw)? {
+    match read_json_updates(arg)? {
         JsonUpdateInput::One(entry) => {
             reject_cli_stdin_comment_source(args, arg, false)?;
             let ids = object_ids(&entry, args)?;
