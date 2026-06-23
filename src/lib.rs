@@ -1,20 +1,18 @@
 //! Library crate backing the `bzr` command-line tool.
 //!
 //! `bzr` ships as a CLI binary (`main.rs`); this library is the binary's
-//! implementation, factored into modules so the binary and the integration
-//! tests in `tests/` (which compile as a separate crate and therefore need
-//! `pub` access) exercise exactly the same code paths.
+//! implementation, factored into modules so the binary and tests exercise
+//! exactly the same code paths.
 //!
 //! ## Public boundary
 //!
 //! The intended entry point is [`dispatch`], which runs a parsed
-//! [`cli::Cli`]. The resource modules ([`cli`], [`client`], [`commands`],
-//! [`config`], [`types`], …) are published only to support the binary and the
-//! integration-test harness — they are an internal surface, not a
-//! stability-guaranteed API for external consumers, and may change between
-//! releases. Genuinely test-only items (`ENV_LOCK`, `test_helpers`) are
-//! gated behind `cfg(test)` / the `test-helpers` feature and never compile
-//! into a normal release build.
+//! [`cli::Cli`]. Public modules support CLI parsing, configuration, output,
+//! and error reporting around that entry point. Implementation modules are
+//! crate-private in normal builds; the `test-helpers` feature widens selected
+//! modules for the integration-test harness only. Genuinely test-only items
+//! (`ENV_LOCK`, `test_helpers`) are gated behind `cfg(test)` / the
+//! `test-helpers` feature and never compile into a normal release build.
 #![expect(
     clippy::missing_errors_doc,
     clippy::must_use_candidate,
@@ -24,9 +22,18 @@
 
 pub(crate) mod bugzilla_auth;
 pub mod cli;
+#[cfg(not(feature = "test-helpers"))]
+pub(crate) mod client;
+#[cfg(feature = "test-helpers")]
 pub mod client;
+#[cfg(not(feature = "test-helpers"))]
+pub(crate) mod commands;
+#[cfg(feature = "test-helpers")]
 pub mod commands;
 pub mod config;
+#[cfg(not(feature = "test-helpers"))]
+pub(crate) mod credentials;
+#[cfg(feature = "test-helpers")]
 pub mod credentials;
 pub mod error;
 pub(crate) mod field_aliases;
@@ -35,8 +42,17 @@ pub(crate) mod http;
 pub mod output;
 pub(crate) mod tls;
 pub mod types;
+#[cfg(not(feature = "test-helpers"))]
+pub(crate) mod url_parser;
+#[cfg(feature = "test-helpers")]
 pub mod url_parser;
+#[cfg(not(feature = "test-helpers"))]
+pub(crate) mod validation;
+#[cfg(feature = "test-helpers")]
 pub mod validation;
+#[cfg(not(feature = "test-helpers"))]
+pub(crate) mod xmlrpc;
+#[cfg(feature = "test-helpers")]
 pub mod xmlrpc;
 
 /// Fuzz-only entry points. Gated behind `cfg(fuzzing)` so they expose the
