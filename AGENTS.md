@@ -54,8 +54,17 @@ Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches `Com
 
 ### Conventions
 
-- User-facing output should use `writeln!(io::stdout(), …)` / `writeln!(io::stderr(), …)` rather than `println!`/`eprintln!`. Two reasons: (a) `print_stdout`/`print_stderr` are denied project-wide, so every `println!` site needs an `#[expect(clippy::print_stdout)]` escape hatch; (b) `test_helpers::capture_stdout` redirects fd 1 via `dup2`, which captures `writeln!(io::stdout(), …)` but **not** `println!` — `println!` goes through cargo test's per-test stdout-capture (a thread-local installed by `set_output_capture`) and bypasses fd 1 entirely. Mixing the two in the same function silently breaks `capture_stdout` tests. The helpers in `src/output/formatting.rs` already follow this convention; new output code should match. Discard the `Result` with `let _ = writeln!(…)` if the function isn't already in a context that allows `.expect()`.
-- `#[expect(clippy::print_stdout)]` is used to allow `println!` in the few remaining sites that haven't been migrated to `writeln!`, since `print_stdout` is denied project-wide.
+- User-facing CLI output should go through `Writers` (`w.out`/`w.err`) and the
+  output helpers, which ultimately use `writeln!(io::stdout(), …)` /
+  `writeln!(io::stderr(), …)` rather than `println!`/`eprintln!`. This keeps
+  command output testable with `test_helpers::capture_stdout`, which redirects
+  fd 1 via `dup2`; `println!` goes through cargo test's per-test stdout capture
+  and bypasses fd 1. Discard the `Result` with `let _ = writeln!(…)` if the
+  function isn't already in a context that allows `.expect()`.
+- Direct `println!`/`eprintln!` is reserved for non-CLI process integration:
+  Cargo directives in `build.rs` and `xtask` status output. Do not add
+  `#[expect(clippy::print_stdout)]` or `#[expect(clippy::print_stderr)]` in
+  `src/`; use `Writers` for user output and `tracing` for diagnostics.
 - Logging uses `tracing` (not println). Verbosity: `-v`=info, `-vv`=debug, `-vvv`=trace. `RUST_LOG` env var overrides.
 - URLs are sanitized via `safe_url()` in debug logs to avoid leaking API keys in query params.
 - Tests use `wiremock` for HTTP mocking. Unit tests live in sibling `<name>_tests.rs` files linked from each source file via `#[cfg(test)] #[path = "<name>_tests.rs"] mod tests;` — inline `mod tests { ... }` blocks are **not permitted** in `src/` and `make check-test-layout` enforces this in CI. The reasons are twofold: (1) SonarCloud's CPD scanner is configured to exclude `**/*_tests.rs` (see `sonar-project.properties`), so test-fixture boilerplate stays out of the duplication metric without forcing bad abstractions; (2) it keeps production source files focused. There is no size threshold — even tiny test mods get their own sibling. Test-helpers modules used only by tests follow the same separation (e.g. `src/client/test_helpers.rs`). Sibling files start with the appropriate file-level inner attribute (`#![expect(clippy::unwrap_used)]`, or whatever the original outer attribute was — including combined forms like `#![expect(clippy::unwrap_used, clippy::panic)]`); siblings whose tests don't trigger the lint omit it. Integration tests live in `tests/integration.rs` and functional tests in `tests/functional/`. All API tests require `#[tokio::test]` (the runtime is tokio). See `docs/superpowers/specs/2026-05-05-test-sibling-migration-design.md` for full rationale.
