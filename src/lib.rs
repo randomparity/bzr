@@ -101,10 +101,9 @@ pub async fn dispatch(
 
 fn ensure_dispatch_allowed(
     cli: &cli::Cli,
-    ctx: &commands::runtime::context::CommandContext,
+    _ctx: &commands::runtime::context::CommandContext,
 ) -> error::Result<()> {
-    ensure_dry_run_supported(cli)?;
-    ensure_credentials_for_command(cli, ctx)
+    ensure_dry_run_supported(cli)
 }
 
 /// Build the explicit command context from global CLI flags.
@@ -131,6 +130,7 @@ fn build_command_context(
         .with_config_path_override(cli.config.clone())
         .with_request_timeout(request_timeout)
         .with_retry_max(cli.retry.unwrap_or(0))
+        .with_credential_requirement(command_requires_credentials(&cli.command))
 }
 
 /// Build the inline server definition from the global `--server-url` flags, or
@@ -180,22 +180,6 @@ fn ensure_dry_run_supported(cli: &cli::Cli) -> error::Result<()> {
     ))
 }
 
-fn ensure_credentials_for_command(
-    cli: &cli::Cli,
-    ctx: &commands::runtime::context::CommandContext,
-) -> error::Result<()> {
-    let Some(command_name) = command_requires_credentials(&cli.command) else {
-        return Ok(());
-    };
-    if active_server_has_credentials(cli, ctx)? {
-        return Ok(());
-    }
-    Err(error::BzrError::Config(format!(
-        "{command_name} requires credentials; configure api_key, api_key_env, \
-         api_key_keyring, or pass --server-api-key-env with --server-url"
-    )))
-}
-
 fn command_requires_credentials(command: &cli::Commands) -> Option<&'static str> {
     match command {
         cli::Commands::Bug { action } => commands::bug::requires_credentials(action),
@@ -208,19 +192,6 @@ fn command_requires_credentials(command: &cli::Commands) -> Option<&'static str>
         cli::Commands::Whoami => Some("whoami"),
         _ => None,
     }
-}
-
-fn active_server_has_credentials(
-    cli: &cli::Cli,
-    ctx: &commands::runtime::context::CommandContext,
-) -> error::Result<bool> {
-    if cli.server_url.is_some() {
-        return Ok(cli.server_api_key_env.is_some());
-    }
-
-    let config = config::Config::load_at(ctx.config_path_override())?;
-    let (_, server) = config.resolve_server(cli.server.as_deref())?;
-    Ok(server.credential_source()?.is_some())
 }
 
 /// Shared mutex for tests that modify the process-global `XDG_CONFIG_HOME` env var.

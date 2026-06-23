@@ -16,6 +16,7 @@ pub struct CommandContext {
     config_path_override: Option<PathBuf>,
     request_timeout: Duration,
     retry_max: u32,
+    credential_requirement: Option<&'static str>,
 }
 
 impl CommandContext {
@@ -32,6 +33,7 @@ impl CommandContext {
             config_path_override: None,
             request_timeout: crate::http::REQUEST_TIMEOUT,
             retry_max: 0,
+            credential_requirement: None,
         }
     }
 
@@ -68,6 +70,15 @@ impl CommandContext {
     #[must_use]
     pub fn with_retry_max(mut self, retry_max: u32) -> Self {
         self.retry_max = retry_max;
+        self
+    }
+
+    #[must_use]
+    pub fn with_credential_requirement(
+        mut self,
+        credential_requirement: Option<&'static str>,
+    ) -> Self {
+        self.credential_requirement = credential_requirement;
         self
     }
 
@@ -121,5 +132,10 @@ impl CommandContext {
     #[must_use]
     pub fn retry_max(&self) -> u32 {
         self.retry_max
+    }
+
+    #[must_use]
+    pub fn credential_requirement(&self) -> Option<&'static str> {
+        self.credential_requirement
     }
 }

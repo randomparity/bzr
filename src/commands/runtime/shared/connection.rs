@@ -537,6 +537,10 @@ pub async fn connect_and_configure(command: &CommandContext) -> Result<BugzillaC
         pin_current_cert,
     } = resolve_connect_target(command)?;
 
+    if let Some(command_name) = command.credential_requirement() {
+        require_credentials_for_connection(&ctx, command_name)?;
+    }
+
     if pin_current_cert {
         pin_current_cert_for_session(&ctx, &mut tls_config).await?;
     }
@@ -592,4 +596,14 @@ pub async fn connect_and_configure(command: &CommandContext) -> Result<BugzillaC
     let api_mode = command.api().unwrap_or(resolved_mode);
     let client = ctx.build_client(auth, api_mode, &tls_config)?;
     Ok(client)
+}
+
+fn require_credentials_for_connection(ctx: &ConnectContext, command_name: &str) -> Result<()> {
+    if ctx.api_key.is_some() {
+        return Ok(());
+    }
+    Err(BzrError::Config(format!(
+        "{command_name} requires credentials; configure api_key, api_key_env, \
+         api_key_keyring, or pass --server-api-key-env with --server-url"
+    )))
 }

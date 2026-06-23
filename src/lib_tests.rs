@@ -199,6 +199,79 @@ async fn dispatch_allows_dry_run_on_admin_create() {
 }
 
 #[tokio::test]
+async fn dispatch_allows_credentialless_dry_run_before_connect() {
+    let _lock = ENV_LOCK.lock().await;
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    write_public_config(&tmp, &mock.uri());
+
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let cli = cli::Cli::try_parse_from([
+        "bzr",
+        "--server",
+        "public",
+        "--json",
+        "--dry-run",
+        "product",
+        "create",
+        "--name",
+        "DryRun",
+        "--description",
+        "Preview",
+    ])
+    .unwrap();
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
+    let output = io.out_str().to_string();
+
+    assert!(result.is_ok(), "credentialless dry-run failed: {result:?}");
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    assert_eq!(parsed["resource"], "product");
+    assert_eq!(parsed["action"], "dry-run");
+}
+
+#[tokio::test]
+async fn dispatch_validates_mutation_args_before_credentials() {
+    let _lock = ENV_LOCK.lock().await;
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    write_public_config(&tmp, &mock.uri());
+    let json_path = tmp.path().join("product.json");
+    std::fs::write(&json_path, "{}").unwrap();
+    let json_arg = json_path.to_string_lossy().into_owned();
+
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let cli = cli::Cli::try_parse_from([
+        "bzr",
+        "--server",
+        "public",
+        "product",
+        "create",
+        "--from-json",
+        json_arg.as_str(),
+    ])
+    .unwrap();
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
+
+    assert!(matches!(
+        result,
+        Err(error::BzrError::InputValidation(ref msg))
+            if msg.contains("'name' is required")
+    ));
+}
+
+#[tokio::test]
 async fn dispatch_rejects_dry_run_on_group_membership_mutation() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
