@@ -38,13 +38,26 @@ Callers outside `update.rs` reference these paths today and must keep working
 The sibling test file references only `super::build_update_params` (×27) and
 four `FLAG_*` constants.
 
+### Prerequisite audit (completed)
+
+The module *path* `crate::commands::bug::update` is unchanged by the
+`update.rs` → `update/mod.rs` move, so path references survive. A grep for
+`bug::update` / `bug/update` and every moved symbol across `fuzz/`,
+`sonar-project.properties`, coverage/CI config, and everything outside
+`src/`+`docs/` returned **zero** references. The fuzz crate (outside the cargo
+workspace, so `clippy --all-targets` never compiles it — a known footgun for
+module/visibility refactors) does **not** reference this module or its symbols,
+so no `cargo +nightly check --manifest-path fuzz/Cargo.toml` gate is required
+for this change. Visibility of every symbol in the external-surface table is
+nonetheless preserved exactly (below).
+
 ## Goals (success criteria)
 
-- `src/commands/bug/update.rs` is replaced by a `src/commands/bug/update/`
-  directory whose largest source file is materially smaller than 587 lines and
-  whose responsibilities are cohesive (target: no single submodule over ~150
-  source lines, no single function over the repo's 100-line / complexity-8
-  limits — already satisfied today, must stay satisfied).
+- `src/commands/bug/update.rs` (587 lines today — the captured baseline) is
+  replaced by a `src/commands/bug/update/` directory whose largest source file
+  is materially smaller (target: every submodule under ~150 source lines, and
+  no single function over the repo's 100-line / complexity-8 limits — already
+  satisfied today, must stay satisfied).
 - Every `super::update::*` path in the table above keeps resolving with **no
   edits to the calling sites** (`mod.rs`, `verbs.rs`, `update_json.rs`,
   `create_json.rs`).
@@ -52,7 +65,12 @@ four `FLAG_*` constants.
   existing `update_tests.rs` suite passes without weakening or deleting any
   assertion.
 - The Desloppify structural finding for the old `update.rs` is resolved or
-  materially reduced on a fresh scan.
+  materially reduced on a fresh scan. Measured objectively against the 587-line
+  baseline: the file-level finding for `update.rs` no longer applies because the
+  monolithic file no longer exists, and the largest replacement source file is
+  well under the original (target under ~150 lines). A fresh Desloppify scan
+  must not raise an equivalent file-level structural finding on any single
+  replacement file.
 - `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`,
   `make check-test-layout`, `make check-no-spawn`, and the focused
   `cargo test bug::update` suite are all green.
@@ -96,6 +114,12 @@ four `FLAG_*` constants.
 - The test file keeps its `super::build_update_params` and `super::FLAG_*`
   references; `mod.rs` re-exports those names so the references resolve with no
   test edits. A `pub(super) use` re-export is an export, not flagged unused.
+  **Fallback:** if a re-export trips an unused/visibility lint, or a moved
+  symbol trips a different pedantic lint across the new boundary, the
+  `clippy --all-targets --all-features -- -D warnings` guardrail fails before
+  the commit lands; recover by qualifying the affected test references
+  (`super::payload::build_update_params`, `super::payload::FLAG_*`) — a
+  mechanical, behavior-neutral edit — rather than weakening the lint.
 
 ### Dependency direction (acyclic)
 
