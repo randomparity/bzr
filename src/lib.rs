@@ -30,6 +30,9 @@ pub mod client;
 pub(crate) mod commands;
 #[cfg(feature = "test-helpers")]
 pub mod commands;
+#[cfg(not(feature = "test-helpers"))]
+pub(crate) mod config;
+#[cfg(feature = "test-helpers")]
 pub mod config;
 #[cfg(not(feature = "test-helpers"))]
 pub(crate) mod credentials;
@@ -70,8 +73,18 @@ pub mod fuzz {
     }
 
     /// Drive Bugzilla URL import parsing on arbitrary strings.
-    pub fn parse_bugzilla_url(data: &str, config: &Config) {
-        let _ = crate::commands::runtime::url_parser::parse_bugzilla_url(data, config);
+    ///
+    /// Builds the fixed test config internally so the fuzz harness does not
+    /// need to reach into the crate-internal `config` module.
+    pub fn parse_bugzilla_url(data: &str) {
+        let config: Config = toml::from_str(
+            "default_server = \"test\"\n\n\
+             [servers.test]\n\
+             url = \"https://bugzilla.example.com\"\n\
+             api_key = \"dummy\"\n",
+        )
+        .expect("static fuzz config is always valid");
+        let _ = crate::commands::runtime::url_parser::parse_bugzilla_url(data, &config);
     }
 
     /// Drive XML-RPC response parsing on arbitrary strings.
