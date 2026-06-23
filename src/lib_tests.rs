@@ -62,6 +62,63 @@ async fn dispatch_routes_local_query_commands() {
 }
 
 #[tokio::test]
+async fn dispatch_applies_config_flag_without_global_override() {
+    let _lock = ENV_LOCK.lock().await;
+    crate::config::Config::set_path_override(None);
+    let tmp = tempfile::TempDir::new().unwrap();
+    let xdg_home = tmp.path().join("xdg");
+    let explicit_dir = tmp.path().join("explicit");
+    std::fs::create_dir_all(&explicit_dir).unwrap();
+    let explicit_config = explicit_dir.join("config.toml");
+    std::fs::write(
+        &explicit_config,
+        r#"
+default_server = "alternate"
+
+[servers.alternate]
+url = "https://bugzilla.example.test"
+api_key = "secret"
+"#,
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        std::fs::set_permissions(&explicit_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::set_permissions(&explicit_config, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    // SAFETY: tests that mutate process environment hold ENV_LOCK.
+    unsafe {
+        std::env::remove_var("BZR_CONFIG");
+        std::env::set_var("XDG_CONFIG_HOME", xdg_home);
+    };
+
+    let config_arg = explicit_config.to_string_lossy().into_owned();
+    let cli = cli::Cli::try_parse_from([
+        "bzr",
+        "--config",
+        config_arg.as_str(),
+        "--json",
+        "config",
+        "show",
+    ])
+    .unwrap();
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
+    let output = io.out_str().to_string();
+
+    assert!(result.is_ok(), "dispatch failed: {result:?}");
+    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    assert_eq!(parsed["config_file"], explicit_config.display().to_string());
+    assert_eq!(parsed["default_server"], "alternate");
+    assert_eq!(
+        parsed["servers"]["alternate"]["url"],
+        "https://bugzilla.example.test"
+    );
+}
+
+#[tokio::test]
 async fn dispatch_rejects_dry_run_on_unsupported_command() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 

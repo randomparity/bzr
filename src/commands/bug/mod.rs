@@ -110,7 +110,7 @@ pub async fn execute(action: &BugAction, ctx: &CommandContext, w: &mut Writers<'
     // of the connect/validate machinery below.
     if let BugAction::View(args) = action {
         if args.web {
-            return view::handle_web(&args.ids, ctx.server(), w);
+            return view::handle_web(&args.ids, ctx, w);
         }
     }
 

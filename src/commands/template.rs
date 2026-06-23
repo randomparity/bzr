@@ -12,7 +12,6 @@ use crate::output::resources::template::{
 };
 use crate::output::writers::Writers;
 use crate::types::BugTemplate;
-use crate::types::OutputFormat;
 
 #[expect(
     clippy::unused_async,
@@ -23,7 +22,6 @@ pub async fn execute(
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let format = ctx.format();
     match action {
         TemplateAction::Save { name, fields } => {
             let mut template = fields.to_template();
@@ -37,37 +35,37 @@ pub async fn execute(
             }
 
             let mut is_update = false;
-            Config::update_locked(|config| {
+            Config::update_locked_at(ctx.config_path_override(), |config| {
                 is_update = config.templates.contains_key(name.as_str());
                 config.templates.insert(name.clone(), template);
                 Ok(())
             })?;
 
             let verb = if is_update { "Updated" } else { "Saved" };
-            write_template_saved(name, verb, format, w.out);
+            write_template_saved(name, verb, ctx.format(), w.out);
         }
         TemplateAction::List => {
-            let config = Config::load()?;
-            write_template_list(&config.templates, format, w.out);
+            let config = Config::load_at(ctx.config_path_override())?;
+            write_template_list(&config.templates, ctx.format(), w.out);
         }
         TemplateAction::Show { name } => {
-            let config = Config::load()?;
+            let config = Config::load_at(ctx.config_path_override())?;
             let template = config
                 .templates
                 .get(name.as_str())
                 .ok_or_else(|| BzrError::config(format!("template '{name}' not found")))?;
-            write_template_detail(name, template, format, w.out);
+            write_template_detail(name, template, ctx.format(), w.out);
         }
-        TemplateAction::Update(args) => handle_update(args, format, w)?,
+        TemplateAction::Update(args) => handle_update(args, ctx, w)?,
         TemplateAction::Delete { name } => {
-            Config::update_locked(|config| {
+            Config::update_locked_at(ctx.config_path_override(), |config| {
                 if config.templates.remove(name.as_str()).is_none() {
                     return Err(BzrError::config(format!("template '{name}' not found")));
                 }
                 Ok(())
             })?;
 
-            write_template_saved(name, "Deleted", format, w.out);
+            write_template_saved(name, "Deleted", ctx.format(), w.out);
         }
     }
     Ok(())
@@ -137,7 +135,7 @@ fn clear_template_field(t: &mut BugTemplate, field: &str) -> Result<()> {
 /// left unchanged. Rejects a no-op call and a result with no fields set.
 fn handle_update(
     args: &crate::cli::TemplateUpdateArgs,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let crate::cli::TemplateUpdateArgs {
@@ -152,7 +150,7 @@ fn handle_update(
         ));
     }
 
-    Config::update_locked(|config| {
+    Config::update_locked_at(ctx.config_path_override(), |config| {
         let Some(t) = config.templates.get_mut(name.as_str()) else {
             return Err(BzrError::config(format!("template '{name}' not found")));
         };
@@ -185,7 +183,7 @@ fn handle_update(
         Ok(())
     })?;
 
-    write_template_saved(name, "Updated", format, w.out);
+    write_template_saved(name, "Updated", ctx.format(), w.out);
     Ok(())
 }
 

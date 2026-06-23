@@ -1,14 +1,14 @@
+use crate::commands::runtime::context::CommandContext;
 use crate::config::Config;
 use crate::error::Result;
 use crate::output::result_types::{write_result, ConfigResult};
 use crate::output::writers::Writers;
-use crate::types::OutputFormat;
 
 /// Remove a server alias from the config, dropping any keychain entry.
-pub(super) fn handle(name: &str, format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
+pub(super) fn handle(name: &str, ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
     // Advisory snapshot: read unvalidated so an unrelated invalid server does
     // not block the removal.
-    let config = Config::read_unvalidated()?;
+    let config = Config::read_unvalidated_at(ctx.config_path_override())?;
     let server = config
         .servers
         .get(name)
@@ -35,20 +35,20 @@ pub(super) fn handle(name: &str, format: OutputFormat, w: &mut Writers<'_>) -> R
 
     // `update_locked_without_validation`: removal cannot improve or worsen an
     // unrelated invalid server, so avoid blocking on whole-config validation.
-    Config::update_locked_without_validation(|config| {
+    Config::update_locked_without_validation_at(ctx.config_path_override(), |config| {
         config.servers.remove(name);
         if config.default_server.as_deref() == Some(name) {
             config.default_server = None;
         }
         Ok(())
     })?;
-    let path = Config::path()?;
+    let path = Config::path_at(ctx.config_path_override())?;
 
     let human = format!("Removed server '{name}'.\nConfig file: {}", path.display());
     write_result(
         &ConfigResult::removed(name, path.to_string_lossy()),
         &human,
-        format,
+        ctx.format(),
         w.out,
     );
     Ok(())

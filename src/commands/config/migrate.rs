@@ -1,8 +1,8 @@
+use crate::commands::runtime::context::CommandContext;
 use crate::config::Config;
 use crate::error::Result;
 use crate::output::result_types::{write_result, ConfigResult};
 use crate::output::writers::Writers;
-use crate::types::OutputFormat;
 
 /// `migrate-to-keyring` operands: which server to migrate and the
 /// optional `--service` / `--account` overrides for where the credential
@@ -19,7 +19,7 @@ pub(super) struct MigrateSpec<'a> {
 pub(super) fn handle(
     spec: MigrateSpec<'_>,
     yes: bool,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     if !yes {
@@ -34,7 +34,7 @@ pub(super) fn handle(
         account,
     } = spec;
 
-    let config = Config::load()?;
+    let config = Config::load_at(ctx.config_path_override())?;
     let server = config
         .servers
         .get(name)
@@ -64,11 +64,11 @@ pub(super) fn handle(
     let account_name = account.unwrap_or(name).to_string();
     crate::credentials::keyring::store(&service_name, &account_name, &current_secret)?;
 
-    let path = Config::path()?;
+    let path = Config::path_at(ctx.config_path_override())?;
     let human = if source_kind == crate::config::CredentialSourceKind::Inline {
         let service_persist = service.map(str::to_owned);
         let account_persist = account.map(str::to_owned);
-        Config::update_locked(move |config| {
+        Config::update_locked_at(ctx.config_path_override(), move |config| {
             let server = config.servers.get_mut(name).ok_or_else(|| {
                 crate::error::BzrError::config(format!("server '{name}' disappeared"))
             })?;
@@ -99,7 +99,7 @@ pub(super) fn handle(
     write_result(
         &ConfigResult::configured(name, &server_url, false, path.to_string_lossy(), true),
         &human,
-        format,
+        ctx.format(),
         w.out,
     );
     Ok(())

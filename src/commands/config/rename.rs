@@ -1,15 +1,15 @@
+use crate::commands::runtime::context::CommandContext;
 use crate::config::Config;
 use crate::error::Result;
 use crate::output::result_types::{write_result, ConfigResult};
 use crate::output::writers::Writers;
-use crate::types::OutputFormat;
 
 /// Rename a server alias, preserving credentials (including a keychain move
 /// when the secret is stored under the default, server-name account).
 pub(super) fn handle(
     old: &str,
     new: &str,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     if old == new {
@@ -19,7 +19,7 @@ pub(super) fn handle(
     }
     // Advisory snapshot: read unvalidated so an unrelated invalid server does
     // not block the rename.
-    let config = Config::read_unvalidated()?;
+    let config = Config::read_unvalidated_at(ctx.config_path_override())?;
     let server = config
         .servers
         .get(old)
@@ -48,7 +48,7 @@ pub(super) fn handle(
     // `update_locked_without_validation`: a rename preserves the server
     // contents, so avoid blocking on whole-config validation for unrelated
     // invalid entries.
-    Config::update_locked_without_validation(|config| {
+    Config::update_locked_without_validation_at(ctx.config_path_override(), |config| {
         let server_cfg = config
             .servers
             .remove(old)
@@ -63,7 +63,7 @@ pub(super) fn handle(
     if let Some(service) = keyring_move {
         crate::credentials::keyring::delete(&service, old)?;
     }
-    let path = Config::path()?;
+    let path = Config::path_at(ctx.config_path_override())?;
 
     let human = format!(
         "Renamed server '{old}' to '{new}'.\nConfig file: {}",
@@ -72,7 +72,7 @@ pub(super) fn handle(
     write_result(
         &ConfigResult::renamed(old, new, path.to_string_lossy()),
         &human,
-        format,
+        ctx.format(),
         w.out,
     );
     Ok(())

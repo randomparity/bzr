@@ -92,7 +92,7 @@ async fn resolve_client_and_params(args: &SearchArgs, ctx: &CommandContext) -> R
         return Ok((client, params, None));
     };
 
-    let config = crate::config::Config::load()?;
+    let config = crate::config::Config::load_at(ctx.config_path_override())?;
     let parsed = crate::commands::runtime::url_parser::parse_bugzilla_url(url_str, &config)?;
     let effective_server = ctx.server().or(parsed.query.server.as_deref());
     let url_ctx = ctx.with_server(effective_server);
@@ -119,6 +119,7 @@ async fn resolve_client_and_params(args: &SearchArgs, ctx: &CommandContext) -> R
 /// No-op when the search had no `--save-as`.
 fn persist_saved_query(
     save_info: Option<(String, SavedQuery)>,
+    ctx: &CommandContext,
     format: OutputFormat,
     out: &mut dyn Write,
 ) -> Result<()> {
@@ -126,7 +127,7 @@ fn persist_saved_query(
         return Ok(());
     };
     let mut is_update = false;
-    crate::config::Config::update_locked(|config| {
+    crate::config::Config::update_locked_at(ctx.config_path_override(), |config| {
         is_update = config.queries.contains_key(name.as_str());
         config.queries.insert(name.clone(), query);
         Ok(())
@@ -174,7 +175,7 @@ pub(super) async fn handle(
         );
     }
 
-    persist_saved_query(save_info, format, w.out)
+    persist_saved_query(save_info, ctx, format, w.out)
 }
 
 #[cfg(test)]

@@ -74,7 +74,7 @@ pub async fn dispatch(
     w: &mut output::writers::Writers<'_>,
 ) -> error::Result<()> {
     let ctx = build_command_context(cli, format);
-    ensure_dispatch_allowed(cli)?;
+    ensure_dispatch_allowed(cli, &ctx)?;
 
     match &cli.command {
         cli::Commands::Bug { action } => commands::bug::execute(action, &ctx, w).await,
@@ -100,9 +100,12 @@ pub async fn dispatch(
     }
 }
 
-fn ensure_dispatch_allowed(cli: &cli::Cli) -> error::Result<()> {
+fn ensure_dispatch_allowed(
+    cli: &cli::Cli,
+    ctx: &commands::runtime::context::CommandContext,
+) -> error::Result<()> {
     ensure_dry_run_supported(cli)?;
-    ensure_credentials_for_command(cli)
+    ensure_credentials_for_command(cli, ctx)
 }
 
 /// Build the explicit command context from global CLI flags.
@@ -126,6 +129,7 @@ fn build_command_context(
         .with_dry_run(cli.dry_run)
         .with_assume_yes(cli.yes)
         .with_inline_server(resolve_inline_server(cli))
+        .with_config_path_override(cli.config.clone())
         .with_request_timeout(request_timeout)
         .with_retry_max(cli.retry.unwrap_or(0))
 }
@@ -177,11 +181,14 @@ fn ensure_dry_run_supported(cli: &cli::Cli) -> error::Result<()> {
     ))
 }
 
-fn ensure_credentials_for_command(cli: &cli::Cli) -> error::Result<()> {
+fn ensure_credentials_for_command(
+    cli: &cli::Cli,
+    ctx: &commands::runtime::context::CommandContext,
+) -> error::Result<()> {
     let Some(command_name) = command_requires_credentials(&cli.command) else {
         return Ok(());
     };
-    if active_server_has_credentials(cli)? {
+    if active_server_has_credentials(cli, ctx)? {
         return Ok(());
     }
     Err(error::BzrError::Config(format!(
@@ -204,12 +211,15 @@ fn command_requires_credentials(command: &cli::Commands) -> Option<&'static str>
     }
 }
 
-fn active_server_has_credentials(cli: &cli::Cli) -> error::Result<bool> {
+fn active_server_has_credentials(
+    cli: &cli::Cli,
+    ctx: &commands::runtime::context::CommandContext,
+) -> error::Result<bool> {
     if cli.server_url.is_some() {
         return Ok(cli.server_api_key_env.is_some());
     }
 
-    let config = config::Config::load()?;
+    let config = config::Config::load_at(ctx.config_path_override())?;
     let (_, server) = config.resolve_server(cli.server.as_deref())?;
     Ok(server.credential_source()?.is_some())
 }

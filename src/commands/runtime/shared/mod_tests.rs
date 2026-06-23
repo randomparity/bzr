@@ -21,6 +21,7 @@ fn connect_context(
         api_override,
         request_timeout: crate::http::REQUEST_TIMEOUT,
         retry_max: 0,
+        config_path_override: None,
         persist: true,
     }
 }
@@ -589,7 +590,7 @@ async fn persist_detected_settings_skips_unknown_server() {
         api_mode: crate::types::ApiMode::Rest,
         server_version: Some("5.1".into()),
     };
-    let result = super::persist_detected_settings("nonexistent", &settings, true);
+    let result = super::persist_detected_settings(None, "nonexistent", &settings, true);
     assert!(result.is_ok());
 
     // The known server is untouched and no "nonexistent" server is created.

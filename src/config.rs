@@ -273,11 +273,32 @@ impl Config {
     /// file; the last two name a directory under which `bzr/config.toml` is
     /// used.
     pub fn path() -> Result<PathBuf> {
+        let path_override = Self::process_path_override();
+        Self::path_at(path_override.as_deref())
+    }
+
+    /// Resolve the config path for one invocation.
+    ///
+    /// Precedence: the explicit invocation path > `BZR_CONFIG` > the default
+    /// config directory. Unlike [`Self::path`], this deliberately ignores the
+    /// legacy process-global override unless the caller passes it explicitly.
+    pub fn path_at(path_override: Option<&Path>) -> Result<PathBuf> {
+        if let Some(path) = path_override {
+            return Ok(path.to_path_buf());
+        }
+        Self::path_from_environment()
+    }
+
+    fn process_path_override() -> Option<PathBuf> {
         if let Ok(guard) = CONFIG_PATH_OVERRIDE.read() {
             if let Some(path) = guard.as_ref() {
-                return Ok(path.clone());
+                return Some(path.clone());
             }
         }
+        None
+    }
+
+    fn path_from_environment() -> Result<PathBuf> {
         if let Some(env_path) = std::env::var_os("BZR_CONFIG") {
             if !env_path.is_empty() {
                 return Ok(PathBuf::from(env_path));
@@ -291,21 +312,20 @@ impl Config {
         Ok(config_dir.join("bzr").join("config.toml"))
     }
 
-    /// Install (or clear) the `--config <PATH>` override that takes precedence
-    /// over `BZR_CONFIG` and the default config directory.
+    /// Install (or clear) a process-wide config path override that takes
+    /// precedence over `BZR_CONFIG` and the default config directory.
     ///
-    /// Called once from `main` after argument parsing. Passing `None` clears
-    /// the override (used by tests to restore the default resolution).
+    /// New command-dispatch code passes the path through `CommandContext`
+    /// instead. This remains for tests and legacy callers that need to exercise
+    /// path precedence directly. Passing `None` clears the override.
     pub fn set_path_override(path: Option<PathBuf>) {
         if let Ok(mut guard) = CONFIG_PATH_OVERRIDE.write() {
             *guard = path;
         }
     }
 
-    /// Resolve the config directory (`<config>/bzr`), creating it `0700` on
-    /// first use, and return it. Shared by `write_to_disk` and `update_locked`.
-    fn ensure_config_dir() -> Result<PathBuf> {
-        let path = Self::path()?;
+    fn ensure_config_dir_at(path_override: Option<&Path>) -> Result<PathBuf> {
+        let path = Self::path_at(path_override)?;
         let parent = path
             .parent()
             .ok_or_else(|| BzrError::config("config path has no parent directory"))?
@@ -330,8 +350,8 @@ impl Config {
     /// `pub(crate)` so `config remove-server`/`rename-server` can take an
     /// advisory snapshot (existence, default pointer, keyring ref) even when
     /// some unrelated server has invalid fields.
-    pub(crate) fn read_unvalidated() -> Result<Config> {
-        let path = Self::path()?;
+    pub(crate) fn read_unvalidated_at(path_override: Option<&Path>) -> Result<Config> {
+        let path = Self::path_at(path_override)?;
         match fs::read_to_string(&path) {
             Ok(content) => toml::from_str(&content).map_err(|e| {
                 BzrError::config(format!("parse config file '{}': {e}", path.display()))
@@ -345,14 +365,19 @@ impl Config {
     }
 
     pub fn load() -> Result<Config> {
+        let path_override = Self::process_path_override();
+        Self::load_at(path_override.as_deref())
+    }
+
+    pub fn load_at(path_override: Option<&Path>) -> Result<Config> {
         // Warn on insecure permissions only on an explicit load (preserves today's
         // behavior); `update_locked`'s internal reload uses `read_unvalidated`, so
         // it warns once (from `write_to_disk`) rather than twice.
-        let path = Self::path()?;
+        let path = Self::path_at(path_override)?;
         if path.exists() {
             Self::warn_on_insecure_permissions(&path);
         }
-        let config = Self::read_unvalidated()?;
+        let config = Self::read_unvalidated_at(path_override)?;
         config.validate()?;
         Ok(config)
     }
@@ -381,7 +406,15 @@ impl Config {
     /// Non-reentrant: a `mutator` that itself calls `update_locked` returns an
     /// error rather than self-deadlocking.
     pub fn update_locked(mutator: impl FnOnce(&mut Config) -> Result<()>) -> Result<Config> {
-        Self::update_locked_inner(true, mutator)
+        let path_override = Self::process_path_override();
+        Self::update_locked_at(path_override.as_deref(), mutator)
+    }
+
+    pub fn update_locked_at(
+        path_override: Option<&Path>,
+        mutator: impl FnOnce(&mut Config) -> Result<()>,
+    ) -> Result<Config> {
+        Self::update_locked_inner(path_override, true, mutator)
     }
 
     /// Like [`Self::update_locked`] but skips whole-config validation for callers
@@ -389,10 +422,19 @@ impl Config {
     pub fn update_locked_without_validation(
         mutator: impl FnOnce(&mut Config) -> Result<()>,
     ) -> Result<Config> {
-        Self::update_locked_inner(false, mutator)
+        let path_override = Self::process_path_override();
+        Self::update_locked_without_validation_at(path_override.as_deref(), mutator)
+    }
+
+    pub fn update_locked_without_validation_at(
+        path_override: Option<&Path>,
+        mutator: impl FnOnce(&mut Config) -> Result<()>,
+    ) -> Result<Config> {
+        Self::update_locked_inner(path_override, false, mutator)
     }
 
     fn update_locked_inner(
+        path_override: Option<&Path>,
         validate: bool,
         mutator: impl FnOnce(&mut Config) -> Result<()>,
     ) -> Result<Config> {
@@ -403,7 +445,7 @@ impl Config {
             ));
         }
 
-        let dir = Self::ensure_config_dir()?;
+        let dir = Self::ensure_config_dir_at(path_override)?;
         let lock_path = dir.join("config.lock");
         let file = open_lock_file(&lock_path)?;
         acquire_exclusive_lock(&file, &lock_path)?;
@@ -416,12 +458,12 @@ impl Config {
         // We validate only the post-mutation state when `validate` is true,
         // matching `save()`'s "validate the whole config before writing"
         // semantics.
-        let mut config = Self::read_unvalidated()?;
+        let mut config = Self::read_unvalidated_at(path_override)?;
         mutator(&mut config)?;
         if validate {
             config.validate()?;
         }
-        config.write_to_disk()?;
+        config.write_to_disk_at(path_override)?;
         Ok(config)
     }
 
@@ -439,9 +481,15 @@ impl Config {
     /// renamed over the target (atomic replace), and the directory is
     /// fsync'd (unix) so the rename survives a crash. A concurrent reader
     /// therefore always sees either the complete old or complete new file.
+    #[cfg(test)]
     fn write_to_disk(&self) -> Result<()> {
-        let _dir = Self::ensure_config_dir()?;
-        let path = Self::path()?;
+        let path_override = Self::process_path_override();
+        self.write_to_disk_at(path_override.as_deref())
+    }
+
+    fn write_to_disk_at(&self, path_override: Option<&Path>) -> Result<()> {
+        let _dir = Self::ensure_config_dir_at(path_override)?;
+        let path = Self::path_at(path_override)?;
         reap_stale_temps(&path);
         let content = toml::to_string_pretty(self).map_err(|e| {
             BzrError::config(format!("serialize config file '{}': {e}", path.display()))

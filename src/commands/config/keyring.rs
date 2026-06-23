@@ -1,19 +1,19 @@
+use crate::commands::runtime::context::CommandContext;
 use crate::config::Config;
 use crate::error::Result;
 use crate::output::result_types::{write_result, ConfigResult};
 use crate::output::writers::Writers;
-use crate::types::OutputFormat;
 
 pub(super) fn set(
     name: &str,
     service: Option<&str>,
     account: Option<&str>,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     // Advisory existence check FIRST — lockless, so a nonexistent server is
     // rejected before prompting / writing to the keychain.
-    let config = Config::load()?;
+    let config = Config::load_at(ctx.config_path_override())?;
     if !config.servers.contains_key(name) {
         return Err(crate::error::BzrError::config(format!(
             "server '{name}' not found; create it first with `bzr config set-server`"
@@ -29,7 +29,7 @@ pub(super) fn set(
     // Capture raw optional args before the closure (preserve None=default).
     let service_persist = service.map(str::to_owned);
     let account_persist = account.map(str::to_owned);
-    let updated = Config::update_locked(move |config| {
+    let updated = Config::update_locked_at(ctx.config_path_override(), move |config| {
         let server = config.servers.get_mut(name).ok_or_else(|| {
             crate::error::BzrError::config(format!("server '{name}' disappeared"))
         })?;
@@ -46,7 +46,7 @@ pub(super) fn set(
         .get(name)
         .map(|s| s.url.clone())
         .unwrap_or_default();
-    let path = Config::path()?;
+    let path = Config::path_at(ctx.config_path_override())?;
 
     let human = format!(
         "Stored API key for server '{name}' in OS keychain \
@@ -56,14 +56,14 @@ pub(super) fn set(
     write_result(
         &ConfigResult::configured(name, &server_url, false, path.to_string_lossy(), true),
         &human,
-        format,
+        ctx.format(),
         w.out,
     );
     Ok(())
 }
 
-pub(super) fn unset(name: &str, format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
-    let config = Config::load()?;
+pub(super) fn unset(name: &str, ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
+    let config = Config::load_at(ctx.config_path_override())?;
     let server = config
         .servers
         .get(name)
@@ -81,7 +81,7 @@ pub(super) fn unset(name: &str, format: OutputFormat, w: &mut Writers<'_>) -> Re
 
     // Saving normally would fail validation (the server has no credential
     // source now), but the on-disk hardening (0o600/0o700) must still apply.
-    Config::update_locked_without_validation(|config| {
+    Config::update_locked_without_validation_at(ctx.config_path_override(), |config| {
         let server = config
             .servers
             .get_mut(name)
@@ -89,7 +89,7 @@ pub(super) fn unset(name: &str, format: OutputFormat, w: &mut Writers<'_>) -> Re
         server.api_key_keyring = None;
         Ok(())
     })?;
-    let path = Config::path()?;
+    let path = Config::path_at(ctx.config_path_override())?;
 
     let human = format!(
         "Removed keychain entry for server '{name}' (service={service_name}, \
@@ -102,7 +102,7 @@ pub(super) fn unset(name: &str, format: OutputFormat, w: &mut Writers<'_>) -> Re
     write_result(
         &ConfigResult::configured(name, &server_url, false, path.to_string_lossy(), true),
         &human,
-        format,
+        ctx.format(),
         w.out,
     );
     Ok(())

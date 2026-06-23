@@ -1,3 +1,4 @@
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::commands::runtime::inline_server::InlineServer;
@@ -12,6 +13,7 @@ pub struct CommandContext {
     dry_run: bool,
     assume_yes: bool,
     inline_server: Option<InlineServer>,
+    config_path_override: Option<PathBuf>,
     request_timeout: Duration,
     retry_max: u32,
 }
@@ -27,6 +29,7 @@ impl CommandContext {
             dry_run: false,
             assume_yes: false,
             inline_server: None,
+            config_path_override: None,
             request_timeout: crate::http::REQUEST_TIMEOUT,
             retry_max: 0,
         }
@@ -47,6 +50,12 @@ impl CommandContext {
     #[must_use]
     pub fn with_inline_server(mut self, inline_server: Option<InlineServer>) -> Self {
         self.inline_server = inline_server;
+        self
+    }
+
+    #[must_use]
+    pub fn with_config_path_override(mut self, config_path_override: Option<PathBuf>) -> Self {
+        self.config_path_override = config_path_override;
         self
     }
 
@@ -97,6 +106,11 @@ impl CommandContext {
     #[must_use]
     pub fn inline_server(&self) -> Option<&InlineServer> {
         self.inline_server.as_ref()
+    }
+
+    #[must_use]
+    pub fn config_path_override(&self) -> Option<&Path> {
+        self.config_path_override.as_deref()
     }
 
     #[must_use]

@@ -1,11 +1,11 @@
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
+use crate::commands::runtime::context::CommandContext;
 use crate::config::{Config, ServerConfig};
 use crate::error::Result;
 use crate::output::result_types::{write_result, ConfigResult};
 use crate::output::writers::Writers;
-use crate::types::OutputFormat;
 
 pub(super) struct SetServerArgs<'a> {
     pub(super) name: &'a str,
@@ -23,8 +23,7 @@ pub(super) struct SetServerArgs<'a> {
 
 pub(super) async fn handle(
     args: &SetServerArgs<'_>,
-    format: OutputFormat,
-    request_timeout: std::time::Duration,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let SetServerArgs {
@@ -43,7 +42,7 @@ pub(super) async fn handle(
 
     // Handle --tls-pin-clear: clear pinning fields on an existing server.
     if tls_pin_clear {
-        Config::update_locked(|config| {
+        Config::update_locked_at(ctx.config_path_override(), |config| {
             let server = config.servers.get_mut(name).ok_or_else(|| {
                 crate::error::BzrError::config(format!(
                     "server '{name}' not found — nothing to clear"
@@ -63,7 +62,9 @@ pub(super) async fn handle(
             "provide at most one of --api-key or --api-key-env".into(),
         ));
     }
-    let is_update = Config::load()?.servers.contains_key(name);
+    let is_update = Config::load_at(ctx.config_path_override())?
+        .servers
+        .contains_key(name);
     let mut server_config = ServerConfig {
         url: url.to_owned(),
         api_key: api_key.map(str::to_owned),
@@ -83,7 +84,7 @@ pub(super) async fn handle(
     // Handle --tls-pin-now: probe the server cert and ask user to confirm.
     if tls_pin_now {
         let (fingerprint, issuer, issuer_der) =
-            crate::tls::tofu::probe_server_cert(&server_config.url, request_timeout).await?;
+            crate::tls::tofu::probe_server_cert(&server_config.url, ctx.request_timeout()).await?;
         let _ = writeln!(w.err, "Certificate fingerprint: {fingerprint}");
         let _ = writeln!(w.err, "Issuer:                  {issuer}");
         let confirmed = crate::tls::tofu::confirm_pin()?;
@@ -98,7 +99,7 @@ pub(super) async fn handle(
         }
     }
 
-    let updated = Config::update_locked(move |config| {
+    let updated = Config::update_locked_at(ctx.config_path_override(), move |config| {
         config.servers.insert(name.to_owned(), server_config);
         if config.default_server.is_none() {
             config.default_server = Some(name.to_owned());
@@ -106,7 +107,7 @@ pub(super) async fn handle(
         Ok(())
     })?;
     let is_default = updated.default_server.as_deref() == Some(name);
-    let path = Config::path()?;
+    let path = Config::path_at(ctx.config_path_override())?;
 
     let verb = if is_update { "updated" } else { "configured" };
     let mut human = format!("Server '{name}' {verb} at {url}");
@@ -125,7 +126,7 @@ pub(super) async fn handle(
     write_result(
         &ConfigResult::configured(name, url, is_default, path.to_string_lossy(), is_update),
         &human,
-        format,
+        ctx.format(),
         w.out,
     );
     Ok(())

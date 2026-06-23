@@ -822,7 +822,9 @@ fn emit_web_interactive_failure_falls_back_to_print() {
 async fn resolve_bug_urls_uses_configured_server() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     let ids = vec!["42".to_string(), "99".to_string()];
-    let urls = super::resolve_bug_urls(&ids, None).unwrap();
+    let ctx =
+        crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None);
+    let urls = super::resolve_bug_urls(&ids, &ctx).unwrap();
     assert_eq!(urls.len(), 2);
     assert!(urls[0].starts_with(&mock.uri()));
     assert!(urls[0].ends_with("/show_bug.cgi?id=42"));
@@ -846,7 +848,9 @@ async fn resolve_bug_urls_works_without_credentials() {
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let ids = vec!["7".to_string()];
-    let urls = super::resolve_bug_urls(&ids, None).unwrap();
+    let ctx =
+        crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None);
+    let urls = super::resolve_bug_urls(&ids, &ctx).unwrap();
     assert_eq!(urls, vec!["https://bz.example.com/show_bug.cgi?id=7"]);
 }
 

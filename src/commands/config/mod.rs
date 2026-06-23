@@ -27,7 +27,6 @@ pub async fn execute(
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let format = ctx.format();
     match action {
         ConfigAction::SetServer {
             name,
@@ -56,20 +55,19 @@ pub async fn execute(
                     tls_pin_now: *tls_pin_now,
                     tls_pin_clear: *tls_pin_clear,
                 },
-                format,
-                ctx.request_timeout(),
+                ctx,
                 w,
             )
             .await
         }
-        ConfigAction::SetDefault { name } => set_default::handle(name.as_str(), format, w),
-        ConfigAction::Show => show::handle(format, w),
+        ConfigAction::SetDefault { name } => set_default::handle(name.as_str(), ctx, w),
+        ConfigAction::Show => show::handle(ctx, w),
         ConfigAction::SetKeyring {
             name,
             service,
             account,
-        } => keyring::set(name, service.as_deref(), account.as_deref(), format, w),
-        ConfigAction::UnsetKeyring { name } => keyring::unset(name.as_str(), format, w),
+        } => keyring::set(name, service.as_deref(), account.as_deref(), ctx, w),
+        ConfigAction::UnsetKeyring { name } => keyring::unset(name.as_str(), ctx, w),
         ConfigAction::MigrateToKeyring {
             name,
             service,
@@ -81,11 +79,11 @@ pub async fn execute(
                 service: service.as_deref(),
                 account: account.as_deref(),
             };
-            migrate::handle(spec, *yes, format, w)
+            migrate::handle(spec, *yes, ctx, w)
         }
-        ConfigAction::RemoveServer { name } => remove::handle(name.as_str(), format, w),
+        ConfigAction::RemoveServer { name } => remove::handle(name.as_str(), ctx, w),
         ConfigAction::RenameServer { old, new } => {
-            rename::handle(old.as_str(), new.as_str(), format, w)
+            rename::handle(old.as_str(), new.as_str(), ctx, w)
         }
     }
 }

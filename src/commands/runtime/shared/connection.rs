@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use crate::client::BugzillaClient;
 use crate::client::DetectedServerSettings;
 use crate::commands::runtime::context::CommandContext;
@@ -14,11 +16,12 @@ use crate::types::{ApiMode, AuthMethod};
 /// If the server was concurrently removed from disk, this is a no-op (we do
 /// not resurrect a deleted server with detected settings) — logged, not silent.
 pub(super) fn persist_detected_settings(
+    config_path_override: Option<&Path>,
     server_name: &str,
     settings: &DetectedServerSettings,
     persist_auth: bool,
 ) -> Result<()> {
-    Config::update_locked(|config| {
+    Config::update_locked_at(config_path_override, |config| {
         let Some(srv) = config.servers.get_mut(server_name) else {
             tracing::debug!(
                 "server '{server_name}' no longer in config; skipping settings persist"
@@ -106,6 +109,7 @@ pub(super) struct ConnectContext {
     pub(super) api_override: Option<ApiMode>,
     pub(super) request_timeout: std::time::Duration,
     pub(super) retry_max: u32,
+    pub(super) config_path_override: Option<PathBuf>,
     /// Whether detected settings (and TOFU pins) may be written back to the
     /// config file. `false` for an inline `--server-url` server, which has no
     /// config entry and must leave the filesystem untouched.
@@ -126,7 +130,12 @@ impl ConnectContext {
         persist_auth: bool,
     ) -> Result<()> {
         if self.persist {
-            persist_detected_settings(&self.server_name, settings, persist_auth)?;
+            persist_detected_settings(
+                self.config_path_override.as_deref(),
+                &self.server_name,
+                settings,
+                persist_auth,
+            )?;
         }
         Ok(())
     }
@@ -137,7 +146,7 @@ impl ConnectContext {
     /// writes" is a single invariant rather than a flag checked at each site.
     fn persist_locked(&self, mutator: impl FnOnce(&mut Config) -> Result<()>) -> Result<()> {
         if self.persist {
-            Config::update_locked(mutator)?;
+            Config::update_locked_at(self.config_path_override.as_deref(), mutator)?;
         }
         Ok(())
     }
@@ -263,11 +272,13 @@ pub(super) async fn handle_pin_rotation(
     // ISSUER_CHANGED would have fired), the DER bytes are still valid.
     // Read existing issuer DER for the returned TlsConfig (PIN_MISMATCH implies
     // the issuer DER still matches, so it stays valid).
-    let existing_issuer_der = Config::load().ok().and_then(|c| {
-        c.servers
-            .get(&ctx.server_name)
-            .and_then(|s| s.tls_pin_issuer_der.clone())
-    });
+    let existing_issuer_der = Config::load_at(ctx.config_path_override.as_deref())
+        .ok()
+        .and_then(|c| {
+            c.servers
+                .get(&ctx.server_name)
+                .and_then(|s| s.tls_pin_issuer_der.clone())
+        });
 
     let new_fp = new_fingerprint.to_owned();
     let new_iss = new_issuer.to_owned();
@@ -435,6 +446,7 @@ fn resolve_connect_target(command: &CommandContext) -> Result<ConnectTarget> {
             api_override,
             request_timeout: command.request_timeout(),
             retry_max: command.retry_max(),
+            config_path_override: None,
             persist: false,
         };
         return Ok(ConnectTarget {
@@ -446,7 +458,7 @@ fn resolve_connect_target(command: &CommandContext) -> Result<ConnectTarget> {
         });
     }
 
-    let config = Config::load()?;
+    let config = Config::load_at(command.config_path_override())?;
     let (server_name, srv) = config.resolve_server(command.server())?;
     let tls_config = srv.tls_config(server_name);
     let api_key = srv.resolve_optional_api_key(server_name)?;
@@ -463,6 +475,7 @@ fn resolve_connect_target(command: &CommandContext) -> Result<ConnectTarget> {
         api_override,
         request_timeout: command.request_timeout(),
         retry_max: command.retry_max(),
+        config_path_override: command.config_path_override().map(Path::to_path_buf),
         persist: true,
     };
     Ok(ConnectTarget {

@@ -152,9 +152,12 @@ fn resolve_description(
     Ok(None)
 }
 
-fn load_template(name: Option<&str>) -> Result<Option<crate::types::BugTemplate>> {
+fn load_template(
+    name: Option<&str>,
+    config_path_override: Option<&std::path::Path>,
+) -> Result<Option<crate::types::BugTemplate>> {
     let Some(name) = name else { return Ok(None) };
-    let config = crate::config::Config::load()?;
+    let config = crate::config::Config::load_at(config_path_override)?;
     let t = config
         .templates
         .get(name)
@@ -314,7 +317,7 @@ pub(super) async fn handle(
         resolve_description(description.as_deref(), description_file.as_deref())?;
     let editor_flow_active = resolved_description.is_none();
 
-    let tmpl = load_template(template_name.as_deref())?;
+    let tmpl = load_template(template_name.as_deref(), ctx.config_path_override())?;
     let merged = merge_fields(args, tmpl.as_ref())?;
     let flags = crate::commands::runtime::flags::parse_flags(&merged.flags)?;
     let deadline =

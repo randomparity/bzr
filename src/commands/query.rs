@@ -21,13 +21,12 @@ pub async fn execute(
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let format = ctx.format();
     match action {
-        QueryAction::Save(args) => handle_save(args, format, w),
-        QueryAction::List => handle_list(format, w),
-        QueryAction::Show(args) => handle_show(args, format, w),
-        QueryAction::Update(args) => handle_update(args, format, w),
-        QueryAction::Delete(args) => handle_delete(args, format, w),
+        QueryAction::Save(args) => handle_save(args, ctx, w),
+        QueryAction::List => handle_list(ctx, w),
+        QueryAction::Show(args) => handle_show(args, ctx, w),
+        QueryAction::Update(args) => handle_update(args, ctx, w),
+        QueryAction::Delete(args) => handle_delete(args, ctx, w),
         QueryAction::Run(args) => handle_run(args, ctx, w).await,
     }
 }
@@ -51,8 +50,12 @@ struct UrlQueryOverrides<'a> {
     sort_args: &'a crate::cli::SortArgs,
 }
 
-fn saved_query_from_url(url_str: &str, overrides: UrlQueryOverrides<'_>) -> Result<SavedQuery> {
-    let config = Config::load()?;
+fn saved_query_from_url(
+    url_str: &str,
+    overrides: UrlQueryOverrides<'_>,
+    config_path_override: Option<&std::path::Path>,
+) -> Result<SavedQuery> {
+    let config = Config::load_at(config_path_override)?;
     let parsed = crate::commands::runtime::url_parser::parse_bugzilla_url(url_str, &config)?;
     let mut query = parsed.query;
     query.limit = overrides.limit.or(query.limit);
@@ -75,7 +78,7 @@ fn saved_query_from_url(url_str: &str, overrides: UrlQueryOverrides<'_>) -> Resu
 
 fn handle_save(
     args: &crate::cli::SaveArgs,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let crate::cli::SaveArgs {
@@ -108,6 +111,7 @@ fn handle_save(
                 last_change_time: last_change_time.as_deref(),
                 sort_args,
             },
+            ctx.config_path_override(),
         )?
     } else {
         let kind = if search.is_some() {
@@ -138,52 +142,52 @@ fn handle_save(
     }
 
     let mut is_update = false;
-    Config::update_locked(|config| {
+    Config::update_locked_at(ctx.config_path_override(), |config| {
         is_update = config.queries.contains_key(name.as_str());
         config.queries.insert(name.clone(), query);
         Ok(())
     })?;
 
     let verb = if is_update { "Updated" } else { "Saved" };
-    write_query_saved(name, verb, format, w.out);
+    write_query_saved(name, verb, ctx.format(), w.out);
     Ok(())
 }
 
-fn handle_list(format: OutputFormat, w: &mut Writers<'_>) -> Result<()> {
-    let config = Config::load()?;
-    write_query_list(&config.queries, format, w.out);
+fn handle_list(ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
+    let config = Config::load_at(ctx.config_path_override())?;
+    write_query_list(&config.queries, ctx.format(), w.out);
     Ok(())
 }
 
 fn handle_show(
     args: &crate::cli::ShowArgs,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let name = &args.name;
-    let config = Config::load()?;
+    let config = Config::load_at(ctx.config_path_override())?;
     let query = config
         .queries
         .get(name.as_str())
         .ok_or_else(|| BzrError::config(format!("query '{name}' not found")))?;
-    write_query_detail(name, query, format, w.out);
+    write_query_detail(name, query, ctx.format(), w.out);
     Ok(())
 }
 
 fn handle_delete(
     args: &crate::cli::DeleteArgs,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let name = &args.name;
-    Config::update_locked(|config| {
+    Config::update_locked_at(ctx.config_path_override(), |config| {
         if config.queries.remove(name.as_str()).is_none() {
             return Err(BzrError::config(format!("query '{name}' not found")));
         }
         Ok(())
     })?;
 
-    write_query_saved(name, "Deleted", format, w.out);
+    write_query_saved(name, "Deleted", ctx.format(), w.out);
     Ok(())
 }
 
@@ -277,7 +281,7 @@ fn apply_query_updates(
 
 fn handle_update(
     args: &crate::cli::QueryUpdateArgs,
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let crate::cli::QueryUpdateArgs {
@@ -310,11 +314,12 @@ fn handle_update(
                     last_change_time: last_change_time.as_deref(),
                     sort_args,
                 },
+                ctx.config_path_override(),
             )
         })
         .transpose()?;
 
-    Config::update_locked(|config| {
+    Config::update_locked_at(ctx.config_path_override(), |config| {
         if let Some(query) = replacement {
             if !config.queries.contains_key(name.as_str()) {
                 return Err(BzrError::config(format!("query '{name}' not found")));
@@ -354,7 +359,7 @@ fn handle_update(
         Ok(())
     })?;
 
-    write_query_saved(name, "Updated", format, w.out);
+    write_query_saved(name, "Updated", ctx.format(), w.out);
     Ok(())
 }
 
@@ -386,7 +391,7 @@ async fn handle_run(
     let last_change_time_override =
         crate::validation::parse_optional_date(changed_since.as_deref(), "--changed-since")?;
 
-    let config = Config::load()?;
+    let config = Config::load_at(ctx.config_path_override())?;
     let saved = config
         .queries
         .get(name.as_str())
