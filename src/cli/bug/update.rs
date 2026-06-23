@@ -56,7 +56,7 @@ of a status change."#;
 
 /// Arguments for `bug update`.
 #[derive(Args, Debug, Default)]
-pub struct UpdateArgs {
+pub(crate) struct UpdateArgs {
     /// Apply one or more structured bug updates from JSON.
     ///
     /// A value of `-` reads the JSON from stdin; otherwise it is a

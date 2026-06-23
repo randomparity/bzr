@@ -7,7 +7,7 @@ use crate::types::product::ProductListType;
     clippy::doc_markdown,
     reason = "doc examples are literal shell commands; wrapping URLs in <> or identifiers in backticks would degrade copy-paste UX"
 )]
-pub enum ProductAction {
+pub(crate) enum ProductAction {
     /// List products visible to the caller.
     ///
     /// `--type` selects which slice of the product catalog to list:

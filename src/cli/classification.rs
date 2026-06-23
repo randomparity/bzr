@@ -1,7 +1,7 @@
 use clap::Subcommand;
 
 #[derive(Subcommand)]
-pub enum ClassificationAction {
+pub(crate) enum ClassificationAction {
     /// List the server's classifications.
     ///
     /// Enumerates every classification with its ID, name, description, and

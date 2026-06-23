@@ -38,7 +38,7 @@ bzr-query(1) for managing saved queries directly."#;
 
 /// Arguments for `bug search`.
 #[derive(Args, Debug)]
-pub struct SearchArgs {
+pub(crate) struct SearchArgs {
     /// Quicksearch query (mutually exclusive with `--from-url`).
     ///
     /// Passed to the server's quicksearch engine, which searches

@@ -7,7 +7,7 @@ use crate::types::common::AuthMethod;
     clippy::doc_markdown,
     reason = "doc examples are literal shell commands; wrapping URLs in <> or identifiers in backticks would degrade copy-paste UX"
 )]
-pub enum ConfigAction {
+pub(crate) enum ConfigAction {
     /// Add or update a named server in the local config.
     ///
     /// `--url` is required. `--api-key` (inline) and `--api-key-env`

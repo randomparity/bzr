@@ -5,7 +5,7 @@ use clap::Subcommand;
     clippy::doc_markdown,
     reason = "doc examples are literal shell commands; wrapping URLs in <> or identifiers in backticks would degrade copy-paste UX"
 )]
-pub enum FieldAction {
+pub(crate) enum FieldAction {
     /// Show the user-friendly aliases bzr accepts for Bugzilla field names.
     ///
     /// Prints the table of short alias to internal field name (e.g.

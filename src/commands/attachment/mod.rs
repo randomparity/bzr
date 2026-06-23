@@ -37,7 +37,7 @@ pub(super) fn resolve_bool_flag(yes: bool, no: bool) -> Option<bool> {
     }
 }
 
-pub async fn execute(
+pub(crate) async fn execute(
     action: &AttachmentAction,
     ctx: &CommandContext,
     w: &mut Writers<'_>,

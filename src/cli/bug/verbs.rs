@@ -62,7 +62,7 @@ Examples:
 
 /// Arguments for `bug resolve`.
 #[derive(Args, Debug)]
-pub struct ResolveArgs {
+pub(crate) struct ResolveArgs {
     /// Bug ID(s) to resolve.
     #[arg(required = true, num_args = 1..)]
     pub ids: Vec<u64>,
@@ -78,7 +78,7 @@ pub struct ResolveArgs {
 
 /// Arguments for `bug close`.
 #[derive(Args, Debug)]
-pub struct CloseArgs {
+pub(crate) struct CloseArgs {
     /// Bug ID(s) to close.
     #[arg(required = true, num_args = 1..)]
     pub ids: Vec<u64>,
@@ -101,7 +101,7 @@ pub struct CloseArgs {
 
 /// Arguments for `bug reopen`.
 #[derive(Args, Debug)]
-pub struct ReopenArgs {
+pub(crate) struct ReopenArgs {
     /// Bug ID(s) to reopen.
     #[arg(required = true, num_args = 1..)]
     pub ids: Vec<u64>,
@@ -120,7 +120,7 @@ pub struct ReopenArgs {
 
 /// Arguments for `bug dup`.
 #[derive(Args, Debug)]
-pub struct DupArgs {
+pub(crate) struct DupArgs {
     /// The duplicate bug.
     pub id: u64,
     /// The canonical bug this one duplicates.

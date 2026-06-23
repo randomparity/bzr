@@ -1,7 +1,7 @@
 use clap::Subcommand;
 
 #[derive(Subcommand)]
-pub enum CommentAction {
+pub(crate) enum CommentAction {
     /// List all comments on a bug.
     ///
     /// Prints each comment's number, author, creation time, tags,

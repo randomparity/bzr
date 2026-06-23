@@ -31,7 +31,7 @@ account `my` resolves to.";
     clippy::struct_excessive_bools,
     reason = "my uses independent CLI view switches, not one state enum"
 )]
-pub struct MyArgs {
+pub(crate) struct MyArgs {
     /// Show bugs I created (instead of assigned to me).
     ///
     /// Mutually exclusive with `--all`.

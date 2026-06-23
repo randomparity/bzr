@@ -4,7 +4,7 @@ use crate::error::Result;
 use crate::output::resources::classification::{write_classification, write_classifications};
 use crate::output::writers::Writers;
 
-pub async fn execute(
+pub(crate) async fn execute(
     action: &ClassificationAction,
     ctx: &CommandContext,
     w: &mut Writers<'_>,

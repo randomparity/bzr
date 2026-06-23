@@ -19,7 +19,7 @@ pub(crate) fn requires_credentials(action: &CommentAction) -> Option<&'static st
     }
 }
 
-pub async fn execute(
+pub(crate) async fn execute(
     action: &CommentAction,
     ctx: &CommandContext,
     w: &mut Writers<'_>,

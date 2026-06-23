@@ -8,7 +8,7 @@ mod list;
 mod update;
 mod view;
 
-pub async fn execute(
+pub(crate) async fn execute(
     action: &ComponentAction,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
@@ -56,7 +56,7 @@ pub async fn execute(
 }
 
 #[must_use]
-pub fn is_dry_runnable(action: &ComponentAction) -> bool {
+pub(crate) fn is_dry_runnable(action: &ComponentAction) -> bool {
     matches!(
         action,
         ComponentAction::Create { .. } | ComponentAction::Update { .. }

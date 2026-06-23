@@ -5,7 +5,7 @@ use clap::{Args, Subcommand};
 /// Grouped into one flattened struct so the set is defined once and the two
 /// variants cannot drift apart.
 #[derive(Args, Debug, Clone, Default)]
-pub struct TemplateFields {
+pub(crate) struct TemplateFields {
     /// Default product
     #[arg(long)]
     pub product: Option<String>,
@@ -87,7 +87,7 @@ impl TemplateFields {
 
 /// Arguments for `template update`.
 #[derive(Debug, Args)]
-pub struct UpdateArgs {
+pub(crate) struct UpdateArgs {
     /// Template name
     pub name: String,
     #[command(flatten)]
@@ -98,7 +98,7 @@ pub struct UpdateArgs {
 }
 
 #[derive(Subcommand)]
-pub enum TemplateAction {
+pub(crate) enum TemplateAction {
     /// Save (or replace) a named bug-creation template.
     ///
     /// Templates store reusable defaults for `bzr bug create`. At

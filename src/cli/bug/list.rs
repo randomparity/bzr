@@ -55,7 +55,7 @@ combination by name."#;
 
 /// Arguments for `bug list`.
 #[derive(Args, Debug, Default)]
-pub struct ListArgs {
+pub(crate) struct ListArgs {
     #[command(flatten)]
     pub filters: BugFilterArgs,
     #[command(flatten)]

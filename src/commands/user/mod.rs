@@ -9,7 +9,11 @@ mod create;
 mod search;
 mod update;
 
-pub async fn execute(action: &UserAction, ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
+pub(crate) async fn execute(
+    action: &UserAction,
+    ctx: &CommandContext,
+    w: &mut Writers<'_>,
+) -> Result<()> {
     match action {
         UserAction::Search { query, details } => search::handle(query, *details, ctx, w).await,
         UserAction::Create {
@@ -50,7 +54,7 @@ pub async fn execute(action: &UserAction, ctx: &CommandContext, w: &mut Writers<
 }
 
 #[must_use]
-pub fn is_dry_runnable(action: &UserAction) -> bool {
+pub(crate) fn is_dry_runnable(action: &UserAction) -> bool {
     matches!(
         action,
         UserAction::Create { .. } | UserAction::Update { .. }

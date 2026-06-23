@@ -41,7 +41,7 @@ fn bug_column_spec(action: &BugAction) -> Option<ColumnSpec<'_>> {
 /// Whether a bug action is a mutation that supports `--dry-run` (the create-,
 /// update-, and clone-shaped writes). Read actions and `--web` are excluded.
 #[must_use]
-pub fn is_dry_runnable(action: &BugAction) -> bool {
+pub(crate) fn is_dry_runnable(action: &BugAction) -> bool {
     matches!(
         action,
         BugAction::Create(_)
@@ -71,7 +71,11 @@ pub(crate) fn requires_credentials(action: &BugAction) -> Option<&'static str> {
 }
 
 /// Dispatch bug actions to their respective handlers.
-pub async fn execute(action: &BugAction, ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
+pub(crate) async fn execute(
+    action: &BugAction,
+    ctx: &CommandContext,
+    w: &mut Writers<'_>,
+) -> Result<()> {
     let format = ctx.format();
     update::validate_action(action)?;
 

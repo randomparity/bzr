@@ -18,7 +18,7 @@ See bzr-bug-view(1) for the current state of a bug.";
 
 /// Arguments for `bug history`.
 #[derive(Args, Debug)]
-pub struct HistoryArgs {
+pub(crate) struct HistoryArgs {
     /// Bug ID
     pub id: u64,
     /// Only show changes after this date (ISO 8601)

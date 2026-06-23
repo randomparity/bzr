@@ -1,7 +1,7 @@
 use clap::Subcommand;
 
 #[derive(Subcommand)]
-pub enum GroupAction {
+pub(crate) enum GroupAction {
     /// Add a user to a group.
     ///
     /// Requires Bugzilla admin permissions. The `--user` value can

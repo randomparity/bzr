@@ -6,7 +6,7 @@ use clap::{Args, Subcommand};
     clippy::struct_excessive_bools,
     reason = "each bool is a distinct CLI flag (--private/--no-private, --patch/--no-patch, --comment-private); they are not a state enum"
 )]
-pub struct UploadArgs {
+pub(crate) struct UploadArgs {
     /// Bug ID
     pub bug_id: u64,
     /// File to upload
@@ -84,7 +84,7 @@ pub struct UploadArgs {
     clippy::struct_excessive_bools,
     reason = "each bool is a distinct CLI flag (--obsolete/--no-obsolete, --patch/--no-patch, --private/--no-private); they are not a state enum"
 )]
-pub struct UpdateArgs {
+pub(crate) struct UpdateArgs {
     /// Attachment ID
     pub id: u64,
     /// New summary
@@ -137,7 +137,7 @@ pub struct UpdateArgs {
 }
 
 #[derive(Subcommand)]
-pub enum AttachmentAction {
+pub(crate) enum AttachmentAction {
     /// List all attachments on a bug.
     ///
     /// Prints attachment ID, summary, file name, MIME type, size,

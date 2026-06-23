@@ -26,7 +26,7 @@ const FILTER_FLAG_ARGS: [&str; 15] = [
 
 /// Per-run overrides for the saved-query filters that `query run` supports.
 #[derive(Debug, Default, Args)]
-pub struct QueryRunFilterArgs {
+pub(crate) struct QueryRunFilterArgs {
     /// Override the saved Whiteboard filter for this run.
     #[arg(long)]
     pub whiteboard: Vec<String>,
@@ -76,7 +76,7 @@ impl QueryRunFilterArgs {
 
 /// Arguments for `query save`.
 #[derive(Debug, Args)]
-pub struct SaveArgs {
+pub(crate) struct SaveArgs {
     /// Query name
     pub name: String,
     /// Import query from a Bugzilla `buglist.cgi` URL.
@@ -126,21 +126,21 @@ pub struct SaveArgs {
 
 /// Arguments for `query show`.
 #[derive(Debug, Args)]
-pub struct ShowArgs {
+pub(crate) struct ShowArgs {
     /// Query name
     pub name: String,
 }
 
 /// Arguments for `query delete`.
 #[derive(Debug, Args)]
-pub struct DeleteArgs {
+pub(crate) struct DeleteArgs {
     /// Query name
     pub name: String,
 }
 
 /// Arguments for `query update`.
 #[derive(Debug, Args)]
-pub struct UpdateArgs {
+pub(crate) struct UpdateArgs {
     /// Query name
     pub name: String,
     /// Refresh this saved query from a Bugzilla `buglist.cgi` URL.
@@ -182,7 +182,7 @@ pub struct UpdateArgs {
 
 /// Arguments for `query run`.
 #[derive(Debug, Args)]
-pub struct RunArgs {
+pub(crate) struct RunArgs {
     /// Query name
     pub name: String,
     /// Override the saved limit
@@ -235,7 +235,7 @@ pub struct RunArgs {
     clippy::doc_markdown,
     reason = "doc examples are literal shell commands; wrapping URLs in <> or identifiers in backticks would degrade copy-paste UX"
 )]
-pub enum QueryAction {
+pub(crate) enum QueryAction {
     /// Save a named query (filter flags or a Bugzilla URL) for later reuse.
     ///
     /// Three mutually exclusive input modes are supported. Filter

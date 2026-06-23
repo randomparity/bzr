@@ -17,7 +17,7 @@ mod save;
 mod show;
 mod update;
 
-pub async fn execute(
+pub(crate) async fn execute(
     action: &QueryAction,
     ctx: &CommandContext,
     w: &mut Writers<'_>,

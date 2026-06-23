@@ -68,7 +68,7 @@ values."#;
 
 /// Arguments for `bug create`.
 #[derive(Args, Debug)]
-pub struct CreateArgs {
+pub(crate) struct CreateArgs {
     /// Create one or more bugs from a JSON object or array.
     ///
     /// A value of `-` reads the JSON from stdin; otherwise it is a

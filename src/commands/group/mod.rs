@@ -12,7 +12,7 @@ mod remove_user;
 mod update;
 mod view;
 
-pub async fn execute(
+pub(crate) async fn execute(
     action: &GroupAction,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
@@ -56,7 +56,7 @@ pub async fn execute(
 }
 
 #[must_use]
-pub fn is_dry_runnable(action: &GroupAction) -> bool {
+pub(crate) fn is_dry_runnable(action: &GroupAction) -> bool {
     matches!(
         action,
         GroupAction::Create { .. } | GroupAction::Update { .. }
