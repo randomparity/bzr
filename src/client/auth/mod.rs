@@ -15,6 +15,33 @@ use self::whoami::{detect_whoami_auth, WhoamiOutcome};
 
 use super::version::{detect_version_and_mode, detect_version_and_mode_without_auth_checked};
 
+#[derive(Debug, Clone)]
+pub(super) struct MalformedProbeResponse {
+    probe: &'static str,
+    method: AuthMethod,
+    error: String,
+}
+
+impl MalformedProbeResponse {
+    fn new(probe: &'static str, method: AuthMethod, error: impl std::fmt::Display) -> Self {
+        Self {
+            probe,
+            method,
+            error: error.to_string(),
+        }
+    }
+}
+
+impl std::fmt::Display for MalformedProbeResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} {} probe returned malformed 200 response: {}",
+            self.probe, self.method, self.error
+        )
+    }
+}
+
 /// Result of server settings detection -- auth method, API mode, and
 /// optionally the server version string. Returned by [`detect_server_settings`]
 /// for the caller to persist as appropriate.
@@ -119,6 +146,16 @@ fn network_error_outcome(e: reqwest::Error) -> Result<AuthMethod> {
     Ok(AuthMethod::Header)
 }
 
+fn auth_detection_error(hint: &str, malformed: Option<MalformedProbeResponse>) -> BzrError {
+    let mut message = hint.to_owned();
+    if let Some(malformed) = malformed {
+        message.push_str(" Last malformed auth probe: ");
+        message.push_str(&malformed.to_string());
+        message.push('.');
+    }
+    BzrError::Auth(message)
+}
+
 async fn detect_auth_method(
     http: &reqwest::Client,
     base_url: &str,
@@ -137,6 +174,8 @@ async fn detect_auth_method(
     let key_header = HeaderValue::from_str(api_key)
         .map_err(|_| BzrError::config("invalid API key characters"))?;
 
+    let mut malformed_response = None;
+
     // Try whoami endpoint first (Bugzilla 5.1+). A TLS-certificate failure is
     // propagated so the connection layer can offer TOFU / pin-rotation; other
     // transport errors fall back to header auth (see network_error_outcome).
@@ -148,7 +187,11 @@ async fn detect_auth_method(
             tracing::info!("falling back to rest/valid_login for older Bugzilla");
             true
         }
-        WhoamiOutcome::AuthRejected | WhoamiOutcome::UnparseableResponse => false,
+        WhoamiOutcome::AuthRejected => false,
+        WhoamiOutcome::MalformedResponse(error) => {
+            malformed_response.get_or_insert(error);
+            false
+        }
     };
 
     // Fall back to valid_login endpoint (Bugzilla 5.0+, requires email)
@@ -172,6 +215,9 @@ async fn detect_auth_method(
             }
             ValidLoginOutcome::NetworkError(e) => return network_error_outcome(e),
             ValidLoginOutcome::AuthRejected => {}
+            ValidLoginOutcome::MalformedResponse(error) => {
+                malformed_response.get_or_insert(error);
+            }
         }
     }
 
@@ -186,7 +232,7 @@ async fn detect_auth_method(
         "auth detection failed: could not authenticate with the \
          server. Check your API key and server URL."
     };
-    Err(BzrError::Auth(hint.into()))
+    Err(auth_detection_error(hint, malformed_response))
 }
 
 #[cfg(test)]

@@ -4,6 +4,8 @@ use serde::Deserialize;
 use crate::bugzilla_auth::{AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::types::common::AuthMethod;
 
+use super::MalformedProbeResponse;
+
 #[derive(Deserialize)]
 struct ValidLoginResponse {
     #[serde(default)]
@@ -38,6 +40,8 @@ impl TryFrom<serde_json::Value> for ValidLoginResult {
 pub(super) enum ValidLoginOutcome {
     Authenticated(AuthMethod),
     AuthRejected,
+    /// Server returned 200 but the response body was unparseable or anomalous.
+    MalformedResponse(MalformedProbeResponse),
     /// Could not complete the probe due to a transport failure. Carries the
     /// underlying error so the caller can classify TLS/network failures
     /// instead of masking them as a successful header-auth fallback.
@@ -64,15 +68,22 @@ pub(super) async fn detect_valid_login_auth(
         ),
     ];
 
+    let mut malformed_response = None;
     for (query, header, method) in &probes {
         match probe_valid_login(http, &url, query, *header, *method).await {
             ValidLoginOutcome::AuthRejected => {} // try next probe
+            ValidLoginOutcome::MalformedResponse(error) => {
+                malformed_response.get_or_insert(error);
+            }
             outcome => return outcome,
         }
     }
 
     tracing::debug!("valid_login probes both failed");
-    ValidLoginOutcome::AuthRejected
+    malformed_response.map_or(
+        ValidLoginOutcome::AuthRejected,
+        ValidLoginOutcome::MalformedResponse,
+    )
 }
 
 async fn probe_valid_login(
@@ -108,7 +119,13 @@ async fn probe_valid_login(
     tracing::trace!(probe = "valid_login", %method, body = body_text, "auth probe response");
     let parsed: ValidLoginResponse = match serde_json::from_str(&body_text) {
         Ok(p) => p,
-        Err(_) => return ValidLoginOutcome::AuthRejected,
+        Err(error) => {
+            return ValidLoginOutcome::MalformedResponse(MalformedProbeResponse::new(
+                "valid_login",
+                method,
+                error,
+            ));
+        }
     };
     if parsed.result.is_valid() {
         ValidLoginOutcome::Authenticated(method)

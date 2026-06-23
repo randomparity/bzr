@@ -235,6 +235,48 @@ async fn whoami_401_no_email_gives_api_key_error() {
 }
 
 #[tokio::test]
+async fn whoami_malformed_200_adds_parse_context_to_auth_error() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .and(header(AUTH_HEADER_NAME, "test-key"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("not json"))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    let result = detect_auth_method(&test_http_client(), &server.uri(), "test-key", None).await;
+    assert!(matches!(result, Err(BzrError::Auth(_))));
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("whoami"),
+        "should name the malformed probe, got: {err}"
+    );
+    assert!(
+        err.contains("header"),
+        "should name the malformed auth method, got: {err}"
+    );
+    assert!(
+        err.contains("malformed"),
+        "should describe the malformed response, got: {err}"
+    );
+    assert!(
+        err.contains("expected"),
+        "should include the parser error, got: {err}"
+    );
+}
+
+#[tokio::test]
 async fn non_tls_network_error_defaults_to_header() {
     // A plain transport failure (connection refused — not a TLS cert error)
     // falls back to header auth rather than aborting: detection isn't retried,
@@ -321,6 +363,62 @@ async fn valid_login_accepts_integer_result() {
     .await
     .unwrap();
     assert_eq!(result, AuthMethod::Header);
+}
+
+#[tokio::test]
+async fn valid_login_malformed_200_adds_parse_context_to_auth_error() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/valid_login"))
+        .and(query_param("login", "user@example.com"))
+        .and(header(AUTH_HEADER_NAME, "test-key"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("not json"))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/valid_login"))
+        .and(query_param("login", "user@example.com"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    let result = detect_auth_method(
+        &test_http_client(),
+        &server.uri(),
+        "test-key",
+        Some("user@example.com"),
+    )
+    .await;
+    assert!(matches!(result, Err(BzrError::Auth(_))));
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("valid_login"),
+        "should name the malformed probe, got: {err}"
+    );
+    assert!(
+        err.contains("header"),
+        "should name the malformed auth method, got: {err}"
+    );
+    assert!(
+        err.contains("malformed"),
+        "should describe the malformed response, got: {err}"
+    );
+    assert!(
+        err.contains("expected"),
+        "should include the parser error, got: {err}"
+    );
 }
 
 #[tokio::test]
