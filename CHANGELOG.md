@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Internal: the clap-derived CLI action and argument types are now
+  crate-internal (`pub(crate)`). The `bzr` library crate's public surface is
+  reduced to `cli::Cli` and `dispatch`; CLI behavior, flags, and output are
+  unchanged. (#419)
+
 ## [0.6.0] - 2026-06-22
 
 ### Security
