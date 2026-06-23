@@ -1,8 +1,9 @@
 use serde::Deserialize;
 
 use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::mutation::{self, Committed, DryRunPreview};
 use crate::error::Result;
-use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
+use crate::output::result_types::{ActionResult, ResourceKind};
 use crate::output::writers::Writers;
 use crate::types::group::CreateGroupParams;
 
@@ -27,26 +28,24 @@ pub(super) async fn handle(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let params = build_params(args)?;
-    let format = ctx.format();
-    if ctx.dry_run() {
-        let message = format!("Would create group '{}'", params.name);
-        write_result(
-            &DryRunResult::new(ResourceKind::Group, &[], &params),
-            &message,
-            format,
-            w.out,
-        );
-        return Ok(());
-    }
-    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
-    let id = client.create_group(&params).await?;
-    write_result(
-        &ActionResult::created_named(id, params.name.as_str(), ResourceKind::Group),
-        &format!("Created group #{id} '{}'", params.name),
-        format,
-        w.out,
-    );
-    Ok(())
+    let message = format!("Would create group '{}'", params.name);
+    mutation::run(
+        ctx,
+        w,
+        DryRunPreview {
+            resource: ResourceKind::Group,
+            params,
+            message,
+        },
+        |client, params| async move {
+            let id = client.create_group(&params).await?;
+            Ok(Committed {
+                result: ActionResult::created_named(id, params.name.as_str(), ResourceKind::Group),
+                message: format!("Created group #{id} '{}'", params.name),
+            })
+        },
+    )
+    .await
 }
 
 fn build_params(args: &CreateArgs<'_>) -> Result<CreateGroupParams> {
