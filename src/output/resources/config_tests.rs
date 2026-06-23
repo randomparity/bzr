@@ -167,7 +167,7 @@ fn server_display_info_keyring_source() {
         tls_pin_issuer_der: None,
     };
     let info = ServerDisplayInfo::from_config(&srv);
-    assert_eq!(info.api_key_source, "keyring");
+    assert_eq!(info.api_key_source, DisplayCredentialSource::Keyring);
     assert!(info.api_key.contains("bzr"));
     assert!(info.api_key.contains("prod"));
 }
@@ -211,14 +211,14 @@ fn display_server_with_tls_pin() {
 fn make_display_info(
     url: &str,
     api_key: &str,
-    source: &str,
+    source: DisplayCredentialSource,
     tls_insecure: bool,
 ) -> ServerDisplayInfo {
     ServerDisplayInfo {
         url: url.into(),
         email: None,
         api_key: api_key.into(),
-        api_key_source: source.into(),
+        api_key_source: source,
         auth_method: None,
         tls_insecure,
         tls_ca_cert: None,
@@ -236,7 +236,12 @@ fn capture_write_config(view: &ConfigView) -> String {
 fn write_config_renders_table_for_inline_server() {
     // Exercises write_config / write_server / write_api_key with the
     // inline credential branch.
-    let mut info = make_display_info("https://bugzilla.example", "12345678...", "inline", true);
+    let mut info = make_display_info(
+        "https://bugzilla.example",
+        "12345678...",
+        DisplayCredentialSource::Inline,
+        true,
+    );
     info.email = Some("admin@example.com".into());
     info.auth_method = Some(AuthMethod::Header);
     let mut servers = std::collections::BTreeMap::new();
@@ -267,11 +272,21 @@ fn write_config_renders_env_and_keyring_labels() {
     let mut servers = std::collections::BTreeMap::new();
     servers.insert(
         "env-srv".into(),
-        make_display_info("https://env.example", "BZR_API_KEY", "env", false),
+        make_display_info(
+            "https://env.example",
+            "BZR_API_KEY",
+            DisplayCredentialSource::Env,
+            false,
+        ),
     );
     servers.insert(
         "kr-srv".into(),
-        make_display_info("https://kr.example", "bzr/kr-srv", "keyring", false),
+        make_display_info(
+            "https://kr.example",
+            "bzr/kr-srv",
+            DisplayCredentialSource::Keyring,
+            false,
+        ),
     );
     let view = ConfigView {
         config_file: "/tmp/bzr/config.toml".into(),
@@ -318,7 +333,7 @@ fn server_display_info_keyring_source_default_account() {
         tls_pin_issuer_der: None,
     };
     let info = ServerDisplayInfo::from_config(&srv);
-    assert_eq!(info.api_key_source, "keyring");
+    assert_eq!(info.api_key_source, DisplayCredentialSource::Keyring);
     assert!(info.api_key.contains("bzr"));
     // The display shows the placeholder, not a real server name (since
     // ServerDisplayInfo doesn't know the server name — that's higher
