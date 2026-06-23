@@ -12,9 +12,11 @@ use crate::types::common::OutputFormat;
 use serde::Deserialize;
 
 mod output;
+mod validate;
 
 pub(super) use output::write_batch_result;
 use output::{comment_suffix, write_update_dry_run};
+use validate::{validate_args, validate_draft};
 
 const FLAG_KEYWORDS_ADD: &str = "--keywords-add";
 const FLAG_KEYWORDS_REMOVE: &str = "--keywords-remove";
@@ -229,21 +231,6 @@ impl BugUpdateDraft {
     }
 }
 
-/// Reject invalid field combinations before building the API payload.
-fn validate_draft(draft: &BugUpdateDraft, ids: &[u64]) -> Result<()> {
-    if draft.dupe_of.is_some() && (draft.status.is_some() || draft.resolution.is_some()) {
-        return Err(crate::error::BzrError::InputValidation(
-            "--dupe-of cannot be combined with --status or --resolution".into(),
-        ));
-    }
-    if draft.alias.is_some() && ids.len() > 1 {
-        return Err(crate::error::BzrError::InputValidation(
-            "--alias can only be used when updating one bug".into(),
-        ));
-    }
-    Ok(())
-}
-
 pub(super) fn build_update_params(args: &UpdateArgs) -> Result<(Vec<u64>, UpdateBugParams)> {
     build_update_params_from_draft(args.ids.clone(), &BugUpdateDraft::from_cli(args))
 }
@@ -310,10 +297,6 @@ pub(super) fn build_update_params_from_draft(
         ));
     }
     Ok((ids, params))
-}
-
-fn validate_args(args: &UpdateArgs) -> Result<()> {
-    validate_draft(&BugUpdateDraft::from_cli(args), &args.ids)
 }
 
 fn merge_copy<T: Copy>(target: &mut Option<T>, value: Option<T>) {
