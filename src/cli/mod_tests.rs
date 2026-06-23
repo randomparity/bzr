@@ -1424,6 +1424,23 @@ fn quiet_help_mentions_tracing_is_suppressed() {
 }
 
 #[test]
+fn migrate_to_keyring_help_requires_yes_without_prompt_text() {
+    let mut command = Cli::command();
+    let Some(config) = command.find_subcommand_mut("config") else {
+        panic!("config subcommand exists");
+    };
+    let Some(migrate) = config.find_subcommand_mut("migrate-to-keyring") else {
+        panic!("config migrate-to-keyring subcommand exists");
+    };
+    let help = migrate.render_long_help().to_string();
+
+    assert!(help.contains("`--yes`"), "{help}");
+    assert!(help.contains("required to confirm"), "{help}");
+    assert!(!help.contains("confirmation prompt"), "{help}");
+    assert!(!help.contains("waits for a"), "{help}");
+}
+
+#[test]
 fn parse_api_override() {
     let cli = Cli::try_parse_from(["bzr", "--api", "xmlrpc", "whoami"]).unwrap();
     assert_eq!(cli.api, Some(ApiMode::XmlRpc));

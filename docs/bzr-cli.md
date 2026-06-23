@@ -200,7 +200,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │                     [--tls-insecure] [--tls-ca-cert <PATH>] [--tls-pin-sha256 <HEX>] [--tls-pin-now] [--tls-pin-clear]
 │   ├── set-keyring <NAME> [--service <S>] [--account <A>]
 │   ├── unset-keyring <NAME>
-│   ├── migrate-to-keyring <NAME> [--service <S>] [--account <A>] [--yes]
+│   ├── migrate-to-keyring <NAME> [--service <S>] [--account <A>] --yes
 │   ├── set-default <NAME>
 │   ├── remove-server <NAME>
 │   ├── rename-server <OLD> <NEW>

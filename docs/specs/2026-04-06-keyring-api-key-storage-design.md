@@ -176,7 +176,7 @@ Three new `bzr config` subcommands. No existing commands are modified.
   `set-keyring` afterward.
 - Idempotent: a missing keychain entry is a warning, not an error.
 
-### `bzr config migrate-to-keyring <server> [--service <name>] [--account <name>] [--yes]`
+### `bzr config migrate-to-keyring <server> [--service <name>] [--account <name>] --yes`
 
 - Resolves the server's current credential via `resolve_api_key()`
   (supports both inline and env sources).
@@ -188,7 +188,8 @@ Three new `bzr config` subcommands. No existing commands are modified.
   configured to read 'api_key_env = "<VAR>"'. Edit config.toml manually to
   switch to the keychain if desired; the env var may be shared with other
   tools.`
-- Without `--yes`, confirms before writing anything.
+- `--yes` is required; without it, the command exits before reading or
+  writing keychain state.
 
 `set-server` is deliberately **not** extended to accept an API key flag,
 so secrets never appear on the command line or in shell history.

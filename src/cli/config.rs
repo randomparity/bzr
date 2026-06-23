@@ -277,8 +277,8 @@ pub enum ConfigAction {
     ///
     /// Examples:
     ///
-    ///   bzr config migrate-to-keyring prod
-    ///   bzr config migrate-to-keyring staging --yes
+    ///   bzr config migrate-to-keyring prod --yes
+    ///   bzr config migrate-to-keyring staging --service bzr --yes
     ///
     /// See bzr-config-set-keyring(1) for storing a fresh key
     /// (without reading from the existing config) and
@@ -293,12 +293,10 @@ pub enum ConfigAction {
         /// Override the keyring account name (defaults to the server name).
         #[arg(long)]
         account: Option<String>,
-        /// Skip the confirmation prompt before migrating.
+        /// Acknowledge and run the migration.
         ///
-        /// Without this flag, the command prints the source of
-        /// the existing key (inline vs. env var) and waits for a
-        /// `y` on stdin before writing to the keychain. Useful
-        /// for scripted migrations across many servers.
+        /// The command exits before reading or writing keychain state unless
+        /// this flag is present.
         #[arg(long)]
         yes: bool,
     },
