@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+#[cfg(test)]
 use std::sync::RwLock;
 
 use serde::{Deserialize, Serialize};
@@ -10,9 +11,8 @@ use serde::{Deserialize, Serialize};
 use crate::error::{io_with_context, BzrError, Result};
 use crate::types::{ApiMode, AuthMethod, BugTemplate, SavedQuery};
 
-/// Process-wide override for the config file path, set from the global
-/// `--config <PATH>` flag. Takes precedence over `BZR_CONFIG` and the default
-/// config directory. `RwLock` (not `OnceLock`) so tests can set and clear it.
+/// Test-only process-wide override for path-precedence unit tests.
+#[cfg(test)]
 static CONFIG_PATH_OVERRIDE: RwLock<Option<PathBuf>> = RwLock::new(None);
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -264,14 +264,9 @@ impl ServerConfig {
 }
 
 impl Config {
-    /// Resolve the path to the config file.
-    ///
-    /// Precedence: the `--config <PATH>` override (set via
-    /// [`Self::set_path_override`]) > the `BZR_CONFIG` environment variable
-    /// (a full path to the config file) > `$XDG_CONFIG_HOME/bzr/config.toml` >
-    /// the platform default config dir. The first two point directly at the
-    /// file; the last two name a directory under which `bzr/config.toml` is
-    /// used.
+    /// Resolve the path to the config file, honoring the test-only process
+    /// override before environment/default resolution.
+    #[cfg(test)]
     pub fn path() -> Result<PathBuf> {
         let path_override = Self::process_path_override();
         Self::path_at(path_override.as_deref())
@@ -280,8 +275,7 @@ impl Config {
     /// Resolve the config path for one invocation.
     ///
     /// Precedence: the explicit invocation path > `BZR_CONFIG` > the default
-    /// config directory. Unlike [`Self::path`], this deliberately ignores the
-    /// legacy process-global override unless the caller passes it explicitly.
+    /// config directory.
     pub fn path_at(path_override: Option<&Path>) -> Result<PathBuf> {
         if let Some(path) = path_override {
             return Ok(path.to_path_buf());
@@ -289,6 +283,7 @@ impl Config {
         Self::path_from_environment()
     }
 
+    #[cfg(test)]
     fn process_path_override() -> Option<PathBuf> {
         if let Ok(guard) = CONFIG_PATH_OVERRIDE.read() {
             if let Some(path) = guard.as_ref() {
@@ -312,12 +307,12 @@ impl Config {
         Ok(config_dir.join("bzr").join("config.toml"))
     }
 
-    /// Install (or clear) a process-wide config path override that takes
-    /// precedence over `BZR_CONFIG` and the default config directory.
+    /// Install (or clear) a test-only process-wide config path override.
     ///
-    /// New command-dispatch code passes the path through `CommandContext`
-    /// instead. This remains for tests and legacy callers that need to exercise
+    /// Production command-dispatch code passes the path through
+    /// `CommandContext` instead. This remains only for unit tests that exercise
     /// path precedence directly. Passing `None` clears the override.
+    #[cfg(test)]
     pub fn set_path_override(path: Option<PathBuf>) {
         if let Ok(mut guard) = CONFIG_PATH_OVERRIDE.write() {
             *guard = path;
@@ -345,7 +340,7 @@ impl Config {
 
     /// Read and parse the config from disk WITHOUT validating it or warning on
     /// permissions. Maps a missing file to `Config::default()`. Used by
-    /// `update_locked` (which validates the post-mutation state) and by `load`.
+    /// update-locked writes and by `load_at`.
     ///
     /// `pub(crate)` so `config remove-server`/`rename-server` can take an
     /// advisory snapshot (existence, default pointer, keyring ref) even when
@@ -364,6 +359,7 @@ impl Config {
         }
     }
 
+    #[cfg(test)]
     pub fn load() -> Result<Config> {
         let path_override = Self::process_path_override();
         Self::load_at(path_override.as_deref())
@@ -371,8 +367,8 @@ impl Config {
 
     pub fn load_at(path_override: Option<&Path>) -> Result<Config> {
         // Warn on insecure permissions only on an explicit load (preserves today's
-        // behavior); `update_locked`'s internal reload uses `read_unvalidated`, so
-        // it warns once (from `write_to_disk`) rather than twice.
+        // behavior); `update_locked_at`'s internal reload uses `read_unvalidated`,
+        // so it warns once (from `write_to_disk`) rather than twice.
         let path = Self::path_at(path_override)?;
         if path.exists() {
             Self::warn_on_insecure_permissions(&path);
@@ -405,6 +401,7 @@ impl Config {
     ///
     /// Non-reentrant: a `mutator` that itself calls `update_locked` returns an
     /// error rather than self-deadlocking.
+    #[cfg(test)]
     pub fn update_locked(mutator: impl FnOnce(&mut Config) -> Result<()>) -> Result<Config> {
         let path_override = Self::process_path_override();
         Self::update_locked_at(path_override.as_deref(), mutator)
@@ -417,8 +414,9 @@ impl Config {
         Self::update_locked_inner(path_override, true, mutator)
     }
 
-    /// Like [`Self::update_locked`] but skips whole-config validation for callers
-    /// that preserve existing invalid config while changing unrelated data.
+    /// Test-only no-argument wrapper around
+    /// [`Self::update_locked_without_validation_at`].
+    #[cfg(test)]
     pub fn update_locked_without_validation(
         mutator: impl FnOnce(&mut Config) -> Result<()>,
     ) -> Result<Config> {
@@ -440,7 +438,7 @@ impl Config {
     ) -> Result<Config> {
         if LOCK_HELD.with(Cell::get) {
             return Err(BzrError::config(
-                "internal error: Config::update_locked called re-entrantly \
+                "internal error: Config::update_locked_at called re-entrantly \
                  (a mutation closure must not write the config itself)",
             ));
         }
@@ -452,7 +450,7 @@ impl Config {
         LOCK_HELD.with(|held| held.set(true));
         let _guard = LockGuard { file };
 
-        // Reload WITHOUT validation. `Config::load` validates unconditionally;
+        // Reload WITHOUT validation. `Config::load_at` validates unconditionally;
         // validating the reload would make `update_locked_without_validation`
         // fail before a caller can repair or preserve unrelated invalid config.
         // We validate only the post-mutation state when `validate` is true,

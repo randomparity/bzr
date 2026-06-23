@@ -61,9 +61,9 @@ fn second_process_holding_the_lock_blocks_try_lock() {
         .expect("try_lock must succeed after the holder releases");
 }
 
-/// Drive `Config::update_locked` itself through the contention branch of
+/// Drive `Config::update_locked_at` itself through the contention branch of
 /// `acquire_exclusive_lock`: while a second process holds `config.lock`,
-/// `update_locked` must block (not error or return early), then acquire the
+/// `update_locked_at` must block (not error or return early), then acquire the
 /// lock and complete its write once the holder releases.
 #[test]
 fn update_locked_waits_for_a_held_lock_then_completes() {
@@ -94,11 +94,12 @@ fn update_locked_waits_for_a_held_lock_then_completes() {
         .expect("spawn lock helper");
     wait_for(&ready);
 
-    // update_locked on a background thread: try_lock is contended, so it must
+    // update_locked_at on a background thread: try_lock is contended, so it must
     // fall back to a blocking lock and stay blocked while the helper holds it.
+    let config_path = cfg_dir.join("config.toml");
     let (tx, rx) = mpsc::channel();
     let writer = std::thread::spawn(move || {
-        let result = Config::update_locked(|c| {
+        let result = Config::update_locked_at(Some(&config_path), |c| {
             c.default_server = Some("sentinel".to_string());
             Ok(())
         });
@@ -108,19 +109,19 @@ fn update_locked_waits_for_a_held_lock_then_completes() {
     // Still blocked while the holder is alive.
     assert!(
         rx.recv_timeout(Duration::from_millis(300)).is_err(),
-        "update_locked must block while another process holds config.lock"
+        "update_locked_at must block while another process holds config.lock"
     );
 
-    // Release the holder; update_locked now acquires the lock and completes.
+    // Release the holder; update_locked_at now acquires the lock and completes.
     File::create(&release).unwrap();
     child.wait().expect("child exits");
     let ok = rx
         .recv_timeout(Duration::from_secs(10))
-        .expect("update_locked must complete after the lock is released");
-    assert!(ok, "update_locked must succeed after acquiring the lock");
+        .expect("update_locked_at must complete after the lock is released");
+    assert!(ok, "update_locked_at must succeed after acquiring the lock");
     writer.join().unwrap();
 
     // The write actually landed on disk.
-    let reloaded = Config::load().unwrap();
+    let reloaded = Config::load_at(Some(&cfg_dir.join("config.toml"))).unwrap();
     assert_eq!(reloaded.default_server.as_deref(), Some("sentinel"));
 }
