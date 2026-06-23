@@ -10,6 +10,7 @@ use crate::types::{ApiMode, OutputFormat};
 
 mod clone;
 mod create;
+mod create_json;
 mod history;
 mod list;
 mod my;
