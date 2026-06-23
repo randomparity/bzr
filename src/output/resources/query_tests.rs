@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use super::*;
-use crate::types::{OutputFormat, QueryKind, SavedQuery};
+use crate::types::{OutputFormat, SavedQuery};
 
 fn capture_detail(name: &str, query: &SavedQuery, format: OutputFormat) -> String {
     let mut buf = Vec::new();
@@ -21,7 +21,6 @@ struct QueryView<'a> {
 
 fn make_url_query() -> SavedQuery {
     SavedQuery {
-        kind: QueryKind::Url,
         source_url: Some(
             "https://bugzilla.example.com/buglist.cgi?product=Firefox&f1=qa_contact".into(),
         ),
@@ -38,7 +37,6 @@ fn make_url_query() -> SavedQuery {
 
 fn make_list_query() -> SavedQuery {
     SavedQuery {
-        kind: QueryKind::List,
         product: vec!["Firefox".into()],
         status: vec!["NEW".into(), "ASSIGNED".into()],
         priority: vec!["P1".into()],
@@ -49,7 +47,6 @@ fn make_list_query() -> SavedQuery {
 
 fn make_search_query() -> SavedQuery {
     SavedQuery {
-        kind: QueryKind::Search,
         quicksearch: Some("crash in tab".into()),
         limit: Some(10),
         ..Default::default()

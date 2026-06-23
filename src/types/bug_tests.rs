@@ -197,7 +197,6 @@ fn partition_filters_empty() {
 #[test]
 fn saved_query_list_roundtrips_json() {
     let query = SavedQuery {
-        kind: QueryKind::List,
         product: vec!["Firefox".into()],
         component: vec![],
         status: vec!["NEW".into(), "ASSIGNED".into()],
@@ -226,7 +225,7 @@ fn saved_query_list_roundtrips_json() {
     };
     let json = serde_json::to_string(&query).unwrap();
     let roundtripped: SavedQuery = serde_json::from_str(&json).unwrap();
-    assert_eq!(roundtripped.kind, QueryKind::List);
+    assert_eq!(roundtripped.kind(), QueryKind::List);
     assert_eq!(roundtripped.product, vec!["Firefox"]);
     assert_eq!(roundtripped.status, vec!["NEW", "ASSIGNED"]);
     assert_eq!(roundtripped.limit, Some(25));
@@ -235,21 +234,31 @@ fn saved_query_list_roundtrips_json() {
 #[test]
 fn saved_query_search_roundtrips_json() {
     let query = SavedQuery {
-        kind: QueryKind::Search,
         quicksearch: Some("crash in tab".into()),
         limit: Some(10),
         ..SavedQuery::default()
     };
     let json = serde_json::to_string(&query).unwrap();
     let roundtripped: SavedQuery = serde_json::from_str(&json).unwrap();
-    assert_eq!(roundtripped.kind, QueryKind::Search);
+    assert_eq!(roundtripped.kind(), QueryKind::Search);
     assert_eq!(roundtripped.quicksearch.as_deref(), Some("crash in tab"));
+}
+
+#[test]
+fn saved_query_kind_is_derived_from_executable_fields() {
+    let stale_json = r#"{"kind":"list","quicksearch":"crash in tab"}"#;
+    let query: SavedQuery = serde_json::from_str(stale_json).unwrap();
+
+    assert_eq!(query.kind(), QueryKind::Search);
+
+    let serialized: serde_json::Value =
+        serde_json::from_str(&serde_json::to_string(&query).unwrap()).unwrap();
+    assert_eq!(serialized["kind"], "search");
 }
 
 #[test]
 fn saved_query_to_search_params_list() {
     let query = SavedQuery {
-        kind: QueryKind::List,
         product: vec!["Core".into()],
         status: vec!["NEW".into()],
         limit: Some(20),
@@ -267,7 +276,6 @@ fn saved_query_to_search_params_list() {
 #[test]
 fn saved_query_to_search_params_search() {
     let query = SavedQuery {
-        kind: QueryKind::Search,
         quicksearch: Some("memory leak".into()),
         limit: Some(30),
         ..SavedQuery::default()
@@ -306,7 +314,6 @@ fn query_kind_url_deserializes() {
 #[test]
 fn saved_query_with_url_fields_roundtrips() {
     let query = SavedQuery {
-        kind: QueryKind::Url,
         source_url: Some("https://bugzilla.example.com/buglist.cgi?product=Firefox".into()),
         server: Some("example".into()),
         raw_params: vec![
@@ -319,7 +326,7 @@ fn saved_query_with_url_fields_roundtrips() {
     };
     let json = serde_json::to_string(&query).unwrap();
     let roundtripped: SavedQuery = serde_json::from_str(&json).unwrap();
-    assert_eq!(roundtripped.kind, QueryKind::Url);
+    assert_eq!(roundtripped.kind(), QueryKind::Url);
     assert_eq!(
         roundtripped.source_url.as_deref(),
         Some("https://bugzilla.example.com/buglist.cgi?product=Firefox")
@@ -336,7 +343,6 @@ fn saved_query_with_url_fields_roundtrips() {
 #[test]
 fn saved_query_without_url_fields_omits_them_in_json() {
     let query = SavedQuery {
-        kind: QueryKind::List,
         product: vec!["Firefox".into()],
         ..SavedQuery::default()
     };
@@ -349,7 +355,6 @@ fn saved_query_without_url_fields_omits_them_in_json() {
 #[test]
 fn saved_query_url_kind_to_search_params_includes_raw_params() {
     let query = SavedQuery {
-        kind: QueryKind::Url,
         product: vec!["Firefox".into()],
         raw_params: sample_raw_params(),
         limit: Some(100),
@@ -683,7 +688,6 @@ fn id_list_update_not_empty_when_only_remove() {
 #[test]
 fn into_search_params_moves_fields() {
     let query = SavedQuery {
-        kind: QueryKind::List,
         product: vec!["Firefox".into()],
         component: vec!["General".into()],
         status: vec!["NEW".into()],

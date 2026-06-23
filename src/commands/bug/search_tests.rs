@@ -292,7 +292,7 @@ async fn handle_search_from_url_saves_query() {
 
     let config = load_config();
     let saved = config.queries.get("my-query").unwrap();
-    assert_eq!(saved.kind, crate::types::QueryKind::Url);
+    assert_eq!(saved.kind(), crate::types::QueryKind::Url);
     assert_eq!(saved.product, vec!["TestProduct"]);
     assert!(saved.source_url.is_some());
 }

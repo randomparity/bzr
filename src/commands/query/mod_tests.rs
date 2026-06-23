@@ -1135,7 +1135,7 @@ async fn query_save_from_url() {
 
     let config = load_config();
     let saved = &config.queries["url-query"];
-    assert_eq!(saved.kind, crate::types::QueryKind::Url);
+    assert_eq!(saved.kind(), crate::types::QueryKind::Url);
     assert_eq!(saved.product, vec!["TestProduct"]);
     assert!(!saved.raw_params.is_empty());
     assert!(saved.source_url.is_some());
@@ -1748,6 +1748,27 @@ async fn run_q(action: &QueryAction) -> crate::error::Result<()> {
     .await
 }
 
+async fn run_action_output(action: &QueryAction, format: OutputFormat) -> String {
+    let mut io = crate::test_helpers::CapturedIo::new();
+    super::execute(
+        action,
+        &crate::commands::runtime::context::CommandContext::new(None, format, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap();
+    io.out_str().to_string()
+}
+
+async fn show_query_json(name: &str) -> serde_json::Value {
+    let output = run_action_output(
+        &QueryAction::Show(ShowArgs { name: name.into() }),
+        OutputFormat::Json,
+    )
+    .await;
+    serde_json::from_str(output.trim()).unwrap()
+}
+
 #[tokio::test]
 async fn query_update_replaces_filter_keeps_rest() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
@@ -1764,6 +1785,56 @@ async fn query_update_replaces_filter_keeps_rest() {
     assert_eq!(q.status, vec!["ASSIGNED".to_string()]);
     assert_eq!(q.product, vec!["Firefox".to_string()]); // untouched
     assert_eq!(q.limit, Some(25)); // untouched
+}
+
+#[tokio::test]
+async fn query_update_search_reports_effective_search_kind() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run_q(&save_action("q")).await.unwrap();
+
+    let mut update = empty_update("q");
+    if let QueryAction::Update(QueryUpdateArgs { search, .. }) = &mut update {
+        *search = Some("crash in tab".into());
+    }
+    run_q(&update).await.unwrap();
+
+    let shown = show_query_json("q").await;
+    assert_eq!(shown["kind"], "search");
+
+    let listed = run_action_output(&QueryAction::List, OutputFormat::Table).await;
+    assert!(
+        listed.contains("q (kind=search"),
+        "expected query list to report search kind, got: {listed:?}"
+    );
+}
+
+#[tokio::test]
+async fn query_update_clear_search_reports_effective_list_kind() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    run_q(&empty_save_action("q", Some("crash in tab".into())))
+        .await
+        .unwrap();
+
+    let mut add_filter = empty_update("q");
+    if let QueryAction::Update(QueryUpdateArgs { filters, .. }) = &mut add_filter {
+        filters.product = vec!["Firefox".into()];
+    }
+    run_q(&add_filter).await.unwrap();
+
+    let mut clear_search = empty_update("q");
+    if let QueryAction::Update(QueryUpdateArgs { clear, .. }) = &mut clear_search {
+        *clear = vec!["search".into()];
+    }
+    run_q(&clear_search).await.unwrap();
+
+    let shown = show_query_json("q").await;
+    assert_eq!(shown["kind"], "list");
+
+    let listed = run_action_output(&QueryAction::List, OutputFormat::Table).await;
+    assert!(
+        listed.contains("q (kind=list"),
+        "expected query list to report list kind, got: {listed:?}"
+    );
 }
 
 #[tokio::test]
@@ -1933,7 +2004,7 @@ async fn query_update_from_url_replaces_existing_query() {
 
     let config = load_config();
     let q = &config.queries["web"];
-    assert_eq!(q.kind, crate::types::QueryKind::Url);
+    assert_eq!(q.kind(), crate::types::QueryKind::Url);
     assert_eq!(q.product, vec!["NewProduct"]);
     assert_eq!(q.status, vec!["ASSIGNED"]);
     assert_eq!(q.priority, vec!["P1"]);

@@ -293,7 +293,6 @@ fn config_roundtrips_saved_queries() {
 
     let mut config = make_config_with_server();
     let query = crate::types::SavedQuery {
-        kind: crate::types::QueryKind::List,
         product: vec!["Firefox".into()],
         status: vec!["NEW".into()],
         limit: Some(25),

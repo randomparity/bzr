@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::output::resources::query::write_query_saved;
 use crate::output::writers::Writers;
-use crate::types::bug::{QueryKind, SavedQuery};
+use crate::types::bug::SavedQuery;
 
 use super::{explicit_sort_order, saved_query_from_url, UrlQueryOverrides};
 
@@ -45,13 +45,7 @@ pub(super) fn handle(
             ctx.config_path_override(),
         )?
     } else {
-        let kind = if search.is_some() {
-            QueryKind::Search
-        } else {
-            QueryKind::List
-        };
         let mut query = SavedQuery {
-            kind,
             quicksearch: search.clone(),
             limit: *limit,
             fields: fields.clone(),

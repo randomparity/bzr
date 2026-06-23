@@ -781,7 +781,7 @@ pub struct FieldChange {
 }
 
 /// The kind of saved query — determines which fields are meaningful.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum QueryKind {
     /// Structured filter query (product, status, etc.)
@@ -794,11 +794,9 @@ pub enum QueryKind {
 }
 
 /// A reusable bug query stored in the config file.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 #[non_exhaustive]
 pub struct SavedQuery {
-    #[serde(default)]
-    pub kind: QueryKind,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub product: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -868,7 +866,107 @@ pub struct SavedQuery {
     pub order: Option<String>,
 }
 
+#[derive(Serialize)]
+struct SavedQueryWire<'a> {
+    kind: QueryKind,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    product: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    component: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    status: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    assignee: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    creator: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    priority: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    severity: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    quicksearch: &'a Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    limit: &'a Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fields: &'a Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exclude_fields: &'a Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_url: &'a Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    server: &'a Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    raw_params: &'a Vec<(String, String)>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    creation_time: &'a Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_change_time: &'a Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    whiteboard: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    target_milestone: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    version: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    op_sys: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    platform: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    resolution: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    qa_contact: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    url: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    order: &'a Option<String>,
+}
+
+impl Serialize for SavedQuery {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        SavedQueryWire {
+            kind: self.kind(),
+            product: &self.product,
+            component: &self.component,
+            status: &self.status,
+            assignee: &self.assignee,
+            creator: &self.creator,
+            priority: &self.priority,
+            severity: &self.severity,
+            quicksearch: &self.quicksearch,
+            limit: &self.limit,
+            fields: &self.fields,
+            exclude_fields: &self.exclude_fields,
+            source_url: &self.source_url,
+            server: &self.server,
+            raw_params: &self.raw_params,
+            creation_time: &self.creation_time,
+            last_change_time: &self.last_change_time,
+            whiteboard: &self.whiteboard,
+            target_milestone: &self.target_milestone,
+            version: &self.version,
+            op_sys: &self.op_sys,
+            platform: &self.platform,
+            resolution: &self.resolution,
+            qa_contact: &self.qa_contact,
+            url: &self.url,
+            order: &self.order,
+        }
+        .serialize(serializer)
+    }
+}
+
 impl SavedQuery {
+    /// Return the query mode implied by the fields that will execute.
+    pub fn kind(&self) -> QueryKind {
+        if self.source_url.is_some() || !self.raw_params.is_empty() {
+            QueryKind::Url
+        } else if self.quicksearch.is_some() {
+            QueryKind::Search
+        } else {
+            QueryKind::List
+        }
+    }
+
     /// Convert this saved query into `SearchParams` by cloning.
     pub fn to_search_params(&self) -> SearchParams {
         self.clone().into_search_params()

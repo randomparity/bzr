@@ -4,7 +4,7 @@ use url::Url;
 
 use crate::config::Config;
 use crate::error::{BzrError, Result};
-use crate::types::bug::{FieldMapping, QueryKind, SavedQuery, FIELD_MAPPINGS};
+use crate::types::bug::{FieldMapping, SavedQuery, FIELD_MAPPINGS};
 
 /// Parameters containing credentials that must not be stored or forwarded.
 const CREDENTIAL_PARAMS: &[&str] = &["bugzilla_api_key", "token", "api_key"];
@@ -132,7 +132,6 @@ pub(crate) fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<Parse
     }
 
     let mut query = SavedQuery {
-        kind: QueryKind::Url,
         source_url: Some(sanitize_url(&url)),
         server: server.map(String::from),
         ..SavedQuery::default()

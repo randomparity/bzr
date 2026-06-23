@@ -8,7 +8,7 @@ use crate::output::formatting::{
     write_field, write_formatted, write_list_field, write_optional_field,
 };
 
-fn kind_label(kind: &QueryKind) -> &'static str {
+fn kind_label(kind: QueryKind) -> &'static str {
     match kind {
         QueryKind::List => "list",
         QueryKind::Search => "search",
@@ -21,7 +21,7 @@ fn query_saved_message(name: &str, verb: &str) -> String {
 }
 
 fn query_summary_line(name: &str, query: &SavedQuery) -> String {
-    let mut parts = vec![format!("kind={}", kind_label(&query.kind))];
+    let mut parts = vec![format!("kind={}", kind_label(query.kind()))];
     if !query.product.is_empty() {
         parts.push(format!("product={}", query.product.join(",")));
     }
@@ -95,7 +95,7 @@ pub fn write_query_detail<W: Write + ?Sized>(
     let view = QueryView { name, query };
     write_formatted(&view, format, out, |view, out| {
         write_field(out, "Name", view.name);
-        write_field(out, "Kind", kind_label(&view.query.kind));
+        write_field(out, "Kind", kind_label(view.query.kind()));
         write_optional_field(out, "Source URL", view.query.source_url.as_deref());
         write_optional_field(out, "Server", view.query.server.as_deref());
         write_list_field(out, "Product", &view.query.product);
