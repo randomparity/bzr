@@ -5,7 +5,7 @@
 
 use crate::cli::QueryAction;
 use crate::commands::runtime::context::CommandContext;
-use crate::commands::runtime::shared::{merge_set, merge_vec};
+use crate::commands::runtime::shared::merge_set;
 use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::output::resources::bug::{
@@ -84,7 +84,6 @@ fn handle_save(
         search,
         filters,
         actor_filters,
-        url,
         limit,
         fields,
         exclude_fields,
@@ -124,7 +123,6 @@ fn handle_save(
             exclude_fields: exclude_fields.clone(),
             creation_time,
             last_change_time,
-            url: url.clone(),
             order: explicit_sort_order(sort_args),
             ..SavedQuery::default()
         };
@@ -239,7 +237,6 @@ fn apply_query_updates(
         search,
         filters,
         actor_filters,
-        url,
         limit,
         fields,
         exclude_fields,
@@ -252,7 +249,6 @@ fn apply_query_updates(
     let mut changed = false;
     changed |= filters.merge_saved_query_filters(q);
     changed |= actor_filters.merge_saved_query_filters(q);
-    changed |= merge_vec(&mut q.url, url);
     changed |= merge_set(&mut q.quicksearch, search.as_deref());
     changed |= merge_set(&mut q.fields, fields.as_deref());
     changed |= merge_set(&mut q.exclude_fields, exclude_fields.as_deref());

@@ -1,6 +1,6 @@
 use clap::{Args, Subcommand};
 
-use crate::types::{FilterField, SavedQuery, SearchParams, SortDirection};
+use crate::types::{FilterField, SavedQuery, SearchParams, SortDirection, FIELD_MAPPINGS};
 
 /// Shared `--sort` / `--order` result ordering, flattened into the bug query
 /// subcommands (`list`, `search`, `my`) and `query run`. Absent `--sort`,
@@ -195,46 +195,57 @@ pub struct BugFilterArgs {
     /// Filter by QA Contact login (repeatable for OR; prefix with ! to exclude)
     #[arg(long)]
     pub qa_contact: Vec<String>,
+    /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub url: Vec<String>,
 }
 
 impl BugFilterArgs {
-    fn filter_values(&self) -> [(FilterField, &[String]); 12] {
-        [
-            (FilterField::Product, self.product.as_slice()),
-            (FilterField::Component, self.component.as_slice()),
-            (FilterField::Status, self.status.as_slice()),
-            (FilterField::Priority, self.priority.as_slice()),
-            (FilterField::Severity, self.severity.as_slice()),
-            (FilterField::Whiteboard, self.whiteboard.as_slice()),
-            (
-                FilterField::TargetMilestone,
-                self.target_milestone.as_slice(),
-            ),
-            (FilterField::Version, self.version.as_slice()),
-            (FilterField::OpSys, self.op_sys.as_slice()),
-            (FilterField::Platform, self.platform.as_slice()),
-            (FilterField::Resolution, self.resolution.as_slice()),
-            (FilterField::QaContact, self.qa_contact.as_slice()),
-        ]
+    fn values_for(&self, field: FilterField) -> Option<&[String]> {
+        match field {
+            FilterField::Product => Some(self.product.as_slice()),
+            FilterField::Component => Some(self.component.as_slice()),
+            FilterField::Status => Some(self.status.as_slice()),
+            FilterField::Priority => Some(self.priority.as_slice()),
+            FilterField::Severity => Some(self.severity.as_slice()),
+            FilterField::Whiteboard => Some(self.whiteboard.as_slice()),
+            FilterField::TargetMilestone => Some(self.target_milestone.as_slice()),
+            FilterField::Version => Some(self.version.as_slice()),
+            FilterField::OpSys => Some(self.op_sys.as_slice()),
+            FilterField::Platform => Some(self.platform.as_slice()),
+            FilterField::Resolution => Some(self.resolution.as_slice()),
+            FilterField::QaContact => Some(self.qa_contact.as_slice()),
+            FilterField::Url => Some(self.url.as_slice()),
+            FilterField::AssignedTo | FilterField::Creator => None,
+        }
     }
 
     pub(crate) fn write_search_filters(&self, params: &mut SearchParams) {
-        for (field, values) in self.filter_values() {
-            *params.get_field_mut(field) = values.to_vec();
+        for mapping in FIELD_MAPPINGS {
+            let Some(values) = self.values_for(mapping.field) else {
+                continue;
+            };
+            *params.get_field_mut(mapping.field) = values.to_vec();
         }
     }
 
     pub(crate) fn write_saved_query_filters(&self, query: &mut SavedQuery) {
-        for (field, values) in self.filter_values() {
-            *query.get_field_mut(field) = values.to_vec();
+        for mapping in FIELD_MAPPINGS {
+            let Some(values) = self.values_for(mapping.field) else {
+                continue;
+            };
+            *query.get_field_mut(mapping.field) = values.to_vec();
         }
     }
 
     pub(crate) fn merge_saved_query_filters(&self, query: &mut SavedQuery) -> bool {
         let mut changed = false;
-        for (field, values) in self.filter_values() {
+        for mapping in FIELD_MAPPINGS {
+            let Some(values) = self.values_for(mapping.field) else {
+                continue;
+            };
             if !values.is_empty() {
-                *query.get_field_mut(field) = values.to_vec();
+                *query.get_field_mut(mapping.field) = values.to_vec();
                 changed = true;
             }
         }
@@ -254,30 +265,40 @@ pub struct BugActorFilterArgs {
 }
 
 impl BugActorFilterArgs {
-    fn filter_values(&self) -> [(FilterField, &[String]); 2] {
-        [
-            (FilterField::AssignedTo, self.assignee.as_slice()),
-            (FilterField::Creator, self.creator.as_slice()),
-        ]
+    fn values_for(&self, field: FilterField) -> Option<&[String]> {
+        match field {
+            FilterField::AssignedTo => Some(self.assignee.as_slice()),
+            FilterField::Creator => Some(self.creator.as_slice()),
+            _ => None,
+        }
     }
 
     pub(crate) fn write_search_filters(&self, params: &mut SearchParams) {
-        for (field, values) in self.filter_values() {
-            *params.get_field_mut(field) = values.to_vec();
+        for mapping in FIELD_MAPPINGS {
+            let Some(values) = self.values_for(mapping.field) else {
+                continue;
+            };
+            *params.get_field_mut(mapping.field) = values.to_vec();
         }
     }
 
     pub(crate) fn write_saved_query_filters(&self, query: &mut SavedQuery) {
-        for (field, values) in self.filter_values() {
-            *query.get_field_mut(field) = values.to_vec();
+        for mapping in FIELD_MAPPINGS {
+            let Some(values) = self.values_for(mapping.field) else {
+                continue;
+            };
+            *query.get_field_mut(mapping.field) = values.to_vec();
         }
     }
 
     pub(crate) fn merge_saved_query_filters(&self, query: &mut SavedQuery) -> bool {
         let mut changed = false;
-        for (field, values) in self.filter_values() {
+        for mapping in FIELD_MAPPINGS {
+            let Some(values) = self.values_for(mapping.field) else {
+                continue;
+            };
             if !values.is_empty() {
-                *query.get_field_mut(field) = values.to_vec();
+                *query.get_field_mut(mapping.field) = values.to_vec();
                 changed = true;
             }
         }
@@ -330,9 +351,6 @@ pub struct ListArgs {
     /// Same accepted forms as `--created-since`.
     #[arg(long, value_name = "DATE")]
     pub changed_since: Option<String>,
-    /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub url: Vec<String>,
 }
 
 /// Arguments for `bug view`.
@@ -552,9 +570,6 @@ pub struct MyArgs {
     /// Same accepted forms as `--created-since`.
     #[arg(long, value_name = "DATE")]
     pub changed_since: Option<String>,
-    /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub url: Vec<String>,
     /// Max results per category (assigned/created/cc).
     ///
     /// With `--all`, the limit applies independently to each of

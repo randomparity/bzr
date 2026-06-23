@@ -107,6 +107,7 @@ async fn bug_list_passes_every_field_through_to_search_params() {
             platform: vec!["x86_64".into()],
             resolution: vec!["FIXED".into()],
             qa_contact: vec!["qa@test.com".into()],
+            url: vec!["github.com/foo".into()],
         },
         actor_filters: crate::cli::BugActorFilterArgs {
             assignee: vec!["dev@test.com".into()],
@@ -122,7 +123,6 @@ async fn bug_list_passes_every_field_through_to_search_params() {
         },
         created_since: Some("2026-04-01".into()),
         changed_since: Some("2026-04-15T00:00:00Z".into()),
-        url: vec!["github.com/foo".into()],
         ..Default::default()
     });
     let result = crate::commands::bug::execute(

@@ -94,7 +94,6 @@ fn build_base_search_params(args: &MyArgs) -> Result<SearchParams> {
         exclude_fields: canonical_field_list(args.field_args.exclude_fields.as_deref()),
         creation_time,
         last_change_time,
-        url: args.url.clone(),
         order: Some(crate::validation::build_order(
             args.sort_args.sort.as_deref(),
             args.sort_args.order,

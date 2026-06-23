@@ -170,11 +170,11 @@ async fn bug_my_all_passes_shared_filters_to_each_category() {
             platform: vec!["x86_64".into()],
             resolution: vec!["FIXED".into()],
             qa_contact: vec!["qa@example.com".into()],
+            url: vec!["github.com/foo".into()],
             ..Default::default()
         },
         created_since: Some("2026-04-01".into()),
         changed_since: Some("2026-04-15T12:00:00Z".into()),
-        url: vec!["github.com/foo".into()],
     });
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(

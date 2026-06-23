@@ -32,7 +32,6 @@ fn empty_list_action() -> bzr::cli::BugAction {
         },
         created_since: None,
         changed_since: None,
-        url: vec![],
         sort_args: bzr::cli::SortArgs::default(),
         count: false,
     })

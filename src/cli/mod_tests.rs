@@ -1461,6 +1461,8 @@ fn parse_bug_list_with_filters() {
         "Firefox",
         "--status",
         "NEW",
+        "--url",
+        "github.com/foo",
         "--limit",
         "25",
     ])
@@ -1471,6 +1473,7 @@ fn parse_bug_list_with_filters() {
         } => {
             assert_eq!(filters.product, vec!["Firefox"]);
             assert_eq!(filters.status, vec!["NEW"]);
+            assert_eq!(filters.url, vec!["github.com/foo"]);
             assert_eq!(limit, 25);
         }
         _ => panic!("expected Bug List"),
@@ -1578,7 +1581,6 @@ fn bug_my_parses_shared_filter_set() {
                 filters,
                 created_since,
                 changed_since,
-                url,
                 ..
             }),
     } = cli.command
@@ -1598,7 +1600,7 @@ fn bug_my_parses_shared_filter_set() {
     assert_eq!(filters.platform, vec!["x86_64"]);
     assert_eq!(filters.resolution, vec!["FIXED"]);
     assert_eq!(filters.qa_contact, vec!["qa@example.com"]);
-    assert_eq!(url, vec!["github.com/foo"]);
+    assert_eq!(filters.url, vec!["github.com/foo"]);
 }
 
 #[test]
@@ -2495,7 +2497,7 @@ fn bug_list_parses_158_field_filters() {
     ])
     .unwrap();
     let Commands::Bug {
-        action: BugAction::List(super::ListArgs { filters, url, .. }),
+        action: BugAction::List(super::ListArgs { filters, .. }),
     } = cli.command
     else {
         panic!("expected Bug::List variant");
@@ -2507,7 +2509,7 @@ fn bug_list_parses_158_field_filters() {
     assert_eq!(filters.platform, vec!["x86_64"]);
     assert_eq!(filters.resolution, vec!["FIXED"]);
     assert_eq!(filters.qa_contact, vec!["qa@example.com"]);
-    assert_eq!(url, vec!["github.com/foo"]);
+    assert_eq!(filters.url, vec!["github.com/foo"]);
 }
 
 #[test]
@@ -2569,7 +2571,7 @@ fn query_save_parses_158_field_filters() {
     ])
     .unwrap();
     let Commands::Query {
-        action: QueryAction::Save(super::SaveArgs { filters, url, .. }),
+        action: QueryAction::Save(super::SaveArgs { filters, .. }),
     } = cli.command
     else {
         panic!("expected Query::Save variant");
@@ -2581,7 +2583,7 @@ fn query_save_parses_158_field_filters() {
     assert_eq!(filters.platform, vec!["x86_64"]);
     assert_eq!(filters.resolution, vec!["FIXED"]);
     assert_eq!(filters.qa_contact, vec!["qa@example.com"]);
-    assert_eq!(url, vec!["github.com/foo"]);
+    assert_eq!(filters.url, vec!["github.com/foo"]);
 }
 
 #[test]

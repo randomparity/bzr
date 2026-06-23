@@ -25,7 +25,6 @@ pub(super) async fn handle(
         },
         created_since,
         changed_since,
-        url,
         sort_args,
         page_args: crate::cli::PageArgs { offset, paginate },
         count,
@@ -46,7 +45,6 @@ pub(super) async fn handle(
         exclude_fields: canonical_field_list(exclude_fields.as_deref()),
         creation_time,
         last_change_time,
-        url: url.clone(),
         order: Some(crate::validation::build_order(
             sort_args.sort.as_deref(),
             sort_args.order,

@@ -97,9 +97,6 @@ pub struct SaveArgs {
     pub filters: crate::cli::BugFilterArgs,
     #[command(flatten)]
     pub actor_filters: crate::cli::BugActorFilterArgs,
-    /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude)
-    #[arg(long)]
-    pub url: Vec<String>,
     /// Max number of results
     #[arg(long)]
     pub limit: Option<u32>,
@@ -159,9 +156,6 @@ pub struct UpdateArgs {
     pub filters: crate::cli::BugFilterArgs,
     #[command(flatten)]
     pub actor_filters: crate::cli::BugActorFilterArgs,
-    /// Replace the URL filter (repeatable)
-    #[arg(long)]
-    pub url: Vec<String>,
     /// Replace the saved limit
     #[arg(long)]
     pub limit: Option<u32>,
