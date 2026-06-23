@@ -42,9 +42,15 @@ parallel.
 process-global environment state that command resolution must observe:
 
 - tests that `set_var`/`remove_var` an **API-key environment variable** named by
-  `api_key_env` / an inline `--server-api-key-env`, and
+  `api_key_env` / an inline `--server-api-key-env`,
 - the test that deliberately verifies `--config` overrides `XDG_CONFIG_HOME`
-  precedence (it must set both).
+  precedence (it must set both), and
+- tests that trigger **libc name resolution** of a hostname (the self-signed TLS
+  tests connect to `https://localhost:{port}` to match the cert SAN;
+  `getaddrinfo("localhost")` reads env outside Rust's serialized env lock, so the
+  lock keeps that C-side `getenv` from racing a concurrent `set_var`). Tests that
+  connect only to numeric `127.0.0.1` URLs take glibc's numeric fast path, read
+  no env via libc, and need no lock.
 
 Each retained `ENV_LOCK` acquisition keeps a comment stating which
 process-global variable it protects and why the explicit-path approach does not

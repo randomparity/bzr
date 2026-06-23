@@ -58,12 +58,16 @@ lock-free. This is safe for two independent reasons:
 2. **No data race on `environ`.** Rust's `std::env::var`/`set_var`/`remove_var`
    serialize through libstd's internal env lock, so concurrent Rust-side env
    access is not a data race even across threads (the edition-2024 `unsafe`
-   marking reflects the C-FFI/signal hazard, not removal of that lock). All env
-   access in this test process is pure-Rust `std::env`; the only non-Rust env
-   reads would be libc `getenv` inside `getaddrinfo`, which is avoided because
-   wiremock binds `127.0.0.1` (numeric host, no name resolution). This residual
-   is pre-existing — any current non-locked env read already shares it — and is
-   not introduced by this change.
+   marking reflects the C-FFI/signal hazard, not removal of that lock). The
+   remaining hazard is libc `getenv` inside `getaddrinfo`, which is *not*
+   serialized against Rust's env lock. Every migrated test connects to a
+   **numeric** `127.0.0.1` URL (wiremock, or an unreachable `127.0.0.1:1`), for
+   which glibc takes the numeric fast path and performs no name resolution, so no
+   libc `getenv` runs. The one group that resolves a **name** — the self-signed
+   inline TLS tests, which must use `https://localhost:{port}` to match the cert
+   SAN — therefore keeps `ENV_LOCK` (see disposition below), so its
+   `getaddrinfo("localhost")` stays serialized against every `set_var` exactly as
+   today.
 
 A `tokio::sync::RwLock` read/write split (migrated tests take a read guard,
 mutators take a write guard) was rejected: a read guard held across the network
@@ -100,13 +104,20 @@ Add, without removing the existing `setup_test_env` / `setup_empty_config_env`
 - All `setup_test_env()` / `write_public_config()` `dispatch` tests: migrate to
   an isolated config path + `--config <path>` in argv. `write_public_config`
   becomes path-returning, no env mutation.
-- Inline `--server-url` tests (`dispatch_rejects_inline_write_without_api_key_env_before_network`,
-  the self-signed TLS group via `assert_self_signed_inline_server_info_succeeds`):
-  inline connects never load config; pass `--config <isolated path>` and assert
-  the file is not created. Drop the lock.
+- `dispatch_rejects_inline_write_without_api_key_env_before_network`: inline
+  `--server-url`, errors at credential validation before any connect/DNS; pass
+  `--config <isolated path>` and drop the lock.
 - **Keep `ENV_LOCK`** in `dispatch_applies_config_flag_without_global_override`:
   it must set `XDG_CONFIG_HOME` to prove `--config` overrides it. Keep the
   comment naming the variable.
+- **Keep `ENV_LOCK`** in the self-signed TLS group via
+  `assert_self_signed_inline_server_info_succeeds` (4 tests). These connect to
+  `https://localhost:{port}` (required to match the cert SAN), so they run libc
+  `getaddrinfo("localhost")`, which reads env outside Rust's env lock. Keeping
+  the lock keeps that C-side `getenv` serialized against every concurrent
+  `set_var`. Replace the `XDG_CONFIG_HOME` mutation with `--config <isolated
+  path>` (still assert no config file is created), and add a comment naming the
+  reason the lock is retained (libc name resolution, not config selection).
 
 ### `commands/runtime/shared/mod_tests.rs`
 
@@ -134,13 +145,15 @@ Add, without removing the existing `setup_test_env` / `setup_empty_config_env`
   env-mutating tests; each retained lock has a comment naming the variable.
 - Migrated tests pass the config by explicit path.
 - **Structural invariant (checkable, not statistical):** after the change, the
-  only `ENV_LOCK.lock()` acquisitions in the four files are the four documented
-  env-mutating tests (`connect_client_resolves_env_backed_api_key`,
+  only `ENV_LOCK.lock()` acquisitions in the four files are five documented
+  sites — three mod_tests that mutate an API-key env var
+  (`connect_client_resolves_env_backed_api_key`,
   `inline_server_connects_without_config_and_persists_nothing`,
-  `inline_server_missing_env_var_is_clean_error`,
-  `dispatch_applies_config_flag_without_global_override`); every other test in
-  the four files acquires no lock. Verify by grepping `ENV_LOCK` in the four
-  files and confirming the count and the names.
+  `inline_server_missing_env_var_is_clean_error`), the precedence test
+  `dispatch_applies_config_flag_without_global_override`, and the self-signed TLS
+  helper `assert_self_signed_inline_server_info_succeeds` (libc name resolution).
+  Every other test in the four files acquires no lock. Verify by grepping
+  `ENV_LOCK` in the four files and confirming the count and the names.
 - `cargo test` passes. To surface any ordering assumption, the **full** suite
   (not just the migrated subset — the relevant interaction is migrated-reader vs.
   writer in another file) runs green three times at `--test-threads=16`:
