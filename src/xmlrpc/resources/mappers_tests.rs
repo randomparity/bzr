@@ -4,7 +4,7 @@ use super::{
     get_datetime_str, get_flags, get_int_array, get_nonempty_str, get_str_array, require_u64,
 };
 use crate::error::BzrError;
-use crate::xmlrpc::value::Value;
+use crate::xmlrpc::protocol::Value;
 
 #[test]
 fn get_flags_parses_structs_and_skips_non_structs() {

@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::xmlrpc::value::Value;
+use crate::xmlrpc::protocol::Value;
 
 /// Escape XML special characters in text content.
 fn xml_escape(s: &str) -> String {

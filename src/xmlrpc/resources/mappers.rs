@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::error::{BzrError, Result};
-use crate::xmlrpc::value::Value;
+use crate::xmlrpc::protocol::Value;
 
 /// Error message used whenever an XML-RPC method expects a top-level struct
 /// in the response but receives a different value type.

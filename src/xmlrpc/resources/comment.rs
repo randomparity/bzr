@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
 
 use crate::error::{BzrError, Result};
-use crate::xmlrpc::client::XmlRpcClient;
-use crate::xmlrpc::mappers::{
+use crate::xmlrpc::protocol::Value;
+use crate::xmlrpc::protocol::XmlRpcClient;
+use crate::xmlrpc::resources::mappers::{
     get_bool_flag, get_datetime_str, get_nonempty_str, get_str, get_u64, lookup_bug_entry,
     require_u64,
 };
-use crate::xmlrpc::value::Value;
 
 impl XmlRpcClient {
     pub async fn get_comments_since(

@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 
 use crate::bugzilla_auth::AUTH_QUERY_PARAM;
 use crate::error::{BzrError, Result};
-use crate::xmlrpc::call::build_request;
-use crate::xmlrpc::parsing::parse_response;
-use crate::xmlrpc::value::Value;
+use crate::xmlrpc::protocol::call::build_request;
+use crate::xmlrpc::protocol::parsing::parse_response;
+use crate::xmlrpc::protocol::Value;
 
 pub struct XmlRpcClient {
     http: reqwest::Client,

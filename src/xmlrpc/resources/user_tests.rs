@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 
 use super::extract_id;
 use crate::types::CreateUserParams;
-use crate::xmlrpc::client::XmlRpcClient;
-use crate::xmlrpc::value::Value;
+use crate::xmlrpc::protocol::Value;
+use crate::xmlrpc::protocol::XmlRpcClient;
 use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 

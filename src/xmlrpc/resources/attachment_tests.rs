@@ -1,7 +1,7 @@
 #![expect(clippy::unwrap_used)]
 
 use crate::error::BzrError;
-use crate::xmlrpc::client::XmlRpcClient;
+use crate::xmlrpc::protocol::XmlRpcClient;
 use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 

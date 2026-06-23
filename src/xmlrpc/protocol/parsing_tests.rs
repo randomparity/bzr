@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used)]
 
-use crate::xmlrpc::value::Value;
+use crate::xmlrpc::protocol::Value;
 
 use super::parse_response;
 

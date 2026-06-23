@@ -2,11 +2,11 @@ use std::collections::BTreeMap;
 
 use crate::error::{BzrError, Result};
 use crate::types::{GroupInfo, GroupMember};
-use crate::xmlrpc::client::XmlRpcClient;
-use crate::xmlrpc::mappers::{
+use crate::xmlrpc::protocol::Value;
+use crate::xmlrpc::protocol::XmlRpcClient;
+use crate::xmlrpc::resources::mappers::{
     get_bool_flag, get_nonempty_str, get_str, get_u64, require_u64, EXPECTED_STRUCT_RESPONSE,
 };
-use crate::xmlrpc::value::Value;
 
 impl XmlRpcClient {
     pub async fn get_group(&self, name: &str) -> Result<GroupInfo> {

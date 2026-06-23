@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use super::value_to_comment;
-use crate::xmlrpc::client::XmlRpcClient;
-use crate::xmlrpc::value::Value;
+use crate::xmlrpc::protocol::Value;
+use crate::xmlrpc::protocol::XmlRpcClient;
 
 #[test]
 fn value_to_comment_parses_int_is_private() {

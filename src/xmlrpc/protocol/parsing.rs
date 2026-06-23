@@ -7,8 +7,8 @@ use quick_xml::events::{BytesText, Event};
 use quick_xml::Reader;
 
 use crate::error::{BzrError, Result};
-use crate::xmlrpc::fault::fault_to_error;
-use crate::xmlrpc::value::Value;
+use crate::xmlrpc::protocol::fault::fault_to_error;
+use crate::xmlrpc::protocol::Value;
 
 /// Convert an XML parse error to a `BzrError::XmlRpc`.
 fn xml_parse_err(e: &quick_xml::Error) -> BzrError {

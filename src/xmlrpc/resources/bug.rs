@@ -2,12 +2,12 @@ use std::collections::BTreeMap;
 
 use crate::error::{BzrError, Result};
 use crate::types::{partition_filters, Bug, SearchParams, FIELD_MAPPINGS};
-use crate::xmlrpc::client::XmlRpcClient;
-use crate::xmlrpc::mappers::{
+use crate::xmlrpc::protocol::Value;
+use crate::xmlrpc::protocol::XmlRpcClient;
+use crate::xmlrpc::resources::mappers::{
     get_datetime_str, get_flags, get_int_array, get_nonempty_str, get_str, get_str_array, get_u64,
     require_u64, xmlrpc_value_to_json, EXPECTED_STRUCT_RESPONSE,
 };
-use crate::xmlrpc::value::Value;
 
 impl XmlRpcClient {
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {

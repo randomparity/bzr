@@ -22,7 +22,7 @@ use crate::bugzilla_auth::{AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::error::{BzrError, Result};
 use crate::types::BugzillaUser;
 use crate::types::{ApiMode, AuthMethod};
-use crate::xmlrpc::client::XmlRpcClient;
+use crate::xmlrpc::protocol::XmlRpcClient;
 
 /// Default fields for user queries (basic info).
 pub(super) const USER_FIELDS_BASIC: &str = "id,name,real_name,email,groups";

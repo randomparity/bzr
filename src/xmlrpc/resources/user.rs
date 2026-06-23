@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 
 use crate::error::{BzrError, Result};
 use crate::types::CreateUserParams;
-use crate::xmlrpc::client::XmlRpcClient;
-use crate::xmlrpc::mappers::{require_u64, EXPECTED_STRUCT_RESPONSE};
-use crate::xmlrpc::value::Value;
+use crate::xmlrpc::protocol::Value;
+use crate::xmlrpc::protocol::XmlRpcClient;
+use crate::xmlrpc::resources::mappers::{require_u64, EXPECTED_STRUCT_RESPONSE};
 
 impl XmlRpcClient {
     pub async fn create_user(&self, params: &CreateUserParams) -> Result<u64> {

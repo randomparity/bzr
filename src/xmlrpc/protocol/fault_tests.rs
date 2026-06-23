@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::error::BzrError;
-use crate::xmlrpc::value::Value;
+use crate::xmlrpc::protocol::Value;
 
 use super::fault_to_error;
 

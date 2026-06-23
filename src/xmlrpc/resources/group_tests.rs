@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use super::value_to_group_info;
-use crate::xmlrpc::value::Value;
+use crate::xmlrpc::protocol::Value;
 
 #[test]
 fn value_to_group_info_parses_membership_and_optional_fields() {

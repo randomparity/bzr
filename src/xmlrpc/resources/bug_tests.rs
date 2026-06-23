@@ -6,8 +6,8 @@ use super::{add_vec_filters, extract_bugs, value_to_bug};
 use crate::error::BzrError;
 use crate::test_helpers::xmlrpc_bug_response;
 use crate::types::SearchParams;
-use crate::xmlrpc::client::XmlRpcClient;
-use crate::xmlrpc::value::Value;
+use crate::xmlrpc::protocol::Value;
+use crate::xmlrpc::protocol::XmlRpcClient;
 use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 

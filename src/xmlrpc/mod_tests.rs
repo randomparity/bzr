@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 #[test]
 fn value_conversions() {
-    use crate::xmlrpc::value::Value;
+    use crate::xmlrpc::protocol::Value;
 
     assert_eq!(Value::from("hello").as_str().unwrap(), "hello");
     assert_eq!(Value::from(42i64).as_i64().unwrap(), 42);
@@ -18,7 +18,7 @@ fn value_conversions() {
 
 #[test]
 fn from_string_value() {
-    use crate::xmlrpc::value::Value;
+    use crate::xmlrpc::protocol::Value;
 
     let v: Value = "owned".to_string().into();
     assert_eq!(v.as_str().unwrap(), "owned");
@@ -26,7 +26,7 @@ fn from_string_value() {
 
 #[test]
 fn from_vec_and_btreemap_value() {
-    use crate::xmlrpc::value::Value;
+    use crate::xmlrpc::protocol::Value;
 
     let arr: Value = vec![Value::Int(1), Value::Int(2)].into();
     assert_eq!(arr.as_array().unwrap().len(), 2);
