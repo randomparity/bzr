@@ -33,53 +33,54 @@ pub async fn execute(
 }
 
 /// Whether a template has no fields set (used to reject empty saves/updates).
-fn template_is_empty(t: &BugTemplate) -> bool {
-    t.product.is_none()
-        && t.component.is_none()
-        && t.version.is_none()
-        && t.priority.is_none()
-        && t.severity.is_none()
-        && t.assignee.is_none()
-        && t.op_sys.is_none()
-        && t.rep_platform.is_none()
-        && t.description.is_none()
-        && t.url.is_none()
-        && t.whiteboard.is_none()
-        && t.target_milestone.is_none()
-        && t.deadline.is_none()
-        && t.cc.is_empty()
-        && t.keywords.is_empty()
-        && t.groups.is_empty()
-        && t.flags.is_empty()
+fn template_is_empty(template: &BugTemplate) -> bool {
+    template.product.is_none()
+        && template.component.is_none()
+        && template.version.is_none()
+        && template.priority.is_none()
+        && template.severity.is_none()
+        && template.assignee.is_none()
+        && template.op_sys.is_none()
+        && template.rep_platform.is_none()
+        && template.description.is_none()
+        && template.url.is_none()
+        && template.whiteboard.is_none()
+        && template.target_milestone.is_none()
+        && template.deadline.is_none()
+        && template.cc.is_empty()
+        && template.keywords.is_empty()
+        && template.groups.is_empty()
+        && template.flags.is_empty()
 }
 
 /// Validate template defaults that share parsing rules with `bug create`.
-fn validate_template(t: &mut BugTemplate) -> Result<()> {
-    t.deadline = crate::validation::parse_optional_date_only(t.deadline.as_deref(), "--deadline")?;
-    crate::commands::runtime::flags::parse_flags(&t.flags)?;
+fn validate_template(template: &mut BugTemplate) -> Result<()> {
+    template.deadline =
+        crate::validation::parse_optional_date_only(template.deadline.as_deref(), "--deadline")?;
+    crate::commands::runtime::flags::parse_flags(&template.flags)?;
     Ok(())
 }
 
 /// Reset the named field to unset. Most names match the long flag (kebab-case).
-fn clear_template_field(t: &mut BugTemplate, field: &str) -> Result<()> {
+fn clear_template_field(template: &mut BugTemplate, field: &str) -> Result<()> {
     match field {
-        "product" => t.product = None,
-        "component" => t.component = None,
-        "version" => t.version = None,
-        "priority" => t.priority = None,
-        "severity" => t.severity = None,
-        "assignee" => t.assignee = None,
-        "op-sys" => t.op_sys = None,
-        "rep-platform" => t.rep_platform = None,
-        "description" => t.description = None,
-        "url" => t.url = None,
-        "whiteboard" => t.whiteboard = None,
-        "target-milestone" => t.target_milestone = None,
-        "deadline" => t.deadline = None,
-        "cc" => t.cc.clear(),
-        "keywords" => t.keywords.clear(),
-        "groups" => t.groups.clear(),
-        "flag" | "flags" => t.flags.clear(),
+        "product" => template.product = None,
+        "component" => template.component = None,
+        "version" => template.version = None,
+        "priority" => template.priority = None,
+        "severity" => template.severity = None,
+        "assignee" => template.assignee = None,
+        "op-sys" => template.op_sys = None,
+        "rep-platform" => template.rep_platform = None,
+        "description" => template.description = None,
+        "url" => template.url = None,
+        "whiteboard" => template.whiteboard = None,
+        "target-milestone" => template.target_milestone = None,
+        "deadline" => template.deadline = None,
+        "cc" => template.cc.clear(),
+        "keywords" => template.keywords.clear(),
+        "groups" => template.groups.clear(),
+        "flag" | "flags" => template.flags.clear(),
         other => {
             return Err(BzrError::InputValidation(format!(
                 "unknown --clear field '{other}'; valid fields: product, component, \
