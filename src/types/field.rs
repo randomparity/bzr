@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 /// Known field name aliases mapped to their Bugzilla API internal names.
 /// Sorted alphabetically by alias.
@@ -24,8 +24,8 @@ pub(crate) const FIELD_ALIASES: &[(&str, &str)] = &[
 pub struct FieldValue {
     /// Field value name. Null for the "default/unset" entry in some Bugzilla
     /// field types (e.g. `bug_status` on Bugzilla 5.0 has a null-named entry).
-    #[serde(default, deserialize_with = "deserialize_null_string")]
-    pub name: String,
+    #[serde(default)]
+    pub name: Option<String>,
     #[serde(default)]
     pub sort_key: u64,
     #[serde(default)]
@@ -49,11 +49,6 @@ pub(crate) fn resolve_field_alias(name: &str) -> Cow<'_, str> {
     }
     // Unknown fields pass through unchanged; only known aliases are normalized.
     Cow::Borrowed(name)
-}
-
-/// Deserialize a string that may be null into an empty string.
-fn deserialize_null_string<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
-    Option::<String>::deserialize(d).map(Option::unwrap_or_default)
 }
 
 #[cfg(test)]

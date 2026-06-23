@@ -41,15 +41,12 @@ fn validate_target_status_value(status: &str) -> Result<()> {
 async fn validate_target_status(client: &BugzillaClient, status: &str) -> Result<()> {
     validate_target_status_value(status)?;
     let values = client.get_field_values("status").await?;
-    if values
-        .iter()
-        .any(|v| !v.name.is_empty() && v.name == status)
-    {
+    if values.iter().any(|v| v.name.as_deref() == Some(status)) {
         return Ok(());
     }
     let valid: Vec<&str> = values
         .iter()
-        .map(|v| v.name.as_str())
+        .filter_map(|v| v.name.as_deref())
         .filter(|n| !n.is_empty())
         .collect();
     Err(BzrError::InputValidation(format!(
