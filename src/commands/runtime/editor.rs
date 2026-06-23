@@ -82,6 +82,7 @@ fn editor_tempfile_path(dir: &std::path::Path, prefix: &str) -> PathBuf {
 ///
 /// Errors:
 /// - `BzrError::Io` if the tempfile cannot be created or read.
+/// - `BzrError::Config` if no unique editor tempfile name is available.
 /// - `BzrError::InputValidation` if `$EDITOR` exits non-zero.
 pub(crate) fn launch(initial: &str, prefix: &str) -> Result<String> {
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".into());
