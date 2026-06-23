@@ -64,7 +64,6 @@ async fn dispatch_routes_local_query_commands() {
 #[tokio::test]
 async fn dispatch_applies_config_flag_without_global_override() {
     let _lock = ENV_LOCK.lock().await;
-    crate::config::Config::set_path_override(None);
     let tmp = tempfile::TempDir::new().unwrap();
     let xdg_home = tmp.path().join("xdg");
     let explicit_dir = tmp.path().join("explicit");

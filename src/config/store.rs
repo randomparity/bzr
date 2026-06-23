@@ -2,24 +2,16 @@ use std::cell::Cell;
 use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
-#[cfg(test)]
-use std::sync::RwLock;
 
 use crate::error::{io_with_context, BzrError, Result};
 
 use super::Config;
 
-/// Test-only process-wide override for path-precedence unit tests.
-#[cfg(test)]
-static CONFIG_PATH_OVERRIDE: RwLock<Option<PathBuf>> = RwLock::new(None);
-
 impl Config {
-    /// Resolve the path to the config file, honoring the test-only process
-    /// override before environment/default resolution.
+    /// Resolve the path to the config file.
     #[cfg(test)]
     pub fn path() -> Result<PathBuf> {
-        let path_override = Self::process_path_override();
-        Self::path_at(path_override.as_deref())
+        Self::path_at(None)
     }
 
     /// Resolve the config path for one invocation.
@@ -31,16 +23,6 @@ impl Config {
             return Ok(path.to_path_buf());
         }
         Self::path_from_environment()
-    }
-
-    #[cfg(test)]
-    fn process_path_override() -> Option<PathBuf> {
-        if let Ok(guard) = CONFIG_PATH_OVERRIDE.read() {
-            if let Some(path) = guard.as_ref() {
-                return Some(path.clone());
-            }
-        }
-        None
     }
 
     fn path_from_environment() -> Result<PathBuf> {
@@ -55,18 +37,6 @@ impl Config {
             .or_else(dirs::config_dir)
             .ok_or_else(|| BzrError::config("cannot determine config directory"))?;
         Ok(config_dir.join("bzr").join("config.toml"))
-    }
-
-    /// Install (or clear) a test-only process-wide config path override.
-    ///
-    /// Production command-dispatch code passes the path through
-    /// `CommandContext` instead. This remains only for unit tests that exercise
-    /// path precedence directly. Passing `None` clears the override.
-    #[cfg(test)]
-    pub fn set_path_override(path: Option<PathBuf>) {
-        if let Ok(mut guard) = CONFIG_PATH_OVERRIDE.write() {
-            *guard = path;
-        }
     }
 
     fn ensure_config_dir_at(path_override: Option<&Path>) -> Result<PathBuf> {
@@ -111,8 +81,7 @@ impl Config {
 
     #[cfg(test)]
     pub fn load() -> Result<Config> {
-        let path_override = Self::process_path_override();
-        Self::load_at(path_override.as_deref())
+        Self::load_at(None)
     }
 
     pub fn load_at(path_override: Option<&Path>) -> Result<Config> {
@@ -153,8 +122,7 @@ impl Config {
     /// error rather than self-deadlocking.
     #[cfg(test)]
     pub fn update_locked(mutator: impl FnOnce(&mut Config) -> Result<()>) -> Result<Config> {
-        let path_override = Self::process_path_override();
-        Self::update_locked_at(path_override.as_deref(), mutator)
+        Self::update_locked_at(None, mutator)
     }
 
     pub fn update_locked_at(
@@ -170,8 +138,7 @@ impl Config {
     pub fn update_locked_without_validation(
         mutator: impl FnOnce(&mut Config) -> Result<()>,
     ) -> Result<Config> {
-        let path_override = Self::process_path_override();
-        Self::update_locked_without_validation_at(path_override.as_deref(), mutator)
+        Self::update_locked_without_validation_at(None, mutator)
     }
 
     pub fn update_locked_without_validation_at(
@@ -231,8 +198,7 @@ impl Config {
     /// therefore always sees either the complete old or complete new file.
     #[cfg(test)]
     fn write_to_disk(&self) -> Result<()> {
-        let path_override = Self::process_path_override();
-        self.write_to_disk_at(path_override.as_deref())
+        self.write_to_disk_at(None)
     }
 
     fn write_to_disk_at(&self, path_override: Option<&Path>) -> Result<()> {

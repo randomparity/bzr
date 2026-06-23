@@ -93,11 +93,9 @@ fn config_load_read_error_names_operation_and_path() {
     let tmp = tempfile::tempdir().unwrap();
     let config_path = tmp.path().join("config.toml");
     fs::create_dir_all(&config_path).unwrap();
-    Config::set_path_override(Some(config_path.clone()));
 
-    let err = Config::load().unwrap_err().to_string();
+    let err = Config::load_at(Some(&config_path)).unwrap_err().to_string();
 
-    Config::set_path_override(None);
     assert!(
         err.contains("read config file")
             && err.contains(&config_path.to_string_lossy().to_string()),
@@ -111,11 +109,9 @@ fn config_load_parse_error_names_operation_and_path() {
     let tmp = tempfile::tempdir().unwrap();
     let config_path = tmp.path().join("config.toml");
     fs::write(&config_path, "default_server = [").unwrap();
-    Config::set_path_override(Some(config_path.clone()));
 
-    let err = Config::load().unwrap_err().to_string();
+    let err = Config::load_at(Some(&config_path)).unwrap_err().to_string();
 
-    Config::set_path_override(None);
     assert!(
         err.contains("parse config file")
             && err.contains(&config_path.to_string_lossy().to_string()),
@@ -132,11 +128,12 @@ fn update_locked_lock_open_error_names_lock_path() {
     fs::create_dir_all(&config_dir).unwrap();
     let lock_path = config_dir.join("config.lock");
     fs::create_dir_all(&lock_path).unwrap();
-    Config::set_path_override(Some(config_dir.join("config.toml")));
+    let config_path = config_dir.join("config.toml");
 
-    let err = Config::update_locked(|_| Ok(())).unwrap_err().to_string();
+    let err = Config::update_locked_at(Some(&config_path), |_| Ok(()))
+        .unwrap_err()
+        .to_string();
 
-    Config::set_path_override(None);
     assert!(
         err.contains("open config lock file")
             && err.contains(&lock_path.to_string_lossy().to_string()),
@@ -153,11 +150,13 @@ fn config_save_rename_error_names_temp_and_target_paths() {
     fs::create_dir_all(&config_dir).unwrap();
     let config_path = config_dir.join("config.toml");
     fs::create_dir_all(&config_path).unwrap();
-    Config::set_path_override(Some(config_path.clone()));
+    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
+    unsafe { env::set_var("BZR_CONFIG", &config_path) };
 
     let err = make_config_with_server().save().unwrap_err().to_string();
 
-    Config::set_path_override(None);
+    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
+    unsafe { env::remove_var("BZR_CONFIG") };
     assert!(
         err.contains("rename config temp file")
             && err.contains("config.toml.")
@@ -1151,14 +1150,13 @@ fn update_locked_reloads_a_credential_less_config_and_can_heal_it() {
     );
 }
 
-/// `Config::path()` precedence (#304): `--config` override > `BZR_CONFIG`
+/// `Config::path_at()` precedence (#304): `--config` override > `BZR_CONFIG`
 /// env > `$XDG_CONFIG_HOME/bzr/config.toml`. Combined into one test under
-/// `ENV_LOCK` to avoid env races, and cleans up the override + env so later
-/// tests see default resolution.
+/// `ENV_LOCK` to avoid env races, and cleans up the env so later tests see
+/// default resolution.
 #[test]
 fn config_path_resolution_precedence() {
     let _lock = crate::ENV_LOCK.blocking_lock();
-    Config::set_path_override(None);
     // SAFETY: serialized via ENV_LOCK; no other thread reads these concurrently.
     unsafe {
         env::remove_var("BZR_CONFIG");
@@ -1179,14 +1177,13 @@ fn config_path_resolution_precedence() {
     );
 
     // The --config override beats BZR_CONFIG.
-    Config::set_path_override(Some(PathBuf::from("/tmp/bzr-flag-config.toml")));
+    let flag_config = PathBuf::from("/tmp/bzr-flag-config.toml");
     assert_eq!(
-        Config::path().unwrap(),
+        Config::path_at(Some(&flag_config)).unwrap(),
         PathBuf::from("/tmp/bzr-flag-config.toml")
     );
 
-    // Clearing the override falls back to BZR_CONFIG.
-    Config::set_path_override(None);
+    // Omitting the explicit override falls back to BZR_CONFIG.
     assert_eq!(
         Config::path().unwrap(),
         PathBuf::from("/tmp/bzr-env-config.toml")
@@ -1201,5 +1198,4 @@ fn config_path_resolution_precedence() {
 
     // Cleanup: restore default resolution for subsequent tests.
     unsafe { env::remove_var("BZR_CONFIG") };
-    Config::set_path_override(None);
 }
