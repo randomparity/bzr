@@ -108,6 +108,6 @@ object payload. Use `bzr schema <name>` to inspect the contract, e.g.
   `bzr-triage-bug` skill walks this through.
 - **Keep writes explicit and minimal.** Change only the fields you intend to.
 
-This reference is authored against **bzr 0.5.1-dev**. If `bzr --version` is much
+This reference is authored against **bzr 0.6.1-dev**. If `bzr --version` is much
 newer and a command here is rejected, the surface may have moved; check
 `bzr <group> --help`.

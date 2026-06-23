@@ -3,7 +3,8 @@
 Installable agent skills that teach AI coding agents (Claude Code, Codex, IBM
 Bob, and other agents that read `~/.agents/skills`) how to drive the
 [`bzr`](https://github.com/randomparity/bzr) Bugzilla CLI correctly. These ship
-inside the `bzr` repo so they stay in lockstep with the CLI they document.
+inside the `bzr` repo so they stay in lockstep with the CLI they document:
+`agent-skills/VERSION` matches the crate version in `Cargo.toml`.
 
 ## Skills
 
@@ -47,7 +48,7 @@ make skills-test    # from the repo root: builds bzr, runs the full suite
 check against the freshly built `bzr` (it fails closed — a set-but-missing
 `BZR_BIN` errors rather than silently skipping), exercises the installer's
 guards hermetically, and lints all shell sources. The command surface is authored
-against `bzr` 0.5.0. The installer copies whole skill folders, marks each with a
-`.bzr-skill-managed` sentinel so it only ever touches its own folders, and refuses
-to write through a symlinked destination or overwrite an unmarked ("foreign")
-folder without `--force`.
+against `bzr` 0.6.1-dev. The installer copies whole skill folders, marks each
+with a `.bzr-skill-managed` sentinel so it only ever touches its own folders, and
+refuses to write through a symlinked destination or overwrite an unmarked
+("foreign") folder without `--force`.
