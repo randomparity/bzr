@@ -1889,15 +1889,14 @@ fn parse_query_save_list_kind() {
             action:
                 QueryAction::Save(super::query::SaveArgs {
                     name,
-                    product,
-                    status,
+                    filters,
                     limit,
                     ..
                 }),
         } => {
             assert_eq!(name, "firefox-new");
-            assert_eq!(product, vec!["Firefox"]);
-            assert_eq!(status, vec!["NEW"]);
+            assert_eq!(filters.product, vec!["Firefox"]);
+            assert_eq!(filters.status, vec!["NEW"]);
             assert_eq!(limit, Some(25));
         }
         _ => panic!("expected Query Save"),
@@ -2669,29 +2668,18 @@ fn query_save_parses_158_field_filters() {
     ])
     .unwrap();
     let Commands::Query {
-        action:
-            QueryAction::Save(super::query::SaveArgs {
-                whiteboard,
-                target_milestone,
-                version,
-                op_sys,
-                platform,
-                resolution,
-                qa_contact,
-                url,
-                ..
-            }),
+        action: QueryAction::Save(super::query::SaveArgs { filters, url, .. }),
     } = cli.command
     else {
         panic!("expected Query::Save variant");
     };
-    assert_eq!(whiteboard, vec!["wip"]);
-    assert_eq!(target_milestone, vec!["5.0"]);
-    assert_eq!(version, vec!["9.4"]);
-    assert_eq!(op_sys, vec!["Linux"]);
-    assert_eq!(platform, vec!["x86_64"]);
-    assert_eq!(resolution, vec!["FIXED"]);
-    assert_eq!(qa_contact, vec!["qa@example.com"]);
+    assert_eq!(filters.whiteboard, vec!["wip"]);
+    assert_eq!(filters.target_milestone, vec!["5.0"]);
+    assert_eq!(filters.version, vec!["9.4"]);
+    assert_eq!(filters.op_sys, vec!["Linux"]);
+    assert_eq!(filters.platform, vec!["x86_64"]);
+    assert_eq!(filters.resolution, vec!["FIXED"]);
+    assert_eq!(filters.qa_contact, vec!["qa@example.com"]);
     assert_eq!(url, vec!["github.com/foo"]);
 }
 
@@ -2721,29 +2709,18 @@ fn query_run_parses_158_field_filter_overrides() {
     ])
     .unwrap();
     let Commands::Query {
-        action:
-            QueryAction::Run(super::query::RunArgs {
-                whiteboard,
-                target_milestone,
-                version,
-                op_sys,
-                platform,
-                resolution,
-                qa_contact,
-                url,
-                ..
-            }),
+        action: QueryAction::Run(super::query::RunArgs { filters, url, .. }),
     } = cli.command
     else {
         panic!("expected Query::Run variant");
     };
-    assert_eq!(whiteboard, vec!["overridden"]);
-    assert_eq!(target_milestone, vec!["6.0"]);
-    assert_eq!(version, vec!["10.0"]);
-    assert_eq!(op_sys, vec!["Windows"]);
-    assert_eq!(platform, vec!["arm64"]);
-    assert_eq!(resolution, vec!["WONTFIX"]);
-    assert_eq!(qa_contact, vec!["newqa@example.com"]);
+    assert_eq!(filters.whiteboard, vec!["overridden"]);
+    assert_eq!(filters.target_milestone, vec!["6.0"]);
+    assert_eq!(filters.version, vec!["10.0"]);
+    assert_eq!(filters.op_sys, vec!["Windows"]);
+    assert_eq!(filters.platform, vec!["arm64"]);
+    assert_eq!(filters.resolution, vec!["WONTFIX"]);
+    assert_eq!(filters.qa_contact, vec!["newqa@example.com"]);
     assert_eq!(url, vec!["gitlab.com/x"]);
 }
 

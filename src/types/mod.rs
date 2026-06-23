@@ -11,8 +11,8 @@ mod user;
 pub use attachment::{Attachment, UpdateAttachmentParams, UploadAttachmentParams};
 pub use bug::{
     partition_filters, Bug, BugTemplate, CommentUpdate, CreateBugParams, FieldChange, FieldMapping,
-    FieldValue, HistoryEntry, IdListUpdate, NegationOp, Overrides, QueryKind, SavedQuery,
-    SearchParams, StatusTransition, StringListUpdate, UpdateBugParams, FIELD_MAPPINGS,
+    FieldValue, FilterField, HistoryEntry, IdListUpdate, NegationOp, Overrides, QueryKind,
+    SavedQuery, SearchParams, StatusTransition, StringListUpdate, UpdateBugParams, FIELD_MAPPINGS,
 };
 pub use classification::{Classification, ClassificationProduct};
 pub use comment::{Comment, UpdateCommentTagsParams};

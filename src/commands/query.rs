@@ -15,17 +15,6 @@ use crate::output::resources::query::{write_query_detail, write_query_list, writ
 use crate::output::writers::Writers;
 use crate::types::{OutputFormat, QueryKind, SavedQuery};
 
-/// Translate clap's empty-Vec sentinel into `None` so
-/// `Overrides`'s `Option<&[String]>` semantics line up: an absent
-/// flag keeps the saved value, a non-empty flag replaces it.
-fn slice_override(v: &[String]) -> Option<&[String]> {
-    if v.is_empty() {
-        None
-    } else {
-        Some(v)
-    }
-}
-
 pub async fn execute(
     action: &QueryAction,
     server: Option<&str>,
@@ -93,26 +82,13 @@ fn handle_save(
         name,
         from_url,
         search,
-        product,
-        component,
-        status,
-        assignee,
-        creator,
-        priority,
-        severity,
+        filters,
+        url,
         limit,
         fields,
         exclude_fields,
         created_since,
         changed_since,
-        whiteboard,
-        target_milestone,
-        version,
-        op_sys,
-        platform,
-        resolution,
-        qa_contact,
-        url,
         sort_args,
     } = args;
 
@@ -139,32 +115,20 @@ fn handle_save(
         } else {
             QueryKind::List
         };
-        SavedQuery {
+        let mut query = SavedQuery {
             kind,
-            product: product.clone(),
-            component: component.clone(),
-            status: status.clone(),
-            assignee: assignee.clone(),
-            creator: creator.clone(),
-            priority: priority.clone(),
-            severity: severity.clone(),
             quicksearch: search.clone(),
             limit: *limit,
             fields: fields.clone(),
             exclude_fields: exclude_fields.clone(),
             creation_time,
             last_change_time,
-            whiteboard: whiteboard.clone(),
-            target_milestone: target_milestone.clone(),
-            version: version.clone(),
-            op_sys: op_sys.clone(),
-            platform: platform.clone(),
-            resolution: resolution.clone(),
-            qa_contact: qa_contact.clone(),
             url: url.clone(),
             order: explicit_sort_order(sort_args),
             ..SavedQuery::default()
-        }
+        };
+        filters.write_saved_query_filters(&mut query);
+        query
     };
 
     if !query.has_filters() {
@@ -271,45 +235,19 @@ fn apply_query_updates(
 ) -> Result<bool> {
     let crate::cli::query::UpdateArgs {
         search,
-        product,
-        component,
-        status,
-        assignee,
-        creator,
-        priority,
-        severity,
+        filters,
+        url,
         limit,
         fields,
         exclude_fields,
         created_since,
         changed_since,
-        whiteboard,
-        target_milestone,
-        version,
-        op_sys,
-        platform,
-        resolution,
-        qa_contact,
-        url,
         clear,
         sort_args,
         ..
     } = args;
     let mut changed = false;
-    changed |= merge_vec(&mut q.product, product);
-    changed |= merge_vec(&mut q.component, component);
-    changed |= merge_vec(&mut q.status, status);
-    changed |= merge_vec(&mut q.assignee, assignee);
-    changed |= merge_vec(&mut q.creator, creator);
-    changed |= merge_vec(&mut q.priority, priority);
-    changed |= merge_vec(&mut q.severity, severity);
-    changed |= merge_vec(&mut q.whiteboard, whiteboard);
-    changed |= merge_vec(&mut q.target_milestone, target_milestone);
-    changed |= merge_vec(&mut q.version, version);
-    changed |= merge_vec(&mut q.op_sys, op_sys);
-    changed |= merge_vec(&mut q.platform, platform);
-    changed |= merge_vec(&mut q.resolution, resolution);
-    changed |= merge_vec(&mut q.qa_contact, qa_contact);
+    changed |= filters.merge_saved_query_filters(q);
     changed |= merge_vec(&mut q.url, url);
     changed |= merge_set(&mut q.quicksearch, search.as_deref());
     changed |= merge_set(&mut q.fields, fields.as_deref());
@@ -436,13 +374,7 @@ async fn handle_run(
         server: server_override,
         created_since,
         changed_since,
-        whiteboard,
-        target_milestone,
-        version,
-        op_sys,
-        platform,
-        resolution,
-        qa_contact,
+        filters,
         url,
         sort_args,
         page_args: crate::cli::PageArgs { offset, paginate },
@@ -466,21 +398,13 @@ async fn handle_run(
         .or(saved.server.as_deref());
 
     let mut params = saved.to_search_params();
-    params.apply_overrides(crate::types::Overrides {
-        limit: *limit,
-        fields: fields.as_deref(),
-        exclude_fields: exclude_fields.as_deref(),
-        creation_time: creation_time_override.as_deref(),
-        last_change_time: last_change_time_override.as_deref(),
-        whiteboard: slice_override(whiteboard),
-        target_milestone: slice_override(target_milestone),
-        version: slice_override(version),
-        op_sys: slice_override(op_sys),
-        platform: slice_override(platform),
-        resolution: slice_override(resolution),
-        qa_contact: slice_override(qa_contact),
-        url: slice_override(url),
-    });
+    let mut overrides = filters.overrides(url);
+    overrides.limit = *limit;
+    overrides.fields = fields.as_deref();
+    overrides.exclude_fields = exclude_fields.as_deref();
+    overrides.creation_time = creation_time_override.as_deref();
+    overrides.last_change_time = last_change_time_override.as_deref();
+    params.apply_overrides(overrides);
     params.include_fields = canonical_field_list(params.include_fields.as_deref());
     params.exclude_fields = canonical_field_list(params.exclude_fields.as_deref());
     // Fold any saved-query/URL `offset` into the struct field and let `--offset`
