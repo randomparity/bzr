@@ -84,6 +84,85 @@ fn config_file_io_operations() {
 }
 
 #[test]
+fn config_load_read_error_names_operation_and_path() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::tempdir().unwrap();
+    let config_path = tmp.path().join("config.toml");
+    fs::create_dir_all(&config_path).unwrap();
+    Config::set_path_override(Some(config_path.clone()));
+
+    let err = Config::load().unwrap_err().to_string();
+
+    Config::set_path_override(None);
+    assert!(
+        err.contains("read config file")
+            && err.contains(&config_path.to_string_lossy().to_string()),
+        "error should name read operation and config path, got: {err}"
+    );
+}
+
+#[test]
+fn config_load_parse_error_names_operation_and_path() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::tempdir().unwrap();
+    let config_path = tmp.path().join("config.toml");
+    fs::write(&config_path, "default_server = [").unwrap();
+    Config::set_path_override(Some(config_path.clone()));
+
+    let err = Config::load().unwrap_err().to_string();
+
+    Config::set_path_override(None);
+    assert!(
+        err.contains("parse config file")
+            && err.contains(&config_path.to_string_lossy().to_string()),
+        "error should name parse operation and config path, got: {err}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn update_locked_lock_open_error_names_lock_path() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::tempdir().unwrap();
+    let config_dir = tmp.path().join("bzr");
+    fs::create_dir_all(&config_dir).unwrap();
+    let lock_path = config_dir.join("config.lock");
+    fs::create_dir_all(&lock_path).unwrap();
+    Config::set_path_override(Some(config_dir.join("config.toml")));
+
+    let err = Config::update_locked(|_| Ok(())).unwrap_err().to_string();
+
+    Config::set_path_override(None);
+    assert!(
+        err.contains("open config lock file")
+            && err.contains(&lock_path.to_string_lossy().to_string()),
+        "error should name lock open operation and lock path, got: {err}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn config_save_rename_error_names_temp_and_target_paths() {
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::tempdir().unwrap();
+    let config_dir = tmp.path().join("bzr");
+    fs::create_dir_all(&config_dir).unwrap();
+    let config_path = config_dir.join("config.toml");
+    fs::create_dir_all(&config_path).unwrap();
+    Config::set_path_override(Some(config_path.clone()));
+
+    let err = make_config_with_server().save().unwrap_err().to_string();
+
+    Config::set_path_override(None);
+    assert!(
+        err.contains("rename config temp file")
+            && err.contains("config.toml.")
+            && err.contains(&config_path.to_string_lossy().to_string()),
+        "error should name rename operation, temp path, and target path, got: {err}"
+    );
+}
+
+#[test]
 fn credential_source_allows_no_api_key_source() {
     let mut srv = make_server_config("https://example.com");
     srv.api_key = None;

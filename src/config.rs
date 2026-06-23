@@ -7,7 +7,7 @@ use std::sync::RwLock;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{BzrError, Result};
+use crate::error::{io_with_context, BzrError, Result};
 use crate::types::{ApiMode, AuthMethod, BugTemplate, SavedQuery};
 
 /// Process-wide override for the config file path, set from the global
@@ -304,7 +304,12 @@ impl Config {
             .ok_or_else(|| BzrError::config("config path has no parent directory"))?
             .to_path_buf();
         let parent_exists = parent.exists();
-        fs::create_dir_all(&parent)?;
+        fs::create_dir_all(&parent).map_err(|e| {
+            io_with_context(
+                format!("create config directory '{}'", parent.display()),
+                &e,
+            )
+        })?;
         if !parent_exists {
             set_private_directory_permissions(&parent)?;
         }
@@ -321,9 +326,14 @@ impl Config {
     pub(crate) fn read_unvalidated() -> Result<Config> {
         let path = Self::path()?;
         match fs::read_to_string(&path) {
-            Ok(content) => Ok(toml::from_str(&content)?),
+            Ok(content) => toml::from_str(&content).map_err(|e| {
+                BzrError::config(format!("parse config file '{}': {e}", path.display()))
+            }),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
-            Err(e) => Err(e.into()),
+            Err(e) => Err(io_with_context(
+                format!("read config file '{}'", path.display()),
+                &e,
+            )),
         }
     }
 
@@ -426,7 +436,9 @@ impl Config {
         let _dir = Self::ensure_config_dir()?;
         let path = Self::path()?;
         reap_stale_temps(&path);
-        let content = toml::to_string_pretty(self)?;
+        let content = toml::to_string_pretty(self).map_err(|e| {
+            BzrError::config(format!("serialize config file '{}': {e}", path.display()))
+        })?;
         atomic_write(&path, &content)?;
         Self::warn_on_insecure_permissions(&path);
         Ok(())
@@ -495,7 +507,14 @@ fn atomic_write(path: &std::path::Path, content: &str) -> Result<()> {
     }
     if let Err(e) = fs::rename(&tmp, path) {
         let _ = fs::remove_file(&tmp);
-        return Err(e.into());
+        return Err(io_with_context(
+            format!(
+                "rename config temp file '{}' to '{}'",
+                tmp.display(),
+                path.display()
+            ),
+            &e,
+        ));
     }
     fsync_parent_dir(path)
 }
@@ -543,25 +562,37 @@ fn open_lock_file(lock_path: &Path) -> Result<fs::File> {
     use std::fs::OpenOptions;
     use std::os::unix::fs::OpenOptionsExt;
 
-    Ok(OpenOptions::new()
+    OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
         .truncate(false)
         .mode(0o600)
-        .open(lock_path)?)
+        .open(lock_path)
+        .map_err(|e| {
+            io_with_context(
+                format!("open config lock file '{}'", lock_path.display()),
+                &e,
+            )
+        })
 }
 
 #[cfg(not(unix))]
 fn open_lock_file(lock_path: &Path) -> Result<fs::File> {
     use std::fs::OpenOptions;
 
-    Ok(OpenOptions::new()
+    OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
         .truncate(false)
-        .open(lock_path)?)
+        .open(lock_path)
+        .map_err(|e| {
+            io_with_context(
+                format!("open config lock file '{}'", lock_path.display()),
+                &e,
+            )
+        })
 }
 
 /// Take the exclusive advisory lock, giving the user feedback if another
@@ -627,20 +658,37 @@ fn write_unique_temp(path: &std::path::Path, content: &str) -> Result<PathBuf> {
         let mut file = match create_new_private(&tmp) {
             Ok(file) => file,
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(e) => return Err(e.into()),
+            Err(e) => {
+                return Err(io_with_context(
+                    format!(
+                        "create config temp file '{}' for '{}'",
+                        tmp.display(),
+                        path.display()
+                    ),
+                    &e,
+                ))
+            }
         };
-        if let Err(e) = file
-            .write_all(content.as_bytes())
-            .and_then(|()| file.sync_all())
-        {
+        if let Err(e) = file.write_all(content.as_bytes()) {
             let _ = fs::remove_file(&tmp);
-            return Err(e.into());
+            return Err(io_with_context(
+                format!("write config temp file '{}'", tmp.display()),
+                &e,
+            ));
+        }
+        if let Err(e) = file.sync_all() {
+            let _ = fs::remove_file(&tmp);
+            return Err(io_with_context(
+                format!("fsync config temp file '{}'", tmp.display()),
+                &e,
+            ));
         }
         return Ok(tmp);
     }
-    Err(BzrError::config(
-        "could not create a unique config temp file after repeated attempts",
-    ))
+    Err(BzrError::config(format!(
+        "could not create a unique config temp file for '{}' after repeated attempts",
+        path.display()
+    )))
 }
 
 #[cfg(unix)]
@@ -730,7 +778,15 @@ fn reap_stale_temps(path: &std::path::Path) {
 fn set_private_directory_permissions(path: &std::path::Path) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
-    fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700)).map_err(|e| {
+        io_with_context(
+            format!(
+                "set private permissions on config directory '{}'",
+                path.display()
+            ),
+            &e,
+        )
+    })?;
     Ok(())
 }
 
