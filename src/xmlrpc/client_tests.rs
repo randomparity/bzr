@@ -1,13 +1,31 @@
 #![expect(clippy::unwrap_used)]
 
 use std::collections::BTreeMap;
+use std::io::{Read as _, Write as _};
+use std::net::TcpListener;
 
 use super::XmlRpcClient;
+use crate::error::BzrError;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn test_http_client() -> reqwest::Client {
     reqwest::Client::new()
+}
+
+fn spawn_truncated_http_error_server() -> (String, std::thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let handle = std::thread::spawn(move || {
+        let Ok((mut stream, _addr)) = listener.accept() else {
+            return;
+        };
+        let _ = stream.read(&mut [0_u8; 1024]);
+        let _ = stream
+            .write_all(b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 32\r\n\r\noops");
+    });
+
+    (format!("http://127.0.0.1:{port}"), handle)
 }
 
 fn xmlrpc_fault_response(code: i64, message: &str) -> String {
@@ -66,6 +84,26 @@ async fn http_error_maps_to_xmlrpc_error() {
     let err = client.get_bug("1").await.unwrap_err();
     let msg = err.to_string();
     assert!(msg.contains("500"), "should contain status code: {msg}");
+}
+
+#[tokio::test]
+async fn http_error_body_read_failure_preserves_context() {
+    let (url, handle) = spawn_truncated_http_error_server();
+    let client = XmlRpcClient::new(test_http_client(), &url, Some("test-key"));
+
+    let err = client.call("Bug.get", BTreeMap::new()).await.unwrap_err();
+    handle.join().unwrap();
+
+    match err {
+        BzrError::HttpStatus { status, body } => {
+            assert_eq!(status, 500);
+            assert!(
+                body.contains("failed to read response body"),
+                "body should preserve read failure context, got: {body}"
+            );
+        }
+        other => assert!(matches!(other, BzrError::HttpStatus { .. })),
+    }
 }
 
 #[tokio::test]

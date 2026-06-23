@@ -57,10 +57,10 @@ impl XmlRpcClient {
 
         let status = resp.status();
         if status.is_client_error() || status.is_server_error() {
-            let body = resp.text().await.unwrap_or_else(|e| {
-                tracing::warn!("failed to read XML-RPC error response body: {e}");
-                String::new()
-            });
+            let body = match resp.text().await {
+                Ok(body) => body,
+                Err(e) => format!("<failed to read response body: {e}>"),
+            };
             tracing::debug!(%status, body = &body[..body.len().min(512)], "XML-RPC HTTP error");
             return Err(BzrError::HttpStatus {
                 status: status.as_u16(),
