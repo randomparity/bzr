@@ -5,7 +5,7 @@ use base64::Engine;
 
 use crate::cli::AttachmentAction;
 use crate::client::BugzillaClient;
-use crate::error::{BzrError, Result};
+use crate::error::{io_with_context, BzrError, Result};
 use crate::output::resources::attachment::{
     write_attachment, write_attachment_batch, write_attachments, AttachmentBatchResult,
     AttachmentDownloadResult, BatchSummary, BugDownloadResult, DownloadedFile, TargetStatus,
@@ -109,7 +109,12 @@ async fn upload(
     let is_patch = resolve_bool_flag(*patch, *no_patch).unwrap_or(false);
     let path = Path::new(file);
     let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or(file);
-    let data = std::fs::read(path)?;
+    let data = std::fs::read(path).map_err(|e| {
+        io_with_context(
+            format!("failed to read attachment upload file '{}'", path.display()),
+            &e,
+        )
+    })?;
     let summary = summary.as_deref().unwrap_or(file_name);
     let ct = match (content_type.as_deref(), is_patch) {
         (Some(explicit), _) => explicit.to_string(),
@@ -420,11 +425,18 @@ async fn download_single(
 ) -> Result<()> {
     let (filename, data) = client.download_attachment(id).await?;
     if out == Some("-") {
-        w.out.write_all(&data)?;
+        w.out.write_all(&data).map_err(|e| {
+            io_with_context(format!("failed to write attachment #{id} to stdout"), &e)
+        })?;
         return Ok(());
     }
     let dest = single_download_dest(out, &filename)?;
-    std::fs::write(&dest, &data)?;
+    std::fs::write(&dest, &data).map_err(|e| {
+        io_with_context(
+            format!("failed to write attachment #{id} to '{}'", dest.display()),
+            &e,
+        )
+    })?;
     let dest = dest.to_string_lossy().into_owned();
     write_result(
         &DownloadResult::new(id, dest.as_str(), data.len()),
@@ -462,10 +474,27 @@ async fn write_one_attachment(
     };
 
     let bug_subdir = Path::new(out_dir).join(att.bug_id.to_string());
-    std::fs::create_dir_all(&bug_subdir)?;
+    std::fs::create_dir_all(&bug_subdir).map_err(|e| {
+        io_with_context(
+            format!(
+                "failed to create attachment download directory '{}'",
+                bug_subdir.display()
+            ),
+            &e,
+        )
+    })?;
     let dest = bug_subdir.join(format!("{}.{}", att.id, safe_basename(&att.file_name)?));
     let dest_str = dest.to_string_lossy().into_owned();
-    std::fs::write(&dest, &bytes)?;
+    std::fs::write(&dest, &bytes).map_err(|e| {
+        io_with_context(
+            format!(
+                "failed to write attachment #{} to '{}'",
+                att.id,
+                dest.display()
+            ),
+            &e,
+        )
+    })?;
 
     tracing::info!(
         att_id = att.id,
@@ -507,7 +536,15 @@ async fn download_batch(
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    std::fs::create_dir_all(targets.out_dir)?;
+    std::fs::create_dir_all(targets.out_dir).map_err(|e| {
+        io_with_context(
+            format!(
+                "failed to create attachment download directory '{}'",
+                Path::new(targets.out_dir).display()
+            ),
+            &e,
+        )
+    })?;
 
     let mut bug_results: Vec<BugDownloadResult> = Vec::new();
     let mut attachment_results: Vec<AttachmentDownloadResult> = Vec::new();

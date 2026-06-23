@@ -8,7 +8,7 @@
 use std::io::Write;
 use std::path::PathBuf;
 
-use crate::error::{BzrError, Result};
+use crate::error::{io_with_context, BzrError, Result};
 
 /// RAII tempfile that removes itself on drop. Failures during cleanup
 /// are debug-logged, not propagated.
@@ -30,8 +30,18 @@ impl Drop for TempFile {
 pub(super) fn create_tempfile(prefix: &str, initial_content: &str) -> Result<TempFile> {
     let dir = std::env::temp_dir();
     let path = dir.join(format!("bzr-{prefix}-{}.txt", std::process::id()));
-    let mut file = std::fs::File::create(&path)?;
-    file.write_all(initial_content.as_bytes())?;
+    let mut file = std::fs::File::create(&path).map_err(|e| {
+        io_with_context(
+            format!("failed to create editor temp file '{}'", path.display()),
+            &e,
+        )
+    })?;
+    file.write_all(initial_content.as_bytes()).map_err(|e| {
+        io_with_context(
+            format!("failed to write editor temp file '{}'", path.display()),
+            &e,
+        )
+    })?;
     drop(file);
     Ok(TempFile { path })
 }
@@ -49,15 +59,33 @@ pub(crate) fn launch(initial: &str, prefix: &str) -> Result<String> {
 
     let status = std::process::Command::new(&editor)
         .arg(&tmpfile.path)
-        .status()?;
+        .status()
+        .map_err(|e| {
+            io_with_context(
+                format!(
+                    "failed to launch editor '{editor}' for '{}'",
+                    tmpfile.path.display()
+                ),
+                &e,
+            )
+        })?;
 
     if !status.success() {
         return Err(BzrError::InputValidation(format!(
-            "{editor} exited with error"
+            "{editor} exited with error while editing '{}'",
+            tmpfile.path.display()
         )));
     }
 
-    let content = std::fs::read_to_string(&tmpfile.path)?;
+    let content = std::fs::read_to_string(&tmpfile.path).map_err(|e| {
+        io_with_context(
+            format!(
+                "failed to read editor temp file '{}'",
+                tmpfile.path.display()
+            ),
+            &e,
+        )
+    })?;
     Ok(content)
 }
 

@@ -124,6 +124,41 @@ async fn attachment_upload_api_error_propagates() {
 }
 
 #[tokio::test]
+async fn attachment_upload_missing_source_names_role_and_path() {
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let client = super::super::runtime::shared::connect_and_configure(None, None)
+        .await
+        .unwrap();
+    let missing = tmp.path().join("missing-upload.txt");
+    let args = UploadArgs {
+        bug_id: 42,
+        file: missing.to_string_lossy().into_owned(),
+        summary: None,
+        content_type: None,
+        private: false,
+        no_private: false,
+        patch: false,
+        no_patch: false,
+        comment: None,
+        comment_file: None,
+        comment_private: false,
+        flag: vec![],
+    };
+
+    let err = super::upload(&client, &args, OutputFormat::Json, &mut io.writers())
+        .await
+        .unwrap_err()
+        .to_string();
+    let missing = missing.to_string_lossy();
+
+    assert!(
+        err.contains("read attachment upload file") && err.contains(missing.as_ref()),
+        "error should name upload role and path, got: {err}"
+    );
+}
+
+#[tokio::test]
 async fn attachment_download_api_error_propagates() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
@@ -1112,6 +1147,35 @@ async fn write_one_attachment_overwrites_existing_file() {
 
     let written = std::fs::read(dir.join("9876.patch.diff")).unwrap();
     assert_eq!(written, b"NEW CONTENT");
+}
+
+#[tokio::test]
+async fn write_one_attachment_create_dir_error_names_destination() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let client = super::super::runtime::shared::connect_and_configure(None, None)
+        .await
+        .unwrap();
+    let out_file = tmp.path().join("not-a-directory");
+    std::fs::write(&out_file, b"file").unwrap();
+    let att = make_attachment(
+        9876,
+        12345,
+        "patch.diff",
+        "Fix patch",
+        Some(b64(b"content")),
+    );
+
+    let err = super::write_one_attachment(&client, &att, &out_file.to_string_lossy())
+        .await
+        .unwrap_err()
+        .to_string();
+    let expected_dir = out_file.join("12345");
+    let expected_dir = expected_dir.to_string_lossy();
+
+    assert!(
+        err.contains("create attachment download directory") && err.contains(expected_dir.as_ref()),
+        "error should name download directory, got: {err}"
+    );
 }
 
 fn bug_attachments_response(bug_id: u64, atts: &serde_json::Value) -> serde_json::Value {

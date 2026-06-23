@@ -78,6 +78,13 @@ pub enum BzrError {
 
 pub type Result<T> = std::result::Result<T, BzrError>;
 
+pub(crate) fn io_with_context(context: impl fmt::Display, error: &std::io::Error) -> BzrError {
+    BzrError::Io(std::io::Error::new(
+        error.kind(),
+        format!("{context}: {error}"),
+    ))
+}
+
 // Error type constants for type-safe error classification
 const ERROR_TYPE_CONFIG: &str = "config";
 const ERROR_TYPE_API: &str = "api";
