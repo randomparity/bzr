@@ -140,7 +140,9 @@ fn resolve_description(
         return Ok(explicit);
     }
     if !std::io::stdin().is_terminal() {
-        let buf = crate::commands::runtime::shared::read_stdin_to_string()?;
+        let buf = crate::commands::runtime::shared::read_stdin_to_string(
+            "read bug description from stdin",
+        )?;
         if buf.trim().is_empty() {
             return Err(crate::error::BzrError::InputValidation(
                 "no description supplied (piped stdin is empty)".into(),

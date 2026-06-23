@@ -1218,7 +1218,12 @@ fn classify_inline_literal() {
 #[test]
 fn classify_inline_dash_is_stdin() {
     let got = classify_body_source(Some("-"), None, "--body", "--body-file").unwrap();
-    assert_eq!(got, BodySource::Stdin);
+    assert_eq!(
+        got,
+        BodySource::Stdin {
+            flag: "--body".to_string()
+        }
+    );
 }
 
 #[test]
@@ -1242,7 +1247,12 @@ fn classify_file_dash_is_stdin() {
         "--body-file",
     )
     .unwrap();
-    assert_eq!(got, BodySource::Stdin);
+    assert_eq!(
+        got,
+        BodySource::Stdin {
+            flag: "--body-file".to_string()
+        }
+    );
 }
 
 #[test]
@@ -1272,14 +1282,21 @@ fn classify_both_is_mutually_exclusive_error() {
 #[test]
 fn read_to_string_from_reads_bytes() {
     let mut src = &b"piped body\n"[..];
-    let got = super::read_to_string_from(&mut src).unwrap();
+    let got = super::read_to_string_from(&mut src, "read test body").unwrap();
     assert_eq!(got, "piped body\n");
 }
 
 #[test]
 fn read_to_string_from_rejects_non_utf8() {
     let mut src = &[0xff, 0xfe][..];
-    assert!(super::read_to_string_from(&mut src).is_err());
+    let err = super::read_to_string_from(&mut src, "read test body").unwrap_err();
+    match err {
+        BzrError::Io(e) => assert!(
+            e.to_string().contains("read test body"),
+            "context missing: {e}"
+        ),
+        other => panic!("expected Io, got {other:?}"),
+    }
 }
 
 #[test]

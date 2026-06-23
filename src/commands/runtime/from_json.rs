@@ -55,7 +55,7 @@ pub(crate) fn resolve_string_target(
 
 fn read_raw(arg: &str) -> Result<String> {
     if arg == "-" {
-        crate::commands::runtime::shared::read_stdin_to_string()
+        crate::commands::runtime::shared::read_stdin_to_string("read --from-json from stdin")
     } else {
         crate::commands::runtime::shared::read_file_with_context(
             std::path::Path::new(arg),

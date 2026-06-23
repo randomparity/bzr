@@ -126,7 +126,7 @@ fn validate_action(action: &CommentAction) -> Result<()> {
 /// Read comment body from stdin (pipe) or $EDITOR (TTY).
 fn read_comment_body() -> Result<String> {
     if !std::io::stdin().is_terminal() {
-        return super::runtime::shared::read_stdin_to_string();
+        return super::runtime::shared::read_stdin_to_string("read comment body from stdin");
     }
     let raw = editor::launch("<!-- Enter your comment above this line -->\n", "comment")?;
     Ok(filter_comment_body(&raw))

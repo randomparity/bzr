@@ -1,4 +1,6 @@
-use crate::error::{BzrError, Result};
+use std::fmt;
+
+use crate::error::{io_with_context, BzrError, Result};
 
 /// Where a body string comes from. Pure result of classifying the
 /// inline + file flag pair; carries no I/O.
@@ -6,8 +8,8 @@ use crate::error::{BzrError, Result};
 pub(crate) enum BodySource {
     /// A literal inline value (`--body "text"`).
     Literal(String),
-    /// Read all of stdin (`--body -` or `--*-file -`).
-    Stdin,
+    /// Read all of stdin from the named flag (`--body -` or `--*-file -`).
+    Stdin { flag: String },
     /// Read a UTF-8 file (`--*-file PATH`, PATH != "-").
     File(std::path::PathBuf),
     /// Neither source supplied; the caller applies its own fallback.
@@ -47,11 +49,15 @@ pub(crate) fn classify_body_source(
         (Some(_), Some(_)) => Err(BzrError::InputValidation(format!(
             "{inline_flag} and {file_flag} are mutually exclusive"
         ))),
-        (Some("-"), None) => Ok(BodySource::Stdin),
+        (Some("-"), None) => Ok(BodySource::Stdin {
+            flag: inline_flag.to_string(),
+        }),
         (Some(s), None) => Ok(BodySource::Literal(s.to_string())),
         (None, Some(path)) => {
             if path == std::path::Path::new("-") {
-                Ok(BodySource::Stdin)
+                Ok(BodySource::Stdin {
+                    flag: file_flag.to_string(),
+                })
             } else {
                 Ok(BodySource::File(path.to_path_buf()))
             }
@@ -62,16 +68,21 @@ pub(crate) fn classify_body_source(
 
 /// Read everything from `reader` into a `String`, mapping I/O failures
 /// (including non-UTF-8 input) to a `BzrError`.
-pub(super) fn read_to_string_from(reader: &mut impl std::io::Read) -> Result<String> {
+pub(super) fn read_to_string_from(
+    reader: &mut impl std::io::Read,
+    context: impl fmt::Display,
+) -> Result<String> {
     let mut buf = String::new();
-    reader.read_to_string(&mut buf)?;
+    reader
+        .read_to_string(&mut buf)
+        .map_err(|e| io_with_context(context, &e))?;
     Ok(buf)
 }
 
 /// Read all of stdin to a `String`. Shared by the `-` (dash) convention and
 /// the flag-omitted auto-stdin paths.
-pub(crate) fn read_stdin_to_string() -> Result<String> {
-    read_to_string_from(&mut std::io::stdin().lock())
+pub(crate) fn read_stdin_to_string(context: impl fmt::Display) -> Result<String> {
+    read_to_string_from(&mut std::io::stdin().lock(), context)
 }
 
 /// Turn a classified [`BodySource`] into the actual body, or `Ok(None)` for
@@ -83,7 +94,9 @@ pub(crate) fn materialize_body_source(
 ) -> Result<Option<String>> {
     match source {
         BodySource::Literal(s) => Ok(Some(s)),
-        BodySource::Stdin => Ok(Some(read_stdin_to_string()?)),
+        BodySource::Stdin { flag } => Ok(Some(read_stdin_to_string(format!(
+            "read {flag} from stdin"
+        ))?)),
         BodySource::File(path) => Ok(Some(read_file_with_context(&path, file_flag)?)),
         BodySource::None => Ok(None),
     }
