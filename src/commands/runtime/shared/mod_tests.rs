@@ -4,24 +4,34 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::error::BzrError;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::{setup_isolated_env, write_config_to};
 use crate::tls::TlsConfig;
 use crate::ENV_LOCK;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-fn current_config_path() -> PathBuf {
-    crate::config::Config::path_at(None).unwrap()
+fn load_config(path: &Path) -> crate::config::Config {
+    crate::config::Config::load_at(Some(path)).unwrap()
 }
 
-fn load_config() -> crate::config::Config {
-    let path = current_config_path();
-    crate::config::Config::load_at(Some(&path)).unwrap()
+/// A JSON-format command context pointed at an explicit config path, so connect
+/// resolves config without `XDG_CONFIG_HOME` and the test needs no `ENV_LOCK`.
+fn ctx_at(
+    config_path: &Path,
+    api: Option<crate::types::ApiMode>,
+) -> crate::commands::runtime::context::CommandContext {
+    crate::commands::runtime::context::CommandContext::new(
+        None,
+        crate::types::OutputFormat::Json,
+        api,
+    )
+    .with_config_path_override(Some(config_path.to_path_buf()))
 }
 
 fn connect_context(
     server_name: &str,
     url: &str,
     api_override: Option<crate::types::ApiMode>,
+    config_path: Option<PathBuf>,
 ) -> super::ConnectContext {
     super::ConnectContext {
         server_name: server_name.to_string(),
@@ -31,14 +41,14 @@ fn connect_context(
         api_override,
         request_timeout: crate::http::REQUEST_TIMEOUT,
         retry_max: 0,
-        config_path_override: None,
+        config_path_override: config_path,
         persist: true,
     }
 }
 
 #[tokio::test]
 async fn connect_client_returns_client() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     // whoami endpoint used by auth detection (already cached in setup_config)
     Mock::given(method("GET"))
@@ -47,41 +57,19 @@ async fn connect_client_returns_client() {
         .mount(&mock)
         .await;
 
-    let result =
-        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
-            None,
-            crate::types::OutputFormat::Json,
-            None,
-        ))
-        .await;
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
     assert!(result.is_ok());
 }
 
 #[tokio::test]
 async fn connect_client_with_email_config_succeeds() {
-    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-
-    // Set up config with an email field
-    let config_dir = tmp.path().join("bzr");
-    std::fs::create_dir_all(&config_dir).unwrap();
-    let config_content = format!(
-        r#"
-default_server = "test"
-
-[servers.test]
-url = "{}"
-api_key = "test-key"
-auth_method = "header"
-api_mode = "rest"
-email = "user@example.com"
-"#,
-        mock.uri()
+    let config_path = write_config(
+        &tmp,
+        &mock.uri(),
+        "auth_method = \"header\"\napi_mode = \"rest\"\nemail = \"user@example.com\"",
     );
-    std::fs::write(config_dir.join("config.toml"), config_content).unwrap();
-    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     Mock::given(method("GET"))
         .and(path("/rest/whoami"))
@@ -89,13 +77,7 @@ email = "user@example.com"
         .mount(&mock)
         .await;
 
-    let result =
-        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
-            None,
-            crate::types::OutputFormat::Json,
-            None,
-        ))
-        .await;
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
     assert!(
         result.is_ok(),
         "connect_client with email config should succeed"
@@ -104,7 +86,7 @@ email = "user@example.com"
 
 #[tokio::test]
 async fn connect_client_api_override_applies() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/whoami"))
@@ -114,40 +96,24 @@ async fn connect_client_api_override_applies() {
 
     // Override with XmlRpc mode — connect should still succeed
     let result =
-        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
-            None,
-            crate::types::OutputFormat::Json,
-            Some(crate::types::ApiMode::XmlRpc),
-        ))
-        .await;
+        super::connect_and_configure(&ctx_at(&config_path, Some(crate::types::ApiMode::XmlRpc)))
+            .await;
     assert!(result.is_ok());
 }
 
 #[tokio::test]
 async fn connect_client_missing_server_fails() {
-    let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    let config_dir = tmp.path().join("bzr");
-    std::fs::create_dir_all(&config_dir).unwrap();
-    // Config with no servers
-    std::fs::write(config_dir.join("config.toml"), "").unwrap();
-    // SAFETY: Tests are serialized via ENV_LOCK.
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+    // Config with no servers.
+    let config_path = write_config_to(&tmp, "");
 
-    let result =
-        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
-            None,
-            crate::types::OutputFormat::Json,
-            None,
-        ))
-        .await;
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
     assert!(result.is_err());
 }
 
 /// Exercises the full orchestration: no cached auth -> probes server -> persists result.
 #[tokio::test]
 async fn uncached_auth_detects_and_persists() {
-    let _lock = ENV_LOCK.lock().await;
     let server = MockServer::start().await;
 
     // whoami succeeds with header auth -> detects Header auth method
@@ -166,35 +132,16 @@ async fn uncached_auth_detects_and_persists() {
         .mount(&server)
         .await;
 
-    // Set up a real config file so update_locked works
+    // Set up a real config file (uncached: no auth_method/api_mode) so detection
+    // runs and update_locked persists back to it.
     let tmp = tempfile::TempDir::new().unwrap();
-    let config_dir = tmp.path().join("bzr");
-    std::fs::create_dir_all(&config_dir).unwrap();
-    let config_content = format!(
-        r#"
-default_server = "test"
+    let config_path = write_config(&tmp, &server.uri(), "");
 
-[servers.test]
-url = "{}"
-api_key = "test-key"
-"#,
-        server.uri()
-    );
-    std::fs::write(config_dir.join("config.toml"), &config_content).unwrap();
-    // SAFETY: Tests are serialized via ENV_LOCK.
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
-
-    let result =
-        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
-            None,
-            crate::types::OutputFormat::Json,
-            None,
-        ))
-        .await;
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
     assert!(result.is_ok(), "connect_client should succeed");
 
     // Verify persistence: reload from disk
-    let reloaded = load_config();
+    let reloaded = load_config(&config_path);
     assert_eq!(
         reloaded.servers["test"].auth_method,
         Some(crate::types::AuthMethod::Header)
@@ -211,10 +158,9 @@ api_key = "test-key"
 
 #[tokio::test]
 async fn credentialless_named_server_persists_api_mode_without_auth_method() {
-    let _lock = ENV_LOCK.lock().await;
     let server = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_credentialless_config(&tmp, &server.uri(), "");
+    let config_path = write_credentialless_config(&tmp, &server.uri(), "");
 
     Mock::given(method("GET"))
         .and(path("/rest/version"))
@@ -225,20 +171,14 @@ async fn credentialless_named_server_persists_api_mode_without_auth_method() {
         .mount(&server)
         .await;
 
-    let result =
-        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
-            None,
-            crate::types::OutputFormat::Json,
-            None,
-        ))
-        .await;
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
     assert!(
         result.is_ok(),
         "credentialless named server should connect anonymously: {:?}",
         result.err()
     );
 
-    let reloaded = load_config();
+    let reloaded = load_config(&config_path);
     let srv = &reloaded.servers["test"];
     assert_eq!(srv.auth_method, None);
     assert_eq!(srv.api_mode, Some(crate::types::ApiMode::Rest));
@@ -258,10 +198,9 @@ async fn credentialless_named_server_persists_api_mode_without_auth_method() {
 
 #[tokio::test]
 async fn credentialless_cached_mode_builds_anonymous_client() {
-    let _lock = ENV_LOCK.lock().await;
     let server = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_credentialless_config(&tmp, &server.uri(), "api_mode = \"rest\"");
+    let config_path = write_credentialless_config(&tmp, &server.uri(), "api_mode = \"rest\"");
 
     Mock::given(method("HEAD"))
         .respond_with(ResponseTemplate::new(404))
@@ -269,13 +208,7 @@ async fn credentialless_cached_mode_builds_anonymous_client() {
         .mount(&server)
         .await;
 
-    let result =
-        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
-            None,
-            crate::types::OutputFormat::Json,
-            None,
-        ))
-        .await;
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
     assert!(
         result.is_ok(),
         "credentialless cached mode should build an anonymous client: {:?}",
@@ -296,12 +229,12 @@ async fn credentialless_cached_mode_builds_anonymous_client() {
 
 #[tokio::test]
 async fn connect_client_resolves_env_backed_api_key() {
+    // Retains ENV_LOCK: this test mutates the process-global BZR_TEST_API_KEY
+    // that api_key_env resolution reads. Config itself is selected by explicit
+    // path, so no XDG_CONFIG_HOME mutation is needed.
     let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-
-    let config_dir = tmp.path().join("bzr");
-    std::fs::create_dir_all(&config_dir).unwrap();
     let config_content = format!(
         r#"
 default_server = "test"
@@ -314,21 +247,9 @@ api_mode = "rest"
 "#,
         mock.uri()
     );
-    std::fs::write(config_dir.join("config.toml"), config_content).unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-
-        std::fs::set_permissions(&config_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
-        std::fs::set_permissions(
-            config_dir.join("config.toml"),
-            std::fs::Permissions::from_mode(0o600),
-        )
-        .unwrap();
-    }
-    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read these vars concurrently.
+    let config_path = write_config_to(&tmp, &config_content);
+    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
     unsafe {
-        std::env::set_var("XDG_CONFIG_HOME", tmp.path());
         std::env::set_var("BZR_TEST_API_KEY", "test-key");
     }
 
@@ -338,13 +259,7 @@ api_mode = "rest"
         .mount(&mock)
         .await;
 
-    let result =
-        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
-            None,
-            crate::types::OutputFormat::Json,
-            None,
-        ))
-        .await;
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
     assert!(result.is_ok(), "env-backed config should succeed");
 }
 
@@ -352,29 +267,25 @@ api_mode = "rest"
 /// works with NO config file present, and writes none to disk.
 #[tokio::test]
 async fn inline_server_connects_without_config_and_persists_nothing() {
+    // Retains ENV_LOCK: this test mutates the process-global BZR_INLINE_TEST_KEY
+    // that the inline api_key_env resolution reads.
     let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    // Point XDG at an empty dir — there is NO bzr/config.toml here.
-    // SAFETY: tests are serialized via ENV_LOCK.
+    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
     unsafe {
-        std::env::set_var("XDG_CONFIG_HOME", tmp.path());
         std::env::set_var("BZR_INLINE_TEST_KEY", "inline-secret");
     }
     mount_detection_mocks(&mock).await;
 
+    let config_path = tmp.path().join("bzr").join("config.toml");
     let inline = crate::commands::runtime::inline_server::InlineServer {
         url: mock.uri(),
         api_key_env: Some("BZR_INLINE_TEST_KEY".into()),
         email: None,
         tls: crate::commands::runtime::inline_server::InlineTlsOptions::default(),
     };
-    let ctx = crate::commands::runtime::context::CommandContext::new(
-        None,
-        crate::types::OutputFormat::Json,
-        None,
-    )
-    .with_inline_server(Some(inline));
+    let ctx = ctx_at(&config_path, None).with_inline_server(Some(inline));
     let result = super::connect_and_configure(&ctx).await;
 
     assert!(
@@ -383,18 +294,15 @@ async fn inline_server_connects_without_config_and_persists_nothing() {
         result.err()
     );
     assert!(
-        !tmp.path().join("bzr").join("config.toml").exists(),
+        !config_path.exists(),
         "an inline connect must not create or write the config file"
     );
 }
 
 #[tokio::test]
 async fn inline_credentialless_server_connects_without_config() {
-    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    // SAFETY: tests are serialized via ENV_LOCK.
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     Mock::given(method("GET"))
         .and(path("/rest/version"))
@@ -405,18 +313,14 @@ async fn inline_credentialless_server_connects_without_config() {
         .mount(&mock)
         .await;
 
+    let config_path = tmp.path().join("bzr").join("config.toml");
     let inline = crate::commands::runtime::inline_server::InlineServer {
         url: mock.uri(),
         api_key_env: None,
         email: None,
         tls: crate::commands::runtime::inline_server::InlineTlsOptions::default(),
     };
-    let ctx = crate::commands::runtime::context::CommandContext::new(
-        None,
-        crate::types::OutputFormat::Json,
-        None,
-    )
-    .with_inline_server(Some(inline));
+    let ctx = ctx_at(&config_path, None).with_inline_server(Some(inline));
     let result = super::connect_and_configure(&ctx).await;
 
     assert!(
@@ -425,7 +329,7 @@ async fn inline_credentialless_server_connects_without_config() {
         result.err()
     );
     assert!(
-        !tmp.path().join("bzr").join("config.toml").exists(),
+        !config_path.exists(),
         "an inline connect must not create or write the config file"
     );
 
@@ -445,26 +349,23 @@ async fn inline_credentialless_server_connects_without_config() {
 /// error naming the variable — not a panic or a silent empty key.
 #[tokio::test]
 async fn inline_server_missing_env_var_is_clean_error() {
+    // Retains ENV_LOCK: this test mutates the process-global BZR_INLINE_ABSENT_KEY
+    // (removing it) that the inline api_key_env resolution reads.
     let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    // SAFETY: tests are serialized via ENV_LOCK.
+    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
     unsafe {
-        std::env::set_var("XDG_CONFIG_HOME", tmp.path());
         std::env::remove_var("BZR_INLINE_ABSENT_KEY");
     }
 
+    let config_path = tmp.path().join("bzr").join("config.toml");
     let inline = crate::commands::runtime::inline_server::InlineServer {
         url: "https://bugzilla.example.com".into(),
         api_key_env: Some("BZR_INLINE_ABSENT_KEY".into()),
         email: None,
         tls: crate::commands::runtime::inline_server::InlineTlsOptions::default(),
     };
-    let ctx = crate::commands::runtime::context::CommandContext::new(
-        None,
-        crate::types::OutputFormat::Json,
-        None,
-    )
-    .with_inline_server(Some(inline));
+    let ctx = ctx_at(&config_path, None).with_inline_server(Some(inline));
     let result = super::connect_and_configure(&ctx).await;
 
     match result {
@@ -539,35 +440,9 @@ fn extract_hostname_returns_raw_on_invalid() {
 
 #[tokio::test]
 async fn detect_with_tofu_fallback_normal_path() {
-    let _lock = ENV_LOCK.lock().await;
     let server = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-
-    let config_dir = tmp.path().join("bzr");
-    std::fs::create_dir_all(&config_dir).unwrap();
-    let config_content = format!(
-        r#"
-default_server = "test"
-
-[servers.test]
-url = "{}"
-api_key = "test-key"
-"#,
-        server.uri()
-    );
-    std::fs::write(config_dir.join("config.toml"), &config_content).unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&config_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
-        std::fs::set_permissions(
-            config_dir.join("config.toml"),
-            std::fs::Permissions::from_mode(0o600),
-        )
-        .unwrap();
-    }
-    // SAFETY: Tests are serialized via ENV_LOCK.
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+    let config_path = write_config(&tmp, &server.uri(), "");
 
     Mock::given(method("GET"))
         .and(path("/rest/whoami"))
@@ -583,7 +458,7 @@ api_key = "test-key"
         .await;
 
     let tls_config = TlsConfig::default();
-    let ctx = connect_context("test", &server.uri(), None);
+    let ctx = connect_context("test", &server.uri(), None, Some(config_path));
     let result = super::detect_with_tofu_fallback(&ctx, &tls_config).await;
     assert!(result.is_ok(), "normal path should succeed");
 }
@@ -591,29 +466,28 @@ api_key = "test-key"
 #[tokio::test]
 async fn persist_detected_settings_skips_unknown_server() {
     // If the server name doesn't exist in config, persist is a no-op.
-    let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_config(&tmp, "https://example.test", "");
+    let config_path = write_config(&tmp, "https://example.test", "");
 
     let settings = crate::client::DetectedServerSettings {
         auth_method: Some(crate::types::AuthMethod::Header),
         api_mode: crate::types::ApiMode::Rest,
         server_version: Some("5.1".into()),
     };
-    let result = super::persist_detected_settings(None, "nonexistent", &settings, true);
+    let result =
+        super::persist_detected_settings(Some(&config_path), "nonexistent", &settings, true);
     assert!(result.is_ok());
 
     // The known server is untouched and no "nonexistent" server is created.
-    let reloaded = load_config();
+    let reloaded = load_config(&config_path);
     assert!(!reloaded.servers.contains_key("nonexistent"));
 }
 
-/// Build a config TOML with the given extra fields injected into the
-/// `[servers.test]` table. Keeps the boilerplate of `XDG_CONFIG_HOME`
-/// override + permissions out of every test.
-fn write_config(tmp: &tempfile::TempDir, server_url: &str, extra: &str) {
-    let config_dir = tmp.path().join("bzr");
-    std::fs::create_dir_all(&config_dir).unwrap();
+/// Write a config TOML with the given extra fields injected into the
+/// `[servers.test]` table to an isolated temp path and return that path. No env
+/// mutation: pass the path via `CommandContext::with_config_path_override` so the
+/// test needs no `ENV_LOCK`.
+fn write_config(tmp: &tempfile::TempDir, server_url: &str, extra: &str) -> PathBuf {
     let config_content = format!(
         r#"
 default_server = "test"
@@ -624,24 +498,10 @@ api_key = "test-key"
 {extra}
 "#,
     );
-    std::fs::write(config_dir.join("config.toml"), config_content).unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&config_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
-        std::fs::set_permissions(
-            config_dir.join("config.toml"),
-            std::fs::Permissions::from_mode(0o600),
-        )
-        .unwrap();
-    }
-    // SAFETY: Tests are serialized via ENV_LOCK.
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+    write_config_to(tmp, &config_content)
 }
 
-fn write_credentialless_config(tmp: &tempfile::TempDir, server_url: &str, extra: &str) {
-    let config_dir = tmp.path().join("bzr");
-    std::fs::create_dir_all(&config_dir).unwrap();
+fn write_credentialless_config(tmp: &tempfile::TempDir, server_url: &str, extra: &str) -> PathBuf {
     let config_content = format!(
         r#"
 default_server = "test"
@@ -651,20 +511,7 @@ url = "{server_url}"
 {extra}
 "#,
     );
-    std::fs::write(config_dir.join("config.toml"), config_content).unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-
-        std::fs::set_permissions(&config_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
-        std::fs::set_permissions(
-            config_dir.join("config.toml"),
-            std::fs::Permissions::from_mode(0o600),
-        )
-        .unwrap();
-    }
-    // SAFETY: Tests are serialized via ENV_LOCK.
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+    write_config_to(tmp, &config_content)
 }
 
 /// Mount the standard whoami + version mocks used by auth/version detection.
@@ -687,23 +534,16 @@ async fn mount_detection_mocks(server: &MockServer) {
 /// connect flow, exercising the warn branch around the insecure flag.
 #[tokio::test]
 async fn connect_client_with_tls_insecure_warns_and_succeeds() {
-    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_config(
+    let config_path = write_config(
         &tmp,
         &mock.uri(),
         "auth_method = \"header\"\napi_mode = \"rest\"\ntls_insecure = true",
     );
     mount_detection_mocks(&mock).await;
 
-    let result =
-        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
-            None,
-            crate::types::OutputFormat::Json,
-            None,
-        ))
-        .await;
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
     assert!(result.is_ok(), "tls_insecure should still build a client");
 }
 
@@ -712,12 +552,11 @@ async fn connect_client_with_tls_insecure_warns_and_succeeds() {
 /// runs to fill in the missing `api_mode` only.
 #[tokio::test]
 async fn connect_client_partial_cache_preserves_cached_auth_method() {
-    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     // Cache says "header"; live detection will reject header (401) and
     // accept query_param (200). The cached "header" must survive.
-    write_config(&tmp, &mock.uri(), "auth_method = \"header\"");
+    let config_path = write_config(&tmp, &mock.uri(), "auth_method = \"header\"");
 
     Mock::given(method("GET"))
         .and(path("/rest/whoami"))
@@ -742,20 +581,14 @@ async fn connect_client_partial_cache_preserves_cached_auth_method() {
         .mount(&mock)
         .await;
 
-    let result =
-        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
-            None,
-            crate::types::OutputFormat::Json,
-            None,
-        ))
-        .await;
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
     assert!(
         result.is_ok(),
         "partial-cache with disagreeing detection should succeed: {:?}",
         result.err()
     );
 
-    let reloaded = load_config();
+    let reloaded = load_config(&config_path);
     let srv = &reloaded.servers["test"];
     assert_eq!(
         srv.auth_method,
@@ -770,27 +603,20 @@ async fn connect_client_partial_cache_preserves_cached_auth_method() {
 /// without overwriting `auth_method`).
 #[tokio::test]
 async fn connect_client_partial_cache_redetects_api_mode() {
-    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     // auth_method present, api_mode missing -> partial cache branch
-    write_config(&tmp, &mock.uri(), "auth_method = \"header\"");
+    let config_path = write_config(&tmp, &mock.uri(), "auth_method = \"header\"");
     mount_detection_mocks(&mock).await;
 
-    let result =
-        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
-            None,
-            crate::types::OutputFormat::Json,
-            None,
-        ))
-        .await;
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
     assert!(
         result.is_ok(),
         "partial-cache path should re-detect api_mode and succeed"
     );
 
     // Verify api_mode + version got persisted but auth_method stayed Header
-    let reloaded = load_config();
+    let reloaded = load_config(&config_path);
     let srv = &reloaded.servers["test"];
     assert_eq!(srv.auth_method, Some(crate::types::AuthMethod::Header));
     assert_eq!(srv.api_mode, Some(crate::types::ApiMode::Rest));
@@ -802,19 +628,18 @@ async fn connect_client_partial_cache_redetects_api_mode() {
 /// wiremock to cover lines 211-231.
 #[tokio::test]
 async fn detect_and_build_client_persists_and_returns_client() {
-    let _lock = ENV_LOCK.lock().await;
     let server = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_config(&tmp, &server.uri(), "");
+    let config_path = write_config(&tmp, &server.uri(), "");
     mount_detection_mocks(&server).await;
 
     let tls_config = TlsConfig::default();
-    let ctx = connect_context("test", &server.uri(), None);
+    let ctx = connect_context("test", &server.uri(), None, Some(config_path.clone()));
     let result = super::detect_and_build_client(&ctx, &tls_config).await;
     assert!(result.is_ok(), "detect_and_build_client should succeed");
 
     // Verify the settings were persisted.
-    let reloaded = load_config();
+    let reloaded = load_config(&config_path);
     let srv = &reloaded.servers["test"];
     assert_eq!(srv.auth_method, Some(crate::types::AuthMethod::Header));
     assert_eq!(srv.api_mode, Some(crate::types::ApiMode::Rest));
@@ -824,14 +649,18 @@ async fn detect_and_build_client_persists_and_returns_client() {
 /// server's detected mode would be different.
 #[tokio::test]
 async fn detect_and_build_client_respects_api_override() {
-    let _lock = ENV_LOCK.lock().await;
     let server = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_config(&tmp, &server.uri(), "");
+    let config_path = write_config(&tmp, &server.uri(), "");
     mount_detection_mocks(&server).await;
 
     let tls_config = TlsConfig::default();
-    let ctx = connect_context("test", &server.uri(), Some(crate::types::ApiMode::XmlRpc));
+    let ctx = connect_context(
+        "test",
+        &server.uri(),
+        Some(crate::types::ApiMode::XmlRpc),
+        Some(config_path),
+    );
     let result = super::detect_and_build_client(&ctx, &tls_config).await;
     assert!(result.is_ok(), "api_override should still produce a client");
 }
@@ -842,12 +671,11 @@ async fn detect_and_build_client_respects_api_override() {
 /// of `handle_tofu`.
 #[tokio::test]
 async fn handle_tofu_returns_error_when_probe_fails() {
-    let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
     // Use an unreachable HTTPS URL so probe_server_cert fails fast.
-    write_config(&tmp, "https://127.0.0.1:1", "");
+    let config_path = write_config(&tmp, "https://127.0.0.1:1", "");
 
-    let ctx = connect_context("test", "https://127.0.0.1:1", None);
+    let ctx = connect_context("test", "https://127.0.0.1:1", None, Some(config_path));
     let result = super::handle_tofu(&ctx).await;
     assert!(
         result.is_err(),
@@ -860,16 +688,17 @@ async fn handle_tofu_returns_error_when_probe_fails() {
 /// "rotation rejected" config error covering lines 168-174.
 #[tokio::test]
 async fn handle_pin_rotation_rejects_in_noninteractive() {
-    let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_config(
+    // `prompt_rotation` returns false non-interactively, so this errors before
+    // any network/DNS — no name resolution, hence no ENV_LOCK.
+    let config_path = write_config(
         &tmp,
         "https://example.test",
         "tls_pin_sha256 = \"sha256//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\"\n\
          tls_pin_issuer = \"CN=Old\"",
     );
 
-    let ctx = connect_context("test", "https://example.test", None);
+    let ctx = connect_context("test", "https://example.test", None, Some(config_path));
     let result = super::handle_pin_rotation(
         &ctx,
         "sha256//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
@@ -893,16 +722,15 @@ async fn handle_pin_rotation_rejects_in_noninteractive() {
 /// (covers the catch-all `Err(e) => Err(e)` branch around line 281).
 #[tokio::test]
 async fn detect_with_tofu_fallback_propagates_auth_errors() {
-    let _lock = ENV_LOCK.lock().await;
     let server = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_config(&tmp, &server.uri(), "");
+    let config_path = write_config(&tmp, &server.uri(), "");
 
     // No mocks mounted -> wiremock returns 404 for every request.
     // detect_auth_method will exhaust whoami + valid_login (no email)
     // and return BzrError::Auth, which is not a TLS error -> propagates.
     let tls_config = TlsConfig::default();
-    let ctx = connect_context("test", &server.uri(), None);
+    let ctx = connect_context("test", &server.uri(), None, Some(config_path));
     let result = super::detect_with_tofu_fallback(&ctx, &tls_config).await;
     assert!(result.is_err(), "auth failure should propagate");
 }
@@ -968,10 +796,9 @@ fn tls_uses_default_trust_false_when_pin_set() {
 /// the first real API call.
 #[tokio::test]
 async fn cached_path_probes_tls_when_default_trust() {
-    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_config(
+    let config_path = write_config(
         &tmp,
         &mock.uri(),
         "auth_method = \"header\"\napi_mode = \"rest\"",
@@ -987,13 +814,7 @@ async fn cached_path_probes_tls_when_default_trust() {
         .mount(&mock)
         .await;
 
-    let result =
-        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
-            None,
-            crate::types::OutputFormat::Json,
-            None,
-        ))
-        .await;
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
     assert!(
         result.is_ok(),
         "cached path with default trust should still succeed after probe"
@@ -1006,13 +827,12 @@ async fn cached_path_probes_tls_when_default_trust() {
 /// the rotation prompt.
 #[tokio::test]
 async fn cached_path_probes_tls_when_pinned() {
-    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     // Cached config with a pinned fingerprint. Wiremock is HTTP, so the
     // pinned verifier is never invoked; the probe HEAD reaches the
     // server normally and returns 404.
-    write_config(
+    let config_path = write_config(
         &tmp,
         &mock.uri(),
         "auth_method = \"header\"\napi_mode = \"rest\"\n\
@@ -1025,13 +845,7 @@ async fn cached_path_probes_tls_when_pinned() {
         .mount(&mock)
         .await;
 
-    let result =
-        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
-            None,
-            crate::types::OutputFormat::Json,
-            None,
-        ))
-        .await;
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
     assert!(
         result.is_ok(),
         "cached path with pinned cert should still succeed after probe"
@@ -1044,11 +858,10 @@ async fn cached_path_probes_tls_when_pinned() {
 /// prompt would describe one endpoint while validating another.
 #[tokio::test]
 async fn cached_path_probe_does_not_follow_redirects() {
-    let _lock = ENV_LOCK.lock().await;
     let primary = MockServer::start().await;
     let secondary = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_config(
+    let config_path = write_config(
         &tmp,
         &primary.uri(),
         "auth_method = \"header\"\napi_mode = \"rest\"",
@@ -1070,13 +883,7 @@ async fn cached_path_probe_does_not_follow_redirects() {
         .mount(&secondary)
         .await;
 
-    let result =
-        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
-            None,
-            crate::types::OutputFormat::Json,
-            None,
-        ))
-        .await;
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
     assert!(
         result.is_ok(),
         "probe should treat 301 as connect-success and not chase redirects"
@@ -1104,7 +911,7 @@ async fn classify_and_handle_tls_failure_returns_none_for_non_tls_error() {
     let bzr_err = BzrError::Http(err);
 
     let tls_config = TlsConfig::default();
-    let ctx = connect_context("test", "http://127.0.0.1:1/unreachable", None);
+    let ctx = connect_context("test", "http://127.0.0.1:1/unreachable", None, None);
     let result = super::classify_and_handle_tls_failure(&bzr_err, &ctx, &tls_config).await;
     match result {
         Ok(None) => {}
@@ -1138,26 +945,19 @@ async fn probe_tls_returns_err_on_unreachable_address() {
 /// the cached client) because non-TLS probe failures are silent.
 #[tokio::test]
 async fn cached_path_proceeds_when_probe_fails_on_non_tls_error() {
-    let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
     // Point the configured server at an unreachable port so probe_tls
     // returns Err with a non-TLS connection error. classify_and_handle
     // _tls_failure should return Ok(None) for that, and the cached
     // path should fall through to building the client with cached
     // settings.
-    write_config(
+    let config_path = write_config(
         &tmp,
         "http://127.0.0.1:1",
         "auth_method = \"header\"\napi_mode = \"rest\"",
     );
 
-    let result =
-        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
-            None,
-            crate::types::OutputFormat::Json,
-            None,
-        ))
-        .await;
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
     assert!(
         result.is_ok(),
         "non-TLS probe failures must not block the cached path"
@@ -1168,10 +968,9 @@ async fn cached_path_proceeds_when_probe_fails_on_non_tls_error() {
 /// disabled — there is no TLS error class to surface in that mode.
 #[tokio::test]
 async fn cached_path_skips_probe_when_insecure() {
-    let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_config(
+    let config_path = write_config(
         &tmp,
         &mock.uri(),
         "auth_method = \"header\"\napi_mode = \"rest\"\ntls_insecure = true",
@@ -1184,13 +983,7 @@ async fn cached_path_skips_probe_when_insecure() {
         .mount(&mock)
         .await;
 
-    let result =
-        super::connect_and_configure(&crate::commands::runtime::context::CommandContext::new(
-            None,
-            crate::types::OutputFormat::Json,
-            None,
-        ))
-        .await;
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
     assert!(
         result.is_ok(),
         "cached path with insecure flag should skip probe"

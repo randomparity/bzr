@@ -23,16 +23,11 @@ pub async fn setup_test_env() -> (
     (lock, mock, tmp)
 }
 
-/// Write a test config file to the given temp directory.
-///
-/// # Panics
-///
-/// Panics if the config directory or file cannot be created.
-#[expect(clippy::unwrap_used)]
-pub fn setup_config(tmp: &tempfile::TempDir, server_url: &str) {
-    let config_dir = tmp.path().join("bzr");
-    std::fs::create_dir_all(&config_dir).unwrap();
-    let config_content = format!(
+/// The TOML body shared by `setup_config` and `setup_isolated_env`: one
+/// `[servers.test]` server with a literal api key and cached auth/API mode, so
+/// connect takes the cached path without re-detecting.
+fn default_test_config(server_url: &str) -> String {
+    format!(
         r#"
 default_server = "test"
 
@@ -42,21 +37,61 @@ api_key = "test-key"
 auth_method = "header"
 api_mode = "rest"
 "#,
-    );
-    std::fs::write(config_dir.join("config.toml"), config_content).unwrap();
+    )
+}
+
+/// Write `contents` to `<tmp>/bzr/config.toml`, hardening permissions on unix,
+/// and return the config file path. Unlike `setup_config`, this performs **no**
+/// process-environment mutation: pass the returned path to
+/// `CommandContext::with_config_path_override` (or the `--config` flag) so config
+/// resolution never consults `XDG_CONFIG_HOME`, and the test needs no `ENV_LOCK`.
+///
+/// # Panics
+///
+/// Panics if the config directory or file cannot be created.
+#[expect(clippy::unwrap_used)]
+pub fn write_config_to(tmp: &tempfile::TempDir, contents: &str) -> std::path::PathBuf {
+    let config_dir = tmp.path().join("bzr");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    let config_path = config_dir.join("config.toml");
+    std::fs::write(&config_path, contents).unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
 
         std::fs::set_permissions(&config_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
-        std::fs::set_permissions(
-            config_dir.join("config.toml"),
-            std::fs::Permissions::from_mode(0o600),
-        )
-        .unwrap();
+        std::fs::set_permissions(&config_path, std::fs::Permissions::from_mode(0o600)).unwrap();
     }
+    config_path
+}
+
+/// Write a test config file to the given temp directory and point
+/// `XDG_CONFIG_HOME` at it. Caller must hold `ENV_LOCK`.
+///
+/// # Panics
+///
+/// Panics if the config directory or file cannot be created.
+pub fn setup_config(tmp: &tempfile::TempDir, server_url: &str) {
+    write_config_to(tmp, &default_test_config(server_url));
     // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+}
+
+/// Lock-free analogue of `setup_test_env`: start a mock server, write the default
+/// `[servers.test]` config to an isolated temp path, and return the path. The
+/// test selects this config by passing the path to
+/// `CommandContext::with_config_path_override` (or `--config`), so it mutates no
+/// process environment, acquires no `ENV_LOCK`, and runs in parallel.
+///
+/// # Panics
+///
+/// Panics if the temp directory cannot be created.
+#[expect(clippy::unwrap_used)]
+pub async fn setup_isolated_env() -> (wiremock::MockServer, tempfile::TempDir, std::path::PathBuf) {
+    let mock = wiremock::MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = write_config_to(&tmp, &default_test_config(&mock.uri()));
+    (mock, tmp, config_path)
 }
 
 /// Acquire `ENV_LOCK` and point `XDG_CONFIG_HOME` at an empty temp dir (no
