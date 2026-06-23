@@ -221,35 +221,15 @@ impl BugFilterArgs {
     }
 
     pub(crate) fn write_search_filters(&self, params: &mut SearchParams) {
-        for mapping in FIELD_MAPPINGS {
-            let Some(values) = self.values_for(mapping.field) else {
-                continue;
-            };
-            *params.get_field_mut(mapping.field) = values.to_vec();
-        }
+        write_search_filter_values(params, |field| self.values_for(field));
     }
 
     pub(crate) fn write_saved_query_filters(&self, query: &mut SavedQuery) {
-        for mapping in FIELD_MAPPINGS {
-            let Some(values) = self.values_for(mapping.field) else {
-                continue;
-            };
-            *query.get_field_mut(mapping.field) = values.to_vec();
-        }
+        write_saved_query_filter_values(query, |field| self.values_for(field));
     }
 
     pub(crate) fn merge_saved_query_filters(&self, query: &mut SavedQuery) -> bool {
-        let mut changed = false;
-        for mapping in FIELD_MAPPINGS {
-            let Some(values) = self.values_for(mapping.field) else {
-                continue;
-            };
-            if !values.is_empty() {
-                *query.get_field_mut(mapping.field) = values.to_vec();
-                changed = true;
-            }
-        }
-        changed
+        merge_saved_query_filter_values(query, |field| self.values_for(field))
     }
 }
 
@@ -274,36 +254,57 @@ impl BugActorFilterArgs {
     }
 
     pub(crate) fn write_search_filters(&self, params: &mut SearchParams) {
-        for mapping in FIELD_MAPPINGS {
-            let Some(values) = self.values_for(mapping.field) else {
-                continue;
-            };
-            *params.get_field_mut(mapping.field) = values.to_vec();
-        }
+        write_search_filter_values(params, |field| self.values_for(field));
     }
 
     pub(crate) fn write_saved_query_filters(&self, query: &mut SavedQuery) {
-        for mapping in FIELD_MAPPINGS {
-            let Some(values) = self.values_for(mapping.field) else {
-                continue;
-            };
-            *query.get_field_mut(mapping.field) = values.to_vec();
-        }
+        write_saved_query_filter_values(query, |field| self.values_for(field));
     }
 
     pub(crate) fn merge_saved_query_filters(&self, query: &mut SavedQuery) -> bool {
-        let mut changed = false;
-        for mapping in FIELD_MAPPINGS {
-            let Some(values) = self.values_for(mapping.field) else {
-                continue;
-            };
-            if !values.is_empty() {
-                *query.get_field_mut(mapping.field) = values.to_vec();
-                changed = true;
-            }
-        }
-        changed
+        merge_saved_query_filter_values(query, |field| self.values_for(field))
     }
+}
+
+fn write_search_filter_values<'a>(
+    params: &mut SearchParams,
+    mut values_for: impl FnMut(FilterField) -> Option<&'a [String]>,
+) {
+    for mapping in FIELD_MAPPINGS {
+        let Some(values) = values_for(mapping.field) else {
+            continue;
+        };
+        *params.get_field_mut(mapping.field) = values.to_vec();
+    }
+}
+
+fn write_saved_query_filter_values<'a>(
+    query: &mut SavedQuery,
+    mut values_for: impl FnMut(FilterField) -> Option<&'a [String]>,
+) {
+    for mapping in FIELD_MAPPINGS {
+        let Some(values) = values_for(mapping.field) else {
+            continue;
+        };
+        *query.get_field_mut(mapping.field) = values.to_vec();
+    }
+}
+
+fn merge_saved_query_filter_values<'a>(
+    query: &mut SavedQuery,
+    mut values_for: impl FnMut(FilterField) -> Option<&'a [String]>,
+) -> bool {
+    let mut changed = false;
+    for mapping in FIELD_MAPPINGS {
+        let Some(values) = values_for(mapping.field) else {
+            continue;
+        };
+        if !values.is_empty() {
+            *query.get_field_mut(mapping.field) = values.to_vec();
+            changed = true;
+        }
+    }
+    changed
 }
 
 /// Arguments for `bug list`.
