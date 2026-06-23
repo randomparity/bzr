@@ -43,7 +43,7 @@ pub async fn execute(
             body_file,
             private,
         } => {
-            let resolved = super::runtime::shared::materialize_non_empty_comment_body(
+            let text = super::runtime::shared::materialize_comment_body(
                 super::runtime::shared::classify_body_source(
                     body.as_deref(),
                     body_file.as_deref(),
@@ -51,13 +51,14 @@ pub async fn execute(
                     "--body-file",
                 )?,
                 "--body-file",
-                None,
+                super::runtime::shared::CommentBodyRequirement::RequiredWithFallback(
+                    read_comment_body,
+                ),
             )?;
-            let text = match resolved {
-                Some(t) => t,
-                None => {
-                    super::runtime::shared::require_non_empty_comment_body(read_comment_body()?)?
-                }
+            let Some(text) = text else {
+                return Err(BzrError::DataIntegrity(
+                    "comment body requirement did not produce a body".into(),
+                ));
             };
             let id = client.add_comment(*bug_id, &text, *private).await?;
             write_result(

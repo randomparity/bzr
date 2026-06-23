@@ -595,6 +595,23 @@ pub(crate) enum BodySource {
     None,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum CommentBodyRequirement {
+    Optional,
+    RequiredWithFallback(fn() -> Result<String>),
+    PrivateRequiresBody,
+}
+
+impl CommentBodyRequirement {
+    pub(crate) fn optional_or_private_required(comment_private: bool) -> Self {
+        if comment_private {
+            Self::PrivateRequiresBody
+        } else {
+            Self::Optional
+        }
+    }
+}
+
 /// Classify an inline flag value and/or a `--*-file` path into a
 /// [`BodySource`], honouring the `-` = stdin convention for both. The two
 /// sources are mutually exclusive; clap `conflicts_with` makes the
@@ -653,25 +670,32 @@ pub(crate) fn materialize_body_source(
     }
 }
 
-/// Materialize an explicit comment body source and reject whitespace-only text.
-/// `required_body_message` turns an absent source into an input error for flags
-/// like `--comment-private` that only make sense with an explicit comment.
-pub(crate) fn materialize_non_empty_comment_body(
+/// Materialize a comment body according to the command's body requirement.
+///
+/// Explicit sources always reject whitespace-only text. When no explicit source
+/// is present, `requirement` decides whether absence is allowed, should fall
+/// back to a command reader, or is a `--comment-private` usage error.
+pub(crate) fn materialize_comment_body(
     source: BodySource,
     file_flag: &str,
-    required_body_message: Option<&str>,
+    requirement: CommentBodyRequirement,
 ) -> Result<Option<String>> {
     let Some(text) = materialize_body_source(source, file_flag)? else {
-        if let Some(message) = required_body_message {
-            return Err(BzrError::InputValidation(message.to_string()));
-        }
-        return Ok(None);
+        return match requirement {
+            CommentBodyRequirement::Optional => Ok(None),
+            CommentBodyRequirement::RequiredWithFallback(read_fallback) => {
+                Ok(Some(require_non_empty_comment_body(read_fallback()?)?))
+            }
+            CommentBodyRequirement::PrivateRequiresBody => Err(BzrError::InputValidation(
+                "--comment-private requires --comment or --comment-file".to_string(),
+            )),
+        };
     };
     Ok(Some(require_non_empty_comment_body(text)?))
 }
 
 /// Return comment text when it has non-whitespace content.
-pub(crate) fn require_non_empty_comment_body(text: String) -> Result<String> {
+fn require_non_empty_comment_body(text: String) -> Result<String> {
     if text.trim().is_empty() {
         return Err(BzrError::InputValidation("empty comment, aborting".into()));
     }

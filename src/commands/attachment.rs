@@ -156,9 +156,7 @@ fn resolve_upload_comment(
     comment_file: Option<&Path>,
     comment_private: bool,
 ) -> Result<Option<String>> {
-    let required_body_message =
-        comment_private.then_some("--comment-private requires --comment or --comment-file");
-    super::runtime::shared::materialize_non_empty_comment_body(
+    super::runtime::shared::materialize_comment_body(
         super::runtime::shared::classify_body_source(
             comment,
             comment_file,
@@ -166,7 +164,9 @@ fn resolve_upload_comment(
             "--comment-file",
         )?,
         "--comment-file",
-        required_body_message,
+        super::runtime::shared::CommentBodyRequirement::optional_or_private_required(
+            comment_private,
+        ),
     )
 }
 

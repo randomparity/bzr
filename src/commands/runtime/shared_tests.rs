@@ -1187,8 +1187,16 @@ async fn cached_path_skips_probe_when_insecure() {
 }
 
 use super::{
-    classify_body_source, materialize_body_source, materialize_non_empty_comment_body, BodySource,
+    classify_body_source, materialize_body_source, materialize_comment_body, BodySource,
+    CommentBodyRequirement,
 };
+
+fn fallback_comment_body() -> crate::error::Result<String> {
+    let mut source = &b"fallback body"[..];
+    let mut body = String::new();
+    std::io::Read::read_to_string(&mut source, &mut body)?;
+    Ok(body)
+}
 
 #[test]
 fn classify_inline_literal() {
@@ -1289,28 +1297,44 @@ fn materialize_missing_file_is_input_validation() {
 }
 
 #[test]
-fn materialize_non_empty_comment_body_accepts_literal() {
-    let got = materialize_non_empty_comment_body(
+fn materialize_comment_body_uses_required_fallback() {
+    let got = materialize_comment_body(
+        BodySource::None,
+        "--body-file",
+        CommentBodyRequirement::RequiredWithFallback(fallback_comment_body),
+    )
+    .unwrap();
+    assert_eq!(got, Some("fallback body".to_string()));
+}
+
+#[test]
+fn materialize_comment_body_accepts_literal() {
+    let got = materialize_comment_body(
         BodySource::Literal("hi".into()),
         "--comment-file",
-        None,
+        CommentBodyRequirement::Optional,
     )
     .unwrap();
     assert_eq!(got, Some("hi".to_string()));
 }
 
 #[test]
-fn materialize_non_empty_comment_body_allows_absent_optional_body() {
-    let got = materialize_non_empty_comment_body(BodySource::None, "--comment-file", None).unwrap();
+fn materialize_comment_body_allows_absent_optional_body() {
+    let got = materialize_comment_body(
+        BodySource::None,
+        "--comment-file",
+        CommentBodyRequirement::Optional,
+    )
+    .unwrap();
     assert_eq!(got, None);
 }
 
 #[test]
-fn materialize_non_empty_comment_body_rejects_required_private_body() {
-    let err = materialize_non_empty_comment_body(
+fn materialize_comment_body_rejects_required_private_body() {
+    let err = materialize_comment_body(
         BodySource::None,
         "--comment-file",
-        Some("--comment-private requires --comment or --comment-file"),
+        CommentBodyRequirement::PrivateRequiresBody,
     )
     .unwrap_err();
     assert!(matches!(
@@ -1321,11 +1345,11 @@ fn materialize_non_empty_comment_body_rejects_required_private_body() {
 }
 
 #[test]
-fn materialize_non_empty_comment_body_rejects_whitespace() {
-    let err = materialize_non_empty_comment_body(
+fn materialize_comment_body_rejects_whitespace() {
+    let err = materialize_comment_body(
         BodySource::Literal(" \n\t".into()),
         "--comment-file",
-        None,
+        CommentBodyRequirement::Optional,
     )
     .unwrap_err();
     assert!(matches!(
