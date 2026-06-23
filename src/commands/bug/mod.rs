@@ -1,7 +1,7 @@
 //! Bug subcommand handlers, split per-action.
 
 use crate::cli::BugAction;
-use crate::commands::bug_fields::{
+use crate::commands::bug::search_support::fields::{
     validate_json_field_selection, validate_table_columns, warn_unknown_fields, ColumnSpec,
 };
 use crate::commands::runtime::context::CommandContext;
@@ -16,6 +16,7 @@ mod history;
 mod list;
 mod my;
 mod search;
+pub(crate) mod search_support;
 mod update;
 mod update_json;
 mod verbs;

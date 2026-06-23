@@ -4,7 +4,7 @@ use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 
 use crate::cli::{FieldArgs, ViewArgs};
 use crate::client::BugzillaClient;
-use crate::commands::bug_fields::{canonical_field_list, ColumnSpec};
+use crate::commands::bug::search_support::fields::{canonical_field_list, ColumnSpec};
 use crate::commands::runtime::context::CommandContext;
 use crate::config::Config;
 use crate::error::{BzrError, Result};

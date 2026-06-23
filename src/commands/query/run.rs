@@ -1,9 +1,11 @@
-use crate::commands::bug_fields::{
+use crate::commands::bug::search_support::fields::{
     canonical_field_list, validate_json_field_selection, validate_table_columns,
     warn_unknown_fields, ColumnSpec,
 };
+use crate::commands::bug::search_support::policy::{
+    count_search_params, ensure_no_paging_with_count,
+};
 use crate::commands::runtime::context::CommandContext;
-use crate::commands::search_policy::{count_search_params, ensure_no_paging_with_count};
 use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::output::resources::bug::write_bugs;

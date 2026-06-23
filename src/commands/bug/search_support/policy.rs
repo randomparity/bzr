@@ -28,5 +28,5 @@ pub(crate) fn ensure_no_paging_with_count(
 }
 
 #[cfg(test)]
-#[path = "search_policy_tests.rs"]
+#[path = "policy_tests.rs"]
 mod tests;
