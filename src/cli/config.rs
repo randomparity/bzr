@@ -111,10 +111,9 @@ pub enum ConfigAction {
         tls_ca_cert: Option<String>,
         /// Pin a certificate fingerprint in `sha256//<base64>` format.
         ///
-        /// The exact format used by curl's `--pinnedpubkey`. Once
-        /// pinned, every subsequent connection to this server
-        /// must present a leaf certificate whose SHA-256 hash
-        /// matches; mismatches exit with code 13. Mutually
+        /// Once pinned, every subsequent connection to this server
+        /// must present a leaf certificate whose DER bytes hash to
+        /// this fingerprint; mismatches exit with code 13. Mutually
         /// exclusive with `--tls-insecure`, `--tls-ca-cert`,
         /// `--tls-pin-now`, and `--tls-pin-clear`. Use
         /// `--tls-pin-now` to capture the current cert

@@ -479,15 +479,17 @@ CA in the trust store is later compromised.
 
 - `--tls-ca-cert <path>`: pin a custom CA certificate (PEM file). The
   server must present a chain that verifies against this CA.
-- `--tls-pin-sha256 <hex>`: pin the SHA-256 fingerprint of the server's
-  leaf certificate Subject Public Key Info (SPKI). The server must
-  present a leaf certificate whose SPKI matches this fingerprint.
+- `--tls-pin-sha256 <pin>`: pin the SHA-256 fingerprint of the server's
+  leaf certificate in `sha256//<base64>` format. The server must present
+  a leaf certificate whose DER bytes hash to this fingerprint.
 
 ### Trust on first use
 
 If you don't already know the pin, use `--tls-pin-now`. `bzr` connects
-once, captures the leaf certificate's SPKI fingerprint, prints it, and
-prompts before storing it:
+once, captures the leaf certificate fingerprint, prints it, and prompts
+before storing it. When issuer DER can be extracted, `bzr` also stores a
+DER-backed issuer guard so future issuer changes can be reported as
+`IssuerChanged`; the human-readable `tls_pin_issuer` is display-only.
 
 ```sh
 bzr config set-server my-bz --url https://bugzilla.example.com --tls-pin-now
