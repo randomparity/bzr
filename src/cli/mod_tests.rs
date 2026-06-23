@@ -6,114 +6,42 @@ use super::{
     ServerAction, TemplateAction, UserAction,
 };
 use crate::types::{ApiMode, ProductListType};
-use clap::{CommandFactory as _, Parser as _};
+use clap::{Command, CommandFactory as _, Parser as _};
 
-/// Doc-comment coverage for items already converted to multi-paragraph
-/// `long_about` per docs/dev/cli-doc-style.md. Phase 1 + 2a of the
-/// CLI doc-expansion plan; extend as phases 2b/2c land. When this list
-/// covers every leaf subcommand, drop the explicit list and walk the
-/// command tree instead.
-const COVERED_PATHS: &[&[&str]] = &[
-    // Phase 1: top-level + 14 group variants
-    &[],
-    &["bug"],
-    &["comment"],
-    &["attachment"],
-    &["config"],
-    &["product"],
-    &["field"],
-    &["user"],
-    &["group"],
-    &["whoami"],
-    &["server"],
-    &["classification"],
-    &["component"],
-    &["template"],
-    &["query"],
-    // Phase 2a: bug.rs actions
-    &["bug", "list"],
-    &["bug", "view"],
-    &["bug", "search"],
-    &["bug", "history"],
-    &["bug", "create"],
-    &["bug", "my"],
-    &["bug", "clone"],
-    &["bug", "update"],
-    // Phase 2a: config.rs actions
-    &["config", "set-server"],
-    &["config", "set-default"],
-    &["config", "show"],
-    &["config", "set-keyring"],
-    &["config", "unset-keyring"],
-    &["config", "migrate-to-keyring"],
-    // Phase 2a: query.rs actions
-    &["query", "save"],
-    &["query", "list"],
-    &["query", "show"],
-    &["query", "delete"],
-    &["query", "run"],
-    // Phase 2b: attachment.rs actions
-    &["attachment", "list"],
-    &["attachment", "download"],
-    &["attachment", "upload"],
-    &["attachment", "update"],
-    // Phase 2b: comment.rs actions
-    &["comment", "list"],
-    &["comment", "add"],
-    &["comment", "tag"],
-    &["comment", "search-tags"],
-    // Phase 2b: user.rs actions
-    &["user", "search"],
-    &["user", "create"],
-    &["user", "update"],
-    // Phase 2b: group.rs actions
-    &["group", "add-user"],
-    &["group", "remove-user"],
-    &["group", "list-users"],
-    &["group", "view"],
-    &["group", "create"],
-    &["group", "update"],
-    // Phase 2b: product.rs actions
-    &["product", "list"],
-    &["product", "view"],
-    &["product", "create"],
-    &["product", "update"],
-    // Phase 2b: template.rs actions
-    &["template", "save"],
-    &["template", "list"],
-    &["template", "show"],
-    &["template", "delete"],
-    // Phase 2b: component.rs actions
-    &["component", "create"],
-    &["component", "update"],
-    // Phase 2c: trivial files
-    &["server", "info"],
-    &["classification", "view"],
-    &["field", "aliases"],
-    &["field", "list"],
-];
+fn display_command_path(path: &[String]) -> String {
+    if path.is_empty() {
+        "bzr".to_string()
+    } else {
+        format!("bzr {}", path.join(" "))
+    }
+}
+
+fn assert_long_about_coverage(command: &Command, path: &mut Vec<String>) {
+    let command_path = display_command_path(path);
+    let about = command.get_about().map(ToString::to_string);
+    let long_about = command.get_long_about().map(ToString::to_string);
+    assert!(
+        long_about.is_some(),
+        "command `{command_path}` is missing long_about \
+         (multi-paragraph doc comment required)"
+    );
+    assert_ne!(
+        about, long_about,
+        "command `{command_path}` has long_about identical to about \
+         (single-paragraph doc -- expand to multi-paragraph per docs/dev/cli-doc-style.md)"
+    );
+
+    for subcommand in command.get_subcommands() {
+        path.push(subcommand.get_name().to_string());
+        assert_long_about_coverage(subcommand, path);
+        path.pop();
+    }
+}
 
 #[test]
 fn cli_doc_long_about_coverage() {
     let cmd = Cli::command();
-    for path in COVERED_PATHS {
-        let mut current = &cmd;
-        for &name in *path {
-            let next = current.get_subcommands().find(|c| c.get_name() == name);
-            current =
-                next.unwrap_or_else(|| panic!("subcommand path {path:?} not found in clap tree"));
-        }
-        let about = current.get_about().map(ToString::to_string);
-        let long_about = current.get_long_about().map(ToString::to_string);
-        assert!(
-            long_about.is_some(),
-            "subcommand path {path:?} is missing long_about (multi-paragraph doc comment required)"
-        );
-        assert_ne!(
-            about, long_about,
-            "subcommand path {path:?} has long_about identical to about (single-paragraph doc -- expand to multi-paragraph per docs/dev/cli-doc-style.md)"
-        );
-    }
+    assert_long_about_coverage(&cmd, &mut Vec::new());
 }
 
 #[test]
