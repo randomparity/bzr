@@ -237,19 +237,7 @@ async fn whoami_integration() {
         .mount(&mock)
         .await;
 
-    let mut __io7 = bzr::test_helpers::CapturedIo::new();
-
-    let result = bzr::commands::whoami::execute(
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __io7.writers(),
-    )
-    .await;
-
-    let output = __io7.out_str().to_string();
+    let (result, output) = dispatch_cli_with_output(&["bzr", "whoami"]).await;
     assert!(result.is_ok(), "whoami should succeed: {result:?}");
     let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["name"], "admin@example.com");
@@ -280,21 +268,7 @@ async fn product_list_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::ProductAction::List {
-        r#type: bzr::types::ProductListType::Accessible,
-    };
-    let mut __io8 = bzr::test_helpers::CapturedIo::new();
-    let result = bzr::commands::product::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __io8.writers(),
-    )
-    .await;
-    let output = __io8.out_str().to_string();
+    let (result, output) = dispatch_cli_with_output(&["bzr", "product", "list"]).await;
     assert!(result.is_ok(), "product list should succeed: {result:?}");
     let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed[0]["name"], "Firefox");
@@ -323,19 +297,7 @@ async fn server_info_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::ServerAction::Info;
-    let mut __io9 = bzr::test_helpers::CapturedIo::new();
-    let result = bzr::commands::server::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __io9.writers(),
-    )
-    .await;
-    let output = __io9.out_str().to_string();
+    let (result, output) = dispatch_cli_with_output(&["bzr", "server", "info"]).await;
     assert!(result.is_ok(), "server info should succeed: {result:?}");
     let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["version"], "5.1.2");
@@ -361,21 +323,7 @@ async fn field_list_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::FieldAction::List {
-        name: "status".to_string(),
-    };
-    let mut __io10 = bzr::test_helpers::CapturedIo::new();
-    let result = bzr::commands::field::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __io10.writers(),
-    )
-    .await;
-    let output = __io10.out_str().to_string();
+    let (result, output) = dispatch_cli_with_output(&["bzr", "field", "list", "status"]).await;
     assert!(result.is_ok(), "field list should succeed: {result:?}");
     let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed[0]["name"], "NEW");
@@ -402,21 +350,8 @@ async fn classification_view_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::ClassificationAction::View {
-        name: "Unclassified".to_string(),
-    };
-    let mut __io11 = bzr::test_helpers::CapturedIo::new();
-    let result = bzr::commands::classification::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __io11.writers(),
-    )
-    .await;
-    let output = __io11.out_str().to_string();
+    let (result, output) =
+        dispatch_cli_with_output(&["bzr", "classification", "view", "Unclassified"]).await;
     assert!(
         result.is_ok(),
         "classification view should succeed: {result:?}"
@@ -446,22 +381,7 @@ async fn user_search_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::UserAction::Search {
-        query: "alice".to_string(),
-        details: false,
-    };
-    let mut __io12 = bzr::test_helpers::CapturedIo::new();
-    let result = bzr::commands::user::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __io12.writers(),
-    )
-    .await;
-    let output = __io12.out_str().to_string();
+    let (result, output) = dispatch_cli_with_output(&["bzr", "user", "search", "alice"]).await;
     assert!(result.is_ok(), "user search should succeed: {result:?}");
     let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed[0]["name"], "alice@example.com");
@@ -490,21 +410,7 @@ async fn group_view_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::GroupAction::View {
-        group: "admin".to_string(),
-    };
-    let mut __io13 = bzr::test_helpers::CapturedIo::new();
-    let result = bzr::commands::group::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __io13.writers(),
-    )
-    .await;
-    let output = __io13.out_str().to_string();
+    let (result, output) = dispatch_cli_with_output(&["bzr", "group", "view", "admin"]).await;
     assert!(result.is_ok(), "group view should succeed: {result:?}");
     let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed["name"], "admin");
@@ -524,25 +430,20 @@ async fn component_create_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::ComponentAction::Create {
-        from_json: None,
-        product: Some("TestProduct".to_string()),
-        name: Some("Backend".to_string()),
-        description: Some("Backend component".to_string()),
-        default_assignee: Some("dev@test.com".to_string()),
-    };
-    let mut __io14 = bzr::test_helpers::CapturedIo::new();
-    let result = bzr::commands::component::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __io14.writers(),
-    )
+    let (result, output) = dispatch_cli_with_output(&[
+        "bzr",
+        "component",
+        "create",
+        "--product",
+        "TestProduct",
+        "--name",
+        "Backend",
+        "--description",
+        "Backend component",
+        "--default-assignee",
+        "dev@test.com",
+    ])
     .await;
-    let output = __io14.out_str().to_string();
     assert!(
         result.is_ok(),
         "component create should succeed: {result:?}"
@@ -575,19 +476,7 @@ async fn attachment_list_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::AttachmentAction::List { bug_id: 42 };
-    let mut __io15 = bzr::test_helpers::CapturedIo::new();
-    let result = bzr::commands::attachment::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __io15.writers(),
-    )
-    .await;
-    let output = __io15.out_str().to_string();
+    let (result, output) = dispatch_cli_with_output(&["bzr", "attachment", "list", "42"]).await;
     assert!(result.is_ok(), "attachment list should succeed: {result:?}");
     let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed[0]["file_name"], "patch.diff");
@@ -597,7 +486,6 @@ async fn attachment_list_integration() {
 
 #[tokio::test]
 async fn config_show_integration() {
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
 
@@ -616,17 +504,7 @@ api_key = "key-1234567890"
     .unwrap();
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
-    let action = bzr::cli::ConfigAction::Show;
-    let result = bzr::commands::config::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            None,
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
-    .await;
+    let result = dispatch_cli(&["bzr", "config", "show"]).await;
     assert!(result.is_ok(), "config show should succeed: {result:?}");
 }
 
@@ -908,7 +786,6 @@ async fn comment_search_tags_integration() {
 
 #[tokio::test]
 async fn attachment_download_integration() {
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let (_lock, mock, tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -931,22 +808,8 @@ async fn attachment_download_integration() {
         .await;
 
     let out_path = tmp.path().join("downloaded.txt");
-    let action = bzr::cli::AttachmentAction::Download {
-        ids: vec![99],
-        bug_ids: vec![],
-        out: Some(out_path.to_string_lossy().into_owned()),
-        out_dir: "./attachments".into(),
-    };
-    let result = bzr::commands::attachment::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
-    .await;
+    let out_arg = out_path.to_str().unwrap();
+    let result = dispatch_cli(&["bzr", "attachment", "download", "99", "--out", out_arg]).await;
     assert!(
         result.is_ok(),
         "attachment download should succeed: {result:?}"
@@ -958,7 +821,6 @@ async fn attachment_download_integration() {
 
 #[tokio::test]
 async fn attachment_download_bulk_per_bug_integration() {
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let (_lock, mock, tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -997,22 +859,16 @@ async fn attachment_download_bulk_per_bug_integration() {
         .mount(&mock)
         .await;
 
-    let out_dir = tmp.path().to_string_lossy().into_owned();
-    let action = bzr::cli::AttachmentAction::Download {
-        ids: vec![],
-        bug_ids: vec![77],
-        out: None,
+    let out_dir = tmp.path().to_str().unwrap();
+    let result = dispatch_cli(&[
+        "bzr",
+        "attachment",
+        "download",
+        "--bug",
+        "77",
+        "--out-dir",
         out_dir,
-    };
-    let result = bzr::commands::attachment::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
+    ])
     .await;
     assert!(result.is_ok(), "expected ok: {result:?}");
 
@@ -1032,7 +888,6 @@ async fn attachment_download_bulk_per_bug_integration() {
 
 #[tokio::test]
 async fn attachment_upload_integration() {
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let (_lock, mock, tmp) = setup_test_env().await;
 
     // Create a temporary file to upload
@@ -1046,29 +901,18 @@ async fn attachment_upload_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::AttachmentAction::Upload(bzr::cli::UploadArgs {
-        bug_id: 42,
-        file: upload_file.to_string_lossy().into_owned(),
-        summary: Some("Test upload".to_string()),
-        content_type: Some("text/plain".to_string()),
-        private: false,
-        no_private: false,
-        patch: false,
-        no_patch: false,
-        comment: None,
-        comment_file: None,
-        comment_private: false,
-        flag: vec![],
-    });
-    let result = bzr::commands::attachment::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
+    let file_arg = upload_file.to_str().unwrap();
+    let result = dispatch_cli(&[
+        "bzr",
+        "attachment",
+        "upload",
+        "42",
+        file_arg,
+        "--summary",
+        "Test upload",
+        "--content-type",
+        "text/plain",
+    ])
     .await;
     assert!(
         result.is_ok(),
@@ -1079,7 +923,6 @@ async fn attachment_upload_integration() {
 #[tokio::test]
 async fn attachment_upload_with_comment_integration() {
     use wiremock::matchers::body_string_contains;
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let (_lock, mock, tmp) = setup_test_env().await;
 
     let upload_file = tmp.path().join("upload.txt");
@@ -1095,29 +938,20 @@ async fn attachment_upload_with_comment_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::AttachmentAction::Upload(bzr::cli::UploadArgs {
-        bug_id: 42,
-        file: upload_file.to_string_lossy().into_owned(),
-        summary: Some("Test upload".to_string()),
-        content_type: Some("text/plain".to_string()),
-        private: false,
-        no_private: false,
-        patch: false,
-        no_patch: false,
-        comment: Some("see #6789 for context".to_string()),
-        comment_file: None,
-        comment_private: false,
-        flag: vec![],
-    });
-    let result = bzr::commands::attachment::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
+    let file_arg = upload_file.to_str().unwrap();
+    let result = dispatch_cli(&[
+        "bzr",
+        "attachment",
+        "upload",
+        "42",
+        file_arg,
+        "--summary",
+        "Test upload",
+        "--content-type",
+        "text/plain",
+        "--comment",
+        "see #6789 for context",
+    ])
     .await;
     assert!(
         result.is_ok(),
@@ -1128,7 +962,6 @@ async fn attachment_upload_with_comment_integration() {
 #[tokio::test]
 async fn attachment_upload_with_is_patch_integration() {
     use wiremock::matchers::body_string_contains;
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let (_lock, mock, tmp) = setup_test_env().await;
 
     let upload_file = tmp.path().join("fix.patch");
@@ -1143,29 +976,17 @@ async fn attachment_upload_with_is_patch_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::AttachmentAction::Upload(bzr::cli::UploadArgs {
-        bug_id: 42,
-        file: upload_file.to_string_lossy().into_owned(),
-        summary: Some("Test patch".to_string()),
-        content_type: None,
-        private: false,
-        no_private: false,
-        patch: true,
-        no_patch: false,
-        comment: None,
-        comment_file: None,
-        comment_private: false,
-        flag: vec![],
-    });
-    let result = bzr::commands::attachment::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
+    let file_arg = upload_file.to_str().unwrap();
+    let result = dispatch_cli(&[
+        "bzr",
+        "attachment",
+        "upload",
+        "42",
+        file_arg,
+        "--summary",
+        "Test patch",
+        "--patch",
+    ])
     .await;
     assert!(
         result.is_ok(),
@@ -1176,7 +997,6 @@ async fn attachment_upload_with_is_patch_integration() {
 #[tokio::test]
 async fn attachment_upload_with_comment_private_integration() {
     use wiremock::matchers::body_string_contains;
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let (_lock, mock, tmp) = setup_test_env().await;
 
     let upload_file = tmp.path().join("upload.txt");
@@ -1214,29 +1034,21 @@ async fn attachment_upload_with_comment_private_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::AttachmentAction::Upload(bzr::cli::UploadArgs {
-        bug_id: 42,
-        file: upload_file.to_string_lossy().into_owned(),
-        summary: Some("test".into()),
-        content_type: Some("text/plain".into()),
-        private: false,
-        no_private: false,
-        patch: false,
-        no_patch: false,
-        comment: Some("sensitive".into()),
-        comment_file: None,
-        comment_private: true,
-        flag: vec![],
-    });
-    let result = bzr::commands::attachment::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
+    let file_arg = upload_file.to_str().unwrap();
+    let result = dispatch_cli(&[
+        "bzr",
+        "attachment",
+        "upload",
+        "42",
+        file_arg,
+        "--summary",
+        "test",
+        "--content-type",
+        "text/plain",
+        "--comment",
+        "sensitive",
+        "--comment-private",
+    ])
     .await;
     assert!(
         result.is_ok(),
@@ -1269,19 +1081,7 @@ async fn attachment_list_returns_is_patch_field_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::AttachmentAction::List { bug_id: 42 };
-    let mut __io20 = bzr::test_helpers::CapturedIo::new();
-    let result = bzr::commands::attachment::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __io20.writers(),
-    )
-    .await;
-    let output = __io20.out_str().to_string();
+    let (result, output) = dispatch_cli_with_output(&["bzr", "attachment", "list", "42"]).await;
     assert!(result.is_ok(), "list should succeed: {result:?}");
     let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
     assert_eq!(parsed[0]["is_patch"], true);
@@ -1291,7 +1091,6 @@ async fn attachment_list_returns_is_patch_field_integration() {
 
 #[tokio::test]
 async fn attachment_update_integration() {
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
@@ -1303,28 +1102,14 @@ async fn attachment_update_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::AttachmentAction::Update(bzr::cli::AttachmentUpdateArgs {
-        id: 99,
-        summary: Some("Updated summary".to_string()),
-        file_name: None,
-        content_type: None,
-        obsolete: false,
-        no_obsolete: false,
-        patch: false,
-        no_patch: false,
-        private: false,
-        no_private: false,
-        flag: vec![],
-    });
-    let result = bzr::commands::attachment::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
+    let result = dispatch_cli(&[
+        "bzr",
+        "attachment",
+        "update",
+        "99",
+        "--summary",
+        "Updated summary",
+    ])
     .await;
     assert!(
         result.is_ok(),
@@ -1336,7 +1121,6 @@ async fn attachment_update_integration() {
 
 #[tokio::test]
 async fn component_update_integration() {
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
@@ -1346,25 +1130,7 @@ async fn component_update_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::ComponentAction::Update {
-        from_json: None,
-        id: Some(10),
-        product: None,
-        component: None,
-        name: Some("Updated".to_string()),
-        description: None,
-        default_assignee: None,
-    };
-    let result = bzr::commands::component::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
-    .await;
+    let result = dispatch_cli(&["bzr", "component", "update", "10", "--name", "Updated"]).await;
     assert!(
         result.is_ok(),
         "component update should succeed: {result:?}"
@@ -1375,7 +1141,6 @@ async fn component_update_integration() {
 
 #[tokio::test]
 async fn product_view_integration() {
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -1390,19 +1155,7 @@ async fn product_view_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::ProductAction::View {
-        name: "Firefox".to_string(),
-    };
-    let result = bzr::commands::product::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
-    .await;
+    let result = dispatch_cli(&["bzr", "product", "view", "Firefox"]).await;
     assert!(result.is_ok(), "product view should succeed: {result:?}");
 }
 
@@ -1410,7 +1163,6 @@ async fn product_view_integration() {
 
 #[tokio::test]
 async fn product_create_integration() {
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("POST"))
@@ -1420,22 +1172,19 @@ async fn product_create_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::ProductAction::Create {
-        from_json: None,
-        name: Some("NewProduct".to_string()),
-        description: Some("A new product".to_string()),
-        version: Some("1.0".to_string()),
-        is_open: Some(true),
-    };
-    let result = bzr::commands::product::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
+    let result = dispatch_cli(&[
+        "bzr",
+        "product",
+        "create",
+        "--name",
+        "NewProduct",
+        "--description",
+        "A new product",
+        "--version",
+        "1.0",
+        "--is-open",
+        "true",
+    ])
     .await;
     assert!(result.is_ok(), "product create should succeed: {result:?}");
 }
@@ -1444,7 +1193,6 @@ async fn product_create_integration() {
 
 #[tokio::test]
 async fn product_update_integration() {
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
@@ -1456,22 +1204,14 @@ async fn product_update_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::ProductAction::Update {
-        from_json: None,
-        name: Some("Firefox".to_string()),
-        description: Some("Updated description".to_string()),
-        default_milestone: None,
-        is_open: None,
-    };
-    let result = bzr::commands::product::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
+    let result = dispatch_cli(&[
+        "bzr",
+        "product",
+        "update",
+        "Firefox",
+        "--description",
+        "Updated description",
+    ])
     .await;
     assert!(result.is_ok(), "product update should succeed: {result:?}");
 }
@@ -1480,7 +1220,6 @@ async fn product_update_integration() {
 
 #[tokio::test]
 async fn user_create_integration() {
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("POST"))
@@ -1490,22 +1229,15 @@ async fn user_create_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::UserAction::Create {
-        from_json: None,
-        email: Some("new@example.com".to_string()),
-        login: None,
-        full_name: Some("New User".to_string()),
-        password: None,
-    };
-    let result = bzr::commands::user::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
+    let result = dispatch_cli(&[
+        "bzr",
+        "user",
+        "create",
+        "--email",
+        "new@example.com",
+        "--full-name",
+        "New User",
+    ])
     .await;
     assert!(result.is_ok(), "user create should succeed: {result:?}");
 }
@@ -1514,7 +1246,6 @@ async fn user_create_integration() {
 
 #[tokio::test]
 async fn user_update_integration() {
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
@@ -1526,23 +1257,14 @@ async fn user_update_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::UserAction::Update {
-        from_json: None,
-        user: Some("alice@example.com".to_string()),
-        real_name: Some("Alice Updated".to_string()),
-        email: None,
-        disable_login: None,
-        login_denied_text: None,
-    };
-    let result = bzr::commands::user::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
+    let result = dispatch_cli(&[
+        "bzr",
+        "user",
+        "update",
+        "alice@example.com",
+        "--real-name",
+        "Alice Updated",
+    ])
     .await;
     assert!(result.is_ok(), "user update should succeed: {result:?}");
 }
@@ -1551,7 +1273,6 @@ async fn user_update_integration() {
 
 #[tokio::test]
 async fn group_create_integration() {
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("POST"))
@@ -1561,21 +1282,17 @@ async fn group_create_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::GroupAction::Create {
-        from_json: None,
-        name: Some("testers".to_string()),
-        description: Some("Tester group".to_string()),
-        is_active: Some(true),
-    };
-    let result = bzr::commands::group::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
+    let result = dispatch_cli(&[
+        "bzr",
+        "group",
+        "create",
+        "--name",
+        "testers",
+        "--description",
+        "Tester group",
+        "--is-active",
+        "true",
+    ])
     .await;
     assert!(result.is_ok(), "group create should succeed: {result:?}");
 }
@@ -1584,7 +1301,6 @@ async fn group_create_integration() {
 
 #[tokio::test]
 async fn group_update_integration() {
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
@@ -1596,21 +1312,14 @@ async fn group_update_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::GroupAction::Update {
-        from_json: None,
-        group: Some("testers".to_string()),
-        description: Some("Updated testers".to_string()),
-        is_active: None,
-    };
-    let result = bzr::commands::group::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
+    let result = dispatch_cli(&[
+        "bzr",
+        "group",
+        "update",
+        "testers",
+        "--description",
+        "Updated testers",
+    ])
     .await;
     assert!(result.is_ok(), "group update should succeed: {result:?}");
 }
@@ -1619,7 +1328,6 @@ async fn group_update_integration() {
 
 #[tokio::test]
 async fn group_add_user_integration() {
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
@@ -1631,19 +1339,15 @@ async fn group_add_user_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::GroupAction::AddUser {
-        group: "admin".to_string(),
-        user: "alice@example.com".to_string(),
-    };
-    let result = bzr::commands::group::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
+    let result = dispatch_cli(&[
+        "bzr",
+        "group",
+        "add-user",
+        "--group",
+        "admin",
+        "--user",
+        "alice@example.com",
+    ])
     .await;
     assert!(result.is_ok(), "group add-user should succeed: {result:?}");
 }
@@ -1652,7 +1356,6 @@ async fn group_add_user_integration() {
 
 #[tokio::test]
 async fn group_remove_user_integration() {
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("PUT"))
@@ -1664,19 +1367,15 @@ async fn group_remove_user_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::GroupAction::RemoveUser {
-        group: "admin".to_string(),
-        user: "alice@example.com".to_string(),
-    };
-    let result = bzr::commands::group::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
+    let result = dispatch_cli(&[
+        "bzr",
+        "group",
+        "remove-user",
+        "--group",
+        "admin",
+        "--user",
+        "alice@example.com",
+    ])
     .await;
     assert!(
         result.is_ok(),
@@ -1688,7 +1387,6 @@ async fn group_remove_user_integration() {
 
 #[tokio::test]
 async fn group_list_users_integration() {
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -1706,20 +1404,7 @@ async fn group_list_users_integration() {
         .mount(&mock)
         .await;
 
-    let action = bzr::cli::GroupAction::ListUsers {
-        group: "admin".to_string(),
-        details: false,
-    };
-    let result = bzr::commands::group::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            Some("test"),
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
-    .await;
+    let result = dispatch_cli(&["bzr", "group", "list-users", "--group", "admin"]).await;
     assert!(
         result.is_ok(),
         "group list-users should succeed: {result:?}"
@@ -1730,7 +1415,6 @@ async fn group_list_users_integration() {
 
 #[tokio::test]
 async fn config_set_server_integration() {
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
 
@@ -1743,28 +1427,16 @@ async fn config_set_server_integration() {
     .unwrap();
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
-    let action = bzr::cli::ConfigAction::SetServer {
-        name: "staging".to_string(),
-        url: "https://staging.bugzilla.example".to_string(),
-        api_key: Some("staging-key-abc".to_string()),
-        api_key_env: None,
-        email: None,
-        auth_method: None,
-        tls_insecure: false,
-        tls_ca_cert: None,
-        tls_pin_sha256: None,
-        tls_pin_now: false,
-        tls_pin_clear: false,
-    };
-    let result = bzr::commands::config::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            None,
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
+    let result = dispatch_cli(&[
+        "bzr",
+        "config",
+        "set-server",
+        "staging",
+        "--url",
+        "https://staging.bugzilla.example",
+        "--api-key",
+        "staging-key-abc",
+    ])
     .await;
     assert!(
         result.is_ok(),
@@ -1774,7 +1446,6 @@ async fn config_set_server_integration() {
 
 #[tokio::test]
 async fn config_set_default_integration() {
-    let mut __cap_io = bzr::test_helpers::CapturedIo::new();
     let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
 
@@ -1787,19 +1458,7 @@ async fn config_set_default_integration() {
     .unwrap();
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
-    let action = bzr::cli::ConfigAction::SetDefault {
-        name: "staging".to_string(),
-    };
-    let result = bzr::commands::config::execute(
-        &action,
-        &bzr::commands::runtime::context::CommandContext::new(
-            None,
-            bzr::types::OutputFormat::Json,
-            None,
-        ),
-        &mut __cap_io.writers(),
-    )
-    .await;
+    let result = dispatch_cli(&["bzr", "config", "set-default", "staging"]).await;
     assert!(
         result.is_ok(),
         "config set-default should succeed: {result:?}"
@@ -1809,8 +1468,8 @@ async fn config_set_default_integration() {
 // ── CLI-to-execute end-to-end tests ──────────────────────────────────
 // These test the full path: CLI arg parsing → command dispatch → API call
 
-/// Parse CLI args and dispatch to the correct command `execute(, &mut __cap_io.writers())` function,
-/// exercising the same path as `main.rs::run()`.
+/// Parse CLI args and dispatch to the matching command, exercising the same
+/// path as `main.rs::run()`.
 async fn dispatch_cli(args: &[&str]) -> bzr::error::Result<()> {
     let cli = bzr::cli::Cli::try_parse_from(args)
         .map_err(|e| bzr::error::BzrError::InputValidation(e.to_string()))?;
