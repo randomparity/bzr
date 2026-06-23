@@ -249,6 +249,52 @@ async fn dispatch_rejects_whoami_without_credentials() {
 }
 
 #[tokio::test]
+async fn dispatch_installs_runtime_globals_before_validation_errors() {
+    let _lock = ENV_LOCK.lock().await;
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    write_public_config(&tmp, &mock.uri());
+
+    commands::runtime::dry_run::set(true);
+    commands::runtime::confirm::set_yes(true);
+    commands::runtime::inline_server::set(Some(commands::runtime::inline_server::InlineServer {
+        url: "http://stale.example.invalid".into(),
+        api_key_env: Some("STALE_API_KEY".into()),
+        email: Some("stale@example.invalid".into()),
+        tls: commands::runtime::inline_server::InlineTlsOptions::default(),
+    }));
+
+    let cli = cli::Cli::try_parse_from(["bzr", "--server", "public", "whoami"]).unwrap();
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = dispatch(&cli, OutputFormat::Json, &mut io.writers()).await;
+
+    let dry_run_enabled = commands::runtime::dry_run::enabled();
+    let assume_yes = commands::runtime::confirm::yes();
+    let inline_server = commands::runtime::inline_server::get();
+    commands::runtime::dry_run::set(false);
+    commands::runtime::confirm::set_yes(false);
+    commands::runtime::inline_server::set(None);
+
+    assert!(matches!(
+        result,
+        Err(error::BzrError::Config(ref msg))
+            if msg.contains("whoami") && msg.contains("credentials")
+    ));
+    assert!(
+        !dry_run_enabled,
+        "dry-run state should come from the rejected invocation"
+    );
+    assert!(
+        !assume_yes,
+        "assume-yes state should come from the rejected invocation"
+    );
+    assert!(
+        inline_server.is_none(),
+        "inline server state should come from the rejected invocation"
+    );
+}
+
+#[tokio::test]
 async fn dispatch_rejects_inline_write_without_api_key_env_before_network() {
     let _lock = ENV_LOCK.lock().await;
     let mock = MockServer::start().await;

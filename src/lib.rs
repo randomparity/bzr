@@ -78,11 +78,11 @@ pub async fn dispatch(
     w: &mut output::writers::Writers<'_>,
 ) -> error::Result<()> {
     apply_network_tuning(cli);
-    ensure_dry_run_supported(cli)?;
-    ensure_credentials_for_command(cli)?;
-    commands::runtime::dry_run::set(cli.dry_run);
-    commands::runtime::confirm::set_yes(cli.yes);
-    commands::runtime::inline_server::set(resolve_inline_server(cli));
+    install_runtime_globals(cli);
+    if let Err(err) = ensure_dispatch_allowed(cli) {
+        clear_runtime_globals();
+        return Err(err);
+    }
 
     let api = cli.api;
     let server = cli.server.as_deref();
@@ -131,6 +131,23 @@ pub async fn dispatch(
         cli::Commands::Completion { shell } => commands::completion::execute(*shell, w),
         cli::Commands::Schema { name } => commands::schema::execute(name.as_deref(), format, w),
     }
+}
+
+fn install_runtime_globals(cli: &cli::Cli) {
+    commands::runtime::dry_run::set(cli.dry_run);
+    commands::runtime::confirm::set_yes(cli.yes);
+    commands::runtime::inline_server::set(resolve_inline_server(cli));
+}
+
+fn clear_runtime_globals() {
+    commands::runtime::dry_run::set(false);
+    commands::runtime::confirm::set_yes(false);
+    commands::runtime::inline_server::set(None);
+}
+
+fn ensure_dispatch_allowed(cli: &cli::Cli) -> error::Result<()> {
+    ensure_dry_run_supported(cli)?;
+    ensure_credentials_for_command(cli)
 }
 
 /// Install process-wide network tuning from the global flags before any client
