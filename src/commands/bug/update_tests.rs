@@ -638,6 +638,47 @@ async fn bug_update_from_json_rejects_json_comment_file_stdin() {
 }
 
 #[tokio::test]
+async fn bug_update_from_json_cli_comment_overrides_json_comment_file_stdin() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/42"))
+        .and(body_partial_json(serde_json::json!({
+            "status": "ASSIGNED",
+            "comment": {
+                "body": "ready",
+            },
+        })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": [{"id": 42, "changes": {}}]})),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{"id":42,"status":"ASSIGNED","comment_file":"-"}"#;
+    let mut action = from_json_update_action(&write_json_file(&tmp, json));
+    let BugAction::Update(args) = &mut action else {
+        panic!("expected update action");
+    };
+    args.comment = Some("ready".into());
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(
+        result.is_ok(),
+        "CLI comment should override JSON comment_file stdin: {result:?}"
+    );
+    assert_eq!(received_put_count(&mock).await, 1);
+}
+
+#[tokio::test]
 async fn bug_update_sends_put() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     mock_put_bug_ok(&mock, 42).await;

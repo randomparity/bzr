@@ -21,8 +21,12 @@ struct JsonUpdateRequest {
     params: UpdateBugParams,
 }
 
-fn reject_json_comment_file_stdin(entry: &super::update::BugUpdateDraft) -> Result<()> {
-    if entry.comment_file.as_deref() == Some(std::path::Path::new("-")) {
+fn reject_json_comment_file_stdin(
+    entry: &super::update::BugUpdateDraft,
+    args: &UpdateArgs,
+) -> Result<()> {
+    let cli_comment_file_stdin = args.comment_file.as_deref() == Some(std::path::Path::new("-"));
+    if entry.comment_file.as_deref() == Some(std::path::Path::new("-")) && !cli_comment_file_stdin {
         return Err(crate::error::BzrError::InputValidation(
             "--from-json comment_file cannot read from stdin; use comment text in JSON instead"
                 .into(),
@@ -80,8 +84,8 @@ fn build_from_json(
     args: &UpdateArgs,
     ids: Vec<u64>,
 ) -> Result<(Vec<u64>, UpdateBugParams, Option<String>)> {
-    reject_json_comment_file_stdin(&entry)?;
     entry.overlay_cli(args);
+    reject_json_comment_file_stdin(&entry, args)?;
     let expected = entry.expect_unchanged_since.clone();
     let (ids, params) = super::update::build_update_params_from_draft(ids, &entry)?;
     Ok((ids, params, expected))
