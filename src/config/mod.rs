@@ -11,5 +11,5 @@ use store::fsync_parent_dir;
 use store::set_fail_after_temp;
 
 #[cfg(test)]
-#[path = "../config_tests.rs"]
+#[path = "mod_tests.rs"]
 mod tests;
