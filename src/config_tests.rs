@@ -1,9 +1,13 @@
 #![expect(clippy::unwrap_used, clippy::panic)]
 
 use super::*;
+use crate::types::{ApiMode, AuthMethod};
+use std::collections::HashMap;
 use std::env;
+use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+use std::path::PathBuf;
 use std::str::FromStr;
 
 fn make_server_config(url: &str) -> ServerConfig {
