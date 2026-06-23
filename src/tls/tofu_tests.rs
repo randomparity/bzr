@@ -76,7 +76,13 @@ async fn probe_server_cert_returns_error_for_unreachable() {
         crate::http::REQUEST_TIMEOUT,
     )
     .await;
-    assert!(result.is_err(), "should fail for unreachable server");
+    let variant = match &result {
+        Err(BzrError::Http(_)) => "http",
+        Err(BzrError::Config(_)) => "config",
+        Err(_) => "other error",
+        Ok(_) => "ok",
+    };
+    assert_eq!(variant, "http", "expected Http error, got {result:?}");
 }
 
 #[test]

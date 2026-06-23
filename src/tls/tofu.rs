@@ -94,9 +94,7 @@ pub(crate) async fn probe_server_cert(
         .build()
         .map_err(|e| BzrError::config(format!("failed to build TLS probe client: {e}")))?;
 
-    client.head(url).send().await.map_err(|e| {
-        BzrError::config(format!("failed to probe server certificate at {url}: {e}"))
-    })?;
+    client.head(url).send().await?;
 
     let (der, issuer) = capture
         .captured
