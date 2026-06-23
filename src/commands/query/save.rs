@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::output::resources::query::write_query_saved;
 use crate::output::writers::Writers;
-use crate::types::bug::SavedQuery;
+use crate::types::query::SavedQuery;
 
 use super::{explicit_sort_order, saved_query_from_url, UrlQueryOverrides};
 
