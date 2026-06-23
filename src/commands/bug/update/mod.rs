@@ -1,7 +1,6 @@
 use crate::cli::{BugAction, UpdateArgs};
 use crate::client::BugzillaClient;
 use crate::commands::runtime::context::CommandContext;
-use crate::commands::runtime::shared::{merge_set, merge_vec};
 use crate::error::Result;
 use crate::output::result_types::{
     write_result, ActionResult, BatchFailure, BatchResult, ResourceKind,
@@ -9,12 +8,13 @@ use crate::output::result_types::{
 use crate::output::writers::Writers;
 use crate::types::bug::UpdateBugParams;
 use crate::types::common::OutputFormat;
-use serde::Deserialize;
 
+mod draft;
 mod output;
 mod payload;
 mod validate;
 
+pub(super) use draft::BugUpdateDraft;
 pub(super) use output::write_batch_result;
 use output::{comment_suffix, write_update_dry_run};
 use payload::build_update_params;
@@ -25,166 +25,6 @@ pub(super) fn validate_action(action: &BugAction) -> Result<()> {
     match action {
         BugAction::Update(args) => validate_args(args),
         _ => Ok(()),
-    }
-}
-
-/// Bug update fields after CLI flags or JSON input have been merged.
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct BugUpdateDraft {
-    pub(super) id: Option<u64>,
-    pub(super) status: Option<String>,
-    pub(super) resolution: Option<String>,
-    pub(super) dupe_of: Option<u64>,
-    pub(super) alias: Option<String>,
-    pub(super) deadline: Option<String>,
-    pub(super) estimated_time: Option<f64>,
-    pub(super) remaining_time: Option<f64>,
-    pub(super) work_time: Option<f64>,
-    pub(super) reset_assigned_to: Option<bool>,
-    pub(super) reset_qa_contact: Option<bool>,
-    pub(super) assignee: Option<String>,
-    pub(super) priority: Option<String>,
-    pub(super) severity: Option<String>,
-    pub(super) summary: Option<String>,
-    pub(super) whiteboard: Option<String>,
-    pub(super) url: Option<String>,
-    pub(super) target_milestone: Option<String>,
-    pub(super) comment: Option<String>,
-    pub(super) comment_file: Option<std::path::PathBuf>,
-    pub(super) comment_private: Option<bool>,
-    #[serde(default)]
-    pub(super) flags: Vec<String>,
-    #[serde(default)]
-    pub(super) blocks_add: Vec<u64>,
-    #[serde(default)]
-    pub(super) blocks_remove: Vec<u64>,
-    #[serde(default)]
-    pub(super) depends_on_add: Vec<u64>,
-    #[serde(default)]
-    pub(super) depends_on_remove: Vec<u64>,
-    #[serde(default)]
-    pub(super) keywords_add: Vec<String>,
-    #[serde(default)]
-    pub(super) keywords_remove: Vec<String>,
-    #[serde(default)]
-    pub(super) cc_add: Vec<String>,
-    #[serde(default)]
-    pub(super) cc_remove: Vec<String>,
-    #[serde(default)]
-    pub(super) groups_add: Vec<String>,
-    #[serde(default)]
-    pub(super) groups_remove: Vec<String>,
-    #[serde(default)]
-    pub(super) see_also_add: Vec<String>,
-    #[serde(default)]
-    pub(super) see_also_remove: Vec<String>,
-    pub(super) expect_unchanged_since: Option<String>,
-}
-
-impl BugUpdateDraft {
-    pub(super) fn from_cli(args: &UpdateArgs) -> Self {
-        Self {
-            id: None,
-            status: args.status.clone(),
-            resolution: args.resolution.clone(),
-            dupe_of: args.dupe_of,
-            alias: args.alias.clone(),
-            deadline: args.deadline.clone(),
-            estimated_time: args.estimated_time,
-            remaining_time: args.remaining_time,
-            work_time: args.work_time,
-            reset_assigned_to: args.reset_assigned_to.then_some(true),
-            reset_qa_contact: args.reset_qa_contact.then_some(true),
-            assignee: args.assignee.clone(),
-            priority: args.priority.clone(),
-            severity: args.severity.clone(),
-            summary: args.summary.clone(),
-            whiteboard: args.whiteboard.clone(),
-            url: args.url.clone(),
-            target_milestone: args.target_milestone.clone(),
-            comment: args.comment.clone(),
-            comment_file: args.comment_file.clone(),
-            comment_private: args.comment_private.then_some(true),
-            flags: args.flag.clone(),
-            blocks_add: args.blocks_add.clone(),
-            blocks_remove: args.blocks_remove.clone(),
-            depends_on_add: args.depends_on_add.clone(),
-            depends_on_remove: args.depends_on_remove.clone(),
-            keywords_add: args.keywords_add.clone(),
-            keywords_remove: args.keywords_remove.clone(),
-            cc_add: args.cc_add.clone(),
-            cc_remove: args.cc_remove.clone(),
-            groups_add: args.groups_add.clone(),
-            groups_remove: args.groups_remove.clone(),
-            see_also_add: args.see_also_add.clone(),
-            see_also_remove: args.see_also_remove.clone(),
-            expect_unchanged_since: args.expect_unchanged_since.clone(),
-        }
-    }
-
-    pub(super) fn overlay_cli(&mut self, args: &UpdateArgs) {
-        merge_set(&mut self.status, args.status.as_deref());
-        merge_set(&mut self.resolution, args.resolution.as_deref());
-        merge_copy(&mut self.dupe_of, args.dupe_of);
-        merge_set(&mut self.alias, args.alias.as_deref());
-        merge_set(&mut self.deadline, args.deadline.as_deref());
-        merge_copy(&mut self.estimated_time, args.estimated_time);
-        merge_copy(&mut self.remaining_time, args.remaining_time);
-        merge_copy(&mut self.work_time, args.work_time);
-        merge_bool_true(&mut self.reset_assigned_to, args.reset_assigned_to);
-        merge_bool_true(&mut self.reset_qa_contact, args.reset_qa_contact);
-        merge_set(&mut self.assignee, args.assignee.as_deref());
-        merge_set(&mut self.priority, args.priority.as_deref());
-        merge_set(&mut self.severity, args.severity.as_deref());
-        merge_set(&mut self.summary, args.summary.as_deref());
-        merge_set(&mut self.whiteboard, args.whiteboard.as_deref());
-        merge_set(&mut self.url, args.url.as_deref());
-        merge_set(&mut self.target_milestone, args.target_milestone.as_deref());
-        if let Some(comment) = args.comment.as_deref() {
-            self.comment = Some(comment.to_string());
-            self.comment_file = None;
-        }
-        if let Some(comment_file) = args.comment_file.as_deref() {
-            self.comment = None;
-            self.comment_file = Some(comment_file.to_path_buf());
-        }
-        merge_bool_true(&mut self.comment_private, args.comment_private);
-        merge_vec(&mut self.flags, &args.flag);
-        merge_vec_u64(&mut self.blocks_add, &args.blocks_add);
-        merge_vec_u64(&mut self.blocks_remove, &args.blocks_remove);
-        merge_vec_u64(&mut self.depends_on_add, &args.depends_on_add);
-        merge_vec_u64(&mut self.depends_on_remove, &args.depends_on_remove);
-        merge_vec(&mut self.keywords_add, &args.keywords_add);
-        merge_vec(&mut self.keywords_remove, &args.keywords_remove);
-        merge_vec(&mut self.cc_add, &args.cc_add);
-        merge_vec(&mut self.cc_remove, &args.cc_remove);
-        merge_vec(&mut self.groups_add, &args.groups_add);
-        merge_vec(&mut self.groups_remove, &args.groups_remove);
-        merge_vec(&mut self.see_also_add, &args.see_also_add);
-        merge_vec(&mut self.see_also_remove, &args.see_also_remove);
-        merge_set(
-            &mut self.expect_unchanged_since,
-            args.expect_unchanged_since.as_deref(),
-        );
-    }
-}
-
-fn merge_copy<T: Copy>(target: &mut Option<T>, value: Option<T>) {
-    if let Some(value) = value {
-        *target = Some(value);
-    }
-}
-
-fn merge_bool_true(target: &mut Option<bool>, value: bool) {
-    if value {
-        *target = Some(true);
-    }
-}
-
-fn merge_vec_u64(target: &mut Vec<u64>, value: &[u64]) {
-    if !value.is_empty() {
-        *target = value.to_vec();
     }
 }
 
