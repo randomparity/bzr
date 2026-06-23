@@ -35,6 +35,20 @@ fn bool_from_int_or_bool_deserializes_integers() {
 }
 
 #[test]
+fn bool_from_int_or_bool_rejects_non_binary_numbers() {
+    for raw in ["2", "-1", "1.5"] {
+        let json = format!(r#"{{"id":1,"is_obsolete":{raw}}}"#);
+
+        let err = serde_json::from_str::<Attachment>(&json).unwrap_err();
+
+        assert!(
+            err.to_string().contains("expected bool or 0/1 integer"),
+            "unexpected error for {raw}: {err}"
+        );
+    }
+}
+
+#[test]
 fn bool_from_int_or_bool_rejects_string() {
     let json = r#"{"id":1,"is_obsolete":"yes"}"#;
     let err = serde_json::from_str::<Attachment>(json).unwrap_err();
