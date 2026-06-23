@@ -394,25 +394,6 @@ async fn apply_connected(
     }
 }
 
-/// Apply an already-built `UpdateBugParams` to one or more bug IDs, dispatching
-/// to the single- or batch-update path. Shared by `bug update` and the
-/// convenience verbs (`resolve`/`close`/`reopen`/`dup`). Under `--dry-run`,
-/// previews the change without calling the write API.
-pub(super) async fn apply(
-    ids: Vec<u64>,
-    params: UpdateBugParams,
-    ctx: &CommandContext,
-    w: &mut Writers<'_>,
-) -> Result<()> {
-    let format = ctx.format();
-    if ctx.dry_run() {
-        write_update_dry_run(&ids, &params, format, w);
-        return Ok(());
-    }
-    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
-    apply_connected(&client, ids, params, ctx, w).await
-}
-
 pub(super) struct ApplyRequest<'a> {
     pub ids: Vec<u64>,
     pub params: UpdateBugParams,
@@ -428,17 +409,31 @@ pub(super) async fn apply_checked(
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    if ctx.dry_run() {
+        write_update_dry_run(&request.ids, &request.params, ctx.format(), w);
+        return Ok(());
+    }
+    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+    apply_checked_connected(&client, request, ctx, w).await
+}
+
+/// Apply an update with an already configured client after running the optional
+/// optimistic-concurrency guard.
+pub(super) async fn apply_checked_connected(
+    client: &BugzillaClient,
+    request: ApplyRequest<'_>,
+    ctx: &CommandContext,
+    w: &mut Writers<'_>,
+) -> Result<()> {
     let format = ctx.format();
     if ctx.dry_run() {
         write_update_dry_run(&request.ids, &request.params, format, w);
         return Ok(());
     }
     if let Some(expected) = request.expect_unchanged_since {
-        let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
-        ensure_unchanged_since(&client, &request.ids, expected).await?;
-        return apply_connected(&client, request.ids, request.params, ctx, w).await;
+        ensure_unchanged_since(client, &request.ids, expected).await?;
     }
-    apply(request.ids, request.params, ctx, w).await
+    apply_connected(client, request.ids, request.params, ctx, w).await
 }
 
 /// Optimistic-concurrency guard for `--expect-unchanged-since`: refuse the

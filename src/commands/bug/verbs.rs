@@ -90,26 +90,23 @@ pub(super) async fn close(
     // a bad --comment-private combination fails without a round-trip.
     let comment = comment_update(&args.comment)?;
     validate_target_status_value(&args.status)?;
-    if !ctx.dry_run() {
-        let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
-        validate_target_status(&client, &args.status).await?;
-    }
     let params = UpdateBugParams {
         status: Some(args.status.clone()),
         resolution: args.as_resolution.clone(),
         comment,
         ..Default::default()
     };
-    super::update::apply_checked(
-        super::update::ApplyRequest {
-            ids: args.ids.clone(),
-            params,
-            expect_unchanged_since: args.expect_unchanged_since.as_deref(),
-        },
-        ctx,
-        w,
-    )
-    .await
+    let request = super::update::ApplyRequest {
+        ids: args.ids.clone(),
+        params,
+        expect_unchanged_since: args.expect_unchanged_since.as_deref(),
+    };
+    if ctx.dry_run() {
+        return super::update::apply_checked(request, ctx, w).await;
+    }
+    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+    validate_target_status(&client, &args.status).await?;
+    super::update::apply_checked_connected(&client, request, ctx, w).await
 }
 
 pub(super) async fn reopen(
@@ -119,25 +116,22 @@ pub(super) async fn reopen(
 ) -> Result<()> {
     let comment = comment_update(&args.comment)?;
     validate_target_status_value(&args.status)?;
-    if !ctx.dry_run() {
-        let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
-        validate_target_status(&client, &args.status).await?;
-    }
     let params = UpdateBugParams {
         status: Some(args.status.clone()),
         comment,
         ..Default::default()
     };
-    super::update::apply_checked(
-        super::update::ApplyRequest {
-            ids: args.ids.clone(),
-            params,
-            expect_unchanged_since: args.expect_unchanged_since.as_deref(),
-        },
-        ctx,
-        w,
-    )
-    .await
+    let request = super::update::ApplyRequest {
+        ids: args.ids.clone(),
+        params,
+        expect_unchanged_since: args.expect_unchanged_since.as_deref(),
+    };
+    if ctx.dry_run() {
+        return super::update::apply_checked(request, ctx, w).await;
+    }
+    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+    validate_target_status(&client, &args.status).await?;
+    super::update::apply_checked_connected(&client, request, ctx, w).await
 }
 
 pub(super) async fn dup(args: &DupArgs, ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
