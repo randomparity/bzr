@@ -84,5 +84,5 @@ async fn anonymous_xmlrpc_call_omits_api_key() {
     let requests = mock.received_requests().await.unwrap();
     assert_eq!(requests.len(), 1);
     let body = std::str::from_utf8(&requests[0].body).unwrap();
-    assert!(!body.contains(crate::http::AUTH_QUERY_PARAM));
+    assert!(!body.contains(crate::bugzilla_auth::AUTH_QUERY_PARAM));
 }

@@ -8,9 +8,9 @@ use wiremock::matchers::{header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use super::*;
+use crate::bugzilla_auth::AUTH_HEADER_NAME;
 use crate::client::test_helpers::test_http_client;
 use crate::error::BzrError;
-use crate::http::AUTH_HEADER_NAME;
 
 fn spawn_self_signed_https_server() -> (String, std::thread::JoinHandle<()>) {
     let params = rcgen::CertificateParams::new(vec!["localhost".to_owned()]).unwrap();
@@ -70,7 +70,10 @@ async fn falls_back_to_query_param() {
 
     Mock::given(method("GET"))
         .and(path("/rest/whoami"))
-        .and(query_param(crate::http::AUTH_QUERY_PARAM, "test-key"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 7})))
         .mount(&server)
         .await;
@@ -134,7 +137,10 @@ async fn valid_login_query_param_but_header_works_on_api() {
     Mock::given(method("GET"))
         .and(path("/rest/valid_login"))
         .and(query_param("login", "user@example.com"))
-        .and(query_param(crate::http::AUTH_QUERY_PARAM, "test-key"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": true})))
         .mount(&server)
         .await;
@@ -182,7 +188,10 @@ async fn valid_login_query_param_and_header_fails_on_api() {
     Mock::given(method("GET"))
         .and(path("/rest/valid_login"))
         .and(query_param("login", "user@example.com"))
-        .and(query_param(crate::http::AUTH_QUERY_PARAM, "test-key"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": true})))
         .mount(&server)
         .await;
@@ -256,7 +265,7 @@ async fn anonymous_detection_propagates_tls_certificate_errors() {
         return;
     };
     assert!(
-        crate::http::is_tls_cert_error(&err),
+        crate::tls::is_tls_cert_error(&err),
         "anonymous detection should surface TLS cert errors, got: {err:#}"
     );
 }

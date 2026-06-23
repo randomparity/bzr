@@ -137,9 +137,9 @@ pub(crate) fn format_error_chain(err: &dyn std::error::Error) -> String {
 /// Format a reqwest error for display: redact API keys and add TLS hints.
 fn format_http_error(err: &reqwest::Error) -> String {
     let chain = format_error_chain(err);
-    let mut msg = crate::http::redact_api_key(&chain);
-    if crate::http::is_connect_tls_error(err.is_connect(), &chain) {
-        msg.push_str(crate::http::TLS_HINT);
+    let mut msg = crate::bugzilla_auth::redact_api_key(&chain);
+    if crate::tls::is_connect_tls_error(err.is_connect(), &chain) {
+        msg.push_str(crate::tls::TLS_HINT);
     }
     msg
 }

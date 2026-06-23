@@ -46,7 +46,7 @@ fn should_offer_tofu(err: &BzrError, tls_config: &TlsConfig) -> bool {
     if !tls_uses_default_trust(tls_config) {
         return false;
     }
-    matches!(err, BzrError::Http(e) if crate::http::is_tls_cert_error(e))
+    matches!(err, BzrError::Http(e) if crate::tls::is_tls_cert_error(e))
 }
 
 /// Check whether the connection relies on the default OS trust store with

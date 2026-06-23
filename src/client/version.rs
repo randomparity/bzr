@@ -1,5 +1,5 @@
+use crate::bugzilla_auth::apply_auth;
 use crate::error::{BzrError, Result};
-use crate::http::apply_auth;
 use crate::types::{ApiMode, AuthMethod};
 
 #[derive(Debug, Clone, Copy)]
@@ -73,13 +73,13 @@ async fn detect_version_and_mode_inner(
             if matches!(
                 send_error_handling,
                 SendErrorHandling::PropagateTlsCertificate
-            ) && crate::http::is_tls_cert_error(&e)
+            ) && crate::tls::is_tls_cert_error(&e)
             {
                 return Err(BzrError::Http(e));
             }
             tracing::warn!(
                 "{}",
-                crate::http::tls_hint(
+                crate::tls::tls_hint(
                     &format!("version detection failed (falling back to xmlrpc): {e}"),
                     &e,
                 )

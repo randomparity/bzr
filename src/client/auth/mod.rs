@@ -84,14 +84,14 @@ pub async fn detect_server_settings_without_auth(
 }
 
 /// Log a probe's `send()` error, surfacing TLS-certificate problems at `warn`
-/// with a [`crate::http::tls_hint`] and routing all other transport errors to
+/// with a [`crate::tls::tls_hint`] and routing all other transport errors to
 /// `debug`. Shared by the `whoami` and `valid_login` probes so their
 /// network-error handling cannot drift apart (the cause of TD-002).
 fn log_probe_send_error(probe: &str, method: AuthMethod, e: &reqwest::Error) {
-    if crate::http::is_tls_cert_error(e) {
+    if crate::tls::is_tls_cert_error(e) {
         tracing::warn!(
             "{}",
-            crate::http::tls_hint(&format!("{probe} {method} request failed: {e:#}"), e)
+            crate::tls::tls_hint(&format!("{probe} {method} request failed: {e:#}"), e)
         );
     } else {
         tracing::debug!("{probe} {method} request failed: {e:#}");
@@ -108,7 +108,7 @@ fn log_probe_send_error(probe: &str, method: AuthMethod, e: &reqwest::Error) {
 /// the real request (which has the transient-retry budget) may still succeed, so
 /// a single detection-time blip must not fail the whole invocation.
 fn network_error_outcome(e: reqwest::Error) -> Result<AuthMethod> {
-    if crate::http::is_tls_cert_error(&e) {
+    if crate::tls::is_tls_cert_error(&e) {
         return Err(BzrError::Http(e));
     }
     tracing::warn!(

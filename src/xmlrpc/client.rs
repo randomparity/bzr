@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
+use crate::bugzilla_auth::AUTH_QUERY_PARAM;
 use crate::error::{BzrError, Result};
-use crate::http::AUTH_QUERY_PARAM;
 use crate::xmlrpc::call::build_request;
 use crate::xmlrpc::parsing::parse_response;
 use crate::xmlrpc::value::Value;

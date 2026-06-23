@@ -77,12 +77,12 @@ async fn detect_version_and_mode_without_auth_sends_no_credentials() {
     assert_eq!(requests.len(), 1);
     assert!(requests[0]
         .headers
-        .get(crate::http::AUTH_HEADER_NAME)
+        .get(crate::bugzilla_auth::AUTH_HEADER_NAME)
         .is_none());
     assert!(requests[0]
         .url
         .query_pairs()
-        .all(|(name, _)| name != crate::http::AUTH_QUERY_PARAM));
+        .all(|(name, _)| name != crate::bugzilla_auth::AUTH_QUERY_PARAM));
 }
 
 #[tokio::test]

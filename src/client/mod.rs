@@ -18,8 +18,8 @@ use reqwest::header::HeaderValue;
 use reqwest::RequestBuilder;
 use serde::Deserialize;
 
+use crate::bugzilla_auth::{AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::error::{BzrError, Result};
-use crate::http::{AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::types::BugzillaUser;
 use crate::types::{ApiMode, AuthMethod};
 use crate::xmlrpc::client::XmlRpcClient;
@@ -328,10 +328,10 @@ impl BugzillaClient {
     pub(super) fn apply_auth(&self, builder: RequestBuilder) -> RequestBuilder {
         match &self.auth {
             Some(PreparedAuth::Header(value)) => {
-                crate::http::apply_auth_to_request(builder, Some(value), None)
+                crate::bugzilla_auth::apply_auth_to_request(builder, Some(value), None)
             }
             Some(PreparedAuth::QueryParam(key)) => {
-                crate::http::apply_auth_to_request(builder, None, Some(key))
+                crate::bugzilla_auth::apply_auth_to_request(builder, None, Some(key))
             }
             None => builder,
         }
@@ -706,7 +706,7 @@ const BODY_TRACE_MAX_BYTES: usize = 2048;
 ///
 /// Truncates to [`BODY_PREVIEW_MAX_BYTES`] on a UTF-8 char boundary,
 /// appends `…` when truncated, runs the result through
-/// [`crate::http::redact_api_key`] to strip echoed-back API keys, and
+/// [`crate::bugzilla_auth::redact_api_key`] to strip echoed-back API keys, and
 /// collapses internal newlines and tabs to single spaces so the preview
 /// stays on one line beneath the main error.
 ///
@@ -736,7 +736,7 @@ fn format_body_preview(body: &str) -> String {
         })
         .collect();
 
-    crate::http::redact_api_key(&collapsed)
+    crate::bugzilla_auth::redact_api_key(&collapsed)
 }
 
 #[cfg(test)]

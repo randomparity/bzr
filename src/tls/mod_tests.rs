@@ -79,19 +79,17 @@ async fn api_key_header_not_forwarded_across_cross_host_redirect() {
     let (origin, target) = cross_host_redirect_pair().await;
     let client = build_tls_client(&TlsConfig::default()).unwrap();
 
-    // Mirror the real client's header-auth attach (http::apply_auth_to_request).
+    // Mirror the real client's header-auth attach.
     let _ = client
         .get(format!("{}/start", origin.uri()))
-        .header(crate::http::AUTH_HEADER_NAME, "SECRET-API-KEY")
+        .header(crate::bugzilla_auth::AUTH_HEADER_NAME, "SECRET-API-KEY")
         .send()
         .await;
 
-    let leaked = target
-        .received_requests()
-        .await
-        .unwrap()
-        .iter()
-        .any(|r| r.headers.contains_key(crate::http::AUTH_HEADER_NAME));
+    let leaked = target.received_requests().await.unwrap().iter().any(|r| {
+        r.headers
+            .contains_key(crate::bugzilla_auth::AUTH_HEADER_NAME)
+    });
     assert!(
         !leaked,
         "API key header must not be forwarded to a different host across a redirect"
@@ -105,14 +103,14 @@ async fn api_key_query_param_not_forwarded_across_cross_host_redirect() {
 
     let _ = client
         .get(format!("{}/start", origin.uri()))
-        .query(&[(crate::http::AUTH_QUERY_PARAM, "SECRET-QP-KEY")])
+        .query(&[(crate::bugzilla_auth::AUTH_QUERY_PARAM, "SECRET-QP-KEY")])
         .send()
         .await;
 
     let leaked = target.received_requests().await.unwrap().iter().any(|r| {
         r.url
             .query()
-            .is_some_and(|q| q.contains(crate::http::AUTH_QUERY_PARAM))
+            .is_some_and(|q| q.contains(crate::bugzilla_auth::AUTH_QUERY_PARAM))
     });
     assert!(
         !leaked,
@@ -141,14 +139,16 @@ async fn same_host_redirect_is_followed_with_credentials() {
     let client = build_tls_client(&TlsConfig::default()).unwrap();
     let resp = client
         .get(format!("{}/start", server.uri()))
-        .header(crate::http::AUTH_HEADER_NAME, "SECRET-API-KEY")
+        .header(crate::bugzilla_auth::AUTH_HEADER_NAME, "SECRET-API-KEY")
         .send()
         .await
         .unwrap();
     assert_eq!(resp.status(), 200, "same-host redirect should be followed");
 
     let landed_with_key = server.received_requests().await.unwrap().iter().any(|r| {
-        r.url.path() == "/landed" && r.headers.contains_key(crate::http::AUTH_HEADER_NAME)
+        r.url.path() == "/landed"
+            && r.headers
+                .contains_key(crate::bugzilla_auth::AUTH_HEADER_NAME)
     });
     assert!(
         landed_with_key,

@@ -22,6 +22,7 @@
     reason = "internal surface for the binary and integration tests, not external consumers"
 )]
 
+pub(crate) mod bugzilla_auth;
 pub mod cli;
 pub mod client;
 pub mod commands;

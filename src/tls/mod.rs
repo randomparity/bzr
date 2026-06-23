@@ -1,10 +1,13 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+pub(crate) mod error;
 pub(crate) mod fingerprint;
 pub(crate) mod pin_failure;
 pub(crate) mod tofu;
 pub(crate) mod verifier;
+
+pub(crate) use error::{is_connect_tls_error, is_tls_cert_error, tls_hint, TLS_HINT};
 
 /// Get the default crypto provider, falling back to ring.
 pub(crate) fn default_provider() -> Arc<rustls::crypto::CryptoProvider> {

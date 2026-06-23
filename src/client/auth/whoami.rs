@@ -1,7 +1,7 @@
 use reqwest::header::HeaderValue;
 use serde::Deserialize;
 
-use crate::http::{AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
+use crate::bugzilla_auth::{AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::types::AuthMethod;
 
 #[derive(Deserialize)]

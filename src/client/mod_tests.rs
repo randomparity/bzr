@@ -10,7 +10,7 @@ use test_helpers::{test_client, test_client_query_param};
 fn safe_url_strips_query_params() {
     let url = reqwest::Url::parse(&format!(
         "https://bugzilla.example.com/rest/bug/1?{}=secret",
-        crate::http::AUTH_QUERY_PARAM
+        crate::bugzilla_auth::AUTH_QUERY_PARAM
     ))
     .unwrap();
     let safe = BugzillaClient::safe_url(&url);
@@ -87,12 +87,12 @@ async fn anonymous_client_sends_no_api_key_header_or_query() {
     assert_eq!(requests.len(), 1);
     assert!(requests[0]
         .headers
-        .get(crate::http::AUTH_HEADER_NAME)
+        .get(crate::bugzilla_auth::AUTH_HEADER_NAME)
         .is_none());
     assert!(requests[0]
         .url
         .query_pairs()
-        .all(|(name, _)| name != crate::http::AUTH_QUERY_PARAM));
+        .all(|(name, _)| name != crate::bugzilla_auth::AUTH_QUERY_PARAM));
 }
 
 #[test]
@@ -181,7 +181,10 @@ async fn auth_fallback_header_to_query_param_on_401() {
     // Success response requires query param auth (registered first)
     Mock::given(method("GET"))
         .and(path("/rest/user"))
-        .and(query_param(crate::http::AUTH_QUERY_PARAM, "test-key"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "users": [{"id": 1, "name": "alice@example.com"}]
         })))
@@ -214,7 +217,7 @@ async fn auth_fallback_query_param_to_header_on_401() {
     Mock::given(method("GET"))
         .and(path("/rest/user"))
         .and(wiremock::matchers::header(
-            crate::http::AUTH_HEADER_NAME,
+            crate::bugzilla_auth::AUTH_HEADER_NAME,
             "test-key",
         ))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
