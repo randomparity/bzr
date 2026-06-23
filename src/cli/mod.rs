@@ -102,7 +102,7 @@ pub struct Cli {
     /// are mutually exclusive). Pairs with `--config` for sandboxed throwaway
     /// runs.
     ///
-    ///   bzr --server-url https://bz.example.com \
+    ///   bzr --server-url <https://bz.example.com> \
     ///     --server-api-key-env BZR_KEY bug view 123
     #[arg(
         long,
