@@ -134,3 +134,7 @@ pub enum ComponentAction {
         default_assignee: Option<String>,
     },
 }
+
+#[cfg(test)]
+#[path = "component_tests.rs"]
+mod tests;

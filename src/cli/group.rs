@@ -156,3 +156,7 @@ pub enum GroupAction {
         is_active: Option<bool>,
     },
 }
+
+#[cfg(test)]
+#[path = "group_tests.rs"]
+mod tests;

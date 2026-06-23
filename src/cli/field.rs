@@ -51,3 +51,7 @@ pub enum FieldAction {
         name: String,
     },
 }
+
+#[cfg(test)]
+#[path = "field_tests.rs"]
+mod tests;
