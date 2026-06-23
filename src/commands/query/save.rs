@@ -77,3 +77,7 @@ pub(super) fn handle(
     write_query_saved(name, verb, ctx.format(), w.out);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "save_tests.rs"]
+mod tests;

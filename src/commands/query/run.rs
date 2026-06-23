@@ -110,3 +110,7 @@ pub(super) async fn handle(
     );
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "run_tests.rs"]
+mod tests;

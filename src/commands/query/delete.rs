@@ -20,3 +20,7 @@ pub(super) fn handle(
     write_query_saved(name, "Deleted", ctx.format(), w.out);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "delete_tests.rs"]
+mod tests;

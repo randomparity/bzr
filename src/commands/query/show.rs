@@ -18,3 +18,7 @@ pub(super) fn handle(
     write_query_detail(name, query, ctx.format(), w.out);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "show_tests.rs"]
+mod tests;
