@@ -214,3 +214,7 @@ pub enum TemplateAction {
         name: String,
     },
 }
+
+#[cfg(test)]
+#[path = "template_tests.rs"]
+mod tests;
