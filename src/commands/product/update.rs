@@ -89,3 +89,7 @@ fn validate_params(params: &UpdateProductParams) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "update_tests.rs"]
+mod tests;

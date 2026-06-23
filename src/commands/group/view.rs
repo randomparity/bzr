@@ -9,3 +9,7 @@ pub(super) async fn handle(group: &str, ctx: &CommandContext, w: &mut Writers<'_
     write_group_info(&info, ctx.format(), w.out);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "view_tests.rs"]
+mod tests;

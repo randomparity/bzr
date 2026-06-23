@@ -67,3 +67,7 @@ fn build_params(args: &CreateArgs<'_>) -> Result<CreateGroupParams> {
         is_active: input.is_active.unwrap_or(true),
     })
 }
+
+#[cfg(test)]
+#[path = "create_tests.rs"]
+mod tests;

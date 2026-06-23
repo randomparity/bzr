@@ -68,3 +68,7 @@ fn build_params(args: &CreateArgs<'_>) -> Result<CreateUserParams> {
         password: input.password,
     })
 }
+
+#[cfg(test)]
+#[path = "create_tests.rs"]
+mod tests;

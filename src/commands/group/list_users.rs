@@ -28,3 +28,7 @@ const fn user_detail_level(details: bool) -> UserDetailLevel {
         UserDetailLevel::Basic
     }
 }
+
+#[cfg(test)]
+#[path = "list_users_tests.rs"]
+mod tests;
