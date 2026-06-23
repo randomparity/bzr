@@ -34,7 +34,23 @@ Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches `Com
 - **`config.rs`** — `Config` and `ServerConfig` structs. TOML file at `~/.config/bzr/config.toml`. Multiple named servers with a default. Uses `AuthMethod` and `ApiMode` from `types/common.rs`; `AuthMethod` (`Header`/`QueryParam`) persisted per-server.
 - **`error.rs`** — `BzrError` enum (thiserror) with 18 variants: `Http`, `Config`, `Api`, `Io`, `TomlParse`, `TomlSerialize`, `XmlRpc`, `NotFound`, `HttpStatus`, `InputValidation`, `Deserialize`, `Auth`, `DataIntegrity`, `BatchPartialFailure`, `Keyring`, `PinMismatch`, `IssuerChanged`, `MidAirCollision`. Each variant has a distinct `exit_code()` and `error_type()`. `Result<T>` type alias.
 - **`output/`** — `mod.rs` is deliberately *not* a re-export facade: command modules import each writer from its owning leaf module so unused facade exports don't accumulate as output formats change. `formatting.rs` holds formatting primitives (`write_formatted`, `write_json_family`, field helpers). `result_types.rs` holds mutation result types (`ActionResult`, `ResourceKind`, `MembershipResult`, etc.) and the shared `write_result`/`write_saved`/`write_count` helpers. `writers.rs` defines the `Writers` stdout/stderr bundle. Per-resource writers live under `output/resources/` (`bug.rs`, `comment.rs`, `attachment.rs`, `product.rs`, `classification.rs`, `component.rs`, `user.rs`, `group.rs`, `field.rs`, `server.rs`, `config.rs`, `template.rs`, `query.rs`), each handling one domain type. Uses `tabled` for tables, `colored` for status colors.
-- **`commands/`** — Each network command submodule has an async `execute()` function taking `(action, server, format, api, w)` (where `w: &mut Writers` bundles the stdout/stderr sinks) and following the pattern: load config → resolve auth → connect client → call API → print output. Two exceptions: `config.rs` shares the same async signature but does local I/O only (it ignores the `server`/`api` params) and `whoami.rs` has no action enum (no subcommands). Cross-cutting command infrastructure lives under `commands/runtime/`: `runtime::shared` provides `connect_and_configure()` (config load + auth detection + client construction) and the body-source helpers; `runtime::flags` handles Bugzilla flag syntax parsing; `runtime::{dry_run,confirm,inline_server}` hold process-global flags set in dispatch; `runtime::paging` drives search pagination; `runtime::editor` invokes `$EDITOR`. See `src/commands/mod.rs` for the complete list of command modules.
+- **`commands/`** — Resource command submodules expose async
+  `execute(action, &CommandContext, &mut Writers)` entry points (where `Writers`
+  bundles stdout/stderr). `lib.rs::dispatch()` builds one `CommandContext` for
+  the invocation and passes it across command boundaries; the context carries
+  server, output format, API mode, dry-run, confirmation, inline-server,
+  config-path, timeout, and retry settings. Network commands follow the
+  pattern: load config → resolve auth → connect client → call API → print
+  output. Local-only commands such as `config.rs` use the same context boundary
+  but do local I/O, while `whoami.rs` has no action enum. Cross-cutting command
+  infrastructure lives under `commands/runtime/`: `runtime::shared` provides
+  `connect_and_configure()` (config load + auth detection + client construction)
+  and body-source helpers; `runtime::context` owns per-invocation flags;
+  `runtime::confirm` handles batch prompts; `runtime::inline_server` models
+  inline server configuration; `runtime::flags` handles Bugzilla flag syntax
+  parsing; `runtime::paging` drives search pagination; `runtime::editor`
+  invokes `$EDITOR`. See `src/commands/mod.rs` for the complete list of command
+  modules.
 
 ### Conventions
 
