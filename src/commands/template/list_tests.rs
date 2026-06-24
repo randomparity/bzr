@@ -45,6 +45,36 @@ async fn template_list_empty() {
 }
 
 #[tokio::test]
+async fn template_list_renders_saved_template() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let mut save_io = crate::test_helpers::CapturedIo::new();
+    crate::commands::template::execute(
+        &save_action("alpha"),
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut save_io.writers(),
+    )
+    .await
+    .unwrap();
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::template::execute(
+        &TemplateAction::List,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+    let output = io.out_str().to_string();
+
+    assert!(result.is_ok(), "template list failed: {result:?}");
+    // A no-op handle would write nothing; the saved template must be rendered.
+    assert!(
+        output.contains("alpha"),
+        "list output must name the saved template, got: {output:?}"
+    );
+}
+
+#[tokio::test]
 async fn template_list_table_sorts_entries_by_name() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
