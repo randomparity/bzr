@@ -14,12 +14,6 @@ pub(crate) use merge::{merge_set, merge_vec};
 
 #[cfg(test)]
 use body_source::{read_to_string_from, BodySource};
-#[cfg(test)]
-use connection::{
-    classify_and_handle_tls_failure, detect_and_build_client, detect_with_tofu_fallback,
-    extract_hostname, handle_pin_rotation, handle_tofu, persist_detected_settings, probe_tls,
-    should_offer_tofu, tls_uses_default_trust, ConnectContext,
-};
 
 #[cfg(test)]
 #[path = "mod_tests.rs"]
