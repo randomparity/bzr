@@ -1,8 +1,9 @@
 use serde::Deserialize;
 
 use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::mutation::{self, Committed, DryRunPreview};
 use crate::error::{BzrError, Result};
-use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
+use crate::output::result_types::{ActionResult, ResourceKind};
 use crate::output::writers::Writers;
 use crate::types::group::UpdateGroupParams;
 
@@ -27,26 +28,24 @@ pub(super) async fn handle(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let (group, params) = build_params(args)?;
-    let format = ctx.format();
-    if ctx.dry_run() {
-        let message = format!("Would update group '{group}'");
-        write_result(
-            &DryRunResult::new(ResourceKind::Group, &[], &params),
-            &message,
-            format,
-            w.out,
-        );
-        return Ok(());
-    }
-    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
-    client.update_group(&group, &params).await?;
-    write_result(
-        &ActionResult::updated_named(group.as_str(), None, ResourceKind::Group),
-        &format!("Updated group '{group}'"),
-        format,
-        w.out,
-    );
-    Ok(())
+    let message = format!("Would update group '{group}'");
+    mutation::run(
+        ctx,
+        w,
+        DryRunPreview {
+            resource: ResourceKind::Group,
+            params,
+            message,
+        },
+        move |client, params| async move {
+            client.update_group(&group, &params).await?;
+            Ok(Committed {
+                result: ActionResult::updated_named(group.as_str(), None, ResourceKind::Group),
+                message: format!("Updated group '{group}'"),
+            })
+        },
+    )
+    .await
 }
 
 fn build_params(args: &UpdateArgs<'_>) -> Result<(String, UpdateGroupParams)> {
