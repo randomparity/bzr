@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Internal: pin the local toolchain to the MSRV (1.89) via `rust-toolchain.toml`
+  so contributor `cargo`/`make lint` runs match CI, which builds and lints at
+  1.89. Catches MSRV-only failures before push. Use `cargo +stable` / a
+  one-off override for newer-toolchain work.
 - Internal: refreshed the `cargo-mutants` baseline after the recent
   restructure. Re-ran the whole-crate sweep, added behavior tests that kill
   the high-value missed mutants (parsers, command/CLI field-wiring, dispatch
