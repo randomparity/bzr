@@ -6,7 +6,7 @@
 
 #![expect(clippy::unwrap_used, clippy::expect_used)]
 
-use bzr::test_helpers::{setup_test_env, HasBooleanChartTriples};
+use bzr::test_helpers::{setup_test_env, write_config_to, HasBooleanChartTriples};
 use bzr::ENV_LOCK;
 
 use clap::Parser;
@@ -489,10 +489,8 @@ async fn config_show_integration() {
     let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
 
-    let config_dir = tmp.path().join("bzr");
-    std::fs::create_dir_all(&config_dir).unwrap();
-    std::fs::write(
-        config_dir.join("config.toml"),
+    write_config_to(
+        &tmp,
         r#"
 default_server = "local"
 
@@ -500,8 +498,7 @@ default_server = "local"
 url = "https://bugzilla.local"
 api_key = "key-1234567890"
 "#,
-    )
-    .unwrap();
+    );
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let result = dispatch_cli(&["bzr", "config", "show"]).await;
@@ -1418,13 +1415,10 @@ async fn config_set_server_integration() {
     let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
 
-    let config_dir = tmp.path().join("bzr");
-    std::fs::create_dir_all(&config_dir).unwrap();
-    std::fs::write(
-        config_dir.join("config.toml"),
+    write_config_to(
+        &tmp,
         "default_server = \"local\"\n\n[servers.local]\nurl = \"https://bugzilla.local\"\napi_key = \"key-1234567890\"\n",
-    )
-    .unwrap();
+    );
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let result = dispatch_cli(&[
@@ -1449,13 +1443,10 @@ async fn config_set_default_integration() {
     let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
 
-    let config_dir = tmp.path().join("bzr");
-    std::fs::create_dir_all(&config_dir).unwrap();
-    std::fs::write(
-        config_dir.join("config.toml"),
+    write_config_to(
+        &tmp,
         "default_server = \"local\"\n\n[servers.local]\nurl = \"https://bugzilla.local\"\napi_key = \"key-1234567890\"\n\n[servers.staging]\nurl = \"https://staging.example\"\napi_key = \"staging-key\"\n",
-    )
-    .unwrap();
+    );
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let result = dispatch_cli(&["bzr", "config", "set-default", "staging"]).await;
