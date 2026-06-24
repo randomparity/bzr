@@ -508,6 +508,81 @@ async fn from_url_offset_in_url_is_overridden_by_cli_offset_not_duplicated() {
     assert_eq!(offsets[0], "5", "the CLI offset wins over the URL's");
 }
 
+// ---- delete field limit from Overrides in build_params_from_url ----
+// Kill the `delete field limit` mutant at search.rs:66.
+// When the URL has no limit and CLI passes --limit N, the outgoing request
+// must carry limit=N+1 (the fetch_page probe: limit+1 to detect truncation).
+// With the mutant, the limit field is missing from Overrides → apply_overrides
+// ignores it → the default (50) is used from URL-to-params conversion, so
+// the server sees limit=51 rather than the CLI-specified 3+1=4.
+#[tokio::test]
+async fn build_params_from_url_cli_limit_overrides_default() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    // URL has no limit; CLI passes --limit 3 → probe sends limit=4 (3+1)
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("product", "Firefox"))
+        .and(query_param("limit", "4"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let url = format!("{}/buglist.cgi?product=Firefox", mock.uri());
+    let mut action = from_url_action(url, None);
+    if let BugAction::Search(crate::cli::SearchArgs { limit, .. }) = &mut action {
+        *limit = Some(3);
+    }
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "from-url cli limit override failed: {result:?}"
+    );
+}
+
+// ---- delete field exclude_fields from Overrides in build_params_from_url ----
+// Kill the `delete field exclude_fields` mutant at search.rs:68.
+// When --exclude-fields is passed with --from-url, the param must reach the
+// server. A dropped field → absent `exclude_fields` in Overrides →
+// apply_overrides skips it → the outgoing request has no exclude_fields param
+// → the wiremock matcher doesn't match → test fails.
+#[tokio::test]
+async fn build_params_from_url_exclude_fields_reaches_server() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("product", "Firefox"))
+        .and(query_param("exclude_fields", "comments"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let url = format!("{}/buglist.cgi?product=Firefox", mock.uri());
+    let mut action = from_url_action(url, None);
+    if let BugAction::Search(crate::cli::SearchArgs { field_args, .. }) = &mut action {
+        field_args.exclude_fields = Some("comments".into());
+    }
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+    assert!(result.is_ok(), "from-url exclude_fields failed: {result:?}");
+}
+
 #[tokio::test]
 async fn from_url_offset_with_paginate_sends_single_offset_per_page() {
     // `--from-url …&offset=10 --paginate` must not leave the URL's offset in
