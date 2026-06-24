@@ -145,13 +145,55 @@ origin file used (`#![expect(clippy::unwrap_used)]` etc.) only if its moved test
 actually trip that lint; siblings whose tests don't trip it omit it (per the
 existing convention).
 
+### Shared test helpers must be promoted before tests move
+
+The origin test siblings define local helper fns that are shared across tests
+which this split routes into *different* destination siblings, so they cannot
+travel with any single relocated test:
+
+- `client/mod_tests.rs` defines `debug_logging_guard`,
+  `multibyte_body_crossing_preview_boundary`, `has_no_auth_header`,
+  `has_no_auth_query_param`, and `bug_ok_body`, used by tests headed for both
+  `response_tests.rs` and `transport_tests.rs`. (It already imports
+  `test_helpers::{test_client, test_client_query_param}` from the existing
+  `client/test_helpers.rs`.)
+- `shared/mod_tests.rs` defines `load_config`, `ctx_at`, `connect_context`,
+  `write_config`, `write_credentialless_config`, and `mount_detection_mocks`,
+  used by tests headed for `connection/target_tests.rs`,
+  `connection/tls_trust_tests.rs`, and `connection/detect_tests.rs`.
+
+**Decision:** before any test is relocated, promote each cross-sibling helper
+into a shared test-helpers module reachable from every destination sibling:
+
+- For the client tree, extend the existing `src/client/test_helpers.rs` (already
+  `#[cfg(test)] pub(super) mod test_helpers;`) with the client-side helpers, and
+  have each relocated sibling `use super::test_helpers::…`.
+- For the connection tree, add `src/commands/runtime/shared/connection/test_helpers.rs`
+  as `#[cfg(test)] pub(super) mod test_helpers;`, move the six shared connection
+  helpers into it at `pub(super)` visibility, and have each relocated sibling
+  `use super::test_helpers::…`.
+
+A helper used by tests that all land in a single destination sibling stays a
+private fn in that sibling — only genuinely cross-sibling helpers are promoted, so
+the shared module does not become a dumping ground. This is a prerequisite step,
+sequenced ahead of test relocation in the plan.
+
 ### Verification that nothing was lost
 
-The pre-split inventory of test-function names across the four origin test files
-(115 functions) is captured before the move. After relocation, the union of
-test-function names across all post-split sibling files must equal that set (no
-test dropped, none silently renamed). `cargo test --lib` reports the same passing
-count before and after.
+Two checks, run together:
+
+1. **No test dropped or renamed.** The pre-split inventory of test-function names
+   across the origin test files (115 functions) is captured before the move; after
+   relocation the union of test-function names across all post-split siblings must
+   equal that set.
+2. **No test silently weakened.** Name-equality alone does not prove a moved test
+   kept its assertions, so the move is verified with `git diff -M` rename
+   detection: each relocated test must show as a pure move (zero content delta) of
+   its body. Any non-zero delta on a moved test body must be a deliberate,
+   reviewed change (e.g. an import-path adjustment), not an assertion change.
+
+`cargo test --lib` reports the same passing count (2041) before and after, and
+`make lint` (including `check-test-layout`) stays green.
 
 ## Non-goals
 
