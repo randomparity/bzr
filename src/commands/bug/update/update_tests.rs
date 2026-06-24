@@ -1594,3 +1594,138 @@ async fn bug_update_dry_run_still_validates_empty_update() {
         Err(crate::error::BzrError::InputValidation(_))
     ));
 }
+
+// ── BugUpdateDraft::overlay_cli merge-helper mutants ────────────────────────
+//
+// draft.rs line 154: merge_copy(&mut self.dupe_of, args.dupe_of)   → ()
+// draft.rs line 160: merge_bool_true(&mut self.reset_assigned_to …) → ()
+// draft.rs line 165: merge_vec_u64(&mut self.blocks_add …)          → ()
+//
+// Each test starts with a draft that does NOT have the field set (None / empty)
+// and overlays a CLI args struct that DOES set it, then asserts the field
+// appears in the merged draft.  Replacing the helper call with () leaves the
+// field at its default value, causing the assertion to fail.
+
+#[test]
+fn overlay_cli_merge_copy_applies_dupe_of_from_cli() {
+    use super::BugUpdateDraft;
+
+    let mut draft = BugUpdateDraft::default();
+    // draft.dupe_of is None; CLI sets it.
+    let args = crate::cli::UpdateArgs {
+        ids: vec![1],
+        dupe_of: Some(77),
+        ..Default::default()
+    };
+    draft.overlay_cli(&args);
+    assert_eq!(
+        draft.dupe_of,
+        Some(77),
+        "merge_copy must write CLI dupe_of into draft when draft is None"
+    );
+}
+
+#[test]
+fn overlay_cli_merge_copy_does_not_overwrite_existing_draft_value_with_none() {
+    use super::BugUpdateDraft;
+
+    let mut draft = BugUpdateDraft {
+        dupe_of: Some(42),
+        ..Default::default()
+    };
+    // CLI does not supply dupe_of.
+    let args = crate::cli::UpdateArgs {
+        ids: vec![1],
+        dupe_of: None,
+        ..Default::default()
+    };
+    draft.overlay_cli(&args);
+    assert_eq!(
+        draft.dupe_of,
+        Some(42),
+        "merge_copy must preserve existing draft value when CLI supplies None"
+    );
+}
+
+#[test]
+fn overlay_cli_merge_bool_true_applies_reset_assigned_to_from_cli() {
+    use super::BugUpdateDraft;
+
+    let mut draft = BugUpdateDraft::default();
+    // draft.reset_assigned_to is None; CLI sets it.
+    let args = crate::cli::UpdateArgs {
+        ids: vec![1],
+        reset_assigned_to: true,
+        ..Default::default()
+    };
+    draft.overlay_cli(&args);
+    assert_eq!(
+        draft.reset_assigned_to,
+        Some(true),
+        "merge_bool_true must set reset_assigned_to to Some(true)"
+    );
+}
+
+#[test]
+fn overlay_cli_merge_bool_true_does_not_clear_existing_true() {
+    use super::BugUpdateDraft;
+
+    let mut draft = BugUpdateDraft {
+        reset_assigned_to: Some(true),
+        ..Default::default()
+    };
+    // CLI does NOT set the flag.
+    let args = crate::cli::UpdateArgs {
+        ids: vec![1],
+        reset_assigned_to: false,
+        ..Default::default()
+    };
+    draft.overlay_cli(&args);
+    // The existing Some(true) must survive when CLI flag is false.
+    assert_eq!(
+        draft.reset_assigned_to,
+        Some(true),
+        "merge_bool_true must not clear an existing Some(true)"
+    );
+}
+
+#[test]
+fn overlay_cli_merge_vec_u64_applies_blocks_add_from_cli() {
+    use super::BugUpdateDraft;
+
+    let mut draft = BugUpdateDraft::default();
+    // draft.blocks_add is empty; CLI supplies values.
+    let args = crate::cli::UpdateArgs {
+        ids: vec![1],
+        blocks_add: vec![10, 20],
+        ..Default::default()
+    };
+    draft.overlay_cli(&args);
+    assert_eq!(
+        draft.blocks_add,
+        vec![10_u64, 20],
+        "merge_vec_u64 must copy CLI blocks_add into draft"
+    );
+}
+
+#[test]
+fn overlay_cli_merge_vec_u64_preserves_draft_when_cli_is_empty() {
+    use super::BugUpdateDraft;
+
+    let mut draft = BugUpdateDraft {
+        blocks_add: vec![5, 6, 7],
+        ..Default::default()
+    };
+    // CLI supplies no blocks.
+    let args = crate::cli::UpdateArgs {
+        ids: vec![1],
+        blocks_add: vec![],
+        ..Default::default()
+    };
+    draft.overlay_cli(&args);
+    assert_eq!(
+        draft.blocks_add,
+        vec![5_u64, 6, 7],
+        "merge_vec_u64 must not clear draft blocks when CLI list is empty"
+    );
+}
