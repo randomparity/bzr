@@ -194,6 +194,8 @@ exclude_re = [
     # constant and a `#[cfg(not(...))]` arm probing DISPLAY/WAYLAND_DISPLAY. The
     # macOS baseline never compiles the probing arm, so cargo-mutants reports its
     # mutations as missed even though the code is not built on this platform.
-    'has_display -> bool',
-    'replace && with \|\| in has_display',
+    # Anchored to line 153 (the `cfg(not(...))` arm): the macOS arm at line 146
+    # shares the identical `has_display -> bool with false` description and IS
+    # caught, so it must not be excluded — only a line anchor distinguishes them.
+    'src/commands/bug/view.rs:153:.*has_display',
 ]
