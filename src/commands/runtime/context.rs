@@ -139,3 +139,7 @@ impl CommandContext {
         self.credential_requirement
     }
 }
+
+#[cfg(test)]
+#[path = "context_tests.rs"]
+mod tests;

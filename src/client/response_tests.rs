@@ -480,6 +480,47 @@ async fn parse_json_invalid_json_handles_multibyte_debug_preview_boundary() {
     assert!(msg.contains('…'), "preview should be truncated: {msg}");
 }
 
+/// When multiple present-keyed extractors both fail, only the FIRST error
+/// must be surfaced.  The guard `first_error.is_none()` ensures this.
+/// Replacing the guard with `true` would let later errors overwrite the first;
+/// replacing with `false` would drop all errors — both mutations break this test.
+#[test]
+fn try_envelopes_preserves_first_error_when_multiple_keyed_extractors_fail() {
+    // Both "bugs" and "attachments" keys are present in the JSON, so both
+    // extractors run in the first pass.  Each returns a distinct error message.
+    let value = serde_json::json!({
+        "bugs": "wrong_shape",
+        "attachments": "also_wrong"
+    });
+
+    let extract_bugs: fn(&serde_json::Value) -> Result<i32> = |_v| {
+        Err(crate::error::BzrError::Deserialize(
+            "FIRST_ERROR_FROM_BUGS".into(),
+        ))
+    };
+    let extract_attachments: fn(&serde_json::Value) -> Result<i32> = |_v| {
+        Err(crate::error::BzrError::Deserialize(
+            "SECOND_ERROR_FROM_ATTACHMENTS".into(),
+        ))
+    };
+
+    let err = BugzillaClient::try_envelopes(
+        &value,
+        &[("bugs", extract_bugs), ("attachments", extract_attachments)],
+    )
+    .unwrap_err();
+
+    let msg = err.to_string();
+    assert!(
+        msg.contains("FIRST_ERROR_FROM_BUGS"),
+        "first extractor's error must be preserved: {msg}"
+    );
+    assert!(
+        !msg.contains("SECOND_ERROR_FROM_ATTACHMENTS"),
+        "second extractor's error must not replace the first: {msg}"
+    );
+}
+
 #[tokio::test]
 async fn parse_json_redacts_api_key_in_body_preview() {
     let mock = MockServer::start().await;
