@@ -67,19 +67,19 @@ RUN printf '%s\n' \
 # Serve Bugzilla from document root so /rest/ works without /bugzilla/ prefix
 RUN sed -i 's|DocumentRoot "/var/www/html"|DocumentRoot "/var/www/html/bugzilla"|' \
         /etc/httpd/conf/httpd.conf \
-    && cat > /etc/httpd/conf.d/bugzilla.conf <<'APACHECONF'
-<Directory "/var/www/html/bugzilla">
-    AddHandler cgi-script .cgi
-    Options +ExecCGI +FollowSymLinks
-    DirectoryIndex index.cgi
-    AllowOverride All
-    Require all granted
-</Directory>
-# Map /rest/* to rest.cgi (Bugzilla 5.2 still uses rest.cgi)
-RewriteEngine On
-RewriteRule ^/rest/(.*)$ /rest.cgi/$1 [L]
-RewriteRule ^/rest$ /rest.cgi [L]
-APACHECONF
+    && printf '%s\n' \
+        '<Directory "/var/www/html/bugzilla">' \
+        '    AddHandler cgi-script .cgi' \
+        '    Options +ExecCGI +FollowSymLinks' \
+        '    DirectoryIndex index.cgi' \
+        '    AllowOverride All' \
+        '    Require all granted' \
+        '</Directory>' \
+        '# Map /rest/* to rest.cgi (Bugzilla 5.2 still uses rest.cgi)' \
+        'RewriteEngine On' \
+        'RewriteRule ^/rest/(.*)$ /rest.cgi/$1 [L]' \
+        'RewriteRule ^/rest$ /rest.cgi [L]' \
+        > /etc/httpd/conf.d/bugzilla.conf
 RUN echo "LoadModule rewrite_module modules/mod_rewrite.so" \
     >> /etc/httpd/conf.modules.d/00-rewrite.conf 2>/dev/null || true
 
