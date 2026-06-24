@@ -54,7 +54,10 @@ jobs:
           key: fuzz-${{ matrix.target }}
 
       - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz --locked
+        # Must be `+nightly`: the repo's rust-toolchain.toml pins the default to
+        # the MSRV (1.89), which cargo-fuzz does not build on. The explicit
+        # toolchain selector overrides the file (same as the run step below).
+        run: cargo +nightly install cargo-fuzz --locked
 
       - name: Run fuzzer
         run: |
