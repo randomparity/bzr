@@ -570,6 +570,69 @@ async fn resolve_posts_comment_atomically() {
 }
 
 #[tokio::test]
+async fn close_posts_comment_atomically() {
+    let action = BugAction::Close(CloseArgs {
+        ids: vec![9],
+        status: "VERIFIED".into(),
+        as_resolution: None,
+        expect_unchanged_since: None,
+        comment: CommentArgs {
+            comment: Some("closing note".into()),
+            comment_file: None,
+            comment_private: false,
+        },
+    });
+    run_status_verb(
+        action,
+        9,
+        serde_json::json!({"status": "VERIFIED", "comment": {"body": "closing note"}}),
+        DEFAULT_STATUSES,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn reopen_posts_comment_atomically() {
+    let action = BugAction::Reopen(ReopenArgs {
+        ids: vec![3],
+        status: "CONFIRMED".into(),
+        expect_unchanged_since: None,
+        comment: CommentArgs {
+            comment: Some("reopening".into()),
+            comment_file: None,
+            comment_private: false,
+        },
+    });
+    run_status_verb(
+        action,
+        3,
+        serde_json::json!({"status": "CONFIRMED", "comment": {"body": "reopening"}}),
+        DEFAULT_STATUSES,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn dup_posts_comment_atomically() {
+    let action = BugAction::Dup(DupArgs {
+        id: 12,
+        target: 100,
+        expect_unchanged_since: None,
+        comment: CommentArgs {
+            comment: Some("dupe of 100".into()),
+            comment_file: None,
+            comment_private: false,
+        },
+    });
+    run_verb_expecting_body(
+        action,
+        12,
+        serde_json::json!({"dupe_of": 100, "comment": {"body": "dupe of 100"}}),
+    )
+    .await;
+}
+
+#[tokio::test]
 async fn resolve_batch_updates_each_id() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     for id in [1_u64, 2] {
