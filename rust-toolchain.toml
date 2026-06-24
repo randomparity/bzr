@@ -1,0 +1,9 @@
+# Pin the local toolchain to the project MSRV so local `cargo`/`make lint`
+# match CI, which runs clippy/build/test at 1.89 (the SHA-pinned
+# dtolnay/rust-toolchain action hardcodes this version regardless of the
+# `# stable` comments). Keeping local on 1.89 catches MSRV-only lint and
+# build failures before push. Keep this in sync with `rust-version` in
+# Cargo.toml. The fuzz job overrides this with `cargo +nightly`.
+[toolchain]
+channel = "1.89.0"
+components = ["clippy", "rustfmt"]
