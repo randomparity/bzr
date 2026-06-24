@@ -388,3 +388,103 @@ fn parse_query_run_rejects_offset_with_paginate() {
         ErrorKind::ArgumentConflict
     );
 }
+
+// ---- QueryRunFilterArgs::overrides() field-wiring tests ----
+// Each test sets exactly one filter flag and asserts the corresponding
+// Overrides field is Some(values), not None. A `delete field X` mutant
+// would leave that field at its Default (None) and fail the assertion.
+
+use super::QueryRunFilterArgs;
+use crate::types::bug::Overrides;
+
+fn filter_args_with(f: impl FnOnce(&mut QueryRunFilterArgs)) -> QueryRunFilterArgs {
+    let mut a = QueryRunFilterArgs::default();
+    f(&mut a);
+    a
+}
+
+#[test]
+fn overrides_target_milestone_is_some_when_set() {
+    let args = filter_args_with(|a| a.target_milestone = vec!["5.0".into()]);
+    let url: Vec<String> = vec![];
+    let ov: Overrides<'_> = args.overrides(&url);
+    assert_eq!(
+        ov.target_milestone,
+        Some(["5.0".to_string()].as_slice()),
+        "target_milestone field must be wired through overrides()"
+    );
+}
+
+#[test]
+fn overrides_version_is_some_when_set() {
+    let args = filter_args_with(|a| a.version = vec!["9.4".into()]);
+    let url: Vec<String> = vec![];
+    let ov: Overrides<'_> = args.overrides(&url);
+    assert_eq!(
+        ov.version,
+        Some(["9.4".to_string()].as_slice()),
+        "version field must be wired through overrides()"
+    );
+}
+
+#[test]
+fn overrides_op_sys_is_some_when_set() {
+    let args = filter_args_with(|a| a.op_sys = vec!["Linux".into()]);
+    let url: Vec<String> = vec![];
+    let ov: Overrides<'_> = args.overrides(&url);
+    assert_eq!(
+        ov.op_sys,
+        Some(["Linux".to_string()].as_slice()),
+        "op_sys field must be wired through overrides()"
+    );
+}
+
+#[test]
+fn overrides_platform_is_some_when_set() {
+    let args = filter_args_with(|a| a.platform = vec!["x86_64".into()]);
+    let url: Vec<String> = vec![];
+    let ov: Overrides<'_> = args.overrides(&url);
+    assert_eq!(
+        ov.platform,
+        Some(["x86_64".to_string()].as_slice()),
+        "platform field must be wired through overrides()"
+    );
+}
+
+#[test]
+fn overrides_qa_contact_is_some_when_set() {
+    let args = filter_args_with(|a| a.qa_contact = vec!["qa@example.com".into()]);
+    let url: Vec<String> = vec![];
+    let ov: Overrides<'_> = args.overrides(&url);
+    assert_eq!(
+        ov.qa_contact,
+        Some(["qa@example.com".to_string()].as_slice()),
+        "qa_contact field must be wired through overrides()"
+    );
+}
+
+#[test]
+fn overrides_url_is_some_when_set() {
+    let args = QueryRunFilterArgs::default();
+    let url = vec!["http://crash.example.com".into()];
+    let ov: Overrides<'_> = args.overrides(&url);
+    assert_eq!(
+        ov.url,
+        Some(["http://crash.example.com".to_string()].as_slice()),
+        "url field must be wired through overrides()"
+    );
+}
+
+#[test]
+fn overrides_none_when_field_empty() {
+    // Baseline: empty vecs produce None — confirms the real behavior is conditional.
+    let args = QueryRunFilterArgs::default();
+    let url: Vec<String> = vec![];
+    let ov: Overrides<'_> = args.overrides(&url);
+    assert!(ov.target_milestone.is_none());
+    assert!(ov.version.is_none());
+    assert!(ov.op_sys.is_none());
+    assert!(ov.platform.is_none());
+    assert!(ov.qa_contact.is_none());
+    assert!(ov.url.is_none());
+}
