@@ -280,6 +280,11 @@ async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
                 "product": "TestProduct",
                 "component": "General",
                 "version": "2.0",
+                "priority": "P1",
+                "severity": "major",
+                "assigned_to": "dev@test.com",
+                "op_sys": "Linux",
+                "rep_platform": "x86_64",
                 "url": "https://example.com/source",
                 "whiteboard": "needs-triage",
                 "target_milestone": "M2",
@@ -325,6 +330,15 @@ async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
     assert_eq!(parsed["ids"], serde_json::json!([]));
     assert_eq!(parsed["changes"]["product"], "TestProduct");
     assert_eq!(parsed["changes"]["summary"], "Original bug");
+    // Each cloned field must be carried into the payload — a dropped field
+    // would fall back to its Default (empty/None) and disappear here.
+    assert_eq!(parsed["changes"]["component"], "General");
+    assert_eq!(parsed["changes"]["version"], "2.0");
+    assert_eq!(parsed["changes"]["priority"], "P1");
+    assert_eq!(parsed["changes"]["severity"], "major");
+    assert_eq!(parsed["changes"]["assigned_to"], "dev@test.com");
+    assert_eq!(parsed["changes"]["op_sys"], "Linux");
+    assert_eq!(parsed["changes"]["rep_platform"], "x86_64");
     assert_eq!(parsed["changes"]["url"], "https://example.com/source");
     assert_eq!(parsed["changes"]["whiteboard"], "needs-triage");
     assert_eq!(parsed["changes"]["target_milestone"], "M2");
@@ -337,6 +351,66 @@ async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
         parsed["changes"]["keywords"],
         serde_json::json!(["regression"])
     );
+}
+
+#[tokio::test]
+async fn bug_clone_dry_run_links_blocks_and_depends_on_to_source() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/100"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{
+                "id": 100,
+                "summary": "Original bug",
+                "status": "NEW",
+                "product": "TestProduct",
+                "component": "General",
+                "version": "2.0",
+                "cc": [],
+                "keywords": []
+            }]
+        })))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/100/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": { "100": { "comments": [{
+                "id": 1, "bug_id": 100, "count": 0, "text": "Original description",
+                "creator": "dev@test.com", "creation_time": "2025-01-01T00:00:00Z"
+            }] } }
+        })))
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 999})))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    // --add-blocks / --add-depends-on make the new bug block and depend on the
+    // source. Without these the lists are empty (and serialization omits them),
+    // so a dropped `blocks`/`depends_on` field is only observable here.
+    let mut args = clone_args("100");
+    args.add_blocks = true;
+    args.add_depends_on = true;
+    let action = BugAction::Clone(args);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
+    let output = io.out_str().to_string();
+
+    assert!(result.is_ok(), "dry-run clone failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    assert_eq!(parsed["changes"]["blocks"], serde_json::json!([100]));
+    assert_eq!(parsed["changes"]["depends_on"], serde_json::json!([100]));
 }
 
 #[tokio::test]

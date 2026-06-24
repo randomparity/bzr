@@ -142,6 +142,42 @@ async fn detect_version_network_error_returns_xmlrpc() {
     assert_eq!(mode, ApiMode::XmlRpc);
 }
 
+/// `detect_version_and_mode_without_auth_checked` uses `PropagateTlsCertificate`
+/// mode and should only propagate errors that are TLS certificate errors.
+/// A plain connection-refused failure is NOT a TLS error, so it must be
+/// swallowed and returned as `Ok((None, XmlRpc))`.
+///
+/// The `&&` → `||` mutant would cause this function to propagate ANY send
+/// error in `PropagateTlsCertificate` mode (treating the first operand alone
+/// as sufficient), making it return `Err` here instead of `Ok`.
+#[tokio::test]
+async fn detect_version_without_auth_connection_refused_returns_xmlrpc() {
+    let result =
+        detect_version_and_mode_without_auth_checked(&test_http_client(), "http://127.0.0.1:1")
+            .await;
+    assert!(
+        result.is_ok(),
+        "non-TLS connection failure must not propagate in PropagateTlsCertificate mode: {result:?}"
+    );
+    let Ok((version, mode)) = result else { return };
+    assert!(version.is_none());
+    assert_eq!(mode, ApiMode::XmlRpc);
+}
+
+/// A bare major version "5" with no minor part must still map to Hybrid,
+/// matching the `(Some(5), None)` arm.  Without that arm it would fall to
+/// `(Some(_), _)` and return Rest instead.
+#[test]
+fn version_to_mode_5_bare_no_minor_maps_to_hybrid() {
+    assert_eq!(version_to_api_mode("5"), ApiMode::Hybrid);
+}
+
+/// Confirm the bare-"5" mapping is distinct from the 5.1+ Rest mapping.
+#[test]
+fn version_to_mode_5_bare_differs_from_5_1() {
+    assert_ne!(version_to_api_mode("5"), version_to_api_mode("5.1"));
+}
+
 #[tokio::test]
 async fn detect_version_non_json_returns_hybrid() {
     let server = MockServer::start().await;

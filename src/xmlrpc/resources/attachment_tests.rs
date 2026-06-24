@@ -241,6 +241,52 @@ async fn xmlrpc_get_attachment_by_id_not_found_returns_error() {
 }
 
 #[tokio::test]
+async fn xmlrpc_attachment_nonempty_string_data_is_kept() {
+    // Some servers return attachment payload as <string> rather than <base64>.
+    // A non-empty string must be preserved verbatim.
+    let mock = MockServer::start().await;
+    let response_xml = xmlrpc_attachments_keyed_envelope(
+        "<member><name>7</name><value><struct>\
+            <member><name>id</name><value><int>7</int></value></member>\
+            <member><name>data</name><value><string>plain-text-data</string></value></member>\
+        </struct></value></member>",
+    );
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("attachment_ids"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(response_xml))
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
+    let attachment = client.get_attachment_by_id(7).await.unwrap();
+    assert_eq!(attachment.data.as_deref(), Some("plain-text-data"));
+}
+
+#[tokio::test]
+async fn xmlrpc_attachment_empty_string_data_becomes_none() {
+    // An empty <string> payload is treated as absent (None), not Some(""), so
+    // the empty-string guard must reject it.
+    let mock = MockServer::start().await;
+    let response_xml = xmlrpc_attachments_keyed_envelope(
+        "<member><name>8</name><value><struct>\
+            <member><name>id</name><value><int>8</int></value></member>\
+            <member><name>data</name><value><string></string></value></member>\
+        </struct></value></member>",
+    );
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("attachment_ids"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(response_xml))
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
+    let attachment = client.get_attachment_by_id(8).await.unwrap();
+    assert_eq!(attachment.data, None);
+}
+
+#[tokio::test]
 async fn xmlrpc_get_attachments_returns_empty_when_bug_has_none() {
     let mock = MockServer::start().await;
     let response_xml = xmlrpc_bugs_envelope(42, "");

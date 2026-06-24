@@ -931,3 +931,42 @@ async fn query_run_without_sort_keeps_saved_order() {
 
     run_q(&run_action("ordered")).await.unwrap();
 }
+
+#[tokio::test]
+async fn query_run_applies_default_order_even_when_raw_params_present() {
+    // Kill the `== with !=` mutant at run.rs:76 (inside the `.any(|(k, _)| k
+    // == "order")` closure). When mutated to `!=`, `.any()` returns true for
+    // any non-"order" key, flipping `!any(..)` to false and suppressing the
+    // default `bug_id` order.  This test seeds a saved query with a raw
+    // non-"order" param and asserts the default order is still applied.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    // Directly insert a saved query that carries a raw_param that is NOT
+    // "order" (so it exercises the `k == "order"` check), has no structured
+    // `order`, and has no explicit sort_args set.
+    update_config(|config| {
+        config.queries.insert(
+            "raw-param-test".into(),
+            crate::types::SavedQuery {
+                product: vec!["TestProduct".into()],
+                // A raw param whose key is NOT "order" — exercises the
+                // `k == "order"` guard on the right side of the `&&`.
+                raw_params: vec![("classification".into(), "MyClass".into())],
+                ..crate::types::SavedQuery::default()
+            },
+        );
+        Ok(())
+    })
+    .unwrap();
+
+    // The wire must carry `order=bug_id` (the default), not be missing it.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("order", "bug_id"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    run_q(&run_action("raw-param-test")).await.unwrap();
+}

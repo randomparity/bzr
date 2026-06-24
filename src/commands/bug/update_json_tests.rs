@@ -117,3 +117,121 @@ fn parse_json_updates_object_and_array_shapes() {
         JsonOneOrMany::Many(_)
     ));
 }
+
+// ── cli_comment_uses_stdin (→ false and || → &&) ─────────────────────────────
+//
+// Mutant line 39: replace return with `false` — both tests would then pass a
+// false value through, but the assertion checks for `true`, so they fail.
+// Mutant line 40: replace `||` with `&&` — comment-only or comment_file-only
+// cases would then return false; the tests below each use only ONE source.
+
+#[test]
+fn cli_comment_uses_stdin_returns_true_for_comment_dash() {
+    let args = crate::cli::UpdateArgs {
+        ids: vec![1],
+        comment: Some("-".into()),
+        ..Default::default()
+    };
+    assert!(
+        super::cli_comment_uses_stdin(&args),
+        "comment = \"-\" must make cli_comment_uses_stdin return true"
+    );
+}
+
+#[test]
+fn cli_comment_uses_stdin_returns_true_for_comment_file_dash() {
+    let args = crate::cli::UpdateArgs {
+        ids: vec![1],
+        comment_file: Some(std::path::PathBuf::from("-")),
+        ..Default::default()
+    };
+    assert!(
+        super::cli_comment_uses_stdin(&args),
+        "comment_file = \"-\" must make cli_comment_uses_stdin return true"
+    );
+}
+
+#[test]
+fn cli_comment_uses_stdin_returns_false_when_no_stdin_source() {
+    let args = crate::cli::UpdateArgs {
+        ids: vec![1],
+        comment: Some("inline body".into()),
+        ..Default::default()
+    };
+    assert!(
+        !super::cli_comment_uses_stdin(&args),
+        "non-stdin comment must not trigger stdin detection"
+    );
+}
+
+// ── reject_cli_stdin_comment_source (→ Ok(()) and == → !=) ──────────────────
+//
+// Mutant line 48: replace function body with Ok(()) — the first test must fail
+// because it expects Err.
+// Mutant line 51: replace `from_json_arg == "-"` with `!= "-"` — the stdin
+// case (`arg == "-"`) would then skip the Err branch, causing the test to fail.
+
+#[test]
+fn reject_cli_stdin_comment_source_rejects_stdin_json_with_stdin_comment() {
+    // from_json arg is "-" (stdin) and comment also uses stdin:
+    // the function must return Err regardless of is_array.
+    let args = crate::cli::UpdateArgs {
+        ids: vec![1],
+        comment: Some("-".into()),
+        ..Default::default()
+    };
+    let result = super::reject_cli_stdin_comment_source(&args, "-", false);
+    assert!(
+        result.is_err(),
+        "stdin JSON + stdin comment must be rejected: got {result:?}"
+    );
+    let msg = result.unwrap_err().to_string();
+    assert!(
+        msg.contains("--from-json -"),
+        "error must mention --from-json -, got: {msg}"
+    );
+}
+
+#[test]
+fn reject_cli_stdin_comment_source_rejects_array_json_with_stdin_comment() {
+    // from_json arg is a file path but is_array=true and comment uses stdin:
+    // arrays cannot consume stdin for a single comment body.
+    let args = crate::cli::UpdateArgs {
+        ids: vec![1],
+        comment: Some("-".into()),
+        ..Default::default()
+    };
+    let result = super::reject_cli_stdin_comment_source(&args, "/tmp/in.json", true);
+    assert!(
+        result.is_err(),
+        "array JSON + stdin comment must be rejected: got {result:?}"
+    );
+}
+
+#[test]
+fn reject_cli_stdin_comment_source_allows_file_json_with_stdin_comment_single() {
+    // from_json arg is a regular file and is_array=false: single-object JSON
+    // can safely combine with stdin comment (the file is read first).
+    let args = crate::cli::UpdateArgs {
+        ids: vec![1],
+        comment: Some("-".into()),
+        ..Default::default()
+    };
+    let result = super::reject_cli_stdin_comment_source(&args, "/tmp/in.json", false);
+    assert!(
+        result.is_ok(),
+        "file JSON + stdin comment (single) must be allowed: got {result:?}"
+    );
+}
+
+#[test]
+fn reject_cli_stdin_comment_source_allows_no_stdin_comment() {
+    // Neither comment source uses stdin: any from_json arg is fine.
+    let args = crate::cli::UpdateArgs {
+        ids: vec![1],
+        comment: Some("normal body".into()),
+        ..Default::default()
+    };
+    assert!(super::reject_cli_stdin_comment_source(&args, "-", false).is_ok());
+    assert!(super::reject_cli_stdin_comment_source(&args, "/tmp/in.json", true).is_ok());
+}

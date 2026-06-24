@@ -440,6 +440,56 @@ async fn connect_client_partial_cache_preserves_cached_auth_method() {
     assert_eq!(srv.api_mode, Some(crate::types::ApiMode::Rest));
 }
 
+/// Kill `ctx.api_key.is_none() → true` mutant (mod.rs:72): when a
+/// credentialed server has `api_mode` cached but no `auth_method`, it must
+/// take the detect path (hits whoami + version), NOT the anonymous probe path
+/// (hits HEAD only). With the mutant, the guard is always `true`, so a
+/// credentialed server would silently take the anonymous probe branch and skip
+/// detection entirely.
+#[tokio::test]
+async fn credentialed_cached_mode_only_runs_detection_not_probe() {
+    let server = wiremock::MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    // Credentialed server: has api_key + api_mode, but NO auth_method.
+    // Real code: api_key.is_none() == false → falls to catch-all → detect.
+    // Mutant: api_key.is_none() replaced by true → takes anonymous probe branch.
+    let config_path = write_config(
+        &tmp,
+        &server.uri(),
+        // api_mode cached, no auth_method — partial cache with credentials.
+        "api_mode = \"rest\"",
+    );
+
+    // Detection mocks: expect whoami (auth detection) and version to be hit.
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/version"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.1.2"})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    // Probe mock: must NOT be called when api_key is present.
+    Mock::given(method("HEAD"))
+        .respond_with(ResponseTemplate::new(404))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
+    assert!(
+        result.is_ok(),
+        "credentialed server with only api_mode cached should detect and succeed: {:?}",
+        result.err()
+    );
+}
+
 /// `auth_method` cached but `api_mode` missing -> takes the partial-cache
 /// branch in `connect_and_configure` (re-detects `api_mode`, persists
 /// without overwriting `auth_method`).

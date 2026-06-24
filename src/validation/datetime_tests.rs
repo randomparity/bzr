@@ -261,3 +261,75 @@ fn date_only_rejects_garbage_and_names_flag() {
 fn date_only_rejects_century_non_leap_feb_29() {
     assert!(parse_date_only("1900-02-29", "--deadline").is_err());
 }
+
+// --- Targeted boundary cases for the date/time field guards ---------------
+//
+// The checks below pin individual boolean operators and match arms in the
+// parser that broader "all separators wrong" / "obviously invalid" tests
+// leave unconstrained.
+
+#[test]
+fn rejects_single_wrong_date_separator() {
+    // Exactly one of the two date separators is wrong. A guard that ANDs the
+    // two separator checks (instead of ORing) would accept these, since only
+    // one position fails. Both positions are exercised.
+    assert!(parse_iso8601_or_date("2026-04/01", FLAG).is_err());
+    assert!(parse_iso8601_or_date("2026/04-01", FLAG).is_err());
+}
+
+#[test]
+fn rejects_plus_signed_date_fields() {
+    // `+4` is rejected by `is_ascii_digit` but ACCEPTED by `u32::parse`, so a
+    // guard that ANDs the per-field digit checks would let these through and
+    // then parse them. Pins both the month-field and day-field digit guards.
+    assert!(parse_iso8601_or_date("2026-+4-01", FLAG).is_err());
+    assert!(parse_iso8601_or_date("2026-04-+1", FLAG).is_err());
+}
+
+#[test]
+fn accepts_last_day_of_non_leap_february() {
+    // A VALID non-leap-year Feb date must be accepted. Removing the `2 => 28`
+    // arm in days_in_month would reject this (all other Feb tests use the
+    // 29th, which is rejected either way and so cannot pin this arm).
+    let canon = parse_iso8601_or_date("2025-02-28", FLAG).unwrap();
+    assert_eq!(canon, "2025-02-28T00:00:00Z");
+}
+
+#[test]
+fn rejects_single_wrong_time_separator() {
+    // Exactly one of the two time colons is wrong (date part valid).
+    assert!(parse_iso8601_or_date("2026-04-01T12-30:45", FLAG).is_err());
+    assert!(parse_iso8601_or_date("2026-04-01T12:30-45", FLAG).is_err());
+}
+
+#[test]
+fn rejects_plus_signed_time_fields() {
+    // `+` in the minute and second fields: rejected by the digit guard,
+    // accepted by parse. Pins the minute-field and second-field digit guards.
+    assert!(parse_iso8601_or_date("2026-04-01T12:+0:45", FLAG).is_err());
+    assert!(parse_iso8601_or_date("2026-04-01T12:30:+5", FLAG).is_err());
+}
+
+#[test]
+fn rejects_plus_signed_offset_field() {
+    // `+` in the offset hour field: rejected by the digit guard, accepted by
+    // parse. Pins the offset digit guard.
+    assert!(parse_iso8601_or_date("2026-04-01T12:30:45++5:00", FLAG).is_err());
+}
+
+#[test]
+fn accepts_maximum_offset_hours() {
+    // +14:00 is the maximum legal offset. It pins `h > 14` (a `>=` mutant
+    // would reject 14) and the `h == 14 && m > 0` minute guard (a `>=` mutant
+    // would reject the :00).
+    let canon = parse_iso8601_or_date("2026-04-01T12:30:45+14:00", FLAG).unwrap();
+    assert_eq!(canon, "2026-04-01T12:30:45+14:00");
+}
+
+#[test]
+fn accepts_maximum_offset_minutes_below_fourteen_hours() {
+    // 59 offset minutes at a sub-14 hour must be accepted, pinning `m > 59`
+    // (a `>=` mutant would reject :59).
+    let canon = parse_iso8601_or_date("2026-04-01T12:30:45+13:59", FLAG).unwrap();
+    assert_eq!(canon, "2026-04-01T12:30:45+13:59");
+}

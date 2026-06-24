@@ -87,3 +87,18 @@ fn resolve_timeout_secs_ignores_invalid_env() {
     assert_eq!(resolve_timeout_secs(None, Some("-3")), None);
     assert_eq!(resolve_timeout_secs(None, Some("abc")), None);
 }
+
+#[test]
+fn utf8_prefix_backs_off_without_exceeding_max() {
+    // "é" is two bytes (0xC3 0xA9). A 2-byte cap lands mid-'é', so the prefix
+    // must shrink to "h" (1 byte) — a guard that grew `end` instead of
+    // shrinking it would return "hé" (3 bytes), exceeding the cap.
+    let s = "héllo";
+    let p = utf8_prefix(s, 2);
+    assert_eq!(p, "h");
+    assert!(p.len() <= 2, "prefix must never exceed max_bytes");
+    // A cap on an ASCII boundary returns exactly that many bytes.
+    assert_eq!(utf8_prefix("abcdef", 3), "abc");
+    // A cap at or beyond the length returns the whole string.
+    assert_eq!(utf8_prefix(s, 100), s);
+}

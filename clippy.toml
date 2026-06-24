@@ -1,1 +1,11 @@
+# Match the project's ≤5 positional-parameter rule.
 too-many-arguments-threshold = 5
+
+# Raised from the 16384-byte default to work around a clippy 1.89
+# `large_stack_arrays` false positive. The CI Clippy job runs at the MSRV
+# (1.89), whose lint miscounts a const-promoted array (~32 KB) as a local stack
+# allocation and reports it span-less; the bug is fixed in clippy >= 1.96, which
+# does not flag it. The codebase has no real local stack array above the default
+# threshold, so this only raises the bar for that one spurious report. Revert to
+# the default once the MSRV moves past the clippy fix.
+array-size-threshold = 32768

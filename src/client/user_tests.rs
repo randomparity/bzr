@@ -185,6 +185,40 @@ async fn hybrid_create_user_api_error_does_not_fall_back() {
 }
 
 #[tokio::test]
+async fn hybrid_create_user_falls_back_to_xmlrpc_on_transport_failure() {
+    let mock = MockServer::start().await;
+    // A REST 500 is a transport failure; in hybrid mode it must trigger the
+    // XML-RPC fallback rather than propagating. A guard that never treats the
+    // error as a transport failure would surface the 500 instead.
+    Mock::given(method("POST"))
+        .and(path("/rest/user"))
+        .respond_with(ResponseTemplate::new(500).set_body_string("upstream down"))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(
+            "<?xml version=\"1.0\"?><methodResponse><params><param><value><struct>\
+                <member><name>id</name><value><int>4242</int></value></member>\
+            </struct></value></param></params></methodResponse>",
+        ))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_hybrid(&mock.uri());
+    let params = CreateUserParams {
+        email: "new@example.com".into(),
+        login: None,
+        full_name: Some("New".into()),
+        password: None,
+    };
+    let id = client.create_user(&params).await.unwrap();
+    assert_eq!(id, 4242);
+}
+
+#[tokio::test]
 async fn update_user_sends_put() {
     let mock = MockServer::start().await;
     Mock::given(method("PUT"))

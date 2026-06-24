@@ -1,198 +1,311 @@
 # Mutation Testing Baseline
 
 This file tracks mutation-testing coverage per source file. It is the ratchet
-target for the multi-wave rollout — every PR should leave the per-file score
-≥ the value listed here. New sweeps update the numbers; never drop them
-silently.
+target — every PR should leave a file's score ≥ the value listed here. New
+sweeps update the numbers; never drop them silently.
 
 - **Tool:** `cargo-mutants` (currently `27.0.0`)
 - **Config:** [`.cargo/mutants.toml`](../../.cargo/mutants.toml)
-- **Baseline date:** 2026-05-01
-- **Total mutants generated:** 1030 across 75 source files
+- **Baseline date:** 2026-06-24
+- **Source files mutated:** 166
+- **Full-run totals (per build target):** 3431 mutants — 2751 caught, 248
+  missed, 424 unviable, 8 timeout. Wall clock ≈ 18h at `--jobs 8` on an
+  18-core host.
+- **Unique totals (deduplicated across targets):** 1796 viable — 1655 caught,
+  141 missed, 239 unviable, 5 timeout. As-measured kill rate **92.1 %**.
+
+### Why two sets of totals
+
+`bzr`'s library sources are compiled into the `bzr` library **and** the `bzr` /
+`bzr_lock_helper` binary targets, so `cargo-mutants` generates and tests most
+mutants once per target. The full-run totals are the tool's raw per-target
+counts; the per-file table and the disposition below report **unique** mutants
+(deduplicated across targets), since killing a defect kills every copy.
+
+## What this refresh did (#417)
+
+The prior baseline (2026-05-01, 1030 mutants over 75 files) predated a large
+restructure (~950 commits): `config.rs` → `config/{model,store}.rs`,
+`client/mod.rs` → `client/{transport,response,request}.rs`,
+`commands/shared.rs` → `commands/runtime/shared/connection/**`, `xmlrpc/*` →
+`xmlrpc/{protocol,resources}/**`, plus new modules (`validation/**`,
+`batch.rs`, `field_aliases.rs`, `commands/completion.rs`, `commands/schema.rs`).
+The whole-crate sweep was re-run and every one of the 141 unique missed mutants
+was dispositioned (see [Disposition](#disposition-of-missed-mutants)):
+
+- **96 killed** by new behavior tests,
+- **39 excluded** as equivalent or unreachable (`.cargo/mutants.toml`),
+- **6 documented residual gaps** (transport-error retry — see below).
+
+Effective post-refresh kill rate of testable mutants: **≈ 99.7 %**.
 
 ## How to read this file
 
-For each file we record one of:
-
-- `swept` — the file has been worked through; counts are real outcomes
-  (`caught` / `missed` / `unviable` / `timeout`)
-- `pending` — only the inventory count is known; no run yet
-
-A "score" is `caught / (caught + missed)`. Unviable mutants (won't compile
-because they require a `Default` impl etc.) and timeouts are reported but do
-not count against the score. Files with a target lower than 95 % carry an
-explicit justification in their row.
+For each file the table records the unique mutant outcome counts
+(`caught` / `missed` / `unviable` / `timeout`). A "score" is
+`caught / (caught + missed)`. Unviable mutants (won't compile — e.g. they
+require a `Default` impl) and timeouts are reported but do not count against
+the score. The `missed` column is the **as-measured** value; every missed
+mutant is resolved in the [Disposition](#disposition-of-missed-mutants)
+section (killed by a test added in this PR, or excluded in `mutants.toml`, or
+listed as a documented gap). A future full sweep will re-measure missed → 0
+for the fixed files.
 
 ## Workflow for a single file
 
 ```bash
-# 1. Produce the report. --jobs caps how many cargo build+test pipelines run
-#    in parallel; cargo-mutants warns above 8. Use a lower value if other work
-#    is competing for the host. The Makefile defaults to 4 and can be
-#    overridden via the MUTANTS_JOBS env var.
-cargo mutants --file <path> --jobs 4
+# 1. Produce the report (--jobs caps parallel build+test pipelines).
+cargo mutants --file <path> --jobs 8
 
 # 2. Inspect outcomes
 cat mutants.out/missed.txt
 cat mutants.out/unviable.txt
-cat mutants.out/timeout.txt
 
 # 3. For each entry in missed.txt:
 #    a) Add a unit test that fails when the mutation is applied, OR
-#    b) If the mutation is semantically equivalent, add `// mutants::skip`
-#       on the offending line with a comment explaining why, OR
-#    c) If a class of mutants is genuinely out of scope (e.g. log strings,
-#       Display impls), broaden `exclude_re` in `.cargo/mutants.toml`
+#    b) If the mutation is semantically equivalent / unreachable, add a narrow
+#       pattern to `exclude_re` in .cargo/mutants.toml with a comment, OR a
+#       `#[cfg_attr(test, mutants::skip)]` on the item, explaining why.
 #
-# 4. Re-run until missed.txt is acceptable. Update this file with the new
-#    score and bump the "last swept" date.
+# 4. Re-run until missed.txt is acceptable; update this file.
 ```
 
-To replay a single missed mutant locally:
+To replay specific missed mutants (cargo-mutants 27 filters by description
+regex, not line:col):
 
 ```bash
-cargo mutants --file <path> --in-place --no-shuffle --line-col <line>:<col>
+cargo mutants --file <path> --re '<mutant description regex>'
 ```
+
+A fast way to verify a fix without re-sweeping the file: hand-apply the
+mutation to the source, run the focused test, confirm it FAILS, then revert.
 
 ## Sweep order
 
-Modules are tackled in this order (highest leverage first). See the rollout
-plan for rationale.
+Modules are tackled highest-leverage first:
 
-1. **Wave 1** — pure parsers: `url_parser.rs`, `commands/flags.rs`,
-   `xmlrpc/parsing.rs`, `client/version.rs`
-2. **Wave 2** — boundaries: `error.rs`, `config.rs`, `http.rs`,
-   `tls/verifier.rs`, `tls/tofu.rs`
-3. **Wave 3** — `client/auth/**`, `client/{bug,attachment,comment,user,group,
-   product,component,classification,field,server}.rs`, `client/mod.rs`
-4. **Wave 4** — `commands/**`
-5. **Wave 5** — `output/**` (adopt `insta` snapshot tests before sweeping)
-6. **Wave 6** — `cli/**`, `types/**`, `main.rs`, `lib.rs`
+1. **Parsers / pure logic** — `validation/datetime.rs`, `url_parser.rs`,
+   `commands/runtime/flags.rs`, `xmlrpc/protocol/parsing.rs`,
+   `client/version.rs`, `http.rs`
+2. **Boundaries** — `error.rs`, `config/{model,store}.rs`,
+   `tls/{verifier,tofu,pin_failure}.rs`
+3. **Client** — `client/{transport,response,request}.rs`,
+   `client/auth/**`, `client/{bug,attachment,comment,user,group,product,
+   component,classification,field,server}.rs`
+4. **Commands** — `commands/**` (incl. `commands/runtime/**`)
+5. **Output** — `output/**` and `output/resources/**`
+6. **CLI / types** — `cli/**`, `types/**`, `main.rs`, `lib.rs`
+
+## Disposition of missed mutants
+
+### Excluded as equivalent or unreachable
+
+These mutants cannot be killed by any feasible unit test, or are
+observationally equivalent to the original. Each has a justification comment in
+[`.cargo/mutants.toml`](../../.cargo/mutants.toml):
+
+| Category | Examples | Why unkillable |
+|----------|----------|----------------|
+| `#[cfg]`-gated dead code | `fuzz::*` (`cfg(fuzzing)`), non-Unix `open_lock_file`/`create_new_private`, non-macOS `has_display` | Never compiled on the platform the baseline runs on; `cargo-mutants` ignores `#[cfg]`. |
+| `reqwest::Error` classifiers | `should_retry_transport`, `is_transient`, `pin_failure::classify` | `reqwest::Error` has no public constructor; wiremock returns HTTP responses, not transport errors. |
+| Tracing / stderr-only side effects | `log_probe_send_error`, `detect_auth_method` non-HTTPS warn, the `warn_*` family, `fetch_all_pages` paginate cap | Emit only `tracing`/stderr with no return-value or `Writers` impact. |
+| Interactive TTY / stdin readers | `read_comment_body`, `read_stdin_to_string`, TOFU/PIN prompts | Require a pty; in tests stdin is never a terminal. |
+| OS keyring setup | `ensure_default_store`, `native_store` | Talk to the platform secret service, absent in CI. |
+| Observationally equivalent | `safe_basename` guard (already guaranteed by `Path::file_name()`), `<impl Serialize for Bug>` `+`/`-` (a serde capacity hint), redundant `bug update` pre-validation, `confirm_batch` (no-TTY), non-deterministic temp-collision retry guards | Same observable result under the mutation. |
+
+### Documented residual gaps
+
+`src/client/transport.rs` retains **6** unique missed mutants in the
+transport-error retry branch (`&&`/`<`/`+=` inside `BugzillaClient::send` at
+the `is_transient` arm). Killing them needs a real `reqwest` connect/timeout
+error, which has no public constructor, plus real backoff timing; the
+status-retry branch (429/5xx) is fully covered by wiremock tests. These are
+left visible rather than excluded so the gap stays honest; close them if a
+transport-error test seam is added.
+
+### Killed by new tests (this PR)
+
+New behavior tests were added next to each source file (sibling `*_tests.rs`).
+Highlights: the `validation/datetime.rs` parser boundary cases; `bug clone`
+field-wiring and `close`/`reopen`/`dup` comment bodies; `lib.rs` dispatch
+credential/dry-run match arms; `config` temp-reaper prefix+suffix guard;
+`attachment` `update_has_changes`/partial-failure warning; `bug update`
+draft-merge helpers and stdin-source rejection; CLI `query overrides` and
+`bug my`/`search` paging fields; `client` version/response/user-fallback
+paths; `output/resources` record formatters; and the connection-context
+accessors.
 
 ## Per-file inventory
 
-Largest-first. `–` means the wave hasn't started yet.
+Largest-first (unique mutant counts from the 2026-06-24 full run). See
+[Disposition](#disposition-of-missed-mutants) for how each `Missed` entry is
+resolved.
 
-| File | Mutants | Status | Caught | Missed | Unviable | Timeout | Score | Last swept |
-|------|--------:|--------|-------:|-------:|---------:|--------:|------:|-----------|
-| src/tls/verifier.rs                 | 102 | swept   | 96 | 0 |  6 | 0 | 100 % | 2026-05-01 |
-| src/xmlrpc/parsing.rs               |  81 | swept   | 57 | 0 | 11 | 0 | 100 % | 2026-05-01 |
-| src/types/bug.rs                    |  77 | swept   | 77 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/commands/shared.rs              |  49 | swept   | 24 | 0 |  4 | 0 | 100 % | 2026-05-01 |
-| src/config.rs                       |  47 | swept   | 33 | 0 |  5 | 0 | 100 % | 2026-05-01 |
-| src/xmlrpc/client.rs                |  42 | swept   | 35 | 0 |  7 | 0 | 100 % | 2026-05-01 |
-| src/client/mod.rs                   |  41 | swept   | 30 | 0 | 10 | 0 | 100 % | 2026-05-01 |
-| src/client/bug.rs                   |  38 | swept   | 28 | 0 | 10 | 0 | 100 % | 2026-05-01 |
-| src/tls/tofu.rs                     |  36 | swept   | 28 | 0 |  4 | 0 | 100 % | 2026-05-01 |
-| src/output/formatting.rs            |  34 | swept   | 34 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/xmlrpc/mod.rs                   |  28 | swept   | 21 | 0 |  7 | 0 | 100 % | 2026-05-01 |
-| src/url_parser.rs                   |  25 | swept   | 23 | 0 | 2 | 0 | 100 % | 2026-05-01 |
-| src/error.rs                        |  19 | swept   | 17 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/commands/query.rs               |  19 | swept   | 18 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/commands/config.rs              |  18 | swept   | 18 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/commands/flags.rs               |  17 | swept   | 10 | 0 |  7 | 0 | 100 % | 2026-05-01 |
-| src/client/version.rs               |  17 | swept   | 13 | 0 |  4 | 0 | 100 % | 2026-05-01 |
-| src/types/common.rs                 |  16 | swept   | 12 | 0 |  4 | 0 | 100 % | 2026-05-01 |
-| src/main.rs                         |  16 | swept   | 12 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/commands/attachment.rs          |  16 | swept   | 16 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/output/query.rs                 |  13 | swept   | 13 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/commands/bug/list.rs            |  13 | swept   | 13 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/client/group.rs                 |  13 | swept   | 12 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/commands/comment.rs             |  12 | swept   |  7 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/client/attachment.rs            |  12 | swept   | 10 | 0 |  2 | 0 | 100 % | 2026-05-01 |
-| src/http.rs                         |  11 | swept   | 10 | 0 |  2 | 0 | 100 % | 2026-05-01 |
-| src/commands/bug/my.rs              |  11 | swept   | 11 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/client/auth/valid_login.rs      |  11 | swept   |  8 | 0 |  3 | 0 | 100 % | 2026-05-01 |
-| src/output/result_types.rs          |  10 | swept   |  1 | 0 |  9 | 0 | 100 % | 2026-05-01 |
-| src/commands/bug/update.rs          |  10 | swept   | 10 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/commands/bug/search.rs          |  10 | swept   | 10 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/client/comment.rs               |  10 | swept   |  9 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/output/config.rs                |   9 | swept   |  7 | 0 |  2 | 0 | 100 % | 2026-05-01 |
-| src/commands/template.rs            |   9 | swept   |  9 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/client/user.rs                  |   9 | swept   |  4 | 0 |  3 | 0 | 100 % | 2026-05-01 |
-| src/xmlrpc/call.rs                  |   8 | swept   |  6 | 0 |  2 | 0 | 100 % | 2026-05-01 |
-| src/client/auth/mod.rs              |   8 | swept   |  6 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/output/template.rs              |   7 | swept   |  7 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/output/product.rs               |   7 | swept   |  7 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/credentials/keyring.rs          |   7 | swept   |  5 | 0 |  2 | 0 | 100 % | 2026-05-01 |
-| src/client/field.rs                 |   7 | swept   |  4 | 0 |  3 | 0 | 100 % | 2026-05-01 |
-| src/output/bug.rs                   |   6 | swept   |  5 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/client/product.rs               |   6 | swept   |  4 | 0 |  2 | 0 | 100 % | 2026-05-01 |
-| src/client/auth/whoami.rs           |   6 | swept   |  4 | 0 |  2 | 0 | 100 % | 2026-05-01 |
-| src/types/attachment.rs             |   5 | swept   |  3 | 0 |  2 | 0 | 100 % | 2026-05-01 |
-| src/tls/mod.rs                      |   5 | swept   |  3 | 0 |  2 | 0 | 100 % | 2026-05-01 |
-| src/output/user.rs                  |   5 | swept   |  3 | 0 |  2 | 0 | 100 % | 2026-05-01 |
-| src/tls/fingerprint.rs              |   4 | swept   |  4 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/credentials/keyring_stub.rs     |   4 | swept   |  0 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/commands/user.rs                |   4 | swept   |  4 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/types/product.rs                |   3 | swept   |  3 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/commands/field.rs               |   3 | swept   |  3 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/commands/bug/clone.rs           |   3 | swept   |  3 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/client/server.rs                |   3 | swept   |  2 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/client/component.rs             |   3 | swept   |  2 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/xmlrpc/fault.rs                 |   2 | swept   |  1 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/output/server.rs                |   2 | swept   |  1 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/output/group.rs                 |   2 | swept   |  2 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/output/field.rs                 |   2 | swept   |  2 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/output/classification.rs        |   2 | swept   |  2 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/types/user.rs                   |   1 | swept   |  0 | 0 |  1 | 0 | 100 % | 2026-05-01 |
-| src/output/comment.rs               |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/output/attachment.rs            |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/lib.rs                          |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/commands/whoami.rs              |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/commands/server.rs              |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/commands/product.rs             |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/commands/group.rs               |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/commands/component.rs           |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/commands/classification.rs      |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/commands/bug/view.rs            |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/commands/bug/mod.rs             |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/commands/bug/history.rs         |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/commands/bug/create.rs          |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-| src/client/classification.rs        |   1 | swept   |  1 | 0 |  0 | 0 | 100 % | 2026-05-01 |
-
-## Sub-tree totals (informational)
-
-| Sub-tree | Mutants | Notes |
-|---------|--------:|-------|
-| `src/commands/`  | 204 | Includes the `bug/*` split; many small files |
-| `src/client/`    | 185 | API surface — wiremock-driven tests already exist |
-| `src/xmlrpc/`    | 161 | Pure parsing — high-leverage |
-| `src/tls/`       | 147 | Custom verifier; bugs here are silent |
-| `src/types/`     | 102 | Mostly serde plumbing |
-| `src/output/`    | 101 | Expect snapshot adoption before sweeping |
-| `src/config.rs`  |  47 | Single file |
-| `src/url_parser.rs` | 25 | Swept (Wave 1) |
-| `src/error.rs`   |  19 | Single file |
-| `src/main.rs`    |  16 | Mostly clap glue |
-| `src/http.rs`    |  11 | Boundary code |
-| `src/credentials/` | 11 | Two files |
-| `src/lib.rs`     |   1 | Dispatch |
-
-## Skip-list audit
-
-Per-file `mutants::skip` attributes are tracked via `make audit-mutant-skips`.
-
-Config-level exclusions in `.cargo/mutants.toml` (review these whenever the
-related code changes — they may have rotted):
-
-| Pattern | Files affected | Reason |
-|---------|---------------|--------|
-| `impl .* Display for` / `impl .* Debug for` | all | formatting; covered by snapshot/output tests when needed |
-| `skip_to_end` | `src/xmlrpc/parsing.rs` | defensive depth-tracking; equivalent in normal XML-RPC flow (depth never exceeds 1) |
-| `is_value_end -> bool with true` | `src/xmlrpc/parsing.rs` | empty `<value></value>` end arm — equivalent under permissive parser |
-| `replace == with != in is_value_end` | `src/xmlrpc/parsing.rs` | same equivalence as above |
-| `match guard is_value_end(...) with true` | `src/xmlrpc/parsing.rs` | guard call site of the equivalent helper |
-| `is_tls_cert_error -> bool with false` | `src/http.rs` | `reqwest::Error` has no public constructor; cannot construct one with both `is_connect()` true and a TLS-keyword chain in unit tests |
-| `read_interactive_line` / `confirm_pin` / `prompt_tofu` / `prompt_rotation` returning Ok(None)/Ok(false) | `src/tls/tofu.rs` | Each detects non-terminal stdin and short-circuits to None/false; cargo test stdin is never a terminal, so the mutation matches the test-mode path |
-| `warn_security` / `warn_if_path_permissions_too_open` / `Config::warn_on_insecure_permissions` no-ops, plus the bitwise-mode-mask check | `src/config.rs` | Stderr-only side effects; the project has no `capture_stderr` helper, so these can't be observed in unit tests |
-| `write_private_file` / `set_private_file_permissions -> Ok(())` | `src/config.rs` | The non-Unix `write_private_file` is dead code on the Linux test platform (`#[cfg(not(unix))]`); the Unix `set_private_file_permissions` is redundant since `write_private_file` already creates with `OpenOptions::mode(0o600)` |
-| `delete ! in detect_auth_method` | `src/client/auth/mod.rs` | Tracing-only side effect for non-HTTPS URLs |
-| `CodeVisitor>::expecting -> std::fmt::Result` | `src/client/mod.rs` | The visitor's "expected" message is only surfaced on serde failure, which `check_response_status` swallows in favor of `BzrError::HttpStatus` |
-| `read_comment_body` / `compose_comment_in_editor` / `TempFile::drop` | `src/commands/comment.rs` | Editor-spawn / tempfile cleanup helpers; only fire when stdin is a terminal, unreachable in unit tests |
-| `read_secret_from_prompt_or_env` (non-keyring) | `src/commands/config.rs` | `#[cfg(not(feature = "keyring"))]` — dead code on the default-feature Linux test platform |
-| `should_offer_tofu` / `is_pin_mismatch` / `is_issuer_changed` / `classify_and_handle_tls_failure` | `src/commands/shared.rs` | TLS-failure predicates can only return true given a real TLS handshake error from reqwest, which has no public Error constructor |
-| `handle_tofu` / `handle_pin_rotation` (whole functions, via `#[cfg_attr(test, mutants::skip)]`) | `src/commands/shared.rs` | TOFU/rotation handlers only fire after a terminal-stdin prompt accepts; cargo-mutants v27 cannot reach `delete field` mutations through `exclude_re`, so the attribute is used instead |
-| `main` (whole function, via `#[cfg_attr(test, mutants::skip)]`) | `src/main.rs` | Binary entry point; observing exit codes / stderr requires spawning the compiled binary (e.g. via `assert_cmd`/`escargot`). The pure helpers it delegates to are unit-tested directly. |
-| `suppress_stdout` non-unix variants (whole functions, via `#[cfg_attr(test, mutants::skip)]`) | `src/main.rs` | `#[cfg(windows)]` and `#[cfg(not(any(unix, windows)))]` are dead code on the Linux test platform |
-| `store` / `retrieve` / `delete` (whole functions, via `#[cfg_attr(test, mutants::skip)]`) | `src/credentials/keyring_stub.rs` | `#[cfg(not(feature = "keyring"))]` — never compiled into the test binary, since `.cargo/mutants.toml` runs with `--all-features` |
+| File | Mutants | Caught | Missed | Unviable | Timeout | Score |
+|------|--------:|-------:|-------:|---------:|--------:|------:|
+| src/validation/datetime.rs                     |   99 |  88 |  11 |   0 |  0 |  89% |
+| src/tls/verifier.rs                            |   99 |  93 |   0 |   6 |  0 | 100% |
+| src/xmlrpc/protocol/parsing.rs                 |   68 |  57 |   0 |  11 |  0 | 100% |
+| src/client/bug.rs                              |   54 |  43 |   0 |  11 |  0 | 100% |
+| src/types/bug/search.rs                        |   43 |  43 |   0 |   0 |  0 | 100% |
+| src/types/bug_fields.rs                        |   43 |  40 |   0 |   3 |  0 | 100% |
+| src/client/response.rs                         |   40 |  35 |   2 |   3 |  0 |  95% |
+| src/commands/bug/create.rs                     |   38 |  36 |   0 |   2 |  0 | 100% |
+| src/xmlrpc/resources/mappers.rs                |   38 |  35 |   0 |   3 |  0 | 100% |
+| src/commands/bug/update_json.rs                |   37 |  29 |   6 |   2 |  0 |  83% |
+| src/config/model.rs                            |   36 |  32 |   1 |   3 |  0 |  97% |
+| src/output/formatting.rs                       |   34 |  34 |   0 |   0 |  0 | 100% |
+| src/config/store.rs                            |   34 |  26 |   6 |   2 |  0 |  81% |
+| src/client/transport.rs                        |   33 |  14 |  11 |   5 |  3 |  56% |
+| src/tls/tofu.rs                                |   32 |  28 |   0 |   4 |  0 | 100% |
+| src/commands/bug/clone.rs                      |   32 |  23 |   9 |   0 |  0 |  72% |
+| src/output/resources/bug.rs                    |   32 |  31 |   0 |   1 |  0 | 100% |
+| src/commands/attachment/mod.rs                 |   30 |  23 |   7 |   0 |  0 |  77% |
+| src/types/query.rs                             |   30 |  29 |   0 |   1 |  0 | 100% |
+| src/commands/runtime/context.rs                |   28 |  12 |   5 |  11 |  0 |  71% |
+| src/lib.rs                                     |   27 |  13 |  12 |   2 |  0 |  52% |
+| src/http.rs                                    |   26 |  20 |   5 |   0 |  1 |  80% |
+| src/types/common.rs                            |   26 |  22 |   0 |   4 |  0 | 100% |
+| src/commands/bug/view.rs                       |   25 |  19 |   3 |   3 |  0 |  86% |
+| src/commands/runtime/url_parser.rs             |   25 |  23 |   0 |   2 |  0 | 100% |
+| src/tls/pin_failure.rs                         |   24 |  21 |   1 |   2 |  0 |  95% |
+| src/xmlrpc/protocol/value.rs                   |   24 |  15 |   0 |   9 |  0 | 100% |
+| src/client/version.rs                          |   24 |  12 |   2 |  10 |  0 |  86% |
+| src/commands/attachment/download.rs            |   24 |  18 |   3 |   3 |  0 |  86% |
+| src/cli/bug/mod.rs                             |   23 |  22 |   1 |   0 |  0 |  96% |
+| src/client/attachment.rs                       |   22 |  13 |   0 |   9 |  0 | 100% |
+| src/commands/runtime/from_json.rs              |   22 |  12 |   0 |  10 |  0 | 100% |
+| src/commands/runtime/paging.rs                 |   22 |  18 |   0 |   4 |  0 | 100% |
+| src/commands/template/mod.rs                   |   21 |  21 |   0 |   0 |  0 | 100% |
+| src/commands/component/update.rs               |   20 |  16 |   0 |   4 |  0 | 100% |
+| src/commands/runtime/shared/body_source.rs     |   20 |  17 |   1 |   2 |  0 |  94% |
+| src/commands/bug/verbs.rs                      |   20 |  17 |   3 |   0 |  0 |  85% |
+| src/commands/bug/my.rs                         |   18 |  15 |   3 |   0 |  0 |  83% |
+| src/commands/runtime/flags.rs                  |   18 |  10 |   0 |   7 |  1 | 100% |
+| src/output/resources/attachment.rs             |   17 |  16 |   0 |   1 |  0 | 100% |
+| src/error.rs                                   |   17 |  15 |   0 |   2 |  0 | 100% |
+| src/client/comment.rs                          |   16 |  12 |   0 |   4 |  0 | 100% |
+| src/commands/bug/search.rs                     |   16 |  13 |   2 |   1 |  0 |  87% |
+| src/commands/bug/update/execute.rs             |   16 |  15 |   1 |   0 |  0 |  94% |
+| src/xmlrpc/resources/bug.rs                    |   15 |  11 |   0 |   4 |  0 | 100% |
+| src/output/result_types.rs                     |   14 |   3 |   0 |  11 |  0 | 100% |
+| src/output/resources/query.rs                  |   13 |  13 |   0 |   0 |  0 | 100% |
+| src/commands/bug/mod.rs                        |   13 |  10 |   3 |   0 |  0 |  77% |
+| src/cli/query.rs                               |   13 |   7 |   6 |   0 |  0 |  54% |
+| src/commands/runtime/shared/connection/target.rs |   13 |   4 |   7 |   2 |  0 |  36% |
+| src/commands/query/update.rs                   |   13 |  13 |   0 |   0 |  0 | 100% |
+| src/commands/bug/update/payload.rs             |   13 |  13 |   0 |   0 |  0 | 100% |
+| src/client/group.rs                            |   13 |  10 |   0 |   3 |  0 | 100% |
+| src/xmlrpc/resources/attachment.rs             |   11 |   3 |   3 |   5 |  0 |  50% |
+| src/main.rs                                    |   11 |  11 |   0 |   0 |  0 | 100% |
+| src/commands/bug/create_json.rs                |   11 |  11 |   0 |   0 |  0 | 100% |
+| src/commands/runtime/shared/connection/tls_trust.rs |   11 |   9 |   0 |   2 |  0 | 100% |
+| src/output/resources/user.rs                   |   11 |   9 |   0 |   2 |  0 | 100% |
+| src/commands/runtime/confirm.rs                |   11 |  11 |   0 |   0 |  0 | 100% |
+| src/credentials/keyring.rs                     |   11 |   4 |   4 |   3 |  0 |  50% |
+| src/commands/bug/list.rs                       |   11 |  11 |   0 |   0 |  0 | 100% |
+| src/client/auth/valid_login.rs                 |   11 |   9 |   0 |   2 |  0 | 100% |
+| src/output/resources/product.rs                |   11 |   7 |   3 |   1 |  0 |  70% |
+| src/commands/attachment/upload.rs              |   11 |   9 |   1 |   1 |  0 |  90% |
+| src/tls/error.rs                               |   10 |  10 |   0 |   0 |  0 | 100% |
+| src/client/mod.rs                              |   10 |   8 |   0 |   2 |  0 | 100% |
+| src/commands/schema.rs                         |   10 |  10 |   0 |   0 |  0 | 100% |
+| src/client/auth/mod.rs                         |   10 |   4 |   1 |   5 |  0 |  80% |
+| src/validation/mod.rs                          |    9 |   9 |   0 |   0 |  0 | 100% |
+| src/output/resources/config.rs                 |    9 |   5 |   2 |   2 |  0 |  71% |
+| src/commands/query/save.rs                     |    9 |   9 |   0 |   0 |  0 | 100% |
+| src/client/user.rs                             |    9 |   5 |   1 |   3 |  0 |  83% |
+| src/commands/user/update.rs                    |    9 |   9 |   0 |   0 |  0 | 100% |
+| src/commands/runtime/editor.rs                 |    9 |   6 |   1 |   2 |  0 |  86% |
+| src/types/bug/payload.rs                       |    8 |   8 |   0 |   0 |  0 | 100% |
+| src/commands/bug/update/validate.rs            |    8 |   7 |   1 |   0 |  0 |  88% |
+| src/client/auth/whoami.rs                      |    8 |   6 |   0 |   2 |  0 | 100% |
+| src/xmlrpc/protocol/call.rs                    |    8 |   8 |   0 |   0 |  0 | 100% |
+| src/tls/mod.rs                                 |    8 |   6 |   0 |   2 |  0 | 100% |
+| src/bugzilla_auth.rs                           |    8 |   6 |   0 |   2 |  0 | 100% |
+| src/commands/comment/mod.rs                    |    7 |   7 |   0 |   0 |  0 | 100% |
+| src/output/resources/template.rs               |    7 |   7 |   0 |   0 |  0 | 100% |
+| src/types/bug.rs                               |    7 |   3 |   1 |   3 |  0 |  75% |
+| src/client/request.rs                          |    7 |   4 |   0 |   3 |  0 | 100% |
+| src/commands/config/remove.rs                  |    7 |   7 |   0 |   0 |  0 | 100% |
+| src/client/product.rs                          |    6 |   4 |   0 |   2 |  0 | 100% |
+| src/commands/product/update.rs                 |    6 |   6 |   0 |   0 |  0 | 100% |
+| src/commands/component/mod.rs                  |    6 |   6 |   0 |   0 |  0 | 100% |
+| src/output/resources/component.rs              |    6 |   6 |   0 |   0 |  0 | 100% |
+| src/commands/runtime/shared/connection/mod.rs  |    6 |   4 |   1 |   1 |  0 |  80% |
+| src/commands/group/mod.rs                      |    6 |   6 |   0 |   0 |  0 | 100% |
+| src/commands/bug/update/draft.rs               |    6 |   3 |   3 |   0 |  0 |  50% |
+| src/output/resources/classification.rs         |    6 |   3 |   3 |   0 |  0 |  50% |
+| src/commands/config/keyring.rs                 |    6 |   6 |   0 |   0 |  0 | 100% |
+| src/types/attachment.rs                        |    6 |   4 |   0 |   2 |  0 | 100% |
+| src/commands/product/mod.rs                    |    6 |   6 |   0 |   0 |  0 | 100% |
+| src/commands/user/mod.rs                       |    6 |   6 |   0 |   0 |  0 | 100% |
+| src/commands/config/rename.rs                  |    5 |   4 |   1 |   0 |  0 |  80% |
+| src/commands/bug/update/output.rs              |    5 |   5 |   0 |   0 |  0 | 100% |
+| src/xmlrpc/resources/comment.rs                |    5 |   2 |   0 |   3 |  0 | 100% |
+| src/commands/group/update.rs                   |    5 |   5 |   0 |   0 |  0 | 100% |
+| src/types/field.rs                             |    5 |   5 |   0 |   0 |  0 | 100% |
+| src/output/resources/field.rs                  |    5 |   5 |   0 |   0 |  0 | 100% |
+| src/commands/query/mod.rs                      |    5 |   5 |   0 |   0 |  0 | 100% |
+| src/commands/bug/search_support/policy.rs      |    5 |   5 |   0 |   0 |  0 | 100% |
+| src/commands/bug/search_support/fields.rs      |    5 |   5 |   0 |   0 |  0 | 100% |
+| src/commands/runtime/shared/connection/detect.rs |    4 |   1 |   0 |   3 |  0 | 100% |
+| src/commands/runtime/shared/merge.rs           |    4 |   4 |   0 |   0 |  0 | 100% |
+| src/xmlrpc/resources/user.rs                   |    4 |   4 |   0 |   0 |  0 | 100% |
+| src/commands/query/run.rs                      |    4 |   3 |   1 |   0 |  0 |  75% |
+| src/client/classification.rs                   |    4 |   2 |   0 |   2 |  0 | 100% |
+| src/tls/fingerprint.rs                         |    4 |   4 |   0 |   0 |  0 | 100% |
+| src/commands/config/migrate.rs                 |    4 |   4 |   0 |   0 |  0 | 100% |
+| src/commands/config/set_server.rs              |    3 |   3 |   0 |   0 |  0 | 100% |
+| src/client/component.rs                        |    3 |   3 |   0 |   0 |  0 | 100% |
+| src/commands/bug/update/mod.rs                 |    3 |   1 |   2 |   0 |  0 |  33% |
+| src/client/server.rs                           |    3 |   0 |   0 |   3 |  0 |  n/a |
+| src/types/product.rs                           |    3 |   3 |   0 |   0 |  0 | 100% |
+| src/commands/attachment/update.rs              |    3 |   3 |   0 |   0 |  0 | 100% |
+| src/commands/field.rs                          |    3 |   3 |   0 |   0 |  0 | 100% |
+| src/commands/template/update.rs                |    2 |   2 |   0 |   0 |  0 | 100% |
+| src/commands/config/set_default.rs             |    2 |   2 |   0 |   0 |  0 | 100% |
+| src/commands/component/view.rs                 |    2 |   2 |   0 |   0 |  0 | 100% |
+| src/client/field.rs                            |    2 |   1 |   0 |   1 |  0 | 100% |
+| src/commands/user/create.rs                    |    2 |   1 |   0 |   1 |  0 | 100% |
+| src/commands/user/search.rs                    |    2 |   1 |   0 |   1 |  0 | 100% |
+| src/xmlrpc/protocol/client.rs                  |    2 |   1 |   0 |   1 |  0 | 100% |
+| src/xmlrpc/resources/group.rs                  |    2 |   0 |   0 |   2 |  0 |  n/a |
+| src/output/resources/server.rs                 |    2 |   1 |   0 |   1 |  0 | 100% |
+| src/commands/comment/tag.rs                    |    2 |   2 |   0 |   0 |  0 | 100% |
+| src/bin/bzr_lock_helper.rs                     |    2 |   2 |   0 |   0 |  0 | 100% |
+| src/commands/component/create.rs               |    2 |   1 |   0 |   1 |  0 | 100% |
+| src/commands/group/create.rs                   |    2 |   1 |   0 |   1 |  0 | 100% |
+| src/xmlrpc/protocol/fault.rs                   |    2 |   1 |   0 |   1 |  0 | 100% |
+| src/commands/group/list_users.rs               |    2 |   1 |   0 |   1 |  0 | 100% |
+| src/output/resources/group.rs                  |    2 |   2 |   0 |   0 |  0 | 100% |
+| src/commands/product/create.rs                 |    2 |   1 |   0 |   1 |  0 | 100% |
+| src/commands/query/delete.rs                   |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/comment/search_tags.rs            |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/component/list.rs                 |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/config/mod.rs                     |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/comment/add.rs                    |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/product/list.rs                   |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/query/show.rs                     |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/bug/history.rs                    |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/template/save.rs                  |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/completion.rs                     |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/output/resources/comment.rs                |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/runtime/mutation.rs               |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/template/delete.rs                |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/attachment/list.rs                |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/query/list.rs                     |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/product/view.rs                   |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/group/add_user.rs                 |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/whoami.rs                         |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/attachment/view.rs                |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/group/view.rs                     |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/cli/template.rs                            |    1 |   0 |   0 |   1 |  0 |  n/a |
+| src/commands/comment/list.rs                   |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/template/list.rs                  |    1 |   0 |   1 |   0 |  0 |   0% |
+| src/commands/classification.rs                 |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/template/show.rs                  |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/server.rs                         |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/types/user.rs                              |    1 |   0 |   0 |   1 |  0 |  n/a |
+| src/commands/config/show.rs                    |    1 |   1 |   0 |   0 |  0 | 100% |
+| src/commands/group/remove_user.rs              |    1 |   1 |   0 |   0 |  0 | 100% |

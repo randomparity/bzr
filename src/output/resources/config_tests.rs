@@ -208,6 +208,31 @@ fn display_server_with_tls_pin() {
     assert!(json.get("tls_insecure").is_none());
 }
 
+// ── DisplayCredentialSource::as_str ──────────────────────────────
+
+#[test]
+fn display_credential_source_as_str_maps_each_variant_to_its_label() {
+    // Kill `-> &'static str with ""`/`"xyzzy"` mutants: assert each variant
+    // returns the exact expected label string.
+    assert_eq!(DisplayCredentialSource::Inline.as_str(), "inline");
+    assert_eq!(DisplayCredentialSource::Env.as_str(), "env");
+    assert_eq!(DisplayCredentialSource::Keyring.as_str(), "keyring");
+    assert_eq!(DisplayCredentialSource::None.as_str(), "none");
+    assert_eq!(DisplayCredentialSource::Invalid.as_str(), "invalid");
+
+    // Confirm all five are pairwise-distinct so a single wrong constant
+    // can't accidentally satisfy two variant checks.
+    let labels = [
+        DisplayCredentialSource::Inline.as_str(),
+        DisplayCredentialSource::Env.as_str(),
+        DisplayCredentialSource::Keyring.as_str(),
+        DisplayCredentialSource::None.as_str(),
+        DisplayCredentialSource::Invalid.as_str(),
+    ];
+    let unique: std::collections::HashSet<_> = labels.iter().collect();
+    assert_eq!(unique.len(), 5, "all five as_str labels must be distinct");
+}
+
 fn make_display_info(
     url: &str,
     api_key: &str,

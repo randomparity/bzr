@@ -60,6 +60,33 @@ fn product_row_conversion() {
     assert_eq!(row.components, 1);
 }
 
+// ── product_record ───────────────────────────────────────────────
+
+#[test]
+fn product_record_has_four_columns_with_correct_values() {
+    // Kill vec![]/vec![String::new()]/vec!["xyzzy".into()] mutants on
+    // `product_record`: assert every column position carries the real value.
+    let mut product = make_product(42, "Firefox");
+    product.description = "The browser".into();
+    // Add a second component so the count is >1 and can't match an empty vec.
+    product.components.push(crate::types::Component {
+        id: 2,
+        name: "Networking".into(),
+        description: "Networking component".into(),
+        is_active: true,
+        default_assignee: None,
+    });
+    let row = product_record(&product);
+    assert_eq!(row.len(), 4, "record must have exactly 4 columns");
+    assert_eq!(row[0], "42", "column 0 must be the product id");
+    assert_eq!(row[1], "Firefox", "column 1 must be the product name");
+    assert!(
+        row[2].contains("The browser"),
+        "column 2 must contain the description"
+    );
+    assert_eq!(row[3], "2", "column 3 must be the component count");
+}
+
 // ── write_product_detail ─────────────────────────────────────────
 
 #[test]

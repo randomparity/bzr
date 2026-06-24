@@ -319,6 +319,88 @@ async fn bug_my_all_deduplicates() {
     assert_eq!(bugs[0]["id"], 42);
 }
 
+// ---- truncated |= page.truncated accumulator ----
+// Kill the `replace |= with &=` mutant at my.rs:62.
+// Scenario: `--all` runs three searches. The first category (assigned_to)
+// is NOT truncated; the second (creator) IS truncated. With `|=` the
+// accumulator stays true; with `&=` it would be reset to false because
+// the first page had truncated=false, so `false &= true = false`.
+#[tokio::test]
+async fn bug_my_all_truncated_flag_set_when_any_category_is_truncated() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_whoami(&mock).await;
+
+    // assigned_to search: limit=1 → probe asks limit=2 → return 1 bug → NOT truncated
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("assigned_to", "dev@test.com"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 10, "summary": "A", "status": "NEW",
+                      "product": "P", "component": "C"}]
+        })))
+        .mount(&mock)
+        .await;
+
+    // creator search: probe asks limit=2 → return 2 bugs → TRUNCATED
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("creator", "dev@test.com"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [
+                {"id": 20, "summary": "B", "status": "NEW", "product": "P", "component": "C"},
+                {"id": 21, "summary": "C", "status": "NEW", "product": "P", "component": "C"}
+            ]
+        })))
+        .mount(&mock)
+        .await;
+
+    // cc search: return 0 bugs → NOT truncated
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("cc", "dev@test.com"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::My(crate::cli::MyArgs {
+        page_args: crate::cli::PageArgs::default(),
+        created: false,
+        cc: false,
+        all: true,
+        limit: 1, // probe = limit+1 = 2; creator returns 2 → truncated
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
+        sort_args: crate::cli::SortArgs::default(),
+        count: false,
+        ..Default::default()
+    });
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        // JSON so truncation note goes to stderr (easy to assert).
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(
+        result.is_ok(),
+        "my --all truncation test failed: {result:?}"
+    );
+    // The truncation footer is only emitted when `truncated` is true.
+    // With `|=` the accumulator becomes true when creator is truncated.
+    // With `&=` the accumulator would stay false (first result was false),
+    // so the note would be absent and this assertion would fail.
+    assert!(
+        io.err_str().contains("more available"),
+        "truncation note expected in stderr but got:\n{}",
+        io.err_str()
+    );
+}
+
 #[tokio::test]
 async fn bug_my_all_count_reports_distinct_total() {
     let (_lock, mock, _tmp) = setup_test_env().await;
@@ -361,4 +443,99 @@ async fn bug_my_all_count_reports_distinct_total() {
     let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
     // Three searches each return ids {1,2}; deduped distinct count is 2.
     assert_eq!(parsed["count"], 2);
+}
+
+// ---- delete field offset from SearchParams in build_base_search_params ----
+// Kill the `delete field offset` mutant at my.rs:97.
+// With --offset, the `offset` query param must reach the server.
+// A dropped field would leave offset=None → the param is absent → wiremock
+// would not match the query_param("offset", "5") matcher and return 404-ish,
+// but more importantly the mock with .expect(1) would not fire.
+#[tokio::test]
+async fn bug_my_offset_reaches_server() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_whoami(&mock).await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("assigned_to", "dev@test.com"))
+        .and(query_param("offset", "5"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::My(crate::cli::MyArgs {
+        page_args: crate::cli::PageArgs {
+            offset: Some(5),
+            paginate: false,
+        },
+        created: false,
+        cc: false,
+        all: false,
+        limit: 50,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
+        sort_args: crate::cli::SortArgs::default(),
+        count: false,
+        ..Default::default()
+    });
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+    assert!(result.is_ok(), "my --offset failed: {result:?}");
+}
+
+// ---- delete field order from SearchParams in build_base_search_params ----
+// Kill the `delete field order` mutant at my.rs:102.
+// The `order` param is built from sort_args and must appear in the request.
+// A dropped field → absent `order` → wiremock's query_param("order", …)
+// matcher does not match → the .expect(1) mock fires 0 times → test fails.
+#[tokio::test]
+async fn bug_my_order_reaches_server() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_whoami(&mock).await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("assigned_to", "dev@test.com"))
+        .and(query_param("order", "last_change_time DESC, bug_id"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::My(crate::cli::MyArgs {
+        page_args: crate::cli::PageArgs::default(),
+        created: false,
+        cc: false,
+        all: false,
+        limit: 50,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
+        sort_args: crate::cli::SortArgs {
+            sort: Some("last_change_time".into()),
+            order: crate::types::SortDirection::Desc,
+        },
+        count: false,
+        ..Default::default()
+    });
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+    assert!(result.is_ok(), "my with --sort failed: {result:?}");
 }

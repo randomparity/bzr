@@ -155,3 +155,67 @@ fn bug_rejects_unknown_subcommand() {
         ErrorKind::InvalidSubcommand
     );
 }
+
+// ---- BugActorFilterArgs::merge_saved_query_filters ----
+// Kill the `-> bool with false` mutant: when any actor filter field is
+// non-empty, merge_saved_query_filters must return true.
+
+use super::{BugActorFilterArgs, BugFilterArgs};
+use crate::types::query::SavedQuery;
+
+#[test]
+fn bug_actor_filter_args_merge_saved_query_returns_true_when_assignee_set() {
+    let actor = BugActorFilterArgs {
+        assignee: vec!["dev@example.com".into()],
+        creator: vec![],
+    };
+    let mut query = SavedQuery::default();
+    let changed = actor.merge_saved_query_filters(&mut query);
+    assert!(
+        changed,
+        "merge_saved_query_filters must return true when assignee is non-empty"
+    );
+    assert_eq!(query.assignee, vec!["dev@example.com"]);
+}
+
+#[test]
+fn bug_actor_filter_args_merge_saved_query_returns_true_when_creator_set() {
+    let actor = BugActorFilterArgs {
+        assignee: vec![],
+        creator: vec!["author@example.com".into()],
+    };
+    let mut query = SavedQuery::default();
+    let changed = actor.merge_saved_query_filters(&mut query);
+    assert!(
+        changed,
+        "merge_saved_query_filters must return true when creator is non-empty"
+    );
+    assert_eq!(query.creator, vec!["author@example.com"]);
+}
+
+#[test]
+fn bug_actor_filter_args_merge_saved_query_returns_false_when_all_empty() {
+    let actor = BugActorFilterArgs::default();
+    let mut query = SavedQuery::default();
+    let changed = actor.merge_saved_query_filters(&mut query);
+    assert!(
+        !changed,
+        "merge_saved_query_filters must return false when all fields are empty"
+    );
+}
+
+#[test]
+fn bug_filter_args_merge_saved_query_returns_true_when_product_set() {
+    // Also pin BugFilterArgs::merge_saved_query_filters for completeness.
+    let filters = BugFilterArgs {
+        product: vec!["Firefox".into()],
+        ..Default::default()
+    };
+    let mut query = SavedQuery::default();
+    let changed = filters.merge_saved_query_filters(&mut query);
+    assert!(
+        changed,
+        "BugFilterArgs::merge_saved_query_filters must return true when product is set"
+    );
+    assert_eq!(query.product, vec!["Firefox"]);
+}

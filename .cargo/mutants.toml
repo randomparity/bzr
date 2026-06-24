@@ -67,7 +67,7 @@ exclude_re = [
     # unmutated code path. Catching them would require spawning a
     # subprocess with a pty.
     'replace (read_interactive_line|confirm_pin|prompt_tofu|prompt_rotation) -> Result<.*> with Ok\((None|false)\)',
-    # Permissions warnings in config.rs print to stderr only. The codebase
+    # Permissions warnings in config/store.rs print to stderr only. The codebase
     # has a `capture_stdout` helper but no stderr equivalent, so these
     # functions and the bitwise mode-mask check inside the second one
     # cannot be observed in unit tests without a refactor to inject a
@@ -77,56 +77,62 @@ exclude_re = [
     'replace Config::warn_on_insecure_permissions with \(\)',
     'replace & with [|^] in warn_if_path_permissions_too_open',
     'replace == with != in warn_if_path_permissions_too_open',
-    # `detect_auth_method`'s non-HTTPS check at the top of the function
-    # only emits a `tracing::warn!` — same untestable-stderr-side-effect
-    # category as the warn_security family above. The function currently
-    # contains only one `!` operator; if more are added, narrow this
-    # pattern.
+    # `detect_auth_method`'s non-HTTPS check (client/auth/mod.rs) at the top of
+    # the function only emits a `tracing::warn!` — same untestable-stderr-side-
+    # effect category as the warn_security family above. The function currently
+    # contains only one `!` operator; if more are added, narrow this pattern.
     'delete ! in detect_auth_method',
-    # The CodeVisitor::expecting body is only surfaced when serde fails to
-    # match any visit_* method (e.g. JSON code is null/array). The caller
-    # `check_response_status` swallows that deserialization error and falls
+    # The CodeVisitor::expecting body (client/response.rs) is only surfaced when
+    # serde fails to match any visit_* method (e.g. JSON code is null/array). The
+    # caller `check_response_status` swallows that deserialization error and falls
     # back to `BzrError::HttpStatus`, so the visitor's "expected" message
     # never reaches user-visible output. Replacing it with a no-op is
     # observably equivalent.
     'CodeVisitor>::expecting -> std::fmt::Result',
-    # The non-Unix `write_private_file` body cannot be reached on Linux
-    # (where CI/dev tests run); cargo-mutants ignores `#[cfg]` and reports
-    # it as missed even though the code is never compiled.
-    'replace write_private_file -> Result<\(\)> with Ok\(\(\)\)',
-    # The Unix `write_private_file` already creates the file with
-    # `OpenOptions::mode(0o600)`, so the subsequent
-    # `set_private_file_permissions` chmod has no observable effect — the
-    # mode is already correct when this function runs. Kept as a defensive
-    # double-set, but the no-op mutation passes any test that checks final
-    # perms.
-    'replace set_private_file_permissions -> Result<\(\)> with Ok\(\(\)\)',
-    # Comment composition helpers in src/commands/comment.rs detect
-    # `!stdin.is_terminal()` and pipe stdin or spawn $EDITOR. In unit
-    # tests stdin is never a terminal, so the editor branch
-    # (`compose_comment_in_editor` and the `TempFile::drop` it owns) is
-    # unreachable; mutations there are observably equivalent. The stdin
-    # branch in `read_comment_body` reads whatever the harness pipes in;
-    # tests can't easily inject specific stdin content without a
-    # subprocess.
-    'replace (read_comment_body|compose_comment_in_editor) -> Result<String> with Ok\(',
-    'delete ! in (read_comment_body|compose_comment_in_editor)',
+    # The non-Unix `open_lock_file` / `create_new_private` bodies (config/store.rs)
+    # cannot be reached on macOS/Linux (where CI/dev tests run); cargo-mutants
+    # ignores `#[cfg]` and reports them as missed even though the code is never
+    # compiled on these platforms.
+    'replace open_lock_file -> Result<fs::File> with Ok\(Default::default\(\)\)',
+    'replace create_new_private -> std::io::Result<fs::File> with Ok\(Default::default\(\)\)',
+    # The collision-retry seams in config/store.rs `write_unique_temp` and
+    # commands/runtime/editor.rs `create_unique_editor_file` only branch when
+    # `OpenOptions::create_new` hits an existing file. The candidate name embeds
+    # the pid and a process-global monotonic counter, so a collision cannot be
+    # forced deterministically in a unit test (the counter value depends on every
+    # prior temp created in the test process). The retry/propagate logic is real,
+    # but its `AlreadyExists` guard is unreachable on demand.
+    'AlreadyExists with (true|false) in write_unique_temp',
+    'replace == with != in write_unique_temp',
+    'AlreadyExists with false in create_unique_editor_file',
+    # Comment composition (commands/comment/mod.rs) detects `!stdin.is_terminal()`
+    # and pipes stdin or spawns $EDITOR; the editor TempFile lives in
+    # commands/runtime/editor.rs. In unit tests stdin is never a terminal, so the
+    # editor branch is unreachable and mutations there are observably equivalent.
+    # The stdin branch in `read_comment_body` reads whatever the harness pipes in;
+    # tests can't easily inject specific stdin content without a subprocess. The
+    # same applies to `read_stdin_to_string` in commands/runtime/shared/body_source.rs.
+    'replace read_comment_body -> Result<String> with Ok\(',
+    'delete ! in read_comment_body',
+    'replace read_stdin_to_string -> Result<String> with Ok\(String::new\(\)\)',
     'replace <impl Drop for TempFile>::drop with \(\)',
-    # TLS-failure classifiers and TOFU/rotation handlers in
-    # src/commands/shared.rs require a real TLS handshake error from
-    # reqwest (which has no public Error constructor) AND a terminal
-    # stdin to drive the prompts. Both are out of reach for unit tests:
-    # `should_offer_tofu`, `is_pin_mismatch`, and `is_issuer_changed` can
-    # only return true given a real TLS error chain; the field
-    # assignments inside `handle_tofu` and `handle_pin_rotation` only
-    # run after a prompt accepts; `classify_and_handle_tls_failure` only
-    # does meaningful work in those same paths.
-    'replace (should_offer_tofu|is_pin_mismatch|is_issuer_changed) -> bool with false',
+    # TLS-failure classifiers and TOFU/rotation handlers now live in
+    # commands/runtime/shared/connection/tls_trust.rs. They require a real TLS
+    # handshake error from reqwest (which has no public Error constructor) AND a
+    # terminal stdin to drive the prompts. Both are out of reach for unit tests:
+    # `should_offer_tofu` can only return true given a real TLS error chain; the
+    # field assignments inside `handle_tofu` and `handle_pin_rotation` only run
+    # after a prompt accepts; `classify_and_handle_tls_failure` only does
+    # meaningful work in those same paths.
+    'replace should_offer_tofu -> bool with false',
     'delete ! in should_offer_tofu',
     'replace classify_and_handle_tls_failure -> Result<Option<BugzillaClient>> with Ok\(None\)',
     'delete match arm BzrError::Http\(re\) in classify_and_handle_tls_failure',
     # `handle_tofu` and `handle_pin_rotation` are skipped via
-    # `#[cfg_attr(test, mutants::skip)]` in src/commands/shared.rs.
+    # `#[cfg_attr(test, mutants::skip)]` in tls_trust.rs.
+    # The `tls/pin_failure.rs` `classify` wrapper takes a real reqwest TLS error
+    # chain (no public constructor); its inner `classify_chain` is unit-tested.
+    'replace classify -> Option<TlsPinFailure> with None',
     # The `--paginate` safety-cap warning in src/commands/runtime/paging.rs
     # only fires when `fetch_all_pages` runs all MAX_PAGES (10_000) iterations
     # without a short page — a server that ignores `offset`. Reaching it in a
@@ -136,4 +142,60 @@ exclude_re = [
     # `!` so the warning fires on the normal path instead is observationally
     # equivalent under any feasible test.
     'delete ! in fetch_all_pages',
+
+    # ── Re-baseline 2026-06-24 (#417) ────────────────────────────────────
+    # Fuzz-only entry points in lib.rs are `#[cfg(fuzzing)]`; they are never
+    # compiled in test builds, so no test can ever catch them. Each is a thin
+    # wrapper over a parser that is itself unit-tested.
+    'replace fuzz::\w+ with \(\)',
+    # Transport-error retry helpers in client/transport.rs and the
+    # `should_retry_transport` classifier in http.rs operate on `reqwest::Error`
+    # (is_connect/is_timeout), which has no public constructor; wiremock yields
+    # real HTTP responses, not transport errors. The status-retry branch (429/5xx)
+    # IS covered by tests; only the transport-error branch is unreachable here.
+    'should_retry_transport',
+    'replace BugzillaClient::is_transient -> bool with (true|false)',
+    'replace BugzillaClient::sleep_before_retry with \(\)',
+    'match guard attempt < self.retry_max && Self::is_transient.* in BugzillaClient::send',
+    # `log_probe_send_error` (client/auth/mod.rs) only emits tracing output;
+    # same untestable-side-effect category as the warn_* family.
+    'replace log_probe_send_error with \(\)',
+    # Native OS keyring setup in credentials/keyring.rs talks to the platform
+    # secret service; unit tests run without one and must not depend on it.
+    'replace ensure_default_store -> Result<\(\)> with Ok\(\(\)\)',
+    'replace native_store ->',
+    # `serialize_map(Some(hint))` in <impl Serialize for Bug> passes only a
+    # capacity *hint*; serde_json ignores it for correctness, so + vs - produces
+    # identical output (observationally equivalent).
+    'replace \+ with - in <impl Serialize for Bug>::serialize',
+    # `safe_basename` (commands/attachment/download.rs) derives its candidate from
+    # `Path::file_name()`, which by construction never yields `"."`, `".."`, or
+    # `""`. The `base != "." && base != ".." && !base.is_empty()` guard is
+    # defensive depth over conditions that cannot occur, so its mutations are
+    # equivalent; the real traversal safety comes from file_name() itself.
+    'with true in safe_basename',
+    'replace && with \|\| in safe_basename',
+    # The early stdin/JSON-source guard at update_json.rs:200 is redundant with
+    # the `reject_cli_stdin_comment_source` calls inside each downstream match
+    # arm, which re-reject the same combination — mutating the early guard yields
+    # identical observable behavior.
+    'src/commands/bug/update_json.rs:200:.* in handle',
+    # `validate_action`/`validate_args` (commands/bug/update) run `validate_draft`
+    # up front, but every execution path also calls `validate_draft` again inside
+    # `build_update_params(_from_draft)` before any network write — so skipping the
+    # early validation surfaces the identical error at the same no-write point.
+    'src/commands/bug/update/mod.rs:.* validate_action',
+    'replace validate_args -> Result<\(\)> with Ok\(\(\)\)',
+    # `confirm_batch` (commands/bug/update/execute.rs) only prompts when stdin is a
+    # TTY; in unit tests stdin is never a TTY, so it already returns Ok(true) —
+    # the mutation is observationally identical without a pty subprocess.
+    'replace confirm_batch -> Result<bool> with Ok\(true\)',
+    # `has_display` (commands/bug/view.rs) has a macOS/Windows arm returning a
+    # constant and a `#[cfg(not(...))]` arm probing DISPLAY/WAYLAND_DISPLAY. The
+    # macOS baseline never compiles the probing arm, so cargo-mutants reports its
+    # mutations as missed even though the code is not built on this platform.
+    # Anchored to line 153 (the `cfg(not(...))` arm): the macOS arm at line 146
+    # shares the identical `has_display -> bool with false` description and IS
+    # caught, so it must not be excluded — only a line anchor distinguishes them.
+    'src/commands/bug/view.rs:153:.*has_display',
 ]

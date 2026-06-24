@@ -312,6 +312,123 @@ async fn dispatch_rejects_dry_run_on_group_membership_mutation() {
     ));
 }
 
+#[test]
+fn command_requires_credentials_covers_each_admin_write_arm() {
+    // A write under each top-level command must require credentials. Deleting
+    // any arm in command_requires_credentials would drop it to `_ => None` and
+    // let the write run unauthenticated. One write per command pins its arm.
+    let cases: &[&[&str]] = &[
+        &["bzr", "attachment", "update", "67890", "--summary", "x"],
+        &[
+            "bzr",
+            "product",
+            "create",
+            "--name",
+            "P",
+            "--description",
+            "d",
+        ],
+        &[
+            "bzr",
+            "component",
+            "create",
+            "--product",
+            "P",
+            "--name",
+            "C",
+            "--description",
+            "d",
+            "--default-assignee",
+            "dev@example.com",
+        ],
+        &[
+            "bzr",
+            "user",
+            "create",
+            "--email",
+            "a@b.c",
+            "--full-name",
+            "Alice",
+        ],
+        &[
+            "bzr",
+            "group",
+            "create",
+            "--name",
+            "G",
+            "--description",
+            "d",
+        ],
+    ];
+    for argv in cases {
+        let cli = cli::Cli::try_parse_from(*argv).unwrap();
+        assert!(
+            command_requires_credentials(&cli.command).is_some(),
+            "{argv:?} is a write and must require credentials"
+        );
+    }
+}
+
+#[test]
+fn ensure_dry_run_supported_covers_admin_create_arms() {
+    // product/component/user/group create accept --dry-run. Deleting any arm in
+    // ensure_dry_run_supported would drop it to `_ => false` and reject the
+    // preview with an InputValidation error.
+    let cases: &[&[&str]] = &[
+        &[
+            "bzr",
+            "--dry-run",
+            "product",
+            "create",
+            "--name",
+            "P",
+            "--description",
+            "d",
+        ],
+        &[
+            "bzr",
+            "--dry-run",
+            "component",
+            "create",
+            "--product",
+            "P",
+            "--name",
+            "C",
+            "--description",
+            "d",
+            "--default-assignee",
+            "dev@example.com",
+        ],
+        &[
+            "bzr",
+            "--dry-run",
+            "user",
+            "create",
+            "--email",
+            "a@b.c",
+            "--full-name",
+            "Alice",
+        ],
+        &[
+            "bzr",
+            "--dry-run",
+            "group",
+            "create",
+            "--name",
+            "G",
+            "--description",
+            "d",
+        ],
+    ];
+    for argv in cases {
+        let cli = cli::Cli::try_parse_from(*argv).unwrap();
+        assert!(
+            ensure_dry_run_supported(&cli).is_ok(),
+            "{argv:?} must support --dry-run"
+        );
+    }
+}
+
 #[tokio::test]
 async fn dispatch_rejects_write_without_credentials_before_network() {
     let mock = MockServer::start().await;
