@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Internal: refreshed the `cargo-mutants` baseline after the recent
+  restructure. Re-ran the whole-crate sweep, added behavior tests that kill
+  the high-value missed mutants (parsers, command/CLI field-wiring, dispatch
+  guards), refreshed `.cargo/mutants.toml` exclusions for equivalent or
+  unreachable code, and updated `docs/dev/mutation-baseline.md`. No runtime
+  behavior change. (#417)
 - Internal: the clap-derived CLI action and argument types are now
   crate-internal (`pub(crate)`). The `bzr` library crate's public surface is
   reduced to `cli::Cli` and `dispatch`; CLI behavior, flags, and output are
