@@ -638,6 +638,13 @@ async fn attachment_upload_comment_private_partial_failure_propagates_error() {
     )
     .await;
     assert!(result.is_err(), "step-2 failure should propagate");
+    // The partial-failure warning must name the uploaded attachment so the
+    // user knows the upload itself succeeded (no warning => silent partial loss).
+    let err_out = __cap_io.err_str();
+    assert!(
+        err_out.contains("attachment #200") && err_out.contains("privacy flip failed"),
+        "expected partial-failure warning naming attachment #200, got: {err_out:?}"
+    );
 }
 
 #[tokio::test]
