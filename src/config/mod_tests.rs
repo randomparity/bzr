@@ -1023,6 +1023,50 @@ fn save_preserves_fresh_temp_files_of_concurrent_writers() {
     );
 }
 
+#[test]
+fn save_reap_requires_both_config_prefix_and_tmp_suffix() {
+    use std::time::{Duration, SystemTime};
+
+    let _lock = crate::ENV_LOCK.blocking_lock();
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = test_config_path(&tmp);
+    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
+
+    let dir = tmp.path().join("bzr");
+    std::fs::create_dir_all(&dir).unwrap();
+    let old = SystemTime::now() - Duration::from_secs(7200);
+    // The reaper ANDs "starts with config.toml." and "ends with .tmp". Each of
+    // these old files satisfies only ONE condition, so neither may be removed.
+    // An OR mutant would delete both (data loss: a `.tmp` from another tool, or
+    // a user's own `config.toml.bak`).
+    let wrong_prefix = dir.join("unrelated.tmp");
+    let wrong_suffix = dir.join("config.toml.bak");
+    for f in [&wrong_prefix, &wrong_suffix] {
+        std::fs::write(f, "keep me").unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(f)
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+    }
+
+    let mut config = Config::default();
+    config
+        .servers
+        .insert("a".to_string(), make_server_config("https://a.test"));
+    config.save_at(&config_path).unwrap();
+
+    assert!(
+        wrong_prefix.exists(),
+        "a .tmp without the config prefix must NOT be reaped"
+    );
+    assert!(
+        wrong_suffix.exists(),
+        "a config-prefixed non-.tmp file must NOT be reaped"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn fsync_parent_dir_errors_when_parent_cannot_be_opened() {
