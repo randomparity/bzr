@@ -33,8 +33,8 @@ restructure (~950 commits): `config.rs` → `config/{model,store}.rs`,
 The whole-crate sweep was re-run and every one of the 141 unique missed mutants
 was dispositioned (see [Disposition](#disposition-of-missed-mutants)):
 
-- **95 killed** by new behavior tests,
-- **40 excluded** as equivalent or unreachable (`.cargo/mutants.toml`),
+- **96 killed** by new behavior tests,
+- **39 excluded** as equivalent or unreachable (`.cargo/mutants.toml`),
 - **6 documented residual gaps** (transport-error retry — see below).
 
 Effective post-refresh kill rate of testable mutants: **≈ 99.7 %**.
