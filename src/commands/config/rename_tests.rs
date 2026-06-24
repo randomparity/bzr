@@ -161,6 +161,59 @@ async fn rename_server_moves_keyring_secret() {
     assert!(crate::credentials::keyring::retrieve("bzr", "oldname").is_err());
 }
 
+/// Kill `kr.account.is_none() → true` mutant (rename.rs:39): when the
+/// keyring entry uses an **explicit** account the secret belongs to that
+/// account, not the server-name default, so the rename must NOT move it.
+/// With the mutant (guard always true) the move fires unconditionally,
+/// attempting to retrieve from the default account and failing / corrupting.
+#[cfg(feature = "keyring")]
+#[tokio::test]
+async fn rename_server_does_not_move_explicitly_accounted_keyring_secret() {
+    let (_lock, _tmp) = setup_empty_config_env().await;
+    crate::credentials::keyring::install_test_store();
+
+    // Seed a server with an inline key first, then manually swap it for a
+    // keyring entry with an explicit account so the rename guard condition
+    // is `account.is_some()` (guard should be false → no move).
+    seed_inline_server("svc", "https://svc.example.com", "dummy").await;
+
+    // Replace the inline key with a keyring ref that has an explicit account.
+    crate::test_helpers::update_config_without_validation(|config| {
+        let srv = config.servers.get_mut("svc").unwrap();
+        srv.api_key = None;
+        srv.api_key_keyring = Some(crate::config::KeyringRef {
+            service: Some("bzr".into()),
+            account: Some("explicit-acct".into()),
+        });
+        Ok(())
+    })
+    .unwrap();
+
+    // Store the real secret under the explicit account so we can verify
+    // it is not disturbed.
+    crate::credentials::keyring::store("bzr", "explicit-acct", "explicit-secret").unwrap();
+
+    // Rename — must succeed and must NOT touch the keyring entry.
+    let json = run_config_action_json(ConfigAction::RenameServer {
+        old: "svc".into(),
+        new: "svc2".into(),
+    })
+    .await;
+    assert_eq!(json["action"], "renamed");
+
+    // The secret must still be reachable under the original explicit account.
+    assert_eq!(
+        crate::credentials::keyring::retrieve("bzr", "explicit-acct").unwrap(),
+        "explicit-secret",
+        "rename must not move a keyring entry that uses an explicit account"
+    );
+    // And must NOT have been mirrored to the new server name.
+    assert!(
+        crate::credentials::keyring::retrieve("bzr", "svc2").is_err(),
+        "rename must not create a server-name entry when account is explicit"
+    );
+}
+
 /// Regression (#300): rename must also succeed when an unrelated server is
 /// credential-less on disk (same `read_unvalidated` + non-validating write
 /// path as remove).
