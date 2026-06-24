@@ -151,3 +151,7 @@ pub(crate) async fn execute(
         BugAction::Search(_) => unreachable!("handled above"),
     }
 }
+
+#[cfg(test)]
+#[path = "mod_tests.rs"]
+mod tests;
