@@ -1223,29 +1223,6 @@ fn build_update_params_rejects_comment_and_comment_file_together() {
 }
 
 #[test]
-fn build_update_params_from_overlaid_draft_uses_cli_comment_over_file() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("body.txt");
-    std::fs::write(&path, "from a file").unwrap();
-    let mut draft = super::BugUpdateDraft {
-        comment_file: Some(path),
-        ..Default::default()
-    };
-    let args = crate::cli::UpdateArgs {
-        ids: vec![42],
-        comment: Some("inline".into()),
-        ..Default::default()
-    };
-
-    draft.overlay_cli(&args);
-    let (_ids, params) = super::build_update_params_from_draft(vec![42], &draft).unwrap();
-
-    let comment = params.comment.expect("comment populated");
-    assert_eq!(comment.body, "inline");
-    assert!(!comment.is_private);
-}
-
-#[test]
 fn build_update_params_reads_comment_file() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("body.txt");
@@ -1632,6 +1609,26 @@ async fn forbid_put(mock: &wiremock::MockServer) {
         .await;
 }
 
+async fn run_update_dry_run_json(
+    action: &BugAction,
+    mock: &wiremock::MockServer,
+) -> serde_json::Value {
+    forbid_put(mock).await;
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "dry-run update failed: {result:?}");
+    assert_eq!(received_put_count(mock).await, 0);
+    serde_json::from_str(io.out_str().trim()).unwrap()
+}
+
 #[tokio::test]
 async fn bug_update_dry_run_makes_no_write_and_marks_payload() {
     let (_lock, mock, _tmp) = setup_test_env().await;
@@ -1834,199 +1831,107 @@ async fn apply_checked_dry_run_skips_connection_setup() {
     assert_eq!(parsed["changes"]["status"], "ASSIGNED");
 }
 
-// ── BugUpdateDraft::overlay_cli merge-helper mutants ────────────────────────
-//
-// draft.rs line 154: merge_copy(&mut self.dupe_of, args.dupe_of)   → ()
-// draft.rs line 160: merge_bool_true(&mut self.reset_assigned_to …) → ()
-// draft.rs line 165: merge_vec_u64(&mut self.blocks_add …)          → ()
-//
-// Each test starts with a draft that does NOT have the field set (None / empty)
-// and overlays a CLI args struct that DOES set it, then asserts the field
-// appears in the merged draft.  Replacing the helper call with () leaves the
-// field at its default value, causing the assertion to fail.
-
-#[test]
-fn overlay_cli_merge_copy_applies_dupe_of_from_cli() {
-    use super::BugUpdateDraft;
-
-    let mut draft = BugUpdateDraft::default();
-    // draft.dupe_of is None; CLI sets it.
-    let args = crate::cli::UpdateArgs {
-        ids: vec![1],
-        dupe_of: Some(77),
-        ..Default::default()
+#[tokio::test]
+async fn bug_update_from_json_cli_dupe_of_reaches_dry_run_payload() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    let mut action = from_json_update_action(&write_json_file(&tmp, r#"{"id":42}"#));
+    let BugAction::Update(args) = &mut action else {
+        panic!("expected update action");
     };
-    draft.overlay_cli(&args);
+    args.dupe_of = Some(77);
+
+    let parsed = run_update_dry_run_json(&action, &mock).await;
+
+    assert_eq!(parsed["ids"], serde_json::json!([42]));
+    assert_eq!(parsed["changes"]["dupe_of"], 77);
+}
+
+#[tokio::test]
+async fn bug_update_from_json_keeps_json_dupe_of_when_cli_omits_it() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    let action = from_json_update_action(&write_json_file(&tmp, r#"{"id":42,"dupe_of":55}"#));
+
+    let parsed = run_update_dry_run_json(&action, &mock).await;
+
+    assert_eq!(parsed["ids"], serde_json::json!([42]));
+    assert_eq!(parsed["changes"]["dupe_of"], 55);
+}
+
+#[tokio::test]
+async fn bug_update_from_json_cli_reset_assigned_to_reaches_dry_run_payload() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    let mut action = from_json_update_action(&write_json_file(&tmp, r#"{"id":42}"#));
+    let BugAction::Update(args) = &mut action else {
+        panic!("expected update action");
+    };
+    args.reset_assigned_to = true;
+
+    let parsed = run_update_dry_run_json(&action, &mock).await;
+
+    assert_eq!(parsed["ids"], serde_json::json!([42]));
+    assert_eq!(parsed["changes"]["reset_assigned_to"], true);
+}
+
+#[tokio::test]
+async fn bug_update_from_json_keeps_json_reset_assigned_to_when_cli_omits_it() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    let json = r#"{"id":42,"reset_assigned_to":true}"#;
+    let action = from_json_update_action(&write_json_file(&tmp, json));
+
+    let parsed = run_update_dry_run_json(&action, &mock).await;
+
+    assert_eq!(parsed["ids"], serde_json::json!([42]));
+    assert_eq!(parsed["changes"]["reset_assigned_to"], true);
+}
+
+#[tokio::test]
+async fn bug_update_from_json_keeps_json_blocks_add_when_cli_omits_it() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    let json = r#"{"id":42,"blocks_add":[5,6,7]}"#;
+    let action = from_json_update_action(&write_json_file(&tmp, json));
+
+    let parsed = run_update_dry_run_json(&action, &mock).await;
+
+    assert_eq!(parsed["ids"], serde_json::json!([42]));
     assert_eq!(
-        draft.dupe_of,
-        Some(77),
-        "merge_copy must write CLI dupe_of into draft when draft is None"
+        parsed["changes"]["blocks"]["add"],
+        serde_json::json!([5, 6, 7])
     );
 }
 
-#[test]
-fn overlay_cli_merge_copy_does_not_overwrite_existing_draft_value_with_none() {
-    use super::BugUpdateDraft;
+#[tokio::test]
+async fn bug_update_from_json_cli_comment_file_replaces_json_comment() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    let comment_path = tmp.path().join("cli-body.txt");
+    std::fs::write(&comment_path, "body from file").unwrap();
+    let mut action =
+        from_json_update_action(&write_json_file(&tmp, r#"{"id":42,"comment":"json body"}"#));
+    let BugAction::Update(args) = &mut action else {
+        panic!("expected update action");
+    };
+    args.comment_file = Some(comment_path);
 
-    let mut draft = BugUpdateDraft {
-        dupe_of: Some(42),
-        ..Default::default()
+    let parsed = run_update_dry_run_json(&action, &mock).await;
+
+    assert_eq!(parsed["ids"], serde_json::json!([42]));
+    assert_eq!(parsed["changes"]["comment"]["body"], "body from file");
+}
+
+#[tokio::test]
+async fn bug_update_from_json_cli_keywords_add_replaces_json_keywords_add() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    let json = r#"{"id":42,"keywords_add":["json-keyword"]}"#;
+    let mut action = from_json_update_action(&write_json_file(&tmp, json));
+    let BugAction::Update(args) = &mut action else {
+        panic!("expected update action");
     };
-    // CLI does not supply dupe_of.
-    let args = crate::cli::UpdateArgs {
-        ids: vec![1],
-        dupe_of: None,
-        ..Default::default()
-    };
-    draft.overlay_cli(&args);
+    args.keywords_add = vec!["cli-keyword".into()];
+
+    let parsed = run_update_dry_run_json(&action, &mock).await;
+
+    assert_eq!(parsed["ids"], serde_json::json!([42]));
     assert_eq!(
-        draft.dupe_of,
-        Some(42),
-        "merge_copy must preserve existing draft value when CLI supplies None"
+        parsed["changes"]["keywords"]["add"],
+        serde_json::json!(["cli-keyword"])
     );
-}
-
-#[test]
-fn overlay_cli_merge_bool_true_applies_reset_assigned_to_from_cli() {
-    use super::BugUpdateDraft;
-
-    let mut draft = BugUpdateDraft::default();
-    // draft.reset_assigned_to is None; CLI sets it.
-    let args = crate::cli::UpdateArgs {
-        ids: vec![1],
-        reset_assigned_to: true,
-        ..Default::default()
-    };
-    draft.overlay_cli(&args);
-    assert_eq!(
-        draft.reset_assigned_to,
-        Some(true),
-        "merge_bool_true must set reset_assigned_to to Some(true)"
-    );
-}
-
-#[test]
-fn overlay_cli_merge_bool_true_does_not_clear_existing_true() {
-    use super::BugUpdateDraft;
-
-    let mut draft = BugUpdateDraft {
-        reset_assigned_to: Some(true),
-        ..Default::default()
-    };
-    // CLI does NOT set the flag.
-    let args = crate::cli::UpdateArgs {
-        ids: vec![1],
-        reset_assigned_to: false,
-        ..Default::default()
-    };
-    draft.overlay_cli(&args);
-    // The existing Some(true) must survive when CLI flag is false.
-    assert_eq!(
-        draft.reset_assigned_to,
-        Some(true),
-        "merge_bool_true must not clear an existing Some(true)"
-    );
-}
-
-#[test]
-fn overlay_cli_merge_vec_u64_applies_blocks_add_from_cli() {
-    use super::BugUpdateDraft;
-
-    let mut draft = BugUpdateDraft::default();
-    // draft.blocks_add is empty; CLI supplies values.
-    let args = crate::cli::UpdateArgs {
-        ids: vec![1],
-        blocks_add: vec![10, 20],
-        ..Default::default()
-    };
-    draft.overlay_cli(&args);
-    assert_eq!(
-        draft.blocks_add,
-        vec![10_u64, 20],
-        "merge_vec_u64 must copy CLI blocks_add into draft"
-    );
-}
-
-#[test]
-fn overlay_cli_merge_vec_u64_preserves_draft_when_cli_is_empty() {
-    use super::BugUpdateDraft;
-
-    let mut draft = BugUpdateDraft {
-        blocks_add: vec![5, 6, 7],
-        ..Default::default()
-    };
-    // CLI supplies no blocks.
-    let args = crate::cli::UpdateArgs {
-        ids: vec![1],
-        blocks_add: vec![],
-        ..Default::default()
-    };
-    draft.overlay_cli(&args);
-    assert_eq!(
-        draft.blocks_add,
-        vec![5_u64, 6, 7],
-        "merge_vec_u64 must not clear draft blocks when CLI list is empty"
-    );
-}
-
-#[test]
-fn overlay_cli_comment_clears_existing_comment_file() {
-    use super::BugUpdateDraft;
-
-    let mut draft = BugUpdateDraft {
-        comment_file: Some(std::path::PathBuf::from("json-body.txt")),
-        ..Default::default()
-    };
-    let args = crate::cli::UpdateArgs {
-        ids: vec![1],
-        comment: Some("inline body".into()),
-        ..Default::default()
-    };
-
-    draft.overlay_cli(&args);
-
-    assert_eq!(draft.comment.as_deref(), Some("inline body"));
-    assert!(draft.comment_file.is_none());
-}
-
-#[test]
-fn overlay_cli_comment_file_clears_existing_comment() {
-    use super::BugUpdateDraft;
-
-    let mut draft = BugUpdateDraft {
-        comment: Some("json body".into()),
-        ..Default::default()
-    };
-    let args = crate::cli::UpdateArgs {
-        ids: vec![1],
-        comment_file: Some(std::path::PathBuf::from("cli-body.txt")),
-        ..Default::default()
-    };
-
-    draft.overlay_cli(&args);
-
-    assert!(draft.comment.is_none());
-    assert_eq!(
-        draft.comment_file.as_deref(),
-        Some(std::path::Path::new("cli-body.txt"))
-    );
-}
-
-#[test]
-fn overlay_cli_merge_vec_applies_keywords_add_from_cli() {
-    use super::BugUpdateDraft;
-
-    let mut draft = BugUpdateDraft {
-        keywords_add: vec!["json-keyword".into()],
-        ..Default::default()
-    };
-    let args = crate::cli::UpdateArgs {
-        ids: vec![1],
-        keywords_add: vec!["cli-keyword".into()],
-        ..Default::default()
-    };
-
-    draft.overlay_cli(&args);
-
-    assert_eq!(draft.keywords_add, vec!["cli-keyword".to_string()]);
 }
