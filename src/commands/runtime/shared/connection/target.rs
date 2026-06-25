@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use crate::client::BugzillaClient;
 use crate::client::DetectedServerSettings;
 use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::inline_server::{InlineServer, INLINE_SERVER_NAME};
 use crate::config::{Config, ServerConfig};
 use crate::error::Result;
 use crate::tls::TlsConfig;
@@ -128,44 +129,58 @@ pub(super) struct ConnectTarget {
 pub(super) fn resolve_connect_target(command: &CommandContext) -> Result<ConnectTarget> {
     let api_override = command.api();
     if let Some(inline) = command.inline_server() {
-        let name = crate::commands::runtime::inline_server::INLINE_SERVER_NAME;
-        let mut srv = match inline.api_key_env.as_ref() {
-            Some(api_key_env) => ServerConfig::from_url_with_env_key(
-                inline.url.clone(),
-                api_key_env.clone(),
-                inline.email.clone(),
-            ),
-            None => ServerConfig {
-                url: inline.url.clone(),
-                email: inline.email.clone(),
-                ..ServerConfig::default()
-            },
-        };
-        srv.tls_insecure = inline.tls.insecure;
-        srv.tls_ca_cert.clone_from(&inline.tls.ca_cert_path);
-        srv.tls_pin_sha256.clone_from(&inline.tls.pin_sha256);
-        srv.validate(name)?;
-        let tls_config = server_tls_config(&srv, name);
-        let ctx = ConnectContext {
-            server_name: name.to_string(),
-            url: srv.url.clone(),
-            api_key: crate::credentials::resolve_optional_api_key(&srv, name)?,
-            email: srv.email.clone(),
-            api_override,
-            request_timeout: command.request_timeout(),
-            retry_max: command.retry_max(),
-            config_path_override: None,
-            persist: false,
-        };
-        return Ok(ConnectTarget {
-            ctx,
-            tls_config,
-            cached_auth: None,
-            cached_mode: None,
-            pin_current_cert: inline.tls.pin_now,
-        });
+        return resolve_inline_target(command, inline, api_override);
     }
+    resolve_config_target(command, api_override)
+}
 
+fn resolve_inline_target(
+    command: &CommandContext,
+    inline: &InlineServer,
+    api_override: Option<ApiMode>,
+) -> Result<ConnectTarget> {
+    let mut srv = match inline.api_key_env.as_ref() {
+        Some(api_key_env) => ServerConfig::from_url_with_env_key(
+            inline.url.clone(),
+            api_key_env.clone(),
+            inline.email.clone(),
+        ),
+        None => ServerConfig {
+            url: inline.url.clone(),
+            email: inline.email.clone(),
+            ..ServerConfig::default()
+        },
+    };
+    srv.tls_insecure = inline.tls.insecure;
+    srv.tls_ca_cert.clone_from(&inline.tls.ca_cert_path);
+    srv.tls_pin_sha256.clone_from(&inline.tls.pin_sha256);
+    srv.validate(INLINE_SERVER_NAME)?;
+
+    let tls_config = server_tls_config(&srv, INLINE_SERVER_NAME);
+    let ctx = ConnectContext {
+        server_name: INLINE_SERVER_NAME.to_string(),
+        url: srv.url.clone(),
+        api_key: crate::credentials::resolve_optional_api_key(&srv, INLINE_SERVER_NAME)?,
+        email: srv.email.clone(),
+        api_override,
+        request_timeout: command.request_timeout(),
+        retry_max: command.retry_max(),
+        config_path_override: None,
+        persist: false,
+    };
+    Ok(ConnectTarget {
+        ctx,
+        tls_config,
+        cached_auth: None,
+        cached_mode: None,
+        pin_current_cert: inline.tls.pin_now,
+    })
+}
+
+fn resolve_config_target(
+    command: &CommandContext,
+    api_override: Option<ApiMode>,
+) -> Result<ConnectTarget> {
     let config = Config::load_at(command.config_path_override())?;
     let (server_name, srv) = config.resolve_server(command.server())?;
     let tls_config = server_tls_config(srv, server_name);
