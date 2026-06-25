@@ -1239,9 +1239,14 @@ bzr --dry-run user create --email alice@example.com --full-name "Alice Smith"
 | `--full-name <N>` | No | Full name |
 | `--password <P>` | No | Password (server generates one if omitted) |
 
-> **Note:** On Bugzilla 5.3+ with `use_email_as_login` disabled, the REST API has a conflict with the `login` field. Set `api_mode = "hybrid"` in your server config to use XML-RPC for user creation, which avoids this issue.
+> **Note:** On Bugzilla 5.3+ with `use_email_as_login` disabled, the REST API has a
+> conflict with the `login` field. Use `--api hybrid`, `--api xmlrpc`, or the
+> matching per-server `api_mode`; Hybrid and XML-RPC send `--login` creates
+> through XML-RPC to avoid this issue.
 
-Agent note: if the server’s login policy is not known, inspect existing users or server conventions before automating `--login`. On affected Bugzilla 5.3+ setups, prefer `api_mode = "hybrid"` as noted above.
+Agent note: if the server's login policy is not known, inspect existing users or
+server conventions before automating `--login`. On affected Bugzilla 5.3+ setups,
+prefer `api_mode = "hybrid"` as noted above.
 
 ### `bzr user update`
 
