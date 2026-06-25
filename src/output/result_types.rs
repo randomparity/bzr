@@ -434,7 +434,7 @@ impl ActionResult {
         }
     }
 
-    pub fn updated_named(name: impl Into<String>, id: Option<u64>, resource: ResourceKind) -> Self {
+    pub fn updated_named(id: Option<u64>, name: impl Into<String>, resource: ResourceKind) -> Self {
         Self {
             id,
             name: Some(name.into()),

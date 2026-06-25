@@ -44,7 +44,7 @@ pub(super) async fn handle(
         move |client, params| async move {
             client.update_user(&user, &params).await?;
             Ok(Committed {
-                result: ActionResult::updated_named(user.as_str(), None, ResourceKind::User),
+                result: ActionResult::updated_named(None, user.as_str(), ResourceKind::User),
                 message: format!("Updated user '{user}'"),
             })
         },

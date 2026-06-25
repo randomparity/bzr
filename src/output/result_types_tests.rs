@@ -144,7 +144,7 @@ fn action_result_updated_json_shape() {
 
 #[test]
 fn action_result_updated_named_with_id_json_shape() {
-    let result = ActionResult::updated_named("widget", Some(9), ResourceKind::Component);
+    let result = ActionResult::updated_named(Some(9), "widget", ResourceKind::Component);
     let json: serde_json::Value = serde_json::to_value(&result).unwrap();
     assert_eq!(json["id"], 9);
     assert_eq!(json["name"], "widget");
@@ -154,7 +154,7 @@ fn action_result_updated_named_with_id_json_shape() {
 
 #[test]
 fn action_result_updated_named_without_id_skips_id() {
-    let result = ActionResult::updated_named("widget", None, ResourceKind::Component);
+    let result = ActionResult::updated_named(None, "widget", ResourceKind::Component);
     let json: serde_json::Value = serde_json::to_value(&result).unwrap();
     assert!(json.get("id").is_none());
     assert_eq!(json["name"], "widget");
