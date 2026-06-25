@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use serde::Serialize;
 
 use crate::commands::runtime::context::CommandContext;
-use crate::commands::runtime::mutation::{run, DryRunPreview};
+use crate::commands::runtime::mutation::{ensure_batch_complete, run, DryRunPreview};
 use crate::output::result_types::ResourceKind;
 use crate::test_helpers::CapturedIo;
 use crate::types::OutputFormat;
@@ -48,4 +48,22 @@ async fn dry_run_emits_preview_and_skips_execute() {
     assert_eq!(parsed["resource"], "product");
     assert_eq!(parsed["ids"], serde_json::json!([]));
     assert_eq!(parsed["changes"]["name"], "Widget");
+}
+
+#[test]
+fn ensure_batch_complete_allows_all_successes() {
+    assert!(ensure_batch_complete(2, 0).is_ok());
+}
+
+#[test]
+fn ensure_batch_complete_reports_partial_failure_counts() {
+    let err = ensure_batch_complete(1, 2).unwrap_err();
+
+    assert!(matches!(
+        err,
+        crate::error::BzrError::BatchPartialFailure {
+            succeeded: 1,
+            failed: 2
+        }
+    ));
 }
