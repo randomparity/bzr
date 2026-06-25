@@ -1,16 +1,14 @@
-use std::io::Write;
-
 use crate::cli::SearchArgs;
 use crate::client::BugzillaClient;
 use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::search::execution::{
+    FieldPreflight, SearchColumns, SearchExecutionPlan, SearchSaveAction,
+};
 use crate::commands::runtime::search::fields::{canonical_field_list, ColumnSpec};
-use crate::commands::runtime::search::policy::{count_search_params, ensure_no_paging_with_count};
+use crate::commands::runtime::search::policy::ensure_no_paging_with_count;
 use crate::error::Result;
-use crate::output::resources::bug::write_bugs;
-use crate::output::resources::query::write_query_saved;
 use crate::output::writers::Writers;
 use crate::types::bug::{Overrides, SearchParams};
-use crate::types::output::OutputFormat;
 use crate::types::query::SavedQuery;
 
 /// The client plus the query to run, and any `--save-as` query to persist
@@ -119,28 +117,6 @@ async fn resolve_client_and_params(args: &SearchArgs, ctx: &CommandContext) -> R
     Ok((client, params, save_info))
 }
 
-/// Persist the `--save-as` query (insert or update) and report the result.
-/// No-op when the search had no `--save-as`.
-fn persist_saved_query(
-    save_info: Option<(String, SavedQuery)>,
-    ctx: &CommandContext,
-    format: OutputFormat,
-    out: &mut dyn Write,
-) -> Result<()> {
-    let Some((name, query)) = save_info else {
-        return Ok(());
-    };
-    let mut is_update = false;
-    crate::config::Config::update_locked_at(ctx.config_path_override(), |config| {
-        is_update = config.queries.contains_key(name.as_str());
-        config.queries.insert(name.clone(), query);
-        Ok(())
-    })?;
-    let verb = if is_update { "Updated" } else { "Saved" };
-    write_query_saved(&name, verb, format, out);
-    Ok(())
-}
-
 /// Handles bug search — builds its own client (unlike other handlers) because
 /// `--from-url` may resolve a different server from the URL hostname.
 pub(super) async fn handle(
@@ -159,25 +135,23 @@ pub(super) async fn handle(
 
     let (client, mut params, save_info) = resolve_client_and_params(args, ctx).await?;
     crate::commands::runtime::paging::resolve_offset(&mut params, offset);
-
-    if args.count {
-        let bugs = client.search_bugs(&count_search_params(params)).await?;
-        crate::output::result_types::write_count(bugs.len(), format, w.out);
-    } else {
-        let page =
-            crate::commands::runtime::paging::fetch_page(&client, &params, args.page_args.paginate)
-                .await?;
-        write_bugs(&page.bugs, spec, format, w.out, w.err);
-        crate::commands::runtime::paging::write_truncation_note(
-            &page,
-            params.limit,
+    let save = save_info.map(|(name, query)| SearchSaveAction { name, query });
+    crate::commands::runtime::search::execution::execute(
+        SearchExecutionPlan {
+            client: &client,
+            params,
+            columns: SearchColumns::from_spec(spec),
+            count: args.count,
+            paginate: args.page_args.paginate,
             offset,
-            format,
-            w,
-        );
-    }
-
-    persist_saved_query(save_info, ctx, format, w.out)
+            field_preflight: FieldPreflight::AlreadyDone,
+            save,
+        },
+        ctx,
+        format,
+        w,
+    )
+    .await
 }
 
 #[cfg(test)]
