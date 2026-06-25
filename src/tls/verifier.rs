@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use base64::Engine;
 
 use crate::error::{BzrError, Result};
-use crate::tls::fingerprint::{compute_fingerprint, parse_pin};
+use crate::tls::fingerprint::compute_fingerprint;
 
 /// A rustls `ServerCertVerifier` that validates the leaf certificate's
 /// SHA-256 fingerprint against a pinned value, bypassing CA chain
@@ -42,7 +42,7 @@ impl PinnedCertVerifier {
         pin_issuer_der_b64: Option<&str>,
         server_name: &str,
     ) -> Result<Self> {
-        let pin_hash = parse_pin(pin_sha256)?;
+        let pin_hash = crate::validation::parse_sha256_pin(pin_sha256)?;
         let provider = super::default_provider();
 
         let pin_issuer_der = pin_issuer_der_b64

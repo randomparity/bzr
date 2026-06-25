@@ -194,7 +194,7 @@ impl ServerConfig {
             }
         }
         if let Some(pin) = &self.tls_pin_sha256 {
-            crate::tls::fingerprint::parse_pin(pin)
+            crate::validation::parse_sha256_pin(pin)
                 .map_err(|e| ctx(&format!("invalid tls_pin_sha256: {e}")))?;
         }
         Ok(())

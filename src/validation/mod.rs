@@ -6,8 +6,10 @@
 //! `BzrError::InputValidation`, which exits with code 7.
 
 pub mod datetime;
+pub(crate) mod tls_pin;
 
 pub use datetime::{parse_date_only, parse_iso8601_or_date, timestamp_compare_key};
+pub(crate) use tls_pin::{parse_sha256_pin, SHA256_PIN_PREFIX};
 
 use crate::error::Result;
 use crate::types::{resolve_field_alias, SortDirection};
