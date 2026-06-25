@@ -46,6 +46,20 @@ pub(crate) struct Page {
     pub truncated: bool,
 }
 
+fn overfetch_limit(limit: u32) -> Result<u32> {
+    limit.checked_add(1).ok_or_else(|| {
+        BzrError::InputValidation("--limit is too large to detect additional search results".into())
+    })
+}
+
+fn checked_next_offset(offset: u32, limit: u32) -> Result<u32> {
+    offset.checked_add(limit).ok_or_else(|| {
+        BzrError::InputValidation(format!(
+            "--offset {offset} plus --limit {limit} is too large to calculate the next page"
+        ))
+    })
+}
+
 /// Fetch results honoring `--offset`/`--paginate`. With `paginate`, returns
 /// every match or errors if the safety cap is reached before a short page.
 /// Otherwise returns one window, with `truncated` set when the server had more
@@ -72,7 +86,8 @@ pub(crate) async fn fetch_page(
         });
     };
     let mut probe = params.clone();
-    probe.limit = Some(limit.saturating_add(1));
+    probe.limit = Some(overfetch_limit(limit)?);
+    let _ = checked_next_offset(params.offset.unwrap_or(0), limit)?;
     let mut bugs = client.search_bugs(&probe).await?;
     let truncated = bugs.len() as u64 > u64::from(limit);
     bugs.truncate(limit as usize);
@@ -98,6 +113,7 @@ async fn fetch_all_pages_with_cap(
     let mut all = Vec::new();
     let mut reached_last_page = false;
     for _ in 0..max_pages {
+        let next_offset = checked_next_offset(offset, page_size)?;
         let mut p = params.clone();
         p.offset = Some(offset);
         let batch = client.search_bugs(&p).await?;
@@ -107,7 +123,7 @@ async fn fetch_all_pages_with_cap(
             reached_last_page = true;
             break;
         }
-        offset = offset.saturating_add(page_size);
+        offset = next_offset;
     }
     if !reached_last_page {
         return Err(BzrError::InputValidation(format!(
@@ -132,7 +148,9 @@ pub(crate) fn write_truncation_note(
         return;
     }
     let Some(limit) = limit else { return };
-    let next = offset.unwrap_or(0).saturating_add(limit);
+    let Some(next) = offset.unwrap_or(0).checked_add(limit) else {
+        return;
+    };
     let msg = format!(
         "Showing first {} result(s); more available — use --paginate for all, \
          or --offset {next} for the next page.",
