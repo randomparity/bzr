@@ -4,7 +4,7 @@ use crate::commands::runtime::context::CommandContext;
 use crate::commands::runtime::search::execution::{
     FieldPreflight, SearchColumns, SearchExecutionPlan, SearchSaveAction,
 };
-use crate::commands::runtime::search::fields::{canonical_field_list, ColumnSpec};
+use crate::commands::runtime::search::fields::canonical_field_list;
 use crate::commands::runtime::search::policy::ensure_no_paging_with_count;
 use crate::error::Result;
 use crate::output::writers::Writers;
@@ -128,23 +128,24 @@ pub(super) async fn handle(
     let offset = args.page_args.offset;
     ensure_no_paging_with_count(args.count, offset, args.page_args.paginate)?;
 
-    let spec = ColumnSpec::new(
-        args.field_args.fields.as_deref(),
-        args.field_args.exclude_fields.as_deref(),
-    );
-
     let (client, mut params, save_info) = resolve_client_and_params(args, ctx).await?;
     crate::commands::runtime::paging::resolve_offset(&mut params, offset);
+    let columns = SearchColumns::from_params(&params);
+    let field_preflight = if args.from_url.is_some() {
+        FieldPreflight::Validate
+    } else {
+        FieldPreflight::AlreadyDone
+    };
     let save = save_info.map(|(name, query)| SearchSaveAction { name, query });
     crate::commands::runtime::search::execution::execute(
         SearchExecutionPlan {
             client: &client,
             params,
-            columns: SearchColumns::from_spec(spec),
+            columns,
             count: args.count,
             paginate: args.page_args.paginate,
             offset,
-            field_preflight: FieldPreflight::AlreadyDone,
+            field_preflight,
             save,
         },
         ctx,

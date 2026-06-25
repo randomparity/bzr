@@ -19,6 +19,8 @@ enum ParamKind {
     KnownName,
     QueryBasedOn,
     Limit,
+    IncludeFields,
+    ExcludeFields,
     Mapped(&'static FieldMapping),
     Credential,
     Raw,
@@ -34,6 +36,8 @@ fn classify_param(key: &str) -> ParamKind {
         "known_name" => return ParamKind::KnownName,
         "query_based_on" => return ParamKind::QueryBasedOn,
         "limit" => return ParamKind::Limit,
+        "include_fields" | "fields" => return ParamKind::IncludeFields,
+        "exclude_fields" => return ParamKind::ExcludeFields,
         _ => {}
     }
     if let Some(mapping) = FIELD_MAPPINGS.iter().find(|m| m.url_param == key) {
@@ -175,6 +179,18 @@ pub(crate) fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<Parse
                         ))
                     })?;
                     query.limit = Some(n);
+                }
+            }
+            ParamKind::IncludeFields => {
+                let trimmed = value.trim();
+                if !trimmed.is_empty() {
+                    query.fields = Some(trimmed.to_string());
+                }
+            }
+            ParamKind::ExcludeFields => {
+                let trimmed = value.trim();
+                if !trimmed.is_empty() {
+                    query.exclude_fields = Some(trimmed.to_string());
                 }
             }
             ParamKind::Mapped(mapping) => {

@@ -24,13 +24,6 @@ pub(crate) struct SearchColumns {
 }
 
 impl SearchColumns {
-    pub(crate) fn from_spec(spec: ColumnSpec<'_>) -> Self {
-        Self {
-            include: spec.include.map(str::to_owned),
-            exclude: spec.exclude.map(str::to_owned),
-        }
-    }
-
     pub(crate) fn from_params(params: &SearchParams) -> Self {
         Self {
             include: params.include_fields.clone(),
