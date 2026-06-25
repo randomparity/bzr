@@ -36,8 +36,8 @@ async fn search_bugs_returns_results() {
     let bugs = client.search_bugs(&params).await.unwrap();
     assert_eq!(bugs.len(), 1);
     assert_eq!(bugs[0].id, 42);
-    assert_eq!(bugs[0].summary, "Test bug");
-    assert_eq!(bugs[0].status, "NEW");
+    assert_eq!(bugs[0].summary.as_deref(), Some("Test bug"));
+    assert_eq!(bugs[0].status.as_deref(), Some("NEW"));
     assert_eq!(bugs[0].product.as_deref(), Some("TestProduct"));
 }
 
@@ -107,7 +107,7 @@ async fn get_bug_by_id() {
     let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let bug = client.get_bug("100").await.unwrap();
     assert_eq!(bug.id, 100);
-    assert_eq!(bug.summary, "Specific bug");
+    assert_eq!(bug.summary.as_deref(), Some("Specific bug"));
 }
 
 #[tokio::test]
@@ -152,7 +152,7 @@ async fn get_bug_by_alias() {
     let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let bug = client.get_bug("my-alias").await.unwrap();
     assert_eq!(bug.id, 55);
-    assert_eq!(bug.summary, "Alias bug");
+    assert_eq!(bug.summary.as_deref(), Some("Alias bug"));
 }
 
 #[tokio::test]

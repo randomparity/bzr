@@ -5,7 +5,8 @@ use crate::types::group::{GroupInfo, GroupMember};
 use crate::xmlrpc::protocol::Value;
 use crate::xmlrpc::protocol::XmlRpcClient;
 use crate::xmlrpc::resources::mappers::{
-    get_bool_flag, get_nonempty_str, get_str, get_u64, require_u64, EXPECTED_STRUCT_RESPONSE,
+    get_nonempty_str, get_optional_bool_flag, get_str, get_u64, require_u64,
+    EXPECTED_STRUCT_RESPONSE,
 };
 
 impl XmlRpcClient {
@@ -45,7 +46,7 @@ fn value_to_group_info(val: &Value) -> Result<GroupInfo> {
                     let member_id = get_u64(member_map, "id")?;
                     Some(GroupMember {
                         id: member_id,
-                        name: get_str(member_map, "name").unwrap_or_default(),
+                        name: get_str(member_map, "name"),
                         real_name: get_nonempty_str(member_map, "real_name"),
                         email: get_nonempty_str(member_map, "email"),
                     })
@@ -56,9 +57,9 @@ fn value_to_group_info(val: &Value) -> Result<GroupInfo> {
 
     Ok(GroupInfo {
         id: require_u64(m, "id", "group")?,
-        name: get_str(m, "name").unwrap_or_default(),
-        description: get_str(m, "description").unwrap_or_default(),
-        is_active: get_bool_flag(m, "is_active"),
+        name: get_str(m, "name"),
+        description: get_str(m, "description"),
+        is_active: get_optional_bool_flag(m, "is_active"),
         membership,
     })
 }

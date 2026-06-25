@@ -5,11 +5,11 @@ use serde::{Deserialize, Serialize};
 pub struct Classification {
     pub id: u64,
     #[serde(default)]
-    pub name: String,
+    pub name: Option<String>,
     #[serde(default)]
-    pub description: String,
+    pub description: Option<String>,
     #[serde(default)]
-    pub sort_key: u64,
+    pub sort_key: Option<u64>,
     #[serde(default)]
     pub products: Vec<ClassificationProduct>,
 }
@@ -19,9 +19,9 @@ pub struct Classification {
 pub struct ClassificationProduct {
     pub id: u64,
     #[serde(default)]
-    pub name: String,
+    pub name: Option<String>,
     #[serde(default)]
-    pub description: String,
+    pub description: Option<String>,
 }
 
 #[cfg(test)]

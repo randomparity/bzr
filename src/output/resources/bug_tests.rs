@@ -19,8 +19,8 @@ fn review_flag(status: &str, requestee: Option<&str>) -> Flag {
 fn make_bug(id: u64, summary: &str, status: &str) -> Bug {
     Bug {
         id,
-        summary: summary.into(),
-        status: status.into(),
+        summary: Some(summary.into()),
+        status: Some(status.into()),
         resolution: None,
         dupe_of: None,
         deadline: None,
@@ -503,8 +503,8 @@ fn bug_to_json_keeps_flags_when_selected() {
 fn write_bug_detail_table_shows_dupe_of() {
     let bug = crate::types::Bug {
         id: 42,
-        summary: "duplicate source".into(),
-        status: "RESOLVED".into(),
+        summary: Some("duplicate source".into()),
+        status: Some("RESOLVED".into()),
         resolution: Some("DUPLICATE".into()),
         dupe_of: Some(99),
         deadline: None,
@@ -547,8 +547,8 @@ fn write_bug_detail_table_shows_dupe_of() {
 fn write_bug_detail_table_handles_minimal_bug() {
     let bug = Bug {
         id: 1,
-        summary: "Unicode summary — déjà vu".into(),
-        status: "NEW".into(),
+        summary: Some("Unicode summary — déjà vu".into()),
+        status: Some("NEW".into()),
         resolution: None,
         dupe_of: None,
         deadline: None,
@@ -744,8 +744,8 @@ fn no_color() {
 fn sample_bug(id: u64, summary: &str) -> Bug {
     Bug {
         id,
-        summary: summary.into(),
-        status: "NEW".into(),
+        summary: Some(summary.into()),
+        status: Some("NEW".into()),
         resolution: None,
         dupe_of: None,
         deadline: None,

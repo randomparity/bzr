@@ -26,9 +26,9 @@ async fn get_classification_returns_data() {
 
     let client = test_client(&mock.uri());
     let cls = client.get_classification("Unclassified").await.unwrap();
-    assert_eq!(cls.name, "Unclassified");
+    assert_eq!(cls.name.as_deref(), Some("Unclassified"));
     assert_eq!(cls.products.len(), 1);
-    assert_eq!(cls.products[0].name, "Widget");
+    assert_eq!(cls.products[0].name.as_deref(), Some("Widget"));
 }
 
 #[tokio::test]
@@ -66,7 +66,7 @@ async fn list_classifications_enumerates_via_field_values() {
     let list = client.list_classifications().await.unwrap();
     assert_eq!(list.len(), 2);
     // Sorted by sort_key: Unclassified (0) before Acme (5).
-    assert_eq!(list[0].name, "Unclassified");
-    assert_eq!(list[1].name, "Acme");
+    assert_eq!(list[0].name.as_deref(), Some("Unclassified"));
+    assert_eq!(list[1].name.as_deref(), Some("Acme"));
     assert_eq!(list[1].id, 2);
 }

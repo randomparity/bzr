@@ -24,7 +24,7 @@ async fn whoami_returns_user_info() {
     let client = test_client(&mock.uri());
     let who = client.whoami().await.unwrap();
     assert_eq!(who.id, 42);
-    assert_eq!(who.name, "alice@example.com");
+    assert_eq!(who.name.as_deref(), Some("alice@example.com"));
     assert_eq!(who.real_name.as_deref(), Some("Alice"));
 }
 
@@ -48,7 +48,7 @@ async fn search_users_returns_matches() {
         .await
         .unwrap();
     assert_eq!(users.len(), 2);
-    assert_eq!(users[0].name, "alice@example.com");
+    assert_eq!(users[0].name.as_deref(), Some("alice@example.com"));
     assert_eq!(users[1].real_name.as_deref(), Some("Bob"));
 }
 
@@ -97,7 +97,7 @@ async fn search_users_details_sends_include_fields() {
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].can_login, Some(true));
     assert_eq!(users[0].groups.len(), 1);
-    assert_eq!(users[0].groups[0].name, "admin");
+    assert_eq!(users[0].groups[0].name.as_deref(), Some("admin"));
 }
 
 #[tokio::test]

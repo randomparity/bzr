@@ -200,7 +200,7 @@ async fn get_bug_falls_back_on_100500() {
     let client = test_client(&mock.uri());
     let bug = client.get_bug("99", None, None).await.unwrap();
     assert_eq!(bug.id, 99);
-    assert_eq!(bug.summary, "fallback bug");
+    assert_eq!(bug.summary.as_deref(), Some("fallback bug"));
 }
 
 #[tokio::test]
@@ -296,7 +296,7 @@ async fn hybrid_search_rest_has_results_no_xmlrpc_call() {
     };
     let bugs = client.search_bugs(&params).await.unwrap();
     assert_eq!(bugs.len(), 1);
-    assert_eq!(bugs[0].summary, "REST bug");
+    assert_eq!(bugs[0].summary.as_deref(), Some("REST bug"));
 }
 
 #[tokio::test]
@@ -327,7 +327,7 @@ async fn hybrid_search_rest_empty_with_filters_falls_back_to_xmlrpc() {
     let bugs = client.search_bugs(&params).await.unwrap();
     assert_eq!(bugs.len(), 1);
     assert_eq!(bugs[0].id, 99);
-    assert_eq!(bugs[0].summary, "XML-RPC bug");
+    assert_eq!(bugs[0].summary.as_deref(), Some("XML-RPC bug"));
 }
 
 #[tokio::test]
@@ -481,7 +481,7 @@ async fn hybrid_get_bug_rest_500_falls_back_to_xmlrpc() {
     let client = test_client_hybrid(&mock.uri());
     let bug = client.get_bug("42", None, None).await.unwrap();
     assert_eq!(bug.id, 42);
-    assert_eq!(bug.summary, "XML-RPC result");
+    assert_eq!(bug.summary.as_deref(), Some("XML-RPC result"));
 }
 
 #[tokio::test]
@@ -748,7 +748,7 @@ async fn hybrid_get_bug_falls_back_on_residual_100500_error() {
     let client = test_client_hybrid(&mock.uri());
     let bug = client.get_bug("42", None, None).await.unwrap();
     assert_eq!(bug.id, 42);
-    assert_eq!(bug.summary, "recovered via xmlrpc");
+    assert_eq!(bug.summary.as_deref(), Some("recovered via xmlrpc"));
 }
 
 #[tokio::test]

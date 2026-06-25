@@ -64,7 +64,7 @@ async fn api_error_with_200_and_data_returns_data() {
     let client = test_client(&mock.uri());
     let bug = client.get_bug("42", None, None).await.unwrap();
     assert_eq!(bug.id, 42);
-    assert_eq!(bug.summary, "test bug");
+    assert_eq!(bug.summary.as_deref(), Some("test bug"));
 }
 
 #[tokio::test]

@@ -7,9 +7,12 @@ fn bug_deserializes_minimal() {
     let json = r#"{"id": 42}"#;
     let bug: Bug = serde_json::from_str(json).unwrap();
     assert_eq!(bug.id, 42);
-    assert!(bug.summary.is_empty());
     assert!(bug.keywords.is_empty());
     assert!(bug.custom_fields.is_empty());
+
+    let serialized = serde_json::to_value(&bug).unwrap();
+    assert_eq!(serialized["summary"], serde_json::Value::Null);
+    assert_eq!(serialized["status"], serde_json::Value::Null);
 }
 
 #[test]
@@ -24,8 +27,8 @@ fn bug_deserializes_full() {
         "keywords": ["regression"]
     }"#;
     let bug: Bug = serde_json::from_str(json).unwrap();
-    assert_eq!(bug.summary, "test bug");
-    assert_eq!(bug.status, "NEW");
+    assert_eq!(bug.summary.as_deref(), Some("test bug"));
+    assert_eq!(bug.status.as_deref(), Some("NEW"));
     assert_eq!(bug.product.as_deref(), Some("Core"));
     assert_eq!(bug.keywords, vec!["regression"]);
 }
@@ -109,10 +112,12 @@ fn bug_deserializes_sparse_custom_fields_with_defaults() {
     let bug: Bug = serde_json::from_str(json).unwrap();
 
     assert_eq!(bug.id, 42);
-    assert!(bug.summary.is_empty());
-    assert!(bug.status.is_empty());
     assert!(bug.keywords.is_empty());
     assert_eq!(bug.custom_fields["cf_release"], "9.6");
+
+    let serialized = serde_json::to_value(&bug).unwrap();
+    assert_eq!(serialized["summary"], serde_json::Value::Null);
+    assert_eq!(serialized["status"], serde_json::Value::Null);
 }
 
 #[test]

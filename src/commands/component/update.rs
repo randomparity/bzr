@@ -233,7 +233,7 @@ async fn resolve_update_target_id(
 fn find_component_id(product_data: &Product, product: &str, component_name: &str) -> Result<u64> {
     let mut found = None;
     for component in &product_data.components {
-        if component.name != component_name {
+        if component.name.as_deref() != Some(component_name) {
             continue;
         }
         if found.is_some() {

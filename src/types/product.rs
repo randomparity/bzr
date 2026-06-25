@@ -7,11 +7,11 @@ use crate::types::component::Component;
 pub struct Product {
     pub id: u64,
     #[serde(default)]
-    pub name: String,
+    pub name: Option<String>,
     #[serde(default)]
-    pub description: String,
+    pub description: Option<String>,
     #[serde(default)]
-    pub is_active: bool,
+    pub is_active: Option<bool>,
     #[serde(default)]
     pub components: Vec<Component>,
     #[serde(default)]
@@ -25,11 +25,11 @@ pub struct Product {
 pub struct Version {
     pub id: u64,
     #[serde(default)]
-    pub name: String,
+    pub name: Option<String>,
     #[serde(default)]
-    pub sort_key: u64,
+    pub sort_key: Option<u64>,
     #[serde(default)]
-    pub is_active: bool,
+    pub is_active: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -37,11 +37,11 @@ pub struct Version {
 pub struct Milestone {
     pub id: u64,
     #[serde(default)]
-    pub name: String,
+    pub name: Option<String>,
     #[serde(default)]
-    pub sort_key: u64,
+    pub sort_key: Option<u64>,
     #[serde(default)]
-    pub is_active: bool,
+    pub is_active: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]

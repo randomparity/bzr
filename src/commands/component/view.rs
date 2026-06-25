@@ -14,7 +14,7 @@ pub(super) async fn handle(
     let component = product
         .components
         .iter()
-        .find(|c| c.name == *name)
+        .find(|c| c.name.as_deref() == Some(name))
         .ok_or_else(|| BzrError::NotFound {
             resource: "component",
             id: name.to_owned(),

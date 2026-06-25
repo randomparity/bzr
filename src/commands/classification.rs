@@ -19,7 +19,11 @@ pub(crate) async fn execute(
             // are disabled on this server.
             let disabled = matches!(
                 classifications.as_slice(),
-                [only] if only.name.eq_ignore_ascii_case("Unclassified")
+                [only]
+                    if only
+                        .name
+                        .as_deref()
+                        .is_some_and(|name| name.eq_ignore_ascii_case("Unclassified"))
             );
             if disabled {
                 let _ = writeln!(

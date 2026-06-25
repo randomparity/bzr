@@ -47,6 +47,7 @@ pub(super) async fn handle(
         resolve_source_description(&client, source.id, description.as_deref()).await?;
     let source_product = required_source_field(source.product, "product")?;
     let source_component = required_source_field(source.component, "component")?;
+    let source_summary = required_source_field(source.summary, "summary")?;
 
     let mut blocks = Vec::new();
     if *add_blocks {
@@ -60,7 +61,7 @@ pub(super) async fn handle(
     let params = CreateBugParams {
         product: product.clone().unwrap_or(source_product),
         component: component.clone().unwrap_or(source_component),
-        summary: summary.clone().unwrap_or(source.summary),
+        summary: summary.clone().unwrap_or(source_summary),
         version: version
             .clone()
             .or(source.version)

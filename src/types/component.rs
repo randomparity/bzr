@@ -5,11 +5,11 @@ use serde::{Deserialize, Serialize};
 pub struct Component {
     pub id: u64,
     #[serde(default)]
-    pub name: String,
+    pub name: Option<String>,
     #[serde(default)]
-    pub description: String,
+    pub description: Option<String>,
     #[serde(default)]
-    pub is_active: bool,
+    pub is_active: Option<bool>,
     #[serde(default)]
     pub default_assignee: Option<String>,
 }

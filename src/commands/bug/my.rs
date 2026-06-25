@@ -2,7 +2,7 @@ use crate::cli::MyArgs;
 use crate::client::BugzillaClient;
 use crate::commands::runtime::search::fields::{canonical_field_list, ColumnSpec};
 use crate::commands::runtime::search::policy::{count_search_params, ensure_no_paging_with_count};
-use crate::error::Result;
+use crate::error::{BzrError, Result};
 use crate::output::resources::bug::write_bugs;
 use crate::output::writers::Writers;
 use crate::types::bug::{Bug, SearchParams};
@@ -24,7 +24,9 @@ pub(super) async fn handle(
     let spec = ColumnSpec::new(fields, exclude_fields);
 
     let whoami = client.whoami().await?;
-    let email = whoami.name;
+    let email = whoami.name.or(whoami.login).ok_or_else(|| {
+        BzrError::DataIntegrity("whoami response missing name/login field".into())
+    })?;
     let mut all_bugs: Vec<Bug> = Vec::new();
     let mut seen_ids = std::collections::HashSet::new();
 

@@ -33,8 +33,8 @@ fn is_custom_field_name(name: &str) -> bool {
 #[non_exhaustive]
 pub struct Bug {
     pub id: u64,
-    pub summary: String,
-    pub status: String,
+    pub summary: Option<String>,
+    pub status: Option<String>,
     pub resolution: Option<String>,
     pub dupe_of: Option<u64>,
     pub deadline: Option<String>,
@@ -64,9 +64,9 @@ pub struct Bug {
 struct BugWire {
     id: u64,
     #[serde(default)]
-    summary: String,
+    summary: Option<String>,
     #[serde(default)]
-    status: String,
+    status: Option<String>,
     #[serde(default)]
     resolution: Option<String>,
     #[serde(default)]
