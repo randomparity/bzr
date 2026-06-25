@@ -82,6 +82,51 @@ fn ca_cert_config_rejects_missing_file() {
     );
 }
 
+fn native_root_error() -> rustls_native_certs::Error {
+    rustls_native_certs::Error {
+        context: "test native root load",
+        kind: rustls_native_certs::ErrorKind::Io {
+            inner: std::io::Error::new(std::io::ErrorKind::InvalidData, "bad native root"),
+            path: std::path::PathBuf::from("/tmp/native-root.pem"),
+        },
+    }
+}
+
+#[test]
+fn add_native_roots_reports_native_load_errors() {
+    let mut root_store = RootCertStore::empty();
+    let mut native_certs = rustls_native_certs::CertificateResult::default();
+    native_certs.errors.push(native_root_error());
+
+    let summary = add_native_roots(&mut root_store, native_certs);
+
+    assert_eq!(
+        summary,
+        NativeRootLoadSummary {
+            added: 0,
+            load_errors: 1,
+            add_errors: 0,
+        }
+    );
+    assert!(summary.has_errors());
+}
+
+#[test]
+fn add_native_roots_reports_rejected_native_roots() {
+    let mut root_store = RootCertStore::empty();
+    let mut native_certs = rustls_native_certs::CertificateResult::default();
+    native_certs
+        .certs
+        .push(CertificateDer::from(vec![0, 1, 2, 3]));
+
+    let summary = add_native_roots(&mut root_store, native_certs);
+
+    assert_eq!(summary.added, 0);
+    assert_eq!(summary.load_errors, 0);
+    assert_eq!(summary.add_errors, 1);
+    assert!(summary.has_errors());
+}
+
 #[test]
 fn build_pinned_config_succeeds() {
     let der = gen_self_signed_cert();
