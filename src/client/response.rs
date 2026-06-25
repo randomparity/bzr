@@ -12,10 +12,14 @@ use super::BugzillaClient;
 struct ErrorResponse {
     #[serde(default)]
     error: bool,
-    #[serde(default, deserialize_with = "deserialize_code")]
+    #[serde(default = "default_error_code", deserialize_with = "deserialize_code")]
     code: i64,
     #[serde(default)]
     message: Option<String>,
+}
+
+fn default_error_code() -> i64 {
+    -1
 }
 
 /// Bugzilla returns error codes as integers on some versions and as
@@ -166,17 +170,9 @@ impl BugzillaClient {
             return Ok(());
         }
 
-        let code = map
-            .get("code")
-            .and_then(|v| {
-                v.as_i64()
-                    .or_else(|| v.as_str().and_then(|s| s.parse::<i64>().ok()))
-            })
-            .unwrap_or(-1);
-        let message = map
-            .get("message")
-            .and_then(|v| v.as_str())
-            .map(String::from);
+        let error = parse_error_response_value(value, url)?;
+        let code = error.code;
+        let message = error.message;
         let has_data = Self::has_data_fields(map);
 
         tracing::debug!(
@@ -301,6 +297,14 @@ impl BugzillaClient {
         }
         Ok(response)
     }
+}
+
+fn parse_error_response_value(value: &serde_json::Value, url: &str) -> Result<ErrorResponse> {
+    serde_json::from_value(value.clone()).map_err(|e| {
+        BzrError::Deserialize(format!(
+            "failed to deserialize Bugzilla error response from {url}: {e}"
+        ))
+    })
 }
 
 /// Maximum length of the body excerpt embedded in deserialization errors.
