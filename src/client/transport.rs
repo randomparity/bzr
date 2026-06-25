@@ -119,8 +119,9 @@ impl BugzillaClient {
     }
 
     /// On 401, retry the request with the alternate auth method (header ↔ query param).
-    /// Returns `Ok(Some(response))` if the retry succeeded, `Ok(None)` if the retry
-    /// also failed or wasn't possible, or `Err` on transport-level failures.
+    /// Returns `Ok(Some(response))` if the retry should replace the original 401,
+    /// `Ok(None)` if the retry also proved auth failed or wasn't possible, or
+    /// `Err` on transport-level failures.
     async fn retry_with_alternate_auth(
         &self,
         retry_builder: Option<RequestBuilder>,
@@ -138,11 +139,15 @@ impl BugzillaClient {
             status = %retried.status(),
             "auth fallback response"
         );
-        if retried.status().is_success() {
-            return Ok(Some(retried));
+        if Self::alternate_auth_failed(retried.status()) {
+            tracing::debug!("auth fallback also failed, returning original 401");
+            return Ok(None);
         }
-        tracing::debug!("auth fallback also failed, returning original 401");
-        Ok(None)
+        Ok(Some(retried))
+    }
+
+    fn alternate_auth_failed(status: reqwest::StatusCode) -> bool {
+        status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN
     }
 
     fn apply_alternate_auth(&self, builder: RequestBuilder) -> Result<RequestBuilder> {
