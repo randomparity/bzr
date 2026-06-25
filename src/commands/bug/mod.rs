@@ -110,21 +110,8 @@ pub(crate) async fn execute(
     }
 
     match action {
-        BugAction::List(args) => {
-            let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
-            list::handle(&client, args, format, w).await
-        }
-        BugAction::View(args) => {
-            let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
-            view::handle(&client, args, format, w).await
-        }
-        BugAction::History(args) => {
-            let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
-            history::handle(&client, args, format, w).await
-        }
-        BugAction::My(args) => {
-            let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
-            my::handle(&client, args, format, w).await
+        BugAction::List(_) | BugAction::View(_) | BugAction::History(_) | BugAction::My(_) => {
+            execute_connected_read(action, ctx, format, w).await
         }
         BugAction::Create(args) => create::handle(args, ctx, w).await,
         BugAction::Clone(args) => clone::handle(args, ctx, w).await,
@@ -134,6 +121,22 @@ pub(crate) async fn execute(
         BugAction::Reopen(a) => verbs::reopen(a, ctx, w).await,
         BugAction::Dup(a) => verbs::dup(a, ctx, w).await,
         BugAction::Search(_) => unreachable!("handled above"),
+    }
+}
+
+async fn execute_connected_read(
+    action: &BugAction,
+    ctx: &CommandContext,
+    format: OutputFormat,
+    w: &mut Writers<'_>,
+) -> Result<()> {
+    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+    match action {
+        BugAction::List(args) => list::handle(&client, args, format, w).await,
+        BugAction::View(args) => view::handle(&client, args, format, w).await,
+        BugAction::History(args) => history::handle(&client, args, format, w).await,
+        BugAction::My(args) => my::handle(&client, args, format, w).await,
+        _ => unreachable!("only read actions are routed here"),
     }
 }
 
