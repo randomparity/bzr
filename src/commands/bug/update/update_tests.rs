@@ -227,6 +227,43 @@ async fn bug_update_from_json_cli_flag_overrides_json_field() {
 }
 
 #[tokio::test]
+async fn bug_update_from_json_cli_list_flag_replaces_json_list_in_put_body() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/42"))
+        .and(body_json(serde_json::json!({
+            "blocks": {"add": [300]},
+        })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": [{"id": 42, "changes": {}}]})),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{"id":42,"blocks_add":[100,200]}"#;
+    let mut action = from_json_update_action(&write_json_file(&tmp, json));
+    let BugAction::Update(args) = &mut action else {
+        panic!("expected update action");
+    };
+    args.blocks_add = vec![300];
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(
+        result.is_ok(),
+        "CLI blocks_add should replace JSON blocks_add in PUT body: {result:?}"
+    );
+}
+
+#[tokio::test]
 async fn bug_update_from_json_list_fields_use_add_remove_shapes() {
     let (_lock, mock, tmp) = setup_test_env().await;
     Mock::given(method("PUT"))
@@ -1049,6 +1086,20 @@ fn build_update_params_rejects_empty_keyword() {
 }
 
 #[test]
+fn build_update_params_rejects_empty_keyword_remove_with_remove_flag() {
+    let action = make_update_action_with_lists(UpdateLists {
+        keywords_remove: vec![" "],
+        ..UpdateLists::default()
+    });
+    let err = super::build_update_params(as_update_args(&action)).unwrap_err();
+
+    assert!(
+        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains("--keywords-remove")),
+        "expected InputValidation naming --keywords-remove, got {err:?}",
+    );
+}
+
+#[test]
 fn build_update_params_rejects_whitespace_only_cc() {
     let action = make_update_action_with_lists(UpdateLists {
         cc_add: vec!["   "],
@@ -1607,6 +1658,48 @@ async fn bug_update_dry_run_makes_no_write_and_marks_payload() {
 }
 
 #[tokio::test]
+async fn bug_update_dry_run_json_includes_cleaned_add_and_remove_lists() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    forbid_put(&mock).await;
+
+    let action = BugAction::Update(crate::cli::UpdateArgs {
+        ids: vec![42],
+        blocks_add: vec![100],
+        blocks_remove: vec![50],
+        keywords_add: vec!["  fix-needed  ".into()],
+        keywords_remove: vec![" stale ".into()],
+        ..Default::default()
+    });
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "dry-run update failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["action"], "dry-run");
+    assert_eq!(parsed["ids"], serde_json::json!([42]));
+    assert_eq!(parsed["changes"]["blocks"]["add"], serde_json::json!([100]));
+    assert_eq!(
+        parsed["changes"]["blocks"]["remove"],
+        serde_json::json!([50])
+    );
+    assert_eq!(
+        parsed["changes"]["keywords"]["add"],
+        serde_json::json!(["fix-needed"])
+    );
+    assert_eq!(
+        parsed["changes"]["keywords"]["remove"],
+        serde_json::json!(["stale"])
+    );
+    assert_eq!(received_put_count(&mock).await, 0);
+}
+
+#[tokio::test]
 async fn bug_update_dry_run_batch_lists_all_ids() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     forbid_put(&mock).await;
@@ -1707,6 +1800,38 @@ async fn apply_checked_connected_dry_run_skips_expect_unchanged_get() {
     let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["ids"], serde_json::json!([42]));
+}
+
+#[tokio::test]
+async fn apply_checked_dry_run_skips_connection_setup() {
+    let tmp = tempfile::tempdir().unwrap();
+    let request = super::ApplyRequest {
+        ids: vec![42],
+        params: crate::types::bug::UpdateBugParams {
+            status: Some("ASSIGNED".into()),
+            ..Default::default()
+        },
+        expect_unchanged_since: Some("2026-06-19T12:00:00Z"),
+    };
+    let ctx = crate::commands::runtime::context::CommandContext::new(
+        Some("missing"),
+        OutputFormat::Json,
+        None,
+    )
+    .with_config_path_override(Some(tmp.path().join("missing-config.toml")))
+    .with_dry_run(true);
+    let mut io = crate::test_helpers::CapturedIo::new();
+
+    let result = super::apply_checked(request, &ctx, &mut io.writers()).await;
+
+    assert!(
+        result.is_ok(),
+        "dry-run should render without loading config or connecting: {result:?}"
+    );
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["action"], "dry-run");
+    assert_eq!(parsed["ids"], serde_json::json!([42]));
+    assert_eq!(parsed["changes"]["status"], "ASSIGNED");
 }
 
 // ── BugUpdateDraft::overlay_cli merge-helper mutants ────────────────────────
