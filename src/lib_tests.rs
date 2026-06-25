@@ -313,10 +313,10 @@ async fn dispatch_rejects_dry_run_on_group_membership_mutation() {
 }
 
 #[test]
-fn command_requires_credentials_covers_each_admin_write_arm() {
+fn command_capabilities_cover_each_admin_write_arm() {
     // A write under each top-level command must require credentials. Deleting
-    // any arm in command_requires_credentials would drop it to `_ => None` and
-    // let the write run unauthenticated. One write per command pins its arm.
+    // any command capability arm would drop it to anonymous and let the write
+    // run unauthenticated. One write per command pins its arm.
     let cases: &[&[&str]] = &[
         &["bzr", "attachment", "update", "67890", "--summary", "x"],
         &[
@@ -362,8 +362,9 @@ fn command_requires_credentials_covers_each_admin_write_arm() {
     ];
     for argv in cases {
         let cli = cli::Cli::try_parse_from(*argv).unwrap();
+        let capabilities = command_capabilities(&cli.command);
         assert!(
-            command_requires_credentials(&cli.command).is_some(),
+            capabilities.credential_requirement().is_some(),
             "{argv:?} is a write and must require credentials"
         );
     }
@@ -371,9 +372,8 @@ fn command_requires_credentials_covers_each_admin_write_arm() {
 
 #[test]
 fn ensure_dry_run_supported_covers_admin_create_arms() {
-    // product/component/user/group create accept --dry-run. Deleting any arm in
-    // ensure_dry_run_supported would drop it to `_ => false` and reject the
-    // preview with an InputValidation error.
+    // product/component/user/group create accept --dry-run. Deleting any command
+    // capability arm would reject the preview with an InputValidation error.
     let cases: &[&[&str]] = &[
         &[
             "bzr",
@@ -422,8 +422,9 @@ fn ensure_dry_run_supported_covers_admin_create_arms() {
     ];
     for argv in cases {
         let cli = cli::Cli::try_parse_from(*argv).unwrap();
+        let capabilities = command_capabilities(&cli.command);
         assert!(
-            ensure_dry_run_supported(&cli).is_ok(),
+            ensure_dry_run_supported(&cli, capabilities).is_ok(),
             "{argv:?} must support --dry-run"
         );
     }

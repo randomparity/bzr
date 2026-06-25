@@ -1,4 +1,3 @@
-use super::{is_dry_runnable, requires_credentials};
 use crate::cli::ProductAction;
 use crate::types::ProductListType;
 
@@ -23,37 +22,25 @@ fn update_action() -> ProductAction {
 }
 
 #[test]
-fn requires_credentials_reads_need_none() {
-    assert_eq!(
-        requires_credentials(&ProductAction::List {
-            r#type: ProductListType::Accessible,
-        }),
-        None
-    );
-    assert_eq!(
-        requires_credentials(&ProductAction::View { name: "P".into() }),
-        None
-    );
-}
-
-#[test]
-fn requires_credentials_writes_name_the_command() {
-    assert_eq!(
-        requires_credentials(&create_action()),
-        Some("product create")
-    );
-    assert_eq!(
-        requires_credentials(&update_action()),
-        Some("product update")
-    );
-}
-
-#[test]
-fn is_dry_runnable_only_for_mutations() {
-    assert!(is_dry_runnable(&create_action()));
-    assert!(is_dry_runnable(&update_action()));
-    assert!(!is_dry_runnable(&ProductAction::List {
+fn capabilities_are_anonymous_for_reads() {
+    let list = super::capabilities(&ProductAction::List {
         r#type: ProductListType::Accessible,
-    }));
-    assert!(!is_dry_runnable(&ProductAction::View { name: "P".into() }));
+    });
+    assert!(!list.supports_dry_run());
+    assert_eq!(list.credential_requirement(), None);
+
+    let view = super::capabilities(&ProductAction::View { name: "P".into() });
+    assert!(!view.supports_dry_run());
+    assert_eq!(view.credential_requirement(), None);
+}
+
+#[test]
+fn capabilities_allow_dry_run_and_credentials_for_writes() {
+    let create = super::capabilities(&create_action());
+    assert!(create.supports_dry_run());
+    assert_eq!(create.credential_requirement(), Some("product create"));
+
+    let update = super::capabilities(&update_action());
+    assert!(update.supports_dry_run());
+    assert_eq!(update.credential_requirement(), Some("product update"));
 }

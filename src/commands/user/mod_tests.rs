@@ -1,4 +1,3 @@
-use super::{is_dry_runnable, requires_credentials};
 use crate::cli::UserAction;
 
 fn create_action() -> UserAction {
@@ -30,19 +29,19 @@ fn search_action() -> UserAction {
 }
 
 #[test]
-fn requires_credentials_reads_need_none() {
-    assert_eq!(requires_credentials(&search_action()), None);
+fn capabilities_are_anonymous_for_search() {
+    let capabilities = super::capabilities(&search_action());
+    assert!(!capabilities.supports_dry_run());
+    assert_eq!(capabilities.credential_requirement(), None);
 }
 
 #[test]
-fn requires_credentials_writes_name_the_command() {
-    assert_eq!(requires_credentials(&create_action()), Some("user create"));
-    assert_eq!(requires_credentials(&update_action()), Some("user update"));
-}
+fn capabilities_allow_dry_run_and_credentials_for_writes() {
+    let create = super::capabilities(&create_action());
+    assert!(create.supports_dry_run());
+    assert_eq!(create.credential_requirement(), Some("user create"));
 
-#[test]
-fn is_dry_runnable_only_for_mutations() {
-    assert!(is_dry_runnable(&create_action()));
-    assert!(is_dry_runnable(&update_action()));
-    assert!(!is_dry_runnable(&search_action()));
+    let update = super::capabilities(&update_action());
+    assert!(update.supports_dry_run());
+    assert_eq!(update.credential_requirement(), Some("user update"));
 }

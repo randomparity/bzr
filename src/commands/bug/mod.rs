@@ -1,6 +1,7 @@
 //! Bug subcommand handlers, split per-action.
 
 use crate::cli::BugAction;
+use crate::commands::runtime::capabilities::CommandCapabilities;
 use crate::commands::runtime::context::CommandContext;
 use crate::commands::runtime::search::fields::{
     validate_json_field_selection, validate_table_columns, warn_unknown_fields, ColumnSpec,
@@ -37,35 +38,20 @@ fn bug_column_spec(action: &BugAction) -> Option<ColumnSpec<'_>> {
     ))
 }
 
-/// Whether a bug action is a mutation that supports `--dry-run` (the create-,
-/// update-, and clone-shaped writes). Read actions and `--web` are excluded.
 #[must_use]
-pub(crate) fn is_dry_runnable(action: &BugAction) -> bool {
-    matches!(
-        action,
-        BugAction::Create(_)
-            | BugAction::Update(_)
-            | BugAction::Clone(_)
-            | BugAction::Resolve(_)
-            | BugAction::Close(_)
-            | BugAction::Reopen(_)
-            | BugAction::Dup(_)
-    )
-}
-
-pub(crate) fn requires_credentials(action: &BugAction) -> Option<&'static str> {
+pub(crate) fn capabilities(action: &BugAction) -> CommandCapabilities {
     match action {
         BugAction::List(_) | BugAction::View(_) | BugAction::Search(_) | BugAction::History(_) => {
-            None
+            CommandCapabilities::anonymous()
         }
-        BugAction::Create(_) => Some("bug create"),
-        BugAction::My(_) => Some("bug my"),
-        BugAction::Clone(_) => Some("bug clone"),
-        BugAction::Update(_) => Some("bug update"),
-        BugAction::Resolve(_) => Some("bug resolve"),
-        BugAction::Close(_) => Some("bug close"),
-        BugAction::Reopen(_) => Some("bug reopen"),
-        BugAction::Dup(_) => Some("bug dup"),
+        BugAction::My(_) => CommandCapabilities::authenticated("bug my"),
+        BugAction::Create(_) => CommandCapabilities::dry_run_mutation("bug create"),
+        BugAction::Clone(_) => CommandCapabilities::dry_run_mutation("bug clone"),
+        BugAction::Update(_) => CommandCapabilities::dry_run_mutation("bug update"),
+        BugAction::Resolve(_) => CommandCapabilities::dry_run_mutation("bug resolve"),
+        BugAction::Close(_) => CommandCapabilities::dry_run_mutation("bug close"),
+        BugAction::Reopen(_) => CommandCapabilities::dry_run_mutation("bug reopen"),
+        BugAction::Dup(_) => CommandCapabilities::dry_run_mutation("bug dup"),
     }
 }
 

@@ -102,8 +102,9 @@ pub async fn dispatch(
     format: types::OutputFormat,
     w: &mut output::writers::Writers<'_>,
 ) -> error::Result<()> {
-    let ctx = build_command_context(cli, format);
-    ensure_dispatch_allowed(cli, &ctx)?;
+    let capabilities = command_capabilities(&cli.command);
+    let ctx = build_command_context(cli, format, capabilities);
+    ensure_dispatch_allowed(cli, capabilities)?;
 
     match &cli.command {
         cli::Commands::Bug { action } => commands::bug::execute(action, &ctx, w).await,
@@ -131,15 +132,16 @@ pub async fn dispatch(
 
 fn ensure_dispatch_allowed(
     cli: &cli::Cli,
-    _ctx: &commands::runtime::context::CommandContext,
+    capabilities: commands::runtime::capabilities::CommandCapabilities,
 ) -> error::Result<()> {
-    ensure_dry_run_supported(cli)
+    ensure_dry_run_supported(cli, capabilities)
 }
 
 /// Build the explicit command context from global CLI flags.
 fn build_command_context(
     cli: &cli::Cli,
     format: types::OutputFormat,
+    capabilities: commands::runtime::capabilities::CommandCapabilities,
 ) -> commands::runtime::context::CommandContext {
     let env_timeout = std::env::var("BZR_TIMEOUT").ok();
     if cli.timeout.is_none() {
@@ -160,7 +162,7 @@ fn build_command_context(
         .with_config_path_override(cli.config.clone())
         .with_request_timeout(request_timeout)
         .with_retry_max(cli.retry.unwrap_or(0))
-        .with_credential_requirement(command_requires_credentials(&cli.command))
+        .with_credential_requirement(capabilities.credential_requirement())
 }
 
 /// Build the inline server definition from the global `--server-url` flags, or
@@ -188,19 +190,14 @@ fn resolve_inline_server(cli: &cli::Cli) -> Option<commands::runtime::inline_ser
 /// only selected mutations preview without writing. Allowing it elsewhere would
 /// silently ignore it — e.g. `bzr comment add --dry-run` would still post the
 /// comment. Fail fast (exit 7) instead of writing when a preview was asked for.
-fn ensure_dry_run_supported(cli: &cli::Cli) -> error::Result<()> {
+fn ensure_dry_run_supported(
+    cli: &cli::Cli,
+    capabilities: commands::runtime::capabilities::CommandCapabilities,
+) -> error::Result<()> {
     if !cli.dry_run {
         return Ok(());
     }
-    let supported = match &cli.command {
-        cli::Commands::Bug { action } => commands::bug::is_dry_runnable(action),
-        cli::Commands::Product { action } => commands::product::is_dry_runnable(action),
-        cli::Commands::Component { action } => commands::component::is_dry_runnable(action),
-        cli::Commands::User { action } => commands::user::is_dry_runnable(action),
-        cli::Commands::Group { action } => commands::group::is_dry_runnable(action),
-        _ => false,
-    };
-    if supported {
+    if capabilities.supports_dry_run() {
         return Ok(());
     }
     Err(error::BzrError::InputValidation(
@@ -210,17 +207,21 @@ fn ensure_dry_run_supported(cli: &cli::Cli) -> error::Result<()> {
     ))
 }
 
-fn command_requires_credentials(command: &cli::Commands) -> Option<&'static str> {
+fn command_capabilities(
+    command: &cli::Commands,
+) -> commands::runtime::capabilities::CommandCapabilities {
     match command {
-        cli::Commands::Bug { action } => commands::bug::requires_credentials(action),
-        cli::Commands::Comment { action } => commands::comment::requires_credentials(action),
-        cli::Commands::Attachment { action } => commands::attachment::requires_credentials(action),
-        cli::Commands::Product { action } => commands::product::requires_credentials(action),
-        cli::Commands::Component { action } => commands::component::requires_credentials(action),
-        cli::Commands::User { action } => commands::user::requires_credentials(action),
-        cli::Commands::Group { action } => commands::group::requires_credentials(action),
-        cli::Commands::Whoami => Some("whoami"),
-        _ => None,
+        cli::Commands::Bug { action } => commands::bug::capabilities(action),
+        cli::Commands::Comment { action } => commands::comment::capabilities(action),
+        cli::Commands::Attachment { action } => commands::attachment::capabilities(action),
+        cli::Commands::Product { action } => commands::product::capabilities(action),
+        cli::Commands::Component { action } => commands::component::capabilities(action),
+        cli::Commands::User { action } => commands::user::capabilities(action),
+        cli::Commands::Group { action } => commands::group::capabilities(action),
+        cli::Commands::Whoami => {
+            commands::runtime::capabilities::CommandCapabilities::authenticated("whoami")
+        }
+        _ => commands::runtime::capabilities::CommandCapabilities::anonymous(),
     }
 }
 

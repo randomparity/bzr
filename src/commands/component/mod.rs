@@ -1,4 +1,5 @@
 use crate::cli::ComponentAction;
+use crate::commands::runtime::capabilities::CommandCapabilities;
 use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::writers::Writers;
@@ -56,18 +57,13 @@ pub(crate) async fn execute(
 }
 
 #[must_use]
-pub(crate) fn is_dry_runnable(action: &ComponentAction) -> bool {
-    matches!(
-        action,
-        ComponentAction::Create { .. } | ComponentAction::Update { .. }
-    )
-}
-
-pub(crate) fn requires_credentials(action: &ComponentAction) -> Option<&'static str> {
+pub(crate) fn capabilities(action: &ComponentAction) -> CommandCapabilities {
     match action {
-        ComponentAction::List { .. } | ComponentAction::View { .. } => None,
-        ComponentAction::Create { .. } => Some("component create"),
-        ComponentAction::Update { .. } => Some("component update"),
+        ComponentAction::List { .. } | ComponentAction::View { .. } => {
+            CommandCapabilities::anonymous()
+        }
+        ComponentAction::Create { .. } => CommandCapabilities::dry_run_mutation("component create"),
+        ComponentAction::Update { .. } => CommandCapabilities::dry_run_mutation("component update"),
     }
 }
 

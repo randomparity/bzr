@@ -1,6 +1,7 @@
 //! Attachment subcommand handlers, split per action.
 
 use crate::cli::AttachmentAction;
+use crate::commands::runtime::capabilities::CommandCapabilities;
 use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::writers::Writers;
@@ -11,13 +12,14 @@ mod update;
 mod upload;
 mod view;
 
-pub(crate) fn requires_credentials(action: &AttachmentAction) -> Option<&'static str> {
+#[must_use]
+pub(crate) fn capabilities(action: &AttachmentAction) -> CommandCapabilities {
     match action {
         AttachmentAction::List { .. }
         | AttachmentAction::View { .. }
-        | AttachmentAction::Download { .. } => None,
-        AttachmentAction::Upload(_) => Some("attachment upload"),
-        AttachmentAction::Update(_) => Some("attachment update"),
+        | AttachmentAction::Download { .. } => CommandCapabilities::anonymous(),
+        AttachmentAction::Upload(_) => CommandCapabilities::authenticated("attachment upload"),
+        AttachmentAction::Update(_) => CommandCapabilities::authenticated("attachment update"),
     }
 }
 
