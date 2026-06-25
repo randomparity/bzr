@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use super::BugzillaClient;
+use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result, BUGZILLA_INTERNAL_ERROR};
 use crate::http::XMLRPC_FALLBACK_TIMEOUT;
 use crate::types::bug::{

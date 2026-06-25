@@ -1,4 +1,4 @@
-use super::BugzillaClient;
+use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::types::server_info::{ServerExtensions, ServerInfoResponse, ServerVersion};
 

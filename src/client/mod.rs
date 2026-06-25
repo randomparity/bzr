@@ -1,20 +1,11 @@
-mod attachment;
 pub(crate) mod auth;
 pub(crate) use auth::{
     detect_server_settings, detect_server_settings_without_auth, DetectedServerSettings,
 };
-mod bug;
-mod classification;
-mod comment;
-mod component;
-mod field;
-mod group;
-mod product;
 mod request;
+mod resources;
 mod response;
-mod server;
 mod transport;
-mod user;
 mod version;
 
 use reqwest::header::HeaderValue;

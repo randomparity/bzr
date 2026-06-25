@@ -3,8 +3,8 @@
 use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use super::super::{encode_path, UserDetailLevel, USER_FIELDS_DETAILED};
 use crate::client::test_helpers::{test_client, test_client_hybrid};
+use crate::client::{encode_path, UserDetailLevel, USER_FIELDS_DETAILED};
 use crate::types::{CreateUserParams, UpdateUserParams};
 
 #[tokio::test]

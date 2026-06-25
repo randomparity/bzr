@@ -1,7 +1,7 @@
 use base64::Engine;
 use serde::Deserialize;
 
-use super::BugzillaClient;
+use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
 use crate::types::attachment::{Attachment, UpdateAttachmentParams, UploadAttachmentParams};
 use crate::types::transport::ApiMode;

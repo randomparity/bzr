@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use super::BugzillaClient;
+use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
 use crate::types::{resolve_field_alias, FieldValue};
 
