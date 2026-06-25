@@ -7,8 +7,7 @@ use tabled::builder::Builder;
 
 use crate::output::formatting::{
     colorize_status, render_flags_inline, shorten_email, truncate, write_divider, write_field,
-    write_formatted, write_json_family, write_list_field, write_optional_field,
-    SUMMARY_TRUNCATE_WIDTH,
+    write_formatted, write_json_family, SUMMARY_TRUNCATE_WIDTH,
 };
 use crate::types::bug::{Bug, HistoryEntry};
 use crate::types::bug_fields::{
@@ -178,6 +177,151 @@ pub fn write_bug_detail<W: Write + ?Sized>(
     }
 }
 
+struct DetailRow {
+    label: &'static str,
+    value: String,
+}
+
+#[derive(Clone, Copy)]
+enum DetailValue {
+    Status,
+    OptionalText(fn(&Bug) -> Option<&str>),
+    OptionalId(fn(&Bug) -> Option<u64>),
+    StringList(fn(&Bug) -> &[String]),
+    IdList(fn(&Bug) -> &[u64]),
+    TargetMilestone,
+    Flags,
+}
+
+#[derive(Clone, Copy)]
+struct BuiltinDetailField {
+    field: BugField,
+    label: &'static str,
+    value: DetailValue,
+}
+
+const BUILTIN_DETAIL_FIELDS: &[BuiltinDetailField] = &[
+    BuiltinDetailField {
+        field: BugField::Status,
+        label: "Status",
+        value: DetailValue::Status,
+    },
+    BuiltinDetailField {
+        field: BugField::Resolution,
+        label: "Resolution",
+        value: DetailValue::OptionalText(|bug| bug.resolution.as_deref()),
+    },
+    BuiltinDetailField {
+        field: BugField::DupeOf,
+        label: "Duplicate of",
+        value: DetailValue::OptionalId(|bug| bug.dupe_of),
+    },
+    BuiltinDetailField {
+        field: BugField::Product,
+        label: "Product",
+        value: DetailValue::OptionalText(|bug| bug.product.as_deref()),
+    },
+    BuiltinDetailField {
+        field: BugField::Component,
+        label: "Component",
+        value: DetailValue::OptionalText(|bug| bug.component.as_deref()),
+    },
+    BuiltinDetailField {
+        field: BugField::TargetMilestone,
+        label: "Target Milestone",
+        value: DetailValue::TargetMilestone,
+    },
+    BuiltinDetailField {
+        field: BugField::AssignedTo,
+        label: "Assignee",
+        value: DetailValue::OptionalText(|bug| bug.assigned_to.as_deref()),
+    },
+    BuiltinDetailField {
+        field: BugField::Priority,
+        label: "Priority",
+        value: DetailValue::OptionalText(|bug| bug.priority.as_deref()),
+    },
+    BuiltinDetailField {
+        field: BugField::Severity,
+        label: "Severity",
+        value: DetailValue::OptionalText(|bug| bug.severity.as_deref()),
+    },
+    BuiltinDetailField {
+        field: BugField::Creator,
+        label: "Creator",
+        value: DetailValue::OptionalText(|bug| bug.creator.as_deref()),
+    },
+    BuiltinDetailField {
+        field: BugField::CreationTime,
+        label: "Created",
+        value: DetailValue::OptionalText(|bug| bug.creation_time.as_deref()),
+    },
+    BuiltinDetailField {
+        field: BugField::LastChangeTime,
+        label: "Updated",
+        value: DetailValue::OptionalText(|bug| bug.last_change_time.as_deref()),
+    },
+    BuiltinDetailField {
+        field: BugField::Keywords,
+        label: "Keywords",
+        value: DetailValue::StringList(|bug| &bug.keywords),
+    },
+    BuiltinDetailField {
+        field: BugField::Blocks,
+        label: "Blocks",
+        value: DetailValue::IdList(|bug| &bug.blocks),
+    },
+    BuiltinDetailField {
+        field: BugField::DependsOn,
+        label: "Depends on",
+        value: DetailValue::IdList(|bug| &bug.depends_on),
+    },
+    BuiltinDetailField {
+        field: BugField::Flags,
+        label: "Flags",
+        value: DetailValue::Flags,
+    },
+];
+
+fn render_builtin_detail_field(field: BuiltinDetailField, bug: &Bug) -> Option<DetailRow> {
+    let value = match field.value {
+        DetailValue::Status => colorize_status(&bug.status).to_string(),
+        DetailValue::OptionalText(accessor) => accessor(bug).unwrap_or("-").to_string(),
+        DetailValue::OptionalId(accessor) => accessor(bug)?.to_string(),
+        DetailValue::StringList(accessor) => {
+            let values = accessor(bug);
+            if values.is_empty() {
+                return None;
+            }
+            values.join(", ")
+        }
+        DetailValue::IdList(accessor) => {
+            let values = accessor(bug);
+            if values.is_empty() {
+                return None;
+            }
+            join_ids(values)
+        }
+        DetailValue::TargetMilestone => {
+            let milestone = bug.target_milestone.as_deref().unwrap_or_default();
+            if milestone.is_empty() || milestone == UNSET_MILESTONE {
+                return None;
+            }
+            milestone.to_string()
+        }
+        DetailValue::Flags => {
+            if bug.flags.is_empty() {
+                return None;
+            }
+            render_flags_inline(&bug.flags)
+        }
+    };
+    Some(DetailRow {
+        label: field.label,
+        value,
+    })
+}
+
 fn write_bug_detail_table(bug: &Bug, spec: ColumnSpec<'_>, out: &mut (impl Write + ?Sized)) {
     if field_selected(spec, "summary") {
         let _ = writeln!(
@@ -190,68 +334,16 @@ fn write_bug_detail_table(bug: &Bug, spec: ColumnSpec<'_>, out: &mut (impl Write
     } else {
         let _ = writeln!(out, "{} #{}\n", "Bug".bold(), bug.id.to_string().bold());
     }
-    if field_selected(spec, "status") {
-        write_field(out, "Status", &colorize_status(&bug.status).to_string());
-    }
-    if field_selected(spec, "resolution") {
-        write_optional_field(out, "Resolution", bug.resolution.as_deref());
-    }
-    if field_selected(spec, "dupe_of") {
-        if let Some(dupe_of) = bug.dupe_of {
-            let _ = writeln!(out, "  {:<12}  {dupe_of}", "Duplicate of");
+    for detail in BUILTIN_DETAIL_FIELDS {
+        if !field_selected(spec, detail.field.canonical()) {
+            continue;
         }
-    }
-    if field_selected(spec, "product") {
-        write_optional_field(out, "Product", bug.product.as_deref());
-    }
-    if field_selected(spec, "component") {
-        write_optional_field(out, "Component", bug.component.as_deref());
-    }
-    if field_selected(spec, "target_milestone") {
-        let milestone = bug.target_milestone.as_deref().unwrap_or_default();
-        if !milestone.is_empty() && milestone != UNSET_MILESTONE {
-            write_field(out, "Target Milestone", milestone);
+        if let Some(row) = render_builtin_detail_field(*detail, bug) {
+            write_field(out, row.label, &row.value);
         }
-    }
-    if field_selected(spec, "assigned_to") {
-        write_optional_field(out, "Assignee", bug.assigned_to.as_deref());
-    }
-    if field_selected(spec, "priority") {
-        write_optional_field(out, "Priority", bug.priority.as_deref());
-    }
-    if field_selected(spec, "severity") {
-        write_optional_field(out, "Severity", bug.severity.as_deref());
-    }
-    if field_selected(spec, "creator") {
-        write_optional_field(out, "Creator", bug.creator.as_deref());
-    }
-    if field_selected(spec, "creation_time") {
-        write_optional_field(out, "Created", bug.creation_time.as_deref());
-    }
-    if field_selected(spec, "last_change_time") {
-        write_optional_field(out, "Updated", bug.last_change_time.as_deref());
-    }
-    if field_selected(spec, "keywords") {
-        write_list_field(out, "Keywords", &bug.keywords);
-    }
-    if field_selected(spec, "blocks") {
-        write_id_list_field(out, "Blocks", &bug.blocks);
-    }
-    if field_selected(spec, "depends_on") {
-        write_id_list_field(out, "Depends on", &bug.depends_on);
-    }
-    if field_selected(spec, "flags") && !bug.flags.is_empty() {
-        write_field(out, "Flags", &render_flags_inline(&bug.flags));
     }
     for name in selected_custom_detail_fields(spec) {
         write_field(out, name, &render_custom_value(bug.custom_fields.get(name)));
-    }
-}
-
-fn write_id_list_field(out: &mut (impl Write + ?Sized), label: &str, ids: &[u64]) {
-    if !ids.is_empty() {
-        let id_str = join_ids(ids);
-        let _ = writeln!(out, "  {label:<12}  {id_str}");
     }
 }
 
