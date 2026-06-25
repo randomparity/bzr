@@ -221,7 +221,16 @@ fn command_capabilities(
         cli::Commands::Whoami => {
             commands::runtime::capabilities::CommandCapabilities::authenticated("whoami")
         }
-        _ => commands::runtime::capabilities::CommandCapabilities::anonymous(),
+        cli::Commands::Config { .. }
+        | cli::Commands::Field { .. }
+        | cli::Commands::Server { .. }
+        | cli::Commands::Classification { .. }
+        | cli::Commands::Template { .. }
+        | cli::Commands::Query { .. }
+        | cli::Commands::Completion { .. }
+        | cli::Commands::Schema { .. } => {
+            commands::runtime::capabilities::CommandCapabilities::anonymous()
+        }
     }
 }
 

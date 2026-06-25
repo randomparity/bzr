@@ -371,6 +371,32 @@ fn command_capabilities_cover_each_admin_write_arm() {
 }
 
 #[test]
+fn command_capabilities_cover_each_explicit_anonymous_top_level_arm() {
+    let cases: &[&[&str]] = &[
+        &["bzr", "config", "show"],
+        &["bzr", "field", "aliases"],
+        &["bzr", "server", "info"],
+        &["bzr", "classification", "list"],
+        &["bzr", "template", "list"],
+        &["bzr", "query", "list"],
+        &["bzr", "completion", "bash"],
+        &["bzr", "schema"],
+    ];
+    for argv in cases {
+        let cli = cli::Cli::try_parse_from(*argv).unwrap();
+        let capabilities = command_capabilities(&cli.command);
+        assert!(
+            capabilities.credential_requirement().is_none(),
+            "{argv:?} is intentionally anonymous"
+        );
+        assert!(
+            !capabilities.supports_dry_run(),
+            "{argv:?} should not accept global --dry-run"
+        );
+    }
+}
+
+#[test]
 fn ensure_dry_run_supported_covers_admin_create_arms() {
     // product/component/user/group create accept --dry-run. Deleting any command
     // capability arm would reject the preview with an InputValidation error.
