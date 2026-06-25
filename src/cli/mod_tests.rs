@@ -45,6 +45,20 @@ fn cli_doc_long_about_coverage() {
 }
 
 #[test]
+fn version_output_includes_package_version_and_build_metadata() {
+    let Err(err) = Cli::try_parse_from(["bzr", "--version"]) else {
+        panic!("expected --version to return a display-version clap error");
+    };
+
+    assert_eq!(err.kind(), clap::error::ErrorKind::DisplayVersion);
+    let version = err.to_string();
+    assert!(version.contains(env!("CARGO_PKG_VERSION")));
+    assert!(version.contains(env!("BZR_GIT_SHA")));
+    assert!(version.contains('('));
+    assert!(version.contains(')'));
+}
+
+#[test]
 fn parse_bug_list_minimal() {
     let cli = Cli::try_parse_from(["bzr", "bug", "list"]).unwrap();
     assert!(matches!(
