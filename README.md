@@ -24,15 +24,16 @@ terminal.
 - **Attachments** — list, download, upload, and update file attachments with auto-detected MIME types
 - **Flags** — set, request, and clear flags on bugs and attachments
 - **Products** — list, view, create, and update products
-- **Components** — create and update product components
-- **Classifications** — view classification details
+- **Components** — list, view, create, and update product components
+- **Classifications** — list and view classification details
 - **Fields** — look up valid values for bug fields (status, priority, severity, etc.)
 - **Users** — search, create, and update users
 - **Groups** — list members, add/remove users, view, create, and update groups
 - **Server diagnostics** — check server version and extensions (`whoami`, `server info`)
 - **Admin operations** — create and update products, components, users, and groups
 - **Multi-server** — configure and switch between multiple Bugzilla instances
-- **Output formats** — human-readable tables (with colored status) or JSON for scripting
+- **Output formats** — human-readable tables (with colored status), JSON, or NDJSON for scripting
+- **Schemas** — print embedded JSON Schemas for output objects and JSON input payloads
 - **Secure auth** — API key sent via `X-BUGZILLA-API-KEY` header by default; falls back to query parameter auth for older servers
 
 ## Installation
