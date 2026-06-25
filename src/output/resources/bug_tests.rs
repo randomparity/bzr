@@ -1,7 +1,7 @@
 #![expect(clippy::unwrap_used)]
 
 use super::*;
-use crate::commands::bug::search_support::fields::{
+use crate::commands::runtime::search::fields::{
     validate_json_field_selection, validate_table_columns, warn_unknown_fields,
 };
 use crate::types::bug_fields::BUG_FIELDS;

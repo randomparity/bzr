@@ -1,9 +1,7 @@
 use crate::cli::{FieldArgs, ListArgs};
 use crate::client::BugzillaClient;
-use crate::commands::bug::search_support::fields::{canonical_field_list, ColumnSpec};
-use crate::commands::bug::search_support::policy::{
-    count_search_params, ensure_no_paging_with_count,
-};
+use crate::commands::runtime::search::fields::{canonical_field_list, ColumnSpec};
+use crate::commands::runtime::search::policy::{count_search_params, ensure_no_paging_with_count};
 use crate::error::Result;
 use crate::output::resources::bug::write_bugs;
 use crate::output::writers::Writers;
