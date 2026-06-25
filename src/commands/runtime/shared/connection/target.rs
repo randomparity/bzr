@@ -100,6 +100,16 @@ pub(super) fn extract_hostname(url: &str) -> String {
         .unwrap_or_else(|| url.to_string())
 }
 
+pub(super) fn server_tls_config(server: &ServerConfig, server_name: &str) -> TlsConfig {
+    TlsConfig {
+        insecure: server.tls_insecure,
+        ca_cert_path: server.tls_ca_cert.clone(),
+        pin_sha256: server.tls_pin_sha256.clone(),
+        pin_issuer_der: server.tls_pin_issuer_der.clone(),
+        server_name: Some(server_name.to_string()),
+    }
+}
+
 /// A resolved connection target: the [`ConnectContext`] plus the TLS config and
 /// any cached auth/mode. Produced from either an inline `--server-url`
 /// definition or a named config server.
@@ -135,11 +145,11 @@ pub(super) fn resolve_connect_target(command: &CommandContext) -> Result<Connect
         srv.tls_ca_cert.clone_from(&inline.tls.ca_cert_path);
         srv.tls_pin_sha256.clone_from(&inline.tls.pin_sha256);
         srv.validate(name)?;
-        let tls_config = srv.tls_config(name);
+        let tls_config = server_tls_config(&srv, name);
         let ctx = ConnectContext {
             server_name: name.to_string(),
             url: srv.url.clone(),
-            api_key: srv.resolve_optional_api_key(name)?,
+            api_key: crate::credentials::resolve_optional_api_key(&srv, name)?,
             email: srv.email.clone(),
             api_override,
             request_timeout: command.request_timeout(),
@@ -158,8 +168,8 @@ pub(super) fn resolve_connect_target(command: &CommandContext) -> Result<Connect
 
     let config = Config::load_at(command.config_path_override())?;
     let (server_name, srv) = config.resolve_server(command.server())?;
-    let tls_config = srv.tls_config(server_name);
-    let api_key = srv.resolve_optional_api_key(server_name)?;
+    let tls_config = server_tls_config(srv, server_name);
+    let api_key = crate::credentials::resolve_optional_api_key(srv, server_name)?;
     let cached_auth = if api_key.is_some() {
         srv.auth_method
     } else {

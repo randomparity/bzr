@@ -160,6 +160,28 @@ fn resolve_connect_target_inline_server_carries_email() {
 }
 
 #[test]
+fn server_tls_config_copies_persisted_tls_fields() {
+    let server = crate::config::ServerConfig {
+        url: "https://bugzilla.example.com".into(),
+        tls_ca_cert: Some(PathBuf::from("/tmp/example-ca.pem")),
+        tls_pin_sha256: Some("sha256//pin-value".into()),
+        tls_pin_issuer_der: Some("issuer-der".into()),
+        ..crate::config::ServerConfig::default()
+    };
+
+    let tls_config = super::server_tls_config(&server, "prod");
+
+    assert!(!tls_config.insecure);
+    assert_eq!(
+        tls_config.ca_cert_path.as_deref(),
+        Some(std::path::Path::new("/tmp/example-ca.pem"))
+    );
+    assert_eq!(tls_config.pin_sha256.as_deref(), Some("sha256//pin-value"));
+    assert_eq!(tls_config.pin_issuer_der.as_deref(), Some("issuer-der"));
+    assert_eq!(tls_config.server_name.as_deref(), Some("prod"));
+}
+
+#[test]
 fn extract_hostname_parses_url() {
     assert_eq!(
         super::extract_hostname("https://example.com/path"),

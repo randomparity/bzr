@@ -117,7 +117,7 @@ impl ServerConfig {
     /// for the inline `--server-url` flow. The result is never written to disk:
     /// auth method and API mode are left unset (detected per-invocation) and TLS
     /// uses the default OS trust store. Construction cannot fail; an unset or
-    /// empty env var surfaces later from [`Self::resolve_api_key`].
+    /// empty env var surfaces later during connection target resolution.
     #[must_use]
     pub fn from_url_with_env_key(url: String, api_key_env: String, email: Option<String>) -> Self {
         ServerConfig {
@@ -125,16 +125,6 @@ impl ServerConfig {
             api_key_env: Some(api_key_env),
             email,
             ..Self::default()
-        }
-    }
-
-    pub fn tls_config(&self, server_name: &str) -> crate::tls::TlsConfig {
-        crate::tls::TlsConfig {
-            insecure: self.tls_insecure,
-            ca_cert_path: self.tls_ca_cert.clone(),
-            pin_sha256: self.tls_pin_sha256.clone(),
-            pin_issuer_der: self.tls_pin_issuer_der.clone(),
-            server_name: Some(server_name.to_string()),
         }
     }
 
@@ -179,41 +169,6 @@ impl ServerConfig {
 
     pub fn credential_source_kind(&self) -> Result<Option<CredentialSourceKind>> {
         Ok(self.credential_source()?.map(|source| source.kind()))
-    }
-
-    pub fn resolve_optional_api_key(&self, server_name: &str) -> Result<Option<String>> {
-        match self.credential_source()? {
-            Some(CredentialSource::Inline(api_key)) => Ok(Some(api_key.to_string())),
-            Some(CredentialSource::EnvVar(var_name)) => {
-                let value = std::env::var(var_name).map_err(|_| {
-                    BzrError::config(format!(
-                        "server '{server_name}' uses API key env var '{var_name}', but it is not set"
-                    ))
-                })?;
-                if value.is_empty() {
-                    return Err(BzrError::config(format!(
-                        "server '{server_name}' uses API key env var '{var_name}', but it is empty"
-                    )));
-                }
-                Ok(Some(value))
-            }
-            Some(CredentialSource::Keyring { service, account }) => {
-                let account = match account {
-                    KeyringAccount::Explicit(account) => account,
-                    KeyringAccount::ServerDefault => server_name,
-                };
-                crate::credentials::keyring::retrieve(service, account).map(Some)
-            }
-            None => Ok(None),
-        }
-    }
-
-    pub fn resolve_api_key(&self, server_name: &str) -> Result<String> {
-        self.resolve_optional_api_key(server_name)?.ok_or_else(|| {
-            BzrError::config(format!(
-                "server '{server_name}' has no API key source configured"
-            ))
-        })
     }
 
     pub fn validate_tls(&self, server_name: &str) -> Result<()> {

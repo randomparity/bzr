@@ -178,14 +178,6 @@ fn credential_source_allows_no_api_key_source() {
 }
 
 #[test]
-fn resolve_optional_api_key_none_without_source() {
-    let mut srv = make_server_config("https://example.com");
-    srv.api_key = None;
-
-    assert_eq!(srv.resolve_optional_api_key("public").unwrap(), None);
-}
-
-#[test]
 fn validate_tls_rejects_missing_ca_cert_file() {
     let mut srv = make_server_config("https://example.com");
     srv.tls_ca_cert = Some(std::path::PathBuf::from(
@@ -356,11 +348,7 @@ api_key_env = "BZR_TEST_API_KEY"
 }
 
 #[test]
-fn env_backed_server_resolves_api_key_from_environment() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
-    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
-    unsafe { env::set_var("BZR_TEST_API_KEY", "secret-from-env") };
-
+fn env_backed_server_reports_env_credential_source() {
     let server = ServerConfig {
         url: "https://bugzilla.example.com".into(),
         api_key: None,
@@ -377,7 +365,6 @@ fn env_backed_server_resolves_api_key_from_environment() {
         tls_pin_issuer_der: None,
     };
 
-    assert_eq!(server.resolve_api_key("test").unwrap(), "secret-from-env");
     assert_eq!(
         server.credential_source_kind().unwrap(),
         Some(CredentialSourceKind::Env)
@@ -583,114 +570,6 @@ fn credential_source_rejects_all_three() {
     };
     let err = server.credential_source().unwrap_err();
     assert!(err.to_string().contains("multiple API key sources"));
-}
-
-#[cfg(feature = "keyring")]
-#[test]
-fn resolve_api_key_from_keyring() {
-    crate::credentials::keyring::install_test_store();
-    crate::credentials::keyring::store("bzr", "resolve-test-srv1", "keyring-secret").unwrap();
-
-    let server = ServerConfig {
-        url: "https://example.com".into(),
-        api_key: None,
-        api_key_env: None,
-        api_key_keyring: Some(KeyringRef {
-            service: None,
-            account: Some("resolve-test-srv1".into()),
-        }),
-        email: None,
-        auth_method: None,
-        api_mode: None,
-        server_version: None,
-        tls_insecure: false,
-        tls_ca_cert: None,
-        tls_pin_sha256: None,
-        tls_pin_issuer: None,
-        tls_pin_issuer_der: None,
-    };
-
-    assert_eq!(
-        server.resolve_api_key("resolve-test-srv1").unwrap(),
-        "keyring-secret"
-    );
-
-    // cleanup
-    crate::credentials::keyring::delete("bzr", "resolve-test-srv1").unwrap();
-}
-
-#[cfg(feature = "keyring")]
-#[test]
-fn resolve_api_key_from_keyring_with_explicit_service_and_account() {
-    crate::credentials::keyring::install_test_store();
-    crate::credentials::keyring::store(
-        "resolve-test-myservice",
-        "resolve-test-myacct",
-        "explicit-secret",
-    )
-    .unwrap();
-
-    let server = ServerConfig {
-        url: "https://example.com".into(),
-        api_key: None,
-        api_key_env: None,
-        api_key_keyring: Some(KeyringRef {
-            service: Some("resolve-test-myservice".into()),
-            account: Some("resolve-test-myacct".into()),
-        }),
-        email: None,
-        auth_method: None,
-        api_mode: None,
-        server_version: None,
-        tls_insecure: false,
-        tls_ca_cert: None,
-        tls_pin_sha256: None,
-        tls_pin_issuer: None,
-        tls_pin_issuer_der: None,
-    };
-
-    assert_eq!(
-        server.resolve_api_key("any-name").unwrap(),
-        "explicit-secret"
-    );
-
-    crate::credentials::keyring::delete("resolve-test-myservice", "resolve-test-myacct").unwrap();
-}
-
-#[cfg(feature = "keyring")]
-#[test]
-fn resolve_api_key_from_keyring_defaults_account_to_server_name() {
-    crate::credentials::keyring::install_test_store();
-    // Store under the server name (no explicit account).
-    crate::credentials::keyring::store("bzr", "resolve-test-srv2", "default-account-secret")
-        .unwrap();
-
-    let server = ServerConfig {
-        url: "https://example.com".into(),
-        api_key: None,
-        api_key_env: None,
-        // Neither service nor account set — should default to ("bzr", server_name).
-        api_key_keyring: Some(KeyringRef {
-            service: None,
-            account: None,
-        }),
-        email: None,
-        auth_method: None,
-        api_mode: None,
-        server_version: None,
-        tls_insecure: false,
-        tls_ca_cert: None,
-        tls_pin_sha256: None,
-        tls_pin_issuer: None,
-        tls_pin_issuer_der: None,
-    };
-
-    assert_eq!(
-        server.resolve_api_key("resolve-test-srv2").unwrap(),
-        "default-account-secret"
-    );
-
-    crate::credentials::keyring::delete("bzr", "resolve-test-srv2").unwrap();
 }
 
 #[test]
