@@ -1,6 +1,5 @@
 pub(crate) mod attachment;
 pub(crate) mod bug;
-pub(crate) mod bug_fields;
 pub(crate) mod classification;
 pub(crate) mod comment;
 pub(crate) mod component;
@@ -21,7 +20,6 @@ pub use bug::{
     HistoryEntry, IdListUpdate, NegationOp, Overrides, SearchParams, StringListUpdate,
     UpdateBugParams, FIELD_MAPPINGS,
 };
-pub use bug_fields::ColumnSpec;
 pub use classification::{Classification, ClassificationProduct};
 pub use comment::{AddCommentParams, Comment, UpdateCommentTagsParams};
 pub use component::{Component, CreateComponentParams, UpdateComponentParams};

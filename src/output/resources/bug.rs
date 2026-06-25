@@ -9,11 +9,10 @@ use crate::output::formatting::{
     colorize_status, render_flags_inline, shorten_email, truncate, write_divider, write_field,
     write_formatted, write_json_family, SUMMARY_TRUNCATE_WIDTH,
 };
-use crate::types::bug::{Bug, HistoryEntry};
-use crate::types::bug_fields::{
+use crate::types::bug::{
     apply_exclude, canonical_excludes, canonical_field_list, default_selected_fields,
-    field_selected, partition_include, selected_custom_detail_fields, BugField, ColumnSpec,
-    SelectedBugField,
+    field_selected, partition_include, selected_custom_detail_fields, Bug, BugField, ColumnSpec,
+    HistoryEntry, SelectedBugField,
 };
 use crate::types::output::OutputFormat;
 

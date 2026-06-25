@@ -4,8 +4,7 @@ use super::*;
 use crate::commands::runtime::search::fields::{
     validate_json_field_selection, validate_table_columns, warn_unknown_fields,
 };
-use crate::types::bug_fields::BUG_FIELDS;
-use crate::types::ColumnSpec;
+use crate::types::bug::{ColumnSpec, BUG_FIELDS};
 use crate::types::{Bug, FieldChange, Flag, HistoryEntry};
 
 fn review_flag(status: &str, requestee: Option<&str>) -> Flag {
