@@ -47,8 +47,13 @@ fn valid_login_response_integer_result() {
 }
 
 #[test]
-fn valid_login_response_missing_result_defaults_false() {
+fn valid_login_response_missing_result_errors() {
     let json = r"{}";
-    let resp: ValidLoginResponse = serde_json::from_str(json).unwrap();
-    assert!(!resp.result.is_valid());
+    let result = serde_json::from_str::<ValidLoginResponse>(json);
+    assert!(result.is_err(), "missing result should fail to deserialize");
+    let err = result.err().unwrap();
+    assert!(
+        err.to_string().contains("missing field `result`"),
+        "unexpected error: {err}",
+    );
 }
