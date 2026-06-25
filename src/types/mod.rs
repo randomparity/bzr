@@ -16,8 +16,8 @@ pub(crate) mod user;
 
 pub use attachment::{Attachment, UpdateAttachmentParams, UploadAttachmentParams};
 pub use bug::{
-    partition_filters, Bug, CommentUpdate, CreateBugParams, FieldChange, FieldMapping, FilterField,
-    HistoryEntry, IdListUpdate, NegationOp, Overrides, SearchParams, StringListUpdate,
+    partition_filters, Bug, ColumnSpec, CommentUpdate, CreateBugParams, FieldChange, FieldMapping,
+    FilterField, HistoryEntry, IdListUpdate, NegationOp, Overrides, SearchParams, StringListUpdate,
     UpdateBugParams, FIELD_MAPPINGS,
 };
 pub use classification::{Classification, ClassificationProduct};

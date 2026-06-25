@@ -538,4 +538,4 @@ reserved for credentials). The full reference for these flags is in
 
 MIT
 
-![Desloppify Score: 92.5](scorecard.png)
+![Desloppify Score: overall 92.4, strict 92.3](scorecard.png)
