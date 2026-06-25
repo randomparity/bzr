@@ -89,7 +89,7 @@ async fn hybrid_uses_xmlrpc_directly_for_attachment_list() {
     let client = test_client_hybrid(&mock.uri());
     let attachments = client.get_attachments(42).await.unwrap();
     assert_eq!(attachments.len(), 3);
-    assert_eq!(attachments[0].file_name, "xmlrpc-1.txt");
+    assert_eq!(attachments[0].file_name.as_deref(), Some("xmlrpc-1.txt"));
     assert_eq!(attachments[0].data.as_deref(), Some("aW5saW5lLWRhdGE="));
 }
 
@@ -131,7 +131,7 @@ async fn hybrid_xmlrpc_transport_error_falls_back_to_rest_for_attachment_list() 
     let client = test_client_hybrid(&mock.uri());
     let attachments = client.get_attachments(42).await.unwrap();
     assert_eq!(attachments.len(), 2);
-    assert_eq!(attachments[0].file_name, "rest-10.txt");
+    assert_eq!(attachments[0].file_name.as_deref(), Some("rest-10.txt"));
 }
 
 #[tokio::test]
@@ -254,8 +254,8 @@ async fn hybrid_uses_xmlrpc_directly_for_get_attachment() {
     let client = test_client_hybrid(&mock.uri());
     let attachment = client.get_attachment(2001).await.unwrap();
     assert_eq!(attachment.id, 2001);
-    assert!(attachment.is_private);
-    assert_eq!(attachment.file_name, "x-2001.txt");
+    assert_eq!(attachment.is_private, Some(true));
+    assert_eq!(attachment.file_name.as_deref(), Some("x-2001.txt"));
 }
 
 #[tokio::test]
@@ -278,7 +278,7 @@ async fn hybrid_xmlrpc_transport_error_falls_back_to_rest_for_get_attachment() {
     let client = test_client_hybrid(&mock.uri());
     let attachment = client.get_attachment(2002).await.unwrap();
     assert_eq!(attachment.id, 2002);
-    assert_eq!(attachment.file_name, "rest-2002.txt");
+    assert_eq!(attachment.file_name.as_deref(), Some("rest-2002.txt"));
 }
 
 #[tokio::test]
@@ -626,7 +626,7 @@ async fn get_attachments_accepts_bugs_envelope() {
     let attachments = client.get_attachments(42).await.unwrap();
     assert_eq!(attachments.len(), 1);
     assert_eq!(attachments[0].id, 100);
-    assert_eq!(attachments[0].file_name, "patch.diff");
+    assert_eq!(attachments[0].file_name.as_deref(), Some("patch.diff"));
 }
 
 #[tokio::test]
@@ -661,7 +661,7 @@ async fn get_attachments_accepts_flat_attachments_envelope() {
     let attachments = client.get_attachments(42).await.unwrap();
     assert_eq!(attachments.len(), 1);
     assert_eq!(attachments[0].id, 200);
-    assert_eq!(attachments[0].file_name, "alt.diff");
+    assert_eq!(attachments[0].file_name.as_deref(), Some("alt.diff"));
 }
 
 #[tokio::test]
@@ -712,7 +712,8 @@ async fn get_attachments_prefers_bugs_when_both_envelopes_populated() {
     let attachments = client.get_attachments(42).await.unwrap();
     assert_eq!(attachments.len(), 1);
     assert_eq!(
-        attachments[0].file_name, "from_bugs.diff",
+        attachments[0].file_name.as_deref(),
+        Some("from_bugs.diff"),
         "should prefer bugs-keyed envelope when both present"
     );
 }
@@ -756,7 +757,7 @@ async fn get_attachments_falls_through_when_bugs_map_empty_and_flat_populated() 
         1,
         "should fall through to flat envelope, not return empty"
     );
-    assert_eq!(attachments[0].file_name, "from_flat.diff");
+    assert_eq!(attachments[0].file_name.as_deref(), Some("from_flat.diff"));
 }
 
 #[tokio::test]
@@ -808,8 +809,8 @@ async fn get_attachment_metadata_excludes_data_field() {
     let client = test_client(&mock.uri());
     let att = client.get_attachment_metadata(9876).await.unwrap();
     assert_eq!(att.id, 9876);
-    assert_eq!(att.file_name, "patch.diff");
-    assert!(att.is_patch);
+    assert_eq!(att.file_name.as_deref(), Some("patch.diff"));
+    assert_eq!(att.is_patch, Some(true));
     assert!(att.data.is_none(), "metadata fetch must not carry bytes");
 }
 
@@ -867,7 +868,7 @@ async fn get_attachment_metadata_xmlrpc_uses_xmlrpc_and_strips_data() {
     let client = test_client_xmlrpc(&mock.uri());
     let att = client.get_attachment_metadata(2004).await.unwrap();
     assert_eq!(att.id, 2004);
-    assert!(att.is_private);
+    assert_eq!(att.is_private, Some(true));
     assert!(
         att.data.is_none(),
         "metadata path must strip bytes in xmlrpc mode"

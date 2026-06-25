@@ -11,15 +11,27 @@ use crate::types::output::OutputFormat;
 
 /// Write the colored `Attachment #<id> - <summary> [FLAGS]` header line.
 fn write_attachment_header<W: Write + ?Sized>(a: &Attachment, out: &mut W) {
-    let patch = if a.is_patch { " [PATCH]" } else { "" };
-    let obsolete = if a.is_obsolete { " [OBSOLETE]" } else { "" };
-    let private = if a.is_private { " [PRIVATE]" } else { "" };
+    let patch = if a.is_patch.unwrap_or(false) {
+        " [PATCH]"
+    } else {
+        ""
+    };
+    let obsolete = if a.is_obsolete.unwrap_or(false) {
+        " [OBSOLETE]"
+    } else {
+        ""
+    };
+    let private = if a.is_private.unwrap_or(false) {
+        " [PRIVATE]"
+    } else {
+        ""
+    };
     let _ = writeln!(
         out,
         "{} #{} - {}{}{}{}",
         "Attachment".bold(),
         a.id,
-        a.summary.bold(),
+        a.summary.as_deref().unwrap_or("unknown").bold(),
         patch.cyan(),
         obsolete.red(),
         private.red(),
@@ -28,10 +40,17 @@ fn write_attachment_header<W: Write + ?Sized>(a: &Attachment, out: &mut W) {
 
 /// Write the `File: <name> (<type>, <n> bytes)` field.
 fn write_attachment_file<W: Write + ?Sized>(a: &Attachment, out: &mut W) {
+    let size = a
+        .size
+        .map_or_else(|| "unknown".to_string(), |value| value.to_string());
     write_field(
         out,
         "File",
-        &format!("{} ({}, {} bytes)", a.file_name, a.content_type, a.size),
+        &format!(
+            "{} ({}, {size} bytes)",
+            a.file_name.as_deref().unwrap_or("unknown"),
+            a.content_type.as_deref().unwrap_or("unknown"),
+        ),
     );
 }
 
@@ -60,7 +79,10 @@ pub fn write_attachments<W: Write + ?Sized>(
 pub fn write_attachment<W: Write + ?Sized>(a: &Attachment, format: OutputFormat, out: &mut W) {
     write_formatted(a, format, out, |a, out| {
         write_attachment_header(a, out);
-        write_field(out, "Bug", &a.bug_id.to_string());
+        let bug = a
+            .bug_id
+            .map_or_else(|| "-".to_string(), |value| value.to_string());
+        write_field(out, "Bug", &bug);
         write_attachment_file(a, out);
         write_optional_field(out, "Creator", a.creator.as_deref());
         write_optional_field(out, "Created", a.creation_time.as_deref());

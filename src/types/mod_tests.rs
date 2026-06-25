@@ -95,8 +95,8 @@ fn comment_deserialize_minimal() {
     let json = r#"{"id": 100, "bug_id": 10}"#;
     let comment: Comment = serde_json::from_str(json).unwrap();
     assert_eq!(comment.id, 100);
-    assert_eq!(comment.text, "");
-    assert!(!comment.is_private);
+    assert_eq!(comment.text, None);
+    assert_eq!(comment.is_private, None);
 }
 
 // Attachment deserialization
@@ -106,8 +106,8 @@ fn attachment_deserialize_minimal() {
     let json = r#"{"id": 50, "bug_id": 10}"#;
     let att: Attachment = serde_json::from_str(json).unwrap();
     assert_eq!(att.id, 50);
-    assert_eq!(att.file_name, "");
-    assert!(!att.is_obsolete);
+    assert_eq!(att.file_name, None);
+    assert_eq!(att.is_obsolete, None);
 }
 
 // WhoamiResponse deserialization

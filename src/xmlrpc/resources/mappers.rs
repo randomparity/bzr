@@ -12,10 +12,14 @@ pub(crate) const EXPECTED_STRUCT_RESPONSE: &str = "expected struct response";
 /// or `<int>1</int>` on the wire. Bugzilla 5.0.x XML-RPC responses use both
 /// shapes interchangeably for the same flag depending on the field.
 pub(crate) fn get_bool_flag(m: &BTreeMap<String, Value>, key: &str) -> bool {
+    get_optional_bool_flag(m, key).unwrap_or(false)
+}
+
+pub(crate) fn get_optional_bool_flag(m: &BTreeMap<String, Value>, key: &str) -> Option<bool> {
     match m.get(key) {
-        Some(Value::Bool(b)) => *b,
-        Some(Value::Int(n)) => *n != 0,
-        _ => false,
+        Some(Value::Bool(b)) => Some(*b),
+        Some(Value::Int(n)) => Some(*n != 0),
+        _ => None,
     }
 }
 

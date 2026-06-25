@@ -2,14 +2,15 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use super::flag::{Flag, FlagUpdate};
 
-/// Deserialize a boolean that may arrive as an integer (0/1) from Bugzilla 5.0.
-fn bool_from_int_or_bool<'de, D: Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+/// Deserialize an optional boolean that may arrive as an integer (0/1) from Bugzilla 5.0.
+fn option_bool_from_int_or_bool<'de, D: Deserializer<'de>>(d: D) -> Result<Option<bool>, D::Error> {
     let v = serde_json::Value::deserialize(d)?;
     match v {
-        serde_json::Value::Bool(b) => Ok(b),
+        serde_json::Value::Null => Ok(None),
+        serde_json::Value::Bool(b) => Ok(Some(b)),
         serde_json::Value::Number(n) => match n.as_u64() {
-            Some(0) => Ok(false),
-            Some(1) => Ok(true),
+            Some(0) => Ok(Some(false)),
+            Some(1) => Ok(Some(true)),
             _ => Err(serde::de::Error::custom(format!(
                 "expected bool or 0/1 integer, got {n}"
             ))),
@@ -24,16 +25,16 @@ fn bool_from_int_or_bool<'de, D: Deserializer<'de>>(d: D) -> Result<bool, D::Err
 #[non_exhaustive]
 pub struct Attachment {
     pub id: u64,
-    /// Parent bug. Tolerant of absence (defaults to `0`) for off-spec servers
-    /// and flat envelopes; `id` (the primary key) stays required.
+    /// Parent bug when the server included it; `id` stays required because it
+    /// is the primary key.
     #[serde(default)]
-    pub bug_id: u64,
+    pub bug_id: Option<u64>,
     #[serde(default)]
-    pub file_name: String,
+    pub file_name: Option<String>,
     #[serde(default)]
-    pub summary: String,
+    pub summary: Option<String>,
     #[serde(default)]
-    pub content_type: String,
+    pub content_type: Option<String>,
     #[serde(default)]
     pub creator: Option<String>,
     #[serde(default)]
@@ -41,13 +42,13 @@ pub struct Attachment {
     #[serde(default)]
     pub last_change_time: Option<String>,
     #[serde(default)]
-    pub size: u64,
-    #[serde(default, deserialize_with = "bool_from_int_or_bool")]
-    pub is_obsolete: bool,
-    #[serde(default, deserialize_with = "bool_from_int_or_bool")]
-    pub is_private: bool,
-    #[serde(default, deserialize_with = "bool_from_int_or_bool")]
-    pub is_patch: bool,
+    pub size: Option<u64>,
+    #[serde(default, deserialize_with = "option_bool_from_int_or_bool")]
+    pub is_obsolete: Option<bool>,
+    #[serde(default, deserialize_with = "option_bool_from_int_or_bool")]
+    pub is_private: Option<bool>,
+    #[serde(default, deserialize_with = "option_bool_from_int_or_bool")]
+    pub is_patch: Option<bool>,
     #[serde(default)]
     pub flags: Vec<Flag>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
