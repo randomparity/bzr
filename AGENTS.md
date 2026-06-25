@@ -32,7 +32,16 @@ Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches the
 ### Key modules
 
 - **`cli/`** — clap derive structs split into per-resource submodules. `mod.rs` defines `Cli`, `Commands`, and re-exports all `*Action` enums. Per-resource files (`bug.rs`, `comment.rs`, `attachment.rs`, `config.rs`, `product.rs`, `field.rs`, `user.rs`, `group.rs`, `server.rs`, `classification.rs`, `component.rs`, `template.rs`, `query.rs`) each define one action enum.
-- **`client/`** — `BugzillaClient` wraps reqwest for Bugzilla REST API. Split into per-resource submodules (`bug.rs`, `attachment.rs`, `comment.rs`, `product.rs`, `user.rs`, `group.rs`, `component.rs`, `classification.rs`, `field.rs`, `server.rs`). `auth/` submodule handles auth detection (split into `whoami.rs` and `valid_login.rs` probing strategies with `mod.rs` as orchestrator). `version.rs` handles version detection and API mode determination. Public data types live in `types/`.
+- **`client/`** — `mod.rs` defines `BugzillaClient`,
+  `BugzillaClientConfig`, client construction, shared dispatch helpers, and
+  cross-resource helpers. `request.rs`, `response.rs`, and `transport.rs` own
+  the shared HTTP request/response pipeline. `resources/` is the REST resource
+  layer (`bug.rs`, `attachment.rs`, `comment.rs`, `product.rs`, `user.rs`,
+  `group.rs`, `component.rs`, `classification.rs`, `field.rs`, `server.rs`).
+  `auth/` handles auth detection (split into `whoami.rs` and `valid_login.rs`
+  probing strategies with `mod.rs` as orchestrator). `version.rs` handles
+  version detection and API mode determination. Public data types live in
+  `types/`.
 - **`config/`** — configuration subsystem for `~/.config/bzr/config.toml`.
   `model.rs` owns the persisted domain model (`Config`, `ServerConfig`,
   credential source types, saved templates, and saved queries). `store.rs`
