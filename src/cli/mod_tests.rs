@@ -1449,6 +1449,18 @@ fn quiet_help_mentions_tracing_is_suppressed() {
 }
 
 #[test]
+fn api_help_describes_transport_preference_not_exclusivity() {
+    let help = Cli::command().render_long_help().to_string();
+    assert!(
+        help.contains("`rest` prefers Bugzilla's REST API"),
+        "{help}"
+    );
+    assert!(help.contains("transport-specific exceptions"), "{help}");
+    assert!(!help.contains("REST API exclusively"), "{help}");
+    assert!(!help.contains("XML-RPC for every call"), "{help}");
+}
+
+#[test]
 fn migrate_to_keyring_help_requires_yes_without_prompt_text() {
     let mut command = Cli::command();
     let Some(config) = command.find_subcommand_mut("config") else {

@@ -48,7 +48,7 @@ For installation and quick start, see [README.md](../README.md).
 | `--config <PATH>` | Use an alternate `config.toml` for reads and writes. Takes precedence over `BZR_CONFIG`; both override the default config directory. |
 | `--no-color` | Disable colored output. Color is also suppressed automatically when stdout is not a TTY. |
 | `--quiet` | Suppress stdout and tracing logs (exit code confirms success) |
-| `--api <MODE>` | Override API transport: `rest`, `xmlrpc`, or `hybrid`. Auto-detected from server version if not set. |
+| `--api <MODE>` | Override preferred API transport: `rest`, `xmlrpc`, or `hybrid`. Some operations use transport-specific exceptions when one Bugzilla API cannot provide equivalent behavior. Auto-detected from server version if not set. |
 | `--timeout <SECS>` | Per-request timeout in seconds (default 30). Takes precedence over `BZR_TIMEOUT`. The 10s connect timeout is unaffected. |
 | `--retry <N>` | Retry transient failures up to N times with exponential backoff honoring `Retry-After`. 429 and connect failures are retried for any operation; 5xx and read timeouts only for safe reads (GET/HEAD), never for writes (create, update, comment) where a replay could duplicate the effect. Default 0 (disabled); max 10. Exhausted retries exit 5. |
 | `--dry-run` | Preview a supported mutation without writing. Resolves and validates the request, then prints the would-be payload and affected IDs as `{"resource":"bug","action":"dry-run","ids":[...],"changes":{...}}` instead of calling the write API. Exits 0 on a valid request. Supported for `bug create`, `update`, `clone`, `resolve`, `close`, `reopen`, `dup`, and `product`/`component`/`user`/`group` `create` and `update`; on any other command it exits 7. `bug clone` still reads the source bug to build the preview. |
@@ -2267,7 +2267,7 @@ To generate an API key:
 
 ## API Transport
 
-`bzr` supports three API transport modes: `rest`, `hybrid`, and `xmlrpc`. On first use, it auto-detects the server version and selects the best mode:
+`bzr` supports three preferred API transport modes: `rest`, `hybrid`, and `xmlrpc`. On first use, it auto-detects the server version and selects the best mode:
 
 | Server Version | Mode | Notes |
 |----------------|------|-------|
@@ -2284,5 +2284,11 @@ bzr --api xmlrpc bug list --product MyProduct
 bzr --api hybrid bug search "crash"
 bzr --api rest bug view 12345
 ```
+
+`--api` is a transport preference, not an exclusivity guarantee. Some resource
+methods use transport-specific exceptions when one Bugzilla API cannot provide
+equivalent behavior. For example, selected reads may fall back across transports
+to avoid known Bugzilla REST gaps, while mutations that only have implemented
+REST support continue to use REST.
 
 In `hybrid` mode, `bzr` tries REST first for search/list operations. If REST returns empty results and the query has active filters (product, status, etc.), it retries via XML-RPC. For direct bug lookups (`bug view`), it falls back to XML-RPC on server errors but not on authentication failures.

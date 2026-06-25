@@ -255,20 +255,21 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub quiet: bool,
 
-    /// Override API transport: `rest`, `xmlrpc`, or `hybrid`.
+    /// Override preferred API transport: `rest`, `xmlrpc`, or `hybrid`.
     ///
-    /// `rest` uses Bugzilla's REST API exclusively. `xmlrpc` uses
-    /// XML-RPC for every call. `hybrid` uses REST where possible
-    /// and falls back to XML-RPC for endpoints REST can't express
-    /// reliably (e.g. `bzr user create` on Bugzilla 5.3+ when
-    /// `use_email_as_login` is disabled). Most users won't need
-    /// this -- bzr probes on first use and caches the working
-    /// transport per server (the auto-detected default depends on
-    /// the server's Bugzilla version: `hybrid` for 5.0.x, `rest`
-    /// for >= 5.1, `xmlrpc` for older). Pass `rest` here (or set
-    /// `api_mode = "rest"` in the server's config block) to
-    /// skip the empty-result XML-RPC retry on servers with
-    /// slow XML-RPC.
+    /// This chooses the preferred transport for API calls. It does
+    /// not guarantee that every operation uses only that transport:
+    /// some resource methods use transport-specific exceptions when
+    /// one Bugzilla API cannot provide equivalent behavior. `rest`
+    /// prefers Bugzilla's REST API. `xmlrpc` prefers XML-RPC.
+    /// `hybrid` prefers REST and falls back to XML-RPC for known
+    /// compatibility gaps. Most users won't need this -- bzr probes
+    /// on first use and caches the working transport per server (the
+    /// auto-detected default depends on the server's Bugzilla version:
+    /// `hybrid` for 5.0.x, `rest` for >= 5.1, `xmlrpc` for older).
+    /// Pass `rest` here (or set `api_mode = "rest"` in the server's
+    /// config block) to skip the empty-result XML-RPC retry on servers
+    /// with slow XML-RPC.
     #[arg(long, global = true)]
     pub api: Option<ApiMode>,
 
