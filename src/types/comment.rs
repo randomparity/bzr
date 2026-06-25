@@ -21,22 +21,20 @@ pub struct AddCommentParams {
 #[non_exhaustive]
 pub struct Comment {
     pub id: u64,
-    /// Parent bug. Tolerant of absence (defaults to `0`): the off-spec flat
-    /// `{"comments": [...]}` envelope some Bugzilla 5.0.x servers return (issue
-    /// #135) does not always carry `bug_id`, and `id` already identifies the
-    /// comment. `id` stays required because it is the primary key.
+    /// Parent bug when the server included it; `id` stays required because it
+    /// is the primary key.
     #[serde(default)]
-    pub bug_id: u64,
+    pub bug_id: Option<u64>,
     #[serde(default)]
-    pub text: String,
+    pub text: Option<String>,
     #[serde(default)]
     pub creator: Option<String>,
     #[serde(default)]
     pub creation_time: Option<String>,
     #[serde(default)]
-    pub count: u64,
+    pub count: Option<u64>,
     #[serde(default)]
-    pub is_private: bool,
+    pub is_private: Option<bool>,
     /// Set when the comment was created alongside an attachment via
     /// `Bug.add_attachment`. Used by `attachment upload --comment-private`
     /// to identify the just-created comment.

@@ -18,7 +18,7 @@ fn value_to_comment_parses_int_is_private() {
     comment.insert("is_private".into(), Value::Int(1));
 
     let parsed = value_to_comment(&Value::Struct(comment)).unwrap();
-    assert!(parsed.is_private);
+    assert_eq!(parsed.is_private, Some(true));
 }
 
 #[test]
@@ -93,11 +93,11 @@ async fn xmlrpc_get_comments_since_parses_full_response() {
     let comments = client.get_comments_since(42, None).await.unwrap();
 
     assert_eq!(comments.len(), 2);
-    assert_eq!(comments[0].count, 0);
-    assert!(!comments[0].is_private);
-    assert_eq!(comments[1].count, 1);
-    assert!(comments[1].is_private);
-    assert_eq!(comments[1].text, "private 1");
+    assert_eq!(comments[0].count, Some(0));
+    assert_eq!(comments[0].is_private, Some(false));
+    assert_eq!(comments[1].count, Some(1));
+    assert_eq!(comments[1].is_private, Some(true));
+    assert_eq!(comments[1].text.as_deref(), Some("private 1"));
 }
 
 #[tokio::test]

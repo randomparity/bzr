@@ -149,7 +149,7 @@ async fn auth_fallback_header_to_query_param_on_401() {
         .await
         .unwrap();
     assert_eq!(users.len(), 1);
-    assert_eq!(users[0].name, "alice@example.com");
+    assert_eq!(users[0].name.as_deref(), Some("alice@example.com"));
 }
 
 #[tokio::test]
@@ -188,7 +188,7 @@ async fn auth_fallback_query_param_to_header_on_401() {
         .await
         .unwrap();
     assert_eq!(users.len(), 1);
-    assert_eq!(users[0].name, "bob@example.com");
+    assert_eq!(users[0].name.as_deref(), Some("bob@example.com"));
 }
 
 #[tokio::test]
@@ -248,7 +248,7 @@ async fn auth_fallback_retryable_status_uses_retry_budget() {
         .unwrap();
 
     assert_eq!(users.len(), 1);
-    assert_eq!(users[0].name, "carol@example.com");
+    assert_eq!(users[0].name.as_deref(), Some("carol@example.com"));
 }
 
 #[tokio::test]

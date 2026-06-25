@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 pub struct BugzillaUser {
     pub id: u64,
     #[serde(default)]
-    pub name: String,
+    pub name: Option<String>,
     #[serde(default)]
     pub real_name: Option<String>,
     #[serde(default)]
@@ -20,11 +20,11 @@ pub struct BugzillaUser {
 #[non_exhaustive]
 pub struct UserGroup {
     #[serde(default)]
-    pub id: u64,
+    pub id: Option<u64>,
     #[serde(default)]
-    pub name: String,
+    pub name: Option<String>,
     #[serde(default)]
-    pub description: String,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,7 +32,7 @@ pub struct UserGroup {
 pub struct WhoamiResponse {
     pub id: u64,
     #[serde(default)]
-    pub name: String,
+    pub name: Option<String>,
     #[serde(default)]
     pub real_name: Option<String>,
     #[serde(default)]

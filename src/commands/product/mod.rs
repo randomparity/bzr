@@ -1,6 +1,7 @@
 //! Product subcommand handlers, split per action.
 
 use crate::cli::ProductAction;
+use crate::commands::runtime::capabilities::CommandCapabilities;
 use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::writers::Writers;
@@ -54,18 +55,11 @@ pub(crate) async fn execute(
 }
 
 #[must_use]
-pub(crate) fn is_dry_runnable(action: &ProductAction) -> bool {
-    matches!(
-        action,
-        ProductAction::Create { .. } | ProductAction::Update { .. }
-    )
-}
-
-pub(crate) fn requires_credentials(action: &ProductAction) -> Option<&'static str> {
+pub(crate) fn capabilities(action: &ProductAction) -> CommandCapabilities {
     match action {
-        ProductAction::List { .. } | ProductAction::View { .. } => None,
-        ProductAction::Create { .. } => Some("product create"),
-        ProductAction::Update { .. } => Some("product update"),
+        ProductAction::List { .. } | ProductAction::View { .. } => CommandCapabilities::anonymous(),
+        ProductAction::Create { .. } => CommandCapabilities::dry_run_mutation("product create"),
+        ProductAction::Update { .. } => CommandCapabilities::dry_run_mutation("product update"),
     }
 }
 

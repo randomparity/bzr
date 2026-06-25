@@ -8,7 +8,6 @@ use super::MalformedProbeResponse;
 
 #[derive(Deserialize)]
 struct WhoamiProbeResponse {
-    #[serde(default)]
     id: u64,
 }
 

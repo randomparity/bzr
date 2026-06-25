@@ -24,8 +24,8 @@ fn value_to_group_info_parses_membership_and_optional_fields() {
     );
 
     let info = value_to_group_info(&Value::Struct(group)).unwrap();
-    assert_eq!(info.name, "admin");
-    assert!(info.is_active);
+    assert_eq!(info.name.as_deref(), Some("admin"));
+    assert_eq!(info.is_active, Some(true));
     assert_eq!(info.membership.len(), 1);
     assert_eq!(info.membership[0].id, 7);
     assert_eq!(info.membership[0].real_name.as_deref(), Some("Alice"));
@@ -41,5 +41,5 @@ fn value_to_group_info_parses_int_is_active() {
     group.insert("membership".into(), Value::Array(Vec::new()));
 
     let info = value_to_group_info(&Value::Struct(group)).unwrap();
-    assert!(info.is_active);
+    assert_eq!(info.is_active, Some(true));
 }

@@ -160,6 +160,91 @@ fn resolve_connect_target_inline_server_carries_email() {
 }
 
 #[test]
+fn resolve_connect_target_inline_server_is_ephemeral_and_uncached() {
+    let inline = crate::commands::runtime::inline_server::InlineServer {
+        url: "https://bugzilla.example.com".into(),
+        api_key_env: None,
+        email: Some("user@example.com".into()),
+        tls: crate::commands::runtime::inline_server::InlineTlsOptions {
+            pin_now: true,
+            ..Default::default()
+        },
+    };
+    let ctx_cmd = crate::commands::runtime::context::CommandContext::new(
+        None,
+        crate::types::OutputFormat::Json,
+        Some(crate::types::ApiMode::Rest),
+    )
+    .with_config_path_override(Some(PathBuf::from("/tmp/must-not-be-read.toml")))
+    .with_inline_server(Some(inline));
+
+    let target = super::resolve_connect_target(&ctx_cmd).unwrap();
+
+    assert!(!target.ctx.persist);
+    assert!(target.ctx.config_path_override.is_none());
+    assert_eq!(target.ctx.api_override, Some(crate::types::ApiMode::Rest));
+    assert_eq!(target.cached_auth, None);
+    assert_eq!(target.cached_mode, None);
+    assert!(target.pin_current_cert);
+}
+
+#[test]
+fn resolve_connect_target_config_server_is_persistent_and_uses_cached_modes() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = crate::test_helpers::write_config_to(
+        &tmp,
+        r#"
+default_server = "test"
+
+[servers.test]
+url = "https://bugzilla.example.com"
+api_key = "test-key"
+auth_method = "header"
+api_mode = "rest"
+"#,
+    );
+    let ctx_cmd = crate::commands::runtime::context::CommandContext::new(
+        None,
+        crate::types::OutputFormat::Json,
+        None,
+    )
+    .with_config_path_override(Some(config_path.clone()));
+
+    let target = super::resolve_connect_target(&ctx_cmd).unwrap();
+
+    assert!(target.ctx.persist);
+    assert_eq!(
+        target.ctx.config_path_override.as_deref(),
+        Some(config_path.as_path())
+    );
+    assert_eq!(target.cached_auth, Some(crate::types::AuthMethod::Header));
+    assert_eq!(target.cached_mode, Some(crate::types::ApiMode::Rest));
+    assert!(!target.pin_current_cert);
+}
+
+#[test]
+fn server_tls_config_copies_persisted_tls_fields() {
+    let server = crate::config::ServerConfig {
+        url: "https://bugzilla.example.com".into(),
+        tls_ca_cert: Some(PathBuf::from("/tmp/example-ca.pem")),
+        tls_pin_sha256: Some("sha256//pin-value".into()),
+        tls_pin_issuer_der: Some("issuer-der".into()),
+        ..crate::config::ServerConfig::default()
+    };
+
+    let tls_config = super::server_tls_config(&server, "prod");
+
+    assert!(!tls_config.insecure);
+    assert_eq!(
+        tls_config.ca_cert_path.as_deref(),
+        Some(std::path::Path::new("/tmp/example-ca.pem"))
+    );
+    assert_eq!(tls_config.pin_sha256.as_deref(), Some("sha256//pin-value"));
+    assert_eq!(tls_config.pin_issuer_der.as_deref(), Some("issuer-der"));
+    assert_eq!(tls_config.server_name.as_deref(), Some("prod"));
+}
+
+#[test]
 fn extract_hostname_parses_url() {
     assert_eq!(
         super::extract_hostname("https://example.com/path"),

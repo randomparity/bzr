@@ -6,15 +6,15 @@ use crate::types::{BugzillaUser, UserGroup, WhoamiResponse};
 fn make_user(id: u64, name: &str, can_login: Option<bool>, groups: Vec<&str>) -> BugzillaUser {
     BugzillaUser {
         id,
-        name: name.into(),
+        name: Some(name.into()),
         real_name: Some(format!("{name} Real")),
         email: Some(format!("{name}@example.com")),
         groups: groups
             .into_iter()
             .map(|g| UserGroup {
-                id: 1,
-                name: g.into(),
-                description: String::new(),
+                id: Some(1),
+                name: Some(g.into()),
+                description: Some(String::new()),
             })
             .collect(),
         can_login,
@@ -24,7 +24,7 @@ fn make_user(id: u64, name: &str, can_login: Option<bool>, groups: Vec<&str>) ->
 fn make_whoami() -> WhoamiResponse {
     WhoamiResponse {
         id: 42,
-        name: "testuser".into(),
+        name: Some("testuser".into()),
         real_name: Some("Test User".into()),
         login: Some("testuser@example.com".into()),
     }
@@ -88,7 +88,7 @@ fn print_whoami_json() {
 fn print_whoami_json_minimal() {
     let whoami = WhoamiResponse {
         id: 1,
-        name: "bot".into(),
+        name: Some("bot".into()),
         real_name: None,
         login: None,
     };
@@ -194,7 +194,7 @@ fn write_users_detailed_table_renders_groups_and_login() {
 fn write_users_detailed_handles_missing_real_name_and_email() {
     let users = vec![BugzillaUser {
         id: 99,
-        name: "minimal".into(),
+        name: Some("minimal".into()),
         real_name: None,
         email: None,
         groups: vec![],
@@ -240,7 +240,7 @@ fn write_whoami_json_via_write() {
 fn write_whoami_table_renders_dashes_for_missing_fields() {
     let whoami = WhoamiResponse {
         id: 1,
-        name: "bot".into(),
+        name: Some("bot".into()),
         real_name: None,
         login: None,
     };

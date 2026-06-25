@@ -41,7 +41,7 @@ async fn get_group_members_returns_users() {
         .await
         .unwrap();
     assert_eq!(users.len(), 2);
-    assert_eq!(users[0].name, "alice@example.com");
+    assert_eq!(users[0].name.as_deref(), Some("alice@example.com"));
 }
 
 #[tokio::test]
@@ -73,9 +73,9 @@ async fn get_group_members_details_sends_include_fields() {
         .await
         .unwrap();
     assert_eq!(users.len(), 1);
-    assert_eq!(users[0].name, "alice@example.com");
+    assert_eq!(users[0].name.as_deref(), Some("alice@example.com"));
     assert_eq!(users[0].groups.len(), 1);
-    assert_eq!(users[0].groups[0].name, "admin");
+    assert_eq!(users[0].groups[0].name.as_deref(), Some("admin"));
     assert_eq!(users[0].can_login, Some(true));
 }
 
@@ -196,8 +196,8 @@ async fn get_group_returns_info() {
 
     let client = test_client(&mock.uri());
     let info = client.get_group("admin").await.unwrap();
-    assert_eq!(info.name, "admin");
-    assert!(info.is_active);
+    assert_eq!(info.name.as_deref(), Some("admin"));
+    assert_eq!(info.is_active, Some(true));
 }
 
 #[tokio::test]
@@ -277,8 +277,8 @@ async fn hybrid_get_group_32610_falls_back_to_xmlrpc() {
 
     let client = test_client_hybrid(&mock.uri());
     let info = client.get_group("admin").await.unwrap();
-    assert_eq!(info.name, "admin");
-    assert_eq!(info.description, "Administrators");
+    assert_eq!(info.name.as_deref(), Some("admin"));
+    assert_eq!(info.description.as_deref(), Some("Administrators"));
 }
 
 #[tokio::test]
@@ -311,7 +311,7 @@ async fn hybrid_get_group_transport_failure_falls_back_to_xmlrpc() {
 
     let client = test_client_hybrid(&mock.uri());
     let info = client.get_group("admin").await.unwrap();
-    assert_eq!(info.name, "admin");
+    assert_eq!(info.name.as_deref(), Some("admin"));
 }
 
 #[tokio::test]
@@ -348,8 +348,8 @@ async fn rest_get_group_32610_falls_back_to_xmlrpc() {
     // Uses test_client (Rest mode), not hybrid
     let client = test_client(&mock.uri());
     let info = client.get_group("admin").await.unwrap();
-    assert_eq!(info.name, "admin");
-    assert_eq!(info.description, "Administrators");
+    assert_eq!(info.name.as_deref(), Some("admin"));
+    assert_eq!(info.description.as_deref(), Some("Administrators"));
 }
 
 #[tokio::test]
@@ -389,7 +389,7 @@ async fn xmlrpc_mode_get_group_bypasses_rest() {
     .unwrap();
 
     let info = client.get_group("admin").await.unwrap();
-    assert_eq!(info.name, "admin");
+    assert_eq!(info.name.as_deref(), Some("admin"));
 }
 
 #[tokio::test]

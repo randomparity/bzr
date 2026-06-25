@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use base64::Engine;
 
 use crate::error::{BzrError, Result};
-use crate::tls::fingerprint::{compute_fingerprint, parse_pin};
+use crate::tls::fingerprint::compute_fingerprint;
 
 /// A rustls `ServerCertVerifier` that validates the leaf certificate's
 /// SHA-256 fingerprint against a pinned value, bypassing CA chain
@@ -42,7 +42,7 @@ impl PinnedCertVerifier {
         pin_issuer_der_b64: Option<&str>,
         server_name: &str,
     ) -> Result<Self> {
-        let pin_hash = parse_pin(pin_sha256)?;
+        let pin_hash = crate::validation::parse_sha256_pin(pin_sha256)?;
         let provider = super::default_provider();
 
         let pin_issuer_der = pin_issuer_der_b64
@@ -158,9 +158,15 @@ pub(crate) fn build_ca_cert_config(ca_pem_path: &Path) -> Result<rustls::ClientC
     let mut root_store = RootCertStore::empty();
 
     // Add system roots.
-    let native_certs = rustls_native_certs::load_native_certs();
-    for cert in native_certs.certs {
-        let _ = root_store.add(cert);
+    let native_root_summary =
+        add_native_roots(&mut root_store, rustls_native_certs::load_native_certs());
+    if native_root_summary.has_errors() {
+        tracing::debug!(
+            native_roots_added = native_root_summary.added,
+            native_root_load_errors = native_root_summary.load_errors,
+            native_root_add_errors = native_root_summary.add_errors,
+            "custom CA TLS setup continued after native root store errors"
+        );
     }
 
     // Parse and add custom CA certs from the PEM file.
@@ -194,6 +200,40 @@ pub(crate) fn build_ca_cert_config(ca_pem_path: &Path) -> Result<rustls::ClientC
         .with_no_client_auth();
 
     Ok(config)
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct NativeRootLoadSummary {
+    added: usize,
+    load_errors: usize,
+    add_errors: usize,
+}
+
+impl NativeRootLoadSummary {
+    fn has_errors(&self) -> bool {
+        self.load_errors > 0 || self.add_errors > 0
+    }
+}
+
+fn add_native_roots(
+    root_store: &mut RootCertStore,
+    native_certs: rustls_native_certs::CertificateResult,
+) -> NativeRootLoadSummary {
+    let mut summary = NativeRootLoadSummary::default();
+    for error in native_certs.errors {
+        summary.load_errors += 1;
+        tracing::warn!("failed to load native root certificate: {error}");
+    }
+    for cert in native_certs.certs {
+        match root_store.add(cert) {
+            Ok(()) => summary.added += 1,
+            Err(error) => {
+                summary.add_errors += 1;
+                tracing::warn!("failed to add native root certificate to TLS root store: {error}");
+            }
+        }
+    }
+    summary
 }
 
 /// Build a `rustls::ClientConfig` that uses a `PinnedCertVerifier`

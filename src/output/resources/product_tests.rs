@@ -6,27 +6,27 @@ use crate::types::Product;
 fn make_product(id: u64, name: &str) -> Product {
     Product {
         id,
-        name: name.into(),
-        description: "A test product description".into(),
-        is_active: true,
+        name: Some(name.into()),
+        description: Some("A test product description".into()),
+        is_active: Some(true),
         components: vec![crate::types::Component {
             id: 1,
-            name: "General".into(),
-            description: "General component".into(),
-            is_active: true,
+            name: Some("General".into()),
+            description: Some("General component".into()),
+            is_active: Some(true),
             default_assignee: Some("dev@example.com".into()),
         }],
         versions: vec![crate::types::Version {
             id: 1,
-            name: "1.0".into(),
-            sort_key: 0,
-            is_active: true,
+            name: Some("1.0".into()),
+            sort_key: Some(0),
+            is_active: Some(true),
         }],
         milestones: vec![crate::types::Milestone {
             id: 1,
-            name: "M1".into(),
-            sort_key: 0,
-            is_active: true,
+            name: Some("M1".into()),
+            sort_key: Some(0),
+            is_active: Some(true),
         }],
     }
 }
@@ -56,7 +56,10 @@ fn product_row_conversion() {
     let row = product_row(&product);
     assert_eq!(row.id, 5);
     assert_eq!(row.name, "Gadget");
-    assert_eq!(row.description, truncate(&product.description, 60));
+    assert_eq!(
+        row.description,
+        truncate(product.description.as_deref().unwrap_or(""), 60)
+    );
     assert_eq!(row.components, 1);
 }
 
@@ -67,13 +70,13 @@ fn product_record_has_four_columns_with_correct_values() {
     // Kill vec![]/vec![String::new()]/vec!["xyzzy".into()] mutants on
     // `product_record`: assert every column position carries the real value.
     let mut product = make_product(42, "Firefox");
-    product.description = "The browser".into();
+    product.description = Some("The browser".into());
     // Add a second component so the count is >1 and can't match an empty vec.
     product.components.push(crate::types::Component {
         id: 2,
-        name: "Networking".into(),
-        description: "Networking component".into(),
-        is_active: true,
+        name: Some("Networking".into()),
+        description: Some("Networking component".into()),
+        is_active: Some(true),
         default_assignee: None,
     });
     let row = product_record(&product);
@@ -103,7 +106,7 @@ fn write_product_detail_json() {
 
 #[test]
 fn format_named_list_empty_is_blank() {
-    let empty: [(&str, bool); 0] = [];
+    let empty: [(&str, Option<bool>); 0] = [];
     assert!(format_named_list("Versions", &empty).is_empty());
 }
 
@@ -112,22 +115,22 @@ fn format_product_detail_renders_sections_and_inactive_flags() {
     let mut product = make_product(3, "Acme");
     product.components.push(crate::types::Component {
         id: 2,
-        name: "Inactive".into(),
-        description: "Inactive component".into(),
-        is_active: false,
+        name: Some("Inactive".into()),
+        description: Some("Inactive component".into()),
+        is_active: Some(false),
         default_assignee: None,
     });
     product.versions.push(crate::types::Version {
         id: 2,
-        name: "2.0".into(),
-        sort_key: 1,
-        is_active: false,
+        name: Some("2.0".into()),
+        sort_key: Some(1),
+        is_active: Some(false),
     });
     product.milestones.push(crate::types::Milestone {
         id: 2,
-        name: "M2".into(),
-        sort_key: 1,
-        is_active: false,
+        name: Some("M2".into()),
+        sort_key: Some(1),
+        is_active: Some(false),
     });
 
     let output = format_product_detail(&product);

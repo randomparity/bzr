@@ -107,6 +107,40 @@ async fn handle_search_from_url_with_custom_fields_emits_custom_field() {
 }
 
 #[tokio::test]
+async fn handle_search_from_url_fields_drive_output_projection() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("product", "TestProduct"))
+        .and(query_param("include_fields", "id,cf_release"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "summary": "Hidden by fields", "cf_release": "9.6"}]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let server_url = mock.uri();
+    let url = format!("{server_url}/buglist.cgi?product=TestProduct&include_fields=id,cf_release");
+    let action = from_url_action(url, None);
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "from-url fields search failed: {result:?}");
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed[0]["id"], 1);
+    assert_eq!(parsed[0]["cf_release"], "9.6");
+    assert!(parsed[0].get("summary").is_none());
+}
+
+#[tokio::test]
 async fn handle_search_from_url_does_not_infer_custom_fields_from_columnlist() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     let default_fields = concat!(

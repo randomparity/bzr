@@ -13,8 +13,11 @@ const CLASSIFICATION_HEADERS: &[&str] = &["ID", "NAME", "DESCRIPTION", "PRODUCTS
 fn classification_record(c: &Classification) -> Vec<String> {
     vec![
         c.id.to_string(),
-        c.name.clone(),
-        truncate(&c.description, DESCRIPTION_TRUNCATE_WIDTH),
+        c.name.clone().unwrap_or_default(),
+        truncate(
+            c.description.as_deref().unwrap_or(""),
+            DESCRIPTION_TRUNCATE_WIDTH,
+        ),
         c.products.len().to_string(),
     ]
 }
@@ -48,8 +51,8 @@ pub fn write_classification<W: Write + ?Sized>(
             out,
             "{} {}\n{}\n",
             "Classification".bold(),
-            classification.name.bold(),
-            classification.description,
+            classification.name.as_deref().unwrap_or("unknown").bold(),
+            classification.description.as_deref().unwrap_or("-"),
         );
         if !classification.products.is_empty() {
             let _ = writeln!(out, "{}:", "Products".bold());
@@ -57,8 +60,11 @@ pub fn write_classification<W: Write + ?Sized>(
                 let _ = writeln!(
                     out,
                     "  {} - {}",
-                    p.name,
-                    truncate(&p.description, DESCRIPTION_TRUNCATE_WIDTH)
+                    p.name.as_deref().unwrap_or("unknown"),
+                    truncate(
+                        p.description.as_deref().unwrap_or(""),
+                        DESCRIPTION_TRUNCATE_WIDTH
+                    )
                 );
             }
         }

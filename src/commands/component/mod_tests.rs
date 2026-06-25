@@ -1,4 +1,3 @@
-use super::{is_dry_runnable, requires_credentials};
 use crate::cli::ComponentAction;
 
 fn create_action() -> ComponentAction {
@@ -24,43 +23,28 @@ fn update_action() -> ComponentAction {
 }
 
 #[test]
-fn requires_credentials_reads_need_none() {
-    assert_eq!(
-        requires_credentials(&ComponentAction::List {
-            product: "P".into()
-        }),
-        None
-    );
-    assert_eq!(
-        requires_credentials(&ComponentAction::View {
-            product: "P".into(),
-            name: "C".into(),
-        }),
-        None
-    );
-}
+fn capabilities_are_anonymous_for_reads() {
+    let list = super::capabilities(&ComponentAction::List {
+        product: "P".into(),
+    });
+    assert!(!list.supports_dry_run());
+    assert_eq!(list.credential_requirement(), None);
 
-#[test]
-fn requires_credentials_writes_name_the_command() {
-    assert_eq!(
-        requires_credentials(&create_action()),
-        Some("component create")
-    );
-    assert_eq!(
-        requires_credentials(&update_action()),
-        Some("component update")
-    );
-}
-
-#[test]
-fn is_dry_runnable_only_for_mutations() {
-    assert!(is_dry_runnable(&create_action()));
-    assert!(is_dry_runnable(&update_action()));
-    assert!(!is_dry_runnable(&ComponentAction::List {
-        product: "P".into()
-    }));
-    assert!(!is_dry_runnable(&ComponentAction::View {
+    let view = super::capabilities(&ComponentAction::View {
         product: "P".into(),
         name: "C".into(),
-    }));
+    });
+    assert!(!view.supports_dry_run());
+    assert_eq!(view.credential_requirement(), None);
+}
+
+#[test]
+fn capabilities_allow_dry_run_and_credentials_for_writes() {
+    let create = super::capabilities(&create_action());
+    assert!(create.supports_dry_run());
+    assert_eq!(create.credential_requirement(), Some("component create"));
+
+    let update = super::capabilities(&update_action());
+    assert!(update.supports_dry_run());
+    assert_eq!(update.credential_requirement(), Some("component update"));
 }

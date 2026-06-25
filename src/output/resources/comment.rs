@@ -13,19 +13,22 @@ pub fn write_comments<W: Write + ?Sized>(comments: &[Comment], format: OutputFor
             return;
         }
         for c in comments {
+            let count = c
+                .count
+                .map_or_else(|| "?".to_string(), |value| value.to_string());
             let _ = writeln!(
                 out,
                 "{} #{} by {} ({})",
                 "Comment".bold(),
-                c.count,
+                count,
                 c.creator.as_deref().unwrap_or("unknown").cyan(),
                 c.creation_time.as_deref().unwrap_or(""),
             );
-            if c.is_private {
+            if c.is_private.unwrap_or(false) {
                 let _ = writeln!(out, "  {}", "[PRIVATE]".red());
             }
             let _ = writeln!(out);
-            for line in c.text.lines() {
+            for line in c.text.as_deref().unwrap_or("").lines() {
                 let _ = writeln!(out, "  {line}");
             }
             let _ = writeln!(out);

@@ -24,7 +24,7 @@ async fn whoami_returns_user_info() {
     let client = test_client(&mock.uri());
     let who = client.whoami().await.unwrap();
     assert_eq!(who.id, 42);
-    assert_eq!(who.name, "alice@example.com");
+    assert_eq!(who.name.as_deref(), Some("alice@example.com"));
     assert_eq!(who.real_name.as_deref(), Some("Alice"));
 }
 
@@ -48,7 +48,7 @@ async fn search_users_returns_matches() {
         .await
         .unwrap();
     assert_eq!(users.len(), 2);
-    assert_eq!(users[0].name, "alice@example.com");
+    assert_eq!(users[0].name.as_deref(), Some("alice@example.com"));
     assert_eq!(users[1].real_name.as_deref(), Some("Bob"));
 }
 
@@ -97,7 +97,7 @@ async fn search_users_details_sends_include_fields() {
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].can_login, Some(true));
     assert_eq!(users[0].groups.len(), 1);
-    assert_eq!(users[0].groups[0].name, "admin");
+    assert_eq!(users[0].groups[0].name.as_deref(), Some("admin"));
 }
 
 #[tokio::test]
@@ -182,6 +182,37 @@ async fn hybrid_create_user_api_error_does_not_fall_back() {
         err.to_string().contains("not authorized"),
         "expected auth error, got: {err}"
     );
+}
+
+#[tokio::test]
+async fn hybrid_create_user_with_login_uses_xmlrpc_directly() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/user"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(
+            "<?xml version=\"1.0\"?><methodResponse><params><param><value><struct>\
+                <member><name>id</name><value><int>4242</int></value></member>\
+            </struct></value></param></params></methodResponse>",
+        ))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_hybrid(&mock.uri());
+    let params = CreateUserParams {
+        email: "new@example.com".into(),
+        login: Some("new-user".into()),
+        full_name: Some("New".into()),
+        password: None,
+    };
+    let id = client.create_user(&params).await.unwrap();
+    assert_eq!(id, 4242);
 }
 
 #[tokio::test]

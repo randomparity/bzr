@@ -1,4 +1,3 @@
-use super::{is_dry_runnable, requires_credentials};
 use crate::cli::GroupAction;
 
 fn create_action() -> GroupAction {
@@ -20,59 +19,45 @@ fn update_action() -> GroupAction {
 }
 
 #[test]
-fn requires_credentials_reads_need_none() {
-    assert_eq!(
-        requires_credentials(&GroupAction::ListUsers {
-            group: "admin".into(),
-            details: false,
-        }),
-        None
-    );
-    assert_eq!(
-        requires_credentials(&GroupAction::View {
-            group: "admin".into()
-        }),
-        None
-    );
-}
-
-#[test]
-fn requires_credentials_writes_name_the_command() {
-    assert_eq!(
-        requires_credentials(&GroupAction::AddUser {
-            group: "admin".into(),
-            user: "alice@test.com".into(),
-        }),
-        Some("group add-user")
-    );
-    assert_eq!(
-        requires_credentials(&GroupAction::RemoveUser {
-            group: "admin".into(),
-            user: "bob@test.com".into(),
-        }),
-        Some("group remove-user")
-    );
-    assert_eq!(requires_credentials(&create_action()), Some("group create"));
-    assert_eq!(requires_credentials(&update_action()), Some("group update"));
-}
-
-#[test]
-fn is_dry_runnable_only_for_mutations() {
-    assert!(is_dry_runnable(&create_action()));
-    assert!(is_dry_runnable(&update_action()));
-    assert!(!is_dry_runnable(&GroupAction::View {
-        group: "admin".into()
-    }));
-    assert!(!is_dry_runnable(&GroupAction::ListUsers {
+fn capabilities_are_anonymous_for_reads() {
+    let list = super::capabilities(&GroupAction::ListUsers {
         group: "admin".into(),
         details: false,
-    }));
-    assert!(!is_dry_runnable(&GroupAction::AddUser {
+    });
+    assert!(!list.supports_dry_run());
+    assert_eq!(list.credential_requirement(), None);
+
+    let view = super::capabilities(&GroupAction::View {
+        group: "admin".into(),
+    });
+    assert!(!view.supports_dry_run());
+    assert_eq!(view.credential_requirement(), None);
+}
+
+#[test]
+fn capabilities_require_credentials_for_membership_writes() {
+    let add = super::capabilities(&GroupAction::AddUser {
         group: "admin".into(),
         user: "alice@test.com".into(),
-    }));
-    assert!(!is_dry_runnable(&GroupAction::RemoveUser {
+    });
+    assert!(!add.supports_dry_run());
+    assert_eq!(add.credential_requirement(), Some("group add-user"));
+
+    let remove = super::capabilities(&GroupAction::RemoveUser {
         group: "admin".into(),
         user: "bob@test.com".into(),
-    }));
+    });
+    assert!(!remove.supports_dry_run());
+    assert_eq!(remove.credential_requirement(), Some("group remove-user"));
+}
+
+#[test]
+fn capabilities_allow_dry_run_and_credentials_for_create_update() {
+    let create = super::capabilities(&create_action());
+    assert!(create.supports_dry_run());
+    assert_eq!(create.credential_requirement(), Some("group create"));
+
+    let update = super::capabilities(&update_action());
+    assert!(update.supports_dry_run());
+    assert_eq!(update.credential_requirement(), Some("group update"));
 }

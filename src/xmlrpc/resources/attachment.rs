@@ -5,7 +5,7 @@ use crate::types::attachment::Attachment;
 use crate::xmlrpc::protocol::Value;
 use crate::xmlrpc::protocol::XmlRpcClient;
 use crate::xmlrpc::resources::mappers::{
-    get_bool_flag, get_datetime_str, get_flags, get_nonempty_str, get_str, get_u64,
+    get_datetime_str, get_flags, get_nonempty_str, get_optional_bool_flag, get_str, get_u64,
     lookup_bug_entry, require_u64, xmlrpc_id, EXPECTED_STRUCT_RESPONSE,
 };
 
@@ -105,21 +105,18 @@ fn value_to_attachment(val: &Value) -> Result<Attachment> {
     };
 
     Ok(Attachment {
-        // `id` is a primary key and must be present and non-negative; secondary
-        // numeric fields (`bug_id`, `size`) default to 0 because off-spec
-        // Bugzilla envelopes may omit them, and a zero is harmless for display.
         id: require_u64(m, "id", "attachment")?,
-        bug_id: get_u64(m, "bug_id").unwrap_or(0),
-        file_name: get_str(m, "file_name").unwrap_or_default(),
-        summary: get_str(m, "summary").unwrap_or_default(),
-        content_type: get_str(m, "content_type").unwrap_or_default(),
+        bug_id: get_u64(m, "bug_id"),
+        file_name: get_str(m, "file_name"),
+        summary: get_str(m, "summary"),
+        content_type: get_str(m, "content_type"),
         creator: get_nonempty_str(m, "creator"),
         creation_time: get_datetime_str(m, "creation_time"),
         last_change_time: get_datetime_str(m, "last_change_time"),
-        size: get_u64(m, "size").unwrap_or(0),
-        is_obsolete: get_bool_flag(m, "is_obsolete"),
-        is_private: get_bool_flag(m, "is_private"),
-        is_patch: get_bool_flag(m, "is_patch"),
+        size: get_u64(m, "size"),
+        is_obsolete: get_optional_bool_flag(m, "is_obsolete"),
+        is_private: get_optional_bool_flag(m, "is_private"),
+        is_patch: get_optional_bool_flag(m, "is_patch"),
         flags: get_flags(m, "flags"),
         data,
     })

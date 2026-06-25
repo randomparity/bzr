@@ -37,10 +37,15 @@ fn whoami_response_id_zero_means_unauthenticated() {
 }
 
 #[test]
-fn whoami_response_missing_id_defaults_zero() {
+fn whoami_response_missing_id_errors() {
     let json = r#"{"name": "test"}"#;
-    let resp: WhoamiProbeResponse = serde_json::from_str(json).unwrap();
-    assert_eq!(resp.id, 0);
+    let result = serde_json::from_str::<WhoamiProbeResponse>(json);
+    assert!(result.is_err(), "missing id should fail to deserialize");
+    let err = result.err().unwrap();
+    assert!(
+        err.to_string().contains("missing field `id`"),
+        "unexpected error: {err}",
+    );
 }
 
 #[tokio::test]

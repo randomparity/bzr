@@ -32,7 +32,37 @@ Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches the
 ### Key modules
 
 - **`cli/`** — clap derive structs split into per-resource submodules. `mod.rs` defines `Cli`, `Commands`, and re-exports all `*Action` enums. Per-resource files (`bug.rs`, `comment.rs`, `attachment.rs`, `config.rs`, `product.rs`, `field.rs`, `user.rs`, `group.rs`, `server.rs`, `classification.rs`, `component.rs`, `template.rs`, `query.rs`) each define one action enum.
-- **`client/`** — `BugzillaClient` wraps reqwest for Bugzilla REST API. Split into per-resource submodules (`bug.rs`, `attachment.rs`, `comment.rs`, `product.rs`, `user.rs`, `group.rs`, `component.rs`, `classification.rs`, `field.rs`, `server.rs`). `auth/` submodule handles auth detection (split into `whoami.rs` and `valid_login.rs` probing strategies with `mod.rs` as orchestrator). `version.rs` handles version detection and API mode determination. Public data types live in `types/`.
+- **`client/`** — `mod.rs` defines `BugzillaClient`,
+  `BugzillaClientConfig`, client construction, shared dispatch helpers, and
+  cross-resource helpers. `request.rs`, `response.rs`, and `transport.rs` own
+  the shared HTTP request/response pipeline. `resources/` is the REST resource
+  layer (`bug.rs`, `attachment.rs`, `comment.rs`, `product.rs`, `user.rs`,
+  `group.rs`, `component.rs`, `classification.rs`, `field.rs`, `server.rs`).
+  `auth/` handles auth detection (split into `whoami.rs` and `valid_login.rs`
+  probing strategies with `mod.rs` as orchestrator). `version.rs` handles
+  version detection and API mode determination. Public data types live in
+  `types/`.
+- **`tls/`** — TLS client construction and trust policy. `mod.rs` builds the
+  reqwest clients used by the connection layer, `fingerprint.rs` formats
+  SHA-256 pins, `verifier.rs` enforces pin and issuer checks, and `tofu.rs`
+  handles first-use pin capture. Config syntax validation stays in
+  `validation/`; TLS modules consume already-validated policy.
+- **`credentials/`** — Credential-source resolution for inline API keys,
+  environment-backed keys, and keyring-backed keys. Command/config code decides
+  whether credentials are required; this module turns a `ServerConfig`
+  credential source into the secret material used by connection setup.
+- **`validation/`** — Shared input validators that are not owned by one command
+  or runtime subsystem, including date parsing, sort order construction, and TLS
+  pin string parsing. Prefer adding cross-command value-shape validation here
+  rather than making persisted config or CLI parsing depend on implementation
+  modules.
+- **`bugzilla_auth.rs` / `http.rs`** — Low-level transport helpers. Auth header
+  and query parameter names, request auth application, API-key redaction, and
+  request timeout constants live here so REST, XML-RPC, auth detection, and logs
+  do not duplicate security-sensitive strings.
+- **`xmlrpc/`** — XML-RPC protocol and resource adapter used by `BugzillaClient`
+  when `ApiMode` is `XmlRpc` or Hybrid fallback selects XML-RPC. The command
+  layer does not talk to XML-RPC directly; it stays behind the client boundary.
 - **`config/`** — configuration subsystem for `~/.config/bzr/config.toml`.
   `model.rs` owns the persisted domain model (`Config`, `ServerConfig`,
   credential source types, saved templates, and saved queries). `store.rs`

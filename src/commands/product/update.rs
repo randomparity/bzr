@@ -42,7 +42,7 @@ pub(super) async fn handle(
         move |client, params| async move {
             client.update_product(&name, &params).await?;
             Ok(Committed {
-                result: ActionResult::updated_named(name.as_str(), None, ResourceKind::Product),
+                result: ActionResult::updated_named(None, name.as_str(), ResourceKind::Product),
                 message: format!("Updated product '{name}'"),
             })
         },

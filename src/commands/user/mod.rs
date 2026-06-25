@@ -1,6 +1,7 @@
 //! User subcommand handlers, split per action.
 
 use crate::cli::UserAction;
+use crate::commands::runtime::capabilities::CommandCapabilities;
 use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::writers::Writers;
@@ -54,18 +55,11 @@ pub(crate) async fn execute(
 }
 
 #[must_use]
-pub(crate) fn is_dry_runnable(action: &UserAction) -> bool {
-    matches!(
-        action,
-        UserAction::Create { .. } | UserAction::Update { .. }
-    )
-}
-
-pub(crate) fn requires_credentials(action: &UserAction) -> Option<&'static str> {
+pub(crate) fn capabilities(action: &UserAction) -> CommandCapabilities {
     match action {
-        UserAction::Search { .. } => None,
-        UserAction::Create { .. } => Some("user create"),
-        UserAction::Update { .. } => Some("user update"),
+        UserAction::Search { .. } => CommandCapabilities::anonymous(),
+        UserAction::Create { .. } => CommandCapabilities::dry_run_mutation("user create"),
+        UserAction::Update { .. } => CommandCapabilities::dry_run_mutation("user update"),
     }
 }
 

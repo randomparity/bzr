@@ -40,7 +40,7 @@ pub(super) async fn handle(
         move |client, params| async move {
             client.update_group(&group, &params).await?;
             Ok(Committed {
-                result: ActionResult::updated_named(group.as_str(), None, ResourceKind::Group),
+                result: ActionResult::updated_named(None, group.as_str(), ResourceKind::Group),
                 message: format!("Updated group '{group}'"),
             })
         },

@@ -45,6 +45,20 @@ fn cli_doc_long_about_coverage() {
 }
 
 #[test]
+fn version_output_includes_package_version_and_build_metadata() {
+    let Err(err) = Cli::try_parse_from(["bzr", "--version"]) else {
+        panic!("expected --version to return a display-version clap error");
+    };
+
+    assert_eq!(err.kind(), clap::error::ErrorKind::DisplayVersion);
+    let version = err.to_string();
+    assert!(version.contains(env!("CARGO_PKG_VERSION")));
+    assert!(version.contains(env!("BZR_GIT_SHA")));
+    assert!(version.contains('('));
+    assert!(version.contains(')'));
+}
+
+#[test]
 fn parse_bug_list_minimal() {
     let cli = Cli::try_parse_from(["bzr", "bug", "list"]).unwrap();
     assert!(matches!(
@@ -1446,6 +1460,18 @@ fn parse_config_path_flag() {
 fn quiet_help_mentions_tracing_is_suppressed() {
     let help = Cli::command().render_long_help().to_string();
     assert!(help.contains("tracing logs are also suppressed"), "{help}");
+}
+
+#[test]
+fn api_help_describes_transport_preference_not_exclusivity() {
+    let help = Cli::command().render_long_help().to_string();
+    assert!(
+        help.contains("`rest` prefers Bugzilla's REST API"),
+        "{help}"
+    );
+    assert!(help.contains("transport-specific exceptions"), "{help}");
+    assert!(!help.contains("REST API exclusively"), "{help}");
+    assert!(!help.contains("XML-RPC for every call"), "{help}");
 }
 
 #[test]

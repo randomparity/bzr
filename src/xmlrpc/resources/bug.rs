@@ -133,8 +133,8 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
 
     Ok(Bug {
         id: require_u64(m, "id", "bug")?,
-        summary: get_str(m, "summary").unwrap_or_default(),
-        status: get_str(m, "status").unwrap_or_default(),
+        summary: get_str(m, "summary"),
+        status: get_str(m, "status"),
         resolution: get_nonempty_str(m, "resolution"),
         dupe_of: get_u64(m, "dupe_of"),
         deadline: get_nonempty_str(m, "deadline"),

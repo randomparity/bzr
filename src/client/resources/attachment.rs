@@ -138,13 +138,16 @@ impl BugzillaClient {
 
     pub async fn download_attachment(&self, attachment_id: u64) -> Result<(String, Vec<u8>)> {
         let attachment = self.get_attachment(attachment_id).await?;
+        let file_name = attachment.file_name.ok_or_else(|| {
+            BzrError::DataIntegrity(format!("attachment #{attachment_id} has no file_name"))
+        })?;
         let data = attachment
             .data
             .ok_or_else(|| BzrError::DataIntegrity("attachment has no data".into()))?;
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(&data)
             .map_err(|e| BzrError::DataIntegrity(format!("failed to decode attachment: {e}")))?;
-        Ok((attachment.file_name, bytes))
+        Ok((file_name, bytes))
     }
 
     pub async fn upload_attachment(&self, params: &UploadAttachmentParams) -> Result<u64> {

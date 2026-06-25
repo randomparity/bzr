@@ -18,39 +18,37 @@ fn filter_comment_body_empty_input() {
 }
 
 #[test]
-fn requires_credentials_none_for_read_actions() {
-    assert_eq!(
-        super::requires_credentials(&CommentAction::List {
-            bug_id: 42,
-            since: None,
-        }),
-        None
-    );
-    assert_eq!(
-        super::requires_credentials(&CommentAction::SearchTags {
-            query: "need".into(),
-        }),
-        None
-    );
+fn capabilities_are_anonymous_for_read_actions() {
+    let list = super::capabilities(&CommentAction::List {
+        bug_id: 42,
+        since: None,
+    });
+    assert!(!list.supports_dry_run());
+    assert_eq!(list.credential_requirement(), None);
+
+    let search_tags = super::capabilities(&CommentAction::SearchTags {
+        query: "need".into(),
+    });
+    assert!(!search_tags.supports_dry_run());
+    assert_eq!(search_tags.credential_requirement(), None);
 }
 
 #[test]
-fn requires_credentials_names_the_write_command() {
-    assert_eq!(
-        super::requires_credentials(&CommentAction::Add {
-            bug_id: 42,
-            body: Some("hi".into()),
-            body_file: None,
-            private: false,
-        }),
-        Some("comment add")
-    );
-    assert_eq!(
-        super::requires_credentials(&CommentAction::Tag {
-            comment_id: 100,
-            add: vec!["needinfo".into()],
-            remove: vec![],
-        }),
-        Some("comment tag")
-    );
+fn capabilities_require_credentials_for_write_actions() {
+    let add = super::capabilities(&CommentAction::Add {
+        bug_id: 42,
+        body: Some("hi".into()),
+        body_file: None,
+        private: false,
+    });
+    assert!(!add.supports_dry_run());
+    assert_eq!(add.credential_requirement(), Some("comment add"));
+
+    let tag = super::capabilities(&CommentAction::Tag {
+        comment_id: 100,
+        add: vec!["needinfo".into()],
+        remove: vec![],
+    });
+    assert!(!tag.supports_dry_run());
+    assert_eq!(tag.credential_requirement(), Some("comment tag"));
 }

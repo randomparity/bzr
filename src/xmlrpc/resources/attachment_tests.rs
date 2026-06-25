@@ -87,13 +87,13 @@ async fn xmlrpc_get_attachments_parses_full_response() {
 
     assert_eq!(attachments.len(), 2);
     assert_eq!(attachments[0].id, 2001);
-    assert_eq!(attachments[0].file_name, "public.txt");
-    assert!(!attachments[0].is_private);
-    assert_eq!(attachments[0].size, 11);
+    assert_eq!(attachments[0].file_name.as_deref(), Some("public.txt"));
+    assert_eq!(attachments[0].is_private, Some(false));
+    assert_eq!(attachments[0].size, Some(11));
     assert_eq!(attachments[0].data.as_deref(), Some("aGVsbG8gd29ybGQK"));
     assert_eq!(attachments[1].id, 2002);
-    assert_eq!(attachments[1].file_name, "private.bin");
-    assert!(attachments[1].is_private);
+    assert_eq!(attachments[1].file_name.as_deref(), Some("private.bin"));
+    assert_eq!(attachments[1].is_private, Some(true));
     assert_eq!(attachments[1].data.as_deref(), Some("YmVlZg=="));
 }
 
@@ -198,7 +198,7 @@ async fn xmlrpc_get_attachment_by_id_parses_response() {
     let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let attachment = client.get_attachment_by_id(2002).await.unwrap();
     assert_eq!(attachment.id, 2002);
-    assert!(attachment.is_private);
+    assert_eq!(attachment.is_private, Some(true));
     assert_eq!(attachment.data.as_deref(), Some("YmVlZg=="));
 }
 

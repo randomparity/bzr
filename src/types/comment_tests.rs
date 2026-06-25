@@ -4,15 +4,15 @@ use super::*;
 
 #[test]
 fn comment_deserializes_minimal() {
-    // Only `id` is required (the primary key). The other fields, including
-    // bug_id, fall back to their defaults so off-spec/flat envelopes still
-    // parse.
     let json = r#"{"id": 1}"#;
     let comment: Comment = serde_json::from_str(json).unwrap();
     assert_eq!(comment.id, 1);
-    assert_eq!(comment.bug_id, 0);
-    assert!(comment.text.is_empty());
-    assert!(!comment.is_private);
+
+    let serialized = serde_json::to_value(&comment).unwrap();
+    assert_eq!(serialized["bug_id"], serde_json::Value::Null);
+    assert_eq!(serialized["text"], serde_json::Value::Null);
+    assert_eq!(serialized["count"], serde_json::Value::Null);
+    assert_eq!(serialized["is_private"], serde_json::Value::Null);
 }
 
 #[test]
@@ -23,8 +23,10 @@ fn comment_flat_envelope_without_bug_id_still_parses() {
     let json = r#"{"id": 7, "count": 2, "text": "hi", "creator": "a@b.c"}"#;
     let comment: Comment = serde_json::from_str(json).unwrap();
     assert_eq!(comment.id, 7);
-    assert_eq!(comment.bug_id, 0);
-    assert_eq!(comment.count, 2);
+
+    let serialized = serde_json::to_value(&comment).unwrap();
+    assert_eq!(serialized["bug_id"], serde_json::Value::Null);
+    assert_eq!(serialized["count"], 2);
 }
 
 #[test]
@@ -32,11 +34,11 @@ fn comment_deserializes_full() {
     let json = r#"{"id": 5, "bug_id": 42, "text": "hello", "creator": "alice@test.com", "creation_time": "2024-01-01T00:00:00Z", "count": 3, "is_private": true}"#;
     let comment: Comment = serde_json::from_str(json).unwrap();
     assert_eq!(comment.id, 5);
-    assert_eq!(comment.bug_id, 42);
-    assert_eq!(comment.text, "hello");
+    assert_eq!(comment.bug_id, Some(42));
+    assert_eq!(comment.text.as_deref(), Some("hello"));
     assert_eq!(comment.creator.as_deref(), Some("alice@test.com"));
-    assert_eq!(comment.count, 3);
-    assert!(comment.is_private);
+    assert_eq!(comment.count, Some(3));
+    assert_eq!(comment.is_private, Some(true));
 }
 
 #[test]

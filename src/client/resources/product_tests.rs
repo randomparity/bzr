@@ -34,8 +34,8 @@ async fn list_products_returns_products() {
         .await
         .unwrap();
     assert_eq!(products.len(), 2);
-    assert_eq!(products[0].name, "Widget");
-    assert_eq!(products[1].name, "Gadget");
+    assert_eq!(products[0].name.as_deref(), Some("Widget"));
+    assert_eq!(products[1].name.as_deref(), Some("Gadget"));
 }
 
 #[tokio::test]
@@ -76,9 +76,9 @@ async fn get_product_by_name() {
 
     let client = test_client(&mock.uri());
     let product = client.get_product("Widget").await.unwrap();
-    assert_eq!(product.name, "Widget");
+    assert_eq!(product.name.as_deref(), Some("Widget"));
     assert_eq!(product.components.len(), 1);
-    assert_eq!(product.components[0].name, "Backend");
+    assert_eq!(product.components[0].name.as_deref(), Some("Backend"));
     assert_eq!(product.versions.len(), 1);
     assert_eq!(product.milestones.len(), 1);
 }

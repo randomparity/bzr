@@ -1,6 +1,7 @@
 //! Group subcommand handlers, split per action.
 
 use crate::cli::GroupAction;
+use crate::commands::runtime::capabilities::CommandCapabilities;
 use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::writers::Writers;
@@ -56,20 +57,15 @@ pub(crate) async fn execute(
 }
 
 #[must_use]
-pub(crate) fn is_dry_runnable(action: &GroupAction) -> bool {
-    matches!(
-        action,
-        GroupAction::Create { .. } | GroupAction::Update { .. }
-    )
-}
-
-pub(crate) fn requires_credentials(action: &GroupAction) -> Option<&'static str> {
+pub(crate) fn capabilities(action: &GroupAction) -> CommandCapabilities {
     match action {
-        GroupAction::ListUsers { .. } | GroupAction::View { .. } => None,
-        GroupAction::AddUser { .. } => Some("group add-user"),
-        GroupAction::RemoveUser { .. } => Some("group remove-user"),
-        GroupAction::Create { .. } => Some("group create"),
-        GroupAction::Update { .. } => Some("group update"),
+        GroupAction::ListUsers { .. } | GroupAction::View { .. } => {
+            CommandCapabilities::anonymous()
+        }
+        GroupAction::AddUser { .. } => CommandCapabilities::authenticated("group add-user"),
+        GroupAction::RemoveUser { .. } => CommandCapabilities::authenticated("group remove-user"),
+        GroupAction::Create { .. } => CommandCapabilities::dry_run_mutation("group create"),
+        GroupAction::Update { .. } => CommandCapabilities::dry_run_mutation("group update"),
     }
 }
 

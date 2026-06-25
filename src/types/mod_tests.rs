@@ -62,8 +62,8 @@ fn bug_deserialize_minimal() {
     let json = r#"{"id": 42}"#;
     let bug: Bug = serde_json::from_str(json).unwrap();
     assert_eq!(bug.id, 42);
-    assert_eq!(bug.summary, "");
-    assert_eq!(bug.status, "");
+    assert_eq!(bug.summary, None);
+    assert_eq!(bug.status, None);
     assert!(bug.resolution.is_none());
 }
 
@@ -83,7 +83,7 @@ fn bug_deserialize_full() {
     }"#;
     let bug: Bug = serde_json::from_str(json).unwrap();
     assert_eq!(bug.id, 1);
-    assert_eq!(bug.summary, "Test bug");
+    assert_eq!(bug.summary.as_deref(), Some("Test bug"));
     assert_eq!(bug.keywords, vec!["crash", "regression"]);
     assert_eq!(bug.blocks, vec![2, 3]);
 }
@@ -95,8 +95,8 @@ fn comment_deserialize_minimal() {
     let json = r#"{"id": 100, "bug_id": 10}"#;
     let comment: Comment = serde_json::from_str(json).unwrap();
     assert_eq!(comment.id, 100);
-    assert_eq!(comment.text, "");
-    assert!(!comment.is_private);
+    assert_eq!(comment.text, None);
+    assert_eq!(comment.is_private, None);
 }
 
 // Attachment deserialization
@@ -106,8 +106,8 @@ fn attachment_deserialize_minimal() {
     let json = r#"{"id": 50, "bug_id": 10}"#;
     let att: Attachment = serde_json::from_str(json).unwrap();
     assert_eq!(att.id, 50);
-    assert_eq!(att.file_name, "");
-    assert!(!att.is_obsolete);
+    assert_eq!(att.file_name, None);
+    assert_eq!(att.is_obsolete, None);
 }
 
 // WhoamiResponse deserialization
@@ -117,7 +117,7 @@ fn whoami_deserialize() {
     let json = r#"{"id": 1, "name": "admin@example.com", "real_name": "Admin"}"#;
     let whoami: WhoamiResponse = serde_json::from_str(json).unwrap();
     assert_eq!(whoami.id, 1);
-    assert_eq!(whoami.name, "admin@example.com");
+    assert_eq!(whoami.name.as_deref(), Some("admin@example.com"));
     assert_eq!(whoami.real_name.as_deref(), Some("Admin"));
 }
 
@@ -148,8 +148,8 @@ fn group_info_deserialize() {
     }"#;
     let group: GroupInfo = serde_json::from_str(json).unwrap();
     assert_eq!(group.id, 10);
-    assert_eq!(group.name, "admin");
-    assert!(group.is_active);
+    assert_eq!(group.name.as_deref(), Some("admin"));
+    assert_eq!(group.is_active, Some(true));
     assert_eq!(group.membership.len(), 1);
 }
 
@@ -165,7 +165,7 @@ fn classification_deserialize() {
         "products": [{"id": 1, "name": "TestProduct", "description": "Test"}]
     }"#;
     let cls: Classification = serde_json::from_str(json).unwrap();
-    assert_eq!(cls.name, "Unclassified");
+    assert_eq!(cls.name.as_deref(), Some("Unclassified"));
     assert_eq!(cls.products.len(), 1);
 }
 

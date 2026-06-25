@@ -22,16 +22,16 @@ fn attachment_deserializes_flags_and_defaults_empty() {
 fn bool_from_int_or_bool_deserializes_true() {
     let json = r#"{"id":1,"bug_id":10,"is_obsolete":true,"is_private":false}"#;
     let att: Attachment = serde_json::from_str(json).unwrap();
-    assert!(att.is_obsolete);
-    assert!(!att.is_private);
+    assert_eq!(att.is_obsolete, Some(true));
+    assert_eq!(att.is_private, Some(false));
 }
 
 #[test]
 fn bool_from_int_or_bool_deserializes_integers() {
     let json = r#"{"id":1,"bug_id":10,"is_obsolete":1,"is_private":0}"#;
     let att: Attachment = serde_json::from_str(json).unwrap();
-    assert!(att.is_obsolete);
-    assert!(!att.is_private);
+    assert_eq!(att.is_obsolete, Some(true));
+    assert_eq!(att.is_private, Some(false));
 }
 
 #[test]
@@ -62,19 +62,44 @@ fn bool_from_int_or_bool_rejects_string() {
 fn is_patch_deserializes_as_bool() {
     let json = r#"{"id":1,"bug_id":10,"is_patch":true}"#;
     let att: Attachment = serde_json::from_str(json).unwrap();
-    assert!(att.is_patch);
+    assert_eq!(att.is_patch, Some(true));
 }
 
 #[test]
 fn is_patch_deserializes_as_int() {
     let json = r#"{"id":1,"bug_id":10,"is_patch":1}"#;
     let att: Attachment = serde_json::from_str(json).unwrap();
-    assert!(att.is_patch);
+    assert_eq!(att.is_patch, Some(true));
 }
 
 #[test]
 fn is_patch_defaults_to_false_when_absent() {
     let json = r#"{"id":1,"bug_id":10}"#;
     let att: Attachment = serde_json::from_str(json).unwrap();
-    assert!(!att.is_patch);
+
+    let serialized = serde_json::to_value(&att).unwrap();
+    assert_eq!(serialized["is_patch"], serde_json::Value::Null);
+}
+
+#[test]
+fn attachment_missing_wire_scalars_serialize_as_null() {
+    let att: Attachment = serde_json::from_str(r#"{"id":2}"#).unwrap();
+
+    let serialized = serde_json::to_value(&att).unwrap();
+    for field in [
+        "bug_id",
+        "file_name",
+        "summary",
+        "content_type",
+        "size",
+        "is_obsolete",
+        "is_private",
+        "is_patch",
+    ] {
+        assert_eq!(
+            serialized[field],
+            serde_json::Value::Null,
+            "field {field} should preserve absence"
+        );
+    }
 }

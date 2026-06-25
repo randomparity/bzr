@@ -131,6 +131,18 @@ pub(super) async fn write_one_attachment(
     att: &Attachment,
     out_dir: &str,
 ) -> Result<DownloadedFile> {
+    let bug_id = att.bug_id.ok_or_else(|| {
+        crate::error::BzrError::DataIntegrity(format!(
+            "attachment #{} has no bug_id; cannot choose download directory",
+            att.id,
+        ))
+    })?;
+    let file_name = att.file_name.as_deref().ok_or_else(|| {
+        crate::error::BzrError::DataIntegrity(format!(
+            "attachment #{} has no file_name; cannot choose download file name",
+            att.id,
+        ))
+    })?;
     let bytes = if let Some(b64) = att.data.as_deref() {
         base64::engine::general_purpose::STANDARD
             .decode(b64)
@@ -145,7 +157,7 @@ pub(super) async fn write_one_attachment(
         fetched
     };
 
-    let bug_subdir = Path::new(out_dir).join(att.bug_id.to_string());
+    let bug_subdir = Path::new(out_dir).join(bug_id.to_string());
     std::fs::create_dir_all(&bug_subdir).map_err(|e| {
         io_with_context(
             format!(
@@ -155,7 +167,7 @@ pub(super) async fn write_one_attachment(
             &e,
         )
     })?;
-    let dest = bug_subdir.join(format!("{}.{}", att.id, safe_basename(&att.file_name)?));
+    let dest = bug_subdir.join(format!("{}.{}", att.id, safe_basename(file_name)?));
     let dest_str = dest.to_string_lossy().into_owned();
     std::fs::write(&dest, &bytes).map_err(|e| {
         io_with_context(
@@ -170,7 +182,7 @@ pub(super) async fn write_one_attachment(
 
     tracing::info!(
         att_id = att.id,
-        bug_id = att.bug_id,
+        bug_id,
         path = %dest_str,
         bytes = bytes.len(),
         "downloaded attachment",
@@ -300,11 +312,12 @@ async fn download_attachment_target(
             };
         }
     };
+    let bug_id = att.bug_id;
     match write_one_attachment(client, &att, out_dir).await {
         Ok(file) => AttachmentDownloadResult {
             attachment_id: att_id,
             status: TargetStatus::Ok,
-            bug_id: Some(att.bug_id),
+            bug_id,
             path: Some(file.path),
             bytes: Some(file.bytes),
             error: None,
@@ -312,7 +325,7 @@ async fn download_attachment_target(
         Err(e) => AttachmentDownloadResult {
             attachment_id: att_id,
             status: TargetStatus::Error,
-            bug_id: Some(att.bug_id),
+            bug_id,
             path: None,
             bytes: None,
             error: Some(e.to_string()),

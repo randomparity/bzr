@@ -34,8 +34,8 @@ pub(crate) enum UserAction {
     /// Bugzilla 5.3+ when the server's `use_email_as_login` is
     /// disabled; if set and the active API mode is REST, the
     /// request may collide with REST's login-as-email assumption --
-    /// override the global `--api hybrid` (or per-server config)
-    /// to fall back to XML-RPC for the create call.
+    /// use `--api hybrid`, `--api xmlrpc`, or matching per-server
+    /// config so the create call is sent through XML-RPC.
     ///
     /// `--password` is optional; if omitted, the server generates a
     /// password and (on most installations) emails the new user a
@@ -58,7 +58,7 @@ pub(crate) enum UserAction {
         #[arg(long, required_unless_present = "from_json")]
         email: Option<String>,
         /// Login name (required on Bugzilla 5.3+ when `use_email_as_login` is disabled;
-        /// set `api_mode` to "hybrid" to use XML-RPC which avoids the REST login field conflict)
+        /// `hybrid` and `xmlrpc` API modes use XML-RPC to avoid the REST login conflict)
         #[arg(long)]
         login: Option<String>,
         /// Full name

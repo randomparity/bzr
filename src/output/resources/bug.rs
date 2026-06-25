@@ -104,10 +104,10 @@ fn render_selected_field(field: SelectedBugField<'_>, bug: &Bug) -> String {
 fn render_builtin_field(field: BugField, bug: &Bug) -> String {
     match field {
         BugField::Id => bug.id.to_string(),
-        BugField::Status => bug.status.clone(),
+        BugField::Status => bug.status.clone().unwrap_or_default(),
         BugField::Priority => bug.priority.clone().unwrap_or_default(),
         BugField::AssignedTo => shorten_email(bug.assigned_to.as_deref().unwrap_or("")),
-        BugField::Summary => truncate(&bug.summary, SUMMARY_TRUNCATE_WIDTH),
+        BugField::Summary => truncate(bug.summary.as_deref().unwrap_or(""), SUMMARY_TRUNCATE_WIDTH),
         BugField::Severity => bug.severity.clone().unwrap_or_default(),
         BugField::Product => bug.product.clone().unwrap_or_default(),
         BugField::Component => bug.component.clone().unwrap_or_default(),
@@ -284,7 +284,10 @@ const BUILTIN_DETAIL_FIELDS: &[BuiltinDetailField] = &[
 
 fn render_builtin_detail_field(field: BuiltinDetailField, bug: &Bug) -> Option<DetailRow> {
     let value = match field.value {
-        DetailValue::Status => colorize_status(&bug.status).to_string(),
+        DetailValue::Status => bug.status.as_deref().map_or_else(
+            || "-".to_string(),
+            |status| colorize_status(status).to_string(),
+        ),
         DetailValue::OptionalText(accessor) => accessor(bug).unwrap_or("-").to_string(),
         DetailValue::OptionalId(accessor) => accessor(bug)?.to_string(),
         DetailValue::StringList(accessor) => {
@@ -328,7 +331,7 @@ fn write_bug_detail_table(bug: &Bug, spec: ColumnSpec<'_>, out: &mut (impl Write
             "{} #{}\n{}\n",
             "Bug".bold(),
             bug.id.to_string().bold(),
-            bug.summary.bold()
+            bug.summary.as_deref().unwrap_or("unknown").bold()
         );
     } else {
         let _ = writeln!(out, "{} #{}\n", "Bug".bold(), bug.id.to_string().bold());

@@ -142,10 +142,6 @@ pub(super) fn write_list_field<W: Write + ?Sized>(out: &mut W, label: &str, item
     }
 }
 
-pub(super) fn write_bool_field<W: Write + ?Sized>(out: &mut W, label: &str, value: bool) {
-    let _ = writeln!(out, "  {label:<12}  {}", yes_no(value));
-}
-
 // ── Section divider ─────────────────────────────────────────────────
 
 /// Width of the horizontal divider used between detail blocks in

@@ -8,13 +8,12 @@ use super::MalformedProbeResponse;
 
 #[derive(Deserialize)]
 struct ValidLoginResponse {
-    #[serde(default)]
     result: ValidLoginResult,
 }
 
 /// Bugzilla returns `{"result": true}` (bool) or `{"result": 1}` (integer)
 /// depending on version. Accept both.
-#[derive(Deserialize, Default)]
+#[derive(Deserialize)]
 #[serde(try_from = "serde_json::Value")]
 struct ValidLoginResult(bool);
 

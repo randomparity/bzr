@@ -66,7 +66,7 @@ async fn get_comments_since_filters_by_date() {
         .await
         .unwrap();
     assert_eq!(comments.len(), 1);
-    assert_eq!(comments[0].text, "new comment");
+    assert_eq!(comments[0].text.as_deref(), Some("new comment"));
 }
 
 fn comments_response_json(counts: &[u64]) -> serde_json::Value {
@@ -138,7 +138,7 @@ async fn hybrid_uses_xmlrpc_directly() {
     let client = test_client_hybrid(&mock.uri());
     let comments = client.get_comments_since(42, None).await.unwrap();
     assert_eq!(comments.len(), 3);
-    assert_eq!(comments[0].text, "xmlrpc 0");
+    assert_eq!(comments[0].text.as_deref(), Some("xmlrpc 0"));
 }
 
 #[tokio::test]
@@ -159,7 +159,7 @@ async fn hybrid_xmlrpc_transport_error_falls_back_to_rest() {
     let client = test_client_hybrid(&mock.uri());
     let comments = client.get_comments_since(42, None).await.unwrap();
     assert_eq!(comments.len(), 3);
-    assert_eq!(comments[0].text, "comment 0");
+    assert_eq!(comments[0].text.as_deref(), Some("comment 0"));
 }
 
 #[tokio::test]
@@ -180,7 +180,7 @@ async fn rest_mode_uses_rest_only() {
     let client = test_client(&mock.uri());
     let comments = client.get_comments_since(42, None).await.unwrap();
     assert_eq!(comments.len(), 1);
-    assert_eq!(comments[0].count, 4);
+    assert_eq!(comments[0].count, Some(4));
 }
 
 #[tokio::test]
@@ -286,7 +286,7 @@ async fn get_comments_since_rest_accepts_flat_comments_envelope() {
         .unwrap();
     assert_eq!(comments.len(), 1);
     assert_eq!(comments[0].id, 1);
-    assert_eq!(comments[0].text, "hello from alt envelope");
+    assert_eq!(comments[0].text.as_deref(), Some("hello from alt envelope"));
 }
 
 #[tokio::test]
@@ -326,7 +326,7 @@ async fn get_comments_since_rest_accepts_bugs_envelope() {
         .unwrap();
     assert_eq!(comments.len(), 1);
     assert_eq!(comments[0].id, 1);
-    assert_eq!(comments[0].text, "from bugs envelope");
+    assert_eq!(comments[0].text.as_deref(), Some("from bugs envelope"));
 }
 
 #[tokio::test]
@@ -378,7 +378,8 @@ async fn get_comments_since_rest_prefers_bugs_when_both_envelopes_populated() {
         .unwrap();
     assert_eq!(comments.len(), 1);
     assert_eq!(
-        comments[0].text, "from bugs envelope",
+        comments[0].text.as_deref(),
+        Some("from bugs envelope"),
         "should prefer bugs-keyed envelope when both present"
     );
 }
@@ -425,7 +426,7 @@ async fn get_comments_since_rest_falls_through_when_bugs_map_empty_and_flat_popu
         1,
         "should fall through to flat envelope, not return empty"
     );
-    assert_eq!(comments[0].text, "from flat envelope");
+    assert_eq!(comments[0].text.as_deref(), Some("from flat envelope"));
 }
 
 #[tokio::test]

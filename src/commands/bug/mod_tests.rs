@@ -1,36 +1,34 @@
 #![expect(clippy::unwrap_used)]
 
-//! Tests for `commands/bug/mod.rs`: `is_dry_runnable` and `bug_column_spec`
+//! Tests for `commands/bug/mod.rs`: command capabilities and `bug_column_spec`
 //! (via `execute`-level field-validation behavior).
 
 use crate::cli::BugAction;
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
-// ---- is_dry_runnable ----
+// ---- capabilities ----
 // Kill the `-> bool with true` mutant: read-only actions must return false.
 // If the mutant replaces the body with `true`, these assertions fail.
 
 #[test]
-fn is_dry_runnable_false_for_list() {
+fn capabilities_are_anonymous_for_list() {
     let action = BugAction::List(crate::cli::ListArgs::default());
-    assert!(
-        !super::is_dry_runnable(&action),
-        "List is read-only — is_dry_runnable must be false"
-    );
+    let capabilities = super::capabilities(&action);
+    assert!(!capabilities.supports_dry_run());
+    assert_eq!(capabilities.credential_requirement(), None);
 }
 
 #[test]
-fn is_dry_runnable_false_for_my() {
+fn capabilities_require_credentials_for_my() {
     let action = BugAction::My(crate::cli::MyArgs::default());
-    assert!(
-        !super::is_dry_runnable(&action),
-        "My is read-only — is_dry_runnable must be false"
-    );
+    let capabilities = super::capabilities(&action);
+    assert!(!capabilities.supports_dry_run());
+    assert_eq!(capabilities.credential_requirement(), Some("bug my"));
 }
 
 #[test]
-fn is_dry_runnable_false_for_search() {
+fn capabilities_are_anonymous_for_search() {
     let action = BugAction::Search(crate::cli::SearchArgs {
         page_args: crate::cli::PageArgs::default(),
         query: Some("q".into()),
@@ -44,14 +42,13 @@ fn is_dry_runnable_false_for_search() {
         sort_args: crate::cli::SortArgs::default(),
         count: false,
     });
-    assert!(
-        !super::is_dry_runnable(&action),
-        "Search is read-only — is_dry_runnable must be false"
-    );
+    let capabilities = super::capabilities(&action);
+    assert!(!capabilities.supports_dry_run());
+    assert_eq!(capabilities.credential_requirement(), None);
 }
 
 #[test]
-fn is_dry_runnable_false_for_view() {
+fn capabilities_are_anonymous_for_view() {
     let action = BugAction::View(crate::cli::ViewArgs {
         ids: vec!["1".into()],
         permissive: false,
@@ -61,19 +58,17 @@ fn is_dry_runnable_false_for_view() {
             exclude_fields: None,
         },
     });
-    assert!(
-        !super::is_dry_runnable(&action),
-        "View is read-only — is_dry_runnable must be false"
-    );
+    let capabilities = super::capabilities(&action);
+    assert!(!capabilities.supports_dry_run());
+    assert_eq!(capabilities.credential_requirement(), None);
 }
 
 #[test]
-fn is_dry_runnable_true_for_update() {
+fn capabilities_allow_dry_run_and_credentials_for_update() {
     let action = BugAction::Update(crate::cli::UpdateArgs::default());
-    assert!(
-        super::is_dry_runnable(&action),
-        "Update is a write — is_dry_runnable must be true"
-    );
+    let capabilities = super::capabilities(&action);
+    assert!(capabilities.supports_dry_run());
+    assert_eq!(capabilities.credential_requirement(), Some("bug update"));
 }
 
 // ---- bug_column_spec — BugAction::My arm ----

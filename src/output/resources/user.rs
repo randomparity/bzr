@@ -30,7 +30,7 @@ struct DetailedUserRow {
 fn basic_row(user: &BugzillaUser) -> UserRow {
     UserRow {
         id: user.id,
-        name: user.name.clone(),
+        name: user.name.clone().unwrap_or_default(),
         real_name: user.real_name.clone().unwrap_or_default(),
         email: user.email.clone().unwrap_or_default(),
     }
@@ -39,7 +39,7 @@ fn basic_row(user: &BugzillaUser) -> UserRow {
 fn detailed_row(user: &BugzillaUser) -> DetailedUserRow {
     DetailedUserRow {
         id: user.id,
-        name: user.name.clone(),
+        name: user.name.clone().unwrap_or_default(),
         real_name: user.real_name.clone().unwrap_or_default(),
         email: user.email.clone().unwrap_or_default(),
         can_login: opt_yes_no(user.can_login).into(),
@@ -48,7 +48,7 @@ fn detailed_row(user: &BugzillaUser) -> DetailedUserRow {
         } else {
             user.groups
                 .iter()
-                .map(|g| g.name.as_str())
+                .map(|g| g.name.as_deref().unwrap_or("unknown"))
                 .collect::<Vec<_>>()
                 .join(", ")
         },
@@ -104,7 +104,12 @@ pub fn write_users_detailed<W: Write + ?Sized>(
 
 pub fn write_whoami<W: Write + ?Sized>(whoami: &WhoamiResponse, format: OutputFormat, out: &mut W) {
     write_formatted(whoami, format, out, |whoami, out| {
-        let _ = writeln!(out, "{} {}", "User".bold(), whoami.name.bold());
+        let _ = writeln!(
+            out,
+            "{} {}",
+            "User".bold(),
+            whoami.name.as_deref().unwrap_or("unknown").bold()
+        );
         write_optional_field(out, "Name", whoami.real_name.as_deref());
         write_optional_field(out, "Login", whoami.login.as_deref());
         write_field(out, "ID", &whoami.id.to_string());

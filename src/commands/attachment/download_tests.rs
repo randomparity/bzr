@@ -164,9 +164,9 @@ async fn write_one_attachment_writes_inline_data_with_att_id_prefix() {
         "Fix patch",
         Some(b64(b"Hello world")),
     );
-    att.content_type = "text/x-diff".into();
-    att.size = 11;
-    att.is_patch = true;
+    att.content_type = Some("text/x-diff".into());
+    att.size = Some(11);
+    att.is_patch = Some(true);
     let out_dir = tmp.path().to_string_lossy().into_owned();
 
     let file = super::write_one_attachment(&client, &att, &out_dir)
@@ -214,7 +214,7 @@ async fn write_one_attachment_falls_back_when_data_missing() {
     .unwrap();
 
     let mut att = make_attachment(9876, 12345, "patch.diff", "Fix patch", None);
-    att.size = 11;
+    att.size = Some(11);
     let out_dir = tmp.path().to_string_lossy().into_owned();
 
     let file = super::write_one_attachment(&client, &att, &out_dir)
@@ -244,7 +244,7 @@ async fn write_one_attachment_overwrites_existing_file() {
     std::fs::write(dir.join("9876.patch.diff"), b"OLD CONTENT").unwrap();
 
     let mut att = make_attachment(9876, 12345, "patch.diff", "v2", Some(b64(b"NEW CONTENT")));
-    att.size = 11;
+    att.size = Some(11);
     let out_dir = tmp.path().to_string_lossy().into_owned();
 
     super::write_one_attachment(&client, &att, &out_dir)
@@ -895,7 +895,7 @@ async fn write_one_attachment_invalid_base64_returns_data_integrity() {
         "broken",
         Some("not valid base64 !!".into()),
     );
-    att.size = 0;
+    att.size = Some(0);
     let out_dir = tmp.path().to_string_lossy().into_owned();
 
     let result = super::write_one_attachment(&client, &att, &out_dir).await;
@@ -909,6 +909,68 @@ async fn write_one_attachment_invalid_base64_returns_data_integrity() {
     assert!(
         msg.contains("decode attachment #9876"),
         "expected decode error message including att-id, got: {msg}",
+    );
+}
+
+#[tokio::test]
+async fn write_one_attachment_without_bug_id_returns_data_integrity() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let client = crate::commands::runtime::shared::connect_and_configure(
+        &crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ),
+    )
+    .await
+    .unwrap();
+
+    let mut att = make_attachment(9876, 12345, "patch.diff", "missing bug", Some(b64(b"x")));
+    att.bug_id = None;
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+
+    let err = super::write_one_attachment(&client, &att, &out_dir)
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(err, crate::error::BzrError::DataIntegrity(_)),
+        "expected DataIntegrity, got {err}",
+    );
+    assert!(
+        err.to_string().contains("has no bug_id"),
+        "unexpected error: {err}",
+    );
+}
+
+#[tokio::test]
+async fn write_one_attachment_without_file_name_returns_data_integrity() {
+    let (_lock, _mock, tmp) = setup_test_env().await;
+    let client = crate::commands::runtime::shared::connect_and_configure(
+        &crate::commands::runtime::context::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ),
+    )
+    .await
+    .unwrap();
+
+    let mut att = make_attachment(9876, 12345, "patch.diff", "missing name", Some(b64(b"x")));
+    att.file_name = None;
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+
+    let err = super::write_one_attachment(&client, &att, &out_dir)
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(err, crate::error::BzrError::DataIntegrity(_)),
+        "expected DataIntegrity, got {err}",
+    );
+    assert!(
+        err.to_string().contains("has no file_name"),
+        "unexpected error: {err}",
     );
 }
 

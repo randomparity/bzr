@@ -13,13 +13,13 @@ fn capture(format: OutputFormat, c: &Classification) -> String {
 fn write_classification_json() {
     let classification = Classification {
         id: 1,
-        name: "Software".into(),
-        description: "Software products".into(),
-        sort_key: 0,
+        name: Some("Software".into()),
+        description: Some("Software products".into()),
+        sort_key: Some(0),
         products: vec![ClassificationProduct {
             id: 10,
-            name: "Widget".into(),
-            description: "Widget product".into(),
+            name: Some("Widget".into()),
+            description: Some("Widget product".into()),
         }],
     };
     let json = serde_json::to_string(&classification).unwrap();
@@ -32,36 +32,37 @@ fn write_classification_json() {
 fn classification_text_format_fields() {
     let classification = Classification {
         id: 1,
-        name: "Software".into(),
-        description: "Software products".into(),
-        sort_key: 0,
+        name: Some("Software".into()),
+        description: Some("Software products".into()),
+        sort_key: Some(0),
         products: vec![
             ClassificationProduct {
                 id: 10,
-                name: "Widget".into(),
-                description:
+                name: Some("Widget".into()),
+                description: Some(
                     "A long description that should be truncated by the formatter when displayed"
                         .into(),
+                ),
             },
             ClassificationProduct {
                 id: 11,
-                name: "Gadget".into(),
-                description: "Short desc".into(),
+                name: Some("Gadget".into()),
+                description: Some("Short desc".into()),
             },
         ],
     };
     assert_eq!(classification.products.len(), 2);
-    assert_eq!(classification.products[0].name, "Widget");
-    assert_eq!(classification.products[1].name, "Gadget");
+    assert_eq!(classification.products[0].name.as_deref(), Some("Widget"));
+    assert_eq!(classification.products[1].name.as_deref(), Some("Gadget"));
 }
 
 #[test]
 fn write_classification_json_empty_products() {
     let classification = Classification {
         id: 2,
-        name: "Empty".into(),
-        description: "No products".into(),
-        sort_key: 0,
+        name: Some("Empty".into()),
+        description: Some("No products".into()),
+        sort_key: Some(0),
         products: vec![],
     };
     let json = serde_json::to_string(&classification).unwrap();
@@ -77,19 +78,19 @@ fn classification_record_has_four_columns_with_correct_values() {
     // `classification_record`: assert every column position carries the real value.
     let c = Classification {
         id: 7,
-        name: "Hardware".into(),
-        description: "Hardware products".into(),
-        sort_key: 0,
+        name: Some("Hardware".into()),
+        description: Some("Hardware products".into()),
+        sort_key: Some(0),
         products: vec![
             ClassificationProduct {
                 id: 1,
-                name: "A".into(),
-                description: "desc".into(),
+                name: Some("A".into()),
+                description: Some("desc".into()),
             },
             ClassificationProduct {
                 id: 2,
-                name: "B".into(),
-                description: "desc2".into(),
+                name: Some("B".into()),
+                description: Some("desc2".into()),
             },
         ],
     };
@@ -111,20 +112,20 @@ fn classification_record_has_four_columns_with_correct_values() {
 fn write_classification_table_omits_products_header_when_empty() {
     let with_products = Classification {
         id: 1,
-        name: "Software".into(),
-        description: "Software products".into(),
-        sort_key: 0,
+        name: Some("Software".into()),
+        description: Some("Software products".into()),
+        sort_key: Some(0),
         products: vec![ClassificationProduct {
             id: 10,
-            name: "Widget".into(),
-            description: "A widget".into(),
+            name: Some("Widget".into()),
+            description: Some("A widget".into()),
         }],
     };
     let empty = Classification {
         id: 2,
-        name: "Empty".into(),
-        description: "Nothing here".into(),
-        sort_key: 0,
+        name: Some("Empty".into()),
+        description: Some("Nothing here".into()),
+        sort_key: Some(0),
         products: vec![],
     };
 

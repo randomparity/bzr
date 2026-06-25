@@ -58,7 +58,7 @@ pub(super) fn handle(
         )));
     }
 
-    let current_secret = server.resolve_api_key(name)?;
+    let current_secret = crate::credentials::resolve_api_key(server, name)?;
 
     let service_name = service.unwrap_or("bzr").to_string();
     let account_name = account.unwrap_or(name).to_string();

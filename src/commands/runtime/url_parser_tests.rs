@@ -43,6 +43,15 @@ fn classify_param_kinds() {
         ParamKind::QueryBasedOn
     ));
     assert!(matches!(classify_param("limit"), ParamKind::Limit));
+    assert!(matches!(
+        classify_param("include_fields"),
+        ParamKind::IncludeFields
+    ));
+    assert!(matches!(classify_param("fields"), ParamKind::IncludeFields));
+    assert!(matches!(
+        classify_param("exclude_fields"),
+        ParamKind::ExcludeFields
+    ));
     assert!(matches!(classify_param("product"), ParamKind::Mapped(_)));
     assert!(matches!(
         classify_param("Bugzilla_api_key"),
@@ -91,6 +100,20 @@ fn parse_simple_url_with_recognized_params() {
     assert_eq!(parsed.query.limit, Some(50));
     assert!(parsed.query.raw_params.is_empty());
     assert_eq!(parsed.query.server.as_deref(), Some("test"));
+}
+
+#[test]
+fn parse_url_field_selection_is_typed_not_raw() {
+    let parsed = parse_test_url(
+        "product=Firefox&include_fields=id,summary,cf_release&exclude_fields=comments",
+    );
+
+    assert_eq!(
+        parsed.query.fields.as_deref(),
+        Some("id,summary,cf_release")
+    );
+    assert_eq!(parsed.query.exclude_fields.as_deref(), Some("comments"));
+    assert!(parsed.query.raw_params.is_empty());
 }
 
 #[test]

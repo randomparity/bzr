@@ -116,7 +116,7 @@ async fn migrate_to_keyring_from_inline_rewrites_config() {
     assert!(server.api_key.is_none(), "inline key should be cleared");
     assert!(server.api_key_keyring.is_some());
     assert_eq!(
-        server.resolve_api_key("migrate-inline").unwrap(),
+        crate::credentials::resolve_api_key(server, "migrate-inline").unwrap(),
         "inline-secret-value"
     );
     crate::credentials::keyring::delete("bzr", "migrate-inline").unwrap();

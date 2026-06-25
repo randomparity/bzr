@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used)]
 
-use super::{requires_credentials, resolve_bool_flag, update_has_changes, validate_action};
+use super::{capabilities, resolve_bool_flag, update_has_changes, validate_action};
 use crate::cli::{AttachmentAction, AttachmentUpdateArgs, UploadArgs};
 
 fn upload_args() -> UploadArgs {
@@ -52,28 +52,34 @@ fn resolve_bool_flag_neither_is_none() {
 }
 
 #[test]
-fn requires_credentials_reads_need_none() {
-    assert!(requires_credentials(&AttachmentAction::List { bug_id: 1 }).is_none());
-    assert!(requires_credentials(&AttachmentAction::View { attachment_id: 1 }).is_none());
-    assert!(requires_credentials(&AttachmentAction::Download {
+fn capabilities_are_anonymous_for_reads() {
+    let list = capabilities(&AttachmentAction::List { bug_id: 1 });
+    assert!(!list.supports_dry_run());
+    assert_eq!(list.credential_requirement(), None);
+
+    let view = capabilities(&AttachmentAction::View { attachment_id: 1 });
+    assert!(!view.supports_dry_run());
+    assert_eq!(view.credential_requirement(), None);
+
+    let download = capabilities(&AttachmentAction::Download {
         ids: vec![1],
         bug_ids: vec![],
         out: None,
         out_dir: "x".into(),
-    })
-    .is_none());
+    });
+    assert!(!download.supports_dry_run());
+    assert_eq!(download.credential_requirement(), None);
 }
 
 #[test]
-fn requires_credentials_writes_name_the_command() {
-    assert_eq!(
-        requires_credentials(&AttachmentAction::Upload(upload_args())),
-        Some("attachment upload")
-    );
-    assert_eq!(
-        requires_credentials(&AttachmentAction::Update(update_args())),
-        Some("attachment update")
-    );
+fn capabilities_require_credentials_for_writes() {
+    let upload = capabilities(&AttachmentAction::Upload(upload_args()));
+    assert!(!upload.supports_dry_run());
+    assert_eq!(upload.credential_requirement(), Some("attachment upload"));
+
+    let update = capabilities(&AttachmentAction::Update(update_args()));
+    assert!(!update.supports_dry_run());
+    assert_eq!(update.credential_requirement(), Some("attachment update"));
 }
 
 // ── update_has_changes (|| vs && mutants) ────────────────────────────────────

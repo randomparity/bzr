@@ -64,7 +64,7 @@ async fn api_error_with_200_and_data_returns_data() {
     let client = test_client(&mock.uri());
     let bug = client.get_bug("42", None, None).await.unwrap();
     assert_eq!(bug.id, 42);
-    assert_eq!(bug.summary, "test bug");
+    assert_eq!(bug.summary.as_deref(), Some("test bug"));
 }
 
 #[tokio::test]
@@ -217,6 +217,36 @@ async fn api_200_error_with_string_code_parsed_correctly() {
     assert!(
         matches!(&err, crate::error::BzrError::Api { code: 32610, .. }),
         "expected Api error with code 32610, got: {err}"
+    );
+}
+
+#[tokio::test]
+async fn api_200_error_with_out_of_range_unsigned_code_is_malformed() {
+    let mock = MockServer::start().await;
+    let code = u64::try_from(i64::MAX).unwrap() + 1;
+    Mock::given(method("GET"))
+        .and(path("/rest/group"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "error": true,
+            "code": code,
+            "message": "code is outside signed range"
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client
+        .get_json_query::<serde_json::Value>("group", &[])
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(
+            &err,
+            crate::error::BzrError::Deserialize(message)
+                if message.contains("Bugzilla error response")
+        ),
+        "expected malformed Bugzilla error response, got: {err}"
     );
 }
 

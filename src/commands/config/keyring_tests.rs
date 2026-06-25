@@ -92,7 +92,10 @@ async fn set_keyring_stores_secret_and_rewrites_config() {
     assert!(server.api_key_keyring.is_some());
 
     // Resolving the API key now fetches from the test keychain.
-    assert_eq!(server.resolve_api_key("prod").unwrap(), "new-keyring-value");
+    assert_eq!(
+        crate::credentials::resolve_api_key(server, "prod").unwrap(),
+        "new-keyring-value"
+    );
     crate::credentials::keyring::delete("bzr", "prod").unwrap();
 }
 

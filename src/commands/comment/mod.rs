@@ -1,6 +1,7 @@
 use std::io::IsTerminal;
 
 use crate::cli::CommentAction;
+use crate::commands::runtime::capabilities::CommandCapabilities;
 use crate::commands::runtime::context::CommandContext;
 use crate::commands::runtime::editor;
 use crate::error::Result;
@@ -11,11 +12,14 @@ mod list;
 mod search_tags;
 mod tag;
 
-pub(crate) fn requires_credentials(action: &CommentAction) -> Option<&'static str> {
+#[must_use]
+pub(crate) fn capabilities(action: &CommentAction) -> CommandCapabilities {
     match action {
-        CommentAction::List { .. } | CommentAction::SearchTags { .. } => None,
-        CommentAction::Add { .. } => Some("comment add"),
-        CommentAction::Tag { .. } => Some("comment tag"),
+        CommentAction::List { .. } | CommentAction::SearchTags { .. } => {
+            CommandCapabilities::anonymous()
+        }
+        CommentAction::Add { .. } => CommandCapabilities::authenticated("comment add"),
+        CommentAction::Tag { .. } => CommandCapabilities::authenticated("comment tag"),
     }
 }
 

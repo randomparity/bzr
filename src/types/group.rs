@@ -5,11 +5,11 @@ use serde::{Deserialize, Serialize};
 pub struct GroupInfo {
     pub id: u64,
     #[serde(default)]
-    pub name: String,
+    pub name: Option<String>,
     #[serde(default)]
-    pub description: String,
+    pub description: Option<String>,
     #[serde(default)]
-    pub is_active: bool,
+    pub is_active: Option<bool>,
     #[serde(default)]
     pub membership: Vec<GroupMember>,
 }
@@ -19,7 +19,7 @@ pub struct GroupInfo {
 pub struct GroupMember {
     pub id: u64,
     #[serde(default)]
-    pub name: String,
+    pub name: Option<String>,
     #[serde(default)]
     pub real_name: Option<String>,
     #[serde(default)]

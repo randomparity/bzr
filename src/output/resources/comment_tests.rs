@@ -6,12 +6,12 @@ use crate::types::{Comment, OutputFormat};
 fn make_comment(count: u64, text: &str) -> Comment {
     Comment {
         id: count + 100,
-        bug_id: 42,
-        text: text.into(),
+        bug_id: Some(42),
+        text: Some(text.into()),
         creator: Some("commenter@example.com".into()),
         creation_time: Some("2025-02-01T08:00:00Z".into()),
-        count,
-        is_private: false,
+        count: Some(count),
+        is_private: Some(false),
         attachment_id: None,
     }
 }
@@ -42,7 +42,7 @@ fn write_comments_json_one_comment() {
 #[test]
 fn write_comments_json_private_flag() {
     let mut comment = make_comment(1, "secret");
-    comment.is_private = true;
+    comment.is_private = Some(true);
     let json = serde_json::to_string(&comment).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["is_private"], true);
@@ -65,7 +65,7 @@ fn write_comments_json_empty_renders_empty_array() {
 #[test]
 fn write_comments_table_renders_comment_fields() {
     let mut c = make_comment(2, "Line one\nLine two");
-    c.is_private = true;
+    c.is_private = Some(true);
     let output = capture(OutputFormat::Table, &[c]);
     assert!(output.contains("Comment"));
     assert!(output.contains("#2"));
@@ -81,12 +81,12 @@ fn write_comments_table_renders_comment_fields() {
 fn write_comments_table_handles_missing_creator_and_unicode() {
     let comments = vec![Comment {
         id: 1,
-        bug_id: 42,
-        text: "héllo, wörld".into(),
+        bug_id: Some(42),
+        text: Some("héllo, wörld".into()),
         creator: None,
         creation_time: None,
-        count: 0,
-        is_private: false,
+        count: Some(0),
+        is_private: Some(false),
         attachment_id: None,
     }];
     let output = capture(OutputFormat::Table, &comments);

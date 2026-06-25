@@ -47,6 +47,7 @@ pub(super) async fn handle(
         resolve_source_description(&client, source.id, description.as_deref()).await?;
     let source_product = required_source_field(source.product, "product")?;
     let source_component = required_source_field(source.component, "component")?;
+    let source_summary = required_source_field(source.summary, "summary")?;
 
     let mut blocks = Vec::new();
     if *add_blocks {
@@ -60,7 +61,7 @@ pub(super) async fn handle(
     let params = CreateBugParams {
         product: product.clone().unwrap_or(source_product),
         component: component.clone().unwrap_or(source_component),
-        summary: summary.clone().unwrap_or(source.summary),
+        summary: summary.clone().unwrap_or(source_summary),
         version: version
             .clone()
             .or(source.version)
@@ -132,7 +133,10 @@ async fn resolve_source_description(
         return Ok(Some(description.to_string()));
     }
     let comments = client.get_comments_since(source_id, None).await?;
-    Ok(comments.into_iter().find(|c| c.count == 0).map(|c| c.text))
+    Ok(comments
+        .into_iter()
+        .find(|comment| comment.count == Some(0))
+        .and_then(|comment| comment.text))
 }
 
 fn required_source_field(value: Option<String>, field: &str) -> Result<String> {

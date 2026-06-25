@@ -71,19 +71,19 @@ fn write_attachments_json_one_attachment() {
 #[test]
 fn attachment_text_format_fields() {
     let att = output_attachment(10, "Fix patch");
-    assert_eq!(att.file_name, "file_10.patch");
-    assert_eq!(att.content_type, "text/plain");
-    assert_eq!(att.size, 1234);
+    assert_eq!(att.file_name.as_deref(), Some("file_10.patch"));
+    assert_eq!(att.content_type.as_deref(), Some("text/plain"));
+    assert_eq!(att.size, Some(1234));
     assert_eq!(att.creator.as_deref(), Some("author@example.com"));
-    assert!(!att.is_obsolete);
-    assert!(!att.is_private);
+    assert_eq!(att.is_obsolete, Some(false));
+    assert_eq!(att.is_private, Some(false));
 }
 
 #[test]
 fn write_attachments_json_obsolete_and_private() {
     let mut att = output_attachment(11, "Old patch");
-    att.is_obsolete = true;
-    att.is_private = true;
+    att.is_obsolete = Some(true);
+    att.is_private = Some(true);
     let json = serde_json::to_string(&att).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["is_obsolete"], true);
@@ -107,8 +107,8 @@ fn write_attachments_json_empty_renders_empty_array() {
 #[test]
 fn write_attachments_table_renders_all_fields() {
     let mut att = output_attachment(7, "Helpful patch");
-    att.is_obsolete = true;
-    att.is_private = true;
+    att.is_obsolete = Some(true);
+    att.is_private = Some(true);
     let output = capture(OutputFormat::Table, &[att]);
     assert!(output.contains("Attachment"));
     assert!(output.contains("#7"));
@@ -128,17 +128,17 @@ fn write_attachments_table_renders_all_fields() {
 fn write_attachments_table_missing_optional_fields_render_dash() {
     let attachments = vec![Attachment {
         id: 8,
-        bug_id: 42,
-        file_name: "patché.txt".into(),
-        summary: "Unicode summary — é".into(),
-        content_type: "text/plain".into(),
+        bug_id: Some(42),
+        file_name: Some("patché.txt".into()),
+        summary: Some("Unicode summary — é".into()),
+        content_type: Some("text/plain".into()),
         creator: None,
         creation_time: None,
         last_change_time: None,
-        size: 0,
-        is_obsolete: false,
-        is_private: false,
-        is_patch: false,
+        size: Some(0),
+        is_obsolete: Some(false),
+        is_private: Some(false),
+        is_patch: Some(false),
         flags: Vec::new(),
         data: None,
     }];
@@ -160,7 +160,7 @@ fn write_attachments_table_missing_optional_fields_render_dash() {
 #[test]
 fn write_attachments_table_renders_patch_tag() {
     let mut att = output_attachment(12, "Patch attachment");
-    att.is_patch = true;
+    att.is_patch = Some(true);
     let output = capture(OutputFormat::Table, &[att]);
     assert!(output.contains("Attachment"));
     assert!(output.contains("#12"));
@@ -173,9 +173,9 @@ fn write_attachments_table_renders_patch_tag() {
 #[test]
 fn write_attachments_table_patch_tag_precedes_obsolete_and_private() {
     let mut att = output_attachment(13, "All flags");
-    att.is_patch = true;
-    att.is_obsolete = true;
-    att.is_private = true;
+    att.is_patch = Some(true);
+    att.is_obsolete = Some(true);
+    att.is_private = Some(true);
     let output = capture(OutputFormat::Table, &[att]);
     let patch_idx = output.find("[PATCH]").expect("[PATCH] tag should render");
     let obsolete_idx = output
