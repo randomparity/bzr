@@ -116,7 +116,12 @@ async fn probe_valid_login(
             return ValidLoginOutcome::NetworkError(e);
         }
     };
-    tracing::trace!(probe = "valid_login", %method, body = body_text, "auth probe response");
+    tracing::trace!(
+        probe = "valid_login",
+        %method,
+        body = super::trace_body_preview(&body_text),
+        "auth probe response"
+    );
     let parsed: ValidLoginResponse = match serde_json::from_str(&body_text) {
         Ok(p) => p,
         Err(error) => {

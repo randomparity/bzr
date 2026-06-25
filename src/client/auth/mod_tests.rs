@@ -41,6 +41,28 @@ fn spawn_self_signed_https_server() -> (String, std::thread::JoinHandle<()>) {
     (format!("https://localhost:{port}"), handle)
 }
 
+#[test]
+fn trace_body_preview_caps_long_auth_probe_bodies() {
+    let body = "x".repeat(AUTH_PROBE_BODY_TRACE_MAX_BYTES + 1);
+
+    let preview = trace_body_preview(&body);
+
+    assert_eq!(preview.len(), AUTH_PROBE_BODY_TRACE_MAX_BYTES);
+    assert_eq!(preview, "x".repeat(AUTH_PROBE_BODY_TRACE_MAX_BYTES));
+}
+
+#[test]
+fn trace_body_preview_stops_on_utf8_boundary() {
+    let mut body = "a".repeat(AUTH_PROBE_BODY_TRACE_MAX_BYTES - 1);
+    body.push('é');
+    body.push_str("trailing");
+
+    let preview = trace_body_preview(&body);
+
+    assert_eq!(preview, "a".repeat(AUTH_PROBE_BODY_TRACE_MAX_BYTES - 1));
+    assert!(preview.len() <= AUTH_PROBE_BODY_TRACE_MAX_BYTES);
+}
+
 #[tokio::test]
 async fn header_auth_succeeds() {
     let server = MockServer::start().await;

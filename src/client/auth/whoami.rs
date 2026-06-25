@@ -77,7 +77,13 @@ async fn probe_whoami(request: reqwest::RequestBuilder, method: AuthMethod) -> W
             return WhoamiOutcome::NetworkError(e);
         }
     };
-    tracing::trace!(probe = "whoami", %method, %status, body, "auth probe response");
+    tracing::trace!(
+        probe = "whoami",
+        %method,
+        %status,
+        body = super::trace_body_preview(&body),
+        "auth probe response"
+    );
     if status.is_success() {
         match serde_json::from_str::<WhoamiProbeResponse>(&body) {
             Ok(parsed) if parsed.id > 0 => {

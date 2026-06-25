@@ -15,6 +15,12 @@ use self::whoami::{detect_whoami_auth, WhoamiOutcome};
 
 use super::version::{detect_version_and_mode, detect_version_and_mode_without_auth_checked};
 
+const AUTH_PROBE_BODY_TRACE_MAX_BYTES: usize = 2048;
+
+fn trace_body_preview(body: &str) -> &str {
+    crate::http::utf8_prefix(body, AUTH_PROBE_BODY_TRACE_MAX_BYTES)
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct MalformedProbeResponse {
     probe: &'static str,
