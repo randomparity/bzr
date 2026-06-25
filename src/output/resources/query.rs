@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::Write;
 
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 use crate::types::query::{QueryKind, SavedQuery};
 
 use crate::output::formatting::{

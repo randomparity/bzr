@@ -12,7 +12,7 @@ use crate::output::resources::bug::write_bugs;
 use crate::output::resources::query::write_query_saved;
 use crate::output::writers::Writers;
 use crate::types::bug::{Overrides, SearchParams};
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 use crate::types::query::SavedQuery;
 
 /// The client plus the query to run, and any `--save-as` query to persist

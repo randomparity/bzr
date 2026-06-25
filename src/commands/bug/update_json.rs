@@ -10,7 +10,7 @@ use crate::output::result_types::{
 };
 use crate::output::writers::Writers;
 use crate::types::bug::UpdateBugParams;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 #[derive(Debug, Serialize)]
 struct JsonUpdateRequest {

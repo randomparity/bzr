@@ -1,6 +1,6 @@
 use serde::{Deserialize, Deserializer, Serialize};
 
-use super::common::{Flag, FlagUpdate};
+use super::flag::{Flag, FlagUpdate};
 
 /// Deserialize a boolean that may arrive as an integer (0/1) from Bugzilla 5.0.
 fn bool_from_int_or_bool<'de, D: Deserializer<'de>>(d: D) -> Result<bool, D::Error> {

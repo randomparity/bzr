@@ -11,7 +11,7 @@ use crate::commands::runtime::context::CommandContext;
 use crate::config::{Config, ServerConfig};
 use crate::error::Result;
 use crate::tls::TlsConfig;
-use crate::types::common::{ApiMode, AuthMethod};
+use crate::types::transport::{ApiMode, AuthMethod};
 
 use super::detect::persist_detected_settings;
 

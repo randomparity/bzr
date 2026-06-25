@@ -4,7 +4,7 @@
 use crate::output::result_types::{write_result, BatchResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
 use crate::types::bug::UpdateBugParams;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 const COMMENT_SUFFIX: &str = " (with comment)";
 

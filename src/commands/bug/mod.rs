@@ -7,7 +7,7 @@ use crate::commands::bug::search_support::fields::{
 use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::writers::Writers;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 mod clone;
 mod create;

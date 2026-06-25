@@ -11,7 +11,8 @@ use crate::test_helpers::{
     config_path, load_config, seed_inline_server, setup_empty_config_env,
     update_config_without_validation, CapturedIo,
 };
-use crate::types::common::{AuthMethod, OutputFormat};
+use crate::types::output::OutputFormat;
+use crate::types::transport::AuthMethod;
 
 /// Owned, all-defaulted view of the `SetServer` operands so each test can
 /// override only the fields it cares about via `..Default::default()` (the

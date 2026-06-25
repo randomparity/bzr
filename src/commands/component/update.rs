@@ -3,8 +3,8 @@ use crate::commands::runtime::context::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
-use crate::types::common::OutputFormat;
 use crate::types::component::UpdateComponentParams;
+use crate::types::output::OutputFormat;
 use crate::types::product::Product;
 use serde::{Deserialize, Serialize};
 

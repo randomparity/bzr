@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{BzrError, Result};
-use crate::types::common::{ApiMode, AuthMethod};
 use crate::types::query::SavedQuery;
 use crate::types::template::BugTemplate;
+use crate::types::transport::{ApiMode, AuthMethod};
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 #[non_exhaustive]

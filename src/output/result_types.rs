@@ -4,7 +4,7 @@ use serde::Serialize;
 
 use super::formatting::write_json_family;
 use crate::types::bug::Bug;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 // ── Result output ───────────────────────────────────────────────────
 

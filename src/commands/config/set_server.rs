@@ -13,7 +13,7 @@ pub(super) struct SetServerArgs<'a> {
     pub(super) api_key: Option<&'a str>,
     pub(super) api_key_env: Option<&'a str>,
     pub(super) email: Option<&'a str>,
-    pub(super) auth_method: Option<crate::types::common::AuthMethod>,
+    pub(super) auth_method: Option<crate::types::transport::AuthMethod>,
     pub(super) tls_insecure: bool,
     pub(super) tls_ca_cert: Option<&'a str>,
     pub(super) tls_pin_sha256: Option<&'a str>,

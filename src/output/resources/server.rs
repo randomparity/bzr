@@ -4,7 +4,8 @@ use colored::Colorize;
 use serde::Serialize;
 
 use crate::output::formatting::write_formatted;
-use crate::types::common::{ExtensionInfo, OutputFormat, ServerInfoResponse};
+use crate::types::output::OutputFormat;
+use crate::types::server_info::{ExtensionInfo, ServerInfoResponse};
 
 /// Combined server information for display.
 #[derive(Serialize)]

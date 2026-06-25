@@ -3,7 +3,7 @@
 use super::ListArgs;
 use crate::cli::bug::BugAction;
 use crate::cli::{Cli, Commands};
-use crate::types::common::SortDirection;
+use crate::types::output::SortDirection;
 use clap::error::ErrorKind;
 use clap::Parser as _;
 

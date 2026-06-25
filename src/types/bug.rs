@@ -4,7 +4,7 @@ use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
-use super::common::Flag;
+use super::flag::Flag;
 
 mod payload;
 mod search;

@@ -11,7 +11,7 @@ use crate::output::result_types::{
 };
 use crate::output::writers::Writers;
 use crate::types::bug::UpdateBugParams;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 use super::output::{comment_suffix, write_batch_result, write_update_dry_run};
 

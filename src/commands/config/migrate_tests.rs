@@ -10,7 +10,7 @@ use crate::error::BzrError;
 use crate::test_helpers::{
     seed_inline_server, setup_empty_config_env, update_config_without_validation, CapturedIo,
 };
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 /// Build a `MigrateToKeyring` action with default service/account and the
 /// given confirmation flag.

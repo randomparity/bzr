@@ -21,7 +21,7 @@ use reqwest::header::HeaderValue;
 use serde::Deserialize;
 
 use crate::error::{BzrError, Result};
-use crate::types::common::{ApiMode, AuthMethod};
+use crate::types::transport::{ApiMode, AuthMethod};
 use crate::types::user::BugzillaUser;
 use crate::xmlrpc::protocol::XmlRpcClient;
 

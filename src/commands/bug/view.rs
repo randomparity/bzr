@@ -13,7 +13,7 @@ use crate::output::resources::bug::{bug_to_json, write_bug_detail, write_multi_b
 use crate::output::result_types::{write_result, BugViewFailure, MultiBugViewResult};
 use crate::output::writers::Writers;
 use crate::types::bug::Bug;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 #[derive(Clone, Copy)]
 enum BugViewMode {

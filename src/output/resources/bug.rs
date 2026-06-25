@@ -16,7 +16,7 @@ use crate::types::bug_fields::{
     field_selected, partition_include, selected_custom_detail_fields, BugField, ColumnSpec,
     SelectedBugField,
 };
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 /// Bugzilla's sentinel for "no target milestone set". Suppressed in detail
 /// output so a bug without a milestone does not print a noise row.

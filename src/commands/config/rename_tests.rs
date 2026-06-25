@@ -10,7 +10,7 @@ use crate::test_helpers::{
     load_config_unvalidated, run_config_action_json, seed_inline_server, setup_empty_config_env,
     CapturedIo,
 };
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 #[tokio::test]
 async fn rename_server_preserves_inline_credentials() {

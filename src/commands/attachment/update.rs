@@ -3,7 +3,7 @@ use crate::error::Result;
 use crate::output::result_types::{write_result, ActionResult, ResourceKind};
 use crate::output::writers::Writers;
 use crate::types::attachment::UpdateAttachmentParams;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 pub(super) async fn handle(
     args: &crate::cli::AttachmentUpdateArgs,

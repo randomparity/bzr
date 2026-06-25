@@ -6,7 +6,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use super::*;
 use crate::client::test_helpers::{test_client, test_client_query_param};
 use crate::client::{BugzillaClientConfig, UserDetailLevel};
-use crate::types::common::{ApiMode, AuthMethod};
+use crate::types::transport::{ApiMode, AuthMethod};
 
 fn has_no_auth_header(req: &wiremock::Request) -> bool {
     !req.headers

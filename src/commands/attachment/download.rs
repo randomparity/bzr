@@ -12,7 +12,7 @@ use crate::output::resources::attachment::{
 use crate::output::result_types::{write_result, DownloadResult};
 use crate::output::writers::Writers;
 use crate::types::attachment::Attachment;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 pub(super) struct DownloadArgs<'a> {
     pub(super) ids: &'a [u64],

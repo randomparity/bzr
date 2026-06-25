@@ -1,7 +1,7 @@
 use super::encode_path;
 use super::{BugzillaClient, UserDetailLevel, UserSearchResponse};
 use crate::error::{BzrError, Result};
-use crate::types::common::ApiMode;
+use crate::types::transport::ApiMode;
 use crate::types::user::{BugzillaUser, CreateUserParams, UpdateUserParams, WhoamiResponse};
 
 impl BugzillaClient {

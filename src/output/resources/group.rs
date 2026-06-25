@@ -3,8 +3,8 @@ use std::io::Write;
 use colored::Colorize;
 
 use crate::output::formatting::{write_bool_field, write_field, write_formatted};
-use crate::types::common::OutputFormat;
 use crate::types::group::GroupInfo;
+use crate::types::output::OutputFormat;
 
 pub fn write_group_info<W: Write + ?Sized>(group: &GroupInfo, format: OutputFormat, out: &mut W) {
     write_formatted(group, format, out, |group, out| {

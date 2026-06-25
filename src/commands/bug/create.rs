@@ -7,7 +7,7 @@ use crate::error::Result;
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
 use crate::types::bug::CreateBugParams;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 use crate::types::template::BugTemplate;
 
 const SENTINEL: &str = "# ------------------------ >8 ------------------------";

@@ -1,5 +1,5 @@
 use crate::error::{BzrError, Result};
-use crate::types::common::{FlagStatus, FlagUpdate};
+use crate::types::flag::{FlagStatus, FlagUpdate};
 
 /// Parse flag strings like "review?(user@example.com)" or "review+" or "review-"
 /// into `FlagUpdate` structs.
