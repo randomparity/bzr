@@ -22,7 +22,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - name: Compare tag with Cargo.toml version
         env:
           TAG: ${{ github.ref_name }}
@@ -45,7 +45,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6e  # stable
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
         with:
@@ -113,7 +113,7 @@ jobs:
             use_cross: false
             archive: zip
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       - name: Install libdbus-1-dev (native Linux)
         if: matrix.target == 'x86_64-unknown-linux-gnu'
@@ -209,13 +209,13 @@ jobs:
 
       - name: Install cargo-deb
         if: matrix.pkg_deb
-        uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912  # v2.81.10
+        uses: taiki-e/install-action@b8cecb83565409bcc297b2df6e77f030b2a468d5  # v2.82.0
         with:
           tool: cargo-deb
 
       - name: Install cargo-generate-rpm
         if: matrix.pkg_rpm
-        uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912  # v2.81.10
+        uses: taiki-e/install-action@b8cecb83565409bcc297b2df6e77f030b2a468d5  # v2.82.0
         with:
           tool: cargo-generate-rpm
 
@@ -323,7 +323,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
         with:
@@ -426,7 +426,7 @@ jobs:
       # validates the installed binary's output against it. This is robust
       # whether or not the project carries an rc suffix in Cargo.toml across
       # the rc cycle.
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       # The tag-vs-Cargo.toml check is enforced by the `preflight` job before
       # any build runs, so we don't repeat it here. This step verifies the
@@ -510,10 +510,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout bzr (for template)
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       - name: Checkout tap
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           repository: randomparity/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
@@ -736,7 +736,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           ref: main
           fetch-depth: 0
