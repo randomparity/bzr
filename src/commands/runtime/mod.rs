@@ -15,5 +15,6 @@ pub(crate) mod from_json;
 pub mod inline_server;
 pub(crate) mod mutation;
 pub(crate) mod paging;
+pub(crate) mod search;
 pub(crate) mod shared;
 pub(crate) mod url_parser;

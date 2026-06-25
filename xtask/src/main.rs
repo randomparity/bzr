@@ -49,3 +49,7 @@ fn generate_man(out: &PathBuf) -> Result<()> {
     eprintln!("wrote manpages to {}", out.display());
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "main_tests.rs"]
+mod tests;

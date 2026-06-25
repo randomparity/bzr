@@ -2,7 +2,7 @@ use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
 use crate::output::resources::attachment::write_attachments;
 use crate::output::writers::Writers;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 pub(super) async fn handle(
     ctx: &CommandContext,

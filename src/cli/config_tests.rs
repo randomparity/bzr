@@ -2,7 +2,7 @@
 
 use super::ConfigAction;
 use crate::cli::{Cli, Commands};
-use crate::types::common::AuthMethod;
+use crate::types::transport::AuthMethod;
 use clap::error::ErrorKind;
 use clap::Parser as _;
 

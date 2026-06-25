@@ -10,7 +10,7 @@ use crate::output::result_types::{
 };
 use crate::output::writers::Writers;
 use crate::types::bug::CreateBugParams;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 /// One bug's worth of structured input for `bug create --from-json`. Keys match
 /// the create flag names; `deny_unknown_fields` rejects typos and keeps

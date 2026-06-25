@@ -4,8 +4,8 @@ use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 
 use crate::cli::{FieldArgs, ViewArgs};
 use crate::client::BugzillaClient;
-use crate::commands::bug::search_support::fields::{canonical_field_list, ColumnSpec};
 use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::search::fields::{canonical_field_list, ColumnSpec};
 use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::output::resources::bug::MultiBugRow;
@@ -13,7 +13,7 @@ use crate::output::resources::bug::{bug_to_json, write_bug_detail, write_multi_b
 use crate::output::result_types::{write_result, BugViewFailure, MultiBugViewResult};
 use crate::output::writers::Writers;
 use crate::types::bug::Bug;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 #[derive(Clone, Copy)]
 enum BugViewMode {

@@ -1,7 +1,7 @@
 use clap::{Args, Subcommand};
 
 use crate::types::bug::{FilterField, SearchParams, FIELD_MAPPINGS};
-use crate::types::common::SortDirection;
+use crate::types::output::SortDirection;
 use crate::types::query::SavedQuery;
 
 mod clone;

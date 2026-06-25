@@ -7,7 +7,7 @@ use crate::output::result_types::{write_result, ActionResult, DryRunResult, Reso
 use crate::output::writers::Writers;
 use crate::types::bug::CreateBugParams;
 use crate::types::comment::AddCommentParams;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 use crate::validation::parse_optional_date_only;
 
 pub(super) async fn handle(

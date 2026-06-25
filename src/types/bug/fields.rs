@@ -356,5 +356,5 @@ pub fn selected_custom_detail_fields(spec: ColumnSpec<'_>) -> Vec<&str> {
 }
 
 #[cfg(test)]
-#[path = "bug_fields_tests.rs"]
+#[path = "fields_tests.rs"]
 mod tests;

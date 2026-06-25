@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use super::encode_path;
-use super::{BugzillaClient, UserDetailLevel, UserSearchResponse};
+use crate::client::encode_path;
+use crate::client::{BugzillaClient, UserDetailLevel, UserSearchResponse};
 use crate::error::{BzrError, Result};
-use crate::types::common::ApiMode;
 use crate::types::group::{CreateGroupParams, GroupInfo, UpdateGroupParams};
+use crate::types::transport::ApiMode;
 use crate::types::user::BugzillaUser;
 
 #[derive(Serialize)]

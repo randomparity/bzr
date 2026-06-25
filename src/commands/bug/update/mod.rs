@@ -9,10 +9,10 @@ mod output;
 mod payload;
 mod validate;
 
+pub(super) use crate::commands::runtime::mutation::ensure_batch_complete;
 pub(super) use draft::BugUpdateDraft;
 pub(super) use execute::{
-    apply_checked, apply_checked_connected, confirm_batch, ensure_batch_complete,
-    ensure_unchanged_since, ApplyRequest,
+    apply_checked, apply_checked_connected, confirm_batch, ensure_unchanged_since, ApplyRequest,
 };
 pub(super) use output::write_batch_result;
 use payload::build_update_params;

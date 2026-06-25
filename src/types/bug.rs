@@ -4,11 +4,17 @@ use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
-use super::common::Flag;
+use super::flag::Flag;
 
+mod fields;
 mod payload;
 mod search;
 
+pub use fields::{
+    apply_exclude, canonical_excludes, canonical_field_list, default_selected_fields,
+    field_selected, partition_include, selected_custom_detail_fields, selected_keys, BugField,
+    ColumnSpec, SelectedBugField, BUG_FIELDS,
+};
 pub use payload::{
     CommentUpdate, CreateBugParams, IdListUpdate, StringListUpdate, UpdateBugParams,
 };

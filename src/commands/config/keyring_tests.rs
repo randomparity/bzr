@@ -10,7 +10,7 @@ use crate::commands::config::execute;
 use crate::commands::runtime::context::CommandContext;
 use crate::error::BzrError;
 use crate::test_helpers::{seed_inline_server, setup_empty_config_env, CapturedIo};
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 #[tokio::test]
 async fn set_keyring_missing_server_errors_before_keychain() {

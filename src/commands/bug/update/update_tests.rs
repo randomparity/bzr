@@ -846,6 +846,45 @@ async fn bug_update_batch_table_format_all_succeed() {
 }
 
 #[test]
+fn write_batch_result_table_prints_successes_and_failures() {
+    let batch = crate::output::result_types::BatchResult::new(
+        vec![1],
+        vec![crate::output::result_types::BatchFailure {
+            id: 2,
+            error: "boom".into(),
+        }],
+    );
+    let mut io = crate::test_helpers::CapturedIo::new();
+
+    super::write_batch_result(&batch, OutputFormat::Table, true, &mut io.writers());
+
+    assert_eq!(io.out_str(), "Updated bugs: #1 (with comment)\n");
+    assert_eq!(io.err_str(), "Failed to update bug #2: boom\n");
+}
+
+#[test]
+fn write_batch_result_json_emits_batch_result_shape() {
+    let batch = crate::output::result_types::BatchResult::new(
+        vec![7],
+        vec![crate::output::result_types::BatchFailure {
+            id: 8,
+            error: "nope".into(),
+        }],
+    );
+    let mut io = crate::test_helpers::CapturedIo::new();
+
+    super::write_batch_result(&batch, OutputFormat::Json, false, &mut io.writers());
+
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["resource"], "bug");
+    assert_eq!(parsed["action"], "updated");
+    assert_eq!(parsed["succeeded"], serde_json::json!([7]));
+    assert_eq!(parsed["failed"][0]["id"], 8);
+    assert_eq!(parsed["failed"][0]["error"], "nope");
+    assert!(io.err_str().is_empty());
+}
+
+#[test]
 fn build_update_params_populates_string_lists() {
     let action = make_update_action_with_lists(UpdateLists {
         keywords_add: vec!["fix-needed"],
@@ -918,6 +957,21 @@ fn build_update_params_rejects_alias_with_multiple_ids() {
     *update_ids_mut(&mut action).expect("expected update action") = vec![42, 43];
 
     let err = super::build_update_params(as_update_args(&action)).unwrap_err();
+    assert!(
+        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("--alias")),
+        "expected --alias validation error, got {err:?}"
+    );
+}
+
+#[test]
+fn build_update_params_from_draft_validates_ids_passed_separately() {
+    let draft = super::BugUpdateDraft {
+        alias: Some("short-name".into()),
+        ..Default::default()
+    };
+
+    let err = super::build_update_params_from_draft(vec![42, 43], &draft).unwrap_err();
+
     assert!(
         matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("--alias")),
         "expected --alias validation error, got {err:?}"
@@ -1115,6 +1169,29 @@ fn build_update_params_rejects_comment_and_comment_file_together() {
         }
         other => panic!("expected InputValidation, got {other:?}"),
     }
+}
+
+#[test]
+fn build_update_params_from_overlaid_draft_uses_cli_comment_over_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("body.txt");
+    std::fs::write(&path, "from a file").unwrap();
+    let mut draft = super::BugUpdateDraft {
+        comment_file: Some(path),
+        ..Default::default()
+    };
+    let args = crate::cli::UpdateArgs {
+        ids: vec![42],
+        comment: Some("inline".into()),
+        ..Default::default()
+    };
+
+    draft.overlay_cli(&args);
+    let (_ids, params) = super::build_update_params_from_draft(vec![42], &draft).unwrap();
+
+    let comment = params.comment.expect("comment populated");
+    assert_eq!(comment.body, "inline");
+    assert!(!comment.is_private);
 }
 
 #[test]
@@ -1595,6 +1672,43 @@ async fn bug_update_dry_run_still_validates_empty_update() {
     ));
 }
 
+#[tokio::test]
+async fn apply_checked_connected_dry_run_skips_expect_unchanged_get() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(500).set_body_string("unexpected get"))
+        .expect(0)
+        .mount(&mock)
+        .await;
+    forbid_put(&mock).await;
+    let client = crate::client::test_helpers::test_client(&mock.uri());
+    let request = super::ApplyRequest {
+        ids: vec![42],
+        params: crate::types::bug::UpdateBugParams {
+            status: Some("ASSIGNED".into()),
+            ..Default::default()
+        },
+        expect_unchanged_since: Some("2026-06-19T12:00:00Z"),
+    };
+    let ctx =
+        crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_dry_run(true);
+    let mut io = crate::test_helpers::CapturedIo::new();
+
+    let result = super::apply_checked_connected(&client, request, &ctx, &mut io.writers()).await;
+
+    assert!(result.is_ok(), "dry-run should not re-read: {result:?}");
+    assert_eq!(received_put_count(&mock).await, 0);
+    let requests = mock.received_requests().await.unwrap();
+    assert!(
+        requests.is_empty(),
+        "dry-run should skip optimistic GET and PUT, got {requests:?}"
+    );
+    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    assert_eq!(parsed["action"], "dry-run");
+    assert_eq!(parsed["ids"], serde_json::json!([42]));
+}
+
 // ── BugUpdateDraft::overlay_cli merge-helper mutants ────────────────────────
 //
 // draft.rs line 154: merge_copy(&mut self.dupe_of, args.dupe_of)   → ()
@@ -1728,4 +1842,66 @@ fn overlay_cli_merge_vec_u64_preserves_draft_when_cli_is_empty() {
         vec![5_u64, 6, 7],
         "merge_vec_u64 must not clear draft blocks when CLI list is empty"
     );
+}
+
+#[test]
+fn overlay_cli_comment_clears_existing_comment_file() {
+    use super::BugUpdateDraft;
+
+    let mut draft = BugUpdateDraft {
+        comment_file: Some(std::path::PathBuf::from("json-body.txt")),
+        ..Default::default()
+    };
+    let args = crate::cli::UpdateArgs {
+        ids: vec![1],
+        comment: Some("inline body".into()),
+        ..Default::default()
+    };
+
+    draft.overlay_cli(&args);
+
+    assert_eq!(draft.comment.as_deref(), Some("inline body"));
+    assert!(draft.comment_file.is_none());
+}
+
+#[test]
+fn overlay_cli_comment_file_clears_existing_comment() {
+    use super::BugUpdateDraft;
+
+    let mut draft = BugUpdateDraft {
+        comment: Some("json body".into()),
+        ..Default::default()
+    };
+    let args = crate::cli::UpdateArgs {
+        ids: vec![1],
+        comment_file: Some(std::path::PathBuf::from("cli-body.txt")),
+        ..Default::default()
+    };
+
+    draft.overlay_cli(&args);
+
+    assert!(draft.comment.is_none());
+    assert_eq!(
+        draft.comment_file.as_deref(),
+        Some(std::path::Path::new("cli-body.txt"))
+    );
+}
+
+#[test]
+fn overlay_cli_merge_vec_applies_keywords_add_from_cli() {
+    use super::BugUpdateDraft;
+
+    let mut draft = BugUpdateDraft {
+        keywords_add: vec!["json-keyword".into()],
+        ..Default::default()
+    };
+    let args = crate::cli::UpdateArgs {
+        ids: vec![1],
+        keywords_add: vec!["cli-keyword".into()],
+        ..Default::default()
+    };
+
+    draft.overlay_cli(&args);
+
+    assert_eq!(draft.keywords_add, vec!["cli-keyword".to_string()]);
 }

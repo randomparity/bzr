@@ -3,10 +3,8 @@
 use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use super::super::encode_path;
-use super::super::UserDetailLevel;
-use super::super::USER_FIELDS_BASIC;
 use crate::client::test_helpers::{test_client, test_client_hybrid};
+use crate::client::{encode_path, UserDetailLevel, USER_FIELDS_BASIC, USER_FIELDS_DETAILED};
 use crate::error::BzrError;
 use crate::types::{ApiMode, AuthMethod, CreateGroupParams, UpdateGroupParams};
 
@@ -52,10 +50,7 @@ async fn get_group_members_details_sends_include_fields() {
     Mock::given(method("GET"))
         .and(path("/rest/user"))
         .and(query_param("group", "admin"))
-        .and(query_param(
-            "include_fields",
-            super::super::USER_FIELDS_DETAILED,
-        ))
+        .and(query_param("include_fields", USER_FIELDS_DETAILED))
         .and(query_param("match", "*"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "users": [

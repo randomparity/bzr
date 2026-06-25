@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::panic, clippy::unwrap_used)]
 
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -56,6 +56,51 @@ async fn fetch_page_flags_truncation_via_over_fetch() {
 }
 
 #[tokio::test]
+async fn fetch_page_rejects_limit_that_cannot_overfetch() {
+    let mock = MockServer::start().await;
+    let client = test_client(&mock.uri());
+
+    let Err(err) = fetch_page(&client, &params_with_limit(u32::MAX), false).await else {
+        panic!("expected limit overflow validation");
+    };
+
+    assert!(
+        matches!(&err, crate::error::BzrError::InputValidation(msg)
+            if msg.contains("--limit") && msg.contains("too large")),
+        "limit overflow should be rejected before search: {err:?}"
+    );
+    assert!(
+        mock.received_requests().await.unwrap().is_empty(),
+        "overflow validation should happen before any search request"
+    );
+}
+
+#[tokio::test]
+async fn fetch_page_rejects_next_offset_overflow() {
+    let mock = MockServer::start().await;
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        limit: Some(10),
+        offset: Some(u32::MAX - 5),
+        ..Default::default()
+    };
+
+    let Err(err) = fetch_page(&client, &params, false).await else {
+        panic!("expected next offset overflow validation");
+    };
+
+    assert!(
+        matches!(&err, crate::error::BzrError::InputValidation(msg)
+            if msg.contains("--offset") && msg.contains("--limit")),
+        "next offset overflow should be rejected before search: {err:?}"
+    );
+    assert!(
+        mock.received_requests().await.unwrap().is_empty(),
+        "overflow validation should happen before any search request"
+    );
+}
+
+#[tokio::test]
 async fn fetch_page_no_truncation_when_under_limit() {
     let mock = MockServer::start().await;
     // limit 5 → over-fetch requests limit=6; server returns 3 (< 6).
@@ -95,6 +140,31 @@ async fn fetch_page_paginate_loops_until_short_page() {
 
     assert!(!page.truncated, "paginate retrieves everything");
     assert_eq!(page.bugs.len(), 5, "2 + 2 + 1 across three pages");
+}
+
+#[tokio::test]
+async fn fetch_page_paginate_rejects_next_offset_overflow() {
+    let mock = MockServer::start().await;
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        limit: Some(10),
+        offset: Some(u32::MAX - 5),
+        ..Default::default()
+    };
+
+    let Err(err) = fetch_page(&client, &params, true).await else {
+        panic!("expected paginate offset overflow validation");
+    };
+
+    assert!(
+        matches!(&err, crate::error::BzrError::InputValidation(msg)
+            if msg.contains("--offset") && msg.contains("--limit")),
+        "paginate offset overflow should be rejected before search: {err:?}"
+    );
+    assert!(
+        mock.received_requests().await.unwrap().is_empty(),
+        "paginate overflow validation should happen before any search request"
+    );
 }
 
 #[test]

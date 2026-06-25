@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::types::common::FlagUpdate;
+use crate::types::flag::FlagUpdate;
 
 #[derive(Debug, Default, Serialize)]
 #[non_exhaustive]

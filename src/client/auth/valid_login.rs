@@ -2,7 +2,7 @@ use reqwest::header::HeaderValue;
 use serde::Deserialize;
 
 use crate::bugzilla_auth::{AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
-use crate::types::common::AuthMethod;
+use crate::types::transport::AuthMethod;
 
 use super::MalformedProbeResponse;
 
@@ -116,7 +116,12 @@ async fn probe_valid_login(
             return ValidLoginOutcome::NetworkError(e);
         }
     };
-    tracing::trace!(probe = "valid_login", %method, body = body_text, "auth probe response");
+    tracing::trace!(
+        probe = "valid_login",
+        %method,
+        body = super::trace_body_preview(&body_text),
+        "auth probe response"
+    );
     let parsed: ValidLoginResponse = match serde_json::from_str(&body_text) {
         Ok(p) => p,
         Err(error) => {

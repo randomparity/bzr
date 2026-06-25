@@ -1,10 +1,11 @@
 use std::collections::HashSet;
 use std::io::Write;
 
-use crate::types::bug_fields::{
-    apply_exclude, default_selected_fields, partition_include, selected_keys, BUG_FIELDS,
+use crate::types::bug::{
+    apply_exclude, canonical_excludes, default_selected_fields, partition_include, selected_keys,
+    BUG_FIELDS,
 };
-pub(crate) use crate::types::bug_fields::{canonical_field_list, ColumnSpec};
+pub(crate) use crate::types::bug::{canonical_field_list, ColumnSpec};
 
 /// Validate that `spec` yields at least one renderable table column. Call
 /// ONLY when output is a table, before the network request. Errors (exit 7)
@@ -54,7 +55,7 @@ pub(crate) fn validate_json_field_selection(spec: ColumnSpec<'_>) -> crate::erro
         }
         None => BUG_FIELDS.iter().map(|field| field.canonical()).collect(),
     };
-    for canonical in crate::types::bug_fields::canonical_excludes(spec.exclude) {
+    for canonical in canonical_excludes(spec.exclude) {
         keys.remove(canonical);
     }
     if keys.is_empty() {

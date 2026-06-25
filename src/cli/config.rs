@@ -1,6 +1,6 @@
 use clap::Subcommand;
 
-use crate::types::common::AuthMethod;
+use crate::types::transport::AuthMethod;
 
 #[derive(Subcommand)]
 #[expect(

@@ -5,13 +5,14 @@
 
 use crate::client::BugzillaClient;
 use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::mutation::ensure_batch_complete;
 use crate::error::Result;
 use crate::output::result_types::{
     write_result, ActionResult, BatchFailure, BatchResult, ResourceKind,
 };
 use crate::output::writers::Writers;
 use crate::types::bug::UpdateBugParams;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 use super::output::{comment_suffix, write_batch_result, write_update_dry_run};
 
@@ -38,17 +39,6 @@ async fn update_single(
         }
     }
     Ok(())
-}
-
-/// The shared exit-11 gate for batch mutations: returns `BatchPartialFailure`
-/// (exit 11) when any element failed, else `Ok(())`. Used by batch `bug update`
-/// and batch `bug create --from-json`.
-pub(crate) fn ensure_batch_complete(succeeded: usize, failed: usize) -> Result<()> {
-    if failed > 0 {
-        Err(crate::error::BzrError::BatchPartialFailure { succeeded, failed })
-    } else {
-        Ok(())
-    }
 }
 
 async fn update_batch(

@@ -8,7 +8,8 @@ use crate::commands::runtime::context::CommandContext;
 use crate::test_helpers::{
     run_config_action_json, seed_inline_server, setup_empty_config_env, CapturedIo,
 };
-use crate::types::common::{AuthMethod, OutputFormat};
+use crate::types::output::OutputFormat;
+use crate::types::transport::AuthMethod;
 
 #[tokio::test]
 async fn show_json_includes_populated_server_details() {

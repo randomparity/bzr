@@ -39,6 +39,15 @@ pub(crate) struct Committed {
     pub(crate) message: String,
 }
 
+/// Return the shared batch partial-failure error when any element failed.
+pub(crate) fn ensure_batch_complete(succeeded: usize, failed: usize) -> Result<()> {
+    if failed > 0 {
+        Err(crate::error::BzrError::BatchPartialFailure { succeeded, failed })
+    } else {
+        Ok(())
+    }
+}
+
 /// Drive an admin create/update command.
 ///
 /// On a dry run, write `preview` and return without connecting. Otherwise

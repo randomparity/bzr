@@ -7,7 +7,7 @@ use crate::output::formatting::{
     render_flags_inline, write_field, write_formatted, write_optional_field,
 };
 use crate::types::attachment::Attachment;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 /// Write the colored `Attachment #<id> - <summary> [FLAGS]` header line.
 fn write_attachment_header<W: Write + ?Sized>(a: &Attachment, out: &mut W) {

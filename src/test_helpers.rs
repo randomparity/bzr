@@ -190,7 +190,7 @@ pub async fn seed_inline_server(name: &str, url: &str, api_key: &str) {
         },
         &crate::commands::runtime::context::CommandContext::new(
             None,
-            crate::types::common::OutputFormat::Json,
+            crate::types::output::OutputFormat::Json,
             None,
         ),
         &mut io.writers(),
@@ -216,7 +216,7 @@ pub(crate) async fn run_config_action_json(action: crate::cli::ConfigAction) -> 
         &action,
         &crate::commands::runtime::context::CommandContext::new(
             None,
-            crate::types::common::OutputFormat::Json,
+            crate::types::output::OutputFormat::Json,
             None,
         ),
         &mut io.writers(),
@@ -248,7 +248,7 @@ pub async fn seed_keyring_secret(server: &str, secret: &str) {
         },
         &crate::commands::runtime::context::CommandContext::new(
             None,
-            crate::types::common::OutputFormat::Json,
+            crate::types::output::OutputFormat::Json,
             None,
         ),
         &mut io.writers(),

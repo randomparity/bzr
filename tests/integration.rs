@@ -14,6 +14,14 @@ use clap::Parser;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
+#[test]
+fn types_root_reexports_column_spec() {
+    let spec = bzr::types::ColumnSpec::new(Some("id,status"), Some("status"));
+
+    assert_eq!(spec.include, Some("id,status"));
+    assert_eq!(spec.exclude, Some("status"));
+}
+
 // ── Bug commands ──────────────────────────────────────────────────────
 
 #[tokio::test]

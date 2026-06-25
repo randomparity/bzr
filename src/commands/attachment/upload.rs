@@ -8,7 +8,7 @@ use crate::output::result_types::{write_result, UploadResult};
 use crate::output::writers::Writers;
 use crate::types::attachment::UploadAttachmentParams;
 use crate::types::bug::UpdateBugParams;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 pub(super) async fn handle(
     args: &crate::cli::UploadArgs,

@@ -2,14 +2,14 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use super::BugzillaClient;
+use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result, BUGZILLA_INTERNAL_ERROR};
 use crate::http::XMLRPC_FALLBACK_TIMEOUT;
 use crate::types::bug::{
     partition_filters, Bug, CreateBugParams, HistoryEntry, SearchParams, UpdateBugParams,
     FIELD_MAPPINGS,
 };
-use crate::types::common::ApiMode;
+use crate::types::transport::ApiMode;
 
 /// Default fields requested for Bug queries. Matches the fields in [`Bug`] and
 /// avoids requesting server-side fields we don't use — some Bugzilla extensions

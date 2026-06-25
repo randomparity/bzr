@@ -12,7 +12,7 @@ use crate::commands::runtime::context::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::result_types::write_result;
 use crate::output::writers::Writers;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 /// Build the `(name, embedded-json)` registry from a bare list of schema names,
 /// deriving each `schemas/<name>.json` path so a name is written exactly once.

@@ -1,5 +1,6 @@
 use super::*;
-use crate::types::common::{ApiMode, OutputFormat};
+use crate::types::output::OutputFormat;
+use crate::types::transport::ApiMode;
 
 #[test]
 fn server_getter_returns_configured_value() {

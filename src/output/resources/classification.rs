@@ -6,7 +6,7 @@ use crate::output::formatting::{
     truncate, write_formatted, write_table_or_empty, TableSpec, DESCRIPTION_TRUNCATE_WIDTH,
 };
 use crate::types::classification::Classification;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 const CLASSIFICATION_HEADERS: &[&str] = &["ID", "NAME", "DESCRIPTION", "PRODUCTS"];
 

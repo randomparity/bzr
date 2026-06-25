@@ -6,7 +6,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use super::*;
 use crate::client::test_helpers::{test_client, test_client_query_param};
 use crate::client::{BugzillaClientConfig, UserDetailLevel};
-use crate::types::common::{ApiMode, AuthMethod};
+use crate::types::transport::{ApiMode, AuthMethod};
 
 fn has_no_auth_header(req: &wiremock::Request) -> bool {
     !req.headers
@@ -189,6 +189,66 @@ async fn auth_fallback_query_param_to_header_on_401() {
         .unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].name, "bob@example.com");
+}
+
+#[tokio::test]
+async fn auth_fallback_retryable_status_uses_retry_budget() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
+        .and(has_no_auth_header)
+        .respond_with(
+            ResponseTemplate::new(429)
+                .insert_header("Retry-After", "0")
+                .set_body_string("slow down"),
+        )
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
+        .and(has_no_auth_header)
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "users": [{"id": 3, "name": "carol@example.com"}]
+        })))
+        .with_priority(2)
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .and(wiremock::matchers::header(
+            crate::bugzilla_auth::AUTH_HEADER_NAME,
+            "test-key",
+        ))
+        .and(has_no_auth_query_param)
+        .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
+            "error": true,
+            "code": 410,
+            "message": "You must log in."
+        })))
+        .expect(2)
+        .with_priority(3)
+        .mount(&mock)
+        .await;
+
+    let mut client = test_client(&mock.uri());
+    client.set_retry_max(1);
+    let users = client
+        .search_users("carol", UserDetailLevel::Basic)
+        .await
+        .unwrap();
+
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].name, "carol@example.com");
 }
 
 #[tokio::test]

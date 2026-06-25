@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
-use super::encode_path;
-use super::BugzillaClient;
+use crate::client::encode_path;
+use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
 use crate::types::product::{CreateProductParams, Product, ProductListType, UpdateProductParams};
 

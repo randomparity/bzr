@@ -3,7 +3,7 @@ use crate::client::BugzillaClient;
 use crate::error::Result;
 use crate::output::resources::bug::write_history;
 use crate::output::writers::Writers;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 use crate::validation::parse_optional_date;
 
 pub(super) async fn handle(

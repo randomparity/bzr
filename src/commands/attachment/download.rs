@@ -4,6 +4,7 @@ use base64::Engine;
 
 use crate::client::BugzillaClient;
 use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::mutation::ensure_batch_complete;
 use crate::error::{io_with_context, Result};
 use crate::output::resources::attachment::{
     write_attachment_batch, AttachmentBatchResult, AttachmentDownloadResult, BatchSummary,
@@ -12,7 +13,7 @@ use crate::output::resources::attachment::{
 use crate::output::result_types::{write_result, DownloadResult};
 use crate::output::writers::Writers;
 use crate::types::attachment::Attachment;
-use crate::types::common::OutputFormat;
+use crate::types::output::OutputFormat;
 
 pub(super) struct DownloadArgs<'a> {
     pub(super) ids: &'a [u64],
@@ -52,14 +53,6 @@ fn ensure_batch_out_dir(out_dir: &str) -> Result<()> {
             &e,
         )
     })
-}
-
-fn ensure_batch_complete(succeeded: usize, failed: usize) -> Result<()> {
-    if failed > 0 {
-        Err(crate::error::BzrError::BatchPartialFailure { succeeded, failed })
-    } else {
-        Ok(())
-    }
 }
 
 /// Reduce a server-supplied attachment file name to its final path
