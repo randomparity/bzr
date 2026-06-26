@@ -4,7 +4,7 @@ use super::*;
 use crate::commands::runtime::search::fields::{
     validate_json_field_selection, validate_table_columns, warn_unknown_fields,
 };
-use crate::types::bug::{ColumnSpec, BUG_FIELDS};
+use crate::types::bug::{BugLink, ColumnSpec, LinkRelation, BUG_FIELDS};
 use crate::types::{Bug, FieldChange, Flag, HistoryEntry};
 
 fn review_flag(status: &str, requestee: Option<&str>) -> Flag {
@@ -1290,4 +1290,42 @@ fn write_bugs_partial_unknown_warns_with_new_wording_and_shows_known() {
         "new warning wording: {err:?}"
     );
     assert!(out.contains("ID"), "known column shown:\n{out}");
+}
+
+fn sample_links() -> Vec<BugLink> {
+    vec![BugLink {
+        id: 2,
+        relation: LinkRelation::DependsOn,
+        direction: LinkRelation::DependsOn.direction(),
+        depth: 1,
+        summary: Some("dep".into()),
+        status: Some("NEW".into()),
+    }]
+}
+
+#[test]
+fn write_bug_links_ndjson_is_one_object_per_line() {
+    let mut buf = Vec::new();
+    write_bug_links(&sample_links(), OutputFormat::Ndjson, &mut buf);
+    let s = String::from_utf8(buf).unwrap();
+    assert_eq!(s.lines().count(), 1);
+    assert!(s.contains(r#""relation":"depends_on""#) && s.contains(r#""direction":"out""#));
+}
+
+#[test]
+fn write_bug_links_json_is_array() {
+    let mut buf = Vec::new();
+    write_bug_links(&sample_links(), OutputFormat::Json, &mut buf);
+    let v: serde_json::Value = serde_json::from_slice(&buf).unwrap();
+    assert!(v.is_array());
+    assert_eq!(v[0]["depth"], 1);
+}
+
+#[test]
+fn write_bug_links_table_has_headers_and_row() {
+    let mut buf = Vec::new();
+    write_bug_links(&sample_links(), OutputFormat::Table, &mut buf);
+    let s = String::from_utf8(buf).unwrap();
+    assert!(s.contains("RELATION") && s.contains("DEPTH"));
+    assert!(s.contains("depends_on") && s.contains('2'));
 }

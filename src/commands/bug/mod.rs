@@ -14,6 +14,7 @@ mod clone;
 mod create;
 mod create_json;
 mod history;
+mod links;
 mod list;
 mod my;
 mod search;
@@ -41,9 +42,11 @@ fn bug_column_spec(action: &BugAction) -> Option<ColumnSpec<'_>> {
 #[must_use]
 pub(crate) fn capabilities(action: &BugAction) -> CommandCapabilities {
     match action {
-        BugAction::List(_) | BugAction::View(_) | BugAction::Search(_) | BugAction::History(_) => {
-            CommandCapabilities::anonymous()
-        }
+        BugAction::List(_)
+        | BugAction::View(_)
+        | BugAction::Search(_)
+        | BugAction::History(_)
+        | BugAction::Links(_) => CommandCapabilities::anonymous(),
         BugAction::My(_) => CommandCapabilities::authenticated("bug my"),
         BugAction::Create(_) => CommandCapabilities::dry_run_mutation("bug create"),
         BugAction::Clone(_) => CommandCapabilities::dry_run_mutation("bug clone"),
@@ -110,9 +113,11 @@ pub(crate) async fn execute(
     }
 
     match action {
-        BugAction::List(_) | BugAction::View(_) | BugAction::History(_) | BugAction::My(_) => {
-            execute_connected_read(action, ctx, format, w).await
-        }
+        BugAction::List(_)
+        | BugAction::View(_)
+        | BugAction::History(_)
+        | BugAction::Links(_)
+        | BugAction::My(_) => execute_connected_read(action, ctx, format, w).await,
         BugAction::Create(args) => create::handle(args, ctx, w).await,
         BugAction::Clone(args) => clone::handle(args, ctx, w).await,
         BugAction::Update(args) => update::handle(args, ctx, w).await,
@@ -135,6 +140,7 @@ async fn execute_connected_read(
         BugAction::List(args) => list::handle(&client, args, format, w).await,
         BugAction::View(args) => view::handle(&client, args, format, w).await,
         BugAction::History(args) => history::handle(&client, args, format, w).await,
+        BugAction::Links(args) => links::handle(&client, args, format, w).await,
         BugAction::My(args) => my::handle(&client, args, format, w).await,
         _ => unreachable!("only read actions are routed here"),
     }
