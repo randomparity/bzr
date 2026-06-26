@@ -37,7 +37,7 @@ pub use product::{
 pub use query::{QueryKind, SavedQuery};
 pub use server_info::{ExtensionInfo, ServerExtensions, ServerInfoResponse, ServerVersion};
 pub use template::BugTemplate;
-pub use transport::{ApiMode, AuthMethod};
+pub use transport::{ApiMode, AuthMethod, AuthMode};
 pub use user::{BugzillaUser, CreateUserParams, UpdateUserParams, UserGroup, WhoamiResponse};
 
 pub(crate) use field::{resolve_field_alias, FIELD_ALIASES};

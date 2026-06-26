@@ -33,6 +33,27 @@ impl fmt::Display for AuthMethod {
     }
 }
 
+/// How the current connection is authenticated, as reported by `whoami`.
+///
+/// Distinct from [`AuthMethod`], which is the credential *transport* (header vs.
+/// query parameter). This answers "am I authenticated?" using the same
+/// vocabulary `server capabilities` publishes in its `auth_modes` list.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthMode {
+    ApiKey,
+    Anonymous,
+}
+
+impl fmt::Display for AuthMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AuthMode::ApiKey => write!(f, "api_key"),
+            AuthMode::Anonymous => write!(f, "anonymous"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ApiMode {
