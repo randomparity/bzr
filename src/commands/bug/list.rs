@@ -1,13 +1,13 @@
 use crate::cli::{FieldArgs, ListArgs};
 use crate::client::BugzillaClient;
-use crate::commands::runtime::search::fields::{canonical_field_list, ColumnSpec};
+use crate::commands::runtime::search::fields::ColumnSpec;
 use crate::commands::runtime::search::policy::{count_search_params, ensure_no_paging_with_count};
+use crate::commands::runtime::search::setup::{
+    build_base_search_params, write_bug_page, BaseSearchInputs, PageWindow,
+};
 use crate::error::Result;
-use crate::output::resources::bug::write_bugs;
 use crate::output::writers::Writers;
-use crate::types::bug::SearchParams;
 use crate::types::output::OutputFormat;
-use crate::validation::parse_optional_date;
 
 pub(super) async fn handle(
     client: &BugzillaClient,
@@ -35,25 +35,19 @@ pub(super) async fn handle(
 
     ensure_no_paging_with_count(*count, *offset, *paginate)?;
 
-    let creation_time = parse_optional_date(created_since.as_deref(), "--created-since")?;
-    let last_change_time = parse_optional_date(changed_since.as_deref(), "--changed-since")?;
-
-    let mut params = SearchParams {
-        id: id.clone(),
-        alias: alias.clone(),
-        summary: summary.clone(),
-        limit: Some(*limit),
+    let mut params = build_base_search_params(BaseSearchInputs {
+        limit: *limit,
         offset: *offset,
-        include_fields: canonical_field_list(fields.as_deref()),
-        exclude_fields: canonical_field_list(exclude_fields.as_deref()),
-        creation_time,
-        last_change_time,
-        order: Some(crate::validation::build_order(
-            sort_args.sort.as_deref(),
-            sort_args.order,
-        )),
-        ..Default::default()
-    };
+        fields: fields.as_deref(),
+        exclude_fields: exclude_fields.as_deref(),
+        created_since: created_since.as_deref(),
+        changed_since: changed_since.as_deref(),
+        sort: sort_args.sort.as_deref(),
+        order: sort_args.order,
+    })?;
+    params.id.clone_from(id);
+    params.alias.clone_from(alias);
+    params.summary.clone_from(summary);
     filters.write_search_filters(&mut params);
     actor_filters.write_search_filters(&mut params);
     if *count {
@@ -64,11 +58,13 @@ pub(super) async fn handle(
 
     let spec = ColumnSpec::new(fields.as_deref(), exclude_fields.as_deref());
     let page = crate::commands::runtime::paging::fetch_page(client, &params, *paginate).await?;
-    write_bugs(&page.bugs, spec, format, w.out, w.err);
-    crate::commands::runtime::paging::write_truncation_note(
+    write_bug_page(
         &page,
-        params.limit,
-        *offset,
+        spec,
+        PageWindow {
+            limit: params.limit,
+            offset: *offset,
+        },
         format,
         w,
     );

@@ -1,13 +1,14 @@
 use crate::cli::MyArgs;
 use crate::client::BugzillaClient;
-use crate::commands::runtime::search::fields::{canonical_field_list, ColumnSpec};
+use crate::commands::runtime::search::fields::ColumnSpec;
 use crate::commands::runtime::search::policy::{count_search_params, ensure_no_paging_with_count};
+use crate::commands::runtime::search::setup::{
+    build_base_search_params, write_bug_page, BaseSearchInputs, PageWindow,
+};
 use crate::error::{BzrError, Result};
-use crate::output::resources::bug::write_bugs;
 use crate::output::writers::Writers;
-use crate::types::bug::{Bug, SearchParams};
+use crate::types::bug::Bug;
 use crate::types::output::OutputFormat;
-use crate::validation::parse_optional_date;
 
 pub(super) async fn handle(
     client: &BugzillaClient,
@@ -30,7 +31,17 @@ pub(super) async fn handle(
     let mut all_bugs: Vec<Bug> = Vec::new();
     let mut seen_ids = std::collections::HashSet::new();
 
-    let mut base = build_base_search_params(args)?;
+    let mut base = build_base_search_params(BaseSearchInputs {
+        limit: args.limit,
+        offset,
+        fields,
+        exclude_fields,
+        created_since: args.created_since.as_deref(),
+        changed_since: args.changed_since.as_deref(),
+        sort: args.sort_args.sort.as_deref(),
+        order: args.sort_args.order,
+    })?;
+    args.filters.write_search_filters(&mut base);
     // `--count` needs every distinct match, so fetch IDs only and lift the
     // per-category limit; the dedup below then yields the true distinct count.
     if args.count {
@@ -73,40 +84,21 @@ pub(super) async fn handle(
         return Ok(());
     }
 
-    write_bugs(&all_bugs, spec, format, w.out, w.err);
     let page = crate::commands::runtime::paging::Page {
         bugs: all_bugs,
         truncated,
     };
-    crate::commands::runtime::paging::write_truncation_note(
+    write_bug_page(
         &page,
-        Some(args.limit),
-        offset,
+        spec,
+        PageWindow {
+            limit: Some(args.limit),
+            offset,
+        },
         format,
         w,
     );
     Ok(())
-}
-
-fn build_base_search_params(args: &MyArgs) -> Result<SearchParams> {
-    let creation_time = parse_optional_date(args.created_since.as_deref(), "--created-since")?;
-    let last_change_time = parse_optional_date(args.changed_since.as_deref(), "--changed-since")?;
-
-    let mut params = SearchParams {
-        limit: Some(args.limit),
-        offset: args.page_args.offset,
-        include_fields: canonical_field_list(args.field_args.fields.as_deref()),
-        exclude_fields: canonical_field_list(args.field_args.exclude_fields.as_deref()),
-        creation_time,
-        last_change_time,
-        order: Some(crate::validation::build_order(
-            args.sort_args.sort.as_deref(),
-            args.sort_args.order,
-        )),
-        ..Default::default()
-    };
-    args.filters.write_search_filters(&mut params);
-    Ok(params)
 }
 
 #[cfg(test)]
