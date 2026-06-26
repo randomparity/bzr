@@ -15,3 +15,4 @@ rejected.
 | [0006](0006-bug-links-isolated-fetch.md) | `bug links` uses an isolated relationship fetch | Accepted |
 | [0007](0007-json-output-schema-version-envelope.md) | `--json` output is wrapped in a versioned envelope | Accepted |
 | [0008](0008-bug-history-flattened-change-records.md) | `bug history` JSON emits flattened change records with correlated `comment_id` | Accepted |
+| [0009](0009-whoami-connection-metadata.md) | `whoami` JSON carries connection metadata via a flatten wrapper | Accepted |
