@@ -1290,3 +1290,36 @@ async fn update_bug_accepts_success_envelope() {
     let params = crate::types::UpdateBugParams::default();
     client.update_bug(42, &params).await.unwrap();
 }
+
+#[tokio::test]
+async fn get_bug_links_nodes_requests_isolated_fields_and_parses() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param(
+            "include_fields",
+            "id,summary,status,depends_on,blocks,dupe_of,duplicates,regressed_by,regressions",
+        ))
+        .and(query_param("id", "1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [
+                {"id": 1, "summary": "root", "status": "NEW",
+                 "depends_on": [2], "blocks": [], "duplicates": [3]}
+            ]
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let nodes = client.get_bug_links_nodes(&[1]).await.unwrap();
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0].depends_on, vec![2]);
+    assert_eq!(nodes[0].duplicates, vec![3]);
+}
+
+#[tokio::test]
+async fn get_bug_links_nodes_empty_ids_makes_no_request() {
+    let mock = MockServer::start().await; // no mounts => any request 404s
+    let client = test_client(&mock.uri());
+    assert!(client.get_bug_links_nodes(&[]).await.unwrap().is_empty());
+}

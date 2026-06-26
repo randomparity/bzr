@@ -6,8 +6,8 @@ use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result, BUGZILLA_INTERNAL_ERROR};
 use crate::http::XMLRPC_FALLBACK_TIMEOUT;
 use crate::types::bug::{
-    partition_filters, Bug, CreateBugParams, HistoryEntry, SearchParams, UpdateBugParams,
-    FIELD_MAPPINGS,
+    partition_filters, Bug, BugLinksNode, CreateBugParams, HistoryEntry, SearchParams,
+    UpdateBugParams, FIELD_MAPPINGS, LINKS_ID_CHUNK, LINKS_INCLUDE_FIELDS,
 };
 use crate::types::transport::ApiMode;
 
@@ -54,6 +54,11 @@ fn force_id_fields(
     });
 
     (include, exclude)
+}
+
+#[derive(Deserialize)]
+struct BugLinksResponse {
+    bugs: Vec<BugLinksNode>,
 }
 
 #[derive(Deserialize)]
@@ -413,6 +418,46 @@ impl BugzillaClient {
                 resource: "bug",
                 id: id.to_string(),
             })
+    }
+
+    /// Fetch isolated link nodes for `ids`. Inaccessible/nonexistent ids are
+    /// omitted from the result; the caller decides whether an omission is fatal
+    /// (root not found) or skippable (a related bug). REST/Hybrid batch the
+    /// request in `LINKS_ID_CHUNK`-sized chunks; XML-RPC fetches one id per call.
+    pub(crate) async fn get_bug_links_nodes(&self, ids: &[u64]) -> Result<Vec<BugLinksNode>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        match self.api_mode {
+            ApiMode::XmlRpc => {
+                let mut nodes = Vec::with_capacity(ids.len());
+                for &id in ids {
+                    match self.xmlrpc_client().get_bug(&id.to_string()).await {
+                        Ok(bug) => nodes.push(BugLinksNode::from_bug(&bug)),
+                        Err(BzrError::NotFound { .. }) => {}
+                        Err(e) => return Err(e),
+                    }
+                }
+                Ok(nodes)
+            }
+            ApiMode::Rest | ApiMode::Hybrid => self.get_bug_links_nodes_rest(ids).await,
+        }
+    }
+
+    async fn get_bug_links_nodes_rest(&self, ids: &[u64]) -> Result<Vec<BugLinksNode>> {
+        let mut nodes = Vec::with_capacity(ids.len());
+        for chunk in ids.chunks(LINKS_ID_CHUNK) {
+            let mut req_builder = self.http.get(self.url("bug"));
+            for &id in chunk {
+                req_builder = req_builder.query(&[("id", id)]);
+            }
+            req_builder = req_builder.query(&[("include_fields", LINKS_INCLUDE_FIELDS)]);
+            let req = self.apply_auth(req_builder);
+            let resp = self.send(req).await?;
+            let data: BugLinksResponse = self.parse_json(resp).await?;
+            nodes.extend(data.bugs);
+        }
+        Ok(nodes)
     }
 
     /// Create a new bug. Always uses REST (XML-RPC mutation support is not implemented).

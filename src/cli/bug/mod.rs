@@ -7,6 +7,7 @@ use crate::types::query::SavedQuery;
 mod clone;
 mod create;
 mod history;
+mod links;
 mod list;
 mod my;
 mod search;
@@ -17,6 +18,7 @@ mod view;
 pub(crate) use clone::CloneArgs;
 pub(crate) use create::CreateArgs;
 pub(crate) use history::HistoryArgs;
+pub(crate) use links::LinksArgs;
 pub(crate) use list::ListArgs;
 pub(crate) use my::MyArgs;
 pub(crate) use search::SearchArgs;
@@ -343,6 +345,9 @@ pub(crate) enum BugAction {
     /// Show the change history for a single bug.
     #[command(long_about = history::LONG_ABOUT)]
     History(HistoryArgs),
+    /// Print a bug's relationship graph (related bugs across all link types).
+    #[command(long_about = links::LONG_ABOUT)]
+    Links(LinksArgs),
     /// Create a new bug under a product and component.
     #[command(long_about = create::LONG_ABOUT)]
     Create(CreateArgs),

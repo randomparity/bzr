@@ -11,8 +11,8 @@ use crate::output::formatting::{
 };
 use crate::types::bug::{
     apply_exclude, canonical_excludes, canonical_field_list, default_selected_fields,
-    field_selected, partition_include, selected_custom_detail_fields, Bug, BugField, ColumnSpec,
-    HistoryEntry, SelectedBugField,
+    field_selected, partition_include, selected_custom_detail_fields, Bug, BugField, BugLink,
+    ColumnSpec, HistoryEntry, SelectedBugField,
 };
 use crate::types::output::OutputFormat;
 
@@ -378,6 +378,34 @@ pub fn write_history<W: Write + ?Sized>(
             }
             write_divider(out);
         }
+    });
+}
+
+/// Render relationship records (`bug links`). JSON/ndjson serialize the slice;
+/// table mode prints a fixed six-column grid. An empty slice renders nothing in
+/// every mode — the command prints the "no related bugs" line so it can name the
+/// root id.
+pub fn write_bug_links<W: Write + ?Sized>(links: &[BugLink], format: OutputFormat, out: &mut W) {
+    write_formatted(links, format, out, |links, out| {
+        if links.is_empty() {
+            return;
+        }
+        let mut builder = Builder::default();
+        builder.push_record(["ID", "RELATION", "DIR", "DEPTH", "STATUS", "SUMMARY"]);
+        for link in links {
+            builder.push_record([
+                link.id.to_string(),
+                link.relation.as_str().to_string(),
+                link.direction.as_str().to_string(),
+                link.depth.to_string(),
+                link.status.clone().unwrap_or_default(),
+                link.summary
+                    .as_deref()
+                    .map(|s| truncate(s, SUMMARY_TRUNCATE_WIDTH))
+                    .unwrap_or_default(),
+            ]);
+        }
+        let _ = writeln!(out, "{}", builder.build());
     });
 }
 

@@ -17,8 +17,8 @@ pub(crate) use bug::{
     BugAction, BugActorFilterArgs, BugFilterArgs, CommentArgs, FieldArgs, PageArgs, SortArgs,
 };
 pub(crate) use bug::{
-    CloneArgs, CloseArgs, CreateArgs, DupArgs, HistoryArgs, ListArgs, MyArgs, ReopenArgs,
-    ResolveArgs, SearchArgs, UpdateArgs, ViewArgs,
+    CloneArgs, CloseArgs, CreateArgs, DupArgs, HistoryArgs, LinksArgs, ListArgs, MyArgs,
+    ReopenArgs, ResolveArgs, SearchArgs, UpdateArgs, ViewArgs,
 };
 // Flattened create-field arg groups are referenced only by in-crate parser
 // tests (via `crate::cli::CreateFieldArgs`); gated so the re-export is not
