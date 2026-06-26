@@ -86,26 +86,39 @@ expose are `null` (best-effort fields) rather than errors.
   `unknown`) and `values` is the field's legal-value names (empty for free-form
   types). Empty list when the server has no custom fields.
 
-- **`max_attachment_size`** — best-effort. `GET /rest/parameters` and read
-  `parameters.maxattachmentsize` (Bugzilla reports this in **kilobytes**; the raw
-  integer is passed through unchanged). The endpoint is admin/permission-gated, so
-  anonymously it usually fails or omits the key. **Any failure → `null`**; this
-  fetch never fails the command. Value is the raw server integer when present.
+- **`max_attachment_size`** — best-effort, **in bytes**. Bugzilla's
+  `maxattachmentsize` parameter is expressed in **kilobytes**; bzr normalizes it to
+  bytes (`kib * 1024`) so the field carries an unambiguous unit and an agent sizing
+  an upload does not have to know Bugzilla's internal convention. The field name and
+  the schema description both state "bytes". `/rest/parameters` only returns a small
+  whitelist to anonymous callers — `maxattachmentsize` is **not** in that whitelist
+  — so the fetch is attempted **only when a credential is present**; credentialless
+  invocations emit `null` without issuing the request (no wasted round-trip, no
+  spurious error log). When credentialed but the value is still absent or the
+  request fails, the field is `null`. **Any failure → `null`**; this fetch never
+  fails the command. A `null` here means "undetermined", not "no limit".
 
-- **`flag_types`** — `null` in this version. Bugzilla exposes no global flag-type
-  REST endpoint; flag types are per-product and only appear inside product detail
-  responses on some releases. There is no anonymous, server-wide data path, so the
-  key is published (for forward-compatibility with the schema) but always `null`
-  until a per-product path is added. The key is present so agents can branch on
-  `flag_types !== null` once it lands.
+- **`flag_types`** — `null` in this version, meaning **undetermined by bzr** (not
+  "no flag types"). Bugzilla exposes no global flag-type REST endpoint; flag types
+  are per-product and only appear inside product detail responses on some releases.
+  There is no anonymous, server-wide data path, so the key is published (for
+  forward-compatibility with the schema) but always `null` until a per-product path
+  is added. The key is present so agents can branch on `flag_types !== null` once
+  it lands.
 
 - **`supports_comments` / `supports_attachments` / `supports_history` /
-  `supports_flag_requests`** — capability booleans derived from the detected
-  transport. Any Bugzilla bzr can connect to over REST or hybrid (version ≥ 5.0)
-  supports all four through the REST API, so they are `true` when `api_modes`
-  contains `"rest"`. For a pure XML-RPC (`< 5.0`) server these REST-surfaced
-  capabilities are reported `false` (bzr cannot drive them over the chosen REST
-  surface). They are derived, not probed, and documented as such.
+  `supports_flag_requests`** — **transport-capability** booleans, derived (not
+  probed) from the detected transport. They answer "does this server's REST surface
+  expose the comment / attachment / history / flag endpoints", *not* "is this
+  feature populated/configured". Any Bugzilla bzr can reach over REST or hybrid
+  (version ≥ 5.0) exposes all four endpoints, so they are `true` when `api_modes`
+  contains `"rest"`; a pure XML-RPC (`< 5.0`) server reports `false` (bzr cannot
+  drive them over the chosen REST surface). In particular `supports_flag_requests:
+  true` means the flag-update endpoint exists — it does **not** assert that any flag
+  types are configured. That is why it can legitimately coexist with `flag_types:
+  null` (undetermined): an agent should read the pair as "flag requests are
+  accepted; discover the available types via product detail", not as a contradiction.
+  The schema descriptions carry this transport-only wording.
 
 The contract choices above (auth_modes semantics, nullable hard fields, the
 failure-class split) are recorded in
@@ -124,7 +137,8 @@ The command performs three classes of fetch:
    these paths. They are not silently nulled. (`NotFound` for the status field on
    an exotic server degrades to an empty `status_transitions` list rather than a
    hard error, since absence of transitions is a real, representable state.)
-3. **Optional** — `max_attachment_size`. Always degrades to `null` on any error.
+3. **Optional** — `max_attachment_size`. Only attempted when a credential is
+   present; always degrades to `null` on any error or when absent.
 
 This split is deliberate: "degrade gracefully" (criterion 3) means *fields the
 server doesn't expose are null/omitted*, not *swallow every error*. A server that
@@ -153,7 +167,9 @@ existing `server_info()` composition.
 
 `schemas/server-capabilities.json` (JSON Schema, draft the other schemas use)
 added to the `SCHEMAS` registry in `src/commands/schema.rs`. `max_attachment_size`
-and `flag_types` are nullable (`["integer","null"]` / `["array","null"]`).
+(bytes; its `description` states the unit) and `flag_types` are nullable
+(`["integer","null"]` / `["array","null"]`). The `supports_*` properties carry the
+transport-only wording in their `description`.
 `schema_tests.rs` gains a maximally-populated `ServerCapabilities` sample asserted
 against the schema by the existing `assert_conforms` drift check, so a contract
 change fails CI until the schema is updated.
@@ -166,12 +182,19 @@ client method, direct serialization for the writer/schema):
 - **Client (wiremock):** mock `/rest/version` (→ `5.0.4`) and
   `/rest/field/bug/bug_status` (→ NEW/ASSIGNED/RESOLVED with `can_change_to`);
   assert the assembled `ServerCapabilities` has the expected `version`,
-  `api_modes`, `auth_modes`, and `status_transitions`. (Criterion 6.)
+  `api_modes`, `auth_modes`, and `status_transitions`. (Criterion 6.) Note: the
+  mocked field URL is `/rest/field/bug/bug_status` (the `status` alias resolves to
+  `bug_status` via `resolve_field_alias`), not the literal `/rest/field/bug/status`
+  the issue text writes — the test must target the resolved URL.
+- **max_attachment_size normalization + credential gating:** with a credential,
+  mock `/rest/parameters` → `{"parameters":{"maxattachmentsize":1000}}`; assert the
+  field is `1024000` (bytes). Without a credential, assert no `/rest/parameters`
+  request is issued and the field is `null`.
 - **Custom fields:** mock `/rest/field/bug` returning one `cf_*` field with a
   type integer and one built-in field; assert only the custom field appears with
   the mapped type name.
-- **max_attachment_size degradation:** mock `/rest/parameters` → 401; assert the
-  field is `null` and the command still succeeds.
+- **max_attachment_size degradation:** with a credential, mock `/rest/parameters`
+  → 401; assert the field is `null` and the command still succeeds.
 - **status field absent:** mock `/rest/field/bug/bug_status` → empty `fields`;
   assert `status_transitions` is `[]`, not an error.
 - **Field-type mapping:** unit-test each integer → name (and the unknown branch).
@@ -194,8 +217,10 @@ client method, direct serialization for the writer/schema):
 
 - Per-product `flag_types` population (the key ships as `null`; a later issue adds
   the data path).
-- Authenticated enrichment of `max_attachment_size` (no credential-gated fetch is
-  added; best-effort anonymous only).
+- Authenticated enrichment beyond `max_attachment_size` (e.g. credentialed
+  per-product flag-type discovery). `max_attachment_size` itself *is* fetched when
+  a credential is present, since the parameter is admin-gated; that is the only
+  auth-dependent field.
 - XML-RPC-transport capability probing beyond the version-derived booleans.
 - Caching the capabilities document; it is computed per invocation like
   `server info`.

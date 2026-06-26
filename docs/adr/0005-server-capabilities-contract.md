@@ -39,15 +39,24 @@ omitting it or erroring.
    without a saved key.
 
 2. **Unavailable fields are published as nullable, not dropped.**
-   `max_attachment_size` is fetched best-effort from `/rest/parameters` and is
-   `null` on any failure (the usual anonymous case). `flag_types` is `null` in
-   this version because no anonymous server-wide data path exists. Both keys stay
-   in the schema (`["...","null"]`) so the contract is forward-compatible and
-   agents can branch on presence-of-value.
+   `max_attachment_size` is reported **in bytes** (Bugzilla's `maxattachmentsize`
+   is kilobytes; bzr normalizes by `* 1024` so the unit is unambiguous). It is
+   fetched best-effort from `/rest/parameters`, **only when a credential is
+   present** — that parameter is absent from the anonymous whitelist, so a
+   credentialless probe would always waste a round-trip and still yield `null`.
+   `flag_types` is `null` in this version because no anonymous server-wide data
+   path exists. Both keys stay in the schema (`["...","null"]`) so the contract is
+   forward-compatible; `null` means **undetermined**, not "absent/no limit".
 
-3. **Derived fields are derived, not probed.** `api_modes` and the `supports_*`
-   booleans are computed from the already-detected `ApiMode`/version, adding no
-   requests. `status_transitions` and `custom_fields` reuse the existing
+3. **Derived fields are derived, not probed, and labelled as such.** `api_modes`
+   and the `supports_*` booleans are computed from the already-detected
+   `ApiMode`/version, adding no requests. The `supports_*` booleans are
+   **transport-capability** signals — "the server's REST surface exposes this
+   endpoint" — not "this feature is configured/populated". Consequently
+   `supports_flag_requests: true` (the flag-update endpoint exists) coexists with
+   `flag_types: null` (bzr has not determined the types); an agent reads the pair
+   as "flag requests are accepted; discover types via product detail", not as a
+   contradiction. `status_transitions` and `custom_fields` reuse the existing
    `/rest/field/bug` data path.
 
 4. **Two failure classes.** `version` is required (its failure fails the command —
@@ -81,10 +90,16 @@ omitting it or erroring.
 - **Drop `max_attachment_size` and `flag_types` from the v1 schema.** Rejected:
   evolving a published schema by *adding required-shape keys later* is a breaking
   change for validators; publishing them nullable now keeps the contract stable.
-- **Probe `/rest/parameters` and flag endpoints with credentials when available.**
-  Rejected for v1: it would make the document's content depend on auth state,
-  breaking the "same answer with or without a key" property and the anonymous
-  acceptance test. Authenticated enrichment is left to a follow-up.
+- **Make the whole document depend on auth state (credentialed flag-type and
+  parameter enrichment).** Rejected for v1: the always-populated fields (`version`,
+  `api_modes`, `auth_modes`, `status_transitions`, `custom_fields`, `supports_*`)
+  must be identical with or without a key so the anonymous acceptance test is
+  meaningful. The single deliberate exception is `max_attachment_size`: it is
+  *only* fetched when a credential is present (the parameter is not in the anonymous
+  whitelist, so an unauthenticated fetch is pure waste) and is `null` otherwise.
+  This keeps the credentialless document fully determined while letting an
+  authenticated caller learn one extra fact. Broader authenticated enrichment
+  (per-product flag types) is left to a follow-up.
 - **Swallow all fetch errors into nulls for maximum robustness.** Rejected: hides
   real breakage (e.g. `/rest/field/bug` failing) behind an empty-looking but
   valid document, which is worse for an agent than a surfaced error.
