@@ -223,7 +223,7 @@ pub(crate) async fn run_config_action_json(action: crate::cli::ConfigAction) -> 
     )
     .await
     .unwrap();
-    serde_json::from_str(io.out_str().trim()).unwrap()
+    json_envelope_data(io.out_str())
 }
 
 /// Seed a keyring-backed secret for `server` by priming the
@@ -257,6 +257,31 @@ pub async fn seed_keyring_secret(server: &str, secret: &str) {
     .unwrap();
     // SAFETY: Serialized via ENV_LOCK held by the caller's setup.
     unsafe { std::env::remove_var("BZR_KEYRING_TEST_SECRET") };
+}
+
+/// Parse the captured stdout of a `--json` command, assert it carries the
+/// versioned envelope (`schema_version` == [`crate::output::SCHEMA_VERSION`]),
+/// and return the inner `data` payload so existing per-field assertions read
+/// unchanged. Use for pretty `--json` (enveloped) output only — `--output
+/// ndjson` records and `bzr schema <name>` documents stay bare and must be
+/// parsed directly.
+///
+/// # Panics
+///
+/// Panics if `raw` is not valid JSON, lacks the `schema_version` envelope, or
+/// has no `data` field.
+#[must_use]
+#[expect(clippy::unwrap_used)]
+pub fn json_envelope_data(raw: &str) -> serde_json::Value {
+    let parsed: serde_json::Value = serde_json::from_str(raw.trim()).unwrap();
+    assert_eq!(
+        parsed
+            .get("schema_version")
+            .and_then(serde_json::Value::as_str),
+        Some(crate::output::SCHEMA_VERSION),
+        "--json output must carry the schema_version envelope: {raw}"
+    );
+    parsed.get("data").cloned().unwrap()
 }
 
 /// Build a full-shaped attachment fixture with common test defaults.

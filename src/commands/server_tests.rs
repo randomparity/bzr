@@ -38,8 +38,7 @@ async fn server_info_returns_version_and_extensions() {
 
     let output = __io.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["version"], "5.0.4");
 }
 
@@ -79,7 +78,7 @@ async fn server_capabilities_outputs_documented_shape() {
 
     let output = __io.out_str().to_string();
     assert!(result.is_ok(), "expected ok, got {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["version"], "5.0.4");
     assert_eq!(parsed["api_modes"][0], "rest");
     assert_eq!(parsed["status_transitions"][0]["from"], "NEW");

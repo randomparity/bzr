@@ -180,8 +180,7 @@ async fn query_save_and_show() {
     .await;
     let output = __io_a2.out_str().to_string();
     assert!(result.is_ok(), "query show failed: {result:?}");
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "test-q");
     assert_eq!(parsed["kind"], "list");
     assert_eq!(parsed["product"][0], "Firefox");
@@ -246,8 +245,7 @@ async fn query_save_persists_every_field() {
     .await;
     let output = __io_a3.out_str().to_string();
     result.unwrap();
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["product"][0], "Firefox");
     assert_eq!(parsed["component"][0], "General");
     assert_eq!(parsed["status"][0], "NEW");
@@ -287,8 +285,7 @@ async fn query_save_search_kind() {
     .await;
     let output = __io_a5.out_str().to_string();
     assert!(result.is_ok(), "query show failed: {result:?}");
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["kind"], "search");
     assert_eq!(parsed["quicksearch"], "crash in tab");
 }
@@ -399,7 +396,7 @@ async fn query_save_existing_entry_reports_updated() {
     let output = __io4.out_str().to_string();
     assert!(result.is_ok());
 
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "existing");
     assert_eq!(parsed["action"], "updated");
 

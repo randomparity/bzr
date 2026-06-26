@@ -1,4 +1,3 @@
-#![expect(clippy::unwrap_used)]
 //! Direct tests for the `bug update` output formatters: the batch result
 //! envelope ([`super::write_batch_result`]) in table and JSON form, and the
 //! dry-run preview ([`super::write_update_dry_run`]).
@@ -40,7 +39,7 @@ fn write_batch_result_json_emits_batch_result_shape() {
 
     write_batch_result(&batch, OutputFormat::Json, false, &mut io.writers());
 
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["resource"], "bug");
     assert_eq!(parsed["action"], "updated");
     assert_eq!(parsed["succeeded"], serde_json::json!([7]));
@@ -59,7 +58,7 @@ fn write_update_dry_run_json_marks_payload_and_lists_ids() {
 
     write_update_dry_run(&[7, 8], &params, OutputFormat::Json, &mut io.writers());
 
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["resource"], "bug");
     assert_eq!(parsed["ids"], serde_json::json!([7, 8]));

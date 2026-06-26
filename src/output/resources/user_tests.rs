@@ -148,7 +148,7 @@ fn write_users_table_empty_says_none_found() {
 #[test]
 fn write_users_json_empty_renders_empty_array() {
     let output = capture_users(OutputFormat::Json, &[]);
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert!(parsed.is_array());
     assert_eq!(parsed.as_array().unwrap().len(), 0);
 }
@@ -230,7 +230,7 @@ fn write_whoami_table_renders_fields() {
 fn write_whoami_json_via_write() {
     let whoami = make_whoami();
     let output = capture_whoami(OutputFormat::Json, &whoami);
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 42);
     assert_eq!(parsed["name"], "testuser");
     assert_eq!(parsed["real_name"], "Test User");

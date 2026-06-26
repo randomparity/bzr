@@ -99,7 +99,7 @@ fn write_attachments_table_empty_says_no_attachments() {
 #[test]
 fn write_attachments_json_empty_renders_empty_array() {
     let output = capture(OutputFormat::Json, &[]);
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert!(parsed.is_array());
     assert_eq!(parsed.as_array().unwrap().len(), 0);
 }
@@ -191,7 +191,7 @@ fn write_attachments_table_patch_tag_precedes_obsolete_and_private() {
 #[test]
 fn write_attachments_json_one_via_write() {
     let output = capture(OutputFormat::Json, &[output_attachment(99, "Json patch")]);
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["id"], 99);
     assert_eq!(parsed[0]["summary"], "Json patch");
     assert_eq!(parsed[0]["file_name"], "file_99.patch");
@@ -328,7 +328,7 @@ fn write_attachment_batch_table_includes_summary() {
 fn write_attachment_batch_json_emits_typed_payload() {
     let result = sample_batch_result();
     let (out, _err) = capture_batch(OutputFormat::Json, &result);
-    let parsed: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&out);
     assert_eq!(parsed["summary"]["succeeded"], 2);
     assert_eq!(parsed["bug_results"][0]["files"][0]["attachment_id"], 9876);
 }

@@ -93,7 +93,7 @@ async fn component_update_succeeds() {
     .await;
     let output = __io_a2.out_str().to_string();
     assert!(result.is_ok());
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 10);
     assert_eq!(parsed["action"], "updated");
 }
@@ -132,7 +132,7 @@ async fn component_update_by_product_and_component_resolves_id() {
         result.is_ok(),
         "component update by product/name failed: {result:?}"
     );
-    let parsed = serde_json::from_str::<serde_json::Value>(io.out_str().trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["id"], 10);
     assert_eq!(parsed["action"], "updated");
 }
@@ -319,7 +319,7 @@ async fn component_update_dry_run_makes_no_write_and_marks_payload() {
         result.is_ok(),
         "dry-run component update failed: {result:?}"
     );
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["resource"], "component");
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["ids"], serde_json::json!([10]));
@@ -365,7 +365,7 @@ async fn component_update_named_dry_run_makes_no_read_or_write_and_marks_target(
         result.is_ok(),
         "named dry-run component update failed: {result:?}"
     );
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["resource"], "component");
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["ids"], serde_json::json!([]));

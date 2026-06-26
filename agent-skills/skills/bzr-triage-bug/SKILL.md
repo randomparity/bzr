@@ -63,7 +63,7 @@ After reading the bug, capture its `last_change_time` and pass it back on the
 write so a concurrent edit is detected instead of clobbered:
 
 ```
-ts=$(bzr bug view <id> --json | jq -r '.last_change_time')
+ts=$(bzr bug view <id> --json | jq -r '.data.last_change_time')
 bzr bug update <id> --status RESOLVED --resolution FIXED \
   --expect-unchanged-since "$ts"      # exits 14 if the bug changed meanwhile
 ```
@@ -78,7 +78,7 @@ Use JSON metadata for decisions, and use stdout only for the raw bytes of one
 attachment:
 
 ```
-bzr attachment list <id> --json | jq -r '.[] | "\(.id)\t\(.file_name)"'
+bzr attachment list <id> --json | jq -r '.data[] | "\(.id)\t\(.file_name)"'
 bzr attachment download <attachment-id> --out - > patch.diff
 ```
 

@@ -80,7 +80,7 @@ async fn template_delete_existing_removes_entry() {
     let output = __io4.out_str().to_string();
     assert!(result.is_ok());
 
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "delete-me");
     assert_eq!(parsed["action"], "deleted");
     assert!(!load_config().templates.contains_key("delete-me"));
@@ -111,7 +111,7 @@ async fn template_delete_json_matches_domain_mutation_output() {
     .await;
 
     assert!(result.is_ok());
-    let parsed = serde_json::from_str::<serde_json::Value>(delete_io.out_str().trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(delete_io.out_str());
     assert_eq!(
         parsed,
         serde_json::json!({"name": "delete-json-shape", "action": "deleted"})

@@ -177,8 +177,7 @@ async fn query_run_executes_saved_query() {
     .await;
     let output = __io_a8.out_str().to_string();
     assert!(result.is_ok(), "query run failed: {result:?}");
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["id"], 1);
     assert_eq!(parsed[0]["product"], "TestProduct");
 }
@@ -222,7 +221,7 @@ async fn query_run_honors_saved_custom_fields() {
     .await;
 
     assert!(result.is_ok(), "query run failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(run_io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(run_io.out_str());
     assert_eq!(parsed[0]["id"], 1);
     assert_eq!(parsed[0]["cf_release"], "9.6");
     assert!(parsed[0].get("summary").is_none());
@@ -265,7 +264,7 @@ async fn query_run_count_json_emits_count_object() {
     .await;
 
     assert!(result.is_ok(), "query run --count failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(run_io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(run_io.out_str());
     assert_eq!(parsed["count"], 3);
 }
 
@@ -388,7 +387,7 @@ async fn query_run_count_ignores_saved_url_offset() {
     .await;
 
     assert!(result.is_ok(), "query run --count failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(run_io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(run_io.out_str());
     assert_eq!(parsed["count"], 4);
 }
 

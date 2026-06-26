@@ -67,7 +67,7 @@ for _phase in \
     09-bug-relationships 09b-bug-collision 09c-bug-links \
     10-bug-clone 11-batch-update 11b-bug-verbs 12-my-bugs 13-templates 14-queries \
     15-comments 15b-comments-private 16-attachments 16b-attachments-private \
-    17-global-options 17b-arg-validation 18-completion-schema 99-sequences; do
+    17-global-options 17b-arg-validation 18-completion-schema 18a-json-envelope 99-sequences; do
     # shellcheck source=/dev/null
     source "$SCRIPT_DIR/phases/${_phase}.sh"
 done

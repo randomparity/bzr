@@ -125,7 +125,7 @@ fn write_group_info_table_member_with_no_real_name_renders_empty_parens() {
 fn write_group_info_json_via_write() {
     let group = make_group_info();
     let output = capture(OutputFormat::Json, &group);
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 5);
     assert_eq!(parsed["name"], "core-team");
     assert_eq!(parsed["membership"][0]["name"], "alice");

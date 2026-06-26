@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/envelope.json",
+  "title": "JsonEnvelope",
+  "description": "Top-level wrapper for every pretty `--json` success response. `schema_version` identifies the JSON output contract (semver); `data` holds the command-specific payload described by the per-command schemas. Not emitted for `--output ndjson`, whose records stay bare; read the version from `bzr schema --json` or `bzr --version` instead.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "data": {}
+  },
+  "required": [
+    "schema_version",
+    "data"
+  ],
+  "additionalProperties": false
+}

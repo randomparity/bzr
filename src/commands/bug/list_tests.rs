@@ -48,8 +48,7 @@ async fn bug_list_returns_bugs() {
     .await;
     let output = __io.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["id"], 1);
     assert_eq!(parsed[0]["summary"], "Test bug");
     assert_eq!(parsed[0]["status"], "NEW");
@@ -372,7 +371,7 @@ async fn bug_list_json_fields_trims_output() {
     )
     .await;
     assert!(result.is_ok(), "json path succeeds: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(__io.out_str());
     let obj = parsed[0].as_object().unwrap();
     assert!(
         obj.contains_key("summary"),
@@ -417,7 +416,7 @@ async fn bug_list_json_custom_field_is_requested_and_emitted() {
         result.is_ok(),
         "json custom field path succeeds: {result:?}"
     );
-    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(__io.out_str());
     assert_eq!(parsed[0]["id"], 1);
     assert_eq!(parsed[0]["cf_release"], "9.6");
     assert!(parsed[0].get("summary").is_none());
@@ -451,7 +450,7 @@ async fn bug_list_json_custom_only_field_does_not_emit_forced_id() {
     .await;
 
     assert!(result.is_ok(), "json custom-only path succeeds: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(__io.out_str());
     let obj = parsed[0].as_object().unwrap();
     assert_eq!(
         obj.keys().map(String::as_str).collect::<Vec<_>>(),
@@ -644,7 +643,7 @@ async fn bug_list_count_json_emits_count_object() {
     )
     .await;
     assert!(result.is_ok(), "count list failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(__io.out_str());
     assert_eq!(parsed["count"], 3);
 }
 

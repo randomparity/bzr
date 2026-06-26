@@ -1,5 +1,3 @@
-#![expect(clippy::unwrap_used)]
-
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
@@ -31,8 +29,7 @@ async fn whoami_returns_user_info() {
 
     let output = __io.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 1);
     assert_eq!(parsed["name"], "admin@test.com");
     assert_eq!(parsed["real_name"], "Admin User");

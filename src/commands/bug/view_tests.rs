@@ -100,8 +100,7 @@ async fn view_single_unchanged_json() {
     .await;
     let output = __io2.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     // Single-ID JSON shape must remain a bare Bug object — no `bugs`/`failed`.
     assert_eq!(parsed["id"], 42);
     assert!(parsed.get("bugs").is_none());
@@ -136,7 +135,7 @@ async fn view_single_json_custom_only_field_omits_forced_id() {
     .await;
 
     assert!(result.is_ok(), "single view custom JSON failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(__io.out_str());
     let obj = parsed.as_object().unwrap();
     assert_eq!(
         obj.keys().map(String::as_str).collect::<Vec<_>>(),
@@ -330,8 +329,7 @@ async fn view_multi_strict_json_all_succeed_emits_wrapped_shape() {
     .await;
     let output = __io5.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["bugs"].as_array().unwrap().len(), 2);
     assert_eq!(parsed["failed"].as_array().unwrap().len(), 0);
     assert_eq!(parsed["bugs"][0]["id"], 1);
@@ -373,7 +371,7 @@ async fn view_multi_strict_json_projects_custom_fields_inside_wrapper() {
     .await;
 
     assert!(result.is_ok(), "multi view custom JSON failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(__io.out_str());
     assert_eq!(parsed["bugs"][0]["id"], 1);
     assert_eq!(parsed["bugs"][0]["cf_release"], "9.6");
     assert!(parsed["bugs"][0].get("summary").is_none());
@@ -489,8 +487,7 @@ async fn view_multi_permissive_json_shape() {
     .await;
     let output = __io8.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["bugs"].as_array().unwrap().len(), 1);
     assert_eq!(parsed["bugs"][0]["id"], 1);
     let failed = parsed["failed"].as_array().unwrap();
@@ -528,8 +525,7 @@ async fn view_multi_permissive_all_fail_returns_empty_bugs() {
     .await;
     let output = __io9.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["bugs"].as_array().unwrap().len(), 0);
     assert_eq!(parsed["failed"].as_array().unwrap().len(), 3);
 }
@@ -560,8 +556,7 @@ async fn view_multi_permissive_with_alias_preserves_id_string() {
     .await;
     let output = __io10.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     let failed = parsed["failed"].as_array().unwrap();
     assert_eq!(
         failed[0]["id"], "my-alias",
@@ -687,8 +682,7 @@ async fn view_multi_permissive_api_102_suppressed() {
     .await;
     let output = __io11.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["failed"].as_array().unwrap().len(), 1);
     assert_eq!(parsed["failed"][0]["id"], "2");
 }

@@ -57,7 +57,7 @@ fn write_comments_table_empty_says_no_comments() {
 #[test]
 fn write_comments_json_empty_renders_empty_array() {
     let output = capture(OutputFormat::Json, &[]);
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert!(parsed.is_array());
     assert_eq!(parsed.as_array().unwrap().len(), 0);
 }
@@ -99,7 +99,7 @@ fn write_comments_table_handles_missing_creator_and_unicode() {
 fn write_comments_json_one_comment_via_write() {
     let comments = vec![make_comment(7, "json body")];
     let output = capture(OutputFormat::Json, &comments);
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["count"], 7);
     assert_eq!(parsed[0]["text"], "json body");
     assert_eq!(parsed[0]["bug_id"], 42);

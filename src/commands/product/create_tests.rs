@@ -39,7 +39,7 @@ async fn product_create_returns_id() {
     .await;
     let output = __io_a3.out_str().to_string();
     assert!(result.is_ok());
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 5);
 }
 
@@ -71,7 +71,7 @@ async fn product_create_dry_run_makes_no_write_and_marks_payload() {
     .await;
 
     assert!(result.is_ok(), "dry-run product create failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["resource"], "product");
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["ids"], serde_json::json!([]));
@@ -115,7 +115,7 @@ async fn product_create_from_json_sends_merged_body() {
         result.is_ok(),
         "product create from JSON failed: {result:?}"
     );
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["id"], 8);
     assert_eq!(parsed["action"], "created");
 }

@@ -80,7 +80,7 @@ async fn bug_update_from_json_object_uses_positional_id() {
         result.is_ok(),
         "JSON object update should succeed: {result:?}"
     );
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["action"], "updated");
     assert_eq!(parsed["id"], 42);
 }
@@ -116,7 +116,7 @@ async fn bug_update_from_json_cli_flag_overrides_json_field() {
         result.is_ok(),
         "CLI status should override JSON: {result:?}"
     );
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["action"], "updated");
     assert_eq!(parsed["id"], 42);
 }
@@ -231,7 +231,7 @@ async fn bug_update_from_json_array_batches_per_id() {
     .await;
 
     assert!(result.is_ok(), "array update should succeed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["succeeded"], serde_json::json!([1, 2]));
     assert_eq!(parsed["failed"], serde_json::json!([]));
 }
@@ -264,7 +264,7 @@ async fn bug_update_from_json_single_element_array_returns_batch_shape() {
         result.is_ok(),
         "one-element array should update: {result:?}"
     );
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["succeeded"], serde_json::json!([8]));
     assert_eq!(parsed["failed"], serde_json::json!([]));
     assert!(
@@ -295,7 +295,7 @@ async fn bug_update_from_json_array_dry_run_emits_single_object_and_no_write() {
     .await;
 
     assert!(result.is_ok(), "array dry-run should succeed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["ids"], serde_json::json!([1, 2]));
     assert_eq!(parsed["changes"].as_array().unwrap().len(), 2);
@@ -331,7 +331,7 @@ async fn bug_update_from_json_array_partial_failure_exits_11() {
             failed: 1
         }
     ));
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["succeeded"], serde_json::json!([1]));
     assert_eq!(parsed["failed"][0]["id"], 2);
 }
@@ -374,7 +374,7 @@ async fn bug_update_from_json_array_guard_failure_prevents_all_writes() {
             failed: 1
         }
     ));
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["succeeded"], serde_json::json!([]));
     assert_eq!(parsed["failed"][0]["id"], 2);
     assert_eq!(received_put_count(&mock).await, 0);
@@ -625,8 +625,7 @@ async fn bug_update_sends_put() {
     .await;
     let output = __io.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["action"], "updated");
     assert_eq!(parsed["id"], 42);
 }
@@ -748,8 +747,7 @@ async fn bug_update_batch_mixed_results() {
             failed: 1,
         })
     ));
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["succeeded"], serde_json::json!([1]));
     assert_eq!(parsed["failed"][0]["id"], 2);
 }
@@ -855,8 +853,7 @@ async fn bug_update_json_output_unchanged_with_comment() {
     .await;
     let output = __io7.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["action"], "updated");
     assert_eq!(parsed["id"], 42);
     assert!(
@@ -888,7 +885,7 @@ async fn bug_update_large_batch_auto_proceeds_when_not_a_tty() {
     let output = io.out_str().to_string();
 
     assert!(result.is_ok(), "large batch should proceed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["action"], "updated");
     assert_eq!(parsed["succeeded"].as_array().unwrap().len(), 11);
 }
@@ -915,7 +912,7 @@ async fn bug_update_expect_unchanged_proceeds_when_timestamp_matches() {
         result.is_ok(),
         "matching timestamp should update: {result:?}"
     );
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["action"], "updated");
     assert_eq!(parsed["id"], 42);
 }
@@ -1090,7 +1087,7 @@ async fn run_update_dry_run_json(
 
     assert!(result.is_ok(), "dry-run update failed: {result:?}");
     assert_eq!(received_put_count(mock).await, 0);
-    serde_json::from_str(io.out_str().trim()).unwrap()
+    crate::test_helpers::json_envelope_data(io.out_str())
 }
 
 #[tokio::test]
@@ -1110,7 +1107,7 @@ async fn bug_update_dry_run_makes_no_write_and_marks_payload() {
     let output = io.out_str().to_string();
 
     assert!(result.is_ok(), "dry-run update failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["resource"], "bug");
     assert_eq!(parsed["ids"], serde_json::json!([42]));
@@ -1141,7 +1138,7 @@ async fn bug_update_dry_run_json_includes_cleaned_add_and_remove_lists() {
     .await;
 
     assert!(result.is_ok(), "dry-run update failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["ids"], serde_json::json!([42]));
     assert_eq!(parsed["changes"]["blocks"]["add"], serde_json::json!([100]));
@@ -1177,7 +1174,7 @@ async fn bug_update_dry_run_batch_lists_all_ids() {
     let output = io.out_str().to_string();
 
     assert!(result.is_ok());
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["ids"], serde_json::json!([1, 2, 3]));
 }

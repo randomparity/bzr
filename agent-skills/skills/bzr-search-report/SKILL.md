@@ -10,10 +10,10 @@ description: Use when searching Bugzilla or producing a bug report/digest with b
 ```
 # Public read-only server, no config or API key
 bzr --server-url https://bugzilla.example.com bug search "crash on startup" --json \
-  | jq -r '.[] | "\(.id)\t\(.status)\t\(.summary)"'
+  | jq -r '.data[] | "\(.id)\t\(.status)\t\(.summary)"'
 
-bzr bug search "crash on startup" --json | jq -r '.[] | "\(.id)\t\(.status)\t\(.summary)"'
-bzr bug list --product Foo --status NEW --json | jq -r '.[].id'
+bzr bug search "crash on startup" --json | jq -r '.data[] | "\(.id)\t\(.status)\t\(.summary)"'
+bzr bug list --product Foo --status NEW --json | jq -r '.data[].id'
 ```
 
 ### Sort, page, count, and filter
@@ -27,7 +27,7 @@ bzr bug list --product Foo --offset 50 --limit 25     # one page
 bzr bug list --product Foo --paginate --json          # fetch every page
 
 # Just the count (cheaper than fetching rows)
-bzr bug list --product Foo --status NEW --count --json | jq '.count'
+bzr bug list --product Foo --status NEW --count --json | jq '.data.count'
 ```
 
 Extra filters beyond product/component/status/assignee: `--resolution`,
@@ -59,9 +59,9 @@ allowed overrides such as `--limit`, `--fields`, date filters, and sort order.
 ## Your own bugs
 
 ```
-bzr bug my --status \!CLOSED --product Foo --json | jq 'length'      # count
+bzr bug my --status \!CLOSED --product Foo --json | jq '.data | length'      # count
 bzr bug my --status \!CLOSED --component Bar --changed-since 2026-01-01 --json \
-  | jq -r '.[] | "\(.id)\t\(.summary)"'
+  | jq -r '.data[] | "\(.id)\t\(.summary)"'
 ```
 
 `bug my` supports the same product/component/status/date/metadata filters as
@@ -74,7 +74,7 @@ Combine a query with jq to produce a readable list to drop into a report:
 
 ```
 bzr query run my-open --json \
-  | jq -r 'sort_by(.status)[] | "- #\(.id) [\(.status)] \(.summary)"'
+  | jq -r '.data | sort_by(.status)[] | "- #\(.id) [\(.status)] \(.summary)"'
 ```
 
 For large or streaming digests, use `--output ndjson` (one compact record per

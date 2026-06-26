@@ -38,8 +38,7 @@ async fn group_view_returns_info() {
     .await;
     let output = __io_a1.out_str().to_string();
     assert!(result.is_ok(), "group_view failed: {result:?}");
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 1);
     assert_eq!(parsed["name"], "admin");
     assert_eq!(parsed["description"], "Admin group");

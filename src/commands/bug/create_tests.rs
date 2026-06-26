@@ -53,8 +53,7 @@ async fn bug_create_sends_post() {
 
     let output = __io.out_str().to_string();
     assert!(result.is_ok());
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["action"], "created");
     assert_eq!(parsed["id"], 99);
 }
@@ -82,7 +81,7 @@ async fn bug_create_dry_run_makes_no_write_and_marks_payload() {
     let output = io.out_str().to_string();
 
     assert!(result.is_ok(), "dry-run create failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["resource"], "bug");
     assert_eq!(parsed["ids"], serde_json::json!([]));
@@ -157,7 +156,7 @@ async fn bug_create_sends_parity_fields_in_body() {
         result.is_ok(),
         "create with parity fields failed: {result:?}"
     );
-    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(__io.out_str());
     assert_eq!(parsed["id"], 123);
 }
 
@@ -380,8 +379,7 @@ async fn bug_create_with_template_fills_missing_fields() {
         result.is_ok(),
         "bug create with template failed: {result:?}"
     );
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 7);
     assert_eq!(parsed["action"], "created");
 }
@@ -444,7 +442,7 @@ async fn bug_create_template_applies_create_metadata_defaults() {
     .await;
     assert!(result.is_ok(), "template create dry-run failed: {result:?}");
 
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     let changes = &parsed["changes"];
     assert_eq!(changes["url"], "https://example.com/repro");
     assert_eq!(changes["whiteboard"], "needs-triage");
@@ -526,7 +524,7 @@ async fn bug_create_cli_create_metadata_overrides_template() {
     .await;
     assert!(result.is_ok(), "template create dry-run failed: {result:?}");
 
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     let changes = &parsed["changes"];
     assert_eq!(changes["url"], "https://example.com/cli");
     assert_eq!(changes["whiteboard"], "cli-whiteboard");
@@ -1128,7 +1126,7 @@ async fn from_json_single_object_files_a_bug() {
         result.is_ok(),
         "single object should file a bug: {result:?}"
     );
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["action"], "created");
     assert_eq!(parsed["id"], 7);
 }
@@ -1155,7 +1153,7 @@ async fn from_json_array_batch_creates_one_per_element() {
     .await;
 
     assert!(result.is_ok(), "array should batch-create: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["action"], "created");
     assert_eq!(parsed["created"], serde_json::json!([11, 11]));
     assert_eq!(parsed["failed"], serde_json::json!([]));
@@ -1204,7 +1202,7 @@ async fn from_json_array_partial_failure_exits_11() {
         "expected partial failure 1/1, got {err:?}"
     );
     assert_eq!(err.exit_code(), 11);
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["created"], serde_json::json!([11]));
     assert_eq!(parsed["failed"][0]["index"], 1);
 }
@@ -1304,7 +1302,7 @@ async fn from_json_single_element_array_returns_batch_shape() {
     .await;
 
     assert!(result.is_ok(), "1-element array should create: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["created"], serde_json::json!([8]));
     assert_eq!(parsed["failed"], serde_json::json!([]));
     assert!(
@@ -1338,7 +1336,7 @@ async fn from_json_batch_dry_run_emits_single_object_and_no_write() {
 
     assert!(result.is_ok(), "batch dry-run should succeed: {result:?}");
     // The whole batch is ONE valid JSON object whose changes is the array.
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["changes"].as_array().unwrap().len(), 2);
 }

@@ -1,5 +1,3 @@
-#![expect(clippy::unwrap_used)]
-
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
@@ -44,7 +42,7 @@ async fn attachment_view_returns_metadata_without_data() {
     )
     .await;
     assert!(result.is_ok(), "view should succeed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(__io.out_str());
     assert_eq!(parsed["id"], 9876);
     assert_eq!(parsed["file_name"], "patch.diff");
     assert_eq!(parsed["size"], 1024);

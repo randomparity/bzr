@@ -20,11 +20,27 @@ pub(super) fn render_flags_inline(flags: &[Flag]) -> String {
         .join(", ")
 }
 
+/// The top-level `--json` envelope: a stable `schema_version` plus the
+/// command's `data` payload. Borrows the payload so no clone is needed; field
+/// order (`schema_version` first) is preserved by the derive.
+#[derive(Serialize)]
+struct JsonEnvelope<'a, T: Serialize + ?Sized> {
+    schema_version: &'static str,
+    data: &'a T,
+}
+
+/// Write pretty `--json` output, wrapping the payload in the versioned
+/// envelope. This is the single seam for the `schema_version` contract on the
+/// success path; `--output ndjson` (see [`write_ndjson`]) stays bare.
 pub(super) fn write_json<W: Write + ?Sized>(value: &(impl Serialize + ?Sized), out: &mut W) {
+    let envelope = JsonEnvelope {
+        schema_version: crate::output::SCHEMA_VERSION,
+        data: value,
+    };
     let _ = writeln!(
         out,
         "{}",
-        serde_json::to_string_pretty(value).expect("serializable to JSON")
+        serde_json::to_string_pretty(&envelope).expect("serializable to JSON")
     );
 }
 

@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used, clippy::expect_used)]
+#![expect(clippy::expect_used)]
 
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -64,8 +64,7 @@ async fn bug_my_returns_assigned_by_default() {
     .await;
     let output = __io.out_str().to_string();
     assert!(result.is_ok(), "bug my failed: {result:?}");
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["id"], 10);
     assert_eq!(parsed[0]["summary"], "Assigned bug");
 }
@@ -312,8 +311,7 @@ async fn bug_my_all_deduplicates() {
     .await;
     let output = __io5.out_str().to_string();
     assert!(result.is_ok(), "bug my --all failed: {result:?}");
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     let bugs = parsed.as_array().expect("expected JSON array");
     assert_eq!(bugs.len(), 1, "duplicate bug should be deduplicated");
     assert_eq!(bugs[0]["id"], 42);
@@ -440,7 +438,7 @@ async fn bug_my_all_count_reports_distinct_total() {
     )
     .await;
     assert!(result.is_ok(), "my --all --count failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(__io.out_str());
     // Three searches each return ids {1,2}; deduped distinct count is 2.
     assert_eq!(parsed["count"], 2);
 }

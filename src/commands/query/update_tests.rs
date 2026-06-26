@@ -218,7 +218,7 @@ async fn show_query_json(name: &str) -> serde_json::Value {
         OutputFormat::Json,
     )
     .await;
-    serde_json::from_str(output.trim()).unwrap()
+    crate::test_helpers::json_envelope_data(&output)
 }
 
 #[test]

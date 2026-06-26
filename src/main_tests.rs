@@ -201,6 +201,11 @@ fn format_dispatch_error_renders_json() {
     let err = BzrError::Config("bad config".into());
     let out = format_dispatch_error(&err, OutputFormat::Json);
     let parsed: serde_json::Value = serde_json::from_str(&out).expect("output must be valid JSON");
+    assert_eq!(
+        parsed["schema_version"],
+        bzr::output::SCHEMA_VERSION,
+        "--json error output must carry the schema_version envelope: {out}"
+    );
     let inner = parsed.get("error").expect("has error key");
     assert_eq!(inner["type"], err.error_type());
     assert_eq!(inner["exit_code"], err.exit_code());
@@ -226,6 +231,10 @@ fn format_dispatch_error_ndjson_renders_compact_json_object() {
     assert!(!out.contains('\n'), "ndjson error must be one line: {out}");
     let parsed: serde_json::Value = serde_json::from_str(&out).expect("output must be valid JSON");
     assert_eq!(parsed["error"]["exit_code"], err.exit_code());
+    assert!(
+        parsed.get("schema_version").is_none(),
+        "ndjson error must stay bare (no schema_version): {out}"
+    );
 }
 
 async fn schema_from_command(name: &str) -> serde_json::Value {
