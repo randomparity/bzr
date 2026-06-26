@@ -16,17 +16,22 @@ document with a published schema.
 The constraint that shapes the whole design: criterion 2 requires the command to
 work against `--server-url` with **no saved config and no API key**. Whatever the
 document reports must therefore be derivable from what a stock Bugzilla 5.x server
-serves anonymously, or explicitly marked absent. The acceptance test confirms this
-expectation — it mocks only `/rest/version` and `/rest/field/bug/status`, not the
-admin-gated `/rest/parameters` or any flag endpoint.
+serves anonymously, or explicitly marked absent. The issue's criterion-6 test
+confirms this expectation — it mocks only `/rest/version` and
+`/rest/field/bug/status`, not the admin-gated `/rest/parameters` or any flag
+endpoint. (The spec adds a further, credentialed test that does mock
+`/rest/parameters`; see Testing.)
 
 ## Decision
 
 Add `ServerAction::Capabilities`. It connects with the existing
 `connect_and_configure()` path (credentialless-capable, per issue #380), fetches
-only anonymously-available data, and assembles a `ServerCapabilities` value that
-serializes to the documented shape. Fields that a stock anonymous server does not
-expose are `null` (best-effort fields) rather than errors.
+the data a stock server serves anonymously plus one credential-gated best-effort
+field (`max_attachment_size`), and assembles a `ServerCapabilities` value that
+serializes to the documented shape. Every always-populated field is
+anonymous-derivable, so the document is identical with or without a key except for
+that single field; fields a stock server does not expose are `null` rather than
+errors.
 
 ### Output shape
 
