@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `bzr bug links <id>` prints a bug's relationship graph — one record per related
+  bug across all six Bugzilla link types (`depends_on`, `blocks`, `dupe_of`,
+  `duplicates`, `regressed_by`, `regressions`) as flat JSON/ndjson/table records
+  with `relation`, `direction`, and `depth` fields. `--recursive --depth N`
+  performs a bounded, cycle-safe breadth-first walk; `--relation <type>` filters
+  to one relation. Read-only and works without an API key. (#453)
 - `bzr server capabilities` dumps the connected server's capability surface as
   structured JSON (`--json`/`--output ndjson`): supported API transports and auth
   modes, status-transition summaries, custom field definitions, the

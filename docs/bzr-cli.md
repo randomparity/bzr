@@ -108,6 +108,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   ├── search [<QUERY>] [--from-url <URL>] [--save-as [NAME]] [--limit <N>] [--offset <N>] [--paginate] [--count] [--fields <F>] [--exclude-fields <F>]
 │   │          [--sort <FIELD>] [--order asc|desc]
 │   ├── history <ID> [--since <DATE>]
+│   ├── links <ID> [--recursive] [--depth <N>] [--relation <TYPE>]
 │   ├── my [--created] [--cc] [--all] [--status <S>...] [--product <P>...] [--component <C>...]
 │   │       [--priority <P>...] [--severity <S>...] [--resolution <R>...] [--version <V>...]
 │   │       [--op-sys <OS>...] [--platform <P>...] [--whiteboard <W>...] [--target-milestone <M>...]
@@ -485,6 +486,58 @@ bzr --json bug history 12345
 |--------|----------|-------------|
 | `<ID>` | Yes | Bug ID |
 | `--since <DATE>` | No | Only show changes after this date (ISO 8601) |
+
+### `bzr bug links`
+
+Print a bug's relationship graph: one record per related bug across all six
+Bugzilla relationship types. Read-only; works against public servers without an
+API key.
+
+```bash
+bzr bug links 12345
+bzr bug links 12345 --recursive --depth 2 --output ndjson
+bzr bug links 12345 --relation depends_on
+bzr --json bug links 12345
+```
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `<ID>` | Yes | | Bug ID |
+| `--recursive` | No | | Walk the relationship graph breadth-first instead of one hop |
+| `--depth <N>` | No | 1 | Maximum hop distance from the root (`1`–`10`); requires `--recursive`. Values outside the range, or `--depth` without `--recursive`, are usage errors (exit 2). |
+| `--relation <TYPE>` | No | | Restrict traversal and output to one relationship type. One of `depends_on`, `blocks`, `dupe_of`, `duplicates`, `regressed_by`, `regressions`; an unknown value is a usage error (exit 2). |
+
+Each record has the shape:
+
+```json
+{"id": 12346, "relation": "depends_on", "direction": "out", "depth": 1, "summary": "...", "status": "NEW"}
+```
+
+The six relationship types and their fixed `direction` (the orientation relative
+to the queried bug `N`):
+
+| relation | direction | meaning |
+|----------|-----------|---------|
+| `depends_on` | `out` | N depends on the related bug |
+| `blocks` | `in` | the related bug depends on N |
+| `dupe_of` | `out` | N is a duplicate of the related bug |
+| `duplicates` | `in` | the related bug is a duplicate of N |
+| `regressed_by` | `out` | N was regressed by the related bug |
+| `regressions` | `in` | the related bug is a regression caused by N |
+
+Walking only `out` edges yields a dependency/root-cause tree; only `in` edges
+yields the dependents/impact tree. `regressed_by`, `regressions`, and
+`duplicates` are BMO/reverse-computed fields; servers that do not return them
+simply omit those records.
+
+Traversal is bounded: depth (`1`–`10`), per-request id chunking (≤100 ids per
+request), and a total cap of 1000 distinct related bugs. On hitting the cap,
+traversal stops, the records found so far are emitted, and a notice is written
+to stderr. Each bug is emitted once, at its first (minimal) depth; cycles are
+followed only once. A root id that cannot be fetched (nonexistent or no read
+permission) fails like `bzr bug view` (exit 2); inaccessible related bugs are
+skipped silently. In table mode, a root with no in-scope relationships prints
+`No related bugs for #<id>.`.
 
 ### `bzr bug my`
 
