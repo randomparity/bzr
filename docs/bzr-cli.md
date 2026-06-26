@@ -1436,7 +1436,8 @@ bzr --dry-run group update qa-team --is-active false
 
 ## `bzr whoami`
 
-Show the currently authenticated user.
+Show the currently authenticated user, the server the identity resolved
+against, and how the connection authenticated.
 
 ```bash
 bzr whoami
@@ -1445,6 +1446,31 @@ bzr --json whoami
 
 `whoami` takes no subcommand. (The former no-op `whoami show` alias was
 removed in favor of the single bare form.)
+
+The `--json` `data` object carries the server-provided identity fields plus two
+connection-metadata fields resolved locally by `bzr`:
+
+| Field | Description |
+|-------|-------------|
+| `id` | Bugzilla user id |
+| `name` / `real_name` / `login` | identity fields (`null` when the server omits them) |
+| `server_name` | the configured/inline server the identity resolved against — a named server's config key (e.g. `default`, `auto`), or the literal `(inline)` for an inline `--server-url` connection |
+| `auth_mode` | how the connection authenticated: `api_key` or `anonymous` |
+
+```json
+{
+  "id": 1,
+  "name": "admin@example.com",
+  "real_name": "Admin User",
+  "login": "admin@example.com",
+  "server_name": "default",
+  "auth_mode": "api_key"
+}
+```
+
+Validate the shape with `bzr schema whoami`. `whoami` is an identity-derived
+command, so it requires a credential; an anonymous connection fails before the
+network call rather than returning `auth_mode: anonymous`.
 
 ---
 
@@ -2161,7 +2187,7 @@ emits the schema document verbatim. An unknown name exits 7 with the list of
 valid names.
 
 Available schemas: `bug`, `comment`, `attachment`, `product`, `component`,
-`classification`, `user`, `group`, `field-value` (read shapes); and the
+`classification`, `user`, `group`, `field-value`, `whoami` (read shapes); and the
 mutation/result envelopes `action-result`, `batch-result`,
 `batch-create-result`, `multi-bug-view`, `tag-result`, `membership-result`,
 `count-result`, `download-result`, `upload-result`, `config-result`,

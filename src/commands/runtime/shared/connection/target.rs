@@ -85,6 +85,7 @@ impl ConnectContext {
             auth_method,
             api_mode,
             email_hint: self.email_hint(),
+            server_name: &self.server_name,
             tls_config,
             request_timeout: self.request_timeout,
             retry_max: self.retry_max,

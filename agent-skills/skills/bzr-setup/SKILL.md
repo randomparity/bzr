@@ -87,7 +87,11 @@ bzr whoami --json && echo "configured" || echo "not configured"
 ```
 
 On success the `data` object carries the identity fields (`id`, `name`,
-`real_name`, `login`). A non-zero exit means one of:
+`real_name`, `login`) plus two connection-metadata fields: `server_name` (the
+server the identity resolved against — a named server's config key, or
+`(inline)` for an inline `--server-url` connection) and `auth_mode` (`api_key`
+or `anonymous`), so one call confirms which server you reached and how you
+authenticated. A non-zero exit means one of:
 
 - **TLS error** — re-run `config set-server` (or the inline `--server-tls-*`
   flags) with the right `--tls-*` trust mode for the server.

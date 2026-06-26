@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `bzr whoami --json` / `--output ndjson` now report two connection-metadata
+  fields alongside the identity fields: `server_name` (the configured/inline
+  server the identity resolved against — a named server's config key, or the
+  literal `(inline)` for an inline `--server-url` connection) and `auth_mode`
+  (`api_key` or `anonymous`). One `whoami --json` call now answers "which server
+  am I, and how am I authenticated?". The existing identity fields (`id`, `name`,
+  `real_name`, `login`) are unchanged (additive). Adds the `whoami` JSON Schema
+  (`bzr schema whoami`). (#470)
 - `bzr bug history <id> --json` / `--output ndjson` now emit flattened change
   records — one record per changed field (`when`, `who`, `field`, `old_value`,
   `new_value`, `comment_id`) instead of grouped entries with a nested `changes`

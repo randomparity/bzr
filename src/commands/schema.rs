@@ -61,6 +61,7 @@ pub(crate) const SCHEMAS: &[(&str, &str)] = schema_registry![
     "user",
     "user-create-input",
     "user-update-input",
+    "whoami",
 ];
 
 /// Look up a schema by name.

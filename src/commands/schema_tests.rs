@@ -21,8 +21,9 @@ use crate::output::result_types::{
 };
 use crate::test_helpers::CapturedIo;
 use crate::types::{
-    Attachment, BugzillaUser, Classification, Comment, Component, CustomFieldSummary, FieldValue,
-    FlagTypeSummary, GroupInfo, HistoryRecord, ServerCapabilities, StatusTransitionSummary,
+    Attachment, AuthMode, BugzillaUser, Classification, Comment, Component, CustomFieldSummary,
+    FieldValue, FlagTypeSummary, GroupInfo, HistoryRecord, ServerCapabilities,
+    StatusTransitionSummary, WhoamiOutput, WhoamiResponse,
 };
 
 /// Look up a schema body by registry name.
@@ -341,6 +342,38 @@ fn classification_conforms() {
     }))
     .unwrap();
     assert_conforms("classification", &to_value(&classification));
+}
+
+#[test]
+fn whoami_conforms() {
+    // Maximal: every nullable identity field populated so the closed-schema
+    // bijection exercises all declared properties.
+    let output = WhoamiOutput {
+        identity: WhoamiResponse {
+            id: 1,
+            name: Some("alice".into()),
+            real_name: Some("Alice".into()),
+            login: Some("alice@example.com".into()),
+        },
+        server_name: "prod".into(),
+        auth_mode: AuthMode::ApiKey,
+    };
+    assert_conforms("whoami", &to_value(&output));
+}
+
+#[test]
+fn whoami_schema_constrains_auth_mode_enum() {
+    let schema = schema_for("whoami");
+    let variants = schema
+        .pointer("/properties/auth_mode/enum")
+        .and_then(Value::as_array)
+        .unwrap();
+    for mode in ["api_key", "anonymous"] {
+        assert!(
+            variants.contains(&Value::String(mode.into())),
+            "whoami schema auth_mode enum must allow {mode}"
+        );
+    }
 }
 
 #[test]

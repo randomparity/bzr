@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/whoami.json",
+  "title": "Whoami",
+  "description": "The `bzr whoami --json` payload (`WhoamiOutput`): the server-provided identity flattened together with the connection metadata bzr resolved locally. `server_name` is the configured/inline server the identity resolved against (the literal `(inline)` for an inline `--server-url` connection); `auth_mode` is how the connection authenticated.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "name": {
+      "type": ["string", "null"]
+    },
+    "real_name": {
+      "type": ["string", "null"]
+    },
+    "login": {
+      "type": ["string", "null"]
+    },
+    "server_name": {
+      "type": "string"
+    },
+    "auth_mode": {
+      "type": "string",
+      "enum": [
+        "api_key",
+        "anonymous"
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "real_name",
+    "login",
+    "server_name",
+    "auth_mode"
+  ],
+  "additionalProperties": false
+}
