@@ -157,10 +157,32 @@ if [[ -n "$BUG1" ]]; then
     if assert_success; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "44. bug history"
+test_begin "44. bug history (flattened JSON change records)"
 if [[ -n "$BUG1" ]]; then
+    # BUG1 has been mutated by earlier tests, so its history is non-empty. The
+    # --json body must be a flat array of per-field records — never the grouped
+    # {who, when, changes:[...]} wire shape.
     run_bzr bug history "$BUG1"
-    if assert_success; then test_pass; fi
+    if assert_success &&
+        assert_json_array_min_length '.' 1 &&
+        assert_json '.[0] | has("field")' "true" &&
+        assert_json '.[0] | has("who")' "true" &&
+        assert_json '.[0] | has("old_value")' "true" &&
+        assert_json '.[0] | has("new_value")' "true" &&
+        assert_json '.[0] | has("comment_id")' "true" &&
+        assert_json '[.[] | has("changes")] | any' "false"; then
+        test_pass
+    fi
+else test_skip "no BUG1"; fi
+
+test_begin "44a. credentialless bug history (public server)"
+if [[ -n "$BUG1" ]]; then
+    run_bzr_raw --json --server public bug history "$BUG1"
+    if assert_success &&
+        assert_json '[.[] | has("field")] | all' "true" &&
+        assert_json '[.[] | has("changes")] | any' "false"; then
+        test_pass
+    fi
 else test_skip "no BUG1"; fi
 
 test_begin "45. bug history --since"

@@ -104,10 +104,27 @@ fn capture_detail_spec(bug: &Bug, spec: ColumnSpec<'_>) -> String {
     String::from_utf8(out).unwrap()
 }
 
-fn capture_history(format: OutputFormat, history: &[HistoryEntry]) -> String {
+fn capture_history_table(history: &[HistoryEntry]) -> String {
     let mut buf = Vec::new();
-    write_history(history, format, &mut buf);
+    write_history_table(history, &mut buf);
     String::from_utf8(buf).unwrap()
+}
+
+fn capture_history_json(records: &[HistoryRecord], format: OutputFormat) -> String {
+    let mut buf = Vec::new();
+    write_history_json(records, format, &mut buf);
+    String::from_utf8(buf).unwrap()
+}
+
+fn sample_record(field: &str, comment_id: Option<u64>) -> HistoryRecord {
+    HistoryRecord {
+        when: "2025-04-01T12:00:00Z".into(),
+        who: "editor@example.com".into(),
+        field: field.into(),
+        old_value: "NEW".into(),
+        new_value: "ASSIGNED".into(),
+        comment_id,
+    }
 }
 
 // ── write_bugs ───────────────────────────────────────────────────
@@ -683,31 +700,55 @@ fn write_json_produces_valid_json_for_vec() {
 // ── write_history ────────────────────────────────────────────────
 
 #[test]
-fn write_history_json_one_entry() {
-    let history = vec![make_history_entry()];
-    let json = serde_json::to_string_pretty(&history).unwrap();
-    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-    assert_eq!(parsed[0]["who"], "editor@example.com");
-    assert_eq!(parsed[0]["when"], "2025-04-01T12:00:00Z");
-    let changes = parsed[0]["changes"].as_array().unwrap();
-    assert_eq!(changes.len(), 2);
-    assert_eq!(changes[0]["field_name"], "status");
-    assert_eq!(changes[0]["removed"], "NEW");
-    assert_eq!(changes[0]["added"], "ASSIGNED");
-    assert_eq!(changes[1]["attachment_id"], 99);
+fn write_history_json_emits_flattened_records() {
+    let records = vec![
+        sample_record("status", Some(7)),
+        sample_record("priority", None),
+    ];
+    let output = capture_history_json(&records, OutputFormat::Json);
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
+    let arr = parsed.as_array().unwrap();
+    assert_eq!(arr.len(), 2);
+    assert_eq!(arr[0]["who"], "editor@example.com");
+    assert_eq!(arr[0]["when"], "2025-04-01T12:00:00Z");
+    assert_eq!(arr[0]["field"], "status");
+    assert_eq!(arr[0]["old_value"], "NEW");
+    assert_eq!(arr[0]["new_value"], "ASSIGNED");
+    assert_eq!(arr[0]["comment_id"], 7);
+    // Null comment_id is present (not omitted) so the shape is stable.
+    assert!(arr[1]["comment_id"].is_null());
+    // The grouped wire shape must NOT leak into the flattened output.
+    assert!(arr[0].get("changes").is_none());
+    assert!(arr[0].get("field_name").is_none());
 }
 
 #[test]
-fn write_history_json_empty() {
-    let history: Vec<HistoryEntry> = vec![];
-    let json = serde_json::to_string_pretty(&history).unwrap();
-    assert_eq!(json, "[]");
+fn write_history_json_empty_is_empty_array() {
+    let output = capture_history_json(&[], OutputFormat::Json);
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
+    assert_eq!(parsed, serde_json::json!([]));
+}
+
+#[test]
+fn write_history_ndjson_one_record_per_line() {
+    let records = vec![
+        sample_record("status", Some(7)),
+        sample_record("priority", None),
+    ];
+    let output = capture_history_json(&records, OutputFormat::Ndjson);
+    let lines: Vec<&str> = output.lines().collect();
+    assert_eq!(lines.len(), 2);
+    for line in lines {
+        let v: serde_json::Value = serde_json::from_str(line).unwrap();
+        assert!(v.is_object());
+        assert!(v.get("field").is_some());
+    }
 }
 
 #[test]
 fn write_history_table_renders_changes() {
     let history = vec![make_history_entry()];
-    let output = capture_history(OutputFormat::Table, &history);
+    let output = capture_history_table(&history);
     assert!(output.contains("Change"));
     assert!(output.contains("editor@example.com"));
     assert!(output.contains("2025-04-01T12:00:00Z"));
@@ -722,17 +763,9 @@ fn write_history_table_renders_changes() {
 
 #[test]
 fn write_history_table_empty_renders_nothing() {
-    let output = capture_history(OutputFormat::Table, &[]);
+    let output = capture_history_table(&[]);
     assert!(!output.contains("Change"));
     assert!(!output.contains('─'));
-}
-
-#[test]
-fn write_history_json_via_write() {
-    let history = vec![make_history_entry()];
-    let output = capture_history(OutputFormat::Json, &history);
-    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
-    assert_eq!(parsed[0]["who"], "editor@example.com");
 }
 
 // ── multi_bug_view ───────────────────────────────────────────────

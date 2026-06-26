@@ -233,6 +233,20 @@ pub struct FieldChange {
     pub attachment_id: Option<u64>,
 }
 
+/// One flattened `bug history` change record: a single field mutation, as
+/// emitted in `--json` / `--output ndjson` output. A history entry with N
+/// changed fields expands to N records sharing `when`/`who`/`comment_id`. See
+/// ADR 0008 and `schemas/history.json` for the published contract.
+#[derive(Debug, Serialize)]
+pub struct HistoryRecord {
+    pub when: String,
+    pub who: String,
+    pub field: String,
+    pub old_value: String,
+    pub new_value: String,
+    pub comment_id: Option<u64>,
+}
+
 #[cfg(test)]
 #[path = "bug_tests.rs"]
 mod tests;

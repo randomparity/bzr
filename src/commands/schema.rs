@@ -48,6 +48,7 @@ pub(crate) const SCHEMAS: &[(&str, &str)] = schema_registry![
     "group",
     "group-create-input",
     "group-update-input",
+    "history",
     "membership-result",
     "multi-bug-view",
     "product",
