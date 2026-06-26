@@ -414,23 +414,27 @@ and queries let agents reuse local workflows without custom wrappers.
 
 ## JSON Output
 
-All list and view commands support `--output json` for scripting and piping to tools like `jq`:
+All list and view commands support `--output json` for scripting and piping to
+tools like `jq`. Output is wrapped in a versioned envelope —
+`{"schema_version": "0.6.0", "data": <payload>}` — so read fields under `.data`
+(`--output ndjson` records stay bare). See
+[docs/bzr-cli.md](docs/bzr-cli.md#json-output) for the stability policy.
 
 ```bash
 # Get bug IDs matching a search
-bzr --output json bug search "memory leak" | jq '.[].id'
+bzr --output json bug search "memory leak" | jq '.data[].id'
 
 # Extract assignee from a bug
-bzr --output json bug view 12345 | jq -r '.assigned_to'
+bzr --output json bug view 12345 | jq -r '.data.assigned_to'
 
 # List attachment filenames
-bzr --output json attachment list 12345 | jq -r '.[].file_name'
+bzr --output json attachment list 12345 | jq -r '.data[].file_name'
 
 # Get product component names
-bzr --output json product view Fedora | jq -r '.components[].name'
+bzr --output json product view Fedora | jq -r '.data.components[].name'
 
 # List allowed status transitions from NEW
-bzr --output json field list status | jq '.[] | select(.name == "NEW") | .can_change_to'
+bzr --output json field list status | jq '.data[] | select(.name == "NEW") | .can_change_to'
 ```
 
 ## Configuration & Authentication
