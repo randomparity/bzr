@@ -1,7 +1,7 @@
 #![expect(clippy::unwrap_used)]
 
 use super::*;
-use crate::types::{BugzillaUser, UserGroup, WhoamiResponse};
+use crate::types::{AuthMode, BugzillaUser, UserGroup, WhoamiOutput, WhoamiResponse};
 
 fn make_user(id: u64, name: &str, can_login: Option<bool>, groups: Vec<&str>) -> BugzillaUser {
     BugzillaUser {
@@ -21,12 +21,16 @@ fn make_user(id: u64, name: &str, can_login: Option<bool>, groups: Vec<&str>) ->
     }
 }
 
-fn make_whoami() -> WhoamiResponse {
-    WhoamiResponse {
-        id: 42,
-        name: Some("testuser".into()),
-        real_name: Some("Test User".into()),
-        login: Some("testuser@example.com".into()),
+fn make_whoami() -> WhoamiOutput {
+    WhoamiOutput {
+        identity: WhoamiResponse {
+            id: 42,
+            name: Some("testuser".into()),
+            real_name: Some("Test User".into()),
+            login: Some("testuser@example.com".into()),
+        },
+        server_name: "prod".into(),
+        auth_mode: AuthMode::ApiKey,
     }
 }
 
@@ -133,7 +137,7 @@ fn capture_users_detailed(format: OutputFormat, users: &[BugzillaUser]) -> Strin
     String::from_utf8(buf).unwrap()
 }
 
-fn capture_whoami(format: OutputFormat, whoami: &WhoamiResponse) -> String {
+fn capture_whoami(format: OutputFormat, whoami: &WhoamiOutput) -> String {
     let mut buf = Vec::new();
     write_whoami(whoami, format, &mut buf);
     String::from_utf8(buf).unwrap()
@@ -224,6 +228,14 @@ fn write_whoami_table_renders_fields() {
     assert!(output.contains("Test User"));
     assert!(output.contains("testuser@example.com"));
     assert!(output.contains("42"));
+    assert!(
+        output.contains("Server        prod"),
+        "expected Server line, got: {output}"
+    );
+    assert!(
+        output.contains("Auth          api_key"),
+        "expected Auth line, got: {output}"
+    );
 }
 
 #[test]
@@ -234,15 +246,21 @@ fn write_whoami_json_via_write() {
     assert_eq!(parsed["id"], 42);
     assert_eq!(parsed["name"], "testuser");
     assert_eq!(parsed["real_name"], "Test User");
+    assert_eq!(parsed["server_name"], "prod");
+    assert_eq!(parsed["auth_mode"], "api_key");
 }
 
 #[test]
 fn write_whoami_table_renders_dashes_for_missing_fields() {
-    let whoami = WhoamiResponse {
-        id: 1,
-        name: Some("bot".into()),
-        real_name: None,
-        login: None,
+    let whoami = WhoamiOutput {
+        identity: WhoamiResponse {
+            id: 1,
+            name: Some("bot".into()),
+            real_name: None,
+            login: None,
+        },
+        server_name: "(inline)".into(),
+        auth_mode: AuthMode::Anonymous,
     };
     let output = capture_whoami(OutputFormat::Table, &whoami);
     assert!(output.contains("bot"));
@@ -253,5 +271,13 @@ fn write_whoami_table_renders_dashes_for_missing_fields() {
     assert!(
         output.contains("Login         -"),
         "expected dashed Login field, got: {output}"
+    );
+    assert!(
+        output.contains("Server        (inline)"),
+        "expected inline Server line, got: {output}"
+    );
+    assert!(
+        output.contains("Auth          anonymous"),
+        "expected anonymous Auth line, got: {output}"
     );
 }

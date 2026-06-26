@@ -6,7 +6,7 @@ use crate::output::formatting::{
     opt_yes_no, write_field, write_formatted, write_optional_field, write_table_or_empty, TableSpec,
 };
 use crate::types::output::OutputFormat;
-use crate::types::user::{BugzillaUser, WhoamiResponse};
+use crate::types::user::{BugzillaUser, WhoamiOutput};
 
 const USER_HEADERS: &[&str] = &["ID", "NAME", "REAL NAME", "EMAIL"];
 const DETAILED_USER_HEADERS: &[&str] = &["ID", "NAME", "REAL NAME", "EMAIL", "CAN LOGIN", "GROUPS"];
@@ -102,17 +102,19 @@ pub fn write_users_detailed<W: Write + ?Sized>(
     );
 }
 
-pub fn write_whoami<W: Write + ?Sized>(whoami: &WhoamiResponse, format: OutputFormat, out: &mut W) {
+pub fn write_whoami<W: Write + ?Sized>(whoami: &WhoamiOutput, format: OutputFormat, out: &mut W) {
     write_formatted(whoami, format, out, |whoami, out| {
         let _ = writeln!(
             out,
             "{} {}",
             "User".bold(),
-            whoami.name.as_deref().unwrap_or("unknown").bold()
+            whoami.identity.name.as_deref().unwrap_or("unknown").bold()
         );
-        write_optional_field(out, "Name", whoami.real_name.as_deref());
-        write_optional_field(out, "Login", whoami.login.as_deref());
-        write_field(out, "ID", &whoami.id.to_string());
+        write_optional_field(out, "Name", whoami.identity.real_name.as_deref());
+        write_optional_field(out, "Login", whoami.identity.login.as_deref());
+        write_field(out, "ID", &whoami.identity.id.to_string());
+        write_field(out, "Server", &whoami.server_name);
+        write_field(out, "Auth", &whoami.auth_mode.to_string());
     });
 }
 

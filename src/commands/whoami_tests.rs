@@ -33,6 +33,9 @@ async fn whoami_returns_user_info() {
     assert_eq!(parsed["id"], 1);
     assert_eq!(parsed["name"], "admin@test.com");
     assert_eq!(parsed["real_name"], "Admin User");
+    // Connection metadata composed locally, not from the server body.
+    assert_eq!(parsed["server_name"], "test");
+    assert_eq!(parsed["auth_mode"], "api_key");
 }
 
 #[tokio::test]
