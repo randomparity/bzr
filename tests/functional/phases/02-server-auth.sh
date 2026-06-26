@@ -12,6 +12,12 @@ test_begin "7. server info"
 run_bzr server info
 if assert_success && assert_json_exists '.version'; then test_pass; fi
 
+test_begin "7b. server capabilities"
+run_bzr server capabilities
+if assert_success && assert_json_exists '.version' &&
+    assert_json_array_min_length '.api_modes' 1 &&
+    assert_json_array_min_length '.status_transitions' 1; then test_pass; fi
+
 test_begin "8. whoami"
 run_bzr whoami
 if assert_success && assert_json_exists '.id'; then test_pass; fi
@@ -59,6 +65,11 @@ unset _FLAG_SQL
 test_begin "8c. credentialless named server info"
 run_bzr_raw --json --server public server info
 if assert_success && assert_json_exists '.version'; then test_pass; fi
+
+test_begin "8c2. credentialless named server capabilities (attachment size null)"
+run_bzr_raw --json --server public server capabilities
+if assert_success && assert_json_exists '.version' &&
+    assert_json '.max_attachment_size' 'null'; then test_pass; fi
 
 test_begin "8d. credentialless named whoami fails before network auth"
 run_bzr_raw --json --server public whoami
