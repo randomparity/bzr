@@ -22,7 +22,7 @@ use crate::output::result_types::{
 use crate::test_helpers::CapturedIo;
 use crate::types::{
     Attachment, BugzillaUser, Classification, Comment, Component, CustomFieldSummary, FieldValue,
-    FlagTypeSummary, GroupInfo, ServerCapabilities, StatusTransitionSummary,
+    FlagTypeSummary, GroupInfo, HistoryRecord, ServerCapabilities, StatusTransitionSummary,
 };
 
 /// Look up a schema body by registry name.
@@ -250,6 +250,21 @@ fn comment_conforms() {
     }))
     .unwrap();
     assert_conforms("comment", &to_value(&comment));
+}
+
+#[test]
+fn history_record_conforms() {
+    // Maximal: comment_id populated so the closed-schema bijection exercises
+    // every declared property.
+    let record = HistoryRecord {
+        when: "2026-06-01T14:22:01Z".into(),
+        who: "alice@example.com".into(),
+        field: "status".into(),
+        old_value: "NEW".into(),
+        new_value: "ASSIGNED".into(),
+        comment_id: Some(42),
+    };
+    assert_conforms("history", &to_value(&record));
 }
 
 #[test]
