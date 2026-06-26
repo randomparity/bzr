@@ -28,6 +28,22 @@ fn parse_server_info() {
 }
 
 #[test]
+fn parse_server_capabilities() {
+    assert!(matches!(
+        server_action(&["bzr", "server", "capabilities"]),
+        ServerAction::Capabilities
+    ));
+}
+
+#[test]
+fn parse_server_capabilities_rejects_positional() {
+    assert_eq!(
+        parse_error_kind(&["bzr", "server", "capabilities", "extra"]),
+        ErrorKind::UnknownArgument
+    );
+}
+
+#[test]
 fn parse_server_info_rejects_positional() {
     assert_eq!(
         parse_error_kind(&["bzr", "server", "info", "extra"]),

@@ -1,7 +1,7 @@
 use crate::cli::ServerAction;
 use crate::commands::runtime::context::CommandContext;
 use crate::error::Result;
-use crate::output::resources::server::write_server_info;
+use crate::output::resources::server::{write_server_capabilities, write_server_info};
 use crate::output::writers::Writers;
 
 pub(crate) async fn execute(
@@ -15,6 +15,10 @@ pub(crate) async fn execute(
         ServerAction::Info => {
             let info = client.server_info().await?;
             write_server_info(&info, ctx.format(), w.out);
+        }
+        ServerAction::Capabilities => {
+            let caps = client.server_capabilities().await?;
+            write_server_capabilities(&caps, ctx.format(), w.out);
         }
     }
     Ok(())

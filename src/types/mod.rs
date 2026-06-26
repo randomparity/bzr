@@ -21,6 +21,9 @@ pub use bug::{
     FilterField, HistoryEntry, IdListUpdate, NegationOp, Overrides, SearchParams, StringListUpdate,
     UpdateBugParams, FIELD_MAPPINGS,
 };
+pub use capabilities::{
+    CustomFieldSummary, FlagTypeSummary, ServerCapabilities, StatusTransitionSummary,
+};
 pub use classification::{Classification, ClassificationProduct};
 pub use comment::{AddCommentParams, Comment, UpdateCommentTagsParams};
 pub use component::{Component, CreateComponentParams, UpdateComponentParams};
