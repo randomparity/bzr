@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `bzr server capabilities` dumps the connected server's capability surface as
+  structured JSON (`--json`/`--output ndjson`): supported API transports and auth
+  modes, status-transition summaries, custom field definitions, the
+  attachment-size limit (bytes), and `supports_*` feature flags. Works without a
+  saved config or API key; fields a stock server does not expose anonymously
+  (`max_attachment_size`, `flag_types`) are reported as `null`. Adds the
+  `server-capabilities` JSON Schema. (#457)
+
 ### Changed
 
 - Internal: pin the local toolchain to the MSRV (1.89) via `rust-toolchain.toml`

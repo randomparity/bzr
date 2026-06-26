@@ -87,6 +87,23 @@ If `whoami` fails: re-check the URL, that the API key is valid, and that the
 credential source you named actually holds the key (`bzr config show` labels
 each server's source).
 
+## 3. Probe what the server supports
+
+Before planning mutations, ask the server what it can do instead of discovering
+it by trial and error:
+
+```
+bzr server capabilities --json   # "what can I do here?" — one structured dump
+```
+
+This reports the supported API transports and auth modes, status transitions,
+custom fields, the attachment-size limit, and `supports_*` feature flags. It
+works anonymously (no API key needed); fields the server does not expose are
+`null` rather than errors. Branch on the result (e.g. `status_transitions` for
+legal `bug update --status` targets, `custom_fields` for `cf_*` field names)
+rather than probing each capability separately. Validate the shape with
+`bzr schema server-capabilities`.
+
 ## Manage configured servers
 
 ```
