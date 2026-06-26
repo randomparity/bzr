@@ -1387,6 +1387,47 @@ bzr server info
 bzr --json server info
 ```
 
+### `bzr server capabilities`
+
+Dump the server's capability surface as structured JSON: supported API
+transports (`api_modes`) and auth modes, status-transition summaries, custom
+field definitions, the attachment-size limit, and `supports_*` feature flags.
+Complements `server info` with the behavior an agent needs to plan mutations.
+
+Works without a saved config or API key. Fields a stock server does not expose
+anonymously degrade to `null` rather than failing: `max_attachment_size` is only
+fetched when a credential is present (Bugzilla's parameter is admin-gated) and is
+reported in **bytes**; `flag_types` is `null` until a per-product path lands. The
+`supports_*` flags are transport-derived — `supports_flag_requests: true` means
+the flag-update endpoint exists, not that flag types are configured, so it can
+coexist with `flag_types: null`.
+
+```bash
+bzr server capabilities --json
+bzr --server-url https://bugzilla.example.com server capabilities --json
+bzr server capabilities --json | jq .status_transitions
+```
+
+Example output:
+
+```json
+{
+  "version": "5.0.4",
+  "api_modes": ["rest"],
+  "auth_modes": ["api_key"],
+  "max_attachment_size": null,
+  "status_transitions": [{"from": "NEW", "can_change_to": ["ASSIGNED", "RESOLVED"]}],
+  "flag_types": null,
+  "custom_fields": [{"name": "cf_release", "type": "single_select", "values": ["1.0"]}],
+  "supports_comments": true,
+  "supports_attachments": true,
+  "supports_history": true,
+  "supports_flag_requests": true
+}
+```
+
+Validate the shape with `bzr schema server-capabilities`.
+
 ---
 
 ## `bzr classification` -- Classification Operations

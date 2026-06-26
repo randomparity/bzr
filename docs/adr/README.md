@@ -11,3 +11,4 @@ rejected.
 | [0002](0002-test-config-isolation-over-env-lock.md) | Per-test config-path isolation replaces the shared env lock | Accepted |
 | [0003](0003-admin-mutation-seam-excludes-component-update.md) | Admin create/update seam is linear-only and excludes component update | Accepted |
 | [0004](0004-client-and-connection-module-boundaries.md) | Client and connection orchestration module boundaries | Accepted |
+| [0005](0005-server-capabilities-contract.md) | `server capabilities` reports the anonymously-derivable surface | Accepted |

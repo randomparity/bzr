@@ -53,6 +53,7 @@ pub(crate) const SCHEMAS: &[(&str, &str)] = schema_registry![
     "product-create-input",
     "product-update-input",
     "search-result",
+    "server-capabilities",
     "tag-result",
     "upload-result",
     "user",

@@ -50,6 +50,7 @@ if assert_success && assert_json_valid &&
     assert_schema_list_contains "user-update-input" &&
     assert_schema_list_contains "group-create-input" &&
     assert_schema_list_contains "group-update-input" &&
+    assert_schema_list_contains "server-capabilities" &&
     assert_schema_list_contains "error"; then test_pass; fi
 
 test_begin "117. schema bug (valid draft 2020-12 schema)"
@@ -82,6 +83,12 @@ test_begin "118d. schema group-update-input"
 run_bzr schema group-update-input
 if assert_success && assert_json_valid &&
     assert_json '.["$schema"]' "https://json-schema.org/draft/2020-12/schema"; then test_pass; fi
+
+test_begin "118e. schema server-capabilities (closed draft 2020-12 schema)"
+run_bzr schema server-capabilities
+if assert_success && assert_json_valid &&
+    assert_json '.["$schema"]' "https://json-schema.org/draft/2020-12/schema" &&
+    assert_json '.additionalProperties' "false"; then test_pass; fi
 
 test_begin "119. schema error (valid error envelope schema)"
 run_bzr schema error

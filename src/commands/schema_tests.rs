@@ -21,7 +21,8 @@ use crate::output::result_types::{
 };
 use crate::test_helpers::CapturedIo;
 use crate::types::{
-    Attachment, BugzillaUser, Classification, Comment, Component, FieldValue, GroupInfo,
+    Attachment, BugzillaUser, Classification, Comment, Component, CustomFieldSummary, FieldValue,
+    FlagTypeSummary, GroupInfo, ServerCapabilities, StatusTransitionSummary,
 };
 
 /// Look up a schema body by registry name.
@@ -274,6 +275,37 @@ fn field_value_conforms() {
     }))
     .unwrap();
     assert_conforms("field-value", &to_value(&field_value));
+}
+
+#[test]
+fn server_capabilities_conforms() {
+    // Maximal: every nullable field (max_attachment_size, flag_types) populated so
+    // the closed-schema bijection exercises all declared properties.
+    let caps = ServerCapabilities {
+        version: "5.0.4".to_string(),
+        api_modes: vec!["rest".to_string(), "xmlrpc".to_string()],
+        auth_modes: vec!["api_key".to_string()],
+        max_attachment_size: Some(1_024_000),
+        status_transitions: vec![StatusTransitionSummary {
+            from: "NEW".to_string(),
+            can_change_to: vec!["ASSIGNED".to_string()],
+        }],
+        flag_types: Some(vec![FlagTypeSummary {
+            name: "review".to_string(),
+            requestable: true,
+            multiplicable: false,
+        }]),
+        custom_fields: vec![CustomFieldSummary {
+            name: "cf_release".to_string(),
+            field_type: "single_select".to_string(),
+            values: vec!["1.0".to_string()],
+        }],
+        supports_comments: true,
+        supports_attachments: true,
+        supports_history: true,
+        supports_flag_requests: true,
+    };
+    assert_conforms("server-capabilities", &to_value(&caps));
 }
 
 #[test]

@@ -9,7 +9,7 @@ field: list aliases
 user: search create update
 group: add-user remove-user list-users view create update
 whoami:
-server: info
+server: info capabilities
 classification: list view
 component: list view create update
 template: save list show update delete

@@ -1,5 +1,6 @@
 pub(crate) mod attachment;
 pub(crate) mod bug;
+pub(crate) mod capabilities;
 pub(crate) mod classification;
 pub(crate) mod comment;
 pub(crate) mod component;
@@ -19,6 +20,9 @@ pub use bug::{
     partition_filters, Bug, ColumnSpec, CommentUpdate, CreateBugParams, FieldChange, FieldMapping,
     FilterField, HistoryEntry, IdListUpdate, NegationOp, Overrides, SearchParams, StringListUpdate,
     UpdateBugParams, FIELD_MAPPINGS,
+};
+pub use capabilities::{
+    CustomFieldSummary, FlagTypeSummary, ServerCapabilities, StatusTransitionSummary,
 };
 pub use classification::{Classification, ClassificationProduct};
 pub use comment::{AddCommentParams, Comment, UpdateCommentTagsParams};
