@@ -124,7 +124,7 @@ the walk, never to the root.
 
 ## Traversal semantics
 
-Bounded, cycle-safe BFS, batched one request per level:
+Bounded, cycle-safe BFS, each level batched into id-chunked requests:
 
 1. A `visited` set seeded with the root id. The root is fetched (level 0) but
    not emitted.
@@ -170,7 +170,7 @@ Bugs: `1 depends_on 2`, `2 depends_on 3`, `3 depends_on 1` (a cycle).
 
 A new fetch entry point returns isolated link nodes for a set of ids:
 
-- REST / Hybrid: one `GET bug?id=…&include_fields=id,summary,status,depends_on,blocks,dupe_of,duplicates,regressed_by,regressions`.
+- REST / Hybrid: `GET bug?id=…&include_fields=id,summary,status,depends_on,blocks,dupe_of,duplicates,regressed_by,regressions`, with the id set split across requests of ≤`LINKS_ID_CHUNK` ids each.
 - XML-RPC: per-id `get_bug`, mapping the resulting `Bug` to a link node
   (populates `depends_on`/`blocks`/`dupe_of`; the BMO-only fields stay empty,
   which XML-RPC servers do not provide anyway).
