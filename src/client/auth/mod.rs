@@ -1,6 +1,64 @@
 //! Auth detection orchestrator — split into submodules because the two
 //! probing strategies (`whoami` for Bugzilla 5.1+, `valid_login` for 5.0+)
 //! are each self-contained with their own types and logic.
+//!
+//! # Auth detection decision matrix
+//!
+//! The intended, behavior-locking matrix for credentialed detection. Each row
+//! is exercised by a test (see `mod_tests.rs`, `whoami_tests.rs`,
+//! `valid_login_tests.rs`) or by the connection layer's tests
+//! (`commands/runtime/shared/connection/`). Changing any cell is a behavior
+//! change and should update both this table and the corresponding test.
+//!
+//! ## Endpoint order
+//!
+//! 1. `rest/whoami` (Bugzilla 5.1+). On `404` (endpoint absent), fall back to:
+//! 2. `rest/valid_login` (Bugzilla 5.0+) — only attempted when an email is
+//!    configured, since `valid_login` requires a `login` parameter.
+//!
+//! ## Auth-method order (within each endpoint)
+//!
+//! Header auth (`X-BUGZILLA-API-KEY`) is probed before query-param auth, and is
+//! preferred when both work — it keeps the API key out of URLs (and out of
+//! server logs / `safe_url` redaction paths).
+//!
+//! ## Probe-outcome classification
+//!
+//! | Server response                       | Outcome              | Effect                                                        |
+//! |---------------------------------------|----------------------|---------------------------------------------------------------|
+//! | `2xx` + valid body (`id>0` / `true`)  | `Authenticated`      | Detection succeeds with that auth method.                     |
+//! | `2xx` + unparseable/anomalous body    | `MalformedResponse`  | Try the other method; preserved for the error diagnostic.     |
+//! | `whoami` returns `404`                | `NotFound`           | Fall back to `valid_login`.                                   |
+//! | non-`2xx`, or `whoami` `id==0`, or `valid_login` `false` | `AuthRejected` | Try the other method; otherwise detection fails. |
+//! | TLS-certificate transport failure     | `NetworkError`→`Err` | Propagated as [`BzrError::Http`] so TOFU / pin-rotation fires.|
+//! | any other transport failure (DNS, timeout, reset) | `NetworkError`→`Ok` | Defaults to [`AuthMethod::Header`]; detection is not retried. |
+//!
+//! ## Malformed-diagnostic precedence
+//!
+//! When several probes return malformed `200`s, the **first** malformed response
+//! is preserved (`get_or_insert`) and surfaced in the final [`BzrError::Auth`]:
+//! header before query-param within an endpoint, and `whoami` before
+//! `valid_login` across endpoints. This keeps the diagnostic stable regardless
+//! of how many later probes also misbehave.
+//!
+//! ## `valid_login` query-param + header REST verification
+//!
+//! Some servers (e.g. IBM LTC) reject header auth via `valid_login` but accept
+//! it on real API endpoints. When `valid_login` reports query-param, header auth
+//! is re-verified against `rest/bug`; if that succeeds, header is preferred.
+//!
+//! ## Cached vs. fresh detection (connection layer)
+//!
+//! | Cached state (credentialed)        | Behavior                                                            |
+//! |------------------------------------|--------------------------------------------------------------------|
+//! | auth + mode both cached            | No re-detection; TLS-probe only (so cert rotation still surfaces).  |
+//! | auth cached, mode missing          | Re-detect mode; persist with `persist_auth=false` (keep cached auth).|
+//! | auth missing, mode cached          | Full detect; persist with `persist_auth=true` (treated as uncached for auth).|
+//! | nothing cached                     | Full detect; persist with `persist_auth=true`.                      |
+//!
+//! In every persist path, `api_mode`/`server_version` are written only when the
+//! version probe succeeded (`server_version.is_some()`); a transient version
+//! failure must not overwrite a previously-good cached mode.
 
 mod valid_login;
 mod whoami;
