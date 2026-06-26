@@ -8,8 +8,8 @@ description: Use when filing a new Bugzilla bug with bzr — discovers the right
 ## 1. Find the right product and component
 
 ```
-bzr product list --json | jq -r '.[].name'
-bzr product view <Product> --json | jq -r '.components[].name'
+bzr product list --json | jq -r '.data[].name'
+bzr product view <Product> --json | jq -r '.data.components[].name'
 ```
 
 `bzr component list --product <Product>` lists a product's components, and

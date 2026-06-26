@@ -412,7 +412,7 @@ bzr bug view 12345 12346 12347
 bzr bug view 12345 my-alias 12347 --permissive
 bzr bug view 12345 --web
 bzr --json bug view 12345
-bzr --json bug view 12345 12346 | jq '.bugs[].summary'
+bzr --json bug view 12345 12346 | jq '.data.bugs[].summary'
 bzr bug view my-alias --fields id,summary,assigned_to
 ```
 
@@ -427,9 +427,9 @@ bzr bug view my-alias --fields id,summary,assigned_to
 **Output shapes:**
 
 - **Single-ID, table:** detail block (status, priority, assignee, etc.).
-- **Single-ID, `--json`:** bare `Bug` object, trimmed to `--fields`/`--exclude-fields` when given (the full object otherwise). The wrapper shape is unchanged from prior versions.
+- **Single-ID, `--json`:** `data` is the `Bug` object, trimmed to `--fields`/`--exclude-fields` when given (the full object otherwise). Read it as `.data` (e.g. `jq .data.status`).
 - **Multi-ID, table:** one detail block per bug in argument order, separated by a `─` divider line. Inaccessible bugs (under `--permissive`) appear as `Bug #N — UNAVAILABLE` blocks.
-- **Multi-ID, `--json`:** wrapped object `{"bugs": [...], "failed": [...]}`. The `failed` array is always present (empty when there are no failures) so `jq` consumers can rely on `.bugs[]` regardless of whether `--permissive` was passed.
+- **Multi-ID, `--json`:** `data` is the object `{"bugs": [...], "failed": [...]}`. The `failed` array is always present (empty when there are no failures) so `jq` consumers can rely on `.data.bugs[]` regardless of whether `--permissive` was passed.
 
 > **Note:** Under `--json`, `bzr bug view` stays lenient when the field
 > selection resolves to nothing known — an unknown/mistyped `--fields`, or an
@@ -713,7 +713,7 @@ flags override the matching JSON fields and unknown JSON keys are rejected.
 printf '%s' '{"product":"Fedora","component":"kernel","summary":"S"}' \
   | bzr bug create --from-json -
 
-bzr bug create --from-json bugs.json --json | jq '.created'
+bzr bug create --from-json bugs.json --json | jq '.data.created'
 ```
 
 ### `bzr bug clone`
@@ -797,7 +797,7 @@ bzr bug update 12345 --status RESOLVED --resolution FIXED \
     --comment "Fixed by patch in #200"
 bzr bug update 100 200 300 --status RESOLVED --resolution WONTFIX
 bzr bug update 12345 --from-json update.json
-bzr bug update --from-json updates.json --json | jq '.failed'
+bzr bug update --from-json updates.json --json | jq '.data.failed'
 ```
 
 | Option | Required | Description |
@@ -875,7 +875,7 @@ The payload shape is published as `bzr schema bug-update-input`.
 printf '%s' '{"status":"ASSIGNED","comment":"Taking this"}' \
   | bzr bug update 12345 --from-json -
 
-bzr bug update --from-json updates.json --json | jq '.succeeded'
+bzr bug update --from-json updates.json --json | jq '.data.succeeded'
 ```
 
 When updating multiple bugs, failures on individual bugs do not abort the batch. A summary is printed showing which bugs succeeded and which failed.
@@ -1019,7 +1019,7 @@ always present (empty `[]` when there are none).
 
 ```bash
 bzr attachment view 9876
-bzr --json attachment view 9876 | jq '.summary, .size'
+bzr --json attachment view 9876 | jq '.data.summary, .data.size'
 ```
 
 ### `bzr attachment download`
@@ -1458,7 +1458,7 @@ coexist with `flag_types: null`.
 ```bash
 bzr server capabilities --json
 bzr --server-url https://bugzilla.example.com server capabilities --json
-bzr server capabilities --json | jq .status_transitions
+bzr server capabilities --json | jq .data.status_transitions
 ```
 
 Example output:
@@ -1497,7 +1497,7 @@ entry is `Unclassified`, and bzr prints a note to stderr.
 
 ```bash
 bzr classification list
-bzr --json classification list | jq '.[].name'
+bzr --json classification list | jq '.data[].name'
 ```
 
 ### `bzr classification view`
@@ -1521,7 +1521,7 @@ assignee, and active flag. Reads the same data as `bzr product view
 
 ```bash
 bzr component list --product Fedora
-bzr --json component list --product Fedora | jq '.[].name'
+bzr --json component list --product Fedora | jq '.data[].name'
 ```
 
 ### `bzr component view`
@@ -2172,6 +2172,53 @@ The `--flag` option is available on `bzr bug update`, `bzr attachment upload`, a
 
 ## JSON Output
 
+### The `schema_version` envelope
+
+Every pretty `--json` response is wrapped in a stable envelope:
+
+```json
+{
+  "schema_version": "0.6.0",
+  "data": <the command's payload>
+}
+```
+
+`data` holds what earlier versions emitted at the top level — a bug object, an
+array of bugs, a mutation result, etc. Consumers read fields under `.data`:
+
+```bash
+bzr --json bug view 12345 | jq -r '.data.assigned_to'
+bzr --json bug search "crash" | jq -r '.data[].id'
+bzr --json schema | jq -r '.schema_version'   # the contract version itself
+```
+
+`--json` error output carries the version too, beside an `error` object:
+`{"schema_version":"0.6.0","error":{"type":...,"message":...,"exit_code":...}}`.
+
+Two outputs are deliberately **not** enveloped:
+
+- **`--output ndjson`** — streamed records (and the single-line error) stay bare,
+  one compact value per line, with no `schema_version`. Read the contract version
+  out of band via `bzr schema --json` (`.schema_version`) or `bzr --version`.
+- **`bzr schema <name>`** — prints the raw JSON-Schema document verbatim. Only the
+  bare `bzr schema` *list* is enveloped.
+
+### JSON Output Stability
+
+`schema_version` is a semver string identifying the `--json` contract (the
+envelope plus the payload shapes inside `data`). It is bumped manually,
+independent of the crate version, by these rules:
+
+| Bump | Meaning |
+|------|---------|
+| **patch** (`x.y.Z`) | additive only — a new field in a payload or the envelope. Consumers that ignore unknown fields are unaffected. |
+| **minor** (`x.Y.0`) | a field rename or restructure, shipped with a one-release deprecation alias (old and new field both present for one minor release). |
+| **major** (`X.0.0`) | a breaking removal or retype with no alias. |
+
+Agents should branch on `schema_version` and either adapt or warn. For pinned
+line-oriented automation, prefer `--output ndjson` (its record shapes are the
+`data` payloads and are unaffected by the envelope).
+
 ### Auto-detection
 
 When stdout is not a TTY (i.e. piped to another program or redirected to a file), bzr automatically outputs JSON. At a TTY, it defaults to table format. Override with `--json`, `--output`, or the `BZR_OUTPUT` env var.
@@ -2184,36 +2231,39 @@ All list and view commands support JSON output for scripting and piping to tools
 
 ```bash
 # Get bug IDs matching a search
-bzr --json bug search "memory leak" | jq '.[].id'
+bzr --json bug search "memory leak" | jq '.data[].id'
 
 # Extract assignee from a bug
-bzr --json bug view 12345 | jq -r '.assigned_to'
+bzr --json bug view 12345 | jq -r '.data.assigned_to'
 
 # List attachment filenames
-bzr --json attachment list 12345 | jq -r '.[].file_name'
+bzr --json attachment list 12345 | jq -r '.data[].file_name'
 
 # Get product component names
-bzr --json product view Fedora | jq -r '.components[].name'
+bzr --json product view Fedora | jq -r '.data.components[].name'
 
 # List allowed status transitions from NEW
-bzr --json field list status | jq '.[] | select(.name == "NEW") | .can_change_to'
+bzr --json field list status | jq '.data[] | select(.name == "NEW") | .can_change_to'
 
 # Get only specific fields from a bug
-bzr --json bug view 12345 --fields id,summary,status | jq .
+bzr --json bug view 12345 --fields id,summary,status | jq .data
 
 # Check authenticated user
-bzr --json whoami | jq -r '.name'
+bzr --json whoami | jq -r '.data.name'
 
 # List server extensions
-bzr --json server info | jq -r '.extensions | keys[]'
+bzr --json server info | jq -r '.data.extensions | keys[]'
 
 # View config as JSON
-bzr --json config show | jq .
+bzr --json config show | jq .data
 ```
 
 ### Mutation responses
 
-Create, update, and delete commands return structured JSON with `--json`:
+Create, update, and delete commands return structured JSON with `--json`. The
+payloads below are the `data` value; under `--json` they are nested inside the
+`{"schema_version":...,"data":...}` envelope, while `--output ndjson` emits them
+bare exactly as shown:
 
 ```json
 {"id":123,"resource":"bug","action":"created"}

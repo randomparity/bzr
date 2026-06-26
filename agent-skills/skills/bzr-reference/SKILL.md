@@ -17,8 +17,8 @@ When you will parse output, pass `--json` (bzr's canonical shorthand;
 piped, but pass `--json` explicitly so intent is clear. Pipe to `jq`:
 
 ```
-bzr bug view 12345 --json | jq -r '.summary'
-bzr bug search "crash on boot" --json | jq -r '.[].id'
+bzr bug view 12345 --json | jq -r '.data.summary'
+bzr bug search "crash on boot" --json | jq -r '.data[].id'
 ```
 
 See `reference/json-recipes.md` for extraction patterns.

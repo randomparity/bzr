@@ -23,8 +23,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   (`max_attachment_size`, `flag_types`) are reported as `null`. Adds the
   `server-capabilities` JSON Schema. (#457)
 
+- A stable, versioned JSON output contract: every pretty `--json` response now
+  carries a top-level `schema_version` string, and `bzr schema --json` reports
+  the current contract version. Adds the `envelope` JSON Schema and a documented
+  "JSON Output Stability" policy (patch = additive, minor = aliased rename,
+  major = breaking) in `docs/bzr-cli.md`. (#464)
+
 ### Changed
 
+- **BREAKING (`--json`):** pretty `--json` output is now wrapped in a versioned
+  envelope `{"schema_version": "0.6.0", "data": <previous output>}`. Move `jq`
+  recipes and deserializers from the old top level to `.data` (e.g. `.[].id` →
+  `.data[].id`, `.assigned_to` → `.data.assigned_to`, `.count` → `.data.count`,
+  multi-id `bug view` `.bugs[]` → `.data.bugs[]`). `--json` errors gain a
+  top-level `schema_version` beside `error`. **`--output ndjson` is unaffected**
+  — records stay bare (no `schema_version`), so it is the recommended stable
+  shape for pinned line-oriented automation; read the version out of band via
+  `bzr schema --json` or `bzr --version`. `bzr schema <name>` still prints the
+  raw schema document verbatim (unenveloped). (#464)
 - Internal: pin the local toolchain to the MSRV (1.89) via `rust-toolchain.toml`
   so contributor `cargo`/`make lint` runs match CI, which builds and lints at
   1.89. Catches MSRV-only failures before push. Use `cargo +stable` / a
