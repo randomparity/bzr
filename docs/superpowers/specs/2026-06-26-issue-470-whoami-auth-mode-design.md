@@ -98,7 +98,8 @@ types, and positions. No identity field is reshaped.
 3. The schema drift test fails if any `WhoamiOutput` field is added/removed/
    renamed without updating `schemas/whoami.json`.
 4. A functional phase asserts `.server_name` and `.auth_mode` on a real
-   credentialed `whoami` (named and inline).
+   credentialed `whoami` (named and inline). The inline case asserts the exact
+   `server_name` value `(inline)` and `auth_mode` value `api_key`.
 5. CHANGELOG, `docs/bzr-cli.md` whoami section, and the `bzr-setup` Health-check
    section mention the two new fields.
 6. `--output ndjson` whoami carries the two fields with no envelope.
@@ -111,5 +112,9 @@ types, and positions. No identity field is reshaped.
   wrapper composes identically.
 - `name`/`real_name`/`login` remain nullable and always serialize (as `null`
   when absent), so the closed-schema bijection holds.
-</content>
-</invoke>
+- For an inline `--server-url` server, `server_name` is the literal sentinel
+  `(inline)` (`INLINE_SERVER_NAME`). For a named/default server it is the config
+  key used to resolve it (e.g. `--server auto` reports `auto`). The inline
+  functional phase asserts the exact `(inline)` value, and `docs/bzr-cli.md`
+  documents it, so the sentinel is a pinned part of the contract rather than an
+  implementation leak.
