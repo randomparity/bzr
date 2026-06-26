@@ -12,7 +12,7 @@ use crate::output::formatting::{
 use crate::types::bug::{
     apply_exclude, canonical_excludes, canonical_field_list, default_selected_fields,
     field_selected, partition_include, selected_custom_detail_fields, Bug, BugField, BugLink,
-    ColumnSpec, HistoryEntry, SelectedBugField,
+    ColumnSpec, HistoryEntry, HistoryRecord, SelectedBugField,
 };
 use crate::types::output::OutputFormat;
 
@@ -349,36 +349,45 @@ fn write_bug_detail_table(bug: &Bug, spec: ColumnSpec<'_>, out: &mut (impl Write
     }
 }
 
-pub fn write_history<W: Write + ?Sized>(
-    history: &[HistoryEntry],
+/// Render bug history as the human-readable table: one colorized block per
+/// history entry with its nested field changes. JSON/ndjson output goes through
+/// [`write_history_json`] instead, which emits flattened per-field records.
+pub fn write_history_table<W: Write + ?Sized>(history: &[HistoryEntry], out: &mut W) {
+    for entry in history {
+        let _ = writeln!(
+            out,
+            "{} by {} ({})",
+            "Change".bold(),
+            entry.who.cyan(),
+            entry.when,
+        );
+        for change in &entry.changes {
+            let attachment_suffix = change
+                .attachment_id
+                .map(|id| format!(" [attachment #{id}]"))
+                .unwrap_or_default();
+            let _ = writeln!(out, "  {}{attachment_suffix}:", change.field_name.bold());
+            if !change.removed.is_empty() {
+                let _ = writeln!(out, "    - {}", change.removed.red());
+            }
+            if !change.added.is_empty() {
+                let _ = writeln!(out, "    + {}", change.added.green());
+            }
+        }
+        write_divider(out);
+    }
+}
+
+/// Render bug history as flattened change records (one per changed field) for the
+/// JSON family. An empty slice emits an empty array (`--json`) or nothing
+/// (`--output ndjson`), per the shared `write_json_family` contract — agents
+/// always receive valid JSON. See ADR 0008 and `schemas/history.json`.
+pub fn write_history_json<W: Write + ?Sized>(
+    records: &[HistoryRecord],
     format: OutputFormat,
     out: &mut W,
 ) {
-    write_formatted(history, format, out, |history, out| {
-        for entry in history {
-            let _ = writeln!(
-                out,
-                "{} by {} ({})",
-                "Change".bold(),
-                entry.who.cyan(),
-                entry.when,
-            );
-            for change in &entry.changes {
-                let attachment_suffix = change
-                    .attachment_id
-                    .map(|id| format!(" [attachment #{id}]"))
-                    .unwrap_or_default();
-                let _ = writeln!(out, "  {}{attachment_suffix}:", change.field_name.bold());
-                if !change.removed.is_empty() {
-                    let _ = writeln!(out, "    - {}", change.removed.red());
-                }
-                if !change.added.is_empty() {
-                    let _ = writeln!(out, "    + {}", change.added.green());
-                }
-            }
-            write_divider(out);
-        }
-    });
+    write_json_family(records, format, out);
 }
 
 /// Render relationship records (`bug links`). JSON/ndjson serialize the slice;
