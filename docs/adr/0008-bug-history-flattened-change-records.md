@@ -46,7 +46,12 @@ returns **no comment association at all**.
    (`validation::datetime::timestamp_compare_key`). A match sets `comment_id`
    for every record from that entry; otherwise it is null. The comment fetch is
    **non-fatal**: on failure the command warns on stderr and proceeds with
-   `comment_id: null`. Table output makes no extra fetch.
+   `comment_id: null`. Table output makes no extra fetch. The comment fetch is
+   **unfiltered** even under `--since`: `--since` constrains which history records
+   are emitted, but correlation joins over the full comment set, so a comment
+   inside the history window is never excluded by a second filter. The join can
+   miss (→ null) but never produce a wrong id (user-string skew, unkeyable
+   offset timestamps, REST-filtered private comments).
 
 4. **`comment_id` is the only correlated field; the rest are 1:1 from history.**
    `old_value`/`new_value` are the server's `removed`/`added` strings verbatim

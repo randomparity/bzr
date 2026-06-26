@@ -89,12 +89,35 @@ comment's `id`; otherwise `comment_id` is null.
 
 - The comment fetch happens only for the JSON family — table output makes one
   API call as before.
+- **The comment fetch is unfiltered (`since = None`) even when the user passed
+  `--since`.** `--since` filters only which *history records* are emitted (the
+  server applies `new_since` to the history call). Correlation must join over
+  the full comment set: a comment can sit inside the history window but be
+  excluded by a `--since` bound on the comment call, which would null a
+  `comment_id` that should have matched. The two lists are joined first; the
+  `--since` bound is the server's filter on the history side only.
 - A comment fetch failure is **non-fatal**: the command warns on stderr and
   emits records with `comment_id: null` (the history delta is the contract;
   comment correlation is best-effort enrichment). See ADR 0008.
 - Duplicate `(who, when-key)` comments (rare; multiple comments in one second by
   one user) resolve to the first by ascending comment id; documented, not an
   error.
+
+### Correlation is best-effort and never produces a wrong id
+
+The join key is exact `who == creator` plus a canonical timestamp-key match.
+Both inputs come from separate REST resources, so a match can be *missed*
+(yielding `comment_id: null`) but never *wrong*. Known miss cases, all
+acceptable degradation:
+
+- **User-string skew.** `who` (history) and `creator` (comment) are exact-string
+  compared. If the server renders the same user as a login name on one endpoint
+  and an email on the other, the join fails and `comment_id` is null.
+- **Unkeyable timestamps.** `timestamp_compare_key` returns `None` for
+  offset-bearing forms (`+01:00`); such entries cannot correlate.
+- **Private/filtered comments.** A REST comment fetch may omit private comments
+  (issue #125); a correlating private comment is then invisible and `comment_id`
+  is null.
 
 ## Empty / edge behavior
 
