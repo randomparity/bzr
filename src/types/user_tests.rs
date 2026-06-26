@@ -93,3 +93,45 @@ fn whoami_from_user_maps_email_to_login() {
     let whoami = WhoamiResponse::from(user);
     assert!(whoami.login.is_none());
 }
+
+#[test]
+fn whoami_output_flattens_identity_with_connection_metadata() {
+    let output = WhoamiOutput {
+        identity: WhoamiResponse {
+            id: 42,
+            name: Some("bob".into()),
+            real_name: Some("Bob Jones".into()),
+            login: Some("bob@example.com".into()),
+        },
+        server_name: "prod".into(),
+        auth_mode: crate::types::AuthMode::ApiKey,
+    };
+    let serialized = serde_json::to_value(&output).unwrap();
+    // Identity keys are flattened to the top level, not nested under `identity`.
+    assert!(serialized.get("identity").is_none());
+    assert_eq!(serialized["id"], 42);
+    assert_eq!(serialized["name"], "bob");
+    assert_eq!(serialized["real_name"], "Bob Jones");
+    assert_eq!(serialized["login"], "bob@example.com");
+    assert_eq!(serialized["server_name"], "prod");
+    assert_eq!(serialized["auth_mode"], "api_key");
+}
+
+#[test]
+fn whoami_output_serializes_absent_identity_fields_as_null() {
+    let output = WhoamiOutput {
+        identity: WhoamiResponse {
+            id: 1,
+            name: Some("bot".into()),
+            real_name: None,
+            login: None,
+        },
+        server_name: "(inline)".into(),
+        auth_mode: crate::types::AuthMode::Anonymous,
+    };
+    let serialized = serde_json::to_value(&output).unwrap();
+    assert_eq!(serialized["real_name"], serde_json::Value::Null);
+    assert_eq!(serialized["login"], serde_json::Value::Null);
+    assert_eq!(serialized["server_name"], "(inline)");
+    assert_eq!(serialized["auth_mode"], "anonymous");
+}

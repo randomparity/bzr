@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::types::transport::AuthMode;
+
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct BugzillaUser {
@@ -37,6 +39,20 @@ pub struct WhoamiResponse {
     pub real_name: Option<String>,
     #[serde(default)]
     pub login: Option<String>,
+}
+
+/// The `whoami` output payload: the server-provided identity
+/// ([`WhoamiResponse`]) flattened together with the connection metadata `bzr`
+/// resolved locally (`server_name`, `auth_mode`). Flattening keeps the JSON a
+/// single flat object so the identity fields stay at the top level (additive,
+/// per the JSON output stability policy). See ADR 0009.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct WhoamiOutput {
+    #[serde(flatten)]
+    pub identity: WhoamiResponse,
+    pub server_name: String,
+    pub auth_mode: AuthMode,
 }
 
 impl From<BugzillaUser> for WhoamiResponse {
