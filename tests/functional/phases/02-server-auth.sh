@@ -20,7 +20,9 @@ if assert_success && assert_json_exists '.version' &&
 
 test_begin "8. whoami"
 run_bzr whoami
-if assert_success && assert_json_exists '.id'; then test_pass; fi
+if assert_success && assert_json_exists '.id' &&
+    assert_json_exists '.server_name' &&
+    assert_json '.auth_mode' 'api_key'; then test_pass; fi
 
 test_begin "8a. --server auto whoami"
 run_bzr_raw --json --server auto whoami
@@ -89,7 +91,9 @@ test_begin "8g. inline credentialed whoami"
 export BZR_FUNC_INLINE_KEY="$API_KEY"
 run_bzr_raw --json --server-url "$BZ_URL" \
     --server-api-key-env BZR_FUNC_INLINE_KEY --server-email "$ADMIN_EMAIL" whoami
-if assert_success && assert_json_exists '.id'; then test_pass; fi
+if assert_success && assert_json_exists '.id' &&
+    assert_json '.server_name' '(inline)' &&
+    assert_json '.auth_mode' 'api_key'; then test_pass; fi
 unset BZR_FUNC_INLINE_KEY
 
 echo ""
