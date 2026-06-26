@@ -46,9 +46,12 @@ three inverse pairs, and the command must assign each a stable `in`/`out` label.
    not derived from server data.
 
 3. **Bounded, batched, cycle-safe BFS.** Traversal is breadth-first with a
-   `visited` set (seeded with the root), one batched REST request per level
-   (`O(depth)` round-trips), each bug emitted once at its minimal depth with the
-   discovering edge's relation/direction. `--depth` is bounded to `1..=10`.
+   `visited` set (seeded with the root), each level's frontier fetched in
+   id-chunked REST requests, each bug emitted once at its minimal depth with the
+   discovering edge's relation/direction. Three independent bounds keep work
+   finite: `--depth` (`1..=10`), a per-request id chunk size, and a total
+   visited-node cap. Depth alone is insufficient — a level can be arbitrarily
+   wide — so the breadth/total bounds matter as much as the depth cap.
 
 4. **Graceful degradation over hard dependency on BMO fields.** A server that
    omits `duplicates`/`regressed_by`/`regressions` yields empty lists, not an
@@ -63,9 +66,10 @@ three inverse pairs, and the command must assign each a stable `in`/`out` label.
   shared default-field path until its serializer-crash risk is assessed.
 - The `direction` contract is a committed part of the `--json` shape; changing a
   relation's label later is a breaking change for consumers.
-- Round-trips scale with depth, not graph size, satisfying the issue's N+1
-  motivation; the depth cap and visited set bound worst-case work on adversarial
-  graphs.
+- Round-trips scale with graph size / chunk size rather than per-related-bug
+  one-at-a-time, satisfying the issue's N+1 motivation; the depth cap, id-chunk
+  size, and total-node cap together bound worst-case work on adversarial or
+  large graphs.
 
 ## Considered & rejected
 
@@ -82,8 +86,10 @@ three inverse pairs, and the command must assign each a stable `in`/`out` label.
   exact N+1 round-trip cost the feature exists to remove. Batching per BFS level
   keeps requests at `O(depth)`.
 - **Follow the graph with no depth cap.** Rejected: an adversarial or large graph
-  could fan out unboundedly. A `1..=10` cap plus the visited set bounds work while
-  covering realistic triage depths.
+  could fan out unboundedly. A `1..=10` depth cap, a per-request id chunk size,
+  and a total visited-node cap together bound work while covering realistic
+  triage depths; depth alone is insufficient because a single level can be
+  arbitrarily wide.
 - **`direction` derived from whether a field is stored vs. reverse-computed.**
   Rejected: less useful for traversal than the inverse-pair convention, and
   ambiguous for `regressed_by`'s passive phrasing. A fixed per-field constant is

@@ -42,6 +42,24 @@ are numeric ids).
 | `--depth N` | u32 | Maximum hop distance from the root. Requires `--recursive`. Default `1`. Range `1..=10`; `0` or `>10` exits 7. |
 | `--relation <type>` | enum | Restrict traversal **and** output to one relationship type. One of the six relation names below. Unknown value exits 7. |
 
+### Bounds
+
+Depth alone does not bound work: a single bug can have hundreds of related
+bugs, so a level's frontier can be wide. Two additional bounds keep traversal
+and request sizes finite (the issue calls out the lack of a *breadth* bound as
+the core gap):
+
+- **Per-request id chunking.** Each level fetches its frontier in chunks of at
+  most `LINKS_ID_CHUNK = 100` ids per `GET`, so no single URL packs an unbounded
+  `id=` list past server/proxy URL-length limits. Round-trips per level are
+  `ceil(level_width / 100)`.
+- **Total-node cap.** Traversal visits at most `LINKS_MAX_NODES = 1000` distinct
+  related bugs. On reaching the cap, traversal stops, the records collected so
+  far are emitted normally, and a one-line notice is written to **stderr**
+  (`stopped at LINKS_MAX_NODES (1000) related bugs; results may be incomplete`)
+  so a truncated graph is never silently mistaken for a complete one. stdout
+  output stays valid (`[]`/ndjson/table unaffected in shape).
+
 Without `--recursive`, depth is fixed at `1` (direct neighbors only). `--depth`
 without `--recursive` exits 7 with a message naming `--recursive`.
 
@@ -94,6 +112,16 @@ One record per related bug:
 
 The root bug itself is never emitted — only related bugs.
 
+### Root not found vs. root with no links
+
+The empty-result path (`[]` / no ndjson lines / `No related bugs for #<id>.`) is
+reached **only when the root bug fetched successfully** but yielded no in-scope
+edges. If the **root** id cannot be fetched (nonexistent, or no read
+permission), the command fails with the same `NotFound` error and exit code as
+`bug view <id>` — it does **not** degrade to an empty "no related bugs" result.
+Silent skipping (traversal point 6) applies to *related* bugs discovered during
+the walk, never to the root.
+
 ## Traversal semantics
 
 Bounded, cycle-safe BFS, batched one request per level:
@@ -101,22 +129,30 @@ Bounded, cycle-safe BFS, batched one request per level:
 1. A `visited` set seeded with the root id. The root is fetched (level 0) but
    not emitted.
 2. For each level `k` (1..=max_depth), batch-fetch every newly-discovered,
-   not-yet-fetched neighbor id in **one** REST request. Each fetched node yields
-   its `summary`/`status` (used to emit its record at depth `k`) and its
-   adjacency (the level `k+1` frontier).
+   not-yet-fetched neighbor id, chunked into requests of ≤`LINKS_ID_CHUNK` ids
+   (see Bounds). Each fetched node yields its `summary`/`status` (used to emit
+   its record at depth `k`) and its adjacency (the level `k+1` frontier).
 3. A bug id is emitted **once**, at the first (minimal) depth it is discovered.
    The recorded `relation`/`direction` is the edge that first discovered it.
    Re-encountering an already-visited id (a cycle or shared node) adds nothing.
-4. Within a level, neighbors are processed in a deterministic order — by parent
-   processing order, then by the fixed relation order in the table above, then
-   by ascending neighbor id — so identical inputs produce identical output.
+4. Discovery order is server-independent: each level's frontier is processed in
+   **ascending bug-id order** (the batch response array order is *not* relied
+   upon — Bugzilla does not guarantee it matches the requested id order). For a
+   single bug, its own relations are expanded in the fixed relation order of the
+   table above. The combination — ascending parent id, then fixed relation
+   order, then ascending neighbor id — makes first-discovery (and thus each
+   node's recorded relation/direction) deterministic across runs and servers.
 5. With `--relation R`, only edges of relation `R` are traversed and emitted.
 6. Related bugs that cannot be fetched (permissions, deleted) are omitted from
    the batch response and therefore from the output. They are skipped silently;
-   they do not abort the command.
+   they do not abort the command. (This applies only to *related* bugs — the
+   root is not skipped; see "Root not found vs. root with no links".)
 
-Round-trips are `O(depth)`, not `O(nodes)` — the explicit fix for the issue's
-N+1 motivation.
+Per-level round-trips are `ceil(level_width / LINKS_ID_CHUNK)` (REST/Hybrid),
+bounded overall by `LINKS_MAX_NODES` — replacing the issue's per-related-bug
+N+1 with a request count that scales with graph size / chunk size, not with
+node count one-at-a-time. (The XML-RPC fallback below is the exception: it is
+`O(nodes)`, since XML-RPC `get_bug` fetches one id per call.)
 
 ### Worked example (cycle)
 
@@ -161,3 +197,15 @@ server that omits any field yields an empty list / `None`.
 - Wiremock test covering one-hop and two-hop recursion with a cycle.
 - Functional phase script exercising the command against a real container,
   including the credentialless path.
+
+### Additional criteria (from spec review)
+
+- A nonexistent / unreadable **root** id fails with the `NotFound` exit code
+  (matching `bug view`), not an empty "no related bugs" result. Wiremock case:
+  root 404.
+- A frontier wider than `LINKS_ID_CHUNK` is fetched over multiple chunked
+  requests; output is identical regardless of chunk boundaries.
+- Discovery is deterministic when a batch response returns nodes out of
+  requested-id order. Wiremock case: response array reordered vs. request.
+- Hitting `LINKS_MAX_NODES` stops traversal, emits the collected records, and
+  writes the truncation notice to stderr (stdout stays valid).
