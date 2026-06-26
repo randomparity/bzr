@@ -54,6 +54,39 @@ async fn persist_detected_settings_skips_unknown_server() {
     assert!(!reloaded.servers.contains_key("nonexistent"));
 }
 
+/// When the version probe failed (`server_version` is `None`), persistence
+/// must NOT overwrite a previously-cached `api_mode` — a transient version
+/// blip must not clobber a known-good mode. Only `auth_method` (when
+/// `persist_auth`) may be written. Locks the "persist only when intended"
+/// invariant in `persist_detected_settings`.
+#[tokio::test]
+async fn persist_skips_api_mode_when_version_probe_failed() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    // Seed config with a known-good cached api_mode.
+    let config_path = write_config(&tmp, "https://example.test", "api_mode = \"rest\"");
+
+    let settings = crate::client::DetectedServerSettings {
+        auth_method: Some(crate::types::AuthMethod::Header),
+        // Hybrid is the fallback mode produced when the version probe fails; it
+        // would clobber the cached Rest mode if persisted.
+        api_mode: crate::types::ApiMode::Hybrid,
+        server_version: None,
+    };
+    super::persist_detected_settings(Some(&config_path), "test", &settings, false).unwrap();
+
+    let reloaded = load_config(&config_path);
+    let srv = &reloaded.servers["test"];
+    assert_eq!(
+        srv.api_mode,
+        Some(crate::types::ApiMode::Rest),
+        "cached api_mode must survive a failed version probe"
+    );
+    assert_eq!(
+        srv.auth_method, None,
+        "persist_auth=false must not write an auth_method"
+    );
+}
+
 /// `detect_and_build_client` is the shared tail of the TOFU/rotation
 /// flows: detect → persist → construct client. Drive it with a real
 /// wiremock to cover lines 211-231.

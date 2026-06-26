@@ -340,6 +340,87 @@ async fn anonymous_detection_propagates_tls_certificate_errors() {
 }
 
 #[tokio::test]
+async fn credentialed_detection_propagates_tls_certificate_errors() {
+    // Symmetric with `anonymous_detection_propagates_tls_certificate_errors`:
+    // the credentialed path (`detect_server_settings` -> whoami probe) must also
+    // surface TLS-cert failures as `BzrError::Http` so the connection layer can
+    // offer TOFU / pin-rotation, rather than masking them as a header fallback.
+    let (url, handle) = spawn_self_signed_https_server();
+
+    let result = detect_server_settings(
+        &url,
+        "test-key",
+        None,
+        &crate::tls::TlsConfig::default(),
+        crate::http::REQUEST_TIMEOUT,
+    )
+    .await;
+    handle.join().unwrap();
+
+    assert!(
+        matches!(&result, Err(BzrError::Http(_))),
+        "expected TLS HTTP error from credentialed detection, got: {result:?}"
+    );
+    let Err(BzrError::Http(err)) = result else {
+        return;
+    };
+    assert!(
+        crate::tls::is_tls_cert_error(&err),
+        "credentialed detection should surface TLS cert errors, got: {err:#}"
+    );
+}
+
+#[tokio::test]
+async fn malformed_whoami_preserved_over_later_valid_login_malformed() {
+    // When BOTH endpoints return malformed 200s, the FIRST malformed probe
+    // (whoami header) is preserved in the surfaced auth error. The diagnostic
+    // must stay stable regardless of how many later probes also misbehave.
+    let server = MockServer::start().await;
+
+    // whoami: header probe -> malformed 200; query probe -> 401 (rejected).
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .and(header(AUTH_HEADER_NAME, "test-key"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("whoami-garbage"))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    // valid_login: both probes -> malformed 200.
+    Mock::given(method("GET"))
+        .and(path("/rest/valid_login"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("valid-login-garbage"))
+        .mount(&server)
+        .await;
+
+    let result = detect_auth_method(
+        &test_http_client(),
+        &server.uri(),
+        "test-key",
+        Some("user@example.com"),
+    )
+    .await;
+    assert!(matches!(result, Err(BzrError::Auth(_))));
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("whoami") && err.contains("malformed"),
+        "the first malformed probe (whoami) must be preserved across endpoints, got: {err}"
+    );
+    assert!(
+        !err.contains("valid_login"),
+        "a later valid_login malformed must not displace the first diagnostic, got: {err}"
+    );
+}
+
+#[tokio::test]
 async fn whoami_404_no_email_suggests_email_flag() {
     let server = MockServer::start().await;
 
