@@ -2,9 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/randomparity/bzr/schemas/error.json",
   "title": "ErrorEnvelope",
-  "description": "Structured error object emitted on stderr under `--json` and `--output ndjson`.",
+  "description": "Structured error object emitted on stderr under `--json` and `--output ndjson`. Under pretty `--json` a top-level `schema_version` is also present; under `--output ndjson` it is omitted (records stay bare).",
   "type": "object",
   "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
     "error": {
       "type": "object",
       "properties": {
