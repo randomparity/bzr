@@ -180,3 +180,7 @@ pub(crate) fn confirm_batch(count: usize, assume_yes: bool, w: &mut Writers<'_>)
     let stdin = std::io::stdin();
     crate::commands::runtime::confirm::read_yes_no(&mut stdin.lock(), w.err, count)
 }
+
+#[cfg(test)]
+#[path = "execute_tests.rs"]
+mod tests;
