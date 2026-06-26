@@ -114,11 +114,17 @@ impl BugzillaClient {
     /// failure degrades to `None`.
     async fn attachment_size_limit(&self) -> Option<u64> {
         self.api_key.as_ref()?;
-        let response: Result<ParametersResponse> = self.get_json("parameters").await;
-        response
-            .ok()
-            .and_then(|body| body.parameters.maxattachmentsize)
-            .map(|kib| kib.saturating_mul(1024))
+        let kib = match self.get_json::<ParametersResponse>("parameters").await {
+            Ok(body) => body.parameters.maxattachmentsize,
+            // Best-effort: degrade to `None` but leave a `-vv` trail so a
+            // credentialed caller can tell "server refused parameters" from
+            // "parameter unset". The error's Display is API-key-redacted.
+            Err(err) => {
+                tracing::debug!(%err, "max_attachment_size undetermined: /rest/parameters failed");
+                None
+            }
+        };
+        kib.map(|kib| kib.saturating_mul(1024))
     }
 }
 
