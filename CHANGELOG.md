@@ -38,6 +38,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The bundled `bzr-setup` agent skill now teaches `bzr whoami --json` as the
+  canonical one-call health check ("am I configured?") — config, auth, and
+  server reachability in a single probe — instead of chaining `config show`,
+  `server info`, and a probe-bug fetch. The new "Health check" section documents
+  the failure modes (TLS, auth, connection), the public read-only fallback
+  (`server info --json`), and cross-references `bzr-reference` for the TLS-trust
+  flag surface and error envelope. No CLI changes. (#461)
 - **BREAKING (`--json`):** pretty `--json` output is now wrapped in a versioned
   envelope `{"schema_version": "0.6.0", "data": <previous output>}`. Move `jq`
   recipes and deserializers from the old top level to `.data` (e.g. `.[].id` →

@@ -75,17 +75,40 @@ To use a sandboxed config file instead of the default, point any command at it
 with `--config <path>` (overrides `BZR_CONFIG` and the default
 `$XDG_CONFIG_HOME/bzr/config.toml`).
 
-## 2. Verify
+## 2. Health check
+
+`bzr whoami --json` is the canonical "am I configured?" probe. One call answers
+config + auth + server reachability together: it returns the logged-in identity
+when auth works and a structured error when it does not, so no probe-bug fetch
+is needed.
 
 ```
-bzr config show                 # confirm server URLs and credential sources
-bzr server info --json          # confirm the server is reachable
-bzr whoami --json               # confirm authentication, when credentials exist
+bzr whoami --json && echo "configured" || echo "not configured"
 ```
 
-If `whoami` fails: re-check the URL, that the API key is valid, and that the
-credential source you named actually holds the key (`bzr config show` labels
-each server's source).
+On success the `data` object carries the identity fields (`id`, `name`,
+`real_name`, `login`). A non-zero exit means one of:
+
+- **TLS error** — re-run `config set-server` (or the inline `--server-tls-*`
+  flags) with the right `--tls-*` trust mode for the server.
+- **Auth error** — the API key is missing or rejected; check the credential
+  source (`bzr config show` labels each server's source).
+- **Connection error** — the URL is wrong or the server is unreachable; re-check
+  the configured `--url`.
+
+See `bzr-reference` for the TLS-trust flag surface and the `schema error`
+envelope that carries the failure detail; this skill does not duplicate them.
+
+For a **public read-only server** with no API key, `whoami` cannot run — it
+requires authentication. Probe reachability with the lighter anonymous call
+instead:
+
+```
+bzr --server-url https://bugzilla.example.com server info --json
+```
+
+When a probe fails, `bzr config show` (server URLs and credential sources) and
+`bzr server info --json` (reachability on its own) narrow down which layer broke.
 
 ## 3. Probe what the server supports
 
