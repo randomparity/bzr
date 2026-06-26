@@ -569,12 +569,25 @@ async fn bug_history_integration() {
         .expect(1)
         .mount(&mock)
         .await;
+    // The JSON path also fetches comments to correlate comment_id; none here.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": { "42": { "comments": [] } }
+        })))
+        .mount(&mock)
+        .await;
 
     let (result, output) = dispatch_cli_with_output(&["bzr", "bug", "history", "42"]).await;
     assert!(result.is_ok(), "bug history should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
+    // Flattened change records (ADR 0008): one record per changed field.
     assert_eq!(parsed[0]["who"], "dev@example.com");
-    assert_eq!(parsed[0]["changes"][0]["field_name"], "status");
+    assert_eq!(parsed[0]["when"], "2025-01-01T00:00:00Z");
+    assert_eq!(parsed[0]["field"], "status");
+    assert_eq!(parsed[0]["old_value"], "NEW");
+    assert_eq!(parsed[0]["new_value"], "ASSIGNED");
+    assert!(parsed[0]["comment_id"].is_null());
 }
 
 // ── Bug update ───────────────────────────────────────────────────────
