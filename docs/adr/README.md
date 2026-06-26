@@ -13,3 +13,4 @@ rejected.
 | [0004](0004-client-and-connection-module-boundaries.md) | Client and connection orchestration module boundaries | Accepted |
 | [0005](0005-server-capabilities-contract.md) | `server capabilities` reports the anonymously-derivable surface | Accepted |
 | [0006](0006-bug-links-isolated-fetch.md) | `bug links` uses an isolated relationship fetch | Accepted |
+| [0007](0007-json-output-schema-version-envelope.md) | `--json` output is wrapped in a versioned envelope | Accepted |
