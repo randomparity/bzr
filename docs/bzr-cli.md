@@ -480,12 +480,31 @@ View the change history of a bug, showing who changed which fields and when.
 bzr bug history 12345
 bzr bug history 12345 --since 2025-01-01
 bzr --json bug history 12345
+bzr bug history 12345 --output ndjson
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
 | `<ID>` | Yes | Bug ID |
 | `--since <DATE>` | No | Only show changes after this date (ISO 8601) |
+
+The default table output groups changes by entry (who/when, then the fields
+changed). `--json` and `--output ndjson` instead emit **flattened change
+records — one per changed field**; a single history entry that changed N fields
+expands to N records sharing the same `when`/`who`/`comment_id`. Each record has
+the shape:
+
+```json
+{"when": "2026-06-01T14:22:01Z", "who": "alice@example.com", "field": "status", "old_value": "NEW", "new_value": "ASSIGNED", "comment_id": null}
+```
+
+`old_value`/`new_value` are the removed/added values (empty string when there is
+nothing on that side). `comment_id` is the id of a comment posted in the same
+history entry, correlated by author and timestamp; it is `null` when no comment
+correlates. Populating it requires a second API call (the bug's comments), made
+only for the JSON family and unfiltered by `--since`; if that fetch fails the
+command still prints the records with `comment_id: null` and warns on stderr.
+See `bzr schema history` for the published contract.
 
 ### `bzr bug links`
 

@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `bzr bug history <id> --json` / `--output ndjson` now emit flattened change
+  records — one record per changed field (`when`, `who`, `field`, `old_value`,
+  `new_value`, `comment_id`) instead of grouped entries with a nested `changes`
+  array. A multi-field history entry expands to one record per field. `comment_id`
+  is correlated from the bug's comments by author and timestamp (best-effort,
+  null when no comment matches). The table output is unchanged. A `history`
+  schema is published via `bzr schema history`. (#456)
 - `bzr bug links <id>` prints a bug's relationship graph — one record per related
   bug across all six Bugzilla link types (`depends_on`, `blocks`, `dupe_of`,
   `duplicates`, `regressed_by`, `regressions`) as flat JSON/ndjson/table records
