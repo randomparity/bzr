@@ -72,21 +72,26 @@ fn exit_code(e: &BzrError) -> ExitCode {
 ///
 /// JSON-family output (`json` and `ndjson`) renders a structured error object
 /// with `type`, `message`, and `exit_code` fields — one compact line, so an
-/// `ndjson` stream stays parseable. Table output renders the conventional
-/// `error: …` prefix.
+/// `ndjson` stream stays parseable. Pretty `--json` additionally carries the
+/// top-level `schema_version` envelope key (present iff the format is `Json`,
+/// matching the success path); `ndjson` stays bare. Table output renders the
+/// conventional `error: …` prefix.
 fn format_dispatch_error(err: &BzrError, format: OutputFormat) -> String {
-    if format.is_json_family() {
-        let json_err = serde_json::json!({
-            "error": {
-                "type": err.error_type(),
-                "message": err.to_string(),
-                "exit_code": err.exit_code(),
-            }
-        });
-        serde_json::to_string(&json_err)
-            .unwrap_or_else(|_| r#"{"error":{"message":"serialization failed"}}"#.into())
-    } else {
-        format!("error: {err}")
+    let error_body = serde_json::json!({
+        "type": err.error_type(),
+        "message": err.to_string(),
+        "exit_code": err.exit_code(),
+    });
+    let fallback = || r#"{"error":{"message":"serialization failed"}}"#.to_string();
+    match format {
+        OutputFormat::Json => serde_json::to_string(&serde_json::json!({
+            "schema_version": bzr::output::SCHEMA_VERSION,
+            "error": error_body,
+        }))
+        .unwrap_or_else(|_| fallback()),
+        OutputFormat::Ndjson => serde_json::to_string(&serde_json::json!({ "error": error_body }))
+            .unwrap_or_else(|_| fallback()),
+        OutputFormat::Table => format!("error: {err}"),
     }
 }
 
