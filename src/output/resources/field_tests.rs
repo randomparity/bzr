@@ -101,7 +101,7 @@ fn write_field_values_table_empty_renders_only_headers() {
 #[test]
 fn write_field_values_json_empty_renders_empty_array() {
     let output = capture_values(OutputFormat::Json, &[]);
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert!(parsed.is_array());
     assert_eq!(parsed.as_array().unwrap().len(), 0);
 }
@@ -177,7 +177,7 @@ fn write_field_values_json_via_write() {
         }]),
     }];
     let output = capture_values(OutputFormat::Json, &values);
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["name"], "NEW");
     assert_eq!(parsed[0]["is_active"], true);
 }
@@ -199,7 +199,7 @@ fn write_field_aliases_table_renders_rows() {
 fn write_field_aliases_json_via_write() {
     let aliases: &[(&'static str, &'static str)] = &[("status", "bug_status")];
     let output = capture_aliases(OutputFormat::Json, aliases);
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["alias"], "status");
     assert_eq!(parsed[0]["api_name"], "bug_status");
 }

@@ -328,7 +328,7 @@ async fn attachment_download_batch_per_bug_writes_per_bug_subdir() {
     let output = __io_a4.out_str().to_string();
     assert!(result.is_ok(), "expected ok, got {result:?}");
 
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["summary"]["succeeded"], 2);
     assert_eq!(parsed["summary"]["failed"], 0);
     assert_eq!(parsed["summary"]["total_bytes"], 5 + 13);
@@ -494,7 +494,7 @@ async fn attachment_download_batch_mixed_bug_and_positional_ids() {
     let output = __io_a5.out_str().to_string();
     assert!(result.is_ok(), "expected ok, got {result:?}");
 
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["summary"]["succeeded"], 2);
     assert_eq!(parsed["bug_results"][0]["bug_id"], 12345);
     assert_eq!(parsed["attachment_results"][0]["attachment_id"], 4242);
@@ -536,7 +536,7 @@ async fn attachment_download_batch_empty_bug_zero_files_success() {
 
     let output = __io_a6.out_str().to_string();
     assert!(result.is_ok(), "expected ok, got {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["bug_results"][0]["status"], "ok");
     assert_eq!(parsed["summary"]["succeeded"], 0);
     assert_eq!(parsed["summary"]["failed"], 0);
@@ -578,7 +578,7 @@ async fn attachment_download_batch_legacy_single_id_unchanged() {
 
     // Legacy path emits DownloadResult, not AttachmentBatchResult — the
     // JSON has `id` at the top level, not `summary`.
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 9876);
     assert_eq!(parsed["size"].as_u64().unwrap_or(0), 6);
     assert!(out_path.exists());
@@ -686,7 +686,7 @@ async fn attachment_download_batch_bug_not_found_partial_failure() {
     let exit = err.exit_code();
     assert_eq!(exit, 11, "expected exit 11, got {exit}: {err}");
 
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["summary"]["succeeded"], 1);
     assert_eq!(parsed["summary"]["failed"], 1);
     let bugs = parsed["bug_results"].as_array().unwrap();

@@ -40,8 +40,7 @@ async fn user_create_sends_post() {
     .await;
     let output = __io_a2.out_str().to_string();
     assert!(result.is_ok(), "user create failed: {result:?}");
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["action"], "created");
     assert_eq!(parsed["id"], 99);
 }
@@ -74,7 +73,7 @@ async fn user_create_dry_run_makes_no_write_and_marks_payload() {
     .await;
 
     assert!(result.is_ok(), "dry-run user create failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["resource"], "user");
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["ids"], serde_json::json!([]));
@@ -116,7 +115,7 @@ async fn user_create_from_json_sends_merged_body() {
     .await;
 
     assert!(result.is_ok(), "user create from JSON failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["id"], 99);
 }
 

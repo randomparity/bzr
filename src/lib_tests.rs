@@ -43,7 +43,7 @@ async fn dispatch_whoami_defaults_to_show_action() {
     let output = __io.out_str().to_string();
     assert!(result.is_ok(), "dispatch failed: {result:?}");
 
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "admin@example.com");
 }
 
@@ -67,7 +67,7 @@ async fn dispatch_routes_local_query_commands() {
     let output = __io2.out_str().to_string();
     assert!(result.is_ok(), "dispatch failed: {result:?}");
 
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "firefox-new");
     assert_eq!(parsed["action"], "saved");
 }
@@ -119,7 +119,7 @@ api_key = "secret"
     let output = io.out_str().to_string();
 
     assert!(result.is_ok(), "dispatch failed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["config_file"], explicit_config.display().to_string());
     assert_eq!(parsed["default_server"], "alternate");
     assert_eq!(
@@ -172,7 +172,7 @@ async fn dispatch_allows_dry_run_on_bug_update() {
     let output = io.out_str().to_string();
 
     assert!(result.is_ok(), "dry-run dispatch failed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["ids"], serde_json::json!([5]));
 }
@@ -206,7 +206,7 @@ async fn dispatch_allows_dry_run_on_admin_create() {
     let output = io.out_str().to_string();
 
     assert!(result.is_ok(), "dry-run dispatch failed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["resource"], "product");
     assert_eq!(parsed["action"], "dry-run");
 }
@@ -243,7 +243,7 @@ async fn dispatch_allows_credentialless_dry_run_before_connect() {
     let output = io.out_str().to_string();
 
     assert!(result.is_ok(), "credentialless dry-run failed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["resource"], "product");
     assert_eq!(parsed["action"], "dry-run");
 }

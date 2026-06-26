@@ -41,7 +41,7 @@ async fn attachment_update_succeeds() {
     .await;
     let output = __io_a3.out_str().to_string();
     assert!(result.is_ok());
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 99);
     assert_eq!(parsed["action"], "updated");
 }

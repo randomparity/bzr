@@ -89,7 +89,7 @@ async fn query_delete_removes_saved_query() {
     .await;
     let output = __io5.out_str().to_string();
     assert!(result.is_ok());
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["action"], "deleted");
 
     let show_action = QueryAction::Show(ShowArgs {

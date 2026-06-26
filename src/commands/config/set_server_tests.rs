@@ -80,7 +80,7 @@ async fn first_set_server_auto_sets_default() {
 
     // The first server set must report `is_default: true` and `created`,
     // since there was no prior default to take precedence.
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["is_default"], true);
     assert_eq!(parsed["action"], "created");
 }
@@ -132,7 +132,7 @@ async fn set_server_update_preserves_existing_default() {
     .await
     .unwrap();
 
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["name"], "second");
     assert_eq!(parsed["action"], "updated");
 

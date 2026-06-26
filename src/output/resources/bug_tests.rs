@@ -169,7 +169,7 @@ fn write_bug_detail_ndjson_emits_single_line() {
 #[test]
 fn write_bugs_json_empty_renders_empty_array() {
     let output = capture_bugs(OutputFormat::Json, &[]);
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert!(parsed.is_array());
     assert_eq!(parsed.as_array().unwrap().len(), 0);
 }
@@ -194,7 +194,7 @@ fn write_bugs_table_renders_columns_and_truncates() {
 fn write_bugs_json_via_write() {
     let bugs = vec![make_bug(99, "Crash on startup", "ASSIGNED")];
     let output = capture_bugs(OutputFormat::Json, &bugs);
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["id"], 99);
     assert_eq!(parsed[0]["summary"], "Crash on startup");
     assert_eq!(parsed[0]["status"], "ASSIGNED");
@@ -283,7 +283,7 @@ fn write_bugs_json_trims_to_selected_fields() {
         exclude: None,
     };
     let (out, _err) = capture_bugs_spec(OutputFormat::Json, &bugs, spec);
-    let parsed: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&out);
     let keys: Vec<&str> = parsed[0]
         .as_object()
         .unwrap()
@@ -585,7 +585,7 @@ fn write_bug_detail_table_handles_minimal_bug() {
 fn write_bug_detail_json_via_write() {
     let bug = make_bug(7, "Json bug", "NEW");
     let output = capture_bug_detail(OutputFormat::Json, &bug);
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 7);
     assert_eq!(parsed["summary"], "Json bug");
 }
@@ -731,7 +731,7 @@ fn write_history_table_empty_renders_nothing() {
 fn write_history_json_via_write() {
     let history = vec![make_history_entry()];
     let output = capture_history(OutputFormat::Json, &history);
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["who"], "editor@example.com");
 }
 
@@ -1316,7 +1316,8 @@ fn write_bug_links_ndjson_is_one_object_per_line() {
 fn write_bug_links_json_is_array() {
     let mut buf = Vec::new();
     write_bug_links(&sample_links(), OutputFormat::Json, &mut buf);
-    let v: serde_json::Value = serde_json::from_slice(&buf).unwrap();
+    let v: serde_json::Value =
+        crate::test_helpers::json_envelope_data(std::str::from_utf8(&buf).unwrap());
     assert!(v.is_array());
     assert_eq!(v[0]["depth"], 1);
 }

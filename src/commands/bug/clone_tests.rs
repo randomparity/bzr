@@ -1,5 +1,3 @@
-#![expect(clippy::unwrap_used)]
-
 use wiremock::matchers::{body_partial_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
@@ -115,8 +113,7 @@ async fn bug_clone_copies_fields() {
     .await;
     let output = __io.out_str().to_string();
     assert!(result.is_ok(), "bug clone failed: {result:?}");
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 200);
     assert_eq!(parsed["action"], "created");
 }
@@ -185,7 +182,7 @@ async fn bug_clone_reports_id_when_comment_post_fails() {
         result.is_ok(),
         "clone should succeed despite comment failure: {result:?}"
     );
-    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(__io.out_str());
     assert_eq!(parsed["id"], 202);
     assert_eq!(parsed["action"], "created");
     // The comment failure is surfaced as a stderr warning naming the new ID.
@@ -325,7 +322,7 @@ async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
     let output = io.out_str().to_string();
 
     assert!(result.is_ok(), "dry-run clone failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["ids"], serde_json::json!([]));
     assert_eq!(parsed["changes"]["product"], "TestProduct");
@@ -408,7 +405,7 @@ async fn bug_clone_dry_run_links_blocks_and_depends_on_to_source() {
     let output = io.out_str().to_string();
 
     assert!(result.is_ok(), "dry-run clone failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["changes"]["blocks"], serde_json::json!([100]));
     assert_eq!(parsed["changes"]["depends_on"], serde_json::json!([100]));
 }
@@ -477,7 +474,7 @@ async fn bug_clone_dry_run_applies_create_metadata_overrides() {
     let output = io.out_str().to_string();
 
     assert!(result.is_ok(), "dry-run clone failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     let changes = &parsed["changes"];
     assert_eq!(changes["url"], "https://example.com/override");
     assert_eq!(changes["whiteboard"], "override-whiteboard");

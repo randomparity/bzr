@@ -43,7 +43,7 @@ async fn dry_run_emits_preview_and_skips_execute() {
         !executed.load(Ordering::SeqCst),
         "execute closure ran on a dry run"
     );
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["resource"], "product");
     assert_eq!(parsed["ids"], serde_json::json!([]));

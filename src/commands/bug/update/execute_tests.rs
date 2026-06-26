@@ -47,7 +47,7 @@ async fn apply_checked_connected_dry_run_skips_expect_unchanged_get() {
         requests.is_empty(),
         "dry-run should skip optimistic GET and PUT, got {requests:?}"
     );
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["ids"], serde_json::json!([42]));
 }
@@ -74,7 +74,7 @@ async fn apply_checked_dry_run_skips_connection_setup() {
         result.is_ok(),
         "dry-run should render without loading config or connecting: {result:?}"
     );
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["ids"], serde_json::json!([42]));
     assert_eq!(parsed["changes"]["status"], "ASSIGNED");
@@ -131,7 +131,7 @@ async fn apply_checked_connected_writes_when_guard_passes() {
 
     assert!(result.is_ok(), "matching guard should write: {result:?}");
     assert_eq!(received_put_count(&mock).await, 1);
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["action"], "updated");
     assert_eq!(parsed["id"], 42);
 }

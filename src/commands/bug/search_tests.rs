@@ -63,8 +63,7 @@ async fn handle_search_from_url_executes() {
 
     let output = __io.out_str().to_string();
     assert!(result.is_ok(), "from-url search failed: {result:?}");
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["id"], 1);
 }
 
@@ -100,7 +99,7 @@ async fn handle_search_from_url_with_custom_fields_emits_custom_field() {
     .await;
 
     assert!(result.is_ok(), "from-url custom search failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(__io.out_str());
     assert_eq!(parsed[0]["id"], 1);
     assert_eq!(parsed[0]["cf_release"], "9.6");
     assert!(parsed[0].get("summary").is_none());
@@ -134,7 +133,7 @@ async fn handle_search_from_url_fields_drive_output_projection() {
     .await;
 
     assert!(result.is_ok(), "from-url fields search failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed[0]["id"], 1);
     assert_eq!(parsed[0]["cf_release"], "9.6");
     assert!(parsed[0].get("summary").is_none());
@@ -490,7 +489,7 @@ async fn handle_search_count_emits_count_object() {
     )
     .await;
     assert!(result.is_ok(), "search --count failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["count"], 4);
 }
 

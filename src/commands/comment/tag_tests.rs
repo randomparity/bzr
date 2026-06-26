@@ -33,7 +33,7 @@ async fn comment_tag_add_updates_tags() {
     )
     .await;
     assert!(result.is_ok(), "comment tag failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(__io.out_str());
     assert_eq!(parsed["comment_id"], 100);
     assert_eq!(parsed["action"], "updated");
     assert_eq!(parsed["tags"], serde_json::json!(["needinfo", "reviewed"]));

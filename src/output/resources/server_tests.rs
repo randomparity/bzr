@@ -32,7 +32,8 @@ fn capabilities_json_round_trips_documented_shape() {
     let mut out: Vec<u8> = Vec::new();
     super::write_server_capabilities(&caps, OutputFormat::Json, &mut out);
 
-    let parsed: serde_json::Value = serde_json::from_slice(&out).unwrap();
+    let parsed: serde_json::Value =
+        crate::test_helpers::json_envelope_data(std::str::from_utf8(&out).unwrap());
     assert_eq!(parsed["version"], "5.0.4");
     assert_eq!(parsed["api_modes"][0], "rest");
     assert_eq!(parsed["max_attachment_size"], 1_024_000);

@@ -179,7 +179,7 @@ async fn resolve_dry_run_makes_no_write() {
     let output = io.out_str().to_string();
 
     assert!(result.is_ok(), "dry-run resolve failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["ids"], serde_json::json!([5]));
     assert_eq!(parsed["changes"]["status"], "RESOLVED");
@@ -495,7 +495,7 @@ async fn reopen_dry_run_skips_validation_and_write() {
     let output = io.out_str().to_string();
 
     assert!(result.is_ok(), "dry-run reopen failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["action"], "dry-run");
     assert_eq!(parsed["changes"]["status"], "REOPENED");
 }
@@ -661,7 +661,7 @@ async fn resolve_batch_updates_each_id() {
     )
     .await;
     assert!(result.is_ok(), "batch resolve failed: {:?}", result.err());
-    let parsed: serde_json::Value = serde_json::from_str(io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     // Batch JSON shape from update_batch / BatchResult.
     assert_eq!(parsed["succeeded"].as_array().unwrap().len(), 2);
 }

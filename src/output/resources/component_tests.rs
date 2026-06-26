@@ -60,7 +60,8 @@ fn write_components_json_is_array() {
     let items = vec![make_component(3, "Gamma", true)];
     let mut buf: Vec<u8> = Vec::new();
     write_components(&items, OutputFormat::Json, &mut buf);
-    let parsed: serde_json::Value = serde_json::from_slice(&buf).unwrap();
+    let parsed: serde_json::Value =
+        crate::test_helpers::json_envelope_data(std::str::from_utf8(&buf).unwrap());
     assert_eq!(parsed[0]["id"], 3);
     assert_eq!(parsed[0]["name"], "Gamma");
 }
@@ -87,7 +88,8 @@ fn write_component_json_is_object() {
         OutputFormat::Json,
         &mut buf,
     );
-    let parsed: serde_json::Value = serde_json::from_slice(&buf).unwrap();
+    let parsed: serde_json::Value =
+        crate::test_helpers::json_envelope_data(std::str::from_utf8(&buf).unwrap());
     assert_eq!(parsed["id"], 4);
     assert_eq!(parsed["name"], "Delta");
 }

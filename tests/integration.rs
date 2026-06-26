@@ -41,7 +41,7 @@ async fn bug_list_integration() {
 
     let (result, output) = dispatch_cli_with_output(&["bzr", "bug", "list"]).await;
     assert!(result.is_ok(), "bug list should succeed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["id"], 1);
     assert_eq!(parsed[0]["summary"], "Test bug");
     assert_eq!(parsed[0]["status"], "NEW");
@@ -99,7 +99,7 @@ async fn bug_view_integration() {
 
     let (result, output) = dispatch_cli_with_output(&["bzr", "bug", "view", "42"]).await;
     assert!(result.is_ok(), "bug view should succeed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 42);
     assert_eq!(parsed["summary"], "Test bug");
 }
@@ -120,7 +120,7 @@ async fn bug_search_integration() {
 
     let (result, output) = dispatch_cli_with_output(&["bzr", "bug", "search", "crash"]).await;
     assert!(result.is_ok(), "bug search should succeed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["id"], 99);
     assert_eq!(parsed[0]["summary"], "Crash on startup");
 }
@@ -153,7 +153,7 @@ async fn bug_create_integration() {
     ])
     .await;
     assert!(result.is_ok(), "bug create should succeed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 100);
 }
 
@@ -180,7 +180,7 @@ async fn comment_list_integration() {
 
     let (result, output) = dispatch_cli_with_output(&["bzr", "comment", "list", "42"]).await;
     assert!(result.is_ok(), "comment list should succeed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["id"], 1);
     assert_eq!(parsed[0]["text"], "First comment");
 }
@@ -247,7 +247,7 @@ async fn whoami_integration() {
 
     let (result, output) = dispatch_cli_with_output(&["bzr", "whoami"]).await;
     assert!(result.is_ok(), "whoami should succeed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "admin@example.com");
     assert_eq!(parsed["real_name"], "Admin User");
 }
@@ -278,7 +278,7 @@ async fn product_list_integration() {
 
     let (result, output) = dispatch_cli_with_output(&["bzr", "product", "list"]).await;
     assert!(result.is_ok(), "product list should succeed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["name"], "Firefox");
 }
 
@@ -307,7 +307,7 @@ async fn server_info_integration() {
 
     let (result, output) = dispatch_cli_with_output(&["bzr", "server", "info"]).await;
     assert!(result.is_ok(), "server info should succeed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["version"], "5.1.2");
 }
 
@@ -333,7 +333,7 @@ async fn field_list_integration() {
 
     let (result, output) = dispatch_cli_with_output(&["bzr", "field", "list", "status"]).await;
     assert!(result.is_ok(), "field list should succeed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["name"], "NEW");
 }
 
@@ -364,7 +364,7 @@ async fn classification_view_integration() {
         result.is_ok(),
         "classification view should succeed: {result:?}"
     );
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "Unclassified");
 }
 
@@ -391,7 +391,7 @@ async fn user_search_integration() {
 
     let (result, output) = dispatch_cli_with_output(&["bzr", "user", "search", "alice"]).await;
     assert!(result.is_ok(), "user search should succeed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["name"], "alice@example.com");
     assert_eq!(parsed[0]["real_name"], "Alice");
 }
@@ -420,7 +420,7 @@ async fn group_view_integration() {
 
     let (result, output) = dispatch_cli_with_output(&["bzr", "group", "view", "admin"]).await;
     assert!(result.is_ok(), "group view should succeed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "admin");
     assert_eq!(parsed["description"], "Administrators");
 }
@@ -456,7 +456,7 @@ async fn component_create_integration() {
         result.is_ok(),
         "component create should succeed: {result:?}"
     );
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 10);
 }
 
@@ -486,7 +486,7 @@ async fn attachment_list_integration() {
 
     let (result, output) = dispatch_cli_with_output(&["bzr", "attachment", "list", "42"]).await;
     assert!(result.is_ok(), "attachment list should succeed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["file_name"], "patch.diff");
 }
 
@@ -572,7 +572,7 @@ async fn bug_history_integration() {
 
     let (result, output) = dispatch_cli_with_output(&["bzr", "bug", "history", "42"]).await;
     assert!(result.is_ok(), "bug history should succeed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["who"], "dev@example.com");
     assert_eq!(parsed[0]["changes"][0]["field_name"], "status");
 }
@@ -622,7 +622,7 @@ async fn bug_update_integration() {
     ])
     .await;
     assert!(result.is_ok(), "bug update should succeed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 42);
     assert_eq!(parsed["action"], "updated");
 }
@@ -746,7 +746,7 @@ async fn comment_add_integration() {
     ])
     .await;
     assert!(result.is_ok(), "comment add should succeed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 999);
 }
 
@@ -1088,7 +1088,7 @@ async fn attachment_list_returns_is_patch_field_integration() {
 
     let (result, output) = dispatch_cli_with_output(&["bzr", "attachment", "list", "42"]).await;
     assert!(result.is_ok(), "list should succeed: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["is_patch"], true);
 }
 
@@ -1553,7 +1553,7 @@ async fn e2e_bug_list_via_cli_args() {
     ])
     .await;
     assert!(result.is_ok(), "e2e bug list: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["summary"], "CLI test");
 }
 
@@ -1573,7 +1573,7 @@ async fn e2e_bug_view_via_cli_args() {
     let (result, output) =
         dispatch_cli_with_output(&["bzr", "--server", "test", "--json", "bug", "view", "42"]).await;
     assert!(result.is_ok(), "e2e bug view: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 42);
     assert_eq!(parsed["summary"], "CLI view test");
 }
@@ -1596,7 +1596,7 @@ async fn e2e_whoami_via_cli_args() {
     let (result, output) =
         dispatch_cli_with_output(&["bzr", "--server", "test", "--json", "whoami"]).await;
     assert!(result.is_ok(), "e2e whoami: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "admin@example.com");
 }
 
@@ -1649,7 +1649,7 @@ async fn e2e_inline_server_bug_view_without_config() {
     .await;
 
     assert!(result.is_ok(), "inline e2e bug view: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 42);
     assert_eq!(parsed["summary"], "Inline view");
     assert!(
@@ -2184,7 +2184,7 @@ async fn e2e_bug_list_json_partial_unknown_warns_and_projects() {
         err.contains("ignoring unknown field(s): not_a_field"),
         "stderr warning: {err:?}"
     );
-    let parsed = serde_json::from_str::<serde_json::Value>(out.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&out);
     assert_eq!(
         json_keys(&parsed[0]),
         vec!["summary"],
@@ -2227,7 +2227,7 @@ async fn e2e_bug_list_json_custom_field_is_emitted() {
         "custom field selection should succeed: {result:?}"
     );
     assert!(err.is_empty(), "custom field should not warn: {err:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(out.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&out);
     assert_eq!(json_keys(&parsed[0]), vec!["cf_release"]);
     assert_eq!(parsed[0]["cf_release"], "9.6");
 }
@@ -2257,7 +2257,7 @@ async fn e2e_bug_view_json_all_unknown_is_lenient_with_warning() {
         err.contains("ignoring unknown field(s): sumary"),
         "stderr warning: {err:?}"
     );
-    let parsed = serde_json::from_str::<serde_json::Value>(out.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&out);
     assert!(
         parsed.as_object().unwrap().is_empty(),
         "empty object for all-unknown view:\n{out}"
@@ -2285,7 +2285,7 @@ async fn e2e_bug_view_json_single_trims_object() {
     .await;
 
     assert!(result.is_ok(), "single view: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(out.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&out);
     assert_eq!(
         json_keys(&parsed),
         vec!["summary"],
@@ -2320,7 +2320,7 @@ async fn e2e_multi_bug_view_json_trims_bugs_keeps_wrapper() {
     .await;
 
     assert!(result.is_ok(), "multi view: {result:?}");
-    let parsed = serde_json::from_str::<serde_json::Value>(out.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&out);
     let bugs = parsed["bugs"].as_array().unwrap();
     assert_eq!(bugs.len(), 2);
     for b in bugs {
@@ -2371,7 +2371,7 @@ async fn e2e_bug_list_json_exclude_id_drops_key_but_parses() {
         result.is_ok(),
         "exclude id should parse and succeed: {result:?}"
     );
-    let parsed = serde_json::from_str::<serde_json::Value>(out.trim()).unwrap();
+    let parsed = bzr::test_helpers::json_envelope_data(&out);
     let keys = json_keys(&parsed[0]);
     assert!(!keys.contains(&"id"), "id dropped from output:\n{out}");
     assert_eq!(parsed[0]["summary"], "keep me", "summary retained:\n{out}");
@@ -2409,6 +2409,65 @@ async fn completion_bash_parses_and_dispatches() {
         script.contains("complete"),
         "bash completion script should register a completion function:\n{script}"
     );
+}
+
+// ── JSON envelope invariant ──────────────────────────────────────────
+
+/// Assert raw `--json` stdout is a single top-level object whose key set is
+/// exactly `{schema_version, data}` with the current `schema_version` — guards
+/// against a missing, doubled, or nested envelope from any command.
+fn assert_single_envelope(raw: &str) {
+    let parsed: serde_json::Value = serde_json::from_str(raw.trim()).unwrap();
+    let obj = parsed.as_object().expect("not a top-level object");
+    assert_eq!(
+        json_keys(&parsed)
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>(),
+        ["data", "schema_version"].into_iter().collect(),
+        "envelope key set must be exactly {{schema_version, data}}:\n{raw}"
+    );
+    assert_eq!(
+        obj["schema_version"].as_str().unwrap(),
+        bzr::output::SCHEMA_VERSION
+    );
+}
+
+/// Every `--json` family of output — a list, a single view, a mutation, and the
+/// local `schema` list — carries exactly one versioned envelope.
+#[tokio::test]
+async fn json_output_carries_exactly_one_envelope() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "summary": "s", "status": "NEW"}]
+        })))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "summary": "s", "status": "NEW"}]
+        })))
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/1/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 5})))
+        .mount(&mock)
+        .await;
+
+    for args in [
+        vec!["bzr", "bug", "list"],
+        vec!["bzr", "bug", "view", "1"],
+        vec!["bzr", "comment", "add", "1", "--body", "hi"],
+        vec!["bzr", "schema"],
+    ] {
+        let (result, output) = dispatch_cli_with_output(&args).await;
+        assert!(result.is_ok(), "{args:?} should succeed: {result:?}");
+        assert_single_envelope(&output);
+    }
 }
 
 /// An unknown shell name is rejected at parse time (clap value enum),

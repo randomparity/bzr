@@ -192,6 +192,54 @@ fn output_format_default_is_table() {
     assert_eq!(OutputFormat::default(), OutputFormat::Table);
 }
 
+// ── versioned envelope ───────────────────────────────────────────
+
+#[test]
+fn write_json_wraps_payload_in_versioned_envelope() {
+    let payload = serde_json::json!([{"id": 1}, {"id": 2}]);
+    let mut buf = Vec::new();
+    write_json(&payload, &mut buf);
+    let parsed: serde_json::Value = serde_json::from_str(&String::from_utf8(buf).unwrap()).unwrap();
+
+    let obj = parsed.as_object().unwrap();
+    let keys: std::collections::BTreeSet<&str> = obj.keys().map(String::as_str).collect();
+    assert_eq!(
+        keys,
+        ["data", "schema_version"].into_iter().collect(),
+        "envelope must have exactly schema_version and data"
+    );
+    assert_eq!(
+        parsed["schema_version"].as_str().unwrap(),
+        crate::output::SCHEMA_VERSION
+    );
+    assert_eq!(parsed["data"], payload, "data must equal the bare payload");
+}
+
+#[test]
+fn write_json_family_json_arm_is_enveloped() {
+    let value = serde_json::json!({"count": 0});
+    let mut buf = Vec::new();
+    write_json_family(&value, OutputFormat::Json, &mut buf);
+    let parsed: serde_json::Value = serde_json::from_str(&String::from_utf8(buf).unwrap()).unwrap();
+    assert_eq!(parsed["data"], value);
+    assert_eq!(
+        parsed["schema_version"].as_str().unwrap(),
+        crate::output::SCHEMA_VERSION
+    );
+}
+
+#[test]
+fn schema_version_is_three_part_semver() {
+    let parts: Vec<&str> = crate::output::SCHEMA_VERSION.split('.').collect();
+    assert_eq!(parts.len(), 3, "SCHEMA_VERSION must be MAJOR.MINOR.PATCH");
+    for part in parts {
+        assert!(
+            !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()),
+            "SCHEMA_VERSION component {part:?} must be all digits"
+        );
+    }
+}
+
 // ── print_result ─────────────────────────────────────────────────
 
 #[test]

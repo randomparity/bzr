@@ -421,6 +421,25 @@ async fn execute_prints_named_schema_verbatim() {
 }
 
 #[tokio::test]
+async fn execute_named_schema_is_not_enveloped() {
+    // `bzr schema <name>` emits the raw JSON-Schema document verbatim — it must
+    // NOT be wrapped in the `{schema_version, data}` envelope (which would
+    // corrupt the published schema document).
+    let (io, ok) = run(Some("bug"), crate::types::OutputFormat::Json).await;
+    assert!(ok);
+    let parsed: Value = serde_json::from_str(io.out_str()).unwrap();
+    assert!(
+        parsed.get("schema_version").is_none(),
+        "named schema document must not carry the envelope"
+    );
+    assert!(parsed.get("data").is_none());
+    assert!(
+        parsed.get("$schema").is_some(),
+        "should be a raw schema doc"
+    );
+}
+
+#[tokio::test]
 async fn execute_unknown_schema_errors_with_available_list() {
     let (io, ok) = run(Some("nope"), crate::types::OutputFormat::Json).await;
     assert!(!ok);
@@ -434,7 +453,9 @@ async fn execute_unknown_schema_errors_with_available_list() {
 async fn execute_list_json_is_array_of_names() {
     let (io, ok) = run(None, crate::types::OutputFormat::Json).await;
     assert!(ok);
-    let parsed: Value = serde_json::from_str(io.out_str()).unwrap();
+    // `bzr schema` (list) flows through the success seam, so it is enveloped:
+    // `{schema_version, data: [...names]}`.
+    let parsed = crate::test_helpers::json_envelope_data(io.out_str());
     let names = parsed.as_array().unwrap();
     assert!(names.iter().any(|n| n == "bug"));
     assert!(names.iter().any(|n| n == "bug-create-input"));

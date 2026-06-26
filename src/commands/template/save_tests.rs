@@ -57,8 +57,7 @@ async fn template_save_and_show() {
     .await;
     let output = __io_a2.out_str().to_string();
     assert!(result.is_ok(), "template show failed: {result:?}");
-    let parsed: serde_json::Value =
-        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "test-tmpl");
     assert_eq!(parsed["product"], "TestProduct");
     assert_eq!(parsed["priority"], "P1");
@@ -152,7 +151,7 @@ async fn template_save_and_show_create_metadata_fields() {
     )
     .await;
     assert!(result.is_ok(), "template show failed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(show_io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(show_io.out_str());
     assert_eq!(parsed["url"], "https://example.com/repro");
     assert_eq!(parsed["whiteboard"], "needs-triage");
     assert_eq!(parsed["target_milestone"], "M1");
@@ -223,7 +222,7 @@ async fn template_save_existing_entry_reports_updated_and_replaces_fields() {
     let output = __io_a4.out_str().to_string();
     assert!(result.is_ok());
 
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "existing");
     assert_eq!(parsed["action"], "updated");
 

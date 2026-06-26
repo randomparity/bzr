@@ -39,7 +39,7 @@ async fn field_list_returns_values() {
     .await;
     let output = __io_a1.out_str().to_string();
     assert!(result.is_ok());
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert!(parsed.as_array().unwrap().len() >= 3);
     assert_eq!(parsed[0]["name"], "NEW");
 }
@@ -58,7 +58,7 @@ async fn field_aliases_succeeds_without_server() {
     .await;
     let output = __io_a2.out_str().to_string();
     assert!(result.is_ok());
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     let arr = parsed.as_array().unwrap();
     assert!(!arr.is_empty());
     assert_eq!(arr[0]["alias"], "file_loc");
@@ -121,7 +121,7 @@ async fn field_list_json_format_with_empty_values_emits_empty_array() {
         !output.contains("No values for field"),
         "JSON format must not emit the table-style 'No values' message; got: {output:?}"
     );
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert!(parsed.as_array().unwrap().is_empty());
 }
 

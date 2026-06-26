@@ -36,7 +36,7 @@ async fn classification_view_returns_data() {
     .await;
     let output = __io_a1.out_str().to_string();
     assert!(result.is_ok());
-    let parsed = serde_json::from_str::<serde_json::Value>(output.trim()).unwrap();
+    let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "Unclassified");
     assert_eq!(parsed["description"], "Not yet classified");
 }
@@ -101,7 +101,7 @@ async fn classification_list_returns_sorted_json() {
     )
     .await;
     assert!(result.is_ok(), "list should succeed: {result:?}");
-    let parsed: serde_json::Value = serde_json::from_str(__io.out_str().trim()).unwrap();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(__io.out_str());
     assert_eq!(parsed.as_array().unwrap().len(), 2);
     assert_eq!(parsed[0]["name"], "Unclassified");
     assert_eq!(parsed[1]["name"], "Acme");
