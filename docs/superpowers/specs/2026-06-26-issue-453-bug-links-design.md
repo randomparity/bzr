@@ -186,6 +186,17 @@ A new fetch entry point returns isolated link nodes for a set of ids:
 A node deserializes each relationship field with `#[serde(default)]`, so a
 server that omits any field yields an empty list / `None`.
 
+**Inaccessible related bugs differ by transport.** On REST/Hybrid the batch
+`bug?id=…` endpoint simply omits ids the caller cannot read (no error), so they
+are skipped silently as described above. On the XML-RPC fallback, `Bug.get`
+faults for a permission-denied id; that error is propagated and aborts the walk
+rather than being swallowed. Only a "not found" (empty result) is treated as a
+silent skip on the XML-RPC path. This is deliberate: surfacing an unexpected
+error on the legacy path is safer than blanket-swallowing it (which would also
+have to special-case the root fetch, which must always error). XML-RPC-only
+servers are pre-5.0 and lack the BMO relationship fields anyway, so `bug links`
+is already a degraded-but-functional path there.
+
 ## Out of scope
 
 - Alias input for `<id>` (relationship fields are numeric).
