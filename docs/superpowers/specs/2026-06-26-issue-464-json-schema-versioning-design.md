@@ -74,6 +74,14 @@ bespoke `{schema_version, schemas}` shape — the universal envelope already car
 the version, and `data` is the uniform payload key. (The issue's illustrative
 `schemas` key predates the decision to use a uniform envelope.)
 
+**`bzr schema` is intentionally two-shaped, and this is documented for users:**
+`bzr schema` (no name) → enveloped `{schema_version, data:[…names]}`;
+`bzr schema <name>` → the raw JSON-Schema *document* (no envelope, no
+`schema_version` key). Consumers branch on the *invocation* — the list form
+reports the version, the document form is self-describing JSON Schema — rather
+than probing for `.schema_version`. Both forms are covered by the functional
+phase and a unit test.
+
 ## Version constant
 
 ```rust
@@ -102,6 +110,26 @@ A new "JSON Output Stability" subsection under the existing JSON Output docs:
 - `--output ndjson` records do not carry `schema_version`; consumers read the
   version from `bzr schema --json` (`.schema_version`) or the binary's `--version`.
 
+## Migration / transition (one-time breaking baseline)
+
+This release is a **one-time breaking baseline** for the `--json` contract: there
+is no prior `schema_version` to alias from, so there is no deprecation window. The
+hazard is that `jq` does not error on a missing path — an existing recipe pinned
+to the old shape (`bzr bug search --json | jq -r '.[].id'`) returns *empty
+silently* against the new enveloped output, which is the same silent-break failure
+mode this issue exists to remove. We cannot give the install base a soft landing,
+so we make the break loud and the move mechanical:
+
+- **CHANGELOG entry is marked `BREAKING`** with a before/after recipe table
+  (`.[].id` → `.data[].id`, `.assigned_to` → `.data.assigned_to`, `.count` →
+  `.data.count`).
+- **The `bzr-reference` skill `json-recipes.md` is updated in the same release**,
+  so the canonical recipes agents copy are correct on day one.
+- **`--output ndjson` is unaffected** (records stay bare) and is called out in the
+  docs as the stable, recommended path for pinned line-oriented automation; the
+  version for ndjson consumers is read out-of-band via `bzr schema --json` or
+  `bzr --version`.
+
 ## Schemas
 
 - **Add `schemas/envelope.json`** (registered in `SCHEMAS`, kept sorted):
@@ -125,9 +153,15 @@ A new "JSON Output Stability" subsection under the existing JSON Output docs:
 3. `bzr schema --json | jq -r '.schema_version'` prints the version;
    `jq '.data'` is the array of names.
 4. `bzr schema bug --json` still emits the verbatim Bug JSON-Schema document (no
-   envelope), asserted by test.
+   envelope), asserted by test; `bzr schema --json` (no name) is enveloped. The
+   two-shaped behavior is documented and both shapes are covered.
 5. `bzr ... --output ndjson` output is byte-for-byte unchanged (no per-line
    version); a regression test pins this.
+9. **Exactly one envelope per invocation:** a test asserts that representative
+   `--json` outputs (a list, a single view, a mutation result, and `schema` list)
+   each parse to a single top-level object whose key set is exactly
+   `{schema_version, data}` — guarding against a future loop emitter producing
+   multiple or nested envelopes.
 6. `--json` error output carries `schema_version`; `--output ndjson` error output
    does not; both asserted.
 7. `make skills-test`, `cargo test`, `make lint` green. A functional phase
@@ -139,10 +173,13 @@ A new "JSON Output Stability" subsection under the existing JSON Output docs:
 
 ## Edge cases & risks
 
-- **Double-wrap:** impossible — only `write_json` wraps, and each command invokes
-  one write helper once. A grep audit confirms no `write_json`/`write_json_family`
-  call sites inside output loops (the only loop candidate,
-  `write_attachment_batch`, serializes one aggregate value).
+- **Double-wrap:** only `write_json` wraps, and each command invokes one write
+  helper once, so there should be exactly one envelope per invocation.
+  Implementation must (a) grep-audit all `write_json`/`write_json_family` call
+  sites to confirm none sit inside an output loop — the only loop candidate,
+  `write_attachment_batch`, serializes one aggregate value — and (b) encode the
+  one-envelope invariant as the test in success criterion #9 rather than relying
+  on the grep alone.
 - **Empty payloads:** `bzr bug search` with no hits → `{"schema_version":"X",
   "data":[]}` (array preserved inside `data`). `--count` → `data:{"count":0}`.
 - **`error.json` dual shape:** handled by making `schema_version` optional there.
