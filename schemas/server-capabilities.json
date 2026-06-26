@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/server-capabilities.json",
+  "title": "ServerCapabilities",
+  "description": "The behavior surface a Bugzilla server exposes, as emitted by `bzr server capabilities --json`. Always-populated fields are derivable from a stock anonymous server; nullable fields are reported as null when undetermined.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Raw Bugzilla version string."
+    },
+    "api_modes": {
+      "type": "array",
+      "description": "Transports the server supports: any of `rest`, `xmlrpc`.",
+      "items": {
+        "type": "string",
+        "enum": ["rest", "xmlrpc"]
+      }
+    },
+    "auth_modes": {
+      "type": "array",
+      "description": "Auth mechanisms the server accepts. `api_key` requires a REST surface; a pure XML-RPC server reports none.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "max_attachment_size": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Maximum attachment size in bytes, normalized from Bugzilla's kilobyte `maxattachmentsize` parameter. Null when undetermined (the parameter is admin-gated; only fetched when a credential is present)."
+    },
+    "status_transitions": {
+      "type": "array",
+      "description": "Per-status allowed transitions, reused from the `field list status` data path.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "can_change_to": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["from", "can_change_to"],
+        "additionalProperties": false
+      }
+    },
+    "flag_types": {
+      "type": ["array", "null"],
+      "description": "Available flag types. Null means undetermined by bzr (no anonymous server-wide data path exists yet), not that none are configured.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "requestable": {
+            "type": "boolean"
+          },
+          "multiplicable": {
+            "type": "boolean"
+          }
+        },
+        "required": ["name", "requestable", "multiplicable"],
+        "additionalProperties": false
+      }
+    },
+    "custom_fields": {
+      "type": "array",
+      "description": "Custom (`cf_*`) field definitions.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "description": "Human-readable Bugzilla field type (e.g. `freetext`, `single_select`, `unknown`)."
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["name", "type", "values"],
+        "additionalProperties": false
+      }
+    },
+    "supports_comments": {
+      "type": "boolean",
+      "description": "Transport-capability flag: whether the server's REST surface exposes comments. Derived, not probed."
+    },
+    "supports_attachments": {
+      "type": "boolean",
+      "description": "Transport-capability flag: whether the server's REST surface exposes attachments. Derived, not probed."
+    },
+    "supports_history": {
+      "type": "boolean",
+      "description": "Transport-capability flag: whether the server's REST surface exposes history. Derived, not probed."
+    },
+    "supports_flag_requests": {
+      "type": "boolean",
+      "description": "Transport-capability flag: whether the flag-update endpoint exists. Does not assert that any flag types are configured, so it may be true while flag_types is null."
+    }
+  },
+  "required": [
+    "version",
+    "api_modes",
+    "auth_modes",
+    "max_attachment_size",
+    "status_transitions",
+    "flag_types",
+    "custom_fields",
+    "supports_comments",
+    "supports_attachments",
+    "supports_history",
+    "supports_flag_requests"
+  ],
+  "additionalProperties": false
+}
