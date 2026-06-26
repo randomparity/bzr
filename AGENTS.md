@@ -106,6 +106,24 @@ Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches the
 - Logging uses `tracing` (not println). Verbosity: `-v`=info, `-vv`=debug, `-vvv`=trace. `RUST_LOG` env var overrides.
 - URLs are sanitized via `safe_url()` in debug logs to avoid leaking API keys in query params.
 - Tests use `wiremock` for HTTP mocking. Unit tests live in sibling `<name>_tests.rs` files linked from each source file via `#[cfg(test)] #[path = "<name>_tests.rs"] mod tests;` — inline `mod tests { ... }` blocks are **not permitted** in `src/` and `make check-test-layout` enforces this in CI. The reasons are twofold: (1) SonarCloud's CPD scanner is configured to exclude `**/*_tests.rs` (see `sonar-project.properties`), so test-fixture boilerplate stays out of the duplication metric without forcing bad abstractions; (2) it keeps production source files focused. There is no size threshold — even tiny test mods get their own sibling. Test-helpers modules used only by tests follow the same separation (e.g. `src/client/test_helpers.rs`). Sibling files start with the appropriate file-level inner attribute (`#![expect(clippy::unwrap_used)]`, or whatever the original outer attribute was — including combined forms like `#![expect(clippy::unwrap_used, clippy::panic)]`); siblings whose tests don't trigger the lint omit it. Integration tests live in `tests/integration.rs` and functional tests in `tests/functional/`. All API tests require `#[tokio::test]` (the runtime is tokio). See `docs/superpowers/specs/2026-05-05-test-sibling-migration-design.md` for full rationale.
+- **Functional tests are mandatory, not optional.** The harness under
+  `tests/functional/` runs the real `bzr` binary against real Bugzilla containers
+  (Docker or podman, auto-detected) and is the **only** tier that catches REST
+  response-shape and server-behavior mismatches that `wiremock` fixtures cannot —
+  fixtures only prove "given this shape, we parse it right", never that the shape
+  matches a live server. Two rules, no exceptions:
+  - **Any user-facing change** — a new or changed command, subcommand, flag,
+    output shape, exit code, or published schema — **must add or extend a phase
+    script** under `tests/functional/phases/` exercising it against a real
+    container (cover the credentialless path too, when the command supports it).
+    A feature without a functional test is incomplete; do not open the PR.
+  - **Any other change** — refactors, internal-only changes, dependency bumps —
+    **must get a full functional run green before the PR is opened**:
+    `make functional-test-all` (all supported Bugzilla versions) or, at minimum,
+    `make functional-test` (default version). If Docker/podman is genuinely
+    unavailable in your environment, say so explicitly in the PR body and state
+    which tier you could not run — never silently skip it. CI does not gate these
+    (they need containers), so the discipline is on the author, not the pipeline.
 - Clippy pedantic is enabled with strict rules (see `[lints.clippy]` in Cargo.toml). `unwrap_used` is denied, `expect_used` and `allow_attributes` are warned.
 - CLI reference documentation lives in `docs/bzr-cli.md`. When adding a new command, update that file.
 - `CHANGELOG.md` entries are written **as the work lands**, not deferred to a release-prep commit. When a feature PR ships user-visible behavior, add (or extend) the relevant `## [X.Y.Z]` section in the same PR. The release-prep commit then only needs to confirm the date and version. `release.yml` reads this file via awk to source the GitHub release notes; it does not generate or modify entries. (Earlier releases used dedicated `release: add CHANGELOG entry` commits — that convention is superseded.)
