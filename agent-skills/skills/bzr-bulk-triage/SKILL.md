@@ -108,16 +108,20 @@ bzr bug update 101 102 103 104 --status RESOLVED --resolution WONTFIX --yes
 Do not background a write per row (`bzr bug update … &`) across a whole query —
 that floods the server with unbounded parallel `Bug.update` calls and interleaves
 output unreadably. A serial loop is the safe default. If you must parallelize,
-cap it. With GNU `xargs`:
+cap it. With GNU `xargs`, fan out the **preview** pass at a fixed ceiling:
 
 ```
 bzr bug list --product Foo --status NEW --paginate --output ndjson \
   | jq -r '.id' \
-  | xargs -P 4 -I{} bzr bug update {} --status ASSIGNED --expect-unchanged-since "$ts"
+  | xargs -P 4 -I{} bzr bug update {} --status ASSIGNED --dry-run
 ```
 
-`-P 4` is a deliberate ceiling. Prefer serial unless the set is large and the
-mutation is independent per bug; never let the fan-out grow with the result size.
+`-P 4` is a deliberate ceiling. The flat form has no per-bug
+`last_change_time`, so it cannot carry the `--expect-unchanged-since` collision
+guard — that needs the serial read-before-write loop above, which captures the
+timestamp per bug. Keep the parallel form to the `--dry-run` preview (or to
+writes you have already validated and accept may race); prefer serial for the
+real writes, and never let the fan-out grow with the result size.
 
 ## 5. `bug my` vs. `bug list`
 
@@ -148,7 +152,7 @@ bzr query run triage-foo --paginate --output ndjson \
   | while IFS= read -r line; do
       id=$(printf '%s' "$line" | jq -r '.id')
       bzr bug view "$id" --json | jq -r '.data | "#\(.id) \(.status)"'
-      bzr bug update "$id" --status IN_PROGRESS --dry-run
+      bzr bug update "$id" --status ASSIGNED --dry-run
     done
 ```
 
