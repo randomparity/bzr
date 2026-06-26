@@ -27,9 +27,14 @@ pub(super) async fn handle(
         // Correlate `comment_id` from the full comment set (unfiltered by
         // `--since`, which scopes only the history records). Best-effort: a
         // comment-fetch failure degrades to `comment_id: null` with a warning
-        // rather than failing the command — see ADR 0008.
-        let comments = fetch_comments_for_correlation(client, *id, w).await;
-        let records = flatten_history(&history, &comments);
+        // rather than failing the command — see ADR 0008. Skip the fetch
+        // entirely when there is no history to correlate against.
+        let records = if history.is_empty() {
+            Vec::new()
+        } else {
+            let comments = fetch_comments_for_correlation(client, *id, w).await;
+            flatten_history(&history, &comments)
+        };
         write_history_json(&records, format, w.out);
     } else if history.is_empty() {
         let _ = writeln!(w.out, "No history for bug #{id}.");

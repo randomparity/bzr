@@ -292,11 +292,13 @@ async fn bug_history_json_empty_emits_empty_array_not_prose() {
         })))
         .mount(&mock)
         .await;
+    // Empty history must NOT trigger the comment correlation fetch.
     Mock::given(method("GET"))
         .and(path("/rest/bug/7/comment"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "bugs": { "7": { "comments": [] } }
         })))
+        .expect(0)
         .mount(&mock)
         .await;
 
