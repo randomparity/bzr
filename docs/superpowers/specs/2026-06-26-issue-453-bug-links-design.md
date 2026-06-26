@@ -39,8 +39,15 @@ are numeric ids).
 | Flag | Type | Meaning |
 |------|------|---------|
 | `--recursive` | bool | Enable BFS beyond the direct neighbors. |
-| `--depth N` | u32 | Maximum hop distance from the root. Requires `--recursive`. Default `1`. Range `1..=10`; `0` or `>10` exits 7. |
-| `--relation <type>` | enum | Restrict traversal **and** output to one relationship type. One of the six relation names below. Unknown value exits 7. |
+| `--depth N` | u32 | Maximum hop distance from the root. clap `requires("recursive")`. Default `1`. Range `1..=10` enforced by clap's value parser; `0` or `>10` is a clap usage error. |
+| `--relation <type>` | enum | Restrict traversal **and** output to one relationship type. One of the six relation names below, parsed via `FromStr`; an unknown value is a clap usage error. |
+
+These three are validated at **parse time by clap** (range, `requires`, and
+`FromStr`), so an invalid value is a clap usage error (exit code `2`, clap's
+default), matching how the existing `--order`/`SortDirection` flag is handled —
+not bzr's runtime `InputValidation` (exit `7`). `requires("recursive")` fires
+only when `--depth` is given explicitly; the defaulted value does not force
+`--recursive`.
 
 ### Bounds
 
@@ -61,7 +68,8 @@ the core gap):
   output stays valid (`[]`/ndjson/table unaffected in shape).
 
 Without `--recursive`, depth is fixed at `1` (direct neighbors only). `--depth`
-without `--recursive` exits 7 with a message naming `--recursive`.
+given without `--recursive` is a clap usage error (`requires`), naming
+`--recursive` in the message.
 
 This command is read-only: `--dry-run` is not applicable, it takes no
 confirmation, and it works against public servers without an API key
