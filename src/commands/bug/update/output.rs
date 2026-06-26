@@ -61,3 +61,7 @@ pub(super) fn write_update_dry_run(
         w.out,
     );
 }
+
+#[cfg(test)]
+#[path = "output_tests.rs"]
+mod tests;

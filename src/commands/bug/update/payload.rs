@@ -141,3 +141,7 @@ pub(crate) fn build_update_params_from_draft(
     }
     Ok((ids, params))
 }
+
+#[cfg(test)]
+#[path = "payload_tests.rs"]
+mod tests;

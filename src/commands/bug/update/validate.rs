@@ -24,3 +24,7 @@ pub(super) fn validate_draft(draft: &BugUpdateDraft, ids: &[u64]) -> Result<()> 
 pub(super) fn validate_args(args: &UpdateArgs) -> Result<()> {
     validate_draft(&BugUpdateDraft::from_cli(args), &args.ids)
 }
+
+#[cfg(test)]
+#[path = "validate_tests.rs"]
+mod tests;

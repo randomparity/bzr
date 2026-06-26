@@ -167,3 +167,7 @@ fn merge_vec_u64(target: &mut Vec<u64>, value: &[u64]) {
         *target = value.to_vec();
     }
 }
+
+#[cfg(test)]
+#[path = "draft_tests.rs"]
+mod tests;

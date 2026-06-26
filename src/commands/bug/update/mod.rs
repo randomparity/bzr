@@ -48,5 +48,8 @@ pub(super) async fn handle(
 }
 
 #[cfg(test)]
+pub(super) mod test_helpers;
+
+#[cfg(test)]
 #[path = "update_tests.rs"]
 mod tests;
