@@ -1,5 +1,6 @@
 pub(crate) mod attachment;
 pub(crate) mod bug;
+pub(crate) mod capabilities;
 pub(crate) mod classification;
 pub(crate) mod comment;
 pub(crate) mod component;
