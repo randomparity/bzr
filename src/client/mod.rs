@@ -66,6 +66,9 @@ pub struct BugzillaClient {
     pub(super) xmlrpc: XmlRpcClient,
     /// Email hint for Bugzilla 5.0 compatibility (whoami fallback via user lookup).
     email_hint: Option<String>,
+    /// The configured/inline server name this client resolved against, surfaced
+    /// by `whoami` so a single call reports which server the identity belongs to.
+    server_name: String,
     /// Transient-retry budget (429 / 5xx / timeout). 0 disables retries.
     retry_max: u32,
 }
@@ -79,6 +82,7 @@ pub struct BugzillaClientConfig<'a> {
     pub auth_method: Option<AuthMethod>,
     pub api_mode: ApiMode,
     pub email_hint: Option<&'a str>,
+    pub server_name: &'a str,
     pub tls_config: &'a crate::tls::TlsConfig,
     pub request_timeout: std::time::Duration,
     pub retry_max: u32,
@@ -99,6 +103,7 @@ impl BugzillaClient {
             auth_method,
             api_mode,
             email_hint,
+            server_name,
             tls_config,
             request_timeout,
             retry_max,
@@ -149,8 +154,24 @@ impl BugzillaClient {
             api_mode,
             xmlrpc,
             email_hint: email_hint.map(String::from),
+            server_name: server_name.to_string(),
             retry_max,
         })
+    }
+
+    /// The configured/inline server name this client resolved against.
+    pub fn server_name(&self) -> &str {
+        &self.server_name
+    }
+
+    /// How this connection is authenticated: [`AuthMode::ApiKey`] when a
+    /// credential was supplied, [`AuthMode::Anonymous`] otherwise.
+    pub fn auth_mode(&self) -> crate::types::AuthMode {
+        if self.api_key.is_some() {
+            crate::types::AuthMode::ApiKey
+        } else {
+            crate::types::AuthMode::Anonymous
+        }
     }
 
     /// Override the transient-retry budget. Used by tests to exercise the
