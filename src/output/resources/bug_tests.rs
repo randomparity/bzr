@@ -9,8 +9,8 @@ use crate::types::{Bug, FieldChange, Flag, HistoryEntry};
 
 fn review_flag(status: &str, requestee: Option<&str>) -> Flag {
     Flag {
-        name: "review".into(),
-        status: status.into(),
+        name: Some("review".into()),
+        status: Some(status.into()),
         setter: Some("alice@example.com".into()),
         requestee: requestee.map(Into::into),
     }

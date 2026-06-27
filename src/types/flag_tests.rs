@@ -76,3 +76,29 @@ fn flag_status_invalid_deserialize() {
     let err = serde_json::from_value::<FlagStatus>(json).unwrap_err();
     assert!(err.to_string().contains("invalid flag status"));
 }
+
+#[test]
+fn read_side_flag_missing_name_and_status_stay_unknown() {
+    let flag: Flag = serde_json::from_value(serde_json::json!({})).unwrap();
+    assert_eq!(flag.name, None);
+    assert_eq!(flag.status, None);
+
+    let serialized = serde_json::to_value(flag).unwrap();
+    assert!(serialized["name"].is_null());
+    assert!(serialized["status"].is_null());
+}
+
+#[test]
+fn read_side_flag_rendering_marks_missing_fields() {
+    let flag = Flag {
+        name: None,
+        status: Some("+".into()),
+        setter: None,
+        requestee: Some("reviewer@example.com".into()),
+    };
+
+    assert_eq!(
+        flag.render_inline(),
+        "<missing-name>+(reviewer@example.com)"
+    );
+}

@@ -56,10 +56,10 @@ fn bug_deserializes_target_milestone_and_flags() {
 
     assert_eq!(bug.target_milestone.as_deref(), Some("9.0"));
     assert_eq!(bug.flags.len(), 2);
-    assert_eq!(bug.flags[0].name, "review");
-    assert_eq!(bug.flags[0].status, "+");
+    assert_eq!(bug.flags[0].name.as_deref(), Some("review"));
+    assert_eq!(bug.flags[0].status.as_deref(), Some("+"));
     assert_eq!(bug.flags[0].setter.as_deref(), Some("alice@example.com"));
-    assert_eq!(bug.flags[1].status, "?");
+    assert_eq!(bug.flags[1].status.as_deref(), Some("?"));
     assert_eq!(bug.flags[1].requestee.as_deref(), Some("bob@example.com"));
 }
 
@@ -95,7 +95,7 @@ fn flag_with_unexpected_status_token_still_deserializes() {
     // enum does not model must not break bug view.
     let json = r#"{"id": 1, "flags": [{"name": "weird", "status": "??"}]}"#;
     let bug: Bug = serde_json::from_str(json).unwrap();
-    assert_eq!(bug.flags[0].status, "??");
+    assert_eq!(bug.flags[0].status.as_deref(), Some("??"));
 }
 
 #[test]

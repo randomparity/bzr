@@ -49,8 +49,8 @@
       "items": {
         "type": "object",
         "properties": {
-          "name": { "type": "string" },
-          "status": { "type": "string" },
+          "name": { "type": ["string", "null"] },
+          "status": { "type": ["string", "null"] },
           "setter": { "type": ["string", "null"] },
           "requestee": { "type": ["string", "null"] }
         }

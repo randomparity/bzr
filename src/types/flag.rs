@@ -68,16 +68,17 @@ pub struct FlagUpdate {
 /// A flag as returned on a bug or attachment view response.
 ///
 /// Distinct from the write-side [`FlagUpdate`]: `status` is the raw server
-/// token (`"+"`, `"-"`, `"?"`) kept as a plain `String` so an unexpected value
-/// cannot make a view fail to deserialize, and `setter` (who set the flag) is
-/// surfaced. Every field defaults so a server that omits one still parses.
+/// token (`"+"`, `"-"`, `"?"`) kept as an optional string so an unexpected value
+/// cannot make a view fail to deserialize. `name` and `status` are optional so
+/// omitted response fields serialize as `null` instead of becoming empty strings,
+/// and `setter` (who set the flag) is surfaced when present.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Flag {
     #[serde(default)]
-    pub name: String,
+    pub name: Option<String>,
     #[serde(default)]
-    pub status: String,
+    pub status: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub setter: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -90,9 +91,19 @@ impl Flag {
     /// the requestee in parentheses when present (e.g. `review?`, `review+`,
     /// `review?(bob@example.com)`).
     pub fn render_inline(&self) -> String {
+        let name = self
+            .name
+            .as_deref()
+            .filter(|name| !name.is_empty())
+            .unwrap_or("<missing-name>");
+        let status = self
+            .status
+            .as_deref()
+            .filter(|status| !status.is_empty())
+            .unwrap_or("<missing-status>");
         match &self.requestee {
-            Some(requestee) => format!("{}{}({requestee})", self.name, self.status),
-            None => format!("{}{}", self.name, self.status),
+            Some(requestee) => format!("{name}{status}({requestee})"),
+            None => format!("{name}{status}"),
         }
     }
 }
