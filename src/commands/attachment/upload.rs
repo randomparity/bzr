@@ -2,8 +2,10 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::client::BugzillaClient;
-use crate::commands::runtime::attachment_input::{prepare_attachment_params, AttachmentInput};
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::input::attachment_input::{
+    prepare_attachment_params, AttachmentInput,
+};
+use crate::commands::runtime::invocation::CommandContext;
 use crate::error::Result;
 use crate::output::result_types::{write_result, UploadResult};
 use crate::output::writers::Writers;
@@ -61,7 +63,7 @@ fn prepare_upload(args: &crate::cli::UploadArgs) -> Result<PreparedUpload> {
     // non-patch.
     let is_private = super::resolve_bool_flag(*private, *no_private).unwrap_or(false);
     let is_patch = super::resolve_bool_flag(*patch, *no_patch).unwrap_or(false);
-    let flags = crate::commands::runtime::flags::parse_flags(flag)?;
+    let flags = crate::commands::runtime::input::flags::parse_flags(flag)?;
     let comment = resolve_upload_comment(
         comment.as_deref(),
         comment_file.as_deref(),
@@ -100,7 +102,7 @@ fn resolve_upload_comment(
 /// single shared content-type table. Test-only: production callers use
 /// `prepare_attachment_params`, which guesses internally.
 #[cfg(test)]
-pub(super) use crate::commands::runtime::attachment_input::guess_content_type;
+pub(super) use crate::commands::runtime::input::attachment_input::guess_content_type;
 
 /// Flip the privacy of the comment that `Bug.add_attachment` just
 /// created. Identifies the comment by its `attachment_id` field —

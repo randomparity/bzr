@@ -7,7 +7,7 @@ async fn script_for(shell: Shell) -> String {
     let mut io = CapturedIo::new();
     let result = super::execute(
         shell,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
         &mut io.writers(),
     )
     .await;

@@ -26,7 +26,7 @@ async fn comment_search_tags_returns_matches() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::comment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -55,7 +55,7 @@ async fn comment_search_tags_empty_returns_no_items() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::comment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -80,7 +80,7 @@ async fn comment_search_tags_api_error_returns_error() {
     };
     let result = crate::commands::comment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;

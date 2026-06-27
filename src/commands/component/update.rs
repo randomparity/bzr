@@ -1,5 +1,5 @@
 use crate::client::BugzillaClient;
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
@@ -115,7 +115,7 @@ fn write_update_dry_run(update: &ComponentUpdateInput, format: OutputFormat, w: 
 
 fn build_update_input(args: &UpdateArgs<'_>) -> Result<ComponentUpdateInput> {
     let mut input = if let Some(arg) = args.from_json {
-        crate::commands::runtime::from_json::read_object::<JsonUpdateComponent>(arg)?
+        crate::commands::runtime::input::from_json::read_object::<JsonUpdateComponent>(arg)?
     } else {
         JsonUpdateComponent::default()
     };
@@ -127,9 +127,12 @@ fn build_update_input(args: &UpdateArgs<'_>) -> Result<ComponentUpdateInput> {
         json_product: input.product.take(),
         json_component: input.component.take(),
     })?;
-    crate::commands::runtime::from_json::merge_string(&mut input.name, args.name);
-    crate::commands::runtime::from_json::merge_string(&mut input.description, args.description);
-    crate::commands::runtime::from_json::merge_string(
+    crate::commands::runtime::input::from_json::merge_string(&mut input.name, args.name);
+    crate::commands::runtime::input::from_json::merge_string(
+        &mut input.description,
+        args.description,
+    );
+    crate::commands::runtime::input::from_json::merge_string(
         &mut input.default_assignee,
         args.default_assignee,
     );

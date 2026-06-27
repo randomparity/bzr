@@ -1,4 +1,4 @@
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::shared::merge_set;
 use crate::config::Config;
 use crate::error::{BzrError, Result};

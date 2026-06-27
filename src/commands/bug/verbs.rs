@@ -5,7 +5,7 @@
 
 use crate::cli::{CloseArgs, CommentArgs, DupArgs, ReopenArgs, ResolveArgs};
 use crate::client::BugzillaClient;
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::writers::Writers;
 use crate::types::bug::{CommentUpdate, UpdateBugParams};

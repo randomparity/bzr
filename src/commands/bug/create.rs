@@ -1,8 +1,8 @@
 use std::io::IsTerminal;
 
 use crate::cli::CreateArgs;
-use crate::commands::runtime::context::CommandContext;
-use crate::commands::runtime::editor;
+use crate::commands::runtime::interaction::editor;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::error::Result;
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
@@ -318,7 +318,7 @@ pub(super) async fn handle(
 
     let tmpl = load_template(template_name.as_deref(), ctx.config_path_override())?;
     let merged = merge_fields(args, tmpl.as_ref())?;
-    let flags = crate::commands::runtime::flags::parse_flags(&merged.flags)?;
+    let flags = crate::commands::runtime::input::flags::parse_flags(&merged.flags)?;
     let deadline =
         crate::validation::parse_optional_date_only(merged.deadline.as_deref(), "--deadline")?;
 
@@ -421,8 +421,8 @@ fn build_attachment_plan(
     let mut attachments = Vec::with_capacity(files.len());
     for (index, file) in files.iter().enumerate() {
         let (params, _size) =
-            crate::commands::runtime::attachment_input::prepare_attachment_params(
-                crate::commands::runtime::attachment_input::AttachmentInput {
+            crate::commands::runtime::input::attachment_input::prepare_attachment_params(
+                crate::commands::runtime::input::attachment_input::AttachmentInput {
                     file,
                     summary: descriptions.get(index).map(String::as_str),
                     content_type: None,

@@ -1,8 +1,8 @@
 //! Attachment subcommand handlers, split per action.
 
 use crate::cli::AttachmentAction;
-use crate::commands::runtime::capabilities::CommandCapabilities;
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandCapabilities;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::error::Result;
 use crate::output::writers::Writers;
 

@@ -13,7 +13,7 @@ async fn query_show_unknown_errors() {
         &QueryAction::Show(ShowArgs {
             name: "missing".into(),
         }),
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await

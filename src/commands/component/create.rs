@@ -1,4 +1,4 @@
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::mutation::{self, Committed, DryRunPreview};
 use crate::error::Result;
 use crate::output::result_types::{ActionResult, ResourceKind};
@@ -54,25 +54,31 @@ pub(super) async fn handle(
 
 fn build_create_params(args: &CreateArgs<'_>) -> Result<CreateComponentParams> {
     let mut input = if let Some(arg) = args.from_json {
-        crate::commands::runtime::from_json::read_object::<JsonCreateComponent>(arg)?
+        crate::commands::runtime::input::from_json::read_object::<JsonCreateComponent>(arg)?
     } else {
         JsonCreateComponent::default()
     };
-    crate::commands::runtime::from_json::merge_string(&mut input.product, args.product);
-    crate::commands::runtime::from_json::merge_string(&mut input.name, args.name);
-    crate::commands::runtime::from_json::merge_string(&mut input.description, args.description);
-    crate::commands::runtime::from_json::merge_string(
+    crate::commands::runtime::input::from_json::merge_string(&mut input.product, args.product);
+    crate::commands::runtime::input::from_json::merge_string(&mut input.name, args.name);
+    crate::commands::runtime::input::from_json::merge_string(
+        &mut input.description,
+        args.description,
+    );
+    crate::commands::runtime::input::from_json::merge_string(
         &mut input.default_assignee,
         args.default_assignee,
     );
     Ok(CreateComponentParams {
-        product: crate::commands::runtime::from_json::required_string(input.product, "product")?,
-        name: crate::commands::runtime::from_json::required_string(input.name, "name")?,
-        description: crate::commands::runtime::from_json::required_string(
+        product: crate::commands::runtime::input::from_json::required_string(
+            input.product,
+            "product",
+        )?,
+        name: crate::commands::runtime::input::from_json::required_string(input.name, "name")?,
+        description: crate::commands::runtime::input::from_json::required_string(
             input.description,
             "description",
         )?,
-        default_assignee: crate::commands::runtime::from_json::required_string(
+        default_assignee: crate::commands::runtime::input::from_json::required_string(
             input.default_assignee,
             "default_assignee",
         )?,

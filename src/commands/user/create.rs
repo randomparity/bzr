@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::mutation::{self, Committed, DryRunPreview};
 use crate::error::Result;
 use crate::output::result_types::{ActionResult, ResourceKind};
@@ -52,16 +52,16 @@ pub(super) async fn handle(
 
 fn build_params(args: &CreateArgs<'_>) -> Result<CreateUserParams> {
     let mut input = if let Some(arg) = args.from_json {
-        crate::commands::runtime::from_json::read_object::<JsonCreateUser>(arg)?
+        crate::commands::runtime::input::from_json::read_object::<JsonCreateUser>(arg)?
     } else {
         JsonCreateUser::default()
     };
-    crate::commands::runtime::from_json::merge_string(&mut input.email, args.email);
-    crate::commands::runtime::from_json::merge_string(&mut input.login, args.login);
-    crate::commands::runtime::from_json::merge_string(&mut input.full_name, args.full_name);
-    crate::commands::runtime::from_json::merge_string(&mut input.password, args.password);
+    crate::commands::runtime::input::from_json::merge_string(&mut input.email, args.email);
+    crate::commands::runtime::input::from_json::merge_string(&mut input.login, args.login);
+    crate::commands::runtime::input::from_json::merge_string(&mut input.full_name, args.full_name);
+    crate::commands::runtime::input::from_json::merge_string(&mut input.password, args.password);
     Ok(CreateUserParams {
-        email: crate::commands::runtime::from_json::required_string(input.email, "email")?,
+        email: crate::commands::runtime::input::from_json::required_string(input.email, "email")?,
         login: input.login,
         full_name: input.full_name,
         password: input.password,

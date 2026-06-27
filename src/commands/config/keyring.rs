@@ -1,4 +1,4 @@
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::config::Config;
 use crate::error::Result;
 use crate::output::result_types::{write_result, ConfigResult};

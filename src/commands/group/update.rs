@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::mutation::{self, Committed, DryRunPreview};
 use crate::error::{BzrError, Result};
 use crate::output::result_types::{ActionResult, ResourceKind};
@@ -50,18 +50,21 @@ pub(super) async fn handle(
 
 fn build_params(args: &UpdateArgs<'_>) -> Result<(String, UpdateGroupParams)> {
     let mut input = if let Some(arg) = args.from_json {
-        crate::commands::runtime::from_json::read_object::<JsonUpdateGroup>(arg)?
+        crate::commands::runtime::input::from_json::read_object::<JsonUpdateGroup>(arg)?
     } else {
         JsonUpdateGroup::default()
     };
-    let target = crate::commands::runtime::from_json::resolve_string_target(
+    let target = crate::commands::runtime::input::from_json::resolve_string_target(
         args.group,
         input.group.take(),
         "--from-json object cannot combine positional group with JSON group",
         "--from-json object requires a group",
     )?;
-    crate::commands::runtime::from_json::merge_string(&mut input.description, args.description);
-    crate::commands::runtime::from_json::merge_copy(&mut input.is_active, args.is_active);
+    crate::commands::runtime::input::from_json::merge_string(
+        &mut input.description,
+        args.description,
+    );
+    crate::commands::runtime::input::from_json::merge_copy(&mut input.is_active, args.is_active);
     let params = UpdateGroupParams {
         description: input.description,
         is_active: input.is_active,

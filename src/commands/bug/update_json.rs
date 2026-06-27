@@ -2,8 +2,8 @@ use serde::Serialize;
 
 use crate::cli::UpdateArgs;
 use crate::client::BugzillaClient;
-use crate::commands::runtime::context::CommandContext;
-use crate::commands::runtime::from_json::JsonOneOrMany;
+use crate::commands::runtime::input::from_json::JsonOneOrMany;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::error::Result;
 use crate::output::result_types::{
     write_result, BatchFailure, BatchResult, DryRunResult, ResourceKind,
@@ -214,9 +214,10 @@ pub(super) async fn handle(
     if arg == "-" && cli_comment_uses_stdin(args) {
         reject_cli_stdin_comment_source(args, arg, false)?;
     }
-    match crate::commands::runtime::from_json::read_one_or_many::<super::update::BugUpdateDraft>(
-        arg,
-    )? {
+    match crate::commands::runtime::input::from_json::read_one_or_many::<
+        super::update::BugUpdateDraft,
+    >(arg)?
+    {
         JsonOneOrMany::One(entry) => {
             reject_cli_stdin_comment_source(args, arg, false)?;
             let ids = object_ids(&entry, args)?;

@@ -34,7 +34,7 @@ async fn component_create_succeeds() {
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a1.writers(),
     )
     .await;
@@ -65,7 +65,7 @@ async fn component_create_dry_run_makes_no_write_and_marks_payload() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
             .with_dry_run(true),
         &mut io.writers(),
     )
@@ -110,7 +110,7 @@ async fn component_create_from_json_sends_merged_body() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -143,7 +143,7 @@ async fn component_create_http_500_returns_error() {
     };
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -164,7 +164,7 @@ async fn component_from_json_rejects_unknown_field() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -190,7 +190,7 @@ async fn component_from_json_missing_required_field_names_cli_flag() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(
+        &crate::commands::runtime::invocation::CommandContext::new(
             Some("missing"),
             OutputFormat::Json,
             None,
@@ -220,7 +220,7 @@ async fn component_from_json_rejects_array_shape() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;

@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::mutation::{self, Committed, DryRunPreview};
 use crate::error::{BzrError, Result};
 use crate::output::result_types::{ActionResult, ResourceKind};
@@ -52,22 +52,25 @@ pub(super) async fn handle(
 
 fn build_params(args: &UpdateArgs<'_>) -> Result<(String, UpdateProductParams)> {
     let mut input = if let Some(arg) = args.from_json {
-        crate::commands::runtime::from_json::read_object::<JsonUpdateProduct>(arg)?
+        crate::commands::runtime::input::from_json::read_object::<JsonUpdateProduct>(arg)?
     } else {
         JsonUpdateProduct::default()
     };
-    let target = crate::commands::runtime::from_json::resolve_string_target(
+    let target = crate::commands::runtime::input::from_json::resolve_string_target(
         args.name,
         input.name.take(),
         "--from-json object cannot combine positional product name with JSON name",
         "--from-json object requires a product name",
     )?;
-    crate::commands::runtime::from_json::merge_string(&mut input.description, args.description);
-    crate::commands::runtime::from_json::merge_string(
+    crate::commands::runtime::input::from_json::merge_string(
+        &mut input.description,
+        args.description,
+    );
+    crate::commands::runtime::input::from_json::merge_string(
         &mut input.default_milestone,
         args.default_milestone,
     );
-    crate::commands::runtime::from_json::merge_copy(&mut input.is_open, args.is_open);
+    crate::commands::runtime::input::from_json::merge_copy(&mut input.is_open, args.is_open);
     let params = UpdateProductParams {
         description: input.description,
         default_milestone: input.default_milestone,

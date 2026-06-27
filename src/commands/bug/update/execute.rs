@@ -4,7 +4,7 @@
 //! convenience verbs and `--from-json`.
 
 use crate::client::BugzillaClient;
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::mutation::ensure_batch_complete;
 use crate::error::Result;
 use crate::output::result_types::{
@@ -168,17 +168,17 @@ pub(crate) async fn ensure_unchanged_since(
 }
 
 /// Prompt for confirmation before a large batch mutation, wiring the real
-/// stdin/TTY into the testable [`crate::commands::runtime::confirm`] primitives. The
+/// stdin/TTY into the testable [`crate::commands::runtime::interaction::confirm`] primitives. The
 /// `should_prompt` gate is checked first, so stdin is locked only when a prompt
 /// is actually shown. Returns whether to proceed.
 pub(crate) fn confirm_batch(count: usize, assume_yes: bool, w: &mut Writers<'_>) -> Result<bool> {
     use std::io::IsTerminal;
     let is_tty = std::io::stdin().is_terminal();
-    if !crate::commands::runtime::confirm::should_prompt(count, assume_yes, is_tty) {
+    if !crate::commands::runtime::interaction::confirm::should_prompt(count, assume_yes, is_tty) {
         return Ok(true);
     }
     let stdin = std::io::stdin();
-    crate::commands::runtime::confirm::read_yes_no(&mut stdin.lock(), w.err, count)
+    crate::commands::runtime::interaction::confirm::read_yes_no(&mut stdin.lock(), w.err, count)
 }
 
 #[cfg(test)]

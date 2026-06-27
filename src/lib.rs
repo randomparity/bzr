@@ -69,7 +69,7 @@ pub mod fuzz {
 
     /// Drive Bugzilla flag parsing on arbitrary string lists.
     pub fn parse_flags(input: &[String]) {
-        let _ = crate::commands::runtime::flags::parse_flags(input);
+        let _ = crate::commands::runtime::input::flags::parse_flags(input);
     }
 
     /// Drive Bugzilla URL import parsing on arbitrary strings.
@@ -84,7 +84,7 @@ pub mod fuzz {
              api_key = \"dummy\"\n",
         )
         .expect("static fuzz config is always valid");
-        let _ = crate::commands::runtime::url_parser::parse_bugzilla_url(data, &config);
+        let _ = crate::commands::runtime::input::url_parser::parse_bugzilla_url(data, &config);
     }
 
     /// Drive XML-RPC response parsing on arbitrary strings.
@@ -132,7 +132,7 @@ pub async fn dispatch(
 
 fn ensure_dispatch_allowed(
     cli: &cli::Cli,
-    capabilities: commands::runtime::capabilities::CommandCapabilities,
+    capabilities: commands::runtime::invocation::CommandCapabilities,
 ) -> error::Result<()> {
     ensure_dry_run_supported(cli, capabilities)
 }
@@ -141,8 +141,8 @@ fn ensure_dispatch_allowed(
 fn build_command_context(
     cli: &cli::Cli,
     format: types::OutputFormat,
-    capabilities: commands::runtime::capabilities::CommandCapabilities,
-) -> commands::runtime::context::CommandContext {
+    capabilities: commands::runtime::invocation::CommandCapabilities,
+) -> commands::runtime::invocation::CommandContext {
     let env_timeout = std::env::var("BZR_TIMEOUT").ok();
     if cli.timeout.is_none() {
         if let Some(raw) = &env_timeout {
@@ -155,7 +155,7 @@ fn build_command_context(
     }
     let request_timeout = http::resolve_timeout_secs(cli.timeout, env_timeout.as_deref())
         .map_or(http::REQUEST_TIMEOUT, std::time::Duration::from_secs);
-    commands::runtime::context::CommandContext::new(cli.server.as_deref(), format, cli.api)
+    commands::runtime::invocation::CommandContext::new(cli.server.as_deref(), format, cli.api)
         .with_dry_run(cli.dry_run)
         .with_assume_yes(cli.yes)
         .with_inline_server(resolve_inline_server(cli))
@@ -169,14 +169,14 @@ fn build_command_context(
 /// Build the inline server definition from the global `--server-url` flags, or
 /// `None` when no inline server was requested. The API-key env var is optional
 /// for public read-only commands.
-fn resolve_inline_server(cli: &cli::Cli) -> Option<commands::runtime::inline_server::InlineServer> {
+fn resolve_inline_server(cli: &cli::Cli) -> Option<commands::runtime::invocation::InlineServer> {
     cli.server_url
         .as_ref()
-        .map(|url| commands::runtime::inline_server::InlineServer {
+        .map(|url| commands::runtime::invocation::InlineServer {
             url: url.clone(),
             api_key_env: cli.server_api_key_env.clone(),
             email: cli.server_email.clone(),
-            tls: commands::runtime::inline_server::InlineTlsOptions {
+            tls: commands::runtime::invocation::InlineTlsOptions {
                 insecure: cli.server_tls_insecure,
                 ca_cert_path: cli.server_tls_ca_cert.clone(),
                 pin_sha256: cli.server_tls_pin_sha256.clone(),
@@ -193,7 +193,7 @@ fn resolve_inline_server(cli: &cli::Cli) -> Option<commands::runtime::inline_ser
 /// comment. Fail fast (exit 7) instead of writing when a preview was asked for.
 fn ensure_dry_run_supported(
     cli: &cli::Cli,
-    capabilities: commands::runtime::capabilities::CommandCapabilities,
+    capabilities: commands::runtime::invocation::CommandCapabilities,
 ) -> error::Result<()> {
     if !cli.dry_run {
         return Ok(());
@@ -210,7 +210,7 @@ fn ensure_dry_run_supported(
 
 fn command_capabilities(
     command: &cli::Commands,
-) -> commands::runtime::capabilities::CommandCapabilities {
+) -> commands::runtime::invocation::CommandCapabilities {
     match command {
         cli::Commands::Bug { action } => commands::bug::capabilities(action),
         cli::Commands::Comment { action } => commands::comment::capabilities(action),
@@ -220,7 +220,7 @@ fn command_capabilities(
         cli::Commands::User { action } => commands::user::capabilities(action),
         cli::Commands::Group { action } => commands::group::capabilities(action),
         cli::Commands::Whoami => {
-            commands::runtime::capabilities::CommandCapabilities::authenticated("whoami")
+            commands::runtime::invocation::CommandCapabilities::authenticated("whoami")
         }
         cli::Commands::Config { .. }
         | cli::Commands::Field { .. }
@@ -230,7 +230,7 @@ fn command_capabilities(
         | cli::Commands::Query { .. }
         | cli::Commands::Completion { .. }
         | cli::Commands::Schema { .. } => {
-            commands::runtime::capabilities::CommandCapabilities::anonymous()
+            commands::runtime::invocation::CommandCapabilities::anonymous()
         }
     }
 }

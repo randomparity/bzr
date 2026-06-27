@@ -33,7 +33,7 @@ async fn product_create_returns_id() {
     let mut __io_a3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a3.writers(),
     )
     .await;
@@ -64,7 +64,7 @@ async fn product_create_dry_run_makes_no_write_and_marks_payload() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
             .with_dry_run(true),
         &mut io.writers(),
     )
@@ -106,7 +106,7 @@ async fn product_create_from_json_sends_merged_body() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -134,7 +134,7 @@ async fn product_from_json_rejects_unknown_field() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(
+        &crate::commands::runtime::invocation::CommandContext::new(
             Some("missing"),
             OutputFormat::Json,
             None,
@@ -163,7 +163,7 @@ async fn product_from_json_rejects_array_shape() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;

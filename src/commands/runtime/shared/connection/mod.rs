@@ -12,7 +12,7 @@ mod tls_trust;
 pub(super) mod test_helpers;
 
 use crate::client::BugzillaClient;
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::error::{BzrError, Result};
 
 use detect::{detect_with_tofu_fallback, DetectOrClient};

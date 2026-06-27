@@ -1,6 +1,6 @@
 use crate::cli::SearchArgs;
 use crate::client::BugzillaClient;
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::search::execution::{
     FieldPreflight, SearchColumns, SearchExecutionPlan, SearchSaveAction,
 };
@@ -95,7 +95,7 @@ async fn resolve_client_and_params(args: &SearchArgs, ctx: &CommandContext) -> R
     };
 
     let config = crate::config::Config::load_at(ctx.config_path_override())?;
-    let parsed = crate::commands::runtime::url_parser::parse_bugzilla_url(url_str, &config)?;
+    let parsed = crate::commands::runtime::input::url_parser::parse_bugzilla_url(url_str, &config)?;
     let effective_server = ctx.server().or(parsed.query.server.as_deref());
     let url_ctx = ctx.with_server(effective_server);
     let client = crate::commands::runtime::shared::connect_and_configure(&url_ctx).await?;
@@ -129,7 +129,7 @@ pub(super) async fn handle(
     ensure_no_paging_with_count(args.count, offset, args.page_args.paginate)?;
 
     let (client, mut params, save_info) = resolve_client_and_params(args, ctx).await?;
-    crate::commands::runtime::paging::resolve_offset(&mut params, offset);
+    crate::commands::runtime::search::paging::resolve_offset(&mut params, offset);
     let columns = SearchColumns::from_params(&params);
     let field_preflight = if args.from_url.is_some() {
         FieldPreflight::Validate

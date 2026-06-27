@@ -59,7 +59,7 @@ async fn query_list_emits_saved_query_names() {
 
     let result = crate::commands::query::execute(
         &save_action("listed-query"),
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io2.writers(),
     )
     .await;
@@ -71,7 +71,7 @@ async fn query_list_emits_saved_query_names() {
 
     let result = crate::commands::query::execute(
         &QueryAction::List,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io3.writers(),
     )
     .await;
@@ -92,7 +92,7 @@ async fn query_list_empty() {
     let mut __io_a6 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::query::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a6.writers(),
     )
     .await;
@@ -108,7 +108,11 @@ async fn query_list_table_sorts_entries_by_name() {
         let mut __io6 = crate::test_helpers::CapturedIo::new();
         let result = crate::commands::query::execute(
             &save_action(name),
-            &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+            &crate::commands::runtime::invocation::CommandContext::new(
+                None,
+                OutputFormat::Json,
+                None,
+            ),
             &mut __io6.writers(),
         )
         .await;
@@ -120,7 +124,7 @@ async fn query_list_table_sorts_entries_by_name() {
 
     let result = crate::commands::query::execute(
         &QueryAction::List,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io7.writers(),
     )
     .await;

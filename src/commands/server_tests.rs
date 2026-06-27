@@ -31,7 +31,7 @@ async fn server_info_returns_version_and_extensions() {
 
     let result = super::execute(
         &ServerAction::Info,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -71,7 +71,7 @@ async fn server_capabilities_outputs_documented_shape() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &ServerAction::Capabilities,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -102,7 +102,7 @@ async fn server_info_http_500_returns_error() {
 
     let result = super::execute(
         &ServerAction::Info,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;

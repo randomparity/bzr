@@ -3,7 +3,7 @@
 //! Template operations are pure local file I/O — no network client needed.
 
 use crate::cli::TemplateAction;
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::writers::Writers;
 use crate::types::template::BugTemplate;
@@ -57,7 +57,7 @@ fn template_is_empty(template: &BugTemplate) -> bool {
 fn validate_template(template: &mut BugTemplate) -> Result<()> {
     template.deadline =
         crate::validation::parse_optional_date_only(template.deadline.as_deref(), "--deadline")?;
-    crate::commands::runtime::flags::parse_flags(&template.flags)?;
+    crate::commands::runtime::input::flags::parse_flags(&template.flags)?;
     Ok(())
 }
 

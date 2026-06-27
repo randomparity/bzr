@@ -244,7 +244,7 @@ async fn schema_from_command(name: &str) -> serde_json::Value {
 
     bzr::commands::schema::execute(
         Some(name),
-        &bzr::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &bzr::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut writers,
     )
     .await

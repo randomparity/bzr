@@ -4,9 +4,11 @@ use serde::Deserialize;
 
 use crate::cli::CreateArgs;
 use crate::commands::bug::compound::CompoundPlan;
-use crate::commands::runtime::attachment_input::{prepare_attachment_params, AttachmentInput};
-use crate::commands::runtime::context::CommandContext;
-use crate::commands::runtime::from_json::JsonOneOrMany;
+use crate::commands::runtime::input::attachment_input::{
+    prepare_attachment_params, AttachmentInput,
+};
+use crate::commands::runtime::input::from_json::JsonOneOrMany;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::shared::{merge_set, merge_vec};
 use crate::error::Result;
 use crate::output::result_types::{
@@ -134,7 +136,7 @@ impl JsonCreateBug {
                 ))
             })
         };
-        let flags = crate::commands::runtime::flags::parse_flags(&self.flags)?;
+        let flags = crate::commands::runtime::input::flags::parse_flags(&self.flags)?;
         let deadline =
             crate::validation::parse_optional_date_only(self.deadline.as_deref(), "deadline")?;
         Ok(CreateBugParams {
@@ -333,7 +335,7 @@ pub(super) async fn handle(
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    match crate::commands::runtime::from_json::read_one_or_many::<JsonCreateBug>(arg)? {
+    match crate::commands::runtime::input::from_json::read_one_or_many::<JsonCreateBug>(arg)? {
         JsonOneOrMany::One(entry) => {
             let mut merged = overlay_cli(*entry, args)?;
             let plan = merged.take_plan()?;

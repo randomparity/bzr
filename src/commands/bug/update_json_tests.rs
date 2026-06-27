@@ -5,8 +5,8 @@ use std::collections::BTreeSet;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
-use crate::commands::runtime::context::CommandContext;
-use crate::commands::runtime::from_json::JsonOneOrMany;
+use crate::commands::runtime::input::from_json::JsonOneOrMany;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::types::{OutputFormat, ProgressFormat};
 
 use super::super::update::BugUpdateDraft;
@@ -170,14 +170,14 @@ fn bug_update_input_schema_array_items_require_id() {
 #[test]
 fn parse_json_updates_object_and_array_shapes() {
     assert!(matches!(
-        crate::commands::runtime::from_json::parse_one_or_many::<BugUpdateDraft>(
+        crate::commands::runtime::input::from_json::parse_one_or_many::<BugUpdateDraft>(
             r#"{"id":1,"status":"ASSIGNED"}"#
         )
         .unwrap(),
         JsonOneOrMany::One(_)
     ));
 
-    match crate::commands::runtime::from_json::parse_one_or_many::<BugUpdateDraft>(
+    match crate::commands::runtime::input::from_json::parse_one_or_many::<BugUpdateDraft>(
         r#"[{"id":1,"status":"ASSIGNED"},{"id":2,"priority":"high"}]"#,
     )
     .unwrap()
@@ -187,7 +187,7 @@ fn parse_json_updates_object_and_array_shapes() {
     }
 
     assert!(matches!(
-        crate::commands::runtime::from_json::parse_one_or_many::<BugUpdateDraft>(
+        crate::commands::runtime::input::from_json::parse_one_or_many::<BugUpdateDraft>(
             r#"[{"id":1,"status":"ASSIGNED"}]"#
         )
         .unwrap(),

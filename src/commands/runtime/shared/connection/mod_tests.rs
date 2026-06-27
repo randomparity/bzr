@@ -16,8 +16,8 @@ use super::test_helpers::{load_config, mount_detection_mocks, write_config};
 fn ctx_at(
     config_path: &Path,
     api: Option<crate::types::ApiMode>,
-) -> crate::commands::runtime::context::CommandContext {
-    crate::commands::runtime::context::CommandContext::new(
+) -> crate::commands::runtime::invocation::CommandContext {
+    crate::commands::runtime::invocation::CommandContext::new(
         None,
         crate::types::OutputFormat::Json,
         api,
@@ -271,11 +271,11 @@ async fn inline_server_connects_without_config_and_persists_nothing() {
     mount_detection_mocks(&mock).await;
 
     let config_path = tmp.path().join("bzr").join("config.toml");
-    let inline = crate::commands::runtime::inline_server::InlineServer {
+    let inline = crate::commands::runtime::invocation::InlineServer {
         url: mock.uri(),
         api_key_env: Some("BZR_INLINE_TEST_KEY".into()),
         email: None,
-        tls: crate::commands::runtime::inline_server::InlineTlsOptions::default(),
+        tls: crate::commands::runtime::invocation::InlineTlsOptions::default(),
     };
     let ctx = ctx_at(&config_path, None).with_inline_server(Some(inline));
     let result = super::connect_and_configure(&ctx).await;
@@ -306,11 +306,11 @@ async fn inline_credentialless_server_connects_without_config() {
         .await;
 
     let config_path = tmp.path().join("bzr").join("config.toml");
-    let inline = crate::commands::runtime::inline_server::InlineServer {
+    let inline = crate::commands::runtime::invocation::InlineServer {
         url: mock.uri(),
         api_key_env: None,
         email: None,
-        tls: crate::commands::runtime::inline_server::InlineTlsOptions::default(),
+        tls: crate::commands::runtime::invocation::InlineTlsOptions::default(),
     };
     let ctx = ctx_at(&config_path, None).with_inline_server(Some(inline));
     let result = super::connect_and_configure(&ctx).await;
@@ -351,11 +351,11 @@ async fn inline_server_missing_env_var_is_clean_error() {
     }
 
     let config_path = tmp.path().join("bzr").join("config.toml");
-    let inline = crate::commands::runtime::inline_server::InlineServer {
+    let inline = crate::commands::runtime::invocation::InlineServer {
         url: "https://bugzilla.example.com".into(),
         api_key_env: Some("BZR_INLINE_ABSENT_KEY".into()),
         email: None,
-        tls: crate::commands::runtime::inline_server::InlineTlsOptions::default(),
+        tls: crate::commands::runtime::invocation::InlineTlsOptions::default(),
     };
     let ctx = ctx_at(&config_path, None).with_inline_server(Some(inline));
     let result = super::connect_and_configure(&ctx).await;

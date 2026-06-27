@@ -138,13 +138,13 @@ fn resolve_connect_target_inline_server_carries_email() {
     // Kills the `delete field email from ServerConfig` mutant in
     // `resolve_connect_target`: asserts that an inline server's email flows
     // into the ConnectContext so it reaches email_hint().
-    let inline = crate::commands::runtime::inline_server::InlineServer {
+    let inline = crate::commands::runtime::invocation::InlineServer {
         url: "https://bugzilla.example.com".into(),
         api_key_env: None,
         email: Some("user@example.com".into()),
-        tls: crate::commands::runtime::inline_server::InlineTlsOptions::default(),
+        tls: crate::commands::runtime::invocation::InlineTlsOptions::default(),
     };
-    let ctx_cmd = crate::commands::runtime::context::CommandContext::new(
+    let ctx_cmd = crate::commands::runtime::invocation::CommandContext::new(
         None,
         crate::types::OutputFormat::Json,
         None,
@@ -161,16 +161,16 @@ fn resolve_connect_target_inline_server_carries_email() {
 
 #[test]
 fn resolve_connect_target_inline_server_is_ephemeral_and_uncached() {
-    let inline = crate::commands::runtime::inline_server::InlineServer {
+    let inline = crate::commands::runtime::invocation::InlineServer {
         url: "https://bugzilla.example.com".into(),
         api_key_env: None,
         email: Some("user@example.com".into()),
-        tls: crate::commands::runtime::inline_server::InlineTlsOptions {
+        tls: crate::commands::runtime::invocation::InlineTlsOptions {
             pin_now: true,
             ..Default::default()
         },
     };
-    let ctx_cmd = crate::commands::runtime::context::CommandContext::new(
+    let ctx_cmd = crate::commands::runtime::invocation::CommandContext::new(
         None,
         crate::types::OutputFormat::Json,
         Some(crate::types::ApiMode::Rest),
@@ -203,7 +203,7 @@ auth_method = "header"
 api_mode = "rest"
 "#,
     );
-    let ctx_cmd = crate::commands::runtime::context::CommandContext::new(
+    let ctx_cmd = crate::commands::runtime::invocation::CommandContext::new(
         None,
         crate::types::OutputFormat::Json,
         None,

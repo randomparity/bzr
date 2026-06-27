@@ -1,9 +1,9 @@
 use std::io::IsTerminal;
 
 use crate::cli::CommentAction;
-use crate::commands::runtime::capabilities::CommandCapabilities;
-use crate::commands::runtime::context::CommandContext;
-use crate::commands::runtime::editor;
+use crate::commands::runtime::interaction::editor;
+use crate::commands::runtime::invocation::CommandCapabilities;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::error::Result;
 use crate::output::writers::Writers;
 

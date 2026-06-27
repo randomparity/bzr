@@ -4,7 +4,7 @@
 //! Only `run` requires a network client.
 
 use crate::cli::QueryAction;
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::config::Config;
 use crate::error::Result;
 use crate::output::writers::Writers;
@@ -57,7 +57,7 @@ fn saved_query_from_url(
     config_path_override: Option<&std::path::Path>,
 ) -> Result<SavedQuery> {
     let config = Config::load_at(config_path_override)?;
-    let parsed = crate::commands::runtime::url_parser::parse_bugzilla_url(url_str, &config)?;
+    let parsed = crate::commands::runtime::input::url_parser::parse_bugzilla_url(url_str, &config)?;
     let mut query = parsed.query;
     query.limit = overrides.limit.or(query.limit);
     query.fields = overrides.fields.map(ToOwned::to_owned).or(query.fields);

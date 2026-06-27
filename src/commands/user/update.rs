@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::mutation::{self, Committed, DryRunPreview};
 use crate::error::{BzrError, Result};
 use crate::output::result_types::{ActionResult, ResourceKind};
@@ -54,20 +54,23 @@ pub(super) async fn handle(
 
 fn build_params(args: &UpdateArgs<'_>) -> Result<(String, UpdateUserParams)> {
     let mut input = if let Some(arg) = args.from_json {
-        crate::commands::runtime::from_json::read_object::<JsonUpdateUser>(arg)?
+        crate::commands::runtime::input::from_json::read_object::<JsonUpdateUser>(arg)?
     } else {
         JsonUpdateUser::default()
     };
-    let target = crate::commands::runtime::from_json::resolve_string_target(
+    let target = crate::commands::runtime::input::from_json::resolve_string_target(
         args.user,
         input.user.take(),
         "--from-json object cannot combine positional user with JSON user",
         "--from-json object requires a user",
     )?;
-    crate::commands::runtime::from_json::merge_string(&mut input.real_name, args.real_name);
-    crate::commands::runtime::from_json::merge_string(&mut input.email, args.email);
-    crate::commands::runtime::from_json::merge_copy(&mut input.disable_login, args.disable_login);
-    crate::commands::runtime::from_json::merge_string(
+    crate::commands::runtime::input::from_json::merge_string(&mut input.real_name, args.real_name);
+    crate::commands::runtime::input::from_json::merge_string(&mut input.email, args.email);
+    crate::commands::runtime::input::from_json::merge_copy(
+        &mut input.disable_login,
+        args.disable_login,
+    );
+    crate::commands::runtime::input::from_json::merge_string(
         &mut input.login_denied_text,
         args.login_denied_text,
     );

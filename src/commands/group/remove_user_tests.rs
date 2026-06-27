@@ -26,7 +26,7 @@ async fn group_remove_user_sends_put() {
     };
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;

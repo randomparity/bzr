@@ -465,7 +465,7 @@ async fn run(name: Option<&str>, format: crate::types::OutputFormat) -> (Capture
     let mut io = CapturedIo::new();
     let ok = super::execute(
         name,
-        &crate::commands::runtime::context::CommandContext::new(None, format, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, format, None),
         &mut io.writers(),
     )
     .await

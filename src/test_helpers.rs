@@ -188,7 +188,7 @@ pub async fn seed_inline_server(name: &str, url: &str, api_key: &str) {
             tls_pin_now: false,
             tls_pin_clear: false,
         },
-        &crate::commands::runtime::context::CommandContext::new(
+        &crate::commands::runtime::invocation::CommandContext::new(
             None,
             crate::types::output::OutputFormat::Json,
             None,
@@ -214,7 +214,7 @@ pub(crate) async fn run_config_action_json(action: crate::cli::ConfigAction) -> 
     let mut io = CapturedIo::new();
     crate::commands::config::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(
+        &crate::commands::runtime::invocation::CommandContext::new(
             None,
             crate::types::output::OutputFormat::Json,
             None,
@@ -246,7 +246,7 @@ pub async fn seed_keyring_secret(server: &str, secret: &str) {
             service: None,
             account: None,
         },
-        &crate::commands::runtime::context::CommandContext::new(
+        &crate::commands::runtime::invocation::CommandContext::new(
             None,
             crate::types::output::OutputFormat::Json,
             None,
