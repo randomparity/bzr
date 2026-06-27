@@ -31,8 +31,8 @@ fn write_field_values_json_empty() {
 fn write_field_values_json_with_transitions() {
     let values = vec![FieldValue {
         name: Some("NEW".into()),
-        sort_key: 0,
-        is_active: true,
+        sort_key: Some(0),
+        is_active: Some(true),
         can_change_to: Some(vec![
             StatusTransition {
                 name: "ASSIGNED".into(),
@@ -56,16 +56,16 @@ fn write_field_values_json_active_and_inactive() {
     let values = vec![
         FieldValue {
             name: Some("NEW".into()),
-            sort_key: 0,
-            is_active: true,
+            sort_key: Some(0),
+            is_active: Some(true),
             can_change_to: Some(vec![StatusTransition {
                 name: "ASSIGNED".into(),
             }]),
         },
         FieldValue {
             name: Some("CLOSED".into()),
-            sort_key: 1,
-            is_active: false,
+            sort_key: Some(1),
+            is_active: Some(false),
             can_change_to: None,
         },
     ];
@@ -116,8 +116,8 @@ fn write_field_values_table_renders_transitions_and_inactive() {
     let values = vec![
         FieldValue {
             name: Some("NEW".into()),
-            sort_key: 0,
-            is_active: true,
+            sort_key: Some(0),
+            is_active: Some(true),
             can_change_to: Some(vec![
                 StatusTransition {
                     name: "ASSIGNED".into(),
@@ -129,8 +129,8 @@ fn write_field_values_table_renders_transitions_and_inactive() {
         },
         FieldValue {
             name: Some("CLOSED".into()),
-            sort_key: 1,
-            is_active: false,
+            sort_key: Some(1),
+            is_active: Some(false),
             can_change_to: None,
         },
     ];
@@ -146,8 +146,8 @@ fn write_field_values_table_renders_transitions_and_inactive() {
 fn write_field_values_table_renders_blank_for_null_name() {
     let values = vec![FieldValue {
         name: None,
-        sort_key: 0,
-        is_active: true,
+        sort_key: Some(0),
+        is_active: Some(true),
         can_change_to: None,
     }];
     let output = capture_values(OutputFormat::Table, &values);
@@ -160,8 +160,8 @@ fn write_field_values_table_renders_blank_for_null_name() {
 fn write_field_values_table_handles_unicode_value_name() {
     let values = vec![FieldValue {
         name: Some("résolu".into()),
-        sort_key: 0,
-        is_active: true,
+        sort_key: Some(0),
+        is_active: Some(true),
         can_change_to: Some(vec![StatusTransition {
             name: "fermé".into(),
         }]),
@@ -175,8 +175,8 @@ fn write_field_values_table_handles_unicode_value_name() {
 fn write_field_values_json_via_write() {
     let values = vec![FieldValue {
         name: Some("NEW".into()),
-        sort_key: 0,
-        is_active: true,
+        sort_key: Some(0),
+        is_active: Some(true),
         can_change_to: Some(vec![StatusTransition {
             name: "ASSIGNED".into(),
         }]),
@@ -185,6 +185,38 @@ fn write_field_values_json_via_write() {
     let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["name"], "NEW");
     assert_eq!(parsed[0]["is_active"], true);
+}
+
+#[test]
+fn write_field_values_json_preserves_unknown_scalars() {
+    let values = vec![FieldValue {
+        name: Some("NEW".into()),
+        sort_key: None,
+        is_active: None,
+        can_change_to: None,
+    }];
+    let output = capture_values(OutputFormat::Json, &values);
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
+    assert!(parsed[0]["sort_key"].is_null());
+    assert!(parsed[0]["is_active"].is_null());
+}
+
+#[test]
+fn write_field_values_table_renders_unknown_active_state() {
+    let values = vec![FieldValue {
+        name: Some("NEW".into()),
+        sort_key: None,
+        is_active: None,
+        can_change_to: None,
+    }];
+    let output = capture_values(OutputFormat::Table, &values);
+    assert!(output.contains("NEW"));
+    let row = output
+        .lines()
+        .find(|line| line.contains("NEW"))
+        .expect("table should contain the field value row");
+    assert!(row.contains('-'));
+    assert!(!row.contains("No"));
 }
 
 #[test]

@@ -8,8 +8,8 @@
 //! dedups. This module owns the shared seams; the command-specific query logic
 //! stays in each command.
 
-use crate::commands::runtime::paging::{write_truncation_note, Page};
 use crate::commands::runtime::search::fields::{canonical_field_list, ColumnSpec};
+use crate::commands::runtime::search::paging::{write_truncation_note, Page};
 use crate::error::Result;
 use crate::output::resources::bug::write_bugs;
 use crate::output::writers::Writers;

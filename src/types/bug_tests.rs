@@ -56,10 +56,10 @@ fn bug_deserializes_target_milestone_and_flags() {
 
     assert_eq!(bug.target_milestone.as_deref(), Some("9.0"));
     assert_eq!(bug.flags.len(), 2);
-    assert_eq!(bug.flags[0].name, "review");
-    assert_eq!(bug.flags[0].status, "+");
+    assert_eq!(bug.flags[0].name.as_deref(), Some("review"));
+    assert_eq!(bug.flags[0].status.as_deref(), Some("+"));
     assert_eq!(bug.flags[0].setter.as_deref(), Some("alice@example.com"));
-    assert_eq!(bug.flags[1].status, "?");
+    assert_eq!(bug.flags[1].status.as_deref(), Some("?"));
     assert_eq!(bug.flags[1].requestee.as_deref(), Some("bob@example.com"));
 }
 
@@ -91,11 +91,29 @@ fn bug_serializes_flags_and_target_milestone() {
 
 #[test]
 fn flag_with_unexpected_status_token_still_deserializes() {
-    // The read-side Flag.status is a plain String, so a token the FlagStatus
+    // The read-side Flag.status is a raw optional string, so a token the FlagStatus
     // enum does not model must not break bug view.
     let json = r#"{"id": 1, "flags": [{"name": "weird", "status": "??"}]}"#;
     let bug: Bug = serde_json::from_str(json).unwrap();
-    assert_eq!(bug.flags[0].status, "??");
+    assert_eq!(bug.flags[0].status.as_deref(), Some("??"));
+}
+
+#[test]
+fn history_change_missing_delta_values_stay_unknown() {
+    let json = r#"{
+        "who": "user@test.com",
+        "when": "2025-01-01T00:00:00Z",
+        "changes": [{"field_name": "status"}]
+    }"#;
+    let entry: HistoryEntry = serde_json::from_str(json).unwrap();
+    let change = &entry.changes[0];
+
+    assert_eq!(change.removed, None);
+    assert_eq!(change.added, None);
+
+    let serialized = serde_json::to_value(entry).unwrap();
+    assert!(serialized["changes"][0]["removed"].is_null());
+    assert!(serialized["changes"][0]["added"].is_null());
 }
 
 #[test]

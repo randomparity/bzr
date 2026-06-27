@@ -8,7 +8,7 @@
 //! input parsers against them, so a contract change fails CI until the schema is
 //! updated.
 
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::result_types::write_result;
 use crate::output::writers::Writers;

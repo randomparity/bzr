@@ -1,7 +1,10 @@
 use std::cell::Cell;
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt as _;
 
 use crate::error::{io_with_context, BzrError, Result};
 
@@ -267,42 +270,19 @@ impl Drop for LockGuard {
 /// Open (creating if absent) the `config.lock` file `0600`, ready for an
 /// advisory lock. The lock file's *contents* are irrelevant — only the
 /// kernel lock on the open description matters — so it is never written to.
-#[cfg(unix)]
 fn open_lock_file(lock_path: &Path) -> Result<fs::File> {
-    use std::fs::OpenOptions;
-    use std::os::unix::fs::OpenOptionsExt;
-
-    OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .mode(0o600)
-        .open(lock_path)
-        .map_err(|e| {
-            io_with_context(
-                format!("open config lock file '{}'", lock_path.display()),
-                &e,
-            )
-        })
-}
-
-#[cfg(not(unix))]
-fn open_lock_file(lock_path: &Path) -> Result<fs::File> {
-    use std::fs::OpenOptions;
-
-    OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(lock_path)
-        .map_err(|e| {
-            io_with_context(
-                format!("open config lock file '{}'", lock_path.display()),
-                &e,
-            )
-        })
+    let mut options = OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    {
+        options.mode(0o600);
+    }
+    options.open(lock_path).map_err(|e| {
+        io_with_context(
+            format!("open config lock file '{}'", lock_path.display()),
+            &e,
+        )
+    })
 }
 
 /// Take the exclusive advisory lock, giving the user feedback if another
@@ -401,23 +381,14 @@ fn write_unique_temp(path: &std::path::Path, content: &str) -> Result<PathBuf> {
     )))
 }
 
-#[cfg(unix)]
 fn create_new_private(tmp: &std::path::Path) -> std::io::Result<fs::File> {
-    use std::fs::OpenOptions;
-    use std::os::unix::fs::OpenOptionsExt;
-
-    OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .mode(0o600)
-        .open(tmp)
-}
-
-#[cfg(not(unix))]
-fn create_new_private(tmp: &std::path::Path) -> std::io::Result<fs::File> {
-    use std::fs::OpenOptions;
-
-    OpenOptions::new().create_new(true).write(true).open(tmp)
+    let mut options = OpenOptions::new();
+    options.create_new(true).write(true);
+    #[cfg(unix)]
+    {
+        options.mode(0o600);
+    }
+    options.open(tmp)
 }
 
 #[cfg(unix)]

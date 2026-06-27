@@ -35,7 +35,7 @@ async fn attachment_update_succeeds() {
     let mut __io_a3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a3.writers(),
     )
     .await;
@@ -77,7 +77,7 @@ async fn attachment_update_no_obsolete_sends_false() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -115,7 +115,7 @@ async fn attachment_update_unset_bools_are_omitted() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -155,7 +155,7 @@ async fn attachment_update_without_changes_is_rejected_before_put() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -193,7 +193,7 @@ async fn attachment_update_invalid_flag_fails_before_connect() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await

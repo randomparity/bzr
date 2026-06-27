@@ -52,7 +52,13 @@ enum PreparedAuth {
     QueryParam(String),
 }
 
-/// HTTP client for the Bugzilla REST API.
+/// Bugzilla API client for REST, XML-RPC, and Hybrid transport modes.
+///
+/// The client owns the shared HTTP stack, authentication material, API-mode
+/// preference, and XML-RPC adapter used by resource methods. Hybrid behavior is
+/// operation-specific: some reads are REST-first with XML-RPC fallback, while
+/// comments and attachments use XML-RPC first to preserve private-data behavior
+/// that REST responses cannot reliably distinguish.
 ///
 /// Update methods use the identifier type that the Bugzilla REST API accepts:
 /// - `u64` for resources identified only by numeric ID (e.g. `update_component`)
@@ -164,8 +170,9 @@ impl BugzillaClient {
         &self.server_name
     }
 
-    /// How this connection is authenticated: [`AuthMode::ApiKey`] when a
-    /// credential was supplied, [`AuthMode::Anonymous`] otherwise.
+    /// How this connection is authenticated: [`crate::types::AuthMode::ApiKey`]
+    /// when a credential was supplied, [`crate::types::AuthMode::Anonymous`]
+    /// otherwise.
     pub fn auth_mode(&self) -> crate::types::AuthMode {
         if self.api_key.is_some() {
             crate::types::AuthMode::ApiKey

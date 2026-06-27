@@ -55,8 +55,8 @@ async fn get_bug_history_returns_entries() {
     assert_eq!(history[0].who, "alice@example.com");
     assert_eq!(history[0].changes.len(), 2);
     assert_eq!(history[0].changes[0].field_name, "status");
-    assert_eq!(history[0].changes[0].removed, "NEW");
-    assert_eq!(history[0].changes[0].added, "ASSIGNED");
+    assert_eq!(history[0].changes[0].removed.as_deref(), Some("NEW"));
+    assert_eq!(history[0].changes[0].added.as_deref(), Some("ASSIGNED"));
     assert_eq!(history[1].changes.len(), 1);
 }
 

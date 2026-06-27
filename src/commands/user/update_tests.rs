@@ -72,7 +72,7 @@ async fn update_user_disable_login_sends_denied_text() {
     };
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -104,7 +104,7 @@ async fn update_user_enable_login_sends_empty_denied_text() {
     };
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -136,7 +136,7 @@ async fn user_update_dry_run_makes_no_write_and_marks_payload() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
             .with_dry_run(true),
         &mut io.writers(),
     )
@@ -184,7 +184,7 @@ async fn user_update_from_json_uses_json_target() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -219,7 +219,7 @@ async fn user_update_from_json_cli_disable_login_overrides_json_denied_text() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -245,7 +245,7 @@ async fn user_update_from_json_rejects_positional_and_json_target() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -271,7 +271,7 @@ async fn user_update_without_fields_is_rejected() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;

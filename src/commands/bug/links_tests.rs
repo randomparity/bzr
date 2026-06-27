@@ -5,7 +5,7 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::LinksArgs;
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::error::BzrError;
 use crate::test_helpers::{setup_test_env, CapturedIo};
 use crate::types::bug::LinkRelation;

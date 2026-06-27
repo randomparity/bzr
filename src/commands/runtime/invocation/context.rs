@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::commands::runtime::inline_server::InlineServer;
+use crate::commands::runtime::invocation::InlineServer;
 use crate::types::output::{OutputFormat, ProgressFormat};
 use crate::types::transport::ApiMode;
 

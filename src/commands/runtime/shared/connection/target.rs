@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 
 use crate::client::BugzillaClient;
 use crate::client::DetectedServerSettings;
-use crate::commands::runtime::context::CommandContext;
-use crate::commands::runtime::inline_server::{InlineServer, INLINE_SERVER_NAME};
+use crate::commands::runtime::invocation::inline_server::{InlineServer, INLINE_SERVER_NAME};
+use crate::commands::runtime::invocation::CommandContext;
 use crate::config::{Config, ServerConfig};
 use crate::error::Result;
 use crate::tls::TlsConfig;

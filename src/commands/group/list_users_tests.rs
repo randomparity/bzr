@@ -51,7 +51,7 @@ async fn group_list_users_returns_members() {
     };
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -80,7 +80,7 @@ async fn group_list_users_with_details() {
     };
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -108,7 +108,7 @@ async fn group_list_users_http_500_returns_error() {
     };
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -135,7 +135,7 @@ async fn group_list_users_json_fields_projects_to_named_keys() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -160,7 +160,7 @@ async fn group_list_users_details_json_fields_still_projects() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -185,7 +185,11 @@ async fn group_list_users_ndjson_fields_projects_each_line() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Ndjson, None),
+        &crate::commands::runtime::invocation::CommandContext::new(
+            None,
+            OutputFormat::Ndjson,
+            None,
+        ),
         &mut io.writers(),
     )
     .await;
@@ -207,7 +211,7 @@ async fn group_list_users_json_unknown_field_exits_7() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -230,7 +234,7 @@ async fn group_list_users_table_fields_is_noop_with_warning() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
         &mut io.writers(),
     )
     .await;

@@ -28,8 +28,8 @@ fn attachment_deserializes_flags_and_defaults_empty() {
     let with = r#"{"id":1,"bug_id":10,"flags":[{"name":"review","status":"+","setter":"a@x"}]}"#;
     let att: Attachment = serde_json::from_str(with).unwrap();
     assert_eq!(att.flags.len(), 1);
-    assert_eq!(att.flags[0].name, "review");
-    assert_eq!(att.flags[0].status, "+");
+    assert_eq!(att.flags[0].name.as_deref(), Some("review"));
+    assert_eq!(att.flags[0].status.as_deref(), Some("+"));
     assert_eq!(att.flags[0].setter.as_deref(), Some("a@x"));
 
     let without: Attachment = serde_json::from_str(r#"{"id":2,"bug_id":10}"#).unwrap();

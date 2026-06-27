@@ -21,12 +21,25 @@ fn get_flags_parses_structs_and_skips_non_structs() {
 
     let flags = get_flags(&m, "flags");
     assert_eq!(flags.len(), 1, "non-struct element should be skipped");
-    assert_eq!(flags[0].name, "review");
-    assert_eq!(flags[0].status, "+");
+    assert_eq!(flags[0].name.as_deref(), Some("review"));
+    assert_eq!(flags[0].status.as_deref(), Some("+"));
     assert_eq!(flags[0].setter.as_deref(), Some("alice@example.com"));
     assert!(flags[0].requestee.is_none());
 
     assert!(get_flags(&m, "missing").is_empty());
+}
+
+#[test]
+fn get_flags_keeps_missing_name_and_status_unknown() {
+    let flag = BTreeMap::new();
+    let mut m = BTreeMap::new();
+    m.insert("flags".into(), Value::Array(vec![Value::Struct(flag)]));
+
+    let flags = get_flags(&m, "flags");
+
+    assert_eq!(flags.len(), 1);
+    assert_eq!(flags[0].name, None);
+    assert_eq!(flags[0].status, None);
 }
 
 #[test]

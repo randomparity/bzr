@@ -84,7 +84,7 @@ pub(crate) fn build_update_params_from_draft(
 ) -> Result<(Vec<u64>, UpdateBugParams)> {
     validate_draft(draft, &ids)?;
 
-    let flags = crate::commands::runtime::flags::parse_flags(&draft.flags)?;
+    let flags = crate::commands::runtime::input::flags::parse_flags(&draft.flags)?;
     let deadline =
         crate::validation::parse_optional_date_only(draft.deadline.as_deref(), "--deadline")?;
     let params = UpdateBugParams {

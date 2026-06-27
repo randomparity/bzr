@@ -1,22 +1,16 @@
 //! Cross-cutting command infrastructure shared across resource handlers.
 //!
 //! Unlike the per-resource modules at the `commands` top level, these modules
-//! provide the runtime plumbing every command relies on: explicit invocation
-//! context (`context`), connection/body/merge helpers (`shared`), result
-//! paging (`paging`), Bugzilla flag-syntax parsing ([`flags`]), the `$EDITOR`
-//! launcher (`editor`), the admin create/update driver (`mutation`), and
-//! inline server data types ([`inline_server`]).
+//! provide the runtime plumbing every command relies on. `invocation` owns
+//! per-command state, capability policy, and inline server configuration;
+//! `input` owns payload loading, Bugzilla URL import, attachment input, and flag
+//! syntax parsing; `interaction` owns prompts and `$EDITOR`; `search` owns
+//! query execution, field projection, and paging; `shared` owns connection/body
+//! helpers; and `mutation` owns the admin create/update driver.
 
-pub(crate) mod attachment_input;
-pub(crate) mod capabilities;
-pub mod confirm;
-pub mod context;
-pub(crate) mod editor;
-pub mod flags;
-pub(crate) mod from_json;
-pub mod inline_server;
+pub mod input;
+pub mod interaction;
+pub mod invocation;
 pub(crate) mod mutation;
-pub(crate) mod paging;
 pub(crate) mod search;
 pub(crate) mod shared;
-pub(crate) mod url_parser;

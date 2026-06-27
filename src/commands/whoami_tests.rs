@@ -22,7 +22,7 @@ async fn whoami_returns_user_info() {
     let mut __io = crate::test_helpers::CapturedIo::new();
 
     let result = super::execute(
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -50,7 +50,7 @@ async fn whoami_http_500_returns_error() {
         .await;
 
     let result = super::execute(
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;

@@ -49,7 +49,7 @@ async fn query_delete_unknown_errors() {
     });
     let result = crate::commands::query::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -70,7 +70,7 @@ async fn query_delete_removes_saved_query() {
     let mut __io_a12 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::query::execute(
         &save_action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a12.writers(),
     )
     .await;
@@ -83,7 +83,7 @@ async fn query_delete_removes_saved_query() {
     let mut __io5 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::query::execute(
         &delete_action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io5.writers(),
     )
     .await;
@@ -97,7 +97,7 @@ async fn query_delete_removes_saved_query() {
     });
     let err = crate::commands::query::execute(
         &show_action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await

@@ -13,7 +13,7 @@
 use serde::Serialize;
 
 use crate::client::BugzillaClient;
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::mutation::ensure_batch_complete;
 use crate::error::Result;
 use crate::output::result_types::{

@@ -1,5 +1,5 @@
 use crate::cli::ServerAction;
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::error::Result;
 use crate::output::resources::server::{write_server_capabilities, write_server_info};
 use crate::output::writers::Writers;

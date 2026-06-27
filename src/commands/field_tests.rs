@@ -56,7 +56,7 @@ async fn field_list_returns_values() {
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
             .with_config_path_override(Some(config_path.clone())),
         &mut __io_a1.writers(),
     )
@@ -76,7 +76,7 @@ async fn field_aliases_succeeds_without_server() {
     let mut __io_a2 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a2.writers(),
     )
     .await;
@@ -106,7 +106,7 @@ async fn field_list_table_format_with_empty_values_prints_no_values_message() {
     let mut __io_a3 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None)
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
             .with_config_path_override(Some(config_path.clone())),
         &mut __io_a3.writers(),
     )
@@ -136,7 +136,7 @@ async fn field_list_json_format_with_empty_values_emits_empty_array() {
     let mut __io_a4 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
             .with_config_path_override(Some(config_path.clone())),
         &mut __io_a4.writers(),
     )
@@ -168,7 +168,7 @@ async fn field_list_http_500_returns_error() {
     };
     let result = super::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
             .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
@@ -191,7 +191,7 @@ async fn field_list_json_fields_projects_to_named_keys() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
             .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
@@ -217,8 +217,12 @@ async fn field_list_ndjson_fields_projects_each_line() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Ndjson, None)
-            .with_config_path_override(Some(config_path.clone())),
+        &crate::commands::runtime::invocation::CommandContext::new(
+            None,
+            OutputFormat::Ndjson,
+            None,
+        )
+        .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -243,7 +247,7 @@ async fn field_list_json_unknown_field_exits_7() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
             .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
@@ -267,7 +271,7 @@ async fn field_list_table_fields_is_noop_with_warning() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None)
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
             .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )

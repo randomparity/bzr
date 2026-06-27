@@ -37,7 +37,7 @@ async fn template_save_and_show() {
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a1.writers(),
     )
     .await;
@@ -51,7 +51,7 @@ async fn template_save_and_show() {
     let mut __io_a2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a2.writers(),
     )
     .await;
@@ -74,7 +74,7 @@ async fn template_save_requires_field() {
     };
     let result = crate::commands::template::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -102,7 +102,7 @@ async fn template_save_with_single_field_succeeds() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -134,7 +134,7 @@ async fn template_save_and_show_create_metadata_fields() {
     let mut save_io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut save_io.writers(),
     )
     .await;
@@ -146,7 +146,7 @@ async fn template_save_and_show_create_metadata_fields() {
         &TemplateAction::Show {
             name: "routing".into(),
         },
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut show_io.writers(),
     )
     .await;
@@ -177,7 +177,7 @@ async fn template_save_rejects_malformed_deadline() {
     };
     let err = crate::commands::template::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut cap_io.writers(),
     )
     .await
@@ -194,7 +194,7 @@ async fn template_save_existing_entry_reports_updated_and_replaces_fields() {
 
     let result = crate::commands::template::execute(
         &save_action("existing"),
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io2.writers(),
     )
     .await;
@@ -215,7 +215,7 @@ async fn template_save_existing_entry_reports_updated_and_replaces_fields() {
     let mut __io_a4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &update,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a4.writers(),
     )
     .await;

@@ -16,8 +16,8 @@ fn entry(who: &str, when: &str, changes: Vec<(&str, &str, &str)>) -> HistoryEntr
             .into_iter()
             .map(|(field, removed, added)| FieldChange {
                 field_name: field.to_string(),
-                removed: removed.to_string(),
-                added: added.to_string(),
+                removed: Some(removed.to_string()),
+                added: Some(added.to_string()),
                 attachment_id: None,
             })
             .collect(),
@@ -54,11 +54,31 @@ fn flatten_expands_multi_field_entry_to_one_record_per_field() {
         assert_eq!(r.comment_id, None);
     }
     assert_eq!(records[0].field, "status");
-    assert_eq!(records[0].old_value, "NEW");
-    assert_eq!(records[0].new_value, "ASSIGNED");
+    assert_eq!(records[0].old_value.as_deref(), Some("NEW"));
+    assert_eq!(records[0].new_value.as_deref(), Some("ASSIGNED"));
     assert_eq!(records[1].field, "assigned_to");
-    assert_eq!(records[1].old_value, "");
-    assert_eq!(records[1].new_value, "alice");
+    assert_eq!(records[1].old_value.as_deref(), Some(""));
+    assert_eq!(records[1].new_value.as_deref(), Some("alice"));
+}
+
+#[test]
+fn flatten_preserves_missing_delta_values_as_unknown() {
+    let entries = vec![HistoryEntry {
+        who: "alice@example.com".into(),
+        when: "2026-06-01T14:22:01Z".into(),
+        changes: vec![FieldChange {
+            field_name: "status".into(),
+            removed: None,
+            added: None,
+            attachment_id: None,
+        }],
+    }];
+
+    let records = flatten_history(&entries, &[]);
+
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].old_value, None);
+    assert_eq!(records[0].new_value, None);
 }
 
 #[test]
@@ -178,7 +198,7 @@ async fn bug_history_empty_prints_no_history_message() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io.writers(),
     )
     .await;
@@ -196,7 +216,7 @@ async fn run_history(id: u64, format: OutputFormat) -> (String, String, bool) {
     let mut io = crate::test_helpers::CapturedIo::new();
     let ok = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, format, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, format, None),
         &mut io.writers(),
     )
     .await
@@ -351,7 +371,7 @@ async fn bug_history_rejects_malformed_since_with_exit_code_7() {
     });
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
         &mut __cap_io.writers(),
     )
     .await;

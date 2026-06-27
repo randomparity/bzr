@@ -4,7 +4,7 @@ use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::{BugAction, CloseArgs, CommentArgs, DupArgs, ReopenArgs, ResolveArgs};
-use crate::commands::runtime::inline_server::{InlineServer, InlineTlsOptions};
+use crate::commands::runtime::invocation::inline_server::{InlineServer, InlineTlsOptions};
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
@@ -64,7 +64,7 @@ async fn run_verb_expecting_body(action: BugAction, id: u64, body: serde_json::V
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -87,7 +87,7 @@ async fn run_status_verb(action: BugAction, id: u64, body: serde_json::Value, st
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -114,7 +114,7 @@ async fn run_verb_collision_expecting_no_write(action: BugAction, id: u64) {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -171,7 +171,7 @@ async fn resolve_dry_run_makes_no_write() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
             .with_dry_run(true),
         &mut io.writers(),
     )
@@ -299,7 +299,7 @@ async fn bug_verbs_expect_unchanged_since_match_writes_update() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -348,7 +348,7 @@ async fn close_reuses_status_validation_client_for_update() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
             .with_inline_server(Some(inline)),
         &mut io.writers(),
     )
@@ -426,7 +426,7 @@ async fn reopen_unknown_status_is_rejected() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await
@@ -454,7 +454,7 @@ async fn close_wrong_case_status_is_rejected() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await
@@ -487,7 +487,7 @@ async fn reopen_dry_run_skips_validation_and_write() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
             .with_dry_run(true),
         &mut io.writers(),
     )
@@ -519,7 +519,7 @@ async fn close_dry_run_rejects_empty_status_without_network() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
             .with_dry_run(true),
         &mut io.writers(),
     )
@@ -656,7 +656,7 @@ async fn resolve_batch_updates_each_id() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -685,7 +685,7 @@ async fn close_private_comment_without_body_is_rejected() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;

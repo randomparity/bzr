@@ -91,7 +91,7 @@ async fn attachment_download_api_error_propagates() {
     };
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -109,7 +109,7 @@ async fn attachment_download_validation_rejects_no_ids_no_bugs() {
     };
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -132,7 +132,7 @@ async fn attachment_download_validation_rejects_out_with_multiple_ids() {
     };
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -148,7 +148,7 @@ async fn attachment_download_validation_rejects_out_with_multiple_ids() {
 async fn write_one_attachment_writes_inline_data_with_att_id_prefix() {
     let (_lock, _mock, tmp) = setup_test_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
-        &crate::commands::runtime::context::CommandContext::new(
+        &crate::commands::runtime::invocation::CommandContext::new(
             None,
             crate::types::OutputFormat::Json,
             None,
@@ -204,7 +204,7 @@ async fn write_one_attachment_falls_back_when_data_missing() {
         .await;
 
     let client = crate::commands::runtime::shared::connect_and_configure(
-        &crate::commands::runtime::context::CommandContext::new(
+        &crate::commands::runtime::invocation::CommandContext::new(
             None,
             crate::types::OutputFormat::Json,
             None,
@@ -230,7 +230,7 @@ async fn write_one_attachment_falls_back_when_data_missing() {
 async fn write_one_attachment_overwrites_existing_file() {
     let (_lock, _mock, tmp) = setup_test_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
-        &crate::commands::runtime::context::CommandContext::new(
+        &crate::commands::runtime::invocation::CommandContext::new(
             None,
             crate::types::OutputFormat::Json,
             None,
@@ -259,7 +259,7 @@ async fn write_one_attachment_overwrites_existing_file() {
 async fn write_one_attachment_create_dir_error_names_destination() {
     let (_lock, _mock, tmp) = setup_test_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
-        &crate::commands::runtime::context::CommandContext::new(
+        &crate::commands::runtime::invocation::CommandContext::new(
             None,
             crate::types::OutputFormat::Json,
             None,
@@ -320,7 +320,7 @@ async fn attachment_download_batch_per_bug_writes_per_bug_subdir() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a4.writers(),
     )
     .await;
@@ -385,7 +385,7 @@ async fn attachment_download_batch_hybrid_uses_xmlrpc_inline_data_without_fallba
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(
+        &crate::commands::runtime::invocation::CommandContext::new(
             None,
             OutputFormat::Json,
             Some(crate::types::ApiMode::Hybrid),
@@ -435,7 +435,7 @@ async fn attachment_download_batch_collision_filenames_resolved_by_att_id_prefix
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -486,7 +486,7 @@ async fn attachment_download_batch_mixed_bug_and_positional_ids() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a5.writers(),
     )
     .await;
@@ -529,7 +529,7 @@ async fn attachment_download_batch_empty_bug_zero_files_success() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a6.writers(),
     )
     .await;
@@ -568,7 +568,7 @@ async fn attachment_download_batch_legacy_single_id_unchanged() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a7.writers(),
     )
     .await;
@@ -615,7 +615,7 @@ async fn attachment_download_single_out_dash_streams_bytes_without_result() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -675,7 +675,7 @@ async fn attachment_download_batch_bug_not_found_partial_failure() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a8.writers(),
     )
     .await;
@@ -710,7 +710,7 @@ async fn attachment_download_batch_creates_out_dir_before_connect() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -749,7 +749,7 @@ async fn attachment_download_batch_all_targets_fail_still_exit_11() {
     };
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -788,7 +788,7 @@ async fn attachment_download_batch_obsolete_attachments_included() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io2.writers(),
     )
     .await;
@@ -838,7 +838,7 @@ async fn attachment_download_batch_data_missing_falls_back_via_get() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io3.writers(),
     )
     .await;
@@ -865,7 +865,7 @@ async fn attachment_download_batch_top_level_out_dir_unwritable_fails_fast() {
     };
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -879,7 +879,7 @@ async fn attachment_download_batch_top_level_out_dir_unwritable_fails_fast() {
 async fn write_one_attachment_invalid_base64_returns_data_integrity() {
     let (_lock, _mock, tmp) = setup_test_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
-        &crate::commands::runtime::context::CommandContext::new(
+        &crate::commands::runtime::invocation::CommandContext::new(
             None,
             crate::types::OutputFormat::Json,
             None,
@@ -916,7 +916,7 @@ async fn write_one_attachment_invalid_base64_returns_data_integrity() {
 async fn write_one_attachment_without_bug_id_returns_data_integrity() {
     let (_lock, _mock, tmp) = setup_test_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
-        &crate::commands::runtime::context::CommandContext::new(
+        &crate::commands::runtime::invocation::CommandContext::new(
             None,
             crate::types::OutputFormat::Json,
             None,
@@ -947,7 +947,7 @@ async fn write_one_attachment_without_bug_id_returns_data_integrity() {
 async fn write_one_attachment_without_file_name_returns_data_integrity() {
     let (_lock, _mock, tmp) = setup_test_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
-        &crate::commands::runtime::context::CommandContext::new(
+        &crate::commands::runtime::invocation::CommandContext::new(
             None,
             crate::types::OutputFormat::Json,
             None,
@@ -1008,7 +1008,7 @@ fn single_download_dest_sanitizes_server_filename_when_no_out() {
 async fn write_one_attachment_sanitizes_server_filename_with_separators() {
     let (_lock, _mock, tmp) = setup_test_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
-        &crate::commands::runtime::context::CommandContext::new(
+        &crate::commands::runtime::invocation::CommandContext::new(
             None,
             crate::types::OutputFormat::Json,
             None,

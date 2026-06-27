@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::Serialize;
 
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::mutation::{ensure_batch_complete, run, DryRunPreview};
 use crate::output::result_types::ResourceKind;
 use crate::test_helpers::CapturedIo;

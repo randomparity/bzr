@@ -1,8 +1,8 @@
 //! Group subcommand handlers, split per action.
 
 use crate::cli::GroupAction;
-use crate::commands::runtime::capabilities::CommandCapabilities;
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandCapabilities;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::error::Result;
 use crate::output::writers::Writers;
 
@@ -19,8 +19,8 @@ pub(crate) async fn execute(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     match action {
-        GroupAction::AddUser { group, user } => add_user::handle(group, user, ctx, w).await,
-        GroupAction::RemoveUser { group, user } => remove_user::handle(group, user, ctx, w).await,
+        GroupAction::AddUser { group, user } => add_user::handle(user, group, ctx, w).await,
+        GroupAction::RemoveUser { group, user } => remove_user::handle(user, group, ctx, w).await,
         GroupAction::ListUsers {
             group,
             details,

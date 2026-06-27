@@ -6,7 +6,7 @@
 //! (piped stdin, agents) auto-bypass so they are never blocked.
 //!
 //! The parsed `--yes` value is carried on
-//! [`crate::commands::runtime::context::CommandContext`], so command handlers
+//! [`crate::commands::runtime::invocation::CommandContext`], so command handlers
 //! can make prompt decisions without consulting process-global state.
 
 use std::io::{BufRead, Write};

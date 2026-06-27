@@ -27,9 +27,9 @@ pub struct FieldValue {
     #[serde(default)]
     pub name: Option<String>,
     #[serde(default)]
-    pub sort_key: u64,
+    pub sort_key: Option<u64>,
     #[serde(default)]
-    pub is_active: bool,
+    pub is_active: Option<bool>,
     #[serde(default)]
     pub can_change_to: Option<Vec<StatusTransition>>,
 }

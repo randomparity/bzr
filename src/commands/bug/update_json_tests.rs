@@ -5,8 +5,8 @@ use std::collections::BTreeSet;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
-use crate::commands::runtime::context::CommandContext;
-use crate::commands::runtime::from_json::JsonOneOrMany;
+use crate::commands::runtime::input::from_json::JsonOneOrMany;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::types::{OutputFormat, ProgressFormat};
 
 use super::super::update::BugUpdateDraft;
@@ -170,14 +170,14 @@ fn bug_update_input_schema_array_items_require_id() {
 #[test]
 fn parse_json_updates_object_and_array_shapes() {
     assert!(matches!(
-        crate::commands::runtime::from_json::parse_one_or_many::<BugUpdateDraft>(
+        crate::commands::runtime::input::from_json::parse_one_or_many::<BugUpdateDraft>(
             r#"{"id":1,"status":"ASSIGNED"}"#
         )
         .unwrap(),
         JsonOneOrMany::One(_)
     ));
 
-    match crate::commands::runtime::from_json::parse_one_or_many::<BugUpdateDraft>(
+    match crate::commands::runtime::input::from_json::parse_one_or_many::<BugUpdateDraft>(
         r#"[{"id":1,"status":"ASSIGNED"},{"id":2,"priority":"high"}]"#,
     )
     .unwrap()
@@ -187,7 +187,7 @@ fn parse_json_updates_object_and_array_shapes() {
     }
 
     assert!(matches!(
-        crate::commands::runtime::from_json::parse_one_or_many::<BugUpdateDraft>(
+        crate::commands::runtime::input::from_json::parse_one_or_many::<BugUpdateDraft>(
             r#"[{"id":1,"status":"ASSIGNED"}]"#
         )
         .unwrap(),
@@ -241,12 +241,10 @@ fn cli_comment_uses_stdin_returns_false_when_no_stdin_source() {
     );
 }
 
-// ── reject_cli_stdin_comment_source (→ Ok(()) and == → !=) ──────────────────
+// ── reject_cli_stdin_comment_source (→ Ok(())) ──────────────────────────────
 //
 // Mutant line 48: replace function body with Ok(()) — the first test must fail
 // because it expects Err.
-// Mutant line 51: replace `from_json_arg == "-"` with `!= "-"` — the stdin
-// case (`arg == "-"`) would then skip the Err branch, causing the test to fail.
 
 #[test]
 fn reject_cli_stdin_comment_source_rejects_stdin_json_with_stdin_comment() {
@@ -257,7 +255,7 @@ fn reject_cli_stdin_comment_source_rejects_stdin_json_with_stdin_comment() {
         comment: Some("-".into()),
         ..Default::default()
     };
-    let result = super::reject_cli_stdin_comment_source(&args, "-", false);
+    let result = super::reject_cli_stdin_comment_source(&args, super::JsonUpdateInputSource::Stdin);
     assert!(
         result.is_err(),
         "stdin JSON + stdin comment must be rejected: got {result:?}"
@@ -278,7 +276,8 @@ fn reject_cli_stdin_comment_source_rejects_array_json_with_stdin_comment() {
         comment: Some("-".into()),
         ..Default::default()
     };
-    let result = super::reject_cli_stdin_comment_source(&args, "/tmp/in.json", true);
+    let result =
+        super::reject_cli_stdin_comment_source(&args, super::JsonUpdateInputSource::FileArray);
     assert!(
         result.is_err(),
         "array JSON + stdin comment must be rejected: got {result:?}"
@@ -294,7 +293,8 @@ fn reject_cli_stdin_comment_source_allows_file_json_with_stdin_comment_single() 
         comment: Some("-".into()),
         ..Default::default()
     };
-    let result = super::reject_cli_stdin_comment_source(&args, "/tmp/in.json", false);
+    let result =
+        super::reject_cli_stdin_comment_source(&args, super::JsonUpdateInputSource::FileObject);
     assert!(
         result.is_ok(),
         "file JSON + stdin comment (single) must be allowed: got {result:?}"
@@ -309,6 +309,11 @@ fn reject_cli_stdin_comment_source_allows_no_stdin_comment() {
         comment: Some("normal body".into()),
         ..Default::default()
     };
-    assert!(super::reject_cli_stdin_comment_source(&args, "-", false).is_ok());
-    assert!(super::reject_cli_stdin_comment_source(&args, "/tmp/in.json", true).is_ok());
+    assert!(
+        super::reject_cli_stdin_comment_source(&args, super::JsonUpdateInputSource::Stdin).is_ok()
+    );
+    assert!(
+        super::reject_cli_stdin_comment_source(&args, super::JsonUpdateInputSource::FileArray)
+            .is_ok()
+    );
 }

@@ -37,7 +37,7 @@ async fn attachment_view_returns_metadata_without_data() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -85,7 +85,7 @@ async fn attachment_view_table_renders_metadata() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io.writers(),
     )
     .await;

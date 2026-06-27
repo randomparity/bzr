@@ -42,7 +42,7 @@ async fn bug_list_returns_bugs() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -126,7 +126,7 @@ async fn bug_list_passes_every_field_through_to_search_params() {
     });
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -166,7 +166,7 @@ async fn bug_list_summary_only_sends_substring_filter() {
     });
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -187,7 +187,7 @@ async fn bug_list_http_500_returns_error() {
     let action = empty_list_action();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -213,7 +213,7 @@ async fn bug_list_malformed_json_returns_error() {
     let action = empty_list_action();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -232,7 +232,7 @@ async fn bug_list_rejects_malformed_created_since_with_exit_code_7() {
 
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -265,7 +265,7 @@ async fn bug_list_rejects_malformed_changed_since_with_exit_code_7() {
 
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -307,7 +307,7 @@ async fn bug_list_mixed_positive_notequals_notsubstring() {
     }
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -331,7 +331,7 @@ async fn bug_list_table_all_unknown_fields_exits_7_before_network() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io.writers(),
     )
     .await;
@@ -366,7 +366,7 @@ async fn bug_list_json_fields_trims_output() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -407,7 +407,7 @@ async fn bug_list_json_custom_field_is_requested_and_emitted() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -444,7 +444,7 @@ async fn bug_list_json_custom_only_field_does_not_emit_forced_id() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -481,7 +481,7 @@ async fn bug_list_table_renders_custom_field_column() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io.writers(),
     )
     .await;
@@ -513,7 +513,7 @@ async fn bug_list_json_without_fields_does_not_warn() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -541,7 +541,7 @@ async fn bug_list_json_all_unknown_fields_exits_7() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -572,7 +572,7 @@ async fn bug_list_sends_default_bug_id_order() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -601,7 +601,7 @@ async fn bug_list_sends_explicit_sort_and_order() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -638,7 +638,7 @@ async fn bug_list_count_json_emits_count_object() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &count_list_action(),
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -661,7 +661,7 @@ async fn bug_list_count_table_prints_integer_only() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &count_list_action(),
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io.writers(),
     )
     .await;
@@ -704,7 +704,7 @@ async fn list_offset_reaches_server_and_truncation_footer_prints() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &list_action_paged(2, Some(10), false),
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
         &mut io.writers(),
     )
     .await;
@@ -735,7 +735,7 @@ async fn list_count_with_offset_is_rejected() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await
@@ -766,7 +766,7 @@ async fn list_paginate_with_progress_emits_page_then_terminal_done() {
 
     let mut io = crate::test_helpers::CapturedIo::new();
     let ctx =
-        crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+        crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
             .with_progress(Some(crate::types::ProgressFormat::Ndjson));
     let result =
         crate::commands::bug::execute(&list_action_paged(2, None, true), &ctx, &mut io.writers())

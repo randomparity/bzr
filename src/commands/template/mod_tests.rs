@@ -43,5 +43,5 @@ fn clear_template_field_handles_every_name() {
     ] {
         super::clear_template_field(&mut t, name).unwrap();
     }
-    assert!(super::template_is_empty(&t));
+    assert!(t.is_empty());
 }

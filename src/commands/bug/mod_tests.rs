@@ -92,7 +92,7 @@ async fn bug_column_spec_my_validates_unknown_field_in_table_mode() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
         &mut io.writers(),
     )
     .await;
@@ -138,7 +138,7 @@ async fn bug_column_spec_search_validates_unknown_field_in_table_mode() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
         &mut io.writers(),
     )
     .await;

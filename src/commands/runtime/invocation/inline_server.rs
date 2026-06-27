@@ -3,7 +3,7 @@
 //! The global `--server-url` / `--server-api-key-env` / `--server-email` flags
 //! let a single command run against a Bugzilla instance that was never written
 //! to any config file. The parsed definition is carried by
-//! [`crate::commands::runtime::context::CommandContext`] and consumed by
+//! [`crate::commands::runtime::invocation::CommandContext`] and consumed by
 //! `crate::commands::runtime::shared::connect_and_configure`.
 
 use std::path::PathBuf;

@@ -2,8 +2,8 @@ use serde::Serialize;
 
 use crate::cli::UpdateArgs;
 use crate::client::BugzillaClient;
-use crate::commands::runtime::context::CommandContext;
-use crate::commands::runtime::from_json::JsonOneOrMany;
+use crate::commands::runtime::input::from_json::JsonOneOrMany;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::error::Result;
 use crate::output::result_types::{
     write_result, BatchFailure, BatchResult, DryRunResult, ResourceKind,
@@ -40,27 +40,49 @@ fn cli_comment_uses_stdin(args: &UpdateArgs) -> bool {
         || args.comment_file.as_deref() == Some(std::path::Path::new("-"))
 }
 
-fn reject_cli_stdin_comment_source(
-    args: &UpdateArgs,
-    from_json_arg: &str,
-    is_array: bool,
-) -> Result<()> {
+#[derive(Clone, Copy)]
+enum JsonUpdateInputSource {
+    Stdin,
+    FileObject,
+    FileArray,
+}
+
+fn reject_cli_stdin_comment_source(args: &UpdateArgs, source: JsonUpdateInputSource) -> Result<()> {
     if !cli_comment_uses_stdin(args) {
         return Ok(());
     }
-    if from_json_arg == "-" {
-        return Err(crate::error::BzrError::InputValidation(
+    match source {
+        JsonUpdateInputSource::Stdin => Err(crate::error::BzrError::InputValidation(
             "--from-json - cannot be combined with --comment - or --comment-file -".into(),
-        ));
-    }
-    if is_array {
-        return Err(crate::error::BzrError::InputValidation(
+        )),
+        JsonUpdateInputSource::FileArray => Err(crate::error::BzrError::InputValidation(
             "--from-json array input cannot combine with --comment - or --comment-file -; \
              put per-entry comments in JSON"
                 .into(),
-        ));
+        )),
+        JsonUpdateInputSource::FileObject => Ok(()),
     }
-    Ok(())
+}
+
+fn read_validated_update_input(
+    args: &UpdateArgs,
+    arg: &str,
+) -> Result<JsonOneOrMany<super::update::BugUpdateDraft>> {
+    if arg == "-" {
+        reject_cli_stdin_comment_source(args, JsonUpdateInputSource::Stdin)?;
+        return crate::commands::runtime::input::from_json::read_one_or_many(arg);
+    }
+
+    let input = crate::commands::runtime::input::from_json::read_one_or_many(arg)?;
+    match &input {
+        JsonOneOrMany::One(_) => {
+            reject_cli_stdin_comment_source(args, JsonUpdateInputSource::FileObject)?;
+        }
+        JsonOneOrMany::Many(_) => {
+            reject_cli_stdin_comment_source(args, JsonUpdateInputSource::FileArray)?;
+        }
+    }
+    Ok(input)
 }
 
 fn object_ids(entry: &super::update::BugUpdateDraft, args: &UpdateArgs) -> Result<Vec<u64>> {
@@ -211,14 +233,8 @@ pub(super) async fn handle(
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    if arg == "-" && cli_comment_uses_stdin(args) {
-        reject_cli_stdin_comment_source(args, arg, false)?;
-    }
-    match crate::commands::runtime::from_json::read_one_or_many::<super::update::BugUpdateDraft>(
-        arg,
-    )? {
+    match read_validated_update_input(args, arg)? {
         JsonOneOrMany::One(entry) => {
-            reject_cli_stdin_comment_source(args, arg, false)?;
             let ids = object_ids(&entry, args)?;
             let (ids, params, expect_unchanged_since) = build_from_json(*entry, args, ids)?;
             super::update::apply_checked(
@@ -233,7 +249,6 @@ pub(super) async fn handle(
             .await
         }
         JsonOneOrMany::Many(entries) => {
-            reject_cli_stdin_comment_source(args, arg, true)?;
             if !args.ids.is_empty() {
                 return Err(crate::error::BzrError::InputValidation(
                     "--from-json array input cannot be combined with positional IDs".into(),

@@ -1,4 +1,4 @@
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::error::{BzrError, Result};
 use crate::output::resources::component::write_component;
 use crate::output::writers::Writers;

@@ -1,4 +1,4 @@
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::error::Result;
 use crate::output::resources::product::write_product_detail;
 use crate::output::writers::Writers;

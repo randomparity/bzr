@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::mutation::{self, Committed, DryRunPreview};
 use crate::error::Result;
 use crate::output::result_types::{ActionResult, ResourceKind};
@@ -50,16 +50,19 @@ pub(super) async fn handle(
 
 fn build_params(args: &CreateArgs<'_>) -> Result<CreateGroupParams> {
     let mut input = if let Some(arg) = args.from_json {
-        crate::commands::runtime::from_json::read_object::<JsonCreateGroup>(arg)?
+        crate::commands::runtime::input::from_json::read_object::<JsonCreateGroup>(arg)?
     } else {
         JsonCreateGroup::default()
     };
-    crate::commands::runtime::from_json::merge_string(&mut input.name, args.name);
-    crate::commands::runtime::from_json::merge_string(&mut input.description, args.description);
-    crate::commands::runtime::from_json::merge_copy(&mut input.is_active, args.is_active);
+    crate::commands::runtime::input::from_json::merge_string(&mut input.name, args.name);
+    crate::commands::runtime::input::from_json::merge_string(
+        &mut input.description,
+        args.description,
+    );
+    crate::commands::runtime::input::from_json::merge_copy(&mut input.is_active, args.is_active);
     Ok(CreateGroupParams {
-        name: crate::commands::runtime::from_json::required_string(input.name, "name")?,
-        description: crate::commands::runtime::from_json::required_string(
+        name: crate::commands::runtime::input::from_json::required_string(input.name, "name")?,
+        description: crate::commands::runtime::input::from_json::required_string(
             input.description,
             "description",
         )?,

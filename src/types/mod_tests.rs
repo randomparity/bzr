@@ -182,5 +182,5 @@ fn history_entry_deserialize() {
     assert_eq!(entry.who, "user@test.com");
     assert_eq!(entry.changes.len(), 1);
     assert_eq!(entry.changes[0].field_name, "status");
-    assert_eq!(entry.changes[0].added, "RESOLVED");
+    assert_eq!(entry.changes[0].added.as_deref(), Some("RESOLVED"));
 }

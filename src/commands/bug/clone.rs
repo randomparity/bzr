@@ -1,7 +1,7 @@
 use crate::cli::CloneArgs;
 use crate::client::BugzillaClient;
-use crate::commands::runtime::context::CommandContext;
-use crate::commands::runtime::flags::parse_flags;
+use crate::commands::runtime::input::flags::parse_flags;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::error::Result;
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;

@@ -3,7 +3,7 @@ use std::io::Write;
 use serde::Serialize;
 
 use crate::output::formatting::{
-    write_formatted, write_formatted_projected, write_table_records, yes_no,
+    opt_yes_no, write_formatted, write_formatted_projected, write_table_records,
 };
 use crate::types::{FieldValue, OutputFormat};
 use crate::validation::fields::FieldProjection;
@@ -25,7 +25,7 @@ fn field_value_record(value: &FieldValue) -> Vec<String> {
         .unwrap_or_default();
     vec![
         value.name.clone().unwrap_or_default(),
-        yes_no(value.is_active).into(),
+        opt_yes_no(value.is_active).into(),
         transitions,
     ]
 }

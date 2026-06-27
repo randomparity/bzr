@@ -87,7 +87,7 @@ async fn component_update_succeeds() {
     let mut __io_a2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a2.writers(),
     )
     .await;
@@ -123,7 +123,7 @@ async fn component_update_by_product_and_component_resolves_id() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -163,7 +163,7 @@ async fn component_update_from_json_uses_product_component_target() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -189,7 +189,7 @@ async fn component_update_rejects_id_and_product_component_target() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -216,7 +216,7 @@ async fn component_update_rejects_product_without_component() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -245,7 +245,7 @@ async fn component_update_named_target_unknown_component_is_not_found() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -274,7 +274,7 @@ async fn component_update_named_target_duplicate_component_is_ambiguous() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -309,7 +309,7 @@ async fn component_update_dry_run_makes_no_write_and_marks_payload() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
             .with_dry_run(true),
         &mut io.writers(),
     )
@@ -355,7 +355,7 @@ async fn component_update_named_dry_run_makes_no_read_or_write_and_marks_target(
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
             .with_dry_run(true),
         &mut io.writers(),
     )
@@ -404,7 +404,7 @@ async fn component_update_from_json_uses_json_target() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -431,7 +431,7 @@ async fn component_update_from_json_rejects_positional_and_json_target() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -459,7 +459,7 @@ async fn component_update_from_json_rejects_id_and_product_component_target() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -487,7 +487,7 @@ async fn component_update_from_json_rejects_partial_product_component_target() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -514,7 +514,7 @@ async fn component_update_without_fields_is_rejected() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;

@@ -36,7 +36,7 @@ async fn template_list_empty() {
     let mut __io_a3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a3.writers(),
     )
     .await;
@@ -51,7 +51,7 @@ async fn template_list_renders_saved_template() {
     let mut save_io = crate::test_helpers::CapturedIo::new();
     crate::commands::template::execute(
         &save_action("alpha"),
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut save_io.writers(),
     )
     .await
@@ -60,7 +60,7 @@ async fn template_list_renders_saved_template() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &TemplateAction::List,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -82,7 +82,11 @@ async fn template_list_table_sorts_entries_by_name() {
         let mut __io7 = crate::test_helpers::CapturedIo::new();
         let result = crate::commands::template::execute(
             &save_action(name),
-            &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+            &crate::commands::runtime::invocation::CommandContext::new(
+                None,
+                OutputFormat::Json,
+                None,
+            ),
             &mut __io7.writers(),
         )
         .await;
@@ -94,7 +98,7 @@ async fn template_list_table_sorts_entries_by_name() {
 
     let result = crate::commands::template::execute(
         &TemplateAction::List,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io8.writers(),
     )
     .await;

@@ -41,7 +41,7 @@ async fn attachment_upload_api_error_propagates() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -75,7 +75,7 @@ async fn attachment_upload_missing_source_names_role_and_path() {
 
     let err = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await
@@ -111,7 +111,7 @@ async fn attachment_upload_missing_source_fails_before_connect() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await
@@ -155,7 +155,7 @@ async fn attachment_upload_returns_id() {
     let mut __io_a2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a2.writers(),
     )
     .await;
@@ -198,7 +198,7 @@ async fn attachment_upload_with_comment_includes_comment_in_request() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -243,7 +243,7 @@ async fn attachment_upload_with_comment_file_includes_comment_in_request() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -277,7 +277,7 @@ async fn attachment_upload_rejects_whitespace_comment() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -313,7 +313,7 @@ async fn attachment_upload_rejects_whitespace_comment_file() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -357,7 +357,7 @@ async fn attachment_upload_with_is_patch_defaults_content_type_to_text_plain() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -400,7 +400,7 @@ async fn attachment_upload_is_patch_with_explicit_content_type_keeps_content_typ
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -471,7 +471,7 @@ async fn attachment_upload_with_comment_private_flips_privacy() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -540,7 +540,7 @@ async fn attachment_upload_comment_private_with_comment_file_flips_privacy() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -573,7 +573,7 @@ async fn attachment_upload_comment_private_without_comment_is_input_error() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -633,7 +633,7 @@ async fn attachment_upload_comment_private_partial_failure_propagates_error() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -695,7 +695,7 @@ async fn attachment_upload_comment_private_no_matching_comment_is_data_integrity
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;

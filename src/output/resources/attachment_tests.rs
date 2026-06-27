@@ -33,8 +33,8 @@ fn capture_batch(format: OutputFormat, result: &AttachmentBatchResult) -> (Strin
 fn write_attachment_detail_shows_flags() {
     let mut a = output_attachment(10, "Fix patch");
     a.flags = vec![Flag {
-        name: "review".into(),
-        status: "+".into(),
+        name: Some("review".into()),
+        status: Some("+".into()),
         setter: Some("alice@example.com".into()),
         requestee: None,
     }];

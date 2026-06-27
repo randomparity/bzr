@@ -4,7 +4,7 @@
 
 use crate::cli::ConfigAction;
 use crate::commands::config::execute;
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::config::ServerConfig;
 use crate::error::BzrError;
 use crate::test_helpers::{

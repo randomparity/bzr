@@ -38,7 +38,7 @@ async fn template_delete_unknown_errors() {
     };
     let result = crate::commands::template::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;
@@ -58,7 +58,7 @@ async fn template_delete_existing_removes_entry() {
 
     let result = crate::commands::template::execute(
         &save_action("delete-me"),
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io3.writers(),
     )
     .await;
@@ -72,7 +72,7 @@ async fn template_delete_existing_removes_entry() {
         &TemplateAction::Delete {
             name: "delete-me".into(),
         },
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io4.writers(),
     )
     .await;
@@ -93,7 +93,7 @@ async fn template_delete_json_matches_domain_mutation_output() {
     let mut save_io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &save_action("delete-json-shape"),
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut save_io.writers(),
     )
     .await;
@@ -105,7 +105,7 @@ async fn template_delete_json_matches_domain_mutation_output() {
         &TemplateAction::Delete {
             name: "delete-json-shape".into(),
         },
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut delete_io.writers(),
     )
     .await;
@@ -126,7 +126,7 @@ async fn template_delete_table_prints_deleted_message() {
 
     let result = crate::commands::template::execute(
         &save_action("table-delete"),
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io5.writers(),
     )
     .await;
@@ -140,7 +140,7 @@ async fn template_delete_table_prints_deleted_message() {
         &TemplateAction::Delete {
             name: "table-delete".into(),
         },
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
         &mut __io6.writers(),
     )
     .await;

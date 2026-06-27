@@ -367,11 +367,11 @@ pub fn write_history_table<W: Write + ?Sized>(history: &[HistoryEntry], out: &mu
                 .map(|id| format!(" [attachment #{id}]"))
                 .unwrap_or_default();
             let _ = writeln!(out, "  {}{attachment_suffix}:", change.field_name.bold());
-            if !change.removed.is_empty() {
-                let _ = writeln!(out, "    - {}", change.removed.red());
+            if let Some(removed) = change.removed.as_deref().filter(|value| !value.is_empty()) {
+                let _ = writeln!(out, "    - {}", removed.red());
             }
-            if !change.added.is_empty() {
-                let _ = writeln!(out, "    + {}", change.added.green());
+            if let Some(added) = change.added.as_deref().filter(|value| !value.is_empty()) {
+                let _ = writeln!(out, "    + {}", added.green());
             }
         }
         write_divider(out);

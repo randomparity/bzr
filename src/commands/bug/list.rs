@@ -58,9 +58,10 @@ pub(super) async fn handle(
     }
 
     let spec = ColumnSpec::new(fields.as_deref(), exclude_fields.as_deref());
-    let page =
-        crate::commands::runtime::paging::fetch_page(client, &params, *paginate, progress, w)
-            .await?;
+    let page = crate::commands::runtime::search::paging::fetch_page(
+        client, &params, *paginate, progress, w,
+    )
+    .await?;
     write_bug_page(
         &page,
         spec,

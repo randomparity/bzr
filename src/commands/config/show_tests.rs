@@ -4,7 +4,7 @@
 
 use crate::cli::ConfigAction;
 use crate::commands::config::execute;
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::test_helpers::{
     run_config_action_json, seed_inline_server, setup_empty_config_env, CapturedIo,
 };

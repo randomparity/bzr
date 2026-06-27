@@ -170,7 +170,7 @@ impl BzrError {
     /// under `bzr bug view --permissive` (one inaccessible bug among
     /// many). Session-level failures (transport, auth, security,
     /// uncategorized server faults) always bail.
-    pub fn is_bug_get_per_resource(&self) -> bool {
+    pub fn is_permissive_bug_view_error(&self) -> bool {
         match self {
             BzrError::NotFound { .. } => true,
             BzrError::Api { code, .. } => BUG_GET_PER_RESOURCE_CODES.contains(code),

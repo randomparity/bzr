@@ -9,8 +9,8 @@ use crate::types::{Bug, FieldChange, Flag, HistoryEntry};
 
 fn review_flag(status: &str, requestee: Option<&str>) -> Flag {
     Flag {
-        name: "review".into(),
-        status: status.into(),
+        name: Some("review".into()),
+        status: Some(status.into()),
         setter: Some("alice@example.com".into()),
         requestee: requestee.map(Into::into),
     }
@@ -63,14 +63,14 @@ fn make_history_entry() -> HistoryEntry {
         changes: vec![
             FieldChange {
                 field_name: "status".into(),
-                removed: "NEW".into(),
-                added: "ASSIGNED".into(),
+                removed: Some("NEW".into()),
+                added: Some("ASSIGNED".into()),
                 attachment_id: None,
             },
             FieldChange {
                 field_name: "flagtypes.name".into(),
-                removed: String::new(),
-                added: "review?".into(),
+                removed: Some(String::new()),
+                added: Some("review?".into()),
                 attachment_id: Some(99),
             },
         ],
@@ -121,8 +121,8 @@ fn sample_record(field: &str, comment_id: Option<u64>) -> HistoryRecord {
         when: "2025-04-01T12:00:00Z".into(),
         who: "editor@example.com".into(),
         field: field.into(),
-        old_value: "NEW".into(),
-        new_value: "ASSIGNED".into(),
+        old_value: Some("NEW".into()),
+        new_value: Some("ASSIGNED".into()),
         comment_id,
     }
 }
@@ -720,6 +720,23 @@ fn write_history_json_emits_flattened_records() {
     // The grouped wire shape must NOT leak into the flattened output.
     assert!(arr[0].get("changes").is_none());
     assert!(arr[0].get("field_name").is_none());
+}
+
+#[test]
+fn write_history_json_preserves_unknown_delta_values() {
+    let record = HistoryRecord {
+        when: "2025-04-01T12:00:00Z".into(),
+        who: "editor@example.com".into(),
+        field: "status".into(),
+        old_value: None,
+        new_value: None,
+        comment_id: None,
+    };
+    let output = capture_history_json(&[record], OutputFormat::Json);
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
+
+    assert!(parsed[0]["old_value"].is_null());
+    assert!(parsed[0]["new_value"].is_null());
 }
 
 #[test]

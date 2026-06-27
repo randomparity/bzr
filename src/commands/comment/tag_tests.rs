@@ -28,7 +28,7 @@ async fn comment_tag_add_updates_tags() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::comment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io.writers(),
     )
     .await;
@@ -58,7 +58,7 @@ async fn comment_tag_without_changes_is_rejected_before_put() {
     };
     let result = crate::commands::comment::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __cap_io.writers(),
     )
     .await;

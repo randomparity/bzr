@@ -1,8 +1,8 @@
 //! Bug subcommand handlers, split per-action.
 
 use crate::cli::BugAction;
-use crate::commands::runtime::capabilities::CommandCapabilities;
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandCapabilities;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::search::fields::{
     validate_json_field_selection, validate_table_columns, warn_unknown_fields, ColumnSpec,
 };

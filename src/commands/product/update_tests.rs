@@ -35,7 +35,7 @@ async fn product_update_succeeds() {
     let mut __io_a4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut __io_a4.writers(),
     )
     .await;
@@ -68,7 +68,7 @@ async fn product_update_dry_run_makes_no_write_and_marks_payload() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(
+        &crate::commands::runtime::invocation::CommandContext::new(
             Some("missing"),
             OutputFormat::Json,
             None,
@@ -116,7 +116,7 @@ async fn product_update_from_json_uses_json_target() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -141,7 +141,7 @@ async fn product_update_from_json_rejects_positional_and_json_target() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;
@@ -166,7 +166,7 @@ async fn product_update_without_fields_is_rejected() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::context::CommandContext::new(
+        &crate::commands::runtime::invocation::CommandContext::new(
             Some("missing"),
             OutputFormat::Json,
             None,

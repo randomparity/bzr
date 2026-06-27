@@ -1,4 +1,4 @@
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::config::Config;
 use crate::error::{BzrError, Result};
 use crate::output::resources::template::write_template_detail;

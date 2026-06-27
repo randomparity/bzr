@@ -1,5 +1,5 @@
 use crate::client::BugzillaClient;
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::search::fields::{
     validate_json_field_selection, validate_table_columns, warn_unknown_fields, ColumnSpec,
 };
@@ -73,7 +73,7 @@ pub(crate) async fn execute(
     let spec = plan.columns.spec();
     validate_fields(plan.field_preflight, spec, format, w.err)?;
 
-    let page = crate::commands::runtime::paging::fetch_page(
+    let page = crate::commands::runtime::search::paging::fetch_page(
         plan.client,
         &plan.params,
         plan.paginate,
@@ -82,7 +82,7 @@ pub(crate) async fn execute(
     )
     .await?;
     write_bugs(&page.bugs, spec, format, w.out, w.err);
-    crate::commands::runtime::paging::write_truncation_note(
+    crate::commands::runtime::search::paging::write_truncation_note(
         &page,
         plan.params.limit,
         plan.offset,

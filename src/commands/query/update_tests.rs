@@ -194,7 +194,7 @@ async fn run_q(action: &QueryAction) -> crate::error::Result<()> {
     let mut io = crate::test_helpers::CapturedIo::new();
     crate::commands::query::execute(
         action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await
@@ -204,7 +204,7 @@ async fn run_action_output(action: &QueryAction, format: OutputFormat) -> String
     let mut io = crate::test_helpers::CapturedIo::new();
     crate::commands::query::execute(
         action,
-        &crate::commands::runtime::context::CommandContext::new(None, format, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, format, None),
         &mut io.writers(),
     )
     .await

@@ -73,7 +73,8 @@ pub(super) async fn handle(
         // multi-category loop would emit several `done` events. Pass `None` so
         // it stays silent regardless of the flag.
         let page =
-            crate::commands::runtime::paging::fetch_page(client, params, paginate, None, w).await?;
+            crate::commands::runtime::search::paging::fetch_page(client, params, paginate, None, w)
+                .await?;
         truncated |= page.truncated;
         for bug in page.bugs {
             // When counting, only the deduped id set matters — don't retain rows.
@@ -88,7 +89,7 @@ pub(super) async fn handle(
         return Ok(());
     }
 
-    let page = crate::commands::runtime::paging::Page {
+    let page = crate::commands::runtime::search::paging::Page {
         bugs: all_bugs,
         truncated,
     };

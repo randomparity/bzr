@@ -56,7 +56,7 @@ async fn run(action: &TemplateAction) -> crate::error::Result<String> {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         action,
-        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
         &mut io.writers(),
     )
     .await;

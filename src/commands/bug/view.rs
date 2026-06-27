@@ -4,7 +4,7 @@ use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 
 use crate::cli::{FieldArgs, ViewArgs};
 use crate::client::BugzillaClient;
-use crate::commands::runtime::context::CommandContext;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::search::fields::{canonical_field_list, ColumnSpec};
 use crate::config::Config;
 use crate::error::{BzrError, Result};
@@ -195,7 +195,9 @@ async fn fetch_batch(
     for id in ids {
         match client.get_bug(id, include_fields, exclude_fields).await {
             Ok(bug) => rows.push(BugViewRow::Ok(Box::new(bug))),
-            Err(e) if matches!(mode, BugViewMode::Permissive) && e.is_bug_get_per_resource() => {
+            Err(e)
+                if matches!(mode, BugViewMode::Permissive) && e.is_permissive_bug_view_error() =>
+            {
                 rows.push(BugViewRow::Failed(BugViewFailure {
                     id: id.clone(),
                     error: e.to_string(),

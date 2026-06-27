@@ -59,13 +59,13 @@ Out of scope:
 | `when` | `HistoryEntry.when` | string | ISO 8601, verbatim from the server |
 | `who` | `HistoryEntry.who` | string | the user who made the change |
 | `field` | `FieldChange.field_name` | string | e.g. `status`, `assigned_to`, `cf_*` |
-| `old_value` | `FieldChange.removed` | string | empty string when nothing was removed |
-| `new_value` | `FieldChange.added` | string | empty string when nothing was added |
+| `old_value` | `FieldChange.removed` | string \| null | empty string when nothing was removed; null when the server omitted the value |
+| `new_value` | `FieldChange.added` | string \| null | empty string when nothing was added; null when the server omitted the value |
 | `comment_id` | correlated (ADR 0008) | integer \| null | the comment posted in the same entry, else null |
 
 All six keys are always present (closed schema, `additionalProperties: false`).
-`old_value`/`new_value` are empty strings — never null — because the server
-always sends both as strings (defaulted via `#[serde(default)]`).
+`old_value`/`new_value` preserve omitted server values as null instead of
+defaulting them to empty strings.
 
 The wire field `attachment_id` is **not** carried into the JSON record (the
 issue's documented shape omits it). It remains visible in the table renderer as
