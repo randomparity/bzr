@@ -93,6 +93,42 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 
 *Exit code 2 is produced by clap for argument errors before bzr's error handling runs, in addition to resource-not-found errors from bzr itself.
 
+## Field Projection (`--fields` / `--exclude-fields`)
+
+Most read verbs accept `--fields <a,b,c>` and `--exclude-fields <a,b,c>` to select
+which JSON keys are emitted, so agents can fetch only what they need. These flags
+affect `--json` and `--output ndjson` only: the output object (or each element of
+an output array) is trimmed to the selected keys. With table output they are a
+no-op and print a one-line warning on stderr (table columns are fixed per verb).
+
+Semantics:
+
+- `--fields` keeps exactly the named keys; `--exclude-fields` drops the named keys.
+  When both are given, the include set is resolved first, then the exclude set is
+  removed from it.
+- Field names are each verb's documented `--json` keys (top-level only — a nested
+  object or array such as a product's `components` is kept or dropped whole).
+- An unknown field name in either flag, or a selection that leaves no keys, exits
+  with code 7. Selecting a key a given record does not carry yields a sparse
+  object (e.g. `--fields data` on `attachment list`, where bodies are not loaded).
+
+Valid field names per verb:
+
+| Verb | Field names |
+|------|-------------|
+| `comment list` | `id`, `bug_id`, `text`, `creator`, `creation_time`, `count`, `is_private`, `attachment_id` |
+| `attachment list` | `id`, `bug_id`, `file_name`, `summary`, `content_type`, `creator`, `creation_time`, `last_change_time`, `size`, `is_obsolete`, `is_private`, `is_patch`, `flags`, `data` |
+| `product list` / `product view` | `id`, `name`, `description`, `is_active`, `components`, `versions`, `milestones` |
+| `component list` / `component view` | `id`, `name`, `description`, `is_active`, `default_assignee` |
+| `user search` | `id`, `name`, `real_name`, `email`, `groups`, `can_login` |
+| `group list-users` | `id`, `name`, `real_name`, `email`, `groups`, `can_login` |
+| `group view` | `id`, `name`, `description`, `is_active`, `membership` |
+| `classification list` / `classification view` | `id`, `name`, `description`, `sort_key`, `products` |
+| `field list` | `name`, `sort_key`, `is_active`, `can_change_to` |
+
+`bzr bug list`/`view`/`search`/`my` and `query run` also accept these flags with
+alias-aware field names; see their sections.
+
 ## Command Tree
 
 ```
@@ -150,12 +186,12 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   └── dup <ID> <TARGET> [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 │                       [--expect-unchanged-since <TIMESTAMP>]
 ├── comment
-│   ├── list <BUG_ID> [--since <DATE>]
+│   ├── list <BUG_ID> [--since <DATE>] [--fields <F>] [--exclude-fields <F>]
 │   ├── add <BUG_ID> [--body <TEXT>] [--body-file <PATH>] [--private]
 │   ├── tag <COMMENT_ID> [--add <TAG>...] [--remove <TAG>...]
 │   └── search-tags <QUERY>
 ├── attachment
-│   ├── list <BUG_ID>
+│   ├── list <BUG_ID> [--fields <F>] [--exclude-fields <F>]
 │   ├── view <ATTACHMENT_ID>
 │   ├── download <ATTACHMENT_ID> [--bug <ID>] [-o|--out <FILE>] [--out-dir <DIR>]
 │   ├── upload <BUG_ID> <FILE> [--summary <S>] [--content-type <MIME>] [--comment <BODY>]
@@ -165,34 +201,34 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │                               [--obsolete|--no-obsolete] [--patch|--no-patch]
 │                               [--private|--no-private] [--flag <F>...]
 ├── product
-│   ├── list [--type <TYPE>]
-│   ├── view <NAME>
+│   ├── list [--type <TYPE>] [--fields <F>] [--exclude-fields <F>]
+│   ├── view <NAME> [--fields <F>] [--exclude-fields <F>]
 │   ├── create [--from-json <PATH>] [--name <N>] [--description <D>] [--version <V>] [--is-open <BOOL>]
 │   └── update [<NAME>] [--from-json <PATH>] [--description <D>] [--default-milestone <M>] [--is-open <BOOL>]
 ├── field
 │   ├── aliases
-│   └── list <FIELD_NAME>
+│   └── list <FIELD_NAME> [--fields <F>] [--exclude-fields <F>]
 ├── user
-│   ├── search <QUERY> [--details]
+│   ├── search <QUERY> [--details] [--fields <F>] [--exclude-fields <F>]
 │   ├── create [--from-json <PATH>] [--email <E>] [--full-name <N>] [--password <P>] [--login <L>]
 │   └── update [<USER>] [--from-json <PATH>] [--real-name <N>] [--email <E>] [--disable-login <BOOL>]
 │                      [--login-denied-text <T>]
 ├── group
 │   ├── add-user --group <G> --user <U>
 │   ├── remove-user --group <G> --user <U>
-│   ├── list-users --group <G> [--details]
-│   ├── view <GROUP>
+│   ├── list-users --group <G> [--details] [--fields <F>] [--exclude-fields <F>]
+│   ├── view <GROUP> [--fields <F>] [--exclude-fields <F>]
 │   ├── create [--from-json <PATH>] [--name <N>] [--description <D>] [--is-active <BOOL>]
 │   └── update [<GROUP>] [--from-json <PATH>] [--description <D>] [--is-active <BOOL>]
 ├── whoami
 ├── server
 │   └── info
 ├── classification
-│   ├── list
-│   └── view <NAME>
+│   ├── list [--fields <F>] [--exclude-fields <F>]
+│   └── view <NAME> [--fields <F>] [--exclude-fields <F>]
 ├── component
-│   ├── list --product <P>
-│   ├── view <PRODUCT> <COMPONENT>
+│   ├── list --product <P> [--fields <F>] [--exclude-fields <F>]
+│   ├── view <PRODUCT> <COMPONENT> [--fields <F>] [--exclude-fields <F>]
 │   ├── create [--from-json <PATH>] [--product <P>] [--name <N>] [--description <D>] [--default-assignee <E>]
 │   └── update [<ID>] [--from-json <PATH>] [--product <P>] [--component <C>]
 │              [--name <N>] [--description <D>] [--default-assignee <E>]
@@ -952,12 +988,15 @@ List all comments on a bug.
 bzr comment list 12345
 bzr comment list 12345 --since 2025-06-01
 bzr --json comment list 12345
+bzr --json comment list 12345 --fields id,creator,creation_time   # tag/index view, fewer tokens
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
 | `<BUG_ID>` | Yes | Bug ID |
 | `--since <DATE>` | No | Only show comments after this date (ISO 8601) |
+| `--fields <F>` | No | Comma-separated JSON keys to keep (`--json`/`ndjson` only). See [Field Projection](#field-projection---fields----exclude-fields). |
+| `--exclude-fields <F>` | No | Comma-separated JSON keys to drop (`--json`/`ndjson` only). |
 
 ### `bzr comment add`
 
@@ -1021,7 +1060,12 @@ List all attachments on a bug.
 ```bash
 bzr attachment list 12345
 bzr --json attachment list 12345
+bzr --json attachment list 12345 --fields file_name,size   # metadata index only
 ```
+
+`--fields`/`--exclude-fields` select JSON keys for `--json`/`ndjson` output; see
+[Field Projection](#field-projection---fields----exclude-fields). `data` is never
+populated by `attachment list`, so `--fields data` yields empty objects.
 
 ### `bzr attachment view`
 

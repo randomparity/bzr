@@ -55,3 +55,28 @@ done
 Note: under `--json`, multi-id `bug view` puts results at `.data.bugs[]`;
 single-id output is the object at `.data`. Check with `jq '.data | has("bugs")'`
 if unsure.
+
+## Project to cut tokens with `--fields`
+
+Every list/view read verb accepts `--fields <a,b,c>` / `--exclude-fields <a,b,c>`
+to trim the JSON object to the keys you actually need. Field names are the verb's
+`--json` keys (top-level only). This cuts tokens and latency on large results —
+a 200-comment thread fetched for a tag index, an attachment list fetched for file
+names and sizes — without post-filtering in `jq`.
+
+```
+# Comment thread as a lightweight index (no bodies)
+bzr comment list 12345 --json --fields id,creator,creation_time | jq '.data'
+
+# Attachment metadata only, streamed
+bzr attachment list 12345 --output ndjson --fields file_name,size
+
+# Drop noisy nested keys instead of listing every key you want
+bzr product view Fedora --json --exclude-fields components,versions,milestones | jq '.data'
+```
+
+Rules: an unknown field name (or a selection that removes every key) exits 7;
+selecting a key a record does not carry yields a sparse object (e.g.
+`--fields data` on `attachment list`); table output ignores the flags with a
+warning, so always pair them with `--json` or `--output ndjson`. The `bug`
+verbs and `query run` support the same flags with alias-aware field names.
