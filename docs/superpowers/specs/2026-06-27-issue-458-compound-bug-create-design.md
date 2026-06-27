@@ -72,17 +72,26 @@ bzr bug create --product P --component C --summary "..." \
 ```
 
 - `--with-comment <text>` / `--with-comment-file <path>` — mutually exclusive
-  (clap `conflicts_with`). A value of `-` reads from stdin, matching the
-  `--description` convention. The comment is public; privacy is JSON-only (the
-  flag form keeps a small surface).
+  (clap `conflicts_with`). `--with-comment` is literal text; `--with-comment-file`
+  reads a UTF-8 file path. **Neither accepts `-` / stdin**: the create flow
+  already consumes stdin for the description (`create.rs` piped-stdin path) and
+  stdin is single-consumer, so a stdin-reading comment would collide with a
+  piped description. Comment-from-stdin is available via the JSON form instead.
+  An empty / whitespace-only comment body is rejected pre-create (exit 7), like
+  the empty-description guard. The comment is public; privacy is JSON-only (the
+  flag form keeps a small surface). Supplying `--with-comment` does **not** alter
+  description resolution — the `$EDITOR` flow still triggers on a TTY with no
+  description.
 - `--with-attachment <PATH>` — repeatable; `Vec<PathBuf>`. File is read from
   disk; content type is guessed from the extension by the existing
   `guess_content_type` helper unless overridden in JSON form.
 - `--attachment-description <TEXT>` — repeatable; `Vec<String>`. The Nth value
   is the Nth attachment's summary. If fewer descriptions than attachments, the
   remaining attachments default their summary to the filename (the existing
-  `attachment upload` default). **More descriptions than attachments is a
-  validation error (exit 7)** — it signals a pairing mistake.
+  `attachment upload` default). An explicit empty / whitespace-only description
+  is treated as absent (falls back to the filename), not an error. **More
+  descriptions than attachments is a validation error (exit 7)** — it signals a
+  pairing mistake.
 - `--attachment-description` without any `--with-attachment` is a validation
   error (exit 7).
 - These flags are rejected with `--from-json` (`conflicts_with = "from_json"`):
@@ -104,8 +113,9 @@ echo '{
 }' | bzr bug create --from-json -
 ```
 
-- `comment` — object: `{"body": <string, required>, "is_private": <bool,
-  default false>}`. `deny_unknown_fields`.
+- `comment` — object: `{"body": <string, required, non-empty>, "is_private":
+  <bool, default false>}`. `deny_unknown_fields`. An empty / whitespace-only
+  `body` is rejected pre-create (exit 7).
 - `attachments` — array of objects:
   - `file` — required; path read from disk.
   - `description` — optional; attachment summary. Defaults to the filename.
@@ -121,33 +131,70 @@ echo '{
 
 ## Output contract
 
-### Flag form (single bug), full success
+The compound path has **two scopes** — *single* (flag form OR single-object
+`--from-json`) and *array* (`--from-json` array). Both share one sub-step
+failure record so an agent parses the same `{step, error}` shape in either:
 
-Unchanged from today: stdout prints `Created bug #N` (table) or the
-`ActionResult` created object (JSON). The comment ID and attachment IDs are
-*not* added to the success output — they are confirmable via `bug view`. (Keeps
-the success shape stable; agents that need the IDs read them back.)
+```rust
+// step ∈ {"comment", "attachment"}; `file` present only for attachments.
+struct SubStepFailure { step: String, file: Option<String>, error: String }
+```
 
-### Flag form (single bug), sub-step failure
+### Single scope (flag form and single-object `--from-json`)
 
-- **stdout**: a `CompoundCreateResult` — the created bug ID plus a `failed`
-  array of `{step, error}` sub-step failures (JSON), or a `Created bug #N` line
-  (table). The result always carries the bug ID.
-- **stderr**: one warning line per failed sub-step naming the bug ID, e.g.
-  `warning: created bug #N but failed to add comment: <error>` and
-  `warning: created bug #N but failed to upload attachment 'trace.log': <error>`.
-- **exit**: `11`.
+Both inputs run the **same compound driver** and emit the same shapes — there is
+no flag-vs-JSON divergence (resolves the under-specified single-object path:
+`create_json::handle`'s `One` arm calls the shared driver, not the plain
+`create_and_report`).
+
+- **Full success** — unchanged from today: stdout prints `Created bug #N`
+  (table) or the plain `ActionResult` created object (JSON). The new compound
+  result type is **not** emitted on success, so the success shape is byte-for-
+  byte stable. Comment/attachment IDs are confirmable via `bug view`.
+- **Sub-step failure** — stdout prints a `CompoundCreateResult`:
+  ```json
+  {"resource":"bug","action":"created","id":N,
+   "failed":[{"step":"comment","error":"..."},
+             {"step":"attachment","file":"trace.log","error":"..."}]}
+  ```
+  (table form: `Created bug #N`). stderr prints one warning per failed sub-step
+  naming the bug ID (`warning: created bug #N but failed to add comment: <e>`,
+  `warning: created bug #N but failed to upload attachment 'trace.log': <e>`).
+  Exit `11`, via `ensure_batch_complete(succeeded = 1, failed = failed.len())`.
 
 The acceptance criterion "the created bug ID is printed to stderr" is satisfied
-by the warning line. The ID also appears on stdout in the result document.
+by the warning line; the ID is also on stdout in the result.
 
-### JSON array form
+### Array scope (`--from-json` array)
 
-Reuses the existing `BatchCreateResult` shape, extended so a created-but-
-partially-failed element is reported. A failed sub-step does **not** remove the
-bug ID from `created`; instead the element is also recorded in `failed` with its
-input index and the sub-step error. Exit 11 if any element has any failure
-(create or sub-step).
+Keeps the existing `BatchCreateResult { created: [u64], failed: [CreateFailure]
+}`. To carry sub-step failures, `CreateFailure` gains three optional fields,
+each `#[serde(skip_serializing_if = "Option::is_none")]` so **existing create-
+failure JSON is byte-for-byte unchanged**:
+
+```rust
+struct CreateFailure {
+    index: usize,
+    bug_id: Option<u64>,   // present iff the bug was created but a sub-step failed
+    step: Option<String>,  // "comment" | "attachment"; absent for a create failure
+    file: Option<String>,  // attachment filename, when step == "attachment"
+    error: String,
+}
+```
+
+- A **create** failure (bug never filed): `{index, error}` — exactly as today.
+- A **sub-step** failure (bug filed, comment/attachment failed): the new bug ID
+  is added to `created` **and** a `{index, bug_id, step, [file], error}` entry is
+  added to `failed`. One element may produce several `failed` entries (e.g. a
+  failed comment and a failed attachment).
+- **Invariant (documented for consumers): `created` and `failed` are NOT
+  disjoint.** `created` lists every bug the server actually filed; `failed`
+  lists every failure. A created-but-partially-failed element appears in both.
+  Counting filed bugs uses `created.len()`; detecting any problem uses
+  `failed`. This is a compatibility change from today's disjoint behavior and is
+  called out in the CHANGELOG.
+- Exit `11` via `ensure_batch_complete(succeeded = created.len(), failed =
+  failed.len())` if any element had any failure (create or sub-step).
 
 ### `--dry-run`
 
@@ -201,16 +248,22 @@ and the warning text are unchanged; only the return/exit changes.
 
 ## Shared infrastructure
 
-A small `commands/bug/compound.rs` (or `runtime` helper) owns:
+A small `commands/bug/compound.rs` owns:
 
-- `CompoundCreateResult` result type (bug ID + `Vec<SubStepFailure>`), in
-  `output/result_types.rs` next to `BatchCreateResult`.
-- A `run_sub_steps(client, bug_id, plan, w) -> Vec<SubStepFailure>` driver that
-  posts the comment and attachments, emitting a stderr warning per failure and
-  collecting the failures.
+- `SubStepFailure { step, file, error }` and `CompoundCreateResult { id,
+  failed: Vec<SubStepFailure>, .. }`, in `output/result_types.rs` next to
+  `BatchCreateResult`. `CreateFailure` is extended with the optional
+  `bug_id`/`step`/`file` fields there too.
+- A `CompoundPlan { comment: Option<AddCommentParams>, attachments:
+  Vec<UploadAttachmentParams> }`, built **before** any network call from
+  validated flag/JSON input (files read, bodies materialized, emptiness checked).
+- A `run_sub_steps(client, bug_id, &plan, w) -> Vec<SubStepFailure>` driver that
+  posts the comment then each attachment, emitting a stderr warning per failure
+  (naming the bug ID) and collecting the failures. Shared by the single-scope
+  flag/JSON handlers and reused conceptually by the array loop.
 - The existing `ensure_batch_complete(succeeded, failed)` in `runtime::mutation`
-  is reused to turn the failure count into the `BatchPartialFailure` error;
-  `clone` and the compound create both call it.
+  turns the failure count into `BatchPartialFailure`; `clone`, the single-scope
+  compound create, and the array loop all funnel through it.
 
 ## Acceptance criteria (from the issue) → coverage
 
@@ -242,12 +295,24 @@ A small `commands/bug/compound.rs` (or `runtime` helper) owns:
   a deliberate behavior change for partial-failure consistency.
 - **`description` → attachment field** — maps to the attachment *summary* (the
   Bugzilla field shown in the UI), matching `attachment upload --summary`.
+- **Comment stdin** — `--with-comment`/`--with-comment-file` do **not** accept
+  `-`/stdin (single-consumer collision with the piped description); use the JSON
+  form for comment-from-stdin.
+- **Single vs array result shapes** — single scope emits `ActionResult` on
+  success / `CompoundCreateResult` on failure; array scope keeps
+  `BatchCreateResult` with an extended `CreateFailure`. Both share the
+  `{step, file, error}` sub-step record. `created`/`failed` are non-disjoint in
+  the array scope (documented compat change).
+- **Empty inputs** — empty comment body → exit 7; empty attachment description →
+  falls back to filename.
 
 ## Test plan
 
 - Unit (sibling `*_tests.rs`): flag→plan building, JSON schema parse
   (`deny_unknown_fields`, defaults), index-pairing of descriptions, the
-  too-many-descriptions error, dry-run preview content.
+  too-many-descriptions error, empty-comment-body → exit 7, empty-description
+  fallback to filename, `--attachment-description` with no `--with-attachment`
+  → exit 7, dry-run preview content (comment + attachments present).
 - Wiremock (`#[tokio::test]`): the two issue-mandated scenarios plus attachment
   500, multi-attachment partial failure, and clone comment 500 → exit 11.
 - Functional (`tests/functional/phases/`): compound create against a real
