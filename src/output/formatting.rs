@@ -9,6 +9,14 @@ use crate::types::output::OutputFormat;
 
 // ── Formatting primitives ───────────────────────────────────────────
 
+#[cfg(test)]
+pub(crate) fn disable_color_for_tests() {
+    colored::control::set_override(false);
+}
+
+#[cfg(not(test))]
+pub(crate) fn disable_color_for_tests() {}
+
 /// Join a bug or attachment's flags into the concise comma-separated
 /// `name<status>[(requestee)]` inline form used by table columns and detail
 /// rows on both resources.
@@ -88,6 +96,7 @@ pub(super) fn write_formatted<T, W>(
     T: Serialize + ?Sized,
     W: Write + ?Sized,
 {
+    disable_color_for_tests();
     match format {
         OutputFormat::Json => write_json(value, out),
         OutputFormat::Ndjson => write_ndjson(value, out),
@@ -108,6 +117,7 @@ pub(super) fn write_formatted_projected<T, W>(
     T: Serialize + ?Sized,
     W: Write + ?Sized,
 {
+    disable_color_for_tests();
     match format {
         OutputFormat::Json => {
             let mut value = serde_json::to_value(value).expect("serializable to JSON");
