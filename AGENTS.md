@@ -81,14 +81,14 @@ Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches the
   pattern: load config → resolve auth → connect client → call API → print
   output. Local-only commands under `commands/config/` use the same context
   boundary but do local I/O, while `whoami.rs` has no action enum. Cross-cutting command
-  infrastructure lives under `commands/runtime/`: `runtime::shared` provides
-  `connect_and_configure()` (config load + auth detection + client construction)
-  and body-source helpers; `runtime::context` owns per-invocation flags;
-  `runtime::confirm` handles batch prompts; `runtime::inline_server` models
-  inline server configuration; `runtime::flags` handles Bugzilla flag syntax
-  parsing; `runtime::paging` drives search pagination; `runtime::editor`
-  invokes `$EDITOR`. See `src/commands/mod.rs` for the complete list of command
-  modules.
+  infrastructure lives under `commands/runtime/`: `runtime::invocation` owns
+  per-command state, capability policy, and inline server configuration;
+  `runtime::input` owns payload loading, Bugzilla URL import, attachment input,
+  and flag parsing; `runtime::interaction` owns confirmation prompts and
+  `$EDITOR`; `runtime::search` owns query execution, field projection, and
+  paging; `runtime::shared` owns connection and body-source helpers; and
+  `runtime::mutation` owns the shared admin create/update driver. See
+  `src/commands/mod.rs` for the complete list of command modules.
 
 ### Conventions
 
