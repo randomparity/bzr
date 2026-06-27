@@ -3,6 +3,38 @@
 use super::*;
 
 #[test]
+fn bugzilla_user_fields_matches_serialized_keys() {
+    let user = BugzillaUser {
+        id: 1,
+        name: Some("alice".into()),
+        real_name: Some("Alice".into()),
+        email: Some("alice@example.com".into()),
+        groups: vec![UserGroup {
+            id: Some(1),
+            name: Some("admin".into()),
+            description: Some("Admins".into()),
+        }],
+        can_login: Some(true),
+    };
+    let value = serde_json::to_value(&user).unwrap();
+    let serialized: std::collections::BTreeSet<String> =
+        value.as_object().unwrap().keys().cloned().collect();
+    let declared: std::collections::BTreeSet<String> = BUGZILLA_USER_FIELDS
+        .iter()
+        .map(|s| (*s).to_string())
+        .collect();
+    assert_eq!(
+        serialized, declared,
+        "BUGZILLA_USER_FIELDS drifted from serde output"
+    );
+    assert_eq!(
+        BUGZILLA_USER_FIELDS.len(),
+        declared.len(),
+        "BUGZILLA_USER_FIELDS has duplicates"
+    );
+}
+
+#[test]
 fn bugzilla_user_deserializes_full() {
     let json = serde_json::json!({
         "id": 123,

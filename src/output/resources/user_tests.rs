@@ -127,13 +127,23 @@ fn print_users_json_includes_all_fields() {
 
 fn capture_users(format: OutputFormat, users: &[BugzillaUser]) -> String {
     let mut buf = Vec::new();
-    write_users(users, format, &mut buf);
+    write_users(
+        users,
+        format,
+        &crate::validation::fields::FieldProjection::none(),
+        &mut buf,
+    );
     String::from_utf8(buf).unwrap()
 }
 
 fn capture_users_detailed(format: OutputFormat, users: &[BugzillaUser]) -> String {
     let mut buf = Vec::new();
-    write_users_detailed(users, format, &mut buf);
+    write_users_detailed(
+        users,
+        format,
+        &crate::validation::fields::FieldProjection::none(),
+        &mut buf,
+    );
     String::from_utf8(buf).unwrap()
 }
 

@@ -68,7 +68,7 @@ fn parse_group_remove_user_binds_group_and_user() {
 #[test]
 fn parse_group_list_users_defaults_details_false() {
     match group_action(&["bzr", "group", "list-users", "--group", "editbugs"]) {
-        GroupAction::ListUsers { group, details } => {
+        GroupAction::ListUsers { group, details, .. } => {
             assert_eq!(group, "editbugs");
             assert!(!details);
         }

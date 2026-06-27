@@ -7,15 +7,23 @@ use crate::output::writers::Writers;
 pub(super) async fn handle(
     query: &str,
     details: bool,
+    projection_args: &crate::cli::ProjectionArgs,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let projection = crate::validation::fields::projection_for(
+        ctx.format(),
+        projection_args.fields.as_deref(),
+        projection_args.exclude_fields.as_deref(),
+        crate::types::user::BUGZILLA_USER_FIELDS,
+        w.err,
+    )?;
     let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
     let detail_level = user_detail_level(details);
     let users = client.search_users(query, detail_level).await?;
     match detail_level {
-        UserDetailLevel::Basic => write_users(&users, ctx.format(), w.out),
-        UserDetailLevel::Detailed => write_users_detailed(&users, ctx.format(), w.out),
+        UserDetailLevel::Basic => write_users(&users, ctx.format(), &projection, w.out),
+        UserDetailLevel::Detailed => write_users_detailed(&users, ctx.format(), &projection, w.out),
     }
     Ok(())
 }

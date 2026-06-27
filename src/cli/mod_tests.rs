@@ -1324,7 +1324,7 @@ fn parse_user_search() {
     let cli = Cli::try_parse_from(["bzr", "user", "search", "alice"]).unwrap();
     match cli.command {
         Commands::User {
-            action: UserAction::Search { query, details },
+            action: UserAction::Search { query, details, .. },
         } => {
             assert_eq!(query, "alice");
             assert!(!details);

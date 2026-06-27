@@ -16,7 +16,11 @@ pub(crate) async fn execute(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     match action {
-        UserAction::Search { query, details } => search::handle(query, *details, ctx, w).await,
+        UserAction::Search {
+            query,
+            details,
+            projection,
+        } => search::handle(query, *details, projection, ctx, w).await,
         UserAction::Create {
             from_json,
             email,

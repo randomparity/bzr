@@ -23,6 +23,7 @@ fn capabilities_are_anonymous_for_reads() {
     let list = super::capabilities(&GroupAction::ListUsers {
         group: "admin".into(),
         details: false,
+        projection: crate::cli::ProjectionArgs::default(),
     });
     assert!(!list.supports_dry_run());
     assert_eq!(list.credential_requirement(), None);

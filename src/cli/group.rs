@@ -74,6 +74,8 @@ pub(crate) enum GroupAction {
         /// Show extended details (groups, login status)
         #[arg(long)]
         details: bool,
+        #[command(flatten)]
+        projection: crate::cli::ProjectionArgs,
     },
 
     /// View group metadata (description, active flag, ID).

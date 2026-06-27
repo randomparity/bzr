@@ -22,7 +22,7 @@ fn parse_error_kind(args: &[&str]) -> ErrorKind {
 #[test]
 fn parse_user_search_minimal_defaults_details_false() {
     match user_action(&["bzr", "user", "search", "alice"]) {
-        UserAction::Search { query, details } => {
+        UserAction::Search { query, details, .. } => {
             assert_eq!(query, "alice");
             assert!(!details);
         }
