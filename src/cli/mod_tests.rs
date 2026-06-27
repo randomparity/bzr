@@ -1361,7 +1361,7 @@ fn parse_field_list() {
     let cli = Cli::try_parse_from(["bzr", "field", "list", "status"]).unwrap();
     match cli.command {
         Commands::Field {
-            action: FieldAction::List { name },
+            action: FieldAction::List { name, .. },
         } => assert_eq!(name, "status"),
         _ => panic!("expected Field List"),
     }

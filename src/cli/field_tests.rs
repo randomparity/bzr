@@ -38,7 +38,7 @@ fn parse_field_aliases_rejects_positional() {
 #[test]
 fn parse_field_list_binds_name() {
     match field_action(&["bzr", "field", "list", "status"]) {
-        FieldAction::List { name } => assert_eq!(name, "status"),
+        FieldAction::List { name, .. } => assert_eq!(name, "status"),
         FieldAction::Aliases => panic!("expected List"),
     }
 }
@@ -46,7 +46,7 @@ fn parse_field_list_binds_name() {
 #[test]
 fn parse_field_list_preserves_canonical_name() {
     match field_action(&["bzr", "field", "list", "bug_severity"]) {
-        FieldAction::List { name } => assert_eq!(name, "bug_severity"),
+        FieldAction::List { name, .. } => assert_eq!(name, "bug_severity"),
         FieldAction::Aliases => panic!("expected List"),
     }
 }

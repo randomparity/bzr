@@ -34,6 +34,10 @@ pub struct FieldValue {
     pub can_change_to: Option<Vec<StatusTransition>>,
 }
 
+/// Serde JSON keys of [`FieldValue`], for `--fields` / `--exclude-fields`
+/// validation on `field list`.
+pub const FIELD_VALUE_FIELDS: &[&str] = &["name", "sort_key", "is_active", "can_change_to"];
+
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct StatusTransition {

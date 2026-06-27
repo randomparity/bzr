@@ -49,6 +49,8 @@ pub(crate) enum FieldAction {
         /// Common aliases are resolved automatically (status -> `bug_status`,
         /// severity -> `bug_severity`, etc.)
         name: String,
+        #[command(flatten)]
+        projection: crate::cli::ProjectionArgs,
     },
 }
 
