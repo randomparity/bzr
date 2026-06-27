@@ -16,3 +16,4 @@ rejected.
 | [0007](0007-json-output-schema-version-envelope.md) | `--json` output is wrapped in a versioned envelope | Accepted |
 | [0008](0008-bug-history-flattened-change-records.md) | `bug history` JSON emits flattened change records with correlated `comment_id` | Accepted |
 | [0009](0009-whoami-connection-metadata.md) | `whoami` JSON carries connection metadata via a flatten wrapper | Accepted |
+| [0010](0010-uniform-fields-projection.md) | Uniform `--fields` projection is a generic serde-key filter, not the bug enum | Accepted |
