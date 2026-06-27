@@ -19,8 +19,8 @@ pub(crate) async fn execute(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     match action {
-        GroupAction::AddUser { group, user } => add_user::handle(group, user, ctx, w).await,
-        GroupAction::RemoveUser { group, user } => remove_user::handle(group, user, ctx, w).await,
+        GroupAction::AddUser { group, user } => add_user::handle(user, group, ctx, w).await,
+        GroupAction::RemoveUser { group, user } => remove_user::handle(user, group, ctx, w).await,
         GroupAction::ListUsers {
             group,
             details,

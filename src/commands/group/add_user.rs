@@ -4,8 +4,8 @@ use crate::output::result_types::{write_result, MembershipResult};
 use crate::output::writers::Writers;
 
 pub(super) async fn handle(
-    group: &str,
     user: &str,
+    group: &str,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
