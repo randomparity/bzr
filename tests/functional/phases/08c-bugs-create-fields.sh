@@ -44,6 +44,14 @@ test_begin "144. bug create --from-json array creates multiple bugs"
 run_bzr bug create --from-json "$_FJ/arr.json"
 if assert_success && assert_json '.created | length' "2" && assert_json '.failed | length' "0"; then test_pass; fi
 
+# #462: --progress ndjson streams batch/done events on stderr for the array form;
+# stdout stays the clean partial-failure result object.
+test_begin "144a. bug create --from-json array --progress ndjson streams events"
+run_bzr bug create --from-json "$_FJ/arr.json" --progress ndjson
+if assert_success && assert_json '.created | length' "2" &&
+    assert_stderr_contains '"event":"batch"' &&
+    assert_stderr_contains '"event":"done"'; then test_pass; fi
+
 test_begin "145. bug create --from-json unknown key (exit 7)"
 run_bzr bug create --from-json "$_FJ/bad.json"
 if assert_exit_code 7 && assert_stderr_contains "unknown field"; then test_pass; fi
