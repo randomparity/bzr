@@ -617,6 +617,64 @@ async fn build_params_from_url_exclude_fields_reaches_server() {
 }
 
 #[tokio::test]
+async fn paginate_with_progress_streams_page_and_done_on_stderr() {
+    // The search execution path (shared by `bug search` and `query run`) must
+    // thread the context's --progress format into the pagination loop: a page
+    // event per request and a terminal done on stderr, while stdout stays a
+    // clean JSON document. Guards execution.rs's `ctx.progress()` wiring, which
+    // functional tier 138a exercises only via `bug list` (a different caller).
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    // Page size 2; first page returns 1 bug → short page → one request, then done.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 7, "summary": "s", "status": "NEW",
+                      "product": "P", "component": "General"}]
+        })))
+        .mount(&mock)
+        .await;
+
+    let url = format!("{}/buglist.cgi?product=P", mock.uri());
+    let mut action = from_url_action(url, None);
+    if let BugAction::Search(crate::cli::SearchArgs {
+        page_args, limit, ..
+    }) = &mut action
+    {
+        *limit = Some(2);
+        *page_args = crate::cli::PageArgs {
+            offset: None,
+            paginate: true,
+        };
+    }
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let ctx =
+        crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_progress(Some(crate::types::ProgressFormat::Ndjson));
+    let result = crate::commands::bug::execute(&action, &ctx, &mut io.writers()).await;
+    assert!(result.is_ok(), "{result:?}");
+
+    let err = io.err_str().to_string();
+    assert!(
+        err.contains(r#"{"event":"page","n":1,"fetched":1}"#),
+        "missing page event on stderr: {err:?}"
+    );
+    assert!(
+        err.contains(r#"{"event":"done","fetched":1}"#),
+        "missing terminal done event on stderr: {err:?}"
+    );
+
+    // stdout stays a clean, parseable JSON document — progress must not leak.
+    let out = io.out_str().to_string();
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&out);
+    assert_eq!(parsed[0]["id"], 7);
+    assert!(
+        !out.contains("\"event\""),
+        "progress events must not leak to stdout: {out:?}"
+    );
+}
+
+#[tokio::test]
 async fn from_url_offset_with_paginate_sends_single_offset_per_page() {
     // `--from-url …&offset=10 --paginate` must not leave the URL's offset in
     // raw_params: every page request carries exactly one (loop-managed) offset.
