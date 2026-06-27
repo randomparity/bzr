@@ -77,6 +77,25 @@ projection is a generic top-level key filter over the serialized
    (exit 7). `serde_json` `preserve_order` is already enabled (bug work), so
    projected objects keep struct-declaration key order for free.
 
+7. **Combined `--fields` + `--exclude-fields` resolves include first, then
+   subtracts exclude** (same as bug verbs). The effective key set is: the
+   include set when a non-blank `--fields` is given, else all known keys; then
+   every `--exclude-fields` token is removed. An exclude token that is a valid
+   known key but absent from the include set is **inert, not an error**
+   (e.g. `--fields a,b --exclude-fields c` → `{a, b}`). An exclude token that is
+   not a known key is still an error (decision 5). If the final set is empty
+   (e.g. `--fields a --exclude-fields a`, or excluding every key) → exit 7. This
+   is validated by an explicit combined-flag unit + wiremock case.
+
+8. **Selecting a key that a given verb's records never carry is allowed and
+   yields sparse objects, not an error.** Some serde keys are absent from a
+   verb's actual payload (e.g. `Attachment.data` is only populated by
+   `attachment download`, never by `attachment list`). `--fields data` on
+   `attachment list` validates (it is a known `Attachment` key) and projects to
+   `{}` per element. This is gh-consistent — asking for an absent key returns
+   nothing — and is documented in the verb's `docs/bzr-cli.md` note rather than
+   special-cased out of the key universe.
+
 ## Non-goals
 
 - No change to bug verbs (`bug list`/`view`/`search`/`my`, `query run`). Their
@@ -237,13 +256,26 @@ CLI args ─> ProjectionArgs ─> command handler
 - unknown include token → `Err` (exit 7); unknown exclude token → `Err`.
 - exclude covering every known key → `Err`; include of all-blank (`""`,`,,`) =
   identity (full set).
+- combined flags: `--fields a,b --exclude-fields a` → `{b}`; `--fields a,b
+  --exclude-fields c` (c known, not in include) → `{a, b}` (inert exclude);
+  `--fields a --exclude-fields a` → `Err` (exit 7) (decision 7).
 - `apply` over an array projects every element; over a single object projects it;
-  over a scalar is a no-op.
+  over a scalar is a no-op; selecting a key absent from the value yields an
+  object without it (sparse, not an error — decision 8).
 - projected object key order = serialization order (preserve_order lock).
 
 **Unit — per type drift guard (`types/<t>_tests.rs`):** serialize a
-fully-populated instance; assert its serde key set equals `<TYPE>_FIELDS` (both
-directions), and that the list has no duplicates. Future field drift fails loud.
+**fully-serializing** instance and assert its serde key set is exactly equal to
+`<TYPE>_FIELDS` (set equality, both directions), and that the list has no
+duplicates. "Fully-serializing" is load-bearing: several target types use
+`skip_serializing_if = "Option::is_none"` / `"Vec::is_empty"` (`Attachment`,
+`Product`, `Component`, `GroupInfo`, `FieldValue`), so the fixture MUST set every
+`Option` field to `Some` and every skip-on-empty `Vec` to non-empty — otherwise a
+skipped key could be silently missing from both the serialization and the const,
+the equality would pass, and `--fields <that_key>` would wrongly exit 7 for a
+real field. The set-equality-both-directions assertion is what catches an
+incomplete const, but only if the fixture forces the full key universe to
+serialize. Each type's test states the populated fixture explicitly.
 
 **Command/wiremock — one per verb (`<cmd>_tests.rs`):**
 - `--json --fields <k>` returns objects with only `<k>` (envelope `data` trimmed).
@@ -260,7 +292,12 @@ the verb supports it.
 
 **Guardrails:** `make lint` (fmt + clippy + check-test-layout + check-no-spawn),
 full `cargo test`, `cargo deny check`, flag-drift-check (docs tree updated),
-`make skills-test` (json-recipes recipe added).
+`make skills-test` (json-recipes recipe added). The `ProjectionArgs` help text
+and the table no-op warning must not reintroduce any phrase forbidden by
+`cli_and_docs_avoid_misleading_trim_phrasing` (tests/integration.rs) — the
+proposed strings ("Comma-separated JSON keys to keep/drop", the no-op warning)
+already comply; that test scans `docs/bzr-cli.md` and `src/cli/*.rs` (top level,
+so `cli/fields.rs` is covered).
 
 ## Docs & artifacts
 
