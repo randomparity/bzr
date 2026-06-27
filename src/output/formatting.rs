@@ -95,6 +95,34 @@ pub(super) fn write_formatted<T, W>(
     }
 }
 
+/// Like [`write_formatted`], but trims the JSON-family output to `projection`
+/// before writing. The table arm renders via `table_fn` unchanged (projection
+/// is a no-op on table output).
+pub(super) fn write_formatted_projected<T, W>(
+    value: &T,
+    format: OutputFormat,
+    projection: &crate::validation::fields::FieldProjection,
+    out: &mut W,
+    table_fn: impl FnOnce(&T, &mut W),
+) where
+    T: Serialize + ?Sized,
+    W: Write + ?Sized,
+{
+    match format {
+        OutputFormat::Json => {
+            let mut value = serde_json::to_value(value).expect("serializable to JSON");
+            projection.apply(&mut value);
+            write_json(&value, out);
+        }
+        OutputFormat::Ndjson => {
+            let mut value = serde_json::to_value(value).expect("serializable to JSON");
+            projection.apply(&mut value);
+            write_ndjson(&value, out);
+        }
+        OutputFormat::Table => table_fn(value, out),
+    }
+}
+
 pub(super) fn write_table_records<W: Write + ?Sized>(
     headers: &[&str],
     rows: impl IntoIterator<Item = Vec<String>>,
@@ -114,6 +142,24 @@ pub(super) struct TableSpec<'a> {
     pub headers: &'a [&'a str],
 }
 
+/// Render `items` as a `tabled` table, printing `table.empty_msg` instead of an
+/// empty table when there are no items. Table-only (no format branch); shared by
+/// [`write_table_or_empty`] and the projected resource writers' table closures.
+pub(super) fn write_records_or_empty<T, W>(
+    items: &[T],
+    table: TableSpec<'_>,
+    to_record: impl Fn(&T) -> Vec<String>,
+    out: &mut W,
+) where
+    W: Write + ?Sized,
+{
+    if items.is_empty() {
+        let _ = writeln!(out, "{}", table.empty_msg);
+        return;
+    }
+    write_table_records(table.headers, items.iter().map(to_record), out);
+}
+
 /// Render a slice as JSON or a `tabled` table, printing `empty_msg` instead of
 /// an empty table when there are no items. `to_record` maps each item to one
 /// display row.
@@ -128,11 +174,7 @@ pub(super) fn write_table_or_empty<T, W>(
     W: Write + ?Sized,
 {
     write_formatted(items, format, out, |items, out| {
-        if items.is_empty() {
-            let _ = writeln!(out, "{}", table.empty_msg);
-            return;
-        }
-        write_table_records(table.headers, items.iter().map(to_record), out);
+        write_records_or_empty(items, table, to_record, out);
     });
 }
 

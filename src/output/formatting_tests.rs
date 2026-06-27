@@ -123,6 +123,71 @@ fn opt_yes_no_formats_optional_boolean_values() {
     assert_eq!(opt_yes_no(None), "-");
 }
 
+// ── projection-aware writers ─────────────────────────────────────
+
+#[test]
+fn write_formatted_projected_trims_ndjson_object() {
+    use crate::validation::fields::FieldProjection;
+    let proj = FieldProjection::resolve(Some("id"), None, &["id", "name"]).unwrap();
+    let value = serde_json::json!({"id": 1, "name": "x"});
+    let mut buf = Vec::new();
+    write_formatted_projected(&value, OutputFormat::Ndjson, &proj, &mut buf, |_, _| {});
+    assert_eq!(String::from_utf8(buf).unwrap().trim(), r#"{"id":1}"#);
+}
+
+#[test]
+fn write_formatted_projected_table_ignores_projection() {
+    use crate::validation::fields::FieldProjection;
+    let proj = FieldProjection::resolve(Some("id"), None, &["id", "name"]).unwrap();
+    let value = serde_json::json!({"id": 1, "name": "x"});
+    let mut buf = Vec::new();
+    write_formatted_projected(&value, OutputFormat::Table, &proj, &mut buf, |_, out| {
+        let _ = writeln!(out, "TABLE");
+    });
+    assert_eq!(String::from_utf8(buf).unwrap().trim(), "TABLE");
+}
+
+#[test]
+fn projected_resource_pattern_trims_each_ndjson_element() {
+    use crate::validation::fields::FieldProjection;
+    let proj = FieldProjection::resolve(Some("id"), None, &["id", "name"]).unwrap();
+    let items = vec![
+        serde_json::json!({"id": 1, "name": "a"}),
+        serde_json::json!({"id": 2, "name": "b"}),
+    ];
+    let mut buf = Vec::new();
+    let spec = TableSpec {
+        empty_msg: "none",
+        headers: &["ID"],
+    };
+    // Mirrors how the table-resource writers call the projected helper.
+    write_formatted_projected(
+        &items,
+        OutputFormat::Ndjson,
+        &proj,
+        &mut buf,
+        |items, out| {
+            write_records_or_empty(items, spec, |_| vec!["x".to_string()], out);
+        },
+    );
+    assert_eq!(
+        String::from_utf8(buf).unwrap().trim(),
+        "{\"id\":1}\n{\"id\":2}"
+    );
+}
+
+#[test]
+fn write_records_or_empty_prints_empty_message() {
+    let items: Vec<serde_json::Value> = Vec::new();
+    let mut buf = Vec::new();
+    let spec = TableSpec {
+        empty_msg: "none here",
+        headers: &["ID"],
+    };
+    write_records_or_empty(&items, spec, |_| vec!["x".to_string()], &mut buf);
+    assert_eq!(String::from_utf8(buf).unwrap().trim(), "none here");
+}
+
 // ── OutputFormat parsing ─────────────────────────────────────────
 
 #[test]

@@ -2,12 +2,18 @@ use std::io::Write;
 
 use colored::Colorize;
 
-use crate::output::formatting::{write_divider, write_formatted};
+use crate::output::formatting::{write_divider, write_formatted_projected};
 use crate::types::comment::Comment;
 use crate::types::output::OutputFormat;
+use crate::validation::fields::FieldProjection;
 
-pub fn write_comments<W: Write + ?Sized>(comments: &[Comment], format: OutputFormat, out: &mut W) {
-    write_formatted(comments, format, out, |comments, out| {
+pub fn write_comments<W: Write + ?Sized>(
+    comments: &[Comment],
+    format: OutputFormat,
+    projection: &FieldProjection,
+    out: &mut W,
+) {
+    write_formatted_projected(comments, format, projection, out, |comments, out| {
         if comments.is_empty() {
             let _ = writeln!(out, "No comments.");
             return;

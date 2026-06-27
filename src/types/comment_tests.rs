@@ -56,3 +56,31 @@ fn comment_deserializes_without_attachment_id_defaults_to_none() {
     assert_eq!(comment.id, 8);
     assert!(comment.attachment_id.is_none());
 }
+
+#[test]
+fn comment_fields_matches_serialized_keys() {
+    let c = Comment {
+        id: 1,
+        bug_id: Some(2),
+        text: Some("t".into()),
+        creator: Some("c".into()),
+        creation_time: Some("2020".into()),
+        count: Some(0),
+        is_private: Some(false),
+        attachment_id: Some(3),
+    };
+    let value = serde_json::to_value(&c).unwrap();
+    let serialized: std::collections::BTreeSet<String> =
+        value.as_object().unwrap().keys().cloned().collect();
+    let declared: std::collections::BTreeSet<String> =
+        COMMENT_FIELDS.iter().map(|s| (*s).to_string()).collect();
+    assert_eq!(
+        serialized, declared,
+        "COMMENT_FIELDS drifted from serde output"
+    );
+    assert_eq!(
+        COMMENT_FIELDS.len(),
+        declared.len(),
+        "COMMENT_FIELDS has duplicates"
+    );
+}

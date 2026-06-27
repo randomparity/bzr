@@ -5,6 +5,7 @@ mod comment;
 mod component;
 mod config;
 mod field;
+mod fields;
 mod group;
 mod product;
 mod query;
@@ -30,6 +31,7 @@ pub(crate) use comment::CommentAction;
 pub(crate) use component::ComponentAction;
 pub(crate) use config::ConfigAction;
 pub(crate) use field::FieldAction;
+pub(crate) use fields::ProjectionArgs;
 pub(crate) use group::GroupAction;
 pub(crate) use product::ProductAction;
 pub(crate) use query::{

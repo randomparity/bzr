@@ -42,6 +42,19 @@ pub struct Comment {
     pub attachment_id: Option<u64>,
 }
 
+/// Serde JSON keys of [`Comment`], for `--fields` / `--exclude-fields`
+/// validation on `comment list`.
+pub const COMMENT_FIELDS: &[&str] = &[
+    "id",
+    "bug_id",
+    "text",
+    "creator",
+    "creation_time",
+    "count",
+    "is_private",
+    "attachment_id",
+];
+
 #[cfg(test)]
 #[path = "comment_tests.rs"]
 mod tests;

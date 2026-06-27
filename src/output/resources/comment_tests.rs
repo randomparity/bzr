@@ -18,7 +18,12 @@ fn make_comment(count: u64, text: &str) -> Comment {
 
 fn capture(format: OutputFormat, comments: &[Comment]) -> String {
     let mut buf = Vec::new();
-    write_comments(comments, format, &mut buf);
+    write_comments(
+        comments,
+        format,
+        &crate::validation::fields::FieldProjection::none(),
+        &mut buf,
+    );
     String::from_utf8(buf).unwrap()
 }
 
