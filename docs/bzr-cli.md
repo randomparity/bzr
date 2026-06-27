@@ -2579,4 +2579,10 @@ equivalent behavior. For example, selected reads may fall back across transports
 to avoid known Bugzilla REST gaps, while mutations that only have implemented
 REST support continue to use REST.
 
-In `hybrid` mode, `bzr` tries REST first for search/list operations. If REST returns empty results and the query has active filters (product, status, etc.), it retries via XML-RPC. For direct bug lookups (`bug view`), it falls back to XML-RPC on server errors but not on authentication failures.
+In `hybrid` mode, `bzr` chooses the transport per operation. Bug search/list is
+REST-first and retries via XML-RPC only when REST returns empty results for a
+query with active filters (product, status, etc.). Direct bug lookups (`bug
+view`) are REST-first and fall back to XML-RPC on server errors but not on
+authentication failures. Comments and attachments are XML-RPC-first in Hybrid
+mode because REST responses cannot reliably distinguish private data from
+missing public data on some Bugzilla versions.

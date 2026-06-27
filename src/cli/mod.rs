@@ -264,11 +264,13 @@ pub struct Cli {
     /// some resource methods use transport-specific exceptions when
     /// one Bugzilla API cannot provide equivalent behavior. `rest`
     /// prefers Bugzilla's REST API. `xmlrpc` prefers XML-RPC.
-    /// `hybrid` prefers REST and falls back to XML-RPC for known
-    /// compatibility gaps. Most users won't need this -- bzr probes
-    /// on first use and caches the working transport per server (the
-    /// auto-detected default depends on the server's Bugzilla version:
-    /// `hybrid` for 5.0.x, `rest` for >= 5.1, `xmlrpc` for older).
+    /// `hybrid` chooses per operation: bug search/view is generally
+    /// REST-first with targeted XML-RPC fallback, while comments and
+    /// attachments use XML-RPC first to preserve private-data behavior.
+    /// Most users won't need this -- bzr probes on first use and
+    /// caches the working transport per server (the auto-detected
+    /// default depends on the server's Bugzilla version: `hybrid` for
+    /// 5.0.x, `rest` for >= 5.1, `xmlrpc` for older).
     /// Pass `rest` here (or set `api_mode = "rest"` in the server's
     /// config block) to skip the empty-result XML-RPC retry on servers
     /// with slow XML-RPC.
