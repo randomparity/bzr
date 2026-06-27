@@ -153,6 +153,12 @@ explicitly matches the existing `CommandContext` pattern and stays testable.
   `done` is **suppressed**, and `main.rs` emits the final `error` event. So the
   last progress line is always `done` (full success) or `error` (any failure),
   never both.
+- Per-item `batch` events cover the **write phase only**. A whole-batch
+  precondition rejection that aborts before any write emits **no** `batch` and no
+  `done`: an `--expect-unchanged-since` preflight failure surfaces solely via the
+  terminal `error` event (exit 11), and an interactively-declined `--yes`
+  confirmation prints the existing "Aborted" line and exits 0 with no progress
+  events. `batch` therefore strictly means "one item was attempted".
 - The existing human/JSON error line still goes to stderr after the `error`
   event. A progress consumer keys on the `event` field and ignores the trailing
   non-`event` error line.
