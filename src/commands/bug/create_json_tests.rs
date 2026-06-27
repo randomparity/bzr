@@ -268,6 +268,58 @@ fn compound_comment_unknown_key_is_rejected() {
 }
 
 #[tokio::test]
+async fn array_sub_step_failure_suppresses_done_event() {
+    // ADR-0011: `done` must be suppressed on ANY partial failure, including a
+    // sub-step failure (bug created, comment POST fails) — a different code path
+    // from a create failure. Mirror batch_create_partial_failure_emits_no_done
+    // but fail the comment, not the create.
+    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 20})))
+        .up_to_n_times(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 21})))
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/21/comment"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&mock)
+        .await;
+    let prepared = vec![
+        plain(sample_create_params()),
+        (
+            sample_create_params(),
+            crate::commands::bug::compound::CompoundPlan {
+                comment: Some(crate::types::comment::AddCommentParams {
+                    text: "note".into(),
+                    is_private: false,
+                }),
+                attachments: vec![],
+            },
+        ),
+    ];
+    let ctx = CommandContext::new(None, OutputFormat::Json, None)
+        .with_progress(Some(ProgressFormat::Ndjson));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let res = super::create_batch_from_json(prepared, &ctx, &mut io.writers()).await;
+    assert!(res.is_err(), "sub-step failure exits non-zero");
+    let stderr = io.err_str();
+    assert!(
+        stderr.contains("\"event\":\"batch\""),
+        "per-item batch events still emit: {stderr}"
+    );
+    assert!(
+        !stderr.contains("\"event\":\"done\""),
+        "no done event on a sub-step partial failure: {stderr}"
+    );
+}
+
+#[tokio::test]
 async fn array_one_good_one_failing_comment_exits_11() {
     let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
     Mock::given(method("POST"))
