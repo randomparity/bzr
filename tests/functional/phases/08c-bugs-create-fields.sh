@@ -102,6 +102,49 @@ run_bzr bug view "$FID"
 if assert_success &&
     assert_json_contains '[.flags[].name] | join(",")' "bzr_bug_review"; then test_pass; fi
 
+# #458: compound create — bug + first comment + attachment in one invocation.
+_CA_FILE="$_FJ/trace.log"
+printf 'boot trace %s\n' "$RANDOM" >"$_CA_FILE"
+_CA_MARK="compound$$x${RANDOM}"
+
+test_begin "146e. bug create --with-comment --with-attachment (compound flags)"
+CCID=$(make_bug "${_CF[@]}" --summary "compound create" \
+    --with-comment "${_CA_MARK} reproduced" \
+    --with-attachment "$_CA_FILE" --attachment-description "boot trace log")
+if [[ -n "$CCID" ]]; then
+    run_bzr comment list "$CCID"
+    if assert_success && assert_json_contains '[.[].text] | join("\n")' "$_CA_MARK"; then
+        run_bzr attachment list "$CCID"
+        if assert_success &&
+            assert_json_contains '[.[].summary] | join("\n")' "boot trace log"; then test_pass; fi
+    fi
+fi
+
+test_begin "146f. bug create compound --dry-run previews comment + attachment"
+run_bzr bug create "${_CF[@]}" --summary "compound dry" \
+    --with-comment "dry note" --with-attachment "$_CA_FILE" --attachment-description "dry trace" \
+    --dry-run
+if assert_success && assert_json '.action' "dry-run" &&
+    assert_json '.changes.comment' "dry note" &&
+    assert_json_exists '.changes.attachments[0].file_name'; then test_pass; fi
+
+test_begin "146g. bug create --from-json with comment + attachments"
+printf '%s' "{\"product\":\"FuncTestProd\",\"component\":\"Backend\",\"summary\":\"fj compound\",\"op_sys\":\"Linux\",\"rep_platform\":\"PC\",\"description\":\"d\",\"comment\":{\"body\":\"${_CA_MARK} json\"},\"attachments\":[{\"file\":\"$_CA_FILE\",\"description\":\"json trace sum\"}]}" >"$_FJ/compound.json"
+run_bzr bug create --from-json "$_FJ/compound.json"
+if assert_success; then
+    JCID=$(jq -r '.id' "$BZR_STDOUT")
+    run_bzr comment list "$JCID"
+    if assert_success && assert_json_contains '[.[].text] | join("\n")' "${_CA_MARK} json"; then
+        run_bzr attachment list "$JCID"
+        if assert_success &&
+            assert_json_contains '[.[].summary] | join("\n")' "json trace sum"; then test_pass; fi
+    fi
+fi
+
+test_begin "146h. bug create --with-comment empty body exits 7"
+run_bzr bug create "${_CF[@]}" --summary "empty compound comment" --with-comment "   "
+if assert_exit_code 7; then test_pass; fi
+
 rm -r "$_FJ"
-unset _CF _FJ _WB _GROUP_WB CFID FID OID MID GID
+unset _CF _FJ _WB _GROUP_WB CFID FID OID MID GID CCID JCID _CA_FILE _CA_MARK
 echo ""
