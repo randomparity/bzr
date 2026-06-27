@@ -53,7 +53,10 @@ fn resolve_bool_flag_neither_is_none() {
 
 #[test]
 fn capabilities_are_anonymous_for_reads() {
-    let list = capabilities(&AttachmentAction::List { bug_id: 1 });
+    let list = capabilities(&AttachmentAction::List {
+        bug_id: 1,
+        projection: crate::cli::ProjectionArgs::default(),
+    });
     assert!(!list.supports_dry_run());
     assert_eq!(list.credential_requirement(), None);
 

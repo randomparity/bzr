@@ -3,6 +3,27 @@
 use super::*;
 
 #[test]
+fn attachment_fields_matches_serialized_keys() {
+    // Fully-serializing fixture: `data` is the only skip_serializing_if field,
+    // so it must be Some for the key set to be complete.
+    let a = crate::test_helpers::make_attachment(1, 2, "f", "s", Some("ZGF0YQ==".into()));
+    let value = serde_json::to_value(&a).unwrap();
+    let serialized: std::collections::BTreeSet<String> =
+        value.as_object().unwrap().keys().cloned().collect();
+    let declared: std::collections::BTreeSet<String> =
+        ATTACHMENT_FIELDS.iter().map(|s| (*s).to_string()).collect();
+    assert_eq!(
+        serialized, declared,
+        "ATTACHMENT_FIELDS drifted from serde output"
+    );
+    assert_eq!(
+        ATTACHMENT_FIELDS.len(),
+        declared.len(),
+        "ATTACHMENT_FIELDS has duplicates"
+    );
+}
+
+#[test]
 fn attachment_deserializes_flags_and_defaults_empty() {
     let with = r#"{"id":1,"bug_id":10,"flags":[{"name":"review","status":"+","setter":"a@x"}]}"#;
     let att: Attachment = serde_json::from_str(with).unwrap();

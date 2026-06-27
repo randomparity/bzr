@@ -4,10 +4,12 @@ use colored::Colorize;
 use serde::Serialize;
 
 use crate::output::formatting::{
-    render_flags_inline, write_field, write_formatted, write_optional_field,
+    render_flags_inline, write_field, write_formatted, write_formatted_projected,
+    write_optional_field,
 };
 use crate::types::attachment::Attachment;
 use crate::types::output::OutputFormat;
+use crate::validation::fields::FieldProjection;
 
 /// Write the colored `Attachment #<id> - <summary> [FLAGS]` header line.
 fn write_attachment_header<W: Write + ?Sized>(a: &Attachment, out: &mut W) {
@@ -57,9 +59,10 @@ fn write_attachment_file<W: Write + ?Sized>(a: &Attachment, out: &mut W) {
 pub fn write_attachments<W: Write + ?Sized>(
     attachments: &[Attachment],
     format: OutputFormat,
+    projection: &FieldProjection,
     out: &mut W,
 ) {
-    write_formatted(attachments, format, out, |attachments, out| {
+    write_formatted_projected(attachments, format, projection, out, |attachments, out| {
         if attachments.is_empty() {
             let _ = writeln!(out, "No attachments.");
             return;

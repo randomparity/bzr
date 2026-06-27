@@ -1121,7 +1121,7 @@ fn parse_attachment_list() {
     let cli = Cli::try_parse_from(["bzr", "attachment", "list", "42"]).unwrap();
     match cli.command {
         Commands::Attachment {
-            action: AttachmentAction::List { bug_id },
+            action: AttachmentAction::List { bug_id, .. },
         } => assert_eq!(bug_id, 42),
         _ => panic!("expected Attachment List"),
     }
