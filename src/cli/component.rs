@@ -24,6 +24,8 @@ pub(crate) enum ComponentAction {
         /// Product name
         #[arg(long)]
         product: String,
+        #[command(flatten)]
+        projection: crate::cli::ProjectionArgs,
     },
 
     /// View a single component within a product.
@@ -45,6 +47,8 @@ pub(crate) enum ComponentAction {
         product: String,
         /// Component name (exact match)
         name: String,
+        #[command(flatten)]
+        projection: crate::cli::ProjectionArgs,
     },
 
     /// Create a new component within a product (admin only).

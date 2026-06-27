@@ -14,6 +14,11 @@ pub struct Component {
     pub default_assignee: Option<String>,
 }
 
+/// Serde JSON keys of [`Component`], for `--fields` / `--exclude-fields`
+/// validation on `component list` and `component view`.
+pub const COMPONENT_FIELDS: &[&str] =
+    &["id", "name", "description", "is_active", "default_assignee"];
+
 #[derive(Debug, Serialize)]
 #[non_exhaustive]
 pub struct CreateComponentParams {

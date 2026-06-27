@@ -1,10 +1,20 @@
+#![expect(clippy::unwrap_used)]
+
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
-use crate::cli::ComponentAction;
+use crate::cli::{ComponentAction, ProjectionArgs};
 use crate::error::BzrError;
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
+
+fn view_with(projection: ProjectionArgs) -> ComponentAction {
+    ComponentAction::View {
+        product: "MyApp".into(),
+        name: "Frontend".into(),
+        projection,
+    }
+}
 
 /// Mock `GET /rest/product?names=MyApp` returning a product with two
 /// components.
@@ -40,6 +50,7 @@ async fn component_view_returns_one_component() {
     let action = ComponentAction::View {
         product: "MyApp".into(),
         name: "Frontend".into(),
+        projection: ProjectionArgs::default(),
     };
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
@@ -62,6 +73,7 @@ async fn component_view_unknown_name_is_not_found() {
     let action = ComponentAction::View {
         product: "MyApp".into(),
         name: "Nonexistent".into(),
+        projection: ProjectionArgs::default(),
     };
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
@@ -77,4 +89,45 @@ async fn component_view_unknown_name_is_not_found() {
             ..
         })
     ));
+}
+
+#[tokio::test]
+async fn component_view_json_fields_projects_to_named_keys() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_product_with_components(&mock).await;
+
+    let action = view_with(ProjectionArgs {
+        fields: Some("id".into()),
+        exclude_fields: None,
+    });
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::component::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+    assert!(result.is_ok());
+    let parsed = crate::test_helpers::json_envelope_data(io.out_str());
+    assert_eq!(parsed["id"], 11);
+    assert_eq!(parsed.as_object().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn component_view_json_unknown_field_exits_7() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let action = view_with(ProjectionArgs {
+        fields: Some("nam".into()),
+        exclude_fields: None,
+    });
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::component::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+    assert_eq!(result.unwrap_err().exit_code(), 7);
+    assert!(io.out_str().is_empty());
 }
