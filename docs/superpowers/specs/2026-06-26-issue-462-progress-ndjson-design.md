@@ -1,6 +1,6 @@
 # Issue #462 — Structured progress stream (`--progress ndjson`)
 
-Status: Draft
+Status: Accepted
 Issue: https://github.com/randomparity/bzr/issues/462
 Related ADR: [0011](../../adr/0011-progress-ndjson-stream.md)
 
