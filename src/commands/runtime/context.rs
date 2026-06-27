@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::commands::runtime::inline_server::InlineServer;
-use crate::types::output::OutputFormat;
+use crate::types::output::{OutputFormat, ProgressFormat};
 use crate::types::transport::ApiMode;
 
 /// Per-invocation command settings that must cross command/module boundaries.
@@ -18,6 +18,7 @@ pub struct CommandContext {
     request_timeout: Duration,
     retry_max: u32,
     credential_requirement: Option<&'static str>,
+    progress: Option<ProgressFormat>,
 }
 
 impl CommandContext {
@@ -35,6 +36,7 @@ impl CommandContext {
             request_timeout: crate::http::REQUEST_TIMEOUT,
             retry_max: 0,
             credential_requirement: None,
+            progress: None,
         }
     }
 
@@ -71,6 +73,12 @@ impl CommandContext {
     #[must_use]
     pub fn with_retry_max(mut self, retry_max: u32) -> Self {
         self.retry_max = retry_max;
+        self
+    }
+
+    #[must_use]
+    pub fn with_progress(mut self, progress: Option<ProgressFormat>) -> Self {
+        self.progress = progress;
         self
     }
 
@@ -138,6 +146,11 @@ impl CommandContext {
     #[must_use]
     pub fn credential_requirement(&self) -> Option<&'static str> {
         self.credential_requirement
+    }
+
+    #[must_use]
+    pub fn progress(&self) -> Option<ProgressFormat> {
+        self.progress
     }
 }
 

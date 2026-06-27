@@ -10,6 +10,7 @@
 pub const SCHEMA_VERSION: &str = "0.6.0";
 
 mod formatting;
+pub mod progress;
 pub(crate) mod resources;
 pub(crate) mod result_types;
 pub mod writers;

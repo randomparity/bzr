@@ -17,7 +17,7 @@ use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
 use crate::output::writers::Writers;
 use crate::types::bug::{Bug, SearchParams};
-use crate::types::output::OutputFormat;
+use crate::types::output::{OutputFormat, ProgressFormat};
 
 /// Backstop on the `--paginate` loop: a server that ignored `offset` would
 /// otherwise return a full page forever. Far above any real result set.
@@ -68,9 +68,11 @@ pub(crate) async fn fetch_page(
     client: &BugzillaClient,
     params: &SearchParams,
     paginate: bool,
+    progress: Option<ProgressFormat>,
+    w: &mut Writers<'_>,
 ) -> Result<Page> {
     if paginate {
-        let bugs = fetch_all_pages(client, params).await?;
+        let bugs = fetch_all_pages(client, params, progress, w).await?;
         return Ok(Page {
             bugs,
             truncated: false,
@@ -97,21 +99,34 @@ pub(crate) async fn fetch_page(
 /// Loop `offset += limit` until a page shorter than `limit` (the last page) and
 /// return the accumulated matches. A zero/absent limit means the single
 /// unbounded request already returns everything (bounded by the server max).
-async fn fetch_all_pages(client: &BugzillaClient, params: &SearchParams) -> Result<Vec<Bug>> {
-    fetch_all_pages_with_cap(client, params, MAX_PAGES).await
+async fn fetch_all_pages(
+    client: &BugzillaClient,
+    params: &SearchParams,
+    progress: Option<ProgressFormat>,
+    w: &mut Writers<'_>,
+) -> Result<Vec<Bug>> {
+    fetch_all_pages_with_cap(client, params, MAX_PAGES, progress, w).await
 }
 
 async fn fetch_all_pages_with_cap(
     client: &BugzillaClient,
     params: &SearchParams,
     max_pages: u32,
+    progress: Option<ProgressFormat>,
+    w: &mut Writers<'_>,
 ) -> Result<Vec<Bug>> {
     let Some(page_size) = params.limit.filter(|l| *l > 0) else {
-        return client.search_bugs(params).await;
+        // No window: one unbounded request returns everything. A single
+        // terminal `done` still fires so consumers can wait on it; there is no
+        // multi-page sequence to report.
+        let bugs = client.search_bugs(params).await?;
+        crate::output::progress::done_event(progress, w.err, bugs.len());
+        return Ok(bugs);
     };
     let mut offset = params.offset.unwrap_or(0);
     let mut all = Vec::new();
     let mut reached_last_page = false;
+    let mut page_no: u32 = 0;
     for _ in 0..max_pages {
         let next_offset = checked_next_offset(offset, page_size)?;
         let mut p = params.clone();
@@ -119,6 +134,8 @@ async fn fetch_all_pages_with_cap(
         let batch = client.search_bugs(&p).await?;
         let received = batch.len();
         all.extend(batch);
+        page_no += 1;
+        crate::output::progress::page_event(progress, w.err, page_no, all.len());
         if received < page_size as usize {
             reached_last_page = true;
             break;
@@ -126,11 +143,14 @@ async fn fetch_all_pages_with_cap(
         offset = next_offset;
     }
     if !reached_last_page {
+        // No `done` on the safety-cap error; the terminal `error` event is
+        // emitted by `main.rs` when this propagates out of dispatch.
         return Err(BzrError::InputValidation(format!(
             "--paginate stopped at the {max_pages}-page safety cap before reaching a short page; \
              the server may be ignoring offset, so results would be incomplete"
         )));
     }
+    crate::output::progress::done_event(progress, w.err, all.len());
     Ok(all)
 }
 

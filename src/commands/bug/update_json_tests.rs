@@ -2,9 +2,86 @@
 
 use std::collections::BTreeSet;
 
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, ResponseTemplate};
+
+use crate::commands::runtime::context::CommandContext;
 use crate::commands::runtime::from_json::JsonOneOrMany;
+use crate::types::{OutputFormat, ProgressFormat};
 
 use super::super::update::BugUpdateDraft;
+use super::JsonUpdateRequest;
+
+fn sample_update_request(id: u64) -> JsonUpdateRequest {
+    JsonUpdateRequest {
+        id,
+        expect_unchanged_since: None,
+        params: crate::types::bug::UpdateBugParams::default(),
+    }
+}
+
+#[tokio::test]
+async fn batch_update_emits_batch_then_done() {
+    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    for id in [1u64, 2] {
+        Mock::given(method("PUT"))
+            .and(path(format!("/rest/bug/{id}")))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"bugs": [{"id": id, "changes": {}}]})),
+            )
+            .mount(&mock)
+            .await;
+    }
+    let requests = vec![sample_update_request(1), sample_update_request(2)];
+    let ctx = CommandContext::new(None, OutputFormat::Json, None)
+        .with_progress(Some(ProgressFormat::Ndjson));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    super::update_many_from_json(&requests, &ctx, &mut io.writers())
+        .await
+        .unwrap();
+    assert_eq!(
+        io.err_str().lines().collect::<Vec<_>>(),
+        vec![
+            "{\"event\":\"batch\",\"n\":1,\"total\":2,\"ok\":1,\"failed\":0}",
+            "{\"event\":\"batch\",\"n\":2,\"total\":2,\"ok\":2,\"failed\":0}",
+            "{\"event\":\"done\",\"fetched\":2}",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn batch_update_partial_failure_emits_no_done() {
+    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/1"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": [{"id": 1, "changes": {}}]})),
+        )
+        .mount(&mock)
+        .await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/2"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&mock)
+        .await;
+    let requests = vec![sample_update_request(1), sample_update_request(2)];
+    let ctx = CommandContext::new(None, OutputFormat::Json, None)
+        .with_progress(Some(ProgressFormat::Ndjson));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let res = super::update_many_from_json(&requests, &ctx, &mut io.writers()).await;
+    assert!(res.is_err(), "partial failure exits non-zero");
+    let err = io.err_str();
+    assert!(
+        err.contains("\"event\":\"batch\""),
+        "per-item events still emit"
+    );
+    assert!(
+        !err.contains("\"event\":\"done\""),
+        "no done on partial failure"
+    );
+}
 
 fn schema_value(name: &str) -> serde_json::Value {
     let (_, body) = crate::commands::schema::SCHEMAS

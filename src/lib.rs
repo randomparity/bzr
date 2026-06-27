@@ -162,6 +162,7 @@ fn build_command_context(
         .with_config_path_override(cli.config.clone())
         .with_request_timeout(request_timeout)
         .with_retry_max(cli.retry.unwrap_or(0))
+        .with_progress(cli.progress)
         .with_credential_requirement(capabilities.credential_requirement())
 }
 

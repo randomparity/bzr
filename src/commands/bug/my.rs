@@ -69,7 +69,11 @@ pub(super) async fn handle(
     // `truncated` means at least one category had more rows than `--limit`.
     let mut truncated = false;
     for params in &searches {
-        let page = crate::commands::runtime::paging::fetch_page(client, params, paginate).await?;
+        // `bug my` is out of the `--progress` scope (issue #462): its
+        // multi-category loop would emit several `done` events. Pass `None` so
+        // it stays silent regardless of the flag.
+        let page =
+            crate::commands::runtime::paging::fetch_page(client, params, paginate, None, w).await?;
         truncated |= page.truncated;
         for bug in page.bugs {
             // When counting, only the deduped id set matters — don't retain rows.

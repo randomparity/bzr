@@ -161,6 +161,16 @@ async fn update_many_from_json(
                 error: e.to_string(),
             }),
         }
+        crate::output::progress::batch_event(
+            ctx.progress(),
+            w.err,
+            &crate::output::progress::BatchProgress {
+                n: succeeded.len() + failed.len(),
+                total: requests.len(),
+                ok: succeeded.len(),
+                failed: failed.len(),
+            },
+        );
     }
 
     let batch = BatchResult::new(succeeded, failed);
@@ -168,7 +178,11 @@ async fn update_many_from_json(
         .iter()
         .any(|request| request.params.comment.is_some());
     super::update::write_batch_result(&batch, format, with_comment, w);
-    super::update::ensure_batch_complete(batch.succeeded.len(), batch.failed.len())
+    let result = super::update::ensure_batch_complete(batch.succeeded.len(), batch.failed.len());
+    if result.is_ok() {
+        crate::output::progress::done_event(ctx.progress(), w.err, requests.len());
+    }
+    result
 }
 
 async fn preflight_expect_unchanged_since(

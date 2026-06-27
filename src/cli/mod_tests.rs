@@ -5,7 +5,7 @@ use super::{
     ComponentAction, ConfigAction, FieldAction, GroupAction, ProductAction, QueryAction,
     ServerAction, TemplateAction, UserAction,
 };
-use crate::types::{ApiMode, ProductListType};
+use crate::types::{ApiMode, ProductListType, ProgressFormat};
 use clap::{Command, CommandFactory as _, Parser as _};
 
 fn display_command_path(path: &[String]) -> String {
@@ -90,6 +90,20 @@ fn parse_global_json_flag() {
 fn parse_global_server_flag() {
     let cli = Cli::try_parse_from(["bzr", "--server", "myserver", "bug", "list"]).unwrap();
     assert_eq!(cli.server.as_deref(), Some("myserver"));
+}
+
+#[test]
+fn parse_progress_ndjson_flag() {
+    let cli = Cli::try_parse_from(["bzr", "bug", "list", "--progress", "ndjson"]).unwrap();
+    assert_eq!(cli.progress, Some(ProgressFormat::Ndjson));
+}
+
+#[test]
+fn progress_rejects_unknown_value() {
+    let Err(err) = Cli::try_parse_from(["bzr", "bug", "list", "--progress", "bogus"]) else {
+        panic!("expected --progress bogus to be rejected");
+    };
+    assert_eq!(err.kind(), clap::error::ErrorKind::ValueValidation);
 }
 
 #[test]

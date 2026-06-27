@@ -55,6 +55,12 @@ async fn main() -> ExitCode {
     let mut writers = bzr::output::writers::Writers::new(&mut out, &mut err);
 
     if let Err(e) = bzr::dispatch(&cli, format, &mut writers).await {
+        bzr::output::progress::error_event(
+            cli.progress,
+            writers.err,
+            e.error_type(),
+            e.exit_code(),
+        );
         let _ = writeln!(writers.err, "{}", format_dispatch_error(&e, format));
         return exit_code(&e);
     }

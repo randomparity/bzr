@@ -73,9 +73,14 @@ pub(crate) async fn execute(
     let spec = plan.columns.spec();
     validate_fields(plan.field_preflight, spec, format, w.err)?;
 
-    let page =
-        crate::commands::runtime::paging::fetch_page(plan.client, &plan.params, plan.paginate)
-            .await?;
+    let page = crate::commands::runtime::paging::fetch_page(
+        plan.client,
+        &plan.params,
+        plan.paginate,
+        ctx.progress(),
+        w,
+    )
+    .await?;
     write_bugs(&page.bugs, spec, format, w.out, w.err);
     crate::commands::runtime::paging::write_truncation_note(
         &page,
