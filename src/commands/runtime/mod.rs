@@ -7,6 +7,7 @@
 //! launcher (`editor`), the admin create/update driver (`mutation`), and
 //! inline server data types ([`inline_server`]).
 
+pub(crate) mod attachment_input;
 pub(crate) mod capabilities;
 pub mod confirm;
 pub mod context;

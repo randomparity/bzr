@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::client::BugzillaClient;
+use crate::commands::runtime::attachment_input::{prepare_attachment_params, AttachmentInput};
 use crate::commands::runtime::context::CommandContext;
-use crate::error::{io_with_context, Result};
+use crate::error::Result;
 use crate::output::result_types::{write_result, UploadResult};
 use crate::output::writers::Writers;
 use crate::types::attachment::UploadAttachmentParams;
@@ -60,40 +61,24 @@ fn prepare_upload(args: &crate::cli::UploadArgs) -> Result<PreparedUpload> {
     // non-patch.
     let is_private = super::resolve_bool_flag(*private, *no_private).unwrap_or(false);
     let is_patch = super::resolve_bool_flag(*patch, *no_patch).unwrap_or(false);
-    let path = Path::new(file);
-    let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or(file);
-    let data = std::fs::read(path).map_err(|e| {
-        io_with_context(
-            format!("failed to read attachment upload file '{}'", path.display()),
-            &e,
-        )
-    })?;
-    let summary = summary.as_deref().unwrap_or(file_name);
-    let ct = match (content_type.as_deref(), is_patch) {
-        (Some(explicit), _) => explicit.to_string(),
-        (None, true) => "text/plain".to_string(),
-        (None, false) => guess_content_type(file_name).to_string(),
-    };
     let flags = crate::commands::runtime::flags::parse_flags(flag)?;
     let comment = resolve_upload_comment(
         comment.as_deref(),
         comment_file.as_deref(),
         *comment_private,
     )?;
-    let size = data.len();
-    let upload_params = UploadAttachmentParams {
-        bug_id: *bug_id,
-        file_name: file_name.to_string(),
-        summary: summary.to_string(),
-        content_type: ct,
-        data,
-        flags,
+    let (mut params, size) = prepare_attachment_params(AttachmentInput {
+        file: Path::new(file),
+        summary: summary.as_deref(),
+        content_type: content_type.as_deref(),
+        is_patch,
         is_private,
         comment,
-        is_patch,
-    };
+        flags,
+    })?;
+    params.bug_id = *bug_id;
     Ok(PreparedUpload {
-        params: upload_params,
+        params,
         size,
         comment_private: *comment_private,
     })
@@ -111,39 +96,11 @@ fn resolve_upload_comment(
     )
 }
 
-/// Maps file extensions (compared case-insensitively) to their MIME type.
-const CONTENT_TYPES: &[(&[&str], &str)] = &[
-    (
-        &[
-            "txt", "log", "c", "h", "cpp", "rs", "py", "sh", "pl", "rb", "js", "ts",
-        ],
-        "text/plain",
-    ),
-    (&["html", "htm"], "text/html"),
-    (&["json"], "application/json"),
-    (&["xml"], "application/xml"),
-    (&["pdf"], "application/pdf"),
-    (&["png"], "image/png"),
-    (&["jpg", "jpeg"], "image/jpeg"),
-    (&["gif"], "image/gif"),
-    (&["svg"], "image/svg+xml"),
-    (&["gz", "tgz"], "application/gzip"),
-    (&["zip"], "application/zip"),
-    (&["tar"], "application/x-tar"),
-    (&["patch", "diff"], "text/x-diff"),
-];
-
-pub(super) fn guess_content_type(filename: &str) -> &'static str {
-    let Some(ext) = Path::new(filename).extension().and_then(|ext| ext.to_str()) else {
-        return "application/octet-stream";
-    };
-    for (extensions, content_type) in CONTENT_TYPES {
-        if extensions.iter().any(|e| e.eq_ignore_ascii_case(ext)) {
-            return content_type;
-        }
-    }
-    "application/octet-stream"
-}
+/// Re-export so the existing `super::guess_content_type` tests resolve to the
+/// single shared content-type table. Test-only: production callers use
+/// `prepare_attachment_params`, which guesses internally.
+#[cfg(test)]
+pub(super) use crate::commands::runtime::attachment_input::guess_content_type;
 
 /// Flip the privacy of the comment that `Bug.add_attachment` just
 /// created. Identifies the comment by its `attachment_id` field —
