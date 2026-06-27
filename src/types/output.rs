@@ -40,6 +40,32 @@ impl FromStr for OutputFormat {
     }
 }
 
+/// Progress-stream format for the `--progress` flag. Only `ndjson` exists; the
+/// flag takes a value so a future format is a non-breaking addition.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProgressFormat {
+    Ndjson,
+}
+
+impl std::fmt::Display for ProgressFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProgressFormat::Ndjson => write!(f, "ndjson"),
+        }
+    }
+}
+
+impl FromStr for ProgressFormat {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "ndjson" => Ok(ProgressFormat::Ndjson),
+            _ => Err(format!("invalid progress format '{s}': expected 'ndjson'")),
+        }
+    }
+}
+
 /// Sort direction for the `--order` flag on listing commands.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum SortDirection {

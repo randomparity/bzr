@@ -30,7 +30,7 @@ pub use component::{Component, CreateComponentParams, UpdateComponentParams};
 pub use field::{FieldValue, StatusTransition};
 pub use flag::{Flag, FlagStatus, FlagUpdate};
 pub use group::{CreateGroupParams, GroupInfo, GroupMember, UpdateGroupParams};
-pub use output::{OutputFormat, SortDirection};
+pub use output::{OutputFormat, ProgressFormat, SortDirection};
 pub use product::{
     CreateProductParams, Milestone, Product, ProductListType, UpdateProductParams, Version,
 };

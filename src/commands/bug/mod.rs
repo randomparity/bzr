@@ -137,7 +137,7 @@ async fn execute_connected_read(
 ) -> Result<()> {
     let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
     match action {
-        BugAction::List(args) => list::handle(&client, args, format, w).await,
+        BugAction::List(args) => list::handle(&client, args, format, ctx.progress(), w).await,
         BugAction::View(args) => view::handle(&client, args, format, w).await,
         BugAction::History(args) => history::handle(&client, args, format, w).await,
         BugAction::Links(args) => links::handle(&client, args, format, w).await,

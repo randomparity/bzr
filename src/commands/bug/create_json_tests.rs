@@ -2,10 +2,82 @@
 
 use std::collections::BTreeSet;
 
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, ResponseTemplate};
+
+use crate::commands::runtime::context::CommandContext;
 use crate::commands::runtime::from_json::JsonOneOrMany;
 use crate::error::BzrError;
+use crate::types::{OutputFormat, ProgressFormat};
 
 use super::JsonCreateBug;
+
+fn sample_create_params() -> crate::types::bug::CreateBugParams {
+    crate::types::bug::CreateBugParams {
+        product: "P".into(),
+        component: "C".into(),
+        summary: "S".into(),
+        version: "unspecified".into(),
+        ..Default::default()
+    }
+}
+
+#[tokio::test]
+async fn batch_create_emits_batch_then_done() {
+    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
+        .mount(&mock)
+        .await;
+    let params = vec![sample_create_params(), sample_create_params()];
+    let ctx = CommandContext::new(None, OutputFormat::Json, None)
+        .with_progress(Some(ProgressFormat::Ndjson));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    super::create_batch_from_json(&params, &ctx, &mut io.writers())
+        .await
+        .unwrap();
+    assert_eq!(
+        io.err_str().lines().collect::<Vec<_>>(),
+        vec![
+            "{\"event\":\"batch\",\"n\":1,\"total\":2,\"ok\":1,\"failed\":0}",
+            "{\"event\":\"batch\",\"n\":2,\"total\":2,\"ok\":2,\"failed\":0}",
+            "{\"event\":\"done\",\"fetched\":2}",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn batch_create_partial_failure_emits_no_done() {
+    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    // First POST succeeds (single use); the second falls through to a 500.
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
+        .up_to_n_times(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&mock)
+        .await;
+    let params = vec![sample_create_params(), sample_create_params()];
+    let ctx = CommandContext::new(None, OutputFormat::Json, None)
+        .with_progress(Some(ProgressFormat::Ndjson));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let res = super::create_batch_from_json(&params, &ctx, &mut io.writers()).await;
+    assert!(res.is_err(), "partial failure exits non-zero");
+    let err = io.err_str();
+    assert!(
+        err.contains("\"event\":\"batch\""),
+        "per-item events still emit"
+    );
+    assert!(
+        !err.contains("\"event\":\"done\""),
+        "no done on partial failure"
+    );
+}
 
 fn schema_value(name: &str) -> serde_json::Value {
     let (_, body) = crate::commands::schema::SCHEMAS

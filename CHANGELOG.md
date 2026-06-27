@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `--progress ndjson` global flag streams structured progress events on stderr
+  (one NDJSON object per line) during long operations: `page`/`done` for
+  paginated fetches (`bug list`/`search --paginate`, `query run --paginate`) and
+  `batch`/`done` for `bug create`/`update --from-json` array form, plus a
+  terminal `error` event on dispatch failure (`done` is suppressed on a partial
+  batch failure). stdout is unchanged; absent the flag behavior is identical.
+  Opt-in, `ndjson`-only. See ADR-0011. (#462)
 - `--fields` / `--exclude-fields` JSON projection now works on `comment list`,
   `attachment list`, `product list`/`view`, `component list`/`view`,
   `user search`, `group list-users`/`view`, `classification list`/`view`, and

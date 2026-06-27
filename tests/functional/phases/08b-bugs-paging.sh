@@ -41,6 +41,14 @@ test_begin "138. bug list --paginate returns every page"
 run_bzr bug list --whiteboard "$_PGMARK" --paginate --limit 2
 if assert_success && assert_json_array_length '.' 3; then test_pass; fi
 
+# #462: --progress ndjson streams page/done events on stderr while stdout stays
+# the clean 3-element JSON array (proving stdout is unaffected by the flag).
+test_begin "138a. bug list --paginate --progress ndjson streams events on stderr"
+run_bzr bug list --whiteboard "$_PGMARK" --paginate --limit 2 --progress ndjson
+if assert_success && assert_json_array_length '.' 3 &&
+    assert_stderr_contains '"event":"page"' &&
+    assert_stderr_contains '"event":"done"'; then test_pass; fi
+
 test_begin "139. bug list --sort bug_id --order desc"
 run_bzr bug list --whiteboard "$_PGMARK" --sort bug_id --order desc
 if assert_success && assert_json '[.[].id][0]' "$P3" && assert_json '[.[].id][-1]' "$P1"; then test_pass; fi

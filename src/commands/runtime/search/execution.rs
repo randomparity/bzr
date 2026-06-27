@@ -73,9 +73,14 @@ pub(crate) async fn execute(
     let spec = plan.columns.spec();
     validate_fields(plan.field_preflight, spec, format, w.err)?;
 
-    let page =
-        crate::commands::runtime::paging::fetch_page(plan.client, &plan.params, plan.paginate)
-            .await?;
+    let page = crate::commands::runtime::paging::fetch_page(
+        plan.client,
+        &plan.params,
+        plan.paginate,
+        ctx.progress(),
+        w,
+    )
+    .await?;
     write_bugs(&page.bugs, spec, format, w.out, w.err);
     crate::commands::runtime::paging::write_truncation_note(
         &page,
@@ -85,7 +90,14 @@ pub(crate) async fn execute(
         w,
     );
 
-    persist_saved_query(plan.save, ctx, format, w.out)
+    // Persist the saved query (a fallible local config write) before the
+    // terminal `done`: a save failure must surface as `error` with no preceding
+    // `done`, preserving the "done only on full success" guarantee.
+    persist_saved_query(plan.save, ctx, format, w.out)?;
+    if plan.paginate {
+        crate::output::progress::done_event(ctx.progress(), w.err, page.bugs.len());
+    }
+    Ok(())
 }
 
 fn validate_fields(

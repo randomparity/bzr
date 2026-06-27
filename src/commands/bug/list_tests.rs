@@ -743,3 +743,45 @@ async fn list_count_with_offset_is_rejected() {
     assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
     assert_eq!(err.exit_code(), 7);
 }
+
+#[tokio::test]
+async fn list_paginate_with_progress_emits_page_then_terminal_done() {
+    // #462: `bug list --paginate --progress ndjson` emits a `page` per request
+    // and a single terminal `done` (emitted by the command after the write
+    // succeeds, not by the fetch loop), with stdout left a clean JSON document.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    // Page size 2: offset 0 → 2 bugs, offset 2 → 1 bug (short page, stop).
+    for (off, ids) in [("0", vec![1, 2]), ("2", vec![3])] {
+        let bugs: Vec<serde_json::Value> =
+            ids.iter().map(|id| serde_json::json!({"id": id})).collect();
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("offset", off))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": bugs})),
+            )
+            .mount(&mock)
+            .await;
+    }
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let ctx =
+        crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None)
+            .with_progress(Some(crate::types::ProgressFormat::Ndjson));
+    let result =
+        crate::commands::bug::execute(&list_action_paged(2, None, true), &ctx, &mut io.writers())
+            .await;
+    assert!(result.is_ok(), "{result:?}");
+
+    assert_eq!(
+        io.err_str().lines().collect::<Vec<_>>(),
+        vec![
+            "{\"event\":\"page\",\"n\":1,\"fetched\":2}",
+            "{\"event\":\"page\",\"n\":2,\"fetched\":3}",
+            "{\"event\":\"done\",\"fetched\":3}",
+        ],
+        "page events during the loop, then exactly one terminal done"
+    );
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
+    assert_eq!(parsed.as_array().unwrap().len(), 3);
+}

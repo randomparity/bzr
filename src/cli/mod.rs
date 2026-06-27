@@ -294,6 +294,18 @@ pub struct Cli {
     #[arg(long, value_name = "N", global = true, value_parser = clap::value_parser!(u32).range(0..=10))]
     pub retry: Option<u32>,
 
+    /// Emit structured progress events on stderr for long operations.
+    ///
+    /// With `--progress ndjson`, paginated fetches (`bug list`/`search
+    /// --paginate`, `query run --paginate`) and batch `--from-json`
+    /// create/update emit newline-delimited JSON progress events
+    /// (`page`/`batch`/`done`, and `error` on failure) to stderr, one per line.
+    /// stdout is unaffected. Only `ndjson` is supported. Absent the flag, stderr
+    /// stays silent (or carries `-v` logs). Intended for non-verbose runs, since
+    /// `-v` log lines interleave on the same stream.
+    #[arg(long, value_name = "FORMAT", global = true)]
+    pub progress: Option<crate::types::ProgressFormat>,
+
     /// Preview a supported mutation without writing.
     ///
     /// Resolves and validates the request, then prints the would-be payload

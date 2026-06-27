@@ -82,6 +82,12 @@ These work on any command (place them before the subcommand):
   more than 10 bugs (interactive terminals only).
 - `--timeout <secs>` / `--retry <n>` — tune per-request timeout and transient
   retry (reads only, with backoff).
+- `--progress ndjson` — stream NDJSON progress events on stderr for long
+  operations: `page`/`done` for `bug list`/`search --paginate` and `query run
+  --paginate`, `batch`/`done` for `bug create`/`update --from-json` array form,
+  and a terminal `error` on failure. stdout is unaffected, so combine it with
+  `--json`/`--output ndjson` and parse stderr line-by-line (skip lines without an
+  `event` key) to show "page N / item N of M" while a batch runs.
 - `--config <path>` — use an alternate `config.toml` (sandboxes the run).
 - `--server-url <url>` (+ `--server-api-key-env <env>`, optional
   `--server-email <email>`) — a fully stateless inline server, no config file

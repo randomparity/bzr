@@ -40,9 +40,15 @@ async fn fetch_page_flags_truncation_via_over_fetch() {
         .await;
 
     let client = test_client(&mock.uri());
-    let page = fetch_page(&client, &params_with_limit(2), false)
-        .await
-        .unwrap();
+    let page = fetch_page(
+        &client,
+        &params_with_limit(2),
+        false,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
 
     assert!(
         page.truncated,
@@ -60,7 +66,15 @@ async fn fetch_page_rejects_limit_that_cannot_overfetch() {
     let mock = MockServer::start().await;
     let client = test_client(&mock.uri());
 
-    let Err(err) = fetch_page(&client, &params_with_limit(u32::MAX), false).await else {
+    let Err(err) = fetch_page(
+        &client,
+        &params_with_limit(u32::MAX),
+        false,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    else {
         panic!("expected limit overflow validation");
     };
 
@@ -85,7 +99,15 @@ async fn fetch_page_rejects_next_offset_overflow() {
         ..Default::default()
     };
 
-    let Err(err) = fetch_page(&client, &params, false).await else {
+    let Err(err) = fetch_page(
+        &client,
+        &params,
+        false,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    else {
         panic!("expected next offset overflow validation");
     };
 
@@ -112,9 +134,15 @@ async fn fetch_page_no_truncation_when_under_limit() {
         .await;
 
     let client = test_client(&mock.uri());
-    let page = fetch_page(&client, &params_with_limit(5), false)
-        .await
-        .unwrap();
+    let page = fetch_page(
+        &client,
+        &params_with_limit(5),
+        false,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
 
     assert!(!page.truncated);
     assert_eq!(page.bugs.len(), 3);
@@ -134,9 +162,15 @@ async fn fetch_page_paginate_loops_until_short_page() {
     }
 
     let client = test_client(&mock.uri());
-    let page = fetch_page(&client, &params_with_limit(2), true)
-        .await
-        .unwrap();
+    let page = fetch_page(
+        &client,
+        &params_with_limit(2),
+        true,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
 
     assert!(!page.truncated, "paginate retrieves everything");
     assert_eq!(page.bugs.len(), 5, "2 + 2 + 1 across three pages");
@@ -152,7 +186,15 @@ async fn fetch_page_paginate_rejects_next_offset_overflow() {
         ..Default::default()
     };
 
-    let Err(err) = fetch_page(&client, &params, true).await else {
+    let Err(err) = fetch_page(
+        &client,
+        &params,
+        true,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    else {
         panic!("expected paginate offset overflow validation");
     };
 
@@ -274,9 +316,15 @@ async fn fetch_page_exact_fill_is_not_truncated() {
         .await;
 
     let client = test_client(&mock.uri());
-    let page = fetch_page(&client, &params_with_limit(2), false)
-        .await
-        .unwrap();
+    let page = fetch_page(
+        &client,
+        &params_with_limit(2),
+        false,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
 
     assert!(
         !page.truncated,
@@ -305,7 +353,15 @@ async fn fetch_page_paginate_zero_limit_makes_single_unbounded_request() {
         limit: Some(0),
         ..Default::default()
     };
-    let page = fetch_page(&client, &params, true).await.unwrap();
+    let page = fetch_page(
+        &client,
+        &params,
+        true,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
 
     assert_eq!(
         page.bugs.len(),
@@ -327,13 +383,175 @@ async fn fetch_all_pages_errors_when_safety_cap_reached_without_short_page() {
     }
 
     let client = test_client(&mock.uri());
-    let err = fetch_all_pages_with_cap(&client, &params_with_limit(2), 2)
-        .await
-        .unwrap_err();
+    let err = fetch_all_pages_with_cap(
+        &client,
+        &params_with_limit(2),
+        2,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap_err();
 
     assert!(
         matches!(&err, crate::error::BzrError::InputValidation(msg)
             if msg.contains("--paginate") && msg.contains("safety cap")),
         "cap exhaustion should fail instead of returning incomplete results: {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn fetch_page_paginate_emits_page_events_but_not_done() {
+    // `fetch_page` emits one `page` per request during the loop; the terminal
+    // `done` is the caller's responsibility (emitted only after the whole
+    // invocation succeeds), so it must NOT appear in the fetch's own output.
+    let mock = MockServer::start().await;
+    for (off, n) in [("0", 2u64), ("2", 2), ("4", 1)] {
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("offset", off))
+            .respond_with(ResponseTemplate::new(200).set_body_json(bugs_body(n)))
+            .mount(&mock)
+            .await;
+    }
+    let client = test_client(&mock.uri());
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let page = fetch_page(
+        &client,
+        &params_with_limit(2),
+        true,
+        Some(crate::types::ProgressFormat::Ndjson),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(page.bugs.len(), 5);
+    assert!(io.out_str().is_empty(), "progress must not touch stdout");
+    assert_eq!(
+        io.err_str().lines().collect::<Vec<_>>(),
+        vec![
+            "{\"event\":\"page\",\"n\":1,\"fetched\":2}",
+            "{\"event\":\"page\",\"n\":2,\"fetched\":4}",
+            "{\"event\":\"page\",\"n\":3,\"fetched\":5}",
+        ],
+        "no terminal done from fetch_page itself"
+    );
+}
+
+#[tokio::test]
+async fn fetch_page_paginate_zero_result_emits_page_not_done() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("offset", "0"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(bugs_body(0)))
+        .mount(&mock)
+        .await;
+    let client = test_client(&mock.uri());
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let page = fetch_page(
+        &client,
+        &params_with_limit(2),
+        true,
+        Some(crate::types::ProgressFormat::Ndjson),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap();
+    assert!(page.bugs.is_empty());
+    assert_eq!(
+        io.err_str().lines().collect::<Vec<_>>(),
+        vec!["{\"event\":\"page\",\"n\":1,\"fetched\":0}"],
+        "a zero-result paginate reports its (empty) page but defers done to the caller"
+    );
+}
+
+#[tokio::test]
+async fn fetch_page_paginate_unbounded_emits_nothing_from_fetch() {
+    // A zero/absent limit collapses to one unbounded request: no page sequence,
+    // and the terminal `done` is the caller's, so fetch_page emits nothing.
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(bugs_body(3)))
+        .up_to_n_times(1)
+        .mount(&mock)
+        .await;
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        limit: Some(0),
+        ..Default::default()
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let page = fetch_page(
+        &client,
+        &params,
+        true,
+        Some(crate::types::ProgressFormat::Ndjson),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(page.bugs.len(), 3);
+    assert!(
+        io.err_str().is_empty(),
+        "unbounded fetch emits no progress; the caller emits the terminal done"
+    );
+}
+
+#[tokio::test]
+async fn fetch_page_none_progress_is_silent_on_stderr() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("offset", "0"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(bugs_body(1)))
+        .mount(&mock)
+        .await;
+    let client = test_client(&mock.uri());
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let _ = fetch_page(
+        &client,
+        &params_with_limit(2),
+        true,
+        None,
+        &mut io.writers(),
+    )
+    .await
+    .unwrap();
+    assert!(io.err_str().is_empty(), "None progress emits nothing");
+}
+
+#[tokio::test]
+async fn paginate_stdout_identical_with_and_without_progress() {
+    async fn run(progress: Option<crate::types::ProgressFormat>) -> Vec<u8> {
+        let mock = MockServer::start().await;
+        for (off, n) in [("0", 2u64), ("2", 1)] {
+            Mock::given(method("GET"))
+                .and(path("/rest/bug"))
+                .and(query_param("offset", off))
+                .respond_with(ResponseTemplate::new(200).set_body_json(bugs_body(n)))
+                .mount(&mock)
+                .await;
+        }
+        let client = test_client(&mock.uri());
+        let mut io = crate::test_helpers::CapturedIo::new();
+        let page = fetch_page(
+            &client,
+            &params_with_limit(2),
+            true,
+            progress,
+            &mut io.writers(),
+        )
+        .await
+        .unwrap();
+        // Emulate the caller writing the result document to stdout.
+        let _ = std::io::Write::write_all(&mut io.out, format!("{}\n", page.bugs.len()).as_bytes());
+        io.out
+    }
+    assert_eq!(
+        run(None).await,
+        run(Some(crate::types::ProgressFormat::Ndjson)).await,
+        "stdout must be byte-identical regardless of --progress"
     );
 }

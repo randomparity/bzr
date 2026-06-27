@@ -7,12 +7,13 @@ use crate::commands::runtime::search::setup::{
 };
 use crate::error::Result;
 use crate::output::writers::Writers;
-use crate::types::output::OutputFormat;
+use crate::types::output::{OutputFormat, ProgressFormat};
 
 pub(super) async fn handle(
     client: &BugzillaClient,
     args: &ListArgs,
     format: OutputFormat,
+    progress: Option<ProgressFormat>,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let ListArgs {
@@ -57,7 +58,9 @@ pub(super) async fn handle(
     }
 
     let spec = ColumnSpec::new(fields.as_deref(), exclude_fields.as_deref());
-    let page = crate::commands::runtime::paging::fetch_page(client, &params, *paginate).await?;
+    let page =
+        crate::commands::runtime::paging::fetch_page(client, &params, *paginate, progress, w)
+            .await?;
     write_bug_page(
         &page,
         spec,
@@ -68,6 +71,11 @@ pub(super) async fn handle(
         format,
         w,
     );
+    // The terminal `done` fires only after a fully successful paginate; `list`
+    // has no fallible step past the write, so this is always reached on success.
+    if *paginate {
+        crate::output::progress::done_event(progress, w.err, page.bugs.len());
+    }
     Ok(())
 }
 

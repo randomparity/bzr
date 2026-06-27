@@ -43,6 +43,15 @@ if assert_exit_code 11 &&
     if assert_json '.priority' "Low"; then test_pass; fi
 fi
 
+# #462: a partial-failure batch with --progress emits per-item batch events and
+# the terminal error event on stderr, and suppresses done (it is a failure).
+test_begin "154a. bug update --from-json array --progress ndjson on failure"
+run_bzr bug update --from-json "$_UJ_DIR/array.json" --progress ndjson
+if assert_exit_code 11 &&
+    assert_stderr_contains '"event":"batch"' &&
+    assert_stderr_contains '"event":"error"' &&
+    assert_stderr_not_contains '"event":"done"'; then test_pass; fi
+
 test_begin "155. bug update --from-json stdin with CLI override"
 _UJ_FOUR=$(make_bug "${_UJ_CREATE[@]}" --summary "update json override")
 write_json_fixture "$_UJ_DIR/stdin.json" \

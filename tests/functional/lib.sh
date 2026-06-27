@@ -347,6 +347,16 @@ assert_stderr_contains() {
     fi
 }
 
+# assert_stderr_not_contains <substring> — assert a substring is ABSENT from
+# stderr. Pairs with progress-stream checks (e.g. no `done` event on failure).
+assert_stderr_not_contains() {
+    local substring="$1"
+    if grep -q "$substring" "$BZR_STDERR" 2>/dev/null; then
+        test_fail "stderr unexpectedly contains '$substring'"
+        return 1
+    fi
+}
+
 # ── Fixtures ─────────────────────────────────────────────────────────
 
 # make_bug [--marker <tag>] <bzr bug create args...> — create a bug and echo its

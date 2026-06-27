@@ -220,11 +220,25 @@ async fn create_batch_from_json(
                 error: e.to_string(),
             }),
         }
+        crate::output::progress::batch_event(
+            ctx.progress(),
+            w.err,
+            &crate::output::progress::BatchProgress {
+                n: index + 1,
+                total: params_list.len(),
+                ok: created.len(),
+                failed: failed.len(),
+            },
+        );
     }
     let succeeded = created.len();
     let failures = failed.len();
     write_batch_create(&BatchCreateResult::new(created, failed), format, w);
-    super::update::ensure_batch_complete(succeeded, failures)
+    let result = super::update::ensure_batch_complete(succeeded, failures);
+    if result.is_ok() {
+        crate::output::progress::done_event(ctx.progress(), w.err, params_list.len());
+    }
+    result
 }
 
 /// Build one bug from a structured JSON object or array, the `--from-json`

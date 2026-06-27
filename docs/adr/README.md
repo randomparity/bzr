@@ -17,3 +17,4 @@ rejected.
 | [0008](0008-bug-history-flattened-change-records.md) | `bug history` JSON emits flattened change records with correlated `comment_id` | Accepted |
 | [0009](0009-whoami-connection-metadata.md) | `whoami` JSON carries connection metadata via a flatten wrapper | Accepted |
 | [0010](0010-uniform-fields-projection.md) | Uniform `--fields` projection is a generic serde-key filter, not the bug enum | Accepted |
+| [0011](0011-progress-ndjson-stream.md) | Structured progress stream on stderr (`--progress ndjson`) | Accepted |
