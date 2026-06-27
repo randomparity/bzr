@@ -15,6 +15,7 @@ inside the `bzr` repo so they stay in lockstep with the CLI they document:
 | `bzr-file-bug` | File a well-formed bug |
 | `bzr-triage-bug` | Read-before-write triage of an existing bug |
 | `bzr-search-report` | Search and build a digest with `--json` + `jq` |
+| `bzr-bulk-triage` | Stream a query and mutate many bugs safely (preview before write) |
 
 ## Install
 

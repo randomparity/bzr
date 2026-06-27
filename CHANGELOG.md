@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- New agent skill `bzr-bulk-triage` (under `agent-skills/`) teaching the
+  streaming batch-triage pattern: stream a saved or ad-hoc query with
+  `--paginate --output ndjson`, apply the read-before-write rule per row, and
+  guard each mutation with a `--dry-run` preview before the real write (plus
+  `--expect-unchanged-since` and bounded concurrency). No new CLI verbs; it
+  codifies an existing-capability workflow and cross-references `bzr-triage-bug`
+  and `bzr-search-report`. The installers and skills table list it. (#454)
 - `bzr whoami --json` / `--output ndjson` now report two connection-metadata
   fields alongside the identity fields: `server_name` (the configured/inline
   server the identity resolved against — a named server's config key, or the

@@ -7,7 +7,7 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 SKILLS_SRC="$SCRIPT_DIR/skills"
 VERSION_FILE="$SCRIPT_DIR/VERSION"
 SENTINEL=".bzr-skill-managed"
-SKILL_NAMES="bzr-reference bzr-setup bzr-file-bug bzr-triage-bug bzr-search-report"
+SKILL_NAMES="bzr-reference bzr-setup bzr-file-bug bzr-triage-bug bzr-search-report bzr-bulk-triage"
 DEST_ROOT="${BZR_SKILL_DEST_ROOT:-$HOME}"
 AGENTS_DIR="$DEST_ROOT/.agents/skills"
 CLAUDE_DIR="$DEST_ROOT/.claude/skills"
