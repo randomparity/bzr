@@ -1302,7 +1302,7 @@ fn parse_product_list() {
     let cli = Cli::try_parse_from(["bzr", "product", "list"]).unwrap();
     match cli.command {
         Commands::Product {
-            action: ProductAction::List { r#type },
+            action: ProductAction::List { r#type, .. },
         } => assert_eq!(r#type, ProductListType::Accessible),
         _ => panic!("expected Product List"),
     }
@@ -1313,7 +1313,7 @@ fn parse_product_view() {
     let cli = Cli::try_parse_from(["bzr", "product", "view", "Firefox"]).unwrap();
     match cli.command {
         Commands::Product {
-            action: ProductAction::View { name },
+            action: ProductAction::View { name, .. },
         } => assert_eq!(name, "Firefox"),
         _ => panic!("expected Product View"),
     }

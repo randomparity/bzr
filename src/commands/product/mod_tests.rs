@@ -25,11 +25,15 @@ fn update_action() -> ProductAction {
 fn capabilities_are_anonymous_for_reads() {
     let list = super::capabilities(&ProductAction::List {
         r#type: ProductListType::Accessible,
+        projection: crate::cli::ProjectionArgs::default(),
     });
     assert!(!list.supports_dry_run());
     assert_eq!(list.credential_requirement(), None);
 
-    let view = super::capabilities(&ProductAction::View { name: "P".into() });
+    let view = super::capabilities(&ProductAction::View {
+        name: "P".into(),
+        projection: crate::cli::ProjectionArgs::default(),
+    });
     assert!(!view.supports_dry_run());
     assert_eq!(view.credential_requirement(), None);
 }
