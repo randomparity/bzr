@@ -12,8 +12,6 @@ pub struct FieldProjection {
     include: Option<BTreeSet<String>>,
     /// Keys to drop, applied after `include`.
     exclude: BTreeSet<String>,
-    /// Whether either flag was supplied (drives the table no-op warning).
-    requested: bool,
 }
 
 impl FieldProjection {
@@ -23,12 +21,6 @@ impl FieldProjection {
         Self::default()
     }
 
-    /// Whether `--fields` or `--exclude-fields` was supplied.
-    #[must_use]
-    pub fn is_requested(&self) -> bool {
-        self.requested
-    }
-
     /// Parse and validate `--fields` / `--exclude-fields` against `known` serde
     /// keys. Tokens are trimmed; blanks skipped; duplicates collapsed.
     ///
@@ -36,7 +28,6 @@ impl FieldProjection {
     /// Returns [`BzrError::InputValidation`] (exit 7) when any include or
     /// exclude token is not in `known`, or when the resolved key set is empty.
     pub fn resolve(include: Option<&str>, exclude: Option<&str>, known: &[&str]) -> Result<Self> {
-        let requested = include.is_some() || exclude.is_some();
         let include_set = parse_tokens(include, known)?;
         let exclude_set = parse_tokens(exclude, known)?.unwrap_or_default();
 
@@ -58,7 +49,6 @@ impl FieldProjection {
         Ok(Self {
             include: include_set,
             exclude: exclude_set,
-            requested,
         })
     }
 

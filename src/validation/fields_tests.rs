@@ -28,13 +28,6 @@ fn neither_is_identity() {
     let mut v = json!({"id": 1, "name": "x"});
     proj.apply(&mut v);
     assert_eq!(v, json!({"id": 1, "name": "x"}));
-    assert!(!proj.is_requested());
-}
-
-#[test]
-fn requested_flag_set_when_include_given() {
-    let proj = FieldProjection::resolve(Some("id"), None, KNOWN).unwrap();
-    assert!(proj.is_requested());
 }
 
 #[test]
@@ -131,7 +124,10 @@ fn projection_for_table_warns_and_returns_identity() {
         &mut err,
     )
     .unwrap();
-    assert!(!proj.is_requested());
+    // Table mode returns the identity projection (no trimming).
+    let mut v = json!({"id": 1, "name": "x"});
+    proj.apply(&mut v);
+    assert_eq!(v, json!({"id": 1, "name": "x"}));
     let warning = String::from_utf8(err).unwrap();
     assert!(warning.contains("--fields/--exclude-fields only affect"));
 }
