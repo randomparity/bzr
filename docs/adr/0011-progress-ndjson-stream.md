@@ -41,7 +41,11 @@ The constraints that force the design:
    failure (exit 11) suppresses `done`; `main.rs` emits a final
    redaction-safe `error` event (`error_type` + `exit_code`, no server message)
    before the process exits non-zero. The last progress line is therefore always
-   exactly one of `done` or `error`.
+   exactly one of `done` or `error`. To hold this for paginated `bug
+   search`/`query run --save-as`, where a fallible config write runs *after* the
+   fetch, `done` is emitted by the **caller** at the operation boundary (after
+   the save), not inside `paging::fetch_page` — so a save failure errors with no
+   preceding `done`. `fetch_page` emits only `page`.
 
 5. **Accepted globally, not gated per command.** Unlike `--dry-run`, ignoring
    `--progress` is harmless, and gating would force agents to add the flag

@@ -90,7 +90,14 @@ pub(crate) async fn execute(
         w,
     );
 
-    persist_saved_query(plan.save, ctx, format, w.out)
+    // Persist the saved query (a fallible local config write) before the
+    // terminal `done`: a save failure must surface as `error` with no preceding
+    // `done`, preserving the "done only on full success" guarantee.
+    persist_saved_query(plan.save, ctx, format, w.out)?;
+    if plan.paginate {
+        crate::output::progress::done_event(ctx.progress(), w.err, page.bugs.len());
+    }
+    Ok(())
 }
 
 fn validate_fields(

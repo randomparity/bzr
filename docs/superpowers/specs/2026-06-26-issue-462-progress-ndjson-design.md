@@ -111,12 +111,20 @@ key.
 
 | Operation | Trigger | Events |
 |-----------|---------|--------|
-| `bug list --paginate` | `paging::fetch_page` (paginate branch) | `page`*, `done` |
-| `bug search --paginate` | same | `page`*, `done` |
-| `query run --paginate` | same | `page`*, `done` |
+| `bug list --paginate` | `page` from `paging::fetch_page`; `done` from `list::handle` after the write | `page`*, `done` |
+| `bug search --paginate` | `page` from `paging::fetch_page`; `done` from `search::execution::execute` after the save | `page`*, `done` |
+| `query run --paginate` | same as `bug search` | `page`*, `done` |
 | `bug create --from-json` array | `create_json` batch loop | `batch`*, `done` |
 | `bug update --from-json` array | `update_json` batch loop | `batch`*, `done` |
 | any command, on failure | `main.rs` after `dispatch` returns `Err` | `error` |
+
+`page` events are emitted inside `paging::fetch_page`'s loop, but the terminal
+`done` is emitted by the **caller** after the whole invocation has succeeded —
+not inside the fetch. This matters because `bug search`/`query run` may perform a
+fallible `--save-as` config write *after* the fetch returns: emitting `done` from
+inside the fetch would let that later failure produce `done` followed by `error`,
+breaking the guarantee below. With `done` at the operation boundary, a save
+failure errors with no preceding `done`.
 
 `bug update --from-json` is included even though acceptance criterion 2 lists
 only create: the "What to build" section names "batch `--from-json`
@@ -147,6 +155,11 @@ explicitly matches the existing `CommandContext` pattern and stays testable.
 ## Ordering and failure guarantees
 
 - On success, `done` is the final progress event.
+- `done` is emitted at the operation boundary, after every fallible step of the
+  invocation has succeeded — including a paginated `bug search`/`query run` with
+  `--save-as`, where the config write runs after the fetch. A save failure on
+  that path therefore emits `error` with **no** preceding `done`, never `done`
+  then `error`.
 - On a pagination error (network failure, safety-cap exhaustion), no `done` is
   emitted; `main.rs` emits the final `error` event.
 - On a partial batch failure (exit 11), the per-item `batch` events are emitted,
@@ -216,11 +229,15 @@ stderr text without coupling the consumer to bzr's log format.
 
 - Unit (sibling `*_tests.rs`): `output/progress_tests.rs` asserts each event's
   exact JSON and the `None` no-op.
-- Wiremock: paginated `fetch_page` emits ordered `page`+`done` to `err` with
-  clean `out`; batch create/update emit `batch`+`done`, and partial failure
-  emits no `done`. Cover the two paginate edges from the schema section: a
-  zero-result search emits a terminal `done` with `fetched:0`, and an unbounded
-  (`limit:0`) `--paginate` emits a terminal `done`.
+- Wiremock: `paging_tests.rs` asserts `fetch_page` emits the ordered `page`
+  events to `err` (and **no** `done` — that is the caller's). The operation-level
+  `page`+`done` ordering with clean `out` is asserted at the caller boundary:
+  `list_tests.rs` for `bug list --paginate` and `search_tests.rs` for the shared
+  `execution::execute` path (`bug search`/`query run`). Batch create/update emit
+  `batch`+`done`, and partial failure emits no `done`. Cover the two paginate
+  edges from the schema section: a zero-result search (the first page is short,
+  `fetched:0`) and an unbounded (`limit:0`) `--paginate` (a single request) both
+  still yield a terminal `done` from the caller.
 - **stdout unchanged (byte-equality):** a test runs the same paginated query
   twice — once with `progress=None`, once with `progress=Ndjson` — and asserts
   the captured stdout bytes are **identical**, proving criterion 1 directly

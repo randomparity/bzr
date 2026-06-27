@@ -401,7 +401,10 @@ async fn fetch_all_pages_errors_when_safety_cap_reached_without_short_page() {
 }
 
 #[tokio::test]
-async fn fetch_page_paginate_emits_page_and_done_events() {
+async fn fetch_page_paginate_emits_page_events_but_not_done() {
+    // `fetch_page` emits one `page` per request during the loop; the terminal
+    // `done` is the caller's responsibility (emitted only after the whole
+    // invocation succeeds), so it must NOT appear in the fetch's own output.
     let mock = MockServer::start().await;
     for (off, n) in [("0", 2u64), ("2", 2), ("4", 1)] {
         Mock::given(method("GET"))
@@ -430,13 +433,13 @@ async fn fetch_page_paginate_emits_page_and_done_events() {
             "{\"event\":\"page\",\"n\":1,\"fetched\":2}",
             "{\"event\":\"page\",\"n\":2,\"fetched\":4}",
             "{\"event\":\"page\",\"n\":3,\"fetched\":5}",
-            "{\"event\":\"done\",\"fetched\":5}",
-        ]
+        ],
+        "no terminal done from fetch_page itself"
     );
 }
 
 #[tokio::test]
-async fn fetch_page_paginate_zero_result_emits_terminal_done() {
+async fn fetch_page_paginate_zero_result_emits_page_not_done() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -457,16 +460,16 @@ async fn fetch_page_paginate_zero_result_emits_terminal_done() {
     .unwrap();
     assert!(page.bugs.is_empty());
     assert_eq!(
-        io.err_str().lines().last().unwrap(),
-        "{\"event\":\"done\",\"fetched\":0}",
-        "a zero-result paginate still emits a terminal done"
+        io.err_str().lines().collect::<Vec<_>>(),
+        vec!["{\"event\":\"page\",\"n\":1,\"fetched\":0}"],
+        "a zero-result paginate reports its (empty) page but defers done to the caller"
     );
 }
 
 #[tokio::test]
-async fn fetch_page_paginate_unbounded_emits_terminal_done() {
-    // A zero/absent limit collapses to one unbounded request; a single terminal
-    // `done` still fires (no page sequence) so a consumer can wait on it.
+async fn fetch_page_paginate_unbounded_emits_nothing_from_fetch() {
+    // A zero/absent limit collapses to one unbounded request: no page sequence,
+    // and the terminal `done` is the caller's, so fetch_page emits nothing.
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -490,9 +493,9 @@ async fn fetch_page_paginate_unbounded_emits_terminal_done() {
     .await
     .unwrap();
     assert_eq!(page.bugs.len(), 3);
-    assert_eq!(
-        io.err_str().lines().collect::<Vec<_>>(),
-        vec!["{\"event\":\"done\",\"fetched\":3}"]
+    assert!(
+        io.err_str().is_empty(),
+        "unbounded fetch emits no progress; the caller emits the terminal done"
     );
 }
 

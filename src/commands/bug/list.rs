@@ -71,6 +71,11 @@ pub(super) async fn handle(
         format,
         w,
     );
+    // The terminal `done` fires only after a fully successful paginate; `list`
+    // has no fallible step past the write, so this is always reached on success.
+    if *paginate {
+        crate::output::progress::done_event(progress, w.err, page.bugs.len());
+    }
     Ok(())
 }
 

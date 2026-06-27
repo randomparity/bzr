@@ -64,6 +64,14 @@ fn checked_next_offset(offset: u32, limit: u32) -> Result<u32> {
 /// every match or errors if the safety cap is reached before a short page.
 /// Otherwise returns one window, with `truncated` set when the server had more
 /// rows than `limit`.
+///
+/// Emits a `page` progress event per request during a `--paginate` loop. The
+/// terminal `done` event is **not** emitted here — it is the caller's
+/// responsibility, fired only once the whole invocation has succeeded (a search
+/// may still perform a fallible `--save-as` write after this returns). Emitting
+/// `done` from inside the fetch would let a later failure produce `done` then
+/// `error`, breaking the "done only on full success" guarantee consumers rely
+/// on.
 pub(crate) async fn fetch_page(
     client: &BugzillaClient,
     params: &SearchParams,
@@ -116,12 +124,9 @@ async fn fetch_all_pages_with_cap(
     w: &mut Writers<'_>,
 ) -> Result<Vec<Bug>> {
     let Some(page_size) = params.limit.filter(|l| *l > 0) else {
-        // No window: one unbounded request returns everything. A single
-        // terminal `done` still fires so consumers can wait on it; there is no
-        // multi-page sequence to report.
-        let bugs = client.search_bugs(params).await?;
-        crate::output::progress::done_event(progress, w.err, bugs.len());
-        return Ok(bugs);
+        // No window: one unbounded request returns everything. There is no
+        // multi-page sequence to report; the caller emits the terminal `done`.
+        return client.search_bugs(params).await;
     };
     let mut offset = params.offset.unwrap_or(0);
     let mut all = Vec::new();
@@ -143,14 +148,13 @@ async fn fetch_all_pages_with_cap(
         offset = next_offset;
     }
     if !reached_last_page {
-        // No `done` on the safety-cap error; the terminal `error` event is
-        // emitted by `main.rs` when this propagates out of dispatch.
+        // The terminal `error` event is emitted by `main.rs` when this
+        // propagates out of dispatch; the caller never reaches its `done`.
         return Err(BzrError::InputValidation(format!(
             "--paginate stopped at the {max_pages}-page safety cap before reaching a short page; \
              the server may be ignoring offset, so results would be incomplete"
         )));
     }
-    crate::output::progress::done_event(progress, w.err, all.len());
     Ok(all)
 }
 
