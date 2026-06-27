@@ -133,6 +133,66 @@ fn batch_result_json_shape() {
 }
 
 #[test]
+fn create_failure_create_is_byte_compatible() {
+    let f = CreateFailure::create(2, "boom");
+    let json: serde_json::Value = serde_json::to_value(&f).unwrap();
+    assert_eq!(json["index"], 2);
+    assert_eq!(json["error"], "boom");
+    assert!(json.get("bug_id").is_none());
+    assert!(json.get("step").is_none());
+    assert!(json.get("file").is_none());
+}
+
+#[test]
+fn create_failure_sub_step_includes_optional_fields() {
+    let f = CreateFailure::sub_step(0, 7, "attachment", Some("t.log".into()), "500");
+    let json: serde_json::Value = serde_json::to_value(&f).unwrap();
+    assert_eq!(json["index"], 0);
+    assert_eq!(json["bug_id"], 7);
+    assert_eq!(json["step"], "attachment");
+    assert_eq!(json["file"], "t.log");
+    assert_eq!(json["error"], "500");
+}
+
+#[test]
+fn create_failure_sub_step_comment_omits_file() {
+    let f = CreateFailure::sub_step(1, 9, "comment", None, "down");
+    let json: serde_json::Value = serde_json::to_value(&f).unwrap();
+    assert_eq!(json["bug_id"], 9);
+    assert_eq!(json["step"], "comment");
+    assert!(json.get("file").is_none());
+}
+
+#[test]
+fn sub_step_failure_comment_shape() {
+    let f = SubStepFailure::comment("x");
+    let json: serde_json::Value = serde_json::to_value(&f).unwrap();
+    assert_eq!(json["step"], "comment");
+    assert_eq!(json["error"], "x");
+    assert!(json.get("file").is_none());
+}
+
+#[test]
+fn sub_step_failure_attachment_shape() {
+    let f = SubStepFailure::attachment("trace.log", "boom");
+    let json: serde_json::Value = serde_json::to_value(&f).unwrap();
+    assert_eq!(json["step"], "attachment");
+    assert_eq!(json["file"], "trace.log");
+    assert_eq!(json["error"], "boom");
+}
+
+#[test]
+fn compound_create_result_json_shape() {
+    let result = CompoundCreateResult::new(7, vec![SubStepFailure::comment("x")]);
+    let json: serde_json::Value = serde_json::to_value(&result).unwrap();
+    assert_eq!(json["resource"], "bug");
+    assert_eq!(json["action"], "created");
+    assert_eq!(json["id"], 7);
+    assert_eq!(json["failed"][0]["step"], "comment");
+    assert_eq!(json["failed"][0]["error"], "x");
+}
+
+#[test]
 fn action_result_updated_json_shape() {
     let result = ActionResult::updated(42, ResourceKind::User);
     let json: serde_json::Value = serde_json::to_value(&result).unwrap();

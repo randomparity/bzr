@@ -230,13 +230,15 @@ failures one at a time across retries.
 ### Attachment reading
 
 Attachment files are read with the existing `prepare_upload` content-type and
-file-read logic (extracted/shared). A file that cannot be read is an **input
-validation** failure (exit 7), detected **before** the bug is created where
-possible: in flag and JSON form, all attachment files are read and all params
-built **before** the `create_bug` call. This keeps a missing-file typo from
-filing a bug it then can't complete. (Comment bodies are likewise materialized
-pre-create.) Only *server* sub-step failures (a POST that reaches the server and
-fails) produce the compound partial-failure path.
+file-read logic (extracted/shared). A file that cannot be read surfaces as an
+**I/O error (exit 6)**, consistent with `attachment upload`'s missing-file
+behavior (the shared helper maps the read error the same way). It is detected
+**before** the bug is created: in flag and JSON form, all attachment files are
+read and all params built **before** the `create_bug` call. This keeps a
+missing-file typo from filing a bug it then can't complete. (Comment bodies are
+likewise materialized pre-create; an empty comment body is exit 7.) Only
+*server* sub-step failures (a POST that reaches the server and fails) produce the
+compound partial-failure path.
 
 ### `bug clone` (TD-006)
 

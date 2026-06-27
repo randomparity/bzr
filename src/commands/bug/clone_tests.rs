@@ -1,3 +1,5 @@
+#![expect(clippy::unwrap_used)]
+
 use wiremock::matchers::{body_partial_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
@@ -175,21 +177,24 @@ async fn bug_clone_reports_id_when_comment_post_fails() {
     )
     .await;
 
-    // The clone (bug creation) succeeded, so the command must succeed and the
-    // new bug ID must be reported — otherwise the user can't tell a bug was
-    // created and may re-clone, producing a duplicate.
+    // The clone (bug creation) succeeded but the back-reference comment failed:
+    // a partial failure. The new bug ID is still reported on stdout, but the
+    // command exits 11 (`BatchPartialFailure`, TD-006) so a scripted caller is
+    // not misled into thinking everything succeeded.
+    let err = result.unwrap_err();
+    assert_eq!(err.exit_code(), 11);
     assert!(
-        result.is_ok(),
-        "clone should succeed despite comment failure: {result:?}"
+        matches!(err, crate::error::BzrError::BatchPartialFailure { .. }),
+        "expected BatchPartialFailure, got {err:?}"
     );
     let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(__io.out_str());
     assert_eq!(parsed["id"], 202);
     assert_eq!(parsed["action"], "created");
     // The comment failure is surfaced as a stderr warning naming the new ID.
-    let err = __io.err_str();
+    let stderr = __io.err_str();
     assert!(
-        err.contains("202") && err.contains("warning"),
-        "expected warning naming bug #202, got: {err:?}"
+        stderr.contains("202") && stderr.contains("warning"),
+        "expected warning naming bug #202, got: {stderr:?}"
     );
 }
 

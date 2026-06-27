@@ -126,6 +126,48 @@
             "type": "string"
           },
           "examples": [["review?(alice@example.com)"]]
+        },
+        "comment": {
+          "description": "First comment posted after the bug is created (compound create). A failed comment POST keeps the bug and exits 11.",
+          "type": ["object", "null"],
+          "properties": {
+            "body": {
+              "type": "string"
+            },
+            "is_private": {
+              "type": "boolean"
+            }
+          },
+          "required": ["body"],
+          "additionalProperties": false,
+          "examples": [{ "body": "Reproduced on F42." }]
+        },
+        "attachments": {
+          "description": "Attachments uploaded after the bug is created (compound create). A failed upload keeps the bug and exits 11.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "description": {
+                "type": ["string", "null"]
+              },
+              "content_type": {
+                "type": ["string", "null"]
+              },
+              "is_patch": {
+                "type": "boolean"
+              },
+              "is_private": {
+                "type": "boolean"
+              }
+            },
+            "required": ["file"],
+            "additionalProperties": false
+          },
+          "examples": [[{ "file": "trace.log", "description": "boot trace" }]]
         }
       },
       "required": [],

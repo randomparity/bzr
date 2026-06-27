@@ -38,6 +38,7 @@ pub(crate) const SCHEMAS: &[(&str, &str)] = schema_registry![
     "component",
     "component-create-input",
     "component-update-input",
+    "compound-create-result",
     "config-result",
     "count-result",
     "download-result",

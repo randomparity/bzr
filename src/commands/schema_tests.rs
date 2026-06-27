@@ -16,8 +16,9 @@ use serde_json::{json, Value};
 use super::SCHEMAS;
 use crate::output::result_types::{
     ActionKind, ActionResult, BatchCreateResult, BatchFailure, BatchResult, BugViewFailure,
-    ConfigResult, CountResult, CreateFailure, DownloadResult, DryRunResult, MembershipResult,
-    MultiBugViewResult, ResourceKind, SearchResult, TagResult, UploadResult,
+    CompoundCreateResult, ConfigResult, CountResult, CreateFailure, DownloadResult, DryRunResult,
+    MembershipResult, MultiBugViewResult, ResourceKind, SearchResult, SubStepFailure, TagResult,
+    UploadResult,
 };
 use crate::test_helpers::CapturedIo;
 use crate::types::{
@@ -142,13 +143,25 @@ fn batch_result_conforms() {
 #[test]
 fn batch_create_result_conforms() {
     let batch = BatchCreateResult::new(
-        vec![10],
-        vec![CreateFailure {
-            index: 0,
-            error: "boom".into(),
-        }],
+        vec![10, 11],
+        vec![
+            CreateFailure::create(0, "boom"),
+            CreateFailure::sub_step(2, 11, "attachment", Some("t.log".into()), "500"),
+        ],
     );
     assert_conforms("batch-create-result", &to_value(&batch));
+}
+
+#[test]
+fn compound_create_result_conforms() {
+    let result = CompoundCreateResult::new(
+        42,
+        vec![
+            SubStepFailure::comment("comment service unavailable"),
+            SubStepFailure::attachment("trace.log", "413 payload too large"),
+        ],
+    );
+    assert_conforms("compound-create-result", &to_value(&result));
 }
 
 #[test]
