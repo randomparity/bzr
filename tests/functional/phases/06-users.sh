@@ -31,6 +31,15 @@ test_begin "23. user search testuser --details"
 run_bzr user search testuser --details
 if assert_success; then test_pass; fi
 
+test_begin "23a. user search --fields projects keys"
+run_bzr user search testuser --fields id,email
+if assert_success && assert_json '.[0] | keys | length' 2 &&
+    assert_json_exists '.[0].id'; then test_pass; fi
+
+test_begin "23b. user search --fields unknown exits 7"
+run_bzr user search testuser --fields bogus_xyz
+if assert_exit_code 7; then test_pass; fi
+
 test_begin "24. user update testuser"
 # Note: Bugzilla 5.0 REST API does not support real_name updates
 # (set_real_name method not found). Use login_denied_text instead.

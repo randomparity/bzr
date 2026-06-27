@@ -1121,7 +1121,7 @@ fn parse_attachment_list() {
     let cli = Cli::try_parse_from(["bzr", "attachment", "list", "42"]).unwrap();
     match cli.command {
         Commands::Attachment {
-            action: AttachmentAction::List { bug_id },
+            action: AttachmentAction::List { bug_id, .. },
         } => assert_eq!(bug_id, 42),
         _ => panic!("expected Attachment List"),
     }
@@ -1302,7 +1302,7 @@ fn parse_product_list() {
     let cli = Cli::try_parse_from(["bzr", "product", "list"]).unwrap();
     match cli.command {
         Commands::Product {
-            action: ProductAction::List { r#type },
+            action: ProductAction::List { r#type, .. },
         } => assert_eq!(r#type, ProductListType::Accessible),
         _ => panic!("expected Product List"),
     }
@@ -1313,7 +1313,7 @@ fn parse_product_view() {
     let cli = Cli::try_parse_from(["bzr", "product", "view", "Firefox"]).unwrap();
     match cli.command {
         Commands::Product {
-            action: ProductAction::View { name },
+            action: ProductAction::View { name, .. },
         } => assert_eq!(name, "Firefox"),
         _ => panic!("expected Product View"),
     }
@@ -1324,7 +1324,7 @@ fn parse_user_search() {
     let cli = Cli::try_parse_from(["bzr", "user", "search", "alice"]).unwrap();
     match cli.command {
         Commands::User {
-            action: UserAction::Search { query, details },
+            action: UserAction::Search { query, details, .. },
         } => {
             assert_eq!(query, "alice");
             assert!(!details);
@@ -1361,7 +1361,7 @@ fn parse_field_list() {
     let cli = Cli::try_parse_from(["bzr", "field", "list", "status"]).unwrap();
     match cli.command {
         Commands::Field {
-            action: FieldAction::List { name },
+            action: FieldAction::List { name, .. },
         } => assert_eq!(name, "status"),
         _ => panic!("expected Field List"),
     }
@@ -1383,7 +1383,7 @@ fn parse_classification_view() {
     let cli = Cli::try_parse_from(["bzr", "classification", "view", "Unclassified"]).unwrap();
     match cli.command {
         Commands::Classification {
-            action: ClassificationAction::View { name },
+            action: ClassificationAction::View { name, .. },
         } => assert_eq!(name, "Unclassified"),
         _ => panic!("expected Classification View"),
     }

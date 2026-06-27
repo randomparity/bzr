@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `--fields` / `--exclude-fields` JSON projection now works on `comment list`,
+  `attachment list`, `product list`/`view`, `component list`/`view`,
+  `user search`, `group list-users`/`view`, `classification list`/`view`, and
+  `field list`, matching the bug verbs' flag spelling. Field names are each
+  verb's `--json` keys; the selection trims the `--json` / `--output ndjson`
+  object (or each array element) to those keys, so agents can fetch only what
+  they need. Table output is unaffected (the flags warn and are ignored there).
+  An unknown field name exits 7. A new `validation/fields` helper centralizes the
+  parsing/validation, guarded by per-type drift tests. See ADR-0010. (#455)
 - New agent skill `bzr-bulk-triage` (under `agent-skills/`) teaching the
   streaming batch-triage pattern: stream a saved or ad-hoc query with
   `--paginate --output ndjson`, apply the read-before-write rule per row, and

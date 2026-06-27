@@ -23,12 +23,14 @@ fn capabilities_are_anonymous_for_reads() {
     let list = super::capabilities(&GroupAction::ListUsers {
         group: "admin".into(),
         details: false,
+        projection: crate::cli::ProjectionArgs::default(),
     });
     assert!(!list.supports_dry_run());
     assert_eq!(list.credential_requirement(), None);
 
     let view = super::capabilities(&GroupAction::View {
         group: "admin".into(),
+        projection: crate::cli::ProjectionArgs::default(),
     });
     assert!(!view.supports_dry_run());
     assert_eq!(view.credential_requirement(), None);

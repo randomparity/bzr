@@ -22,7 +22,7 @@ fn parse_error_kind(args: &[&str]) -> ErrorKind {
 #[test]
 fn parse_attachment_list_binds_numeric_bug_id() {
     match attachment_action(&["bzr", "attachment", "list", "12345"]) {
-        AttachmentAction::List { bug_id } => assert_eq!(bug_id, 12345),
+        AttachmentAction::List { bug_id, .. } => assert_eq!(bug_id, 12345),
         _ => panic!("expected List"),
     }
 }

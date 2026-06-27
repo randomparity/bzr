@@ -25,6 +25,8 @@ pub(crate) enum UserAction {
         /// Show extended details (groups, login status)
         #[arg(long)]
         details: bool,
+        #[command(flatten)]
+        projection: crate::cli::ProjectionArgs,
     },
 
     /// Create a new Bugzilla user account (admin only).

@@ -5,7 +5,12 @@ use crate::types::{Classification, ClassificationProduct, OutputFormat};
 
 fn capture(format: OutputFormat, c: &Classification) -> String {
     let mut buf = Vec::new();
-    write_classification(c, format, &mut buf);
+    write_classification(
+        c,
+        format,
+        &crate::validation::fields::FieldProjection::none(),
+        &mut buf,
+    );
     String::from_utf8(buf).unwrap()
 }
 

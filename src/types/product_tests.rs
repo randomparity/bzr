@@ -3,6 +3,33 @@
 use super::*;
 
 #[test]
+fn product_fields_matches_serialized_keys() {
+    let p = Product {
+        id: 1,
+        name: Some("P".into()),
+        description: Some("d".into()),
+        is_active: Some(true),
+        components: Vec::new(),
+        versions: Vec::new(),
+        milestones: Vec::new(),
+    };
+    let value = serde_json::to_value(&p).unwrap();
+    let serialized: std::collections::BTreeSet<String> =
+        value.as_object().unwrap().keys().cloned().collect();
+    let declared: std::collections::BTreeSet<String> =
+        PRODUCT_FIELDS.iter().map(|s| (*s).to_string()).collect();
+    assert_eq!(
+        serialized, declared,
+        "PRODUCT_FIELDS drifted from serde output"
+    );
+    assert_eq!(
+        PRODUCT_FIELDS.len(),
+        declared.len(),
+        "PRODUCT_FIELDS has duplicates"
+    );
+}
+
+#[test]
 fn product_deserializes_full() {
     let json = serde_json::json!({
         "id": 1,

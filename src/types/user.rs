@@ -18,6 +18,11 @@ pub struct BugzillaUser {
     pub can_login: Option<bool>,
 }
 
+/// Serde JSON keys of [`BugzillaUser`], for `--fields` / `--exclude-fields`
+/// validation on `user search` and `group list-users`.
+pub const BUGZILLA_USER_FIELDS: &[&str] =
+    &["id", "name", "real_name", "email", "groups", "can_login"];
+
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct UserGroup {

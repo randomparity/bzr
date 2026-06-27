@@ -15,8 +15,15 @@ pub(crate) async fn execute(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     match action {
-        ComponentAction::List { product } => list::handle(product, ctx, w).await,
-        ComponentAction::View { product, name } => view::handle(product, name, ctx, w).await,
+        ComponentAction::List {
+            product,
+            projection,
+        } => list::handle(product, projection, ctx, w).await,
+        ComponentAction::View {
+            product,
+            name,
+            projection,
+        } => view::handle(product, name, projection, ctx, w).await,
         ComponentAction::Create {
             from_json,
             product,

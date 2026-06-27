@@ -68,7 +68,7 @@ fn parse_group_remove_user_binds_group_and_user() {
 #[test]
 fn parse_group_list_users_defaults_details_false() {
     match group_action(&["bzr", "group", "list-users", "--group", "editbugs"]) {
-        GroupAction::ListUsers { group, details } => {
+        GroupAction::ListUsers { group, details, .. } => {
             assert_eq!(group, "editbugs");
             assert!(!details);
         }
@@ -94,7 +94,7 @@ fn parse_group_list_users_binds_details_flag() {
 #[test]
 fn parse_group_view_binds_positional() {
     match group_action(&["bzr", "group", "view", "editbugs"]) {
-        GroupAction::View { group } => assert_eq!(group, "editbugs"),
+        GroupAction::View { group, .. } => assert_eq!(group, "editbugs"),
         _ => panic!("expected View"),
     }
 }

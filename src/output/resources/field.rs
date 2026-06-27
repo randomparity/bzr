@@ -2,8 +2,11 @@ use std::io::Write;
 
 use serde::Serialize;
 
-use crate::output::formatting::{write_formatted, write_table_records, yes_no};
+use crate::output::formatting::{
+    write_formatted, write_formatted_projected, write_table_records, yes_no,
+};
 use crate::types::{FieldValue, OutputFormat};
+use crate::validation::fields::FieldProjection;
 
 const FIELD_VALUE_HEADERS: &[&str] = &["NAME", "ACTIVE", "CAN CHANGE TO"];
 const FIELD_ALIAS_HEADERS: &[&str] = &["ALIAS", "API FIELD NAME"];
@@ -30,9 +33,10 @@ fn field_value_record(value: &FieldValue) -> Vec<String> {
 pub fn write_field_values<W: Write + ?Sized>(
     values: &[FieldValue],
     format: OutputFormat,
+    projection: &FieldProjection,
     out: &mut W,
 ) {
-    write_formatted(values, format, out, |values, out| {
+    write_formatted_projected(values, format, projection, out, |values, out| {
         write_table_records(
             FIELD_VALUE_HEADERS,
             values.iter().map(field_value_record),

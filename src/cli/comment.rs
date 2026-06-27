@@ -25,6 +25,8 @@ pub(crate) enum CommentAction {
         /// Only show comments created after this date (ISO 8601)
         #[arg(long)]
         since: Option<String>,
+        #[command(flatten)]
+        projection: crate::cli::ProjectionArgs,
     },
 
     /// Add a comment to a bug.

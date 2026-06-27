@@ -2,12 +2,20 @@ use std::io::Write;
 
 use colored::Colorize;
 
-use crate::output::formatting::{opt_yes_no, write_field, write_formatted, write_optional_field};
+use crate::output::formatting::{
+    opt_yes_no, write_field, write_formatted_projected, write_optional_field,
+};
 use crate::types::group::GroupInfo;
 use crate::types::output::OutputFormat;
+use crate::validation::fields::FieldProjection;
 
-pub fn write_group_info<W: Write + ?Sized>(group: &GroupInfo, format: OutputFormat, out: &mut W) {
-    write_formatted(group, format, out, |group, out| {
+pub fn write_group_info<W: Write + ?Sized>(
+    group: &GroupInfo,
+    format: OutputFormat,
+    projection: &FieldProjection,
+    out: &mut W,
+) {
+    write_formatted_projected(group, format, projection, out, |group, out| {
         let _ = writeln!(
             out,
             "{} {}",

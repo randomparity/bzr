@@ -26,6 +26,16 @@ else
     assert_success
 fi
 
+test_begin "26b. group view --fields projects keys"
+run_bzr group view functest-grp --fields id,name
+if assert_success && assert_json 'keys | length' 2 && assert_json_exists '.name'; then
+    test_pass
+fi
+
+test_begin "26c. group view --fields unknown exits 7"
+run_bzr group view functest-grp --fields bogus_xyz
+if assert_exit_code 7; then test_pass; fi
+
 test_begin "26a. group view functest-grp with --api rest"
 run_bzr_raw --json --server test --api rest group view functest-grp
 if [[ $BZR_EXIT -eq 0 ]] && assert_json '.name' "functest-grp"; then
@@ -79,6 +89,15 @@ if assert_success && assert_stdout_contains "testuser"; then test_pass; fi
 test_begin "30. group list-users --details"
 run_bzr group list-users --group functest-grp --details
 if assert_success; then test_pass; fi
+
+test_begin "30a. group list-users --fields projects keys"
+run_bzr group list-users --group functest-grp --fields id,email
+if assert_success && assert_json '.[0] | keys | length' 2 &&
+    assert_json_exists '.[0].id'; then test_pass; fi
+
+test_begin "30b. group list-users --fields unknown exits 7"
+run_bzr group list-users --group functest-grp --fields bogus_xyz
+if assert_exit_code 7; then test_pass; fi
 
 test_begin "31. group remove-user"
 run_bzr group remove-user --group functest-grp --user testuser@test.bzr

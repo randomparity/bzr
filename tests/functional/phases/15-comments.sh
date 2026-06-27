@@ -36,6 +36,19 @@ if [[ -n "$BUG1" ]]; then
     if assert_success; then test_pass; fi
 else test_skip "no BUG1"; fi
 
+test_begin "91a. comment list --fields projects keys"
+if [[ -n "$BUG1" ]]; then
+    run_bzr comment list "$BUG1" --fields id,creator
+    if assert_success && assert_json '.[0] | keys | length' 2 &&
+        assert_json_exists '.[0].id'; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "91b. comment list --fields unknown exits 7"
+if [[ -n "$BUG1" ]]; then
+    run_bzr comment list "$BUG1" --fields bogus_xyz
+    if assert_exit_code 7; then test_pass; fi
+else test_skip "no BUG1"; fi
+
 test_begin "92. comment tag --add"
 if [[ -n "${COMMENT_ID:-}" ]] && [[ "$COMMENT_ID" != "null" ]]; then
     run_bzr comment tag "$COMMENT_ID" --add important

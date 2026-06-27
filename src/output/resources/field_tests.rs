@@ -5,7 +5,12 @@ use crate::types::{FieldValue, OutputFormat, StatusTransition};
 
 fn capture_values(format: OutputFormat, values: &[FieldValue]) -> String {
     let mut buf = Vec::new();
-    write_field_values(values, format, &mut buf);
+    write_field_values(
+        values,
+        format,
+        &crate::validation::fields::FieldProjection::none(),
+        &mut buf,
+    );
     String::from_utf8(buf).unwrap()
 }
 

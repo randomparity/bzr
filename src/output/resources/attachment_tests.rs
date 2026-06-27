@@ -10,7 +10,12 @@ fn output_attachment(id: u64, summary: &str) -> Attachment {
 
 fn capture(format: OutputFormat, attachments: &[Attachment]) -> String {
     let mut buf = Vec::new();
-    write_attachments(attachments, format, &mut buf);
+    write_attachments(
+        attachments,
+        format,
+        &crate::validation::fields::FieldProjection::none(),
+        &mut buf,
+    );
     String::from_utf8(buf).unwrap()
 }
 

@@ -27,6 +27,19 @@ if [[ -n "$BUG1" ]]; then
     if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
 else test_skip "no BUG1"; fi
 
+test_begin "97a. attachment list --fields projects keys"
+if [[ -n "$BUG1" ]]; then
+    run_bzr attachment list "$BUG1" --fields file_name,size
+    if assert_success && assert_json '.[0] | keys | length' 2 &&
+        assert_json_exists '.[0].file_name'; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "97b. attachment list --fields unknown exits 7"
+if [[ -n "$BUG1" ]]; then
+    run_bzr attachment list "$BUG1" --fields bogus_xyz
+    if assert_exit_code 7; then test_pass; fi
+else test_skip "no BUG1"; fi
+
 test_begin "98. attachment download"
 if [[ -n "${ATTACH_ID:-}" ]] && [[ "$ATTACH_ID" != "null" ]]; then
     rm -f /tmp/bzr-func-downloaded.txt

@@ -8,11 +8,19 @@ pub(super) async fn handle(
     ctx: &CommandContext,
     bug_id: u64,
     format: OutputFormat,
+    projection_args: &crate::cli::ProjectionArgs,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let projection = crate::validation::fields::projection_for(
+        format,
+        projection_args.fields.as_deref(),
+        projection_args.exclude_fields.as_deref(),
+        crate::types::attachment::ATTACHMENT_FIELDS,
+        w.err,
+    )?;
     let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
     let attachments = client.get_attachments(bug_id).await?;
-    write_attachments(&attachments, format, w.out);
+    write_attachments(&attachments, format, &projection, w.out);
     Ok(())
 }
 

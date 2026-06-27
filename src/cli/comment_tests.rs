@@ -23,7 +23,7 @@ fn parse_error_kind(args: &[&str]) -> ErrorKind {
 #[test]
 fn parse_comment_list_minimal_defaults_since_none() {
     match comment_action(&["bzr", "comment", "list", "12345"]) {
-        CommentAction::List { bug_id, since } => {
+        CommentAction::List { bug_id, since, .. } => {
             assert_eq!(bug_id, 12345);
             assert!(since.is_none());
         }

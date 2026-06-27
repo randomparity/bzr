@@ -22,7 +22,7 @@ fn parse_error_kind(args: &[&str]) -> ErrorKind {
 #[test]
 fn parse_component_list_binds_product() {
     match component_action(&["bzr", "component", "list", "--product", "MyApp"]) {
-        ComponentAction::List { product } => assert_eq!(product, "MyApp"),
+        ComponentAction::List { product, .. } => assert_eq!(product, "MyApp"),
         _ => panic!("expected List"),
     }
 }
@@ -38,7 +38,7 @@ fn parse_component_list_requires_product() {
 #[test]
 fn parse_component_view_binds_two_positionals() {
     match component_action(&["bzr", "component", "view", "MyApp", "Backend"]) {
-        ComponentAction::View { product, name } => {
+        ComponentAction::View { product, name, .. } => {
             assert_eq!(product, "MyApp");
             assert_eq!(name, "Backend");
         }

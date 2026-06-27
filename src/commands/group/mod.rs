@@ -21,10 +21,12 @@ pub(crate) async fn execute(
     match action {
         GroupAction::AddUser { group, user } => add_user::handle(group, user, ctx, w).await,
         GroupAction::RemoveUser { group, user } => remove_user::handle(group, user, ctx, w).await,
-        GroupAction::ListUsers { group, details } => {
-            list_users::handle(group, *details, ctx, w).await
-        }
-        GroupAction::View { group } => view::handle(group, ctx, w).await,
+        GroupAction::ListUsers {
+            group,
+            details,
+            projection,
+        } => list_users::handle(group, *details, projection, ctx, w).await,
+        GroupAction::View { group, projection } => view::handle(group, projection, ctx, w).await,
         GroupAction::Create {
             from_json,
             name,

@@ -23,7 +23,7 @@ fn parse_error_kind(args: &[&str]) -> ErrorKind {
 #[test]
 fn parse_product_list_defaults_to_accessible() {
     match product_action(&["bzr", "product", "list"]) {
-        ProductAction::List { r#type } => assert_eq!(r#type, ProductListType::Accessible),
+        ProductAction::List { r#type, .. } => assert_eq!(r#type, ProductListType::Accessible),
         _ => panic!("expected List"),
     }
 }
@@ -31,7 +31,7 @@ fn parse_product_list_defaults_to_accessible() {
 #[test]
 fn parse_product_list_binds_selectable_type() {
     match product_action(&["bzr", "product", "list", "--type", "selectable"]) {
-        ProductAction::List { r#type } => assert_eq!(r#type, ProductListType::Selectable),
+        ProductAction::List { r#type, .. } => assert_eq!(r#type, ProductListType::Selectable),
         _ => panic!("expected List"),
     }
 }
@@ -47,7 +47,7 @@ fn parse_product_list_rejects_invalid_type() {
 #[test]
 fn parse_product_view_binds_name() {
     match product_action(&["bzr", "product", "view", "Firefox"]) {
-        ProductAction::View { name } => assert_eq!(name, "Firefox"),
+        ProductAction::View { name, .. } => assert_eq!(name, "Firefox"),
         _ => panic!("expected View"),
     }
 }

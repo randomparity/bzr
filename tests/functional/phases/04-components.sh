@@ -56,6 +56,15 @@ test_begin "15b. component view <product> <component>"
 run_bzr component view FuncTestProd Backend
 if assert_success && assert_json '.name' "Backend"; then test_pass; fi
 
+test_begin "15c. component list --fields projects keys"
+run_bzr component list --product FuncTestProd --fields id,name
+if assert_success && assert_json '.[0] | keys | length' 2 &&
+    assert_json_exists '.[0].name'; then test_pass; fi
+
+test_begin "15d. component view --fields unknown exits 7"
+run_bzr component view FuncTestProd Backend --fields bogus_xyz
+if assert_exit_code 7; then test_pass; fi
+
 _CJSON_DIR=$(mktemp -d /tmp/bzr-func-component-json.XXXXXX)
 _CJ_NAME=$(unique_name compjson)
 write_json_fixture "$_CJSON_DIR/create.json" \

@@ -156,6 +156,8 @@ pub(crate) enum AttachmentAction {
     List {
         /// Bug ID
         bug_id: u64,
+        #[command(flatten)]
+        projection: crate::cli::ProjectionArgs,
     },
 
     /// View a single attachment's metadata by attachment ID.

@@ -74,6 +74,8 @@ pub(crate) enum GroupAction {
         /// Show extended details (groups, login status)
         #[arg(long)]
         details: bool,
+        #[command(flatten)]
+        projection: crate::cli::ProjectionArgs,
     },
 
     /// View group metadata (description, active flag, ID).
@@ -93,6 +95,8 @@ pub(crate) enum GroupAction {
     View {
         /// Group name or ID
         group: String,
+        #[command(flatten)]
+        projection: crate::cli::ProjectionArgs,
     },
 
     /// Create a new Bugzilla group (admin only).

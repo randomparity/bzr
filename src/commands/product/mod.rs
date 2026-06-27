@@ -17,8 +17,10 @@ pub(crate) async fn execute(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     match action {
-        ProductAction::List { r#type } => list::handle(*r#type, ctx, w).await,
-        ProductAction::View { name } => view::handle(name, ctx, w).await,
+        ProductAction::List { r#type, projection } => {
+            list::handle(*r#type, projection, ctx, w).await
+        }
+        ProductAction::View { name, projection } => view::handle(name, projection, ctx, w).await,
         ProductAction::Create {
             from_json,
             name,

@@ -26,6 +26,7 @@ fn update_action() -> ComponentAction {
 fn capabilities_are_anonymous_for_reads() {
     let list = super::capabilities(&ComponentAction::List {
         product: "P".into(),
+        projection: crate::cli::ProjectionArgs::default(),
     });
     assert!(!list.supports_dry_run());
     assert_eq!(list.credential_requirement(), None);
@@ -33,6 +34,7 @@ fn capabilities_are_anonymous_for_reads() {
     let view = super::capabilities(&ComponentAction::View {
         product: "P".into(),
         name: "C".into(),
+        projection: crate::cli::ProjectionArgs::default(),
     });
     assert!(!view.supports_dry_run());
     assert_eq!(view.credential_requirement(), None);

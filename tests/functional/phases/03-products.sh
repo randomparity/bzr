@@ -30,6 +30,16 @@ test_begin "12. product view FuncTestProd"
 run_bzr product view FuncTestProd
 if assert_success && assert_json '.name' "FuncTestProd"; then test_pass; fi
 
+test_begin "12a. product view --fields projects keys"
+run_bzr product view FuncTestProd --fields id,name
+if assert_success && assert_json 'keys | length' 2 && assert_json_exists '.name'; then
+    test_pass
+fi
+
+test_begin "12b. product list --fields unknown exits 7"
+run_bzr product list --fields bogus_xyz
+if assert_exit_code 7; then test_pass; fi
+
 test_begin "13. product update FuncTestProd"
 run_bzr product update FuncTestProd --description "Updated desc"
 if assert_success; then test_pass; fi

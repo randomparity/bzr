@@ -2,10 +2,12 @@ use std::fmt::Write as _;
 use std::io::Write;
 
 use crate::output::formatting::{
-    truncate, write_formatted, write_table_or_empty, TableSpec, DESCRIPTION_TRUNCATE_WIDTH,
+    truncate, write_formatted_projected, write_records_or_empty, TableSpec,
+    DESCRIPTION_TRUNCATE_WIDTH,
 };
 use crate::types::output::OutputFormat;
 use crate::types::product::Product;
+use crate::validation::fields::FieldProjection;
 
 const PRODUCT_HEADERS: &[&str] = &["ID", "NAME", "DESCRIPTION", "COMPONENTS"];
 
@@ -93,25 +95,32 @@ fn product_record(product: &Product) -> Vec<String> {
     ]
 }
 
-pub fn write_products<W: Write + ?Sized>(products: &[Product], format: OutputFormat, out: &mut W) {
-    write_table_or_empty(
-        products,
-        format,
-        out,
-        TableSpec {
-            empty_msg: "No products found.",
-            headers: PRODUCT_HEADERS,
-        },
-        product_record,
-    );
+pub fn write_products<W: Write + ?Sized>(
+    products: &[Product],
+    format: OutputFormat,
+    projection: &FieldProjection,
+    out: &mut W,
+) {
+    write_formatted_projected(products, format, projection, out, |products, out| {
+        write_records_or_empty(
+            products,
+            TableSpec {
+                empty_msg: "No products found.",
+                headers: PRODUCT_HEADERS,
+            },
+            product_record,
+            out,
+        );
+    });
 }
 
 pub fn write_product_detail<W: Write + ?Sized>(
     product: &Product,
     format: OutputFormat,
+    projection: &FieldProjection,
     out: &mut W,
 ) {
-    write_formatted(product, format, out, |product, out| {
+    write_formatted_projected(product, format, projection, out, |product, out| {
         let _ = write!(out, "{}", format_product_detail(product));
     });
 }

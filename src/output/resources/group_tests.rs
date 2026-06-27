@@ -5,7 +5,12 @@ use crate::types::{GroupInfo, GroupMember, OutputFormat};
 
 fn capture(format: OutputFormat, group: &GroupInfo) -> String {
     let mut buf = Vec::new();
-    write_group_info(group, format, &mut buf);
+    write_group_info(
+        group,
+        format,
+        &crate::validation::fields::FieldProjection::none(),
+        &mut buf,
+    );
     String::from_utf8(buf).unwrap()
 }
 

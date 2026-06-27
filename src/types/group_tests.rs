@@ -3,6 +3,36 @@
 use super::*;
 
 #[test]
+fn group_info_fields_matches_serialized_keys() {
+    let group = GroupInfo {
+        id: 1,
+        name: Some("admin".into()),
+        description: Some("Admins".into()),
+        is_active: Some(true),
+        membership: vec![GroupMember {
+            id: 1,
+            name: Some("alice".into()),
+            real_name: Some("Alice".into()),
+            email: Some("alice@example.com".into()),
+        }],
+    };
+    let value = serde_json::to_value(&group).unwrap();
+    let serialized: std::collections::BTreeSet<String> =
+        value.as_object().unwrap().keys().cloned().collect();
+    let declared: std::collections::BTreeSet<String> =
+        GROUP_INFO_FIELDS.iter().map(|s| (*s).to_string()).collect();
+    assert_eq!(
+        serialized, declared,
+        "GROUP_INFO_FIELDS drifted from serde output"
+    );
+    assert_eq!(
+        GROUP_INFO_FIELDS.len(),
+        declared.len(),
+        "GROUP_INFO_FIELDS has duplicates"
+    );
+}
+
+#[test]
 fn group_info_deserializes_full() {
     let json = serde_json::json!({
         "id": 42,

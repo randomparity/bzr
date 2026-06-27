@@ -29,6 +29,8 @@ pub(crate) enum ProductAction {
         /// Product type: accessible (default), selectable, or enterable
         #[arg(long, default_value = "accessible")]
         r#type: ProductListType,
+        #[command(flatten)]
+        projection: crate::cli::ProjectionArgs,
     },
 
     /// View a product's full details: components, versions, milestones.
@@ -50,6 +52,8 @@ pub(crate) enum ProductAction {
     View {
         /// Product name
         name: String,
+        #[command(flatten)]
+        projection: crate::cli::ProjectionArgs,
     },
 
     /// Create a new Bugzilla product (admin only).

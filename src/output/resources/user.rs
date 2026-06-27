@@ -3,10 +3,12 @@ use std::io::Write;
 use colored::Colorize;
 
 use crate::output::formatting::{
-    opt_yes_no, write_field, write_formatted, write_optional_field, write_table_or_empty, TableSpec,
+    opt_yes_no, write_field, write_formatted, write_formatted_projected, write_optional_field,
+    write_records_or_empty, TableSpec,
 };
 use crate::types::output::OutputFormat;
 use crate::types::user::{BugzillaUser, WhoamiOutput};
+use crate::validation::fields::FieldProjection;
 
 const USER_HEADERS: &[&str] = &["ID", "NAME", "REAL NAME", "EMAIL"];
 const DETAILED_USER_HEADERS: &[&str] = &["ID", "NAME", "REAL NAME", "EMAIL", "CAN LOGIN", "GROUPS"];
@@ -72,34 +74,42 @@ fn detailed_record(user: &BugzillaUser) -> Vec<String> {
     ]
 }
 
-pub fn write_users<W: Write + ?Sized>(users: &[BugzillaUser], format: OutputFormat, out: &mut W) {
-    write_table_or_empty(
-        users,
-        format,
-        out,
-        TableSpec {
-            empty_msg: "No users found.",
-            headers: USER_HEADERS,
-        },
-        basic_record,
-    );
+pub fn write_users<W: Write + ?Sized>(
+    users: &[BugzillaUser],
+    format: OutputFormat,
+    projection: &FieldProjection,
+    out: &mut W,
+) {
+    write_formatted_projected(users, format, projection, out, |users, out| {
+        write_records_or_empty(
+            users,
+            TableSpec {
+                empty_msg: "No users found.",
+                headers: USER_HEADERS,
+            },
+            basic_record,
+            out,
+        );
+    });
 }
 
 pub fn write_users_detailed<W: Write + ?Sized>(
     users: &[BugzillaUser],
     format: OutputFormat,
+    projection: &FieldProjection,
     out: &mut W,
 ) {
-    write_table_or_empty(
-        users,
-        format,
-        out,
-        TableSpec {
-            empty_msg: "No users found.",
-            headers: DETAILED_USER_HEADERS,
-        },
-        detailed_record,
-    );
+    write_formatted_projected(users, format, projection, out, |users, out| {
+        write_records_or_empty(
+            users,
+            TableSpec {
+                empty_msg: "No users found.",
+                headers: DETAILED_USER_HEADERS,
+            },
+            detailed_record,
+            out,
+        );
+    });
 }
 
 pub fn write_whoami<W: Write + ?Sized>(whoami: &WhoamiOutput, format: OutputFormat, out: &mut W) {

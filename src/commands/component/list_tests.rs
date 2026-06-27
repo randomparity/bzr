@@ -3,9 +3,16 @@
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
-use crate::cli::ComponentAction;
+use crate::cli::{ComponentAction, ProjectionArgs};
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
+
+fn list_with(projection: ProjectionArgs) -> ComponentAction {
+    ComponentAction::List {
+        product: "MyApp".into(),
+        projection,
+    }
+}
 
 /// Mock `GET /rest/product?names=MyApp` returning a product with two
 /// components.
@@ -40,6 +47,7 @@ async fn component_list_returns_components() {
 
     let action = ComponentAction::List {
         product: "MyApp".into(),
+        projection: ProjectionArgs::default(),
     };
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
@@ -67,6 +75,7 @@ async fn component_list_http_500_returns_error() {
 
     let action = ComponentAction::List {
         product: "MyApp".into(),
+        projection: ProjectionArgs::default(),
     };
     let result = crate::commands::component::execute(
         &action,
@@ -80,4 +89,91 @@ async fn component_list_http_500_returns_error() {
         err.contains("500") || err.contains("Internal Server Error"),
         "expected HTTP 500 error, got: {err}"
     );
+}
+
+#[tokio::test]
+async fn component_list_json_fields_projects_to_named_keys() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_product_with_components(&mock).await;
+
+    let action = list_with(ProjectionArgs {
+        fields: Some("name".into()),
+        exclude_fields: None,
+    });
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::component::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+    assert!(result.is_ok());
+    let parsed = crate::test_helpers::json_envelope_data(io.out_str());
+    assert_eq!(parsed[0]["name"], "Backend");
+    assert_eq!(parsed[0].as_object().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn component_list_ndjson_fields_projects_each_line() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_product_with_components(&mock).await;
+
+    let action = list_with(ProjectionArgs {
+        fields: Some("name".into()),
+        exclude_fields: None,
+    });
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::component::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Ndjson, None),
+        &mut io.writers(),
+    )
+    .await;
+    assert!(result.is_ok());
+    assert_eq!(
+        io.out_str().trim(),
+        "{\"name\":\"Backend\"}\n{\"name\":\"Frontend\"}"
+    );
+}
+
+#[tokio::test]
+async fn component_list_json_unknown_field_exits_7() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+
+    let action = list_with(ProjectionArgs {
+        fields: Some("nam".into()),
+        exclude_fields: None,
+    });
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::component::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+    assert_eq!(result.unwrap_err().exit_code(), 7);
+    assert!(io.out_str().is_empty());
+}
+
+#[tokio::test]
+async fn component_list_table_fields_is_noop_with_warning() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_product_with_components(&mock).await;
+
+    let action = list_with(ProjectionArgs {
+        fields: Some("name".into()),
+        exclude_fields: None,
+    });
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::component::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Table, None),
+        &mut io.writers(),
+    )
+    .await;
+    assert!(result.is_ok());
+    assert!(io.out_str().contains("Backend"));
+    assert!(io
+        .err_str()
+        .contains("--fields/--exclude-fields only affect"));
 }

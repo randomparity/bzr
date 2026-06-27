@@ -20,7 +20,10 @@ pub(crate) enum ClassificationAction {
     ///
     /// See bzr-classification-view(1) for one classification's full detail.
     #[command(verbatim_doc_comment)]
-    List,
+    List {
+        #[command(flatten)]
+        projection: crate::cli::ProjectionArgs,
+    },
 
     /// View a classification by name or ID.
     ///
@@ -45,6 +48,8 @@ pub(crate) enum ClassificationAction {
     View {
         /// Classification name or ID
         name: String,
+        #[command(flatten)]
+        projection: crate::cli::ProjectionArgs,
     },
 }
 

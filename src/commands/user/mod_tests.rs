@@ -25,6 +25,7 @@ fn search_action() -> UserAction {
     UserAction::Search {
         query: "alice".into(),
         details: false,
+        projection: crate::cli::ProjectionArgs::default(),
     }
 }
 

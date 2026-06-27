@@ -55,6 +55,27 @@ pub struct Attachment {
     pub data: Option<String>,
 }
 
+/// Serde JSON keys of [`Attachment`], for `--fields` / `--exclude-fields`
+/// validation on `attachment list`. `data` is only populated by
+/// `attachment download`; selecting it on `attachment list` yields empty
+/// objects (gh-style sparse projection).
+pub const ATTACHMENT_FIELDS: &[&str] = &[
+    "id",
+    "bug_id",
+    "file_name",
+    "summary",
+    "content_type",
+    "creator",
+    "creation_time",
+    "last_change_time",
+    "size",
+    "is_obsolete",
+    "is_private",
+    "is_patch",
+    "flags",
+    "data",
+];
+
 #[derive(Debug, Serialize)]
 #[non_exhaustive]
 pub struct UploadAttachmentParams {

@@ -29,9 +29,11 @@ pub(crate) async fn execute(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     match action {
-        CommentAction::List { bug_id, since } => {
-            list::handle(*bug_id, since.as_deref(), ctx, w).await
-        }
+        CommentAction::List {
+            bug_id,
+            since,
+            projection,
+        } => list::handle(*bug_id, since.as_deref(), projection, ctx, w).await,
         CommentAction::Add {
             bug_id,
             body,

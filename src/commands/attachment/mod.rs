@@ -48,7 +48,9 @@ pub(crate) async fn execute(
     let format = ctx.format();
 
     match action {
-        AttachmentAction::List { bug_id } => list::handle(ctx, *bug_id, format, w).await?,
+        AttachmentAction::List { bug_id, projection } => {
+            list::handle(ctx, *bug_id, format, projection, w).await?;
+        }
         AttachmentAction::View { attachment_id } => {
             view::handle(ctx, *attachment_id, format, w).await?;
         }

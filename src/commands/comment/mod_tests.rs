@@ -22,6 +22,7 @@ fn capabilities_are_anonymous_for_read_actions() {
     let list = super::capabilities(&CommentAction::List {
         bug_id: 42,
         since: None,
+        projection: crate::cli::ProjectionArgs::default(),
     });
     assert!(!list.supports_dry_run());
     assert_eq!(list.credential_requirement(), None);

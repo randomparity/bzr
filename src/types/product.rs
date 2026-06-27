@@ -20,6 +20,18 @@ pub struct Product {
     pub milestones: Vec<Milestone>,
 }
 
+/// Serde JSON keys of [`Product`], for `--fields` / `--exclude-fields`
+/// validation on `product list` and `product view`.
+pub const PRODUCT_FIELDS: &[&str] = &[
+    "id",
+    "name",
+    "description",
+    "is_active",
+    "components",
+    "versions",
+    "milestones",
+];
+
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Version {
