@@ -3,6 +3,37 @@
 use super::*;
 
 #[test]
+fn classification_fields_matches_serialized_keys() {
+    let cls = Classification {
+        id: 1,
+        name: Some("Software".into()),
+        description: Some("Software products".into()),
+        sort_key: Some(0),
+        products: vec![ClassificationProduct {
+            id: 10,
+            name: Some("Widget".into()),
+            description: Some("A widget".into()),
+        }],
+    };
+    let value = serde_json::to_value(&cls).unwrap();
+    let serialized: std::collections::BTreeSet<String> =
+        value.as_object().unwrap().keys().cloned().collect();
+    let declared: std::collections::BTreeSet<String> = CLASSIFICATION_FIELDS
+        .iter()
+        .map(|s| (*s).to_string())
+        .collect();
+    assert_eq!(
+        serialized, declared,
+        "CLASSIFICATION_FIELDS drifted from serde output"
+    );
+    assert_eq!(
+        CLASSIFICATION_FIELDS.len(),
+        declared.len(),
+        "CLASSIFICATION_FIELDS has duplicates"
+    );
+}
+
+#[test]
 fn classification_deserializes() {
     let json = serde_json::json!({
         "id": 2,

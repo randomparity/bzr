@@ -23,7 +23,7 @@ fn parse_error_kind(args: &[&str]) -> ErrorKind {
 fn parse_classification_list() {
     assert!(matches!(
         classification_action(&["bzr", "classification", "list"]),
-        ClassificationAction::List
+        ClassificationAction::List { .. }
     ));
 }
 
@@ -38,16 +38,16 @@ fn parse_classification_list_rejects_positional() {
 #[test]
 fn parse_classification_view_binds_name() {
     match classification_action(&["bzr", "classification", "view", "Unclassified"]) {
-        ClassificationAction::View { name } => assert_eq!(name, "Unclassified"),
-        ClassificationAction::List => panic!("expected View"),
+        ClassificationAction::View { name, .. } => assert_eq!(name, "Unclassified"),
+        ClassificationAction::List { .. } => panic!("expected View"),
     }
 }
 
 #[test]
 fn parse_classification_view_accepts_numeric_id_as_string() {
     match classification_action(&["bzr", "classification", "view", "1"]) {
-        ClassificationAction::View { name } => assert_eq!(name, "1"),
-        ClassificationAction::List => panic!("expected View"),
+        ClassificationAction::View { name, .. } => assert_eq!(name, "1"),
+        ClassificationAction::List { .. } => panic!("expected View"),
     }
 }
 

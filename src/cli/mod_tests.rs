@@ -1383,7 +1383,7 @@ fn parse_classification_view() {
     let cli = Cli::try_parse_from(["bzr", "classification", "view", "Unclassified"]).unwrap();
     match cli.command {
         Commands::Classification {
-            action: ClassificationAction::View { name },
+            action: ClassificationAction::View { name, .. },
         } => assert_eq!(name, "Unclassified"),
         _ => panic!("expected Classification View"),
     }

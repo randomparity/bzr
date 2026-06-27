@@ -3,10 +3,12 @@ use std::io::Write;
 use colored::Colorize;
 
 use crate::output::formatting::{
-    truncate, write_formatted, write_table_or_empty, TableSpec, DESCRIPTION_TRUNCATE_WIDTH,
+    truncate, write_formatted_projected, write_records_or_empty, TableSpec,
+    DESCRIPTION_TRUNCATE_WIDTH,
 };
 use crate::types::classification::Classification;
 use crate::types::output::OutputFormat;
+use crate::validation::fields::FieldProjection;
 
 const CLASSIFICATION_HEADERS: &[&str] = &["ID", "NAME", "DESCRIPTION", "PRODUCTS"];
 
@@ -27,48 +29,57 @@ fn classification_record(c: &Classification) -> Vec<String> {
 pub fn write_classifications<W: Write + ?Sized>(
     items: &[Classification],
     format: OutputFormat,
+    projection: &FieldProjection,
     out: &mut W,
 ) {
-    write_table_or_empty(
-        items,
-        format,
-        out,
-        TableSpec {
-            empty_msg: "No classifications found.",
-            headers: CLASSIFICATION_HEADERS,
-        },
-        classification_record,
-    );
+    write_formatted_projected(items, format, projection, out, |items, out| {
+        write_records_or_empty(
+            items,
+            TableSpec {
+                empty_msg: "No classifications found.",
+                headers: CLASSIFICATION_HEADERS,
+            },
+            classification_record,
+            out,
+        );
+    });
 }
 
 pub fn write_classification<W: Write + ?Sized>(
     classification: &Classification,
     format: OutputFormat,
+    projection: &FieldProjection,
     out: &mut W,
 ) {
-    write_formatted(classification, format, out, |classification, out| {
-        let _ = writeln!(
-            out,
-            "{} {}\n{}\n",
-            "Classification".bold(),
-            classification.name.as_deref().unwrap_or("unknown").bold(),
-            classification.description.as_deref().unwrap_or("-"),
-        );
-        if !classification.products.is_empty() {
-            let _ = writeln!(out, "{}:", "Products".bold());
-            for p in &classification.products {
-                let _ = writeln!(
-                    out,
-                    "  {} - {}",
-                    p.name.as_deref().unwrap_or("unknown"),
-                    truncate(
-                        p.description.as_deref().unwrap_or(""),
-                        DESCRIPTION_TRUNCATE_WIDTH
-                    )
-                );
+    write_formatted_projected(
+        classification,
+        format,
+        projection,
+        out,
+        |classification, out| {
+            let _ = writeln!(
+                out,
+                "{} {}\n{}\n",
+                "Classification".bold(),
+                classification.name.as_deref().unwrap_or("unknown").bold(),
+                classification.description.as_deref().unwrap_or("-"),
+            );
+            if !classification.products.is_empty() {
+                let _ = writeln!(out, "{}:", "Products".bold());
+                for p in &classification.products {
+                    let _ = writeln!(
+                        out,
+                        "  {} - {}",
+                        p.name.as_deref().unwrap_or("unknown"),
+                        truncate(
+                            p.description.as_deref().unwrap_or(""),
+                            DESCRIPTION_TRUNCATE_WIDTH
+                        )
+                    );
+                }
             }
-        }
-    });
+        },
+    );
 }
 
 #[cfg(test)]

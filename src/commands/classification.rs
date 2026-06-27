@@ -10,10 +10,17 @@ pub(crate) async fn execute(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let format = ctx.format();
-    let client = super::runtime::shared::connect_and_configure(ctx).await?;
 
     match action {
-        ClassificationAction::List => {
+        ClassificationAction::List { projection } => {
+            let projection = crate::validation::fields::projection_for(
+                format,
+                projection.fields.as_deref(),
+                projection.exclude_fields.as_deref(),
+                crate::types::classification::CLASSIFICATION_FIELDS,
+                w.err,
+            )?;
+            let client = super::runtime::shared::connect_and_configure(ctx).await?;
             let classifications = client.list_classifications().await?;
             // A lone "Unclassified" is Bugzilla's signal that classifications
             // are disabled on this server.
@@ -32,11 +39,19 @@ pub(crate) async fn execute(
                      this server likely has classifications disabled."
                 );
             }
-            write_classifications(&classifications, format, w.out);
+            write_classifications(&classifications, format, &projection, w.out);
         }
-        ClassificationAction::View { name } => {
+        ClassificationAction::View { name, projection } => {
+            let projection = crate::validation::fields::projection_for(
+                format,
+                projection.fields.as_deref(),
+                projection.exclude_fields.as_deref(),
+                crate::types::classification::CLASSIFICATION_FIELDS,
+                w.err,
+            )?;
+            let client = super::runtime::shared::connect_and_configure(ctx).await?;
             let classification = client.get_classification(name).await?;
-            write_classification(&classification, format, w.out);
+            write_classification(&classification, format, &projection, w.out);
         }
     }
     Ok(())

@@ -144,7 +144,7 @@ pub(super) struct TableSpec<'a> {
 
 /// Render `items` as a `tabled` table, printing `table.empty_msg` instead of an
 /// empty table when there are no items. Table-only (no format branch); shared by
-/// [`write_table_or_empty`] and the projected resource writers' table closures.
+/// the projected resource writers' table closures.
 pub(super) fn write_records_or_empty<T, W>(
     items: &[T],
     table: TableSpec<'_>,
@@ -158,24 +158,6 @@ pub(super) fn write_records_or_empty<T, W>(
         return;
     }
     write_table_records(table.headers, items.iter().map(to_record), out);
-}
-
-/// Render a slice as JSON or a `tabled` table, printing `empty_msg` instead of
-/// an empty table when there are no items. `to_record` maps each item to one
-/// display row.
-pub(super) fn write_table_or_empty<T, W>(
-    items: &[T],
-    format: OutputFormat,
-    out: &mut W,
-    table: TableSpec<'_>,
-    to_record: impl Fn(&T) -> Vec<String>,
-) where
-    T: Serialize,
-    W: Write + ?Sized,
-{
-    write_formatted(items, format, out, |items, out| {
-        write_records_or_empty(items, table, to_record, out);
-    });
 }
 
 // ── Detail-field helpers ────────────────────────────────────────────
