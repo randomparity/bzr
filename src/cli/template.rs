@@ -60,6 +60,12 @@ pub(crate) struct TemplateFields {
 }
 
 impl TemplateFields {
+    /// Return true when no template-update field flags were supplied.
+    #[must_use]
+    pub fn is_empty_change(&self) -> bool {
+        self.to_template().is_empty()
+    }
+
     /// Build a `BugTemplate` from these flags (used by `template save`).
     #[must_use]
     pub fn to_template(&self) -> BugTemplate {
