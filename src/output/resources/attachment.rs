@@ -4,8 +4,8 @@ use colored::Colorize;
 use serde::Serialize;
 
 use crate::output::formatting::{
-    render_flags_inline, write_field, write_formatted, write_formatted_projected,
-    write_optional_field,
+    disable_color_for_tests, render_flags_inline, write_field, write_formatted,
+    write_formatted_projected, write_optional_field,
 };
 use crate::types::attachment::Attachment;
 use crate::types::output::OutputFormat;
@@ -245,6 +245,7 @@ pub(super) fn write_attachment_batch_table<O: Write + ?Sized, E: Write + ?Sized>
     out: &mut O,
     err: &mut E,
 ) {
+    disable_color_for_tests();
     for bug in &r.bug_results {
         match bug.status {
             TargetStatus::Ok => {

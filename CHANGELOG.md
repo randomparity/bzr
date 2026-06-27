@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   terminal `error` event on dispatch failure (`done` is suppressed on a partial
   batch failure). stdout is unchanged; absent the flag behavior is identical.
   Opt-in, `ndjson`-only. See ADR-0011. (#462)
+
 - `--fields` / `--exclude-fields` JSON projection now works on `comment list`,
   `attachment list`, `product list`/`view`, `component list`/`view`,
   `user search`, `group list-users`/`view`, `classification list`/`view`, and
@@ -36,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   they need. Table output is unaffected (the flags warn and are ignored there).
   An unknown field name exits 7. A new `validation/fields` helper centralizes the
   parsing/validation, guarded by per-type drift tests. See ADR-0010. (#455)
+
 - New agent skill `bzr-bulk-triage` (under `agent-skills/`) teaching the
   streaming batch-triage pattern: stream a saved or ad-hoc query with
   `--paginate --output ndjson`, apply the read-before-write rule per row, and
@@ -43,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `--expect-unchanged-since` and bounded concurrency). No new CLI verbs; it
   codifies an existing-capability workflow and cross-references `bzr-triage-bug`
   and `bzr-search-report`. The installers and skills table list it. (#454)
+
 - `bzr whoami --json` / `--output ndjson` now report two connection-metadata
   fields alongside the identity fields: `server_name` (the configured/inline
   server the identity resolved against — a named server's config key, or the
@@ -51,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   am I, and how am I authenticated?". The existing identity fields (`id`, `name`,
   `real_name`, `login`) are unchanged (additive). Adds the `whoami` JSON Schema
   (`bzr schema whoami`). (#470)
+
 - `bzr bug history <id> --json` / `--output ndjson` now emit flattened change
   records — one record per changed field (`when`, `who`, `field`, `old_value`,
   `new_value`, `comment_id`) instead of grouped entries with a nested `changes`
@@ -58,12 +62,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   is correlated from the bug's comments by author and timestamp (best-effort,
   null when no comment matches). The table output is unchanged. A `history`
   schema is published via `bzr schema history`. (#456)
+
 - `bzr bug links <id>` prints a bug's relationship graph — one record per related
   bug across all six Bugzilla link types (`depends_on`, `blocks`, `dupe_of`,
   `duplicates`, `regressed_by`, `regressions`) as flat JSON/ndjson/table records
   with `relation`, `direction`, and `depth` fields. `--recursive --depth N`
   performs a bounded, cycle-safe breadth-first walk; `--relation <type>` filters
   to one relation. Read-only and works without an API key. (#453)
+
 - `bzr server capabilities` dumps the connected server's capability surface as
   structured JSON (`--json`/`--output ndjson`): supported API transports and auth
   modes, status-transition summaries, custom field definitions, the
@@ -84,11 +90,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   back-reference comment fails to post, instead of warning and exiting 0
   (TD-006). The bug is still created and its ID is printed; the non-zero exit
   signals the partial failure so scripted callers are not misled. (#458)
+
 - `bug create --from-json` array results: `created` and `failed` are no longer
   disjoint. A created bug whose compound sub-step (comment/attachment) fails now
   appears in both — its ID in `created` and a `{index, bug_id, step, file,
   error}` entry in `failed`. Count filed bugs with `created`; detect any problem
   with `failed`. (#458)
+
 - The bundled `bzr-setup` agent skill now teaches `bzr whoami --json` as the
   canonical one-call health check ("am I configured?") — config, auth, and
   server reachability in a single probe — instead of chaining `config show`,
@@ -96,6 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the failure modes (TLS, auth, connection), the public read-only fallback
   (`server info --json`), and cross-references `bzr-reference` for the TLS-trust
   flag surface and error envelope. No CLI changes. (#461)
+
 - **BREAKING (`--json`):** pretty `--json` output is now wrapped in a versioned
   envelope `{"schema_version": "0.6.0", "data": <previous output>}`. Move `jq`
   recipes and deserializers from the old top level to `.data` (e.g. `.[].id` →
@@ -106,20 +115,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   shape for pinned line-oriented automation; read the version out of band via
   `bzr schema --json` or `bzr --version`. `bzr schema <name>` still prints the
   raw schema document verbatim (unenveloped). (#464)
+
 - Internal: pin the local toolchain to the MSRV (1.89) via `rust-toolchain.toml`
   so contributor `cargo`/`make lint` runs match CI, which builds and lints at
   1.89. Catches MSRV-only failures before push. Use `cargo +stable` / a
   one-off override for newer-toolchain work.
+
 - Internal: refreshed the `cargo-mutants` baseline after the recent
   restructure. Re-ran the whole-crate sweep, added behavior tests that kill
   the high-value missed mutants (parsers, command/CLI field-wiring, dispatch
   guards), refreshed `.cargo/mutants.toml` exclusions for equivalent or
   unreachable code, and updated `docs/dev/mutation-baseline.md`. No runtime
   behavior change. (#417)
+
 - Internal: the clap-derived CLI action and argument types are now
   crate-internal (`pub(crate)`). The `bzr` library crate's public surface is
   reduced to `cli::Cli` and `dispatch`; CLI behavior, flags, and output are
   unchanged. (#419)
+
 - Internal: the admin `product`, `component`, `group`, and `user` create/update
   handlers now share a single `runtime::mutation::run` driver for the common
   format/dry-run/connect/call/write flow. Request payloads, dry-run output,
@@ -139,55 +152,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Named and ad-hoc Bugzilla servers can be used without credentials for
   read-only commands. Writes and identity-derived commands now fail fast when
   no credential source is available. (#380)
+
 - Ad-hoc `--server-url` runs now accept stateless TLS trust controls:
   `--server-tls-insecure`, `--server-tls-ca-cert`,
   `--server-tls-pin-sha256`, and session-only `--server-tls-pin-now`.
   These settings are never persisted to config. (#381)
+
 - `bug my` now accepts the shared practical bug filters for product,
   component, priority, severity, created/changed dates, whiteboard, target
   milestone, version, operating system, platform, resolution, QA contact, and
   URL. (#382)
+
 - `query update` now accepts `--from-url <URL>` to refresh an existing saved
   query from an updated Bugzilla `buglist.cgi` URL without delete-and-recreate.
   (#383)
+
 - Bug templates now support the create metadata fields accepted by
   `bug create`: URL, whiteboard, target milestone, deadline, CC, keywords,
   groups, and flags. (#384)
+
 - `bug clone` now copies URL, whiteboard, target milestone, and deadline from
   the source bug, and accepts create-time metadata overrides for URL,
   whiteboard, target milestone, deadline, CC, keywords, groups, and flags.
   (#385)
+
 - `attachment upload` now accepts `--comment-file <PATH>` and the shared `-`
   stdin convention for `--comment` and `--comment-file`, while rejecting empty
   attachment comments consistently. (#386)
+
 - `attachment download <ID> --out -` now streams a single attachment's raw bytes
   to stdout without writing a file or emitting formatted result output. (#387)
+
 - `component update` now accepts `--product <PRODUCT> --component <COMPONENT>`
   and JSON `product`/`component` targets, resolving exact component names
   without a separate ID lookup. (#388)
+
 - `bzr schema error` now publishes the JSON error envelope emitted on stderr
   under `--json` and `--output ndjson`. (#390)
+
 - CLI docs, source help comments, schema descriptions, and bundled agent-skill
   docs are guarded against stale long flag names such as `--is-patch`,
   `--format json`, and `--ndjson`. (#391)
+
 - Bundled bzr agent skills now teach the new CLI UX follow-ups: public
   read-only servers, stateless TLS trust flags, richer `bug my` filters,
   `query update --from-url`, richer templates and clone overrides, attachment
   stdin comments, single-attachment stdout downloads, and the error schema.
   (#392)
+
 - `bug update` now accepts `--url` and `--target-milestone`, matching fields
   that `bug create` can already set. (#363)
+
 - `bug resolve`, `bug close`, `bug reopen`, and `bug dup` now accept
   `--expect-unchanged-since`, matching `bug update`'s optimistic-concurrency
   guard. (#364)
+
 - `bug update` now accepts `--from-json <PATH|->` structured input for object
   and array update payloads. (#365)
+
 - `schema` now publishes `bug-create-input` and `bug-update-input` JSON
   Schemas for the structured payloads accepted by `--from-json`. (#366)
+
 - `--dry-run` now previews product, component, user, and group create/update
   requests without writing. (#367)
+
 - Product, component, user, and group create/update now accept object-shaped
   `--from-json <PATH|->` structured input with published schemas. (#369)
+
 - `query run` now accepts `--count`, matching the count-only output shape used
   by bug search-backed commands. (#368)
 
@@ -196,9 +227,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `attachment update <ID>` and `comment tag <COMMENT_ID>` now reject no-op
   invocations before contacting Bugzilla and suggest the flags needed to make a
   change. (#389)
+
 - Documented that `bug create` has no Bugzilla-backed idempotency-key support
   and that agents should inspect before retrying ambiguous create failures.
   (#370)
+
 - Release artifacts now ship a SLSA provenance bundle (`*.intoto.jsonl`) as a
   release asset alongside each binary, in addition to the existing GitHub
   attestations API publication. The installer smoke tests now download and

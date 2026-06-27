@@ -6,8 +6,8 @@ use serde_json::Value;
 use tabled::builder::Builder;
 
 use crate::output::formatting::{
-    colorize_status, render_flags_inline, shorten_email, truncate, write_divider, write_field,
-    write_formatted, write_json_family, SUMMARY_TRUNCATE_WIDTH,
+    colorize_status, disable_color_for_tests, render_flags_inline, shorten_email, truncate,
+    write_divider, write_field, write_formatted, write_json_family, SUMMARY_TRUNCATE_WIDTH,
 };
 use crate::types::bug::{
     apply_exclude, canonical_excludes, canonical_field_list, default_selected_fields,
@@ -138,6 +138,7 @@ pub fn write_bugs<W: Write + ?Sized, E: Write + ?Sized>(
     out: &mut W,
     err: &mut E,
 ) {
+    disable_color_for_tests();
     match format {
         OutputFormat::Json | OutputFormat::Ndjson => {
             write_json_family(&bugs_to_json(bugs, spec), format, out);
@@ -168,6 +169,7 @@ pub fn write_bug_detail<W: Write + ?Sized>(
     format: OutputFormat,
     out: &mut W,
 ) {
+    disable_color_for_tests();
     match format {
         OutputFormat::Json | OutputFormat::Ndjson => {
             write_json_family(&bug_to_json(bug, spec), format, out);
@@ -353,6 +355,7 @@ fn write_bug_detail_table(bug: &Bug, spec: ColumnSpec<'_>, out: &mut (impl Write
 /// history entry with its nested field changes. JSON/ndjson output goes through
 /// [`write_history_json`] instead, which emits flattened per-field records.
 pub fn write_history_table<W: Write + ?Sized>(history: &[HistoryEntry], out: &mut W) {
+    disable_color_for_tests();
     for entry in history {
         let _ = writeln!(
             out,
@@ -442,6 +445,7 @@ pub fn write_multi_bug_view<W: Write + ?Sized>(
     spec: ColumnSpec<'_>,
     out: &mut W,
 ) {
+    disable_color_for_tests();
     for (i, row) in rows.iter().enumerate() {
         if i > 0 {
             write_divider(out);
