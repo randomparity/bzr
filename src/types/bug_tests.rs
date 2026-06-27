@@ -91,11 +91,29 @@ fn bug_serializes_flags_and_target_milestone() {
 
 #[test]
 fn flag_with_unexpected_status_token_still_deserializes() {
-    // The read-side Flag.status is a plain String, so a token the FlagStatus
+    // The read-side Flag.status is a raw optional string, so a token the FlagStatus
     // enum does not model must not break bug view.
     let json = r#"{"id": 1, "flags": [{"name": "weird", "status": "??"}]}"#;
     let bug: Bug = serde_json::from_str(json).unwrap();
     assert_eq!(bug.flags[0].status.as_deref(), Some("??"));
+}
+
+#[test]
+fn history_change_missing_delta_values_stay_unknown() {
+    let json = r#"{
+        "who": "user@test.com",
+        "when": "2025-01-01T00:00:00Z",
+        "changes": [{"field_name": "status"}]
+    }"#;
+    let entry: HistoryEntry = serde_json::from_str(json).unwrap();
+    let change = &entry.changes[0];
+
+    assert_eq!(change.removed, None);
+    assert_eq!(change.added, None);
+
+    let serialized = serde_json::to_value(entry).unwrap();
+    assert!(serialized["changes"][0]["removed"].is_null());
+    assert!(serialized["changes"][0]["added"].is_null());
 }
 
 #[test]

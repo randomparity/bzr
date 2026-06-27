@@ -537,13 +537,14 @@ the shape:
 {"when": "2026-06-01T14:22:01Z", "who": "alice@example.com", "field": "status", "old_value": "NEW", "new_value": "ASSIGNED", "comment_id": null}
 ```
 
-`old_value`/`new_value` are the removed/added values (empty string when there is
-nothing on that side). `comment_id` is the id of a comment posted in the same
-history entry, correlated by author and timestamp; it is `null` when no comment
-correlates. Populating it requires a second API call (the bug's comments), made
-only for the JSON family and unfiltered by `--since`; if that fetch fails the
-command still prints the records with `comment_id: null` and warns on stderr.
-See `bzr schema history` for the published contract.
+`old_value`/`new_value` are the removed/added values. Empty string means
+Bugzilla reported nothing on that side; `null` means the server omitted the
+value. `comment_id` is the id of a comment posted in the same history entry,
+correlated by author and timestamp; it is `null` when no comment correlates.
+Populating it requires a second API call (the bug's comments), made only for the
+JSON family and unfiltered by `--since`; if that fetch fails the command still
+prints the records with `comment_id: null` and warns on stderr. See
+`bzr schema history` for the published contract.
 
 ### `bzr bug links`
 

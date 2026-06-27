@@ -274,8 +274,8 @@ fn history_record_conforms() {
         when: "2026-06-01T14:22:01Z".into(),
         who: "alice@example.com".into(),
         field: "status".into(),
-        old_value: "NEW".into(),
-        new_value: "ASSIGNED".into(),
+        old_value: Some("NEW".into()),
+        new_value: Some("ASSIGNED".into()),
         comment_id: Some(42),
     };
     assert_conforms("history", &to_value(&record));

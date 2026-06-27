@@ -55,8 +55,9 @@ returns **no comment association at all**.
 
 4. **`comment_id` is the only correlated field; the rest are 1:1 from history.**
    `old_value`/`new_value` are the server's `removed`/`added` strings verbatim
-   (empty string, never null). `attachment_id` from the wire is dropped from the
-   JSON contract.
+   when present; empty string means Bugzilla reported no value on that side, and
+   `null` means the server omitted the value. `attachment_id` from the wire is
+   dropped from the JSON contract.
 
 5. **Publish `schemas/history.json` and register it as `history`.** Closed
    schema (`additionalProperties: false`), all six keys required, guarded by the

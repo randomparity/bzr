@@ -226,9 +226,9 @@ pub struct HistoryEntry {
 pub struct FieldChange {
     pub field_name: String,
     #[serde(default)]
-    pub removed: String,
+    pub removed: Option<String>,
     #[serde(default)]
-    pub added: String,
+    pub added: Option<String>,
     #[serde(default)]
     pub attachment_id: Option<u64>,
 }
@@ -242,8 +242,8 @@ pub struct HistoryRecord {
     pub when: String,
     pub who: String,
     pub field: String,
-    pub old_value: String,
-    pub new_value: String,
+    pub old_value: Option<String>,
+    pub new_value: Option<String>,
     pub comment_id: Option<u64>,
 }
 

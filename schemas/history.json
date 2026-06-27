@@ -18,12 +18,12 @@
       "description": "The changed field name (e.g. `status`, `assigned_to`, or a `cf_*` custom field)."
     },
     "old_value": {
-      "type": "string",
-      "description": "The removed value; empty string when nothing was removed."
+      "type": ["string", "null"],
+      "description": "The removed value; empty string when nothing was removed, null when the server omitted the value."
     },
     "new_value": {
-      "type": "string",
-      "description": "The added value; empty string when nothing was added."
+      "type": ["string", "null"],
+      "description": "The added value; empty string when nothing was added, null when the server omitted the value."
     },
     "comment_id": {
       "type": ["integer", "null"],
