@@ -207,66 +207,66 @@ async fn format_http_error_includes_source_chain() {
 }
 
 #[test]
-fn is_bug_get_per_resource_true_for_notfound() {
+fn is_permissive_bug_view_error_true_for_notfound() {
     let err = BzrError::NotFound {
         resource: "bug",
         id: "123".into(),
     };
-    assert!(err.is_bug_get_per_resource());
+    assert!(err.is_permissive_bug_view_error());
 }
 
 #[test]
-fn is_bug_get_per_resource_true_for_api_100() {
+fn is_permissive_bug_view_error_true_for_api_100() {
     let err = BzrError::Api {
         code: 100,
         message: "invalid alias".into(),
     };
-    assert!(err.is_bug_get_per_resource());
+    assert!(err.is_permissive_bug_view_error());
 }
 
 #[test]
-fn is_bug_get_per_resource_true_for_api_101() {
+fn is_permissive_bug_view_error_true_for_api_101() {
     let err = BzrError::Api {
         code: 101,
         message: "invalid bug id".into(),
     };
-    assert!(err.is_bug_get_per_resource());
+    assert!(err.is_permissive_bug_view_error());
 }
 
 #[test]
-fn is_bug_get_per_resource_true_for_api_102() {
+fn is_permissive_bug_view_error_true_for_api_102() {
     let err = BzrError::Api {
         code: 102,
         message: "access denied".into(),
     };
-    assert!(err.is_bug_get_per_resource());
+    assert!(err.is_permissive_bug_view_error());
 }
 
 #[test]
-fn is_bug_get_per_resource_false_for_api_session_codes() {
+fn is_permissive_bug_view_error_false_for_api_session_codes() {
     for code in [32000_i64, 32610, 100_500, 50_001] {
         let err = BzrError::Api {
             code,
             message: "session-wide".into(),
         };
         assert!(
-            !err.is_bug_get_per_resource(),
+            !err.is_permissive_bug_view_error(),
             "code {code} should NOT be per-resource"
         );
     }
 }
 
 #[test]
-fn is_bug_get_per_resource_false_for_transport_and_auth() {
+fn is_permissive_bug_view_error_false_for_transport_and_auth() {
     let err = BzrError::HttpStatus {
         status: 500,
         body: String::new(),
     };
-    assert!(!err.is_bug_get_per_resource());
+    assert!(!err.is_permissive_bug_view_error());
 
     let err = BzrError::Auth("session expired".into());
-    assert!(!err.is_bug_get_per_resource());
+    assert!(!err.is_permissive_bug_view_error());
 
     let err = BzrError::XmlRpc("transport".into());
-    assert!(!err.is_bug_get_per_resource());
+    assert!(!err.is_permissive_bug_view_error());
 }

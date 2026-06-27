@@ -617,7 +617,7 @@ async fn view_multi_permissive_transport_error_bails() {
         "transport error must bail despite --permissive"
     );
     // It must be a transport-flavored error, not a per-resource one.
-    assert!(!result.unwrap_err().is_bug_get_per_resource());
+    assert!(!result.unwrap_err().is_permissive_bug_view_error());
 }
 
 #[tokio::test]
@@ -724,7 +724,7 @@ async fn view_multi_permissive_api_410_bails() {
         result.is_err(),
         "auth-flavored Api code must bail despite --permissive"
     );
-    assert!(!result.unwrap_err().is_bug_get_per_resource());
+    assert!(!result.unwrap_err().is_permissive_bug_view_error());
 }
 
 #[test]
