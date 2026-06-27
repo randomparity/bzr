@@ -73,12 +73,21 @@ key.
 {"event":"done","fetched":500}
 ```
 
-- `fetched` — total records produced: bugs fetched (pagination) or items
-  processed (batch). Emitted as the final event when the operation fully
+- `fetched` — **records processed**: bugs fetched (pagination) or items written
+  (batch create/update). The field name is kept uniform across operations to
+  match the issue's documented `done` shape; for a batch it means "items
+  written", not literally fetched. On full batch success `ok == total`, so no
+  separate count is lost. Emitted as the final event when the operation fully
   succeeds. **Not** emitted on a partial batch failure (that exits 11 and is a
   failure, not a success — see `error`).
+- A paginated operation **always** emits a terminal `done` on success, including
+  the edge cases where the offset loop never runs: a zero-result search (the
+  first page is short, `fetched:0`) and an unbounded `--paginate` with no/zero
+  `--limit` (a single request; `done` carries the one batch's length). This
+  preserves the "done is always the final event on success" guarantee for every
+  paginate invocation, so a consumer can reliably wait for `done`.
 
-### `error` — emitted on any failure, before the process exits non-zero
+### `error` — emitted on any dispatch failure, before the process exits non-zero
 
 ```json
 {"event":"error","error_type":"http","exit_code":5}
@@ -90,6 +99,13 @@ key.
 - No `message`: the human/structured error message is already written to stderr
   by the existing error path; the progress `error` event is a minimal,
   redaction-safe machine signal that does not echo untrusted server text.
+- **Scope:** "failure" means a `BzrError` returned from `dispatch` (the boundary
+  `main.rs` owns). clap-level usage/parse errors (bad flag, `--progress bogus`,
+  unknown subcommand) exit via clap with code 2 *before* `dispatch` runs, so no
+  `error` event is emitted for them — the standard clap usage message on stderr
+  is the signal there. A progress consumer should treat process exit without a
+  terminal `done`/`error` event as "the invocation failed before the operation
+  started".
 
 ## Where events are emitted
 
@@ -141,6 +157,21 @@ explicitly matches the existing `CommandContext` pattern and stays testable.
   event. A progress consumer keys on the `event` field and ignores the trailing
   non-`event` error line.
 
+### Consumer contract for stderr
+
+Progress events share stderr with two other writers: the existing error line
+(above) and `tracing` log output (`main.rs` wires the tracing subscriber to
+`std::io::stderr`). With `-v`/`-vv`/`-vvv` (or `RUST_LOG`), human log lines
+interleave with progress events on the same fd. `--progress ndjson` is therefore
+intended for non-verbose runs, but a robust consumer must in all cases:
+
+- parse stderr **line by line**, and
+- **skip any line** that does not parse as JSON or whose parsed object lacks an
+  `event` key.
+
+This single rule covers tracing lines, the trailing error line, and any future
+stderr text without coupling the consumer to bzr's log format.
+
 ## Resolved ambiguities (hidden assumptions in the issue)
 
 1. **`total_estimated` is undeliverable.** Bugzilla's `Bug.search` returns no
@@ -162,7 +193,8 @@ explicitly matches the existing `CommandContext` pattern and stays testable.
 ## Acceptance criteria → coverage
 
 - Events on stderr only; stdout unchanged → emission writes solely to `w.err`;
-  wiremock test asserts `out` is the clean document and `err` carries events.
+  byte-equality test asserts stdout is identical with and without `--progress`,
+  and `err` carries the events.
 - Supported on the four (+update) operations → table above.
 - Events match documented shapes; `done` always last on success → schema +
   ordering section; serde-derived event structs guarantee shape.
@@ -180,7 +212,13 @@ explicitly matches the existing `CommandContext` pattern and stays testable.
   exact JSON and the `None` no-op.
 - Wiremock: paginated `fetch_page` emits ordered `page`+`done` to `err` with
   clean `out`; batch create/update emit `batch`+`done`, and partial failure
-  emits no `done`.
+  emits no `done`. Cover the two paginate edges from the schema section: a
+  zero-result search emits a terminal `done` with `fetched:0`, and an unbounded
+  (`limit:0`) `--paginate` emits a terminal `done`.
+- **stdout unchanged (byte-equality):** a test runs the same paginated query
+  twice — once with `progress=None`, once with `progress=Ndjson` — and asserts
+  the captured stdout bytes are **identical**, proving criterion 1 directly
+  rather than only that stdout "parses".
 - CLI parse: `cli` test that `--progress ndjson` parses and a bad value errors.
 - Functional: extend a phase script to run `bug list --paginate --progress
   ndjson` and a batch `bug create --from-json --progress ndjson` against a real
