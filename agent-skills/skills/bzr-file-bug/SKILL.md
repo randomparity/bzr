@@ -70,6 +70,25 @@ bzr bug clone 12345 --summary "Backport to 9.4" \
   --version "9.4" --target-milestone 9.4 --add-depends-on
 ```
 
+## File the bug, its first comment, and attachments in one call
+
+Prefer the **compound** create over three separate `create` → `comment add` →
+`attachment upload` invocations: if a follow-up call fails, the separate-call
+path can lose the new bug ID and you may re-file a duplicate. The compound form
+files everything in one operation and, on any post-create sub-step failure,
+prints the new bug ID and exits 11 (`BatchPartialFailure`) so the ID is never
+lost — complete the missing step with the surfaced ID rather than re-filing.
+
+```
+bzr bug create --product <P> --component <C> --summary "..." --description "..." \
+  --with-comment "Reproduced on F42; root cause is X." \
+  --with-attachment trace.log --attachment-description "boot trace"
+```
+
+`--with-attachment` repeats; the Nth `--attachment-description` is the Nth
+attachment's summary. Files are read and the comment validated before the bug is
+created, so a missing-file typo never files an unfinishable bug.
+
 ## Structured or batch filing
 
 For machine-generated reports, file from JSON instead of flags. A single object
@@ -81,9 +100,22 @@ echo '{"product":"P","component":"C","summary":"...","description":"..."}' \
   | bzr bug create --from-json -        # `-` reads JSON from stdin
 ```
 
+The JSON object also carries the compound `comment` and `attachments` keys:
+
+```
+echo '{
+  "product":"P","component":"C","summary":"...","description":"...",
+  "comment":{"body":"Follow-up note"},
+  "attachments":[{"file":"trace.log","description":"boot trace"}]
+}' | bzr bug create --from-json -
+```
+
 JSON keys match the create flag names (`target_milestone`, `cc`, `keywords`, …);
-explicit CLI flags override the corresponding JSON field. Add `--dry-run` to any
-create to validate and preview the payload without writing.
+explicit CLI flags override the corresponding JSON field (the compound flags
+conflict with `--from-json`). In the array form a created-but-partially-failed
+element appears in both `created` and `failed`. Add `--dry-run` to any create to
+validate and preview the full payload (bug + comment + attachments) without
+writing.
 
 ## 4. Confirm
 

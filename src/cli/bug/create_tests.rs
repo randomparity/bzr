@@ -64,6 +64,79 @@ fn parse_create_core_fields() {
 }
 
 #[test]
+fn parse_compound_flags_collect_into_vecs() {
+    let create = create_args(&[
+        "bzr",
+        "bug",
+        "create",
+        "--product",
+        "P",
+        "--component",
+        "C",
+        "--summary",
+        "S",
+        "--description",
+        "d",
+        "--with-comment",
+        "first note",
+        "--with-attachment",
+        "trace.log",
+        "--attachment-description",
+        "boot trace",
+        "--with-attachment",
+        "dmesg.txt",
+    ]);
+    assert_eq!(create.with_comment.as_deref(), Some("first note"));
+    assert_eq!(
+        create.with_attachment,
+        vec![
+            std::path::PathBuf::from("trace.log"),
+            std::path::PathBuf::from("dmesg.txt")
+        ]
+    );
+    assert_eq!(
+        create.attachment_description,
+        vec!["boot trace".to_string()]
+    );
+}
+
+#[test]
+fn with_comment_conflicts_with_comment_file() {
+    let kind = parse_error_kind(&[
+        "bzr",
+        "bug",
+        "create",
+        "--product",
+        "P",
+        "--component",
+        "C",
+        "--summary",
+        "S",
+        "--description",
+        "d",
+        "--with-comment",
+        "a",
+        "--with-comment-file",
+        "f.txt",
+    ]);
+    assert_eq!(kind, ErrorKind::ArgumentConflict);
+}
+
+#[test]
+fn compound_flags_conflict_with_from_json() {
+    let kind = parse_error_kind(&[
+        "bzr",
+        "bug",
+        "create",
+        "--from-json",
+        "-",
+        "--with-comment",
+        "a",
+    ]);
+    assert_eq!(kind, ErrorKind::ArgumentConflict);
+}
+
+#[test]
 fn parse_create_blocks_and_depends_on_comma_lists() {
     let create = create_args(&[
         "bzr",

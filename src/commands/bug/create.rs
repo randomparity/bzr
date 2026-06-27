@@ -359,7 +359,82 @@ pub(super) async fn handle(
         groups: merged.groups,
         flags,
     };
-    create_and_report(&params, ctx, w).await
+    // Building the plan reads attachment files and validates the comment body
+    // *before* the bug is created, so a bad input never files an unfinishable
+    // bug. An empty plan keeps the byte-identical plain single-create path.
+    let plan = build_compound_plan(args)?;
+    if plan.is_empty() {
+        create_and_report(&params, ctx, w).await
+    } else {
+        super::compound::create_with_sub_steps(&params, plan, ctx, w).await
+    }
+}
+
+/// Build the comment + attachment plan from the flag-form compound flags.
+fn build_compound_plan(args: &CreateArgs) -> Result<super::compound::CompoundPlan> {
+    Ok(super::compound::CompoundPlan {
+        comment: resolve_compound_comment(args)?,
+        attachments: build_attachment_plan(args)?,
+    })
+}
+
+/// Materialize the `--with-comment` / `--with-comment-file` body (clap enforces
+/// they are mutually exclusive). Rejects an empty / whitespace-only body so a
+/// typo never files a bug that then fails an empty-comment POST.
+fn resolve_compound_comment(
+    args: &CreateArgs,
+) -> Result<Option<crate::types::comment::AddCommentParams>> {
+    let text = match (&args.with_comment, &args.with_comment_file) {
+        (Some(text), _) => text.clone(),
+        (None, Some(path)) => {
+            crate::commands::runtime::shared::read_file_with_context(path, "--with-comment-file")?
+        }
+        (None, None) => return Ok(None),
+    };
+    if text.trim().is_empty() {
+        return Err(crate::error::BzrError::InputValidation(
+            "--with-comment: empty comment body".into(),
+        ));
+    }
+    Ok(Some(crate::types::comment::AddCommentParams {
+        text,
+        is_private: false,
+    }))
+}
+
+/// Pair `--with-attachment` paths with `--attachment-description` summaries by
+/// position, reading each file. More descriptions than attachments (which
+/// includes any description with zero attachments) is a validation error.
+fn build_attachment_plan(
+    args: &CreateArgs,
+) -> Result<Vec<crate::types::attachment::UploadAttachmentParams>> {
+    let files = &args.with_attachment;
+    let descriptions = &args.attachment_description;
+    if descriptions.len() > files.len() {
+        return Err(crate::error::BzrError::InputValidation(format!(
+            "--attachment-description given {} time(s) but there are {} --with-attachment file(s); \
+             descriptions pair with attachments by position",
+            descriptions.len(),
+            files.len(),
+        )));
+    }
+    let mut attachments = Vec::with_capacity(files.len());
+    for (index, file) in files.iter().enumerate() {
+        let (params, _size) =
+            crate::commands::runtime::attachment_input::prepare_attachment_params(
+                crate::commands::runtime::attachment_input::AttachmentInput {
+                    file,
+                    summary: descriptions.get(index).map(String::as_str),
+                    content_type: None,
+                    is_patch: false,
+                    is_private: false,
+                    comment: None,
+                    flags: vec![],
+                },
+            )?;
+        attachments.push(params);
+    }
+    Ok(attachments)
 }
 
 /// Emit the would-be create payload without writing, marked `"action":"dry-run"`.

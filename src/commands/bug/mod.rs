@@ -11,6 +11,7 @@ use crate::output::writers::Writers;
 use crate::types::output::OutputFormat;
 
 mod clone;
+mod compound;
 mod create;
 mod create_json;
 mod history;

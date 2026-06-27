@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/randomparity/bzr/schemas/batch-create-result.json",
-  "title": "BatchCreateResult",
-  "description": "Result of an array `bug create --from-json`.",
+  "$id": "https://github.com/randomparity/bzr/schemas/compound-create-result.json",
+  "title": "CompoundCreateResult",
+  "description": "Result of a single compound `bug create` (flag form or single-object `--from-json`) that filed the bug but had at least one sub-step (comment/attachment) fail. Full-success creates emit `action-result` instead, so this body appears only on partial failure (exit 11). The created bug `id` is always present.",
   "type": "object",
   "properties": {
     "resource": {
@@ -13,31 +13,19 @@
       "type": "string",
       "enum": ["created", "updated", "added", "removed", "renamed", "downloaded", "dry-run"]
     },
-    "created": {
-      "type": "array",
-      "items": {
-        "type": "integer",
-        "minimum": 0
-      }
+    "id": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The filed bug's ID — the recovery handle for completing the failed sub-steps."
     },
     "failed": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
-          "index": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "bug_id": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "Present only for a sub-step failure: the bug was filed (also listed in `created`) but its comment/attachment POST failed."
-          },
           "step": {
             "type": "string",
-            "enum": ["comment", "attachment"],
-            "description": "Present only for a sub-step failure."
+            "enum": ["comment", "attachment"]
           },
           "file": {
             "type": "string",
@@ -48,7 +36,7 @@
           }
         },
         "required": [
-          "index",
+          "step",
           "error"
         ],
         "additionalProperties": false
@@ -58,7 +46,7 @@
   "required": [
     "resource",
     "action",
-    "created",
+    "id",
     "failed"
   ],
   "additionalProperties": false

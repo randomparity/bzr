@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Compound `bug create`: file a bug together with its first comment and one or
+  more attachments in a single invocation. Flag form adds `--with-comment` /
+  `--with-comment-file`, `--with-attachment` (repeatable) with index-paired
+  `--attachment-description`; `--from-json` gains `comment` and `attachments`
+  keys on both the object and array forms. Comment/attachment inputs are
+  validated before the bug is created (no half-created batch). On any
+  post-create sub-step failure the created bug ID is printed and the command
+  exits 11 (`BatchPartialFailure`) rather than rolling back — the ID is the
+  recovery handle. New `compound-create-result` published schema. See ADR-0012.
+  (#458)
+
 - `--progress ndjson` global flag streams structured progress events on stderr
   (one NDJSON object per line) during long operations: `page`/`done` for
   paginated fetches (`bug list`/`search --paginate`, `query run --paginate`) and
@@ -69,6 +80,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `bug clone` now exits 11 (`BatchPartialFailure`) when the "Cloned from bug #N"
+  back-reference comment fails to post, instead of warning and exiting 0
+  (TD-006). The bug is still created and its ID is printed; the non-zero exit
+  signals the partial failure so scripted callers are not misled. (#458)
+- `bug create --from-json` array results: `created` and `failed` are no longer
+  disjoint. A created bug whose compound sub-step (comment/attachment) fails now
+  appears in both — its ID in `created` and a `{index, bug_id, step, file,
+  error}` entry in `failed`. Count filed bugs with `created`; detect any problem
+  with `failed`. (#458)
 - The bundled `bzr-setup` agent skill now teaches `bzr whoami --json` as the
   canonical one-call health check ("am I configured?") — config, auth, and
   server reachability in a single probe — instead of chaining `config show`,

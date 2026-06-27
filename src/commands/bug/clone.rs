@@ -99,7 +99,9 @@ pub(super) async fn handle(
     // "Cloned from" back-reference comment is supplementary, so a failure
     // posting it must not hide the new bug ID (otherwise the user can't tell
     // the clone succeeded and may re-clone, creating a duplicate). Warn and
-    // continue rather than propagating.
+    // surface the partial failure via the shared exit-11 path (TD-006) rather
+    // than rolling back or silently exiting 0.
+    let mut comment_failed = false;
     if !*no_comment {
         let params = AddCommentParams {
             text: format!("Cloned from bug #{}", source.id),
@@ -112,6 +114,7 @@ pub(super) async fn handle(
                  \"Cloned from bug #{}\" comment: {e}",
                 source.id
             );
+            comment_failed = true;
         }
     }
 
@@ -121,7 +124,7 @@ pub(super) async fn handle(
         format,
         w.out,
     );
-    Ok(())
+    crate::commands::runtime::mutation::ensure_batch_complete(1, usize::from(comment_failed))
 }
 
 async fn resolve_source_description(

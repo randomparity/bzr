@@ -147,6 +147,32 @@ pub(crate) struct CreateArgs {
     /// Bug IDs that this bug depends on (comma-separated)
     #[arg(long, value_delimiter = ',')]
     pub depends_on: Vec<u64>,
+    /// Post a first comment on the new bug in the same operation.
+    ///
+    /// Literal text (no `-`/stdin: the description already consumes piped
+    /// stdin). An empty body is rejected. The comment is public; use
+    /// `--from-json` for a private first comment. If the comment POST fails
+    /// after the bug is created, the new bug ID is printed and the command
+    /// exits 11 (`BatchPartialFailure`) rather than losing the ID.
+    #[arg(long, conflicts_with_all = ["from_json", "with_comment_file"])]
+    pub with_comment: Option<String>,
+    /// Post a first comment read from a UTF-8 file (path; no `-`/stdin).
+    #[arg(long, value_name = "PATH", conflicts_with = "from_json")]
+    pub with_comment_file: Option<std::path::PathBuf>,
+    /// Upload an attachment to the new bug after create (repeatable).
+    ///
+    /// Each occurrence uploads one file; its content type is guessed from the
+    /// extension. Pair summaries with `--attachment-description` by position. A
+    /// failed upload prints the new bug ID and exits 11 (the bug is kept).
+    #[arg(long, value_name = "PATH", conflicts_with = "from_json")]
+    pub with_attachment: Vec<std::path::PathBuf>,
+    /// Summary for the attachment at the same position in `--with-attachment`.
+    ///
+    /// The Nth value describes the Nth `--with-attachment`. Undescribed
+    /// attachments default their summary to the filename. Supplying more
+    /// descriptions than attachments is an error (exit 7).
+    #[arg(long, value_name = "TEXT", conflicts_with = "from_json")]
+    pub attachment_description: Vec<String>,
     #[command(flatten)]
     pub create_fields: CreateFieldArgs,
 }

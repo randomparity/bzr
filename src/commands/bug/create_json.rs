@@ -1,6 +1,10 @@
+use std::path::Path;
+
 use serde::Deserialize;
 
 use crate::cli::CreateArgs;
+use crate::commands::bug::compound::CompoundPlan;
+use crate::commands::runtime::attachment_input::{prepare_attachment_params, AttachmentInput};
 use crate::commands::runtime::context::CommandContext;
 use crate::commands::runtime::from_json::JsonOneOrMany;
 use crate::commands::runtime::shared::{merge_set, merge_vec};
@@ -10,6 +14,7 @@ use crate::output::result_types::{
 };
 use crate::output::writers::Writers;
 use crate::types::bug::CreateBugParams;
+use crate::types::comment::AddCommentParams;
 use crate::types::output::OutputFormat;
 
 /// One bug's worth of structured input for `bug create --from-json`. Keys match
@@ -47,9 +52,77 @@ struct JsonCreateBug {
     groups: Vec<String>,
     #[serde(default)]
     flags: Vec<String>,
+    /// First comment to post after the bug is created (compound create).
+    #[serde(default)]
+    comment: Option<JsonComment>,
+    /// Attachments to upload after the bug is created (compound create).
+    #[serde(default)]
+    attachments: Vec<JsonAttachment>,
+}
+
+/// A first comment in the compound `--from-json` payload.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct JsonComment {
+    body: String,
+    #[serde(default)]
+    is_private: bool,
+}
+
+/// One attachment in the compound `--from-json` payload.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct JsonAttachment {
+    file: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    content_type: Option<String>,
+    #[serde(default)]
+    is_patch: bool,
+    #[serde(default)]
+    is_private: bool,
 }
 
 impl JsonCreateBug {
+    /// Take the `comment`/`attachments` out of the entry and build the compound
+    /// [`CompoundPlan`], reading each attachment file and rejecting an empty
+    /// comment body — all **before** the bug is created. Leaves the scalar
+    /// create fields intact for [`Self::into_params`].
+    fn take_plan(&mut self) -> Result<CompoundPlan> {
+        let comment = match self.comment.take() {
+            Some(c) => {
+                if c.body.trim().is_empty() {
+                    return Err(crate::error::BzrError::InputValidation(
+                        "--from-json: 'comment.body' must not be empty".into(),
+                    ));
+                }
+                Some(AddCommentParams {
+                    text: c.body,
+                    is_private: c.is_private,
+                })
+            }
+            None => None,
+        };
+        let mut attachments = Vec::with_capacity(self.attachments.len());
+        for a in std::mem::take(&mut self.attachments) {
+            let (params, _size) = prepare_attachment_params(AttachmentInput {
+                file: Path::new(&a.file),
+                summary: a.description.as_deref(),
+                content_type: a.content_type.as_deref(),
+                is_patch: a.is_patch,
+                is_private: a.is_private,
+                comment: None,
+                flags: vec![],
+            })?;
+            attachments.push(params);
+        }
+        Ok(CompoundPlan {
+            comment,
+            attachments,
+        })
+    }
+
     /// Validate the merged fields and build the API params. `product`,
     /// `component`, and `summary` are required; `version` defaults to
     /// `"unspecified"`; `flags` and `deadline` are parsed/validated.
@@ -187,23 +260,27 @@ fn write_batch_create(result: &BatchCreateResult, format: OutputFormat, w: &mut 
 
 /// Create a batch of bugs (top-level JSON array). The array shape always yields
 /// the partial-failure result — even for a single element — so an agent's
-/// output handling does not depend on the element count. Exits 11 if any
-/// element fails.
+/// output handling does not depend on the element count. Each element's compound
+/// sub-steps (comment/attachments) run after its bug is created; a created bug
+/// whose sub-step fails appears in both `created` and `failed`. Exits 11 if any
+/// element had any failure (create or sub-step).
 async fn create_batch_from_json(
-    params_list: &[CreateBugParams],
+    prepared: Vec<(CreateBugParams, CompoundPlan)>,
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let format = ctx.format();
+    let total = prepared.len();
     if ctx.dry_run() {
-        // One coherent object for the whole batch (N pretty-printed objects
-        // would not be valid JSON); `changes` carries the array of params.
+        // One coherent object for the whole batch; `changes` carries the array
+        // of per-element compound payloads (bug fields + comment + attachments).
+        let changes: Vec<_> = prepared
+            .iter()
+            .map(|(params, plan)| super::compound::dry_run_changes(params, plan))
+            .collect();
         write_result(
-            &DryRunResult::new(ResourceKind::Bug, &[], &params_list),
-            &format!(
-                "Dry run: would create {} bug(s) (no bugs created)",
-                params_list.len()
-            ),
+            &DryRunResult::new(ResourceKind::Bug, &[], &changes),
+            &format!("Dry run: would create {total} bug(s) (no bugs created)"),
             format,
             w.out,
         );
@@ -212,20 +289,24 @@ async fn create_batch_from_json(
     let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
     let mut created = Vec::new();
     let mut failed = Vec::new();
-    for (index, params) in params_list.iter().enumerate() {
-        match client.create_bug(params).await {
-            Ok(id) => created.push(id),
-            Err(e) => failed.push(CreateFailure {
-                index,
-                error: e.to_string(),
-            }),
+    for (index, (params, plan)) in prepared.into_iter().enumerate() {
+        match client.create_bug(&params).await {
+            Ok(id) => {
+                created.push(id);
+                for sub in super::compound::run_sub_steps(&client, id, plan, w).await {
+                    failed.push(CreateFailure::sub_step(
+                        index, id, sub.step, sub.file, sub.error,
+                    ));
+                }
+            }
+            Err(e) => failed.push(CreateFailure::create(index, e.to_string())),
         }
         crate::output::progress::batch_event(
             ctx.progress(),
             w.err,
             &crate::output::progress::BatchProgress {
                 n: index + 1,
-                total: params_list.len(),
+                total,
                 ok: created.len(),
                 failed: failed.len(),
             },
@@ -234,17 +315,18 @@ async fn create_batch_from_json(
     let succeeded = created.len();
     let failures = failed.len();
     write_batch_create(&BatchCreateResult::new(created, failed), format, w);
-    let result = super::update::ensure_batch_complete(succeeded, failures);
+    let result = crate::commands::runtime::mutation::ensure_batch_complete(succeeded, failures);
     if result.is_ok() {
-        crate::output::progress::done_event(ctx.progress(), w.err, params_list.len());
+        crate::output::progress::done_event(ctx.progress(), w.err, total);
     }
     result
 }
 
 /// Build one bug from a structured JSON object or array, the `--from-json`
-/// path. All entries are validated before any write, so malformed input never
-/// half-creates a batch; per-element server failures use the partial-failure
-/// model (exit 11).
+/// path. All entries are validated before any write (including reading
+/// attachment files and rejecting empty comment bodies), so malformed input
+/// never half-creates a batch; per-element server failures use the
+/// partial-failure model (exit 11).
 pub(super) async fn handle(
     args: &CreateArgs,
     arg: &str,
@@ -253,8 +335,14 @@ pub(super) async fn handle(
 ) -> Result<()> {
     match crate::commands::runtime::from_json::read_one_or_many::<JsonCreateBug>(arg)? {
         JsonOneOrMany::One(entry) => {
-            let params = overlay_cli(*entry, args)?.into_params()?;
-            super::create::create_and_report(&params, ctx, w).await
+            let mut merged = overlay_cli(*entry, args)?;
+            let plan = merged.take_plan()?;
+            let params = merged.into_params()?;
+            if plan.is_empty() {
+                super::create::create_and_report(&params, ctx, w).await
+            } else {
+                super::compound::create_with_sub_steps(&params, plan, ctx, w).await
+            }
         }
         JsonOneOrMany::Many(entries) => {
             if entries.is_empty() {
@@ -262,11 +350,18 @@ pub(super) async fn handle(
                     "--from-json: empty array, nothing to create".into(),
                 ));
             }
-            let mut params_list = Vec::with_capacity(entries.len());
+            // Phase 1: validate and build every element's params + plan before
+            // any write, so a bad element (missing attachment, empty comment)
+            // aborts (exit 7) with zero bugs created.
+            let mut prepared = Vec::with_capacity(entries.len());
             for entry in entries {
-                params_list.push(overlay_cli(entry, args)?.into_params()?);
+                let mut merged = overlay_cli(entry, args)?;
+                let plan = merged.take_plan()?;
+                let params = merged.into_params()?;
+                prepared.push((params, plan));
             }
-            create_batch_from_json(&params_list, ctx, w).await
+            // Phase 2: create + run sub-steps.
+            create_batch_from_json(prepared, ctx, w).await
         }
     }
 }

@@ -22,6 +22,23 @@ fn sample_create_params() -> crate::types::bug::CreateBugParams {
     }
 }
 
+/// Pair create params with an empty compound plan (no comment/attachments) for
+/// the batch driver, whose signature now carries per-element plans.
+fn plain(
+    params: crate::types::bug::CreateBugParams,
+) -> (
+    crate::types::bug::CreateBugParams,
+    crate::commands::bug::compound::CompoundPlan,
+) {
+    (
+        params,
+        crate::commands::bug::compound::CompoundPlan {
+            comment: None,
+            attachments: vec![],
+        },
+    )
+}
+
 #[tokio::test]
 async fn batch_create_emits_batch_then_done() {
     let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
@@ -30,11 +47,11 @@ async fn batch_create_emits_batch_then_done() {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
         .mount(&mock)
         .await;
-    let params = vec![sample_create_params(), sample_create_params()];
+    let prepared = vec![plain(sample_create_params()), plain(sample_create_params())];
     let ctx = CommandContext::new(None, OutputFormat::Json, None)
         .with_progress(Some(ProgressFormat::Ndjson));
     let mut io = crate::test_helpers::CapturedIo::new();
-    super::create_batch_from_json(&params, &ctx, &mut io.writers())
+    super::create_batch_from_json(prepared, &ctx, &mut io.writers())
         .await
         .unwrap();
     assert_eq!(
@@ -62,11 +79,11 @@ async fn batch_create_partial_failure_emits_no_done() {
         .respond_with(ResponseTemplate::new(500))
         .mount(&mock)
         .await;
-    let params = vec![sample_create_params(), sample_create_params()];
+    let prepared = vec![plain(sample_create_params()), plain(sample_create_params())];
     let ctx = CommandContext::new(None, OutputFormat::Json, None)
         .with_progress(Some(ProgressFormat::Ndjson));
     let mut io = crate::test_helpers::CapturedIo::new();
-    let res = super::create_batch_from_json(&params, &ctx, &mut io.writers()).await;
+    let res = super::create_batch_from_json(prepared, &ctx, &mut io.writers()).await;
     assert!(res.is_err(), "partial failure exits non-zero");
     let err = io.err_str();
     assert!(
@@ -214,4 +231,197 @@ fn parse_one_or_many_preserves_object_and_array_shapes() {
         .unwrap(),
         JsonOneOrMany::Many(_)
     ));
+}
+
+// ── Compound --from-json (comment / attachments) ─────────────────────
+
+#[test]
+fn compound_keys_default_to_absent_and_yield_empty_plan() {
+    let mut entry: JsonCreateBug = serde_json::from_value(serde_json::json!({
+        "product": "P", "component": "C", "summary": "S"
+    }))
+    .unwrap();
+    let plan = entry.take_plan().unwrap();
+    assert!(plan.is_empty());
+}
+
+#[test]
+fn compound_empty_comment_body_is_rejected() {
+    let mut entry: JsonCreateBug = serde_json::from_value(serde_json::json!({
+        "product": "P", "component": "C", "summary": "S",
+        "comment": {"body": "   "}
+    }))
+    .unwrap();
+    let err = entry.take_plan().unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+    assert!(matches!(err, BzrError::InputValidation(_)));
+}
+
+#[test]
+fn compound_comment_unknown_key_is_rejected() {
+    let err = serde_json::from_value::<JsonCreateBug>(serde_json::json!({
+        "product": "P", "component": "C", "summary": "S",
+        "comment": {"body": "x", "bogus": true}
+    }))
+    .unwrap_err();
+    assert!(err.to_string().contains("bogus"), "error was: {err}");
+}
+
+#[tokio::test]
+async fn array_sub_step_failure_suppresses_done_event() {
+    // ADR-0011: `done` must be suppressed on ANY partial failure, including a
+    // sub-step failure (bug created, comment POST fails) — a different code path
+    // from a create failure. Mirror batch_create_partial_failure_emits_no_done
+    // but fail the comment, not the create.
+    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 20})))
+        .up_to_n_times(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 21})))
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/21/comment"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&mock)
+        .await;
+    let prepared = vec![
+        plain(sample_create_params()),
+        (
+            sample_create_params(),
+            crate::commands::bug::compound::CompoundPlan {
+                comment: Some(crate::types::comment::AddCommentParams {
+                    text: "note".into(),
+                    is_private: false,
+                }),
+                attachments: vec![],
+            },
+        ),
+    ];
+    let ctx = CommandContext::new(None, OutputFormat::Json, None)
+        .with_progress(Some(ProgressFormat::Ndjson));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let res = super::create_batch_from_json(prepared, &ctx, &mut io.writers()).await;
+    assert!(res.is_err(), "sub-step failure exits non-zero");
+    let stderr = io.err_str();
+    assert!(
+        stderr.contains("\"event\":\"batch\""),
+        "per-item batch events still emit: {stderr}"
+    );
+    assert!(
+        !stderr.contains("\"event\":\"done\""),
+        "no done event on a sub-step partial failure: {stderr}"
+    );
+}
+
+#[tokio::test]
+async fn array_one_good_one_failing_comment_exits_11() {
+    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 10})))
+        .up_to_n_times(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 11})))
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/11/comment"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&mock)
+        .await;
+    let prepared = vec![
+        plain(sample_create_params()),
+        (
+            sample_create_params(),
+            crate::commands::bug::compound::CompoundPlan {
+                comment: Some(crate::types::comment::AddCommentParams {
+                    text: "note".into(),
+                    is_private: false,
+                }),
+                attachments: vec![],
+            },
+        ),
+    ];
+    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err = super::create_batch_from_json(prepared, &ctx, &mut io.writers())
+        .await
+        .unwrap_err();
+    assert_eq!(err.exit_code(), 11);
+    assert!(io.err_str().contains("11"), "stderr: {}", io.err_str());
+    let data = crate::test_helpers::json_envelope_data(io.out_str());
+    let created: Vec<u64> = data["created"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_u64().unwrap())
+        .collect();
+    assert_eq!(created, vec![10, 11]);
+    assert_eq!(data["failed"][0]["index"], 1);
+    assert_eq!(data["failed"][0]["bug_id"], 11);
+    assert_eq!(data["failed"][0]["step"], "comment");
+}
+
+fn from_json_args(path: &str) -> crate::cli::CreateArgs {
+    crate::cli::CreateArgs {
+        from_json: Some(path.to_string()),
+        template: None,
+        product: None,
+        component: None,
+        summary: None,
+        version: None,
+        description: None,
+        description_file: None,
+        priority: None,
+        severity: None,
+        assignee: None,
+        op_sys: None,
+        rep_platform: None,
+        blocks: vec![],
+        depends_on: vec![],
+        with_comment: None,
+        with_comment_file: None,
+        with_attachment: vec![],
+        attachment_description: vec![],
+        create_fields: crate::cli::CreateFieldArgs::default(),
+    }
+}
+
+#[tokio::test]
+async fn array_with_bad_attachment_file_creates_nothing() {
+    let (_lock, mock, tmp) = crate::test_helpers::setup_test_env().await;
+    // Any create POST is a failure: phase-1 validation must abort first.
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 1})))
+        .expect(0)
+        .mount(&mock)
+        .await;
+    let payload = serde_json::json!([
+        {"product": "P", "component": "C", "summary": "good"},
+        {"product": "P", "component": "C", "summary": "bad",
+         "attachments": [{"file": "/no/such/bzr-missing-attachment.log"}]}
+    ])
+    .to_string();
+    let json_path = tmp.path().join("batch.json");
+    std::fs::write(&json_path, payload).unwrap();
+    let args = from_json_args(json_path.to_str().unwrap());
+    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err = super::handle(&args, json_path.to_str().unwrap(), &ctx, &mut io.writers())
+        .await
+        .unwrap_err();
+    // Unreadable attachment file surfaces as an I/O error (exit 6), consistent
+    // with `attachment upload`; the key guarantee is that it aborts in phase 1
+    // (the create POST `.expect(0)` mock verifies no bug was filed).
+    assert_eq!(err.exit_code(), 6);
 }

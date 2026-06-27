@@ -158,6 +158,8 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │          [--blocks <IDs>] [--depends-on <IDs>] [--alias <A>] [--url <U>]
 │   │          [--whiteboard <W>] [--target-milestone <T>] [--deadline <DATE>]
 │   │          [--cc <C>...] [--keywords <K>...] [--groups <G>...] [--flag <F>...]
+│   │          [--with-comment <TEXT> | --with-comment-file <PATH>]
+│   │          [--with-attachment <PATH>...] [--attachment-description <TEXT>...]
 │   ├── clone <ID> [--summary <S>] [--product <P>] [--component <C>] [--version <V>]
 │   │              [--description <D>] [--priority <P>] [--severity <S>] [--assignee <A>]
 │   │              [--op-sys <OS>] [--rep-platform <PLAT>]
@@ -696,6 +698,10 @@ bzr bug create --from-json bugs.json
 | `--groups <G>` | No | | Add the bug to these groups (comma-separated, repeatable) |
 | `--flag <F>` | No | | Set/request a flag using Bugzilla flag syntax (repeatable): `name+`, `name-`, `name?`, `name?(user@example.com)` |
 | `--template <T>` | No | | Name of a saved template to use for default field values |
+| `--with-comment <TEXT>` | No | | Post a first comment after the bug is created (compound create). Literal text; no `-`/stdin. Mutually exclusive with `--with-comment-file` and `--from-json`. See [Compound create](#compound-create-comment--attachments). |
+| `--with-comment-file <PATH>` | No | | Post a first comment read from a UTF-8 file. Mutually exclusive with `--with-comment` and `--from-json`. |
+| `--with-attachment <PATH>` | No | | Upload an attachment after the bug is created (repeatable). Content type guessed from the extension. Mutually exclusive with `--from-json`. |
+| `--attachment-description <TEXT>` | No | | Summary for the same-position `--with-attachment` (repeatable, index-paired). Undescribed attachments default to the filename; more descriptions than attachments exits 7. Mutually exclusive with `--from-json`. |
 
 These field flags give `bzr bug create` parity with `bzr bug update` for the subset Bugzilla's `Bug.create` accepts, so a bug and its metadata are filed in a single API call instead of a create-then-update two-step.
 
@@ -715,16 +721,51 @@ A value of `-` for `--description` or `--description-file` reads the description
 
 `--description` and `--description-file` are mutually exclusive (clap rejects with exit code 2). An empty piped stdin (when no other source is supplied) aborts with exit code 7.
 
+#### Compound create (comment + attachments)
+
+`bzr bug create` can file a bug **and** its first comment **and** one or more
+attachments in a single invocation, so an agent no longer needs three separate
+process calls (`create`, then `comment add`, then `attachment upload`) — a
+sequence where a failed follow-up could lose the new bug ID.
+
+```bash
+bzr bug create --product Fedora --component kernel --summary "Boot failure" \
+  --description "Hangs at initramfs" \
+  --with-comment "Reproduced on F42; root cause is X." \
+  --with-attachment trace.log --attachment-description "boot trace" \
+  --with-attachment dmesg.txt  --attachment-description "dmesg tail"
+```
+
+`--with-attachment` repeats; the Nth `--attachment-description` is the Nth
+attachment's summary (index-paired). Undescribed attachments default their
+summary to the filename. The comment and attachment files are validated (files
+read, empty comment body rejected) **before** the bug is created, so a
+missing-file or empty-comment typo never files an unfinishable bug.
+
+**Partial-failure contract:** the bug is created first, then the comment, then
+each attachment, in order. If any *post-create* sub-step fails, the new bug is
+**not** rolled back — instead the created bug ID is printed to stdout (a
+`compound-create-result` object under `--json`) and named in a stderr warning,
+and the command exits **11** (`BatchPartialFailure`). The bug ID is the recovery
+handle: complete the missing comment/attachment with a follow-up `comment add` /
+`attachment upload` rather than re-filing. An unreadable attachment file fails as
+an I/O error (exit 6) before anything is written.
+
+The JSON form (`--from-json`) carries `comment` and `attachments` keys instead;
+see [Structured input](#structured-input---from-json). The compound flags are
+mutually exclusive with `--from-json`.
+
 #### Exit codes (this command)
 
 | Code | Condition |
 |------|-----------|
 | 0 | Success |
-| 2 | Conflicting flags (e.g. `--description` and `--description-file` both set) |
+| 2 | Conflicting flags (e.g. `--description` and `--description-file` both set, or a compound flag with `--from-json`) |
 | 4 | Bugzilla API error (e.g. server requires `--op-sys` and it wasn't provided) |
-| 7 | Input validation: missing `--summary` outside the editor flow; missing or unreadable `--description-file`; empty stdin without an explicit description; empty editor buffer; `$EDITOR` exited non-zero; malformed `--from-json` (bad JSON, unknown key, wrong shape, or missing required field) |
+| 6 | Unreadable `--with-attachment` / JSON `attachments[].file` |
+| 7 | Input validation: missing `--summary` outside the editor flow; missing or unreadable `--description-file`; empty stdin without an explicit description; empty editor buffer; `$EDITOR` exited non-zero; empty `--with-comment` body; more `--attachment-description` than `--with-attachment`; malformed `--from-json` (bad JSON, unknown key, wrong shape, or missing required field) |
 | 9 | Authentication failure |
-| 11 | Partial failure: one or more elements of a `--from-json` array failed to create |
+| 11 | Partial failure: one or more elements of a `--from-json` array failed to create, **or** a compound sub-step (comment/attachment) failed after the bug was created |
 
 Agent note: agent workflows should pass `--description` (or `--description-file`) explicitly and supply `--summary`. The `$EDITOR` flow only fires when stdin is a TTY, which is rare in headless / CI invocations.
 
@@ -752,6 +793,13 @@ before the first write, but it is not a reservation.
 - A top-level **array** files one bug per element and returns a partial-failure result `{"resource":"bug","action":"created","created":[...],"failed":[{"index":N,"error":"..."}]}`. If any element fails, the command exits **11** (`BatchPartialFailure`); all input is validated before any bug is created, so a malformed element never half-creates a batch.
 
 Accepted keys match the create flag names: `product`, `component`, `summary`, `version`, `description`, `priority`, `severity`, `assignee`, `op_sys`, `rep_platform`, `alias`, `url`, `whiteboard`, `target_milestone`, `deadline`, `blocks`, `depends_on`, `cc`, `keywords`, `groups`, `flags` (an array of flag-syntax strings). **Unknown keys are rejected** (exit 7) rather than silently ignored, so a typo fails fast. `product`, `component`, and `summary` are required (in the JSON or via a CLI flag).
+
+**Compound keys** (the JSON equivalent of the `--with-comment` / `--with-attachment` flags, see [Compound create](#compound-create-comment--attachments)):
+
+- `comment` — object `{"body": "...", "is_private": false}`. Posts a first comment after the bug is created. `body` is required and must be non-empty.
+- `attachments` — array of objects `{"file": "...", "description": "...", "content_type": "...", "is_patch": false, "is_private": false}`. Each uploads one file after create; `file` is required, the rest are optional (`description` defaults to the filename, `content_type` to the extension guess). Both objects reject unknown keys.
+
+Both keys default to absent, so existing payloads are unaffected. In the array form, a sub-step failure on element *N* does **not** remove that bug's ID from `created`; instead the element is also recorded in `failed` as `{"index":N,"bug_id":M,"step":"comment"|"attachment","file":"...","error":"..."}`. **`created` and `failed` are therefore not disjoint** — `created` lists every bug the server filed, `failed` lists every failure; a created-but-partially-failed element appears in both. Count filed bugs with `created`, detect problems with `failed`. The single-object form with a failed sub-step emits a `compound-create-result` object instead (`bzr schema compound-create-result`).
 
 **Precedence:** an explicit CLI flag overrides the corresponding JSON field, applied uniformly to every element of an array — e.g. `--product Fedora --from-json bugs.json` forces `product` on all entries. `--from-json` is mutually exclusive with `--template` and bypasses the `$EDITOR` flow.
 
@@ -2234,9 +2282,10 @@ valid names.
 Available schemas: `bug`, `comment`, `attachment`, `product`, `component`,
 `classification`, `user`, `group`, `field-value`, `whoami` (read shapes); and the
 mutation/result envelopes `action-result`, `batch-result`,
-`batch-create-result`, `multi-bug-view`, `tag-result`, `membership-result`,
-`count-result`, `download-result`, `upload-result`, `config-result`,
-`search-result`, `dry-run-result`, `error`; and the structured input contracts
+`batch-create-result`, `compound-create-result`, `multi-bug-view`, `tag-result`,
+`membership-result`, `count-result`, `download-result`, `upload-result`,
+`config-result`, `search-result`, `dry-run-result`, `error`; and the structured
+input contracts
 `bug-create-input`, `bug-update-input`, `product-create-input`,
 `product-update-input`, `component-create-input`, `component-update-input`,
 `user-create-input`, `user-update-input`, `group-create-input`,

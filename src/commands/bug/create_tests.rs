@@ -27,6 +27,10 @@ fn create_action() -> BugAction {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        with_comment: None,
+        with_comment_file: None,
+        with_attachment: vec![],
+        attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
     })
 }
@@ -132,6 +136,10 @@ async fn bug_create_sends_parity_fields_in_body() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        with_comment: None,
+        with_comment_file: None,
+        with_attachment: vec![],
+        attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs {
             alias: Some("a-1".into()),
             url: Some("https://example.com/repro".into()),
@@ -180,6 +188,10 @@ async fn bug_create_rejects_malformed_deadline() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        with_comment: None,
+        with_comment_file: None,
+        with_attachment: vec![],
+        attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs {
             deadline: Some("not-a-date".into()),
             ..Default::default()
@@ -219,6 +231,10 @@ async fn bug_create_missing_product_returns_input_validation() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        with_comment: None,
+        with_comment_file: None,
+        with_attachment: vec![],
+        attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
     });
     let mut __io2 = crate::test_helpers::CapturedIo::new();
@@ -256,6 +272,10 @@ async fn bug_create_missing_component_returns_input_validation() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        with_comment: None,
+        with_comment_file: None,
+        with_attachment: vec![],
+        attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
     });
     let mut __io3 = crate::test_helpers::CapturedIo::new();
@@ -293,6 +313,10 @@ async fn bug_create_with_unknown_template_errors() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        with_comment: None,
+        with_comment_file: None,
+        with_attachment: vec![],
+        attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
     });
     let mut __io4 = crate::test_helpers::CapturedIo::new();
@@ -365,6 +389,10 @@ async fn bug_create_with_template_fills_missing_fields() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        with_comment: None,
+        with_comment_file: None,
+        with_attachment: vec![],
+        attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
     });
     let mut __io6 = crate::test_helpers::CapturedIo::new();
@@ -430,6 +458,10 @@ async fn bug_create_template_applies_create_metadata_defaults() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        with_comment: None,
+        with_comment_file: None,
+        with_attachment: vec![],
+        attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
     });
     let mut io = crate::test_helpers::CapturedIo::new();
@@ -502,6 +534,10 @@ async fn bug_create_cli_create_metadata_overrides_template() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        with_comment: None,
+        with_comment_file: None,
+        with_attachment: vec![],
+        attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs {
             alias: None,
             url: Some("https://example.com/cli".into()),
@@ -569,6 +605,10 @@ async fn bug_create_reads_description_from_file() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        with_comment: None,
+        with_comment_file: None,
+        with_attachment: vec![],
+        attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
     });
     let mut __io7 = crate::test_helpers::CapturedIo::new();
@@ -603,6 +643,10 @@ async fn bug_create_description_file_missing_returns_input_validation() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        with_comment: None,
+        with_comment_file: None,
+        with_attachment: vec![],
+        attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
     });
     let mut __io8 = crate::test_helpers::CapturedIo::new();
@@ -644,6 +688,10 @@ async fn bug_create_description_file_non_utf8_returns_input_validation() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        with_comment: None,
+        with_comment_file: None,
+        with_attachment: vec![],
+        attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
     });
     let mut __io9 = crate::test_helpers::CapturedIo::new();
@@ -682,6 +730,10 @@ async fn bug_create_missing_summary_without_editor_flow_is_rejected() {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        with_comment: None,
+        with_comment_file: None,
+        with_attachment: vec![],
+        attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
     });
     let mut __io10 = crate::test_helpers::CapturedIo::new();
@@ -873,6 +925,10 @@ fn editor_action_no_summary_no_description() -> BugAction {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        with_comment: None,
+        with_comment_file: None,
+        with_attachment: vec![],
+        attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
     })
 }
@@ -1037,6 +1093,10 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        with_comment: None,
+        with_comment_file: None,
+        with_attachment: vec![],
+        attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
     });
     let mut __io14 = crate::test_helpers::CapturedIo::new();
@@ -1088,6 +1148,10 @@ fn from_json_action(path: &str) -> BugAction {
         rep_platform: None,
         blocks: vec![],
         depends_on: vec![],
+        with_comment: None,
+        with_comment_file: None,
+        with_attachment: vec![],
+        attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
     })
 }
@@ -1541,5 +1605,121 @@ async fn from_json_batch_table_lists_created_ids() {
         io.out_str().contains("Created bugs: #11"),
         "table output must list the created ids, got: {:?}",
         io.out_str()
+    );
+}
+
+// ── Compound create (flag form) ──────────────────────────────────────
+
+fn compound_args(
+    with_attachment: Vec<std::path::PathBuf>,
+    descriptions: Vec<&str>,
+    with_comment: Option<&str>,
+) -> crate::cli::CreateArgs {
+    crate::cli::CreateArgs {
+        from_json: None,
+        template: None,
+        product: Some("P".into()),
+        component: Some("C".into()),
+        summary: Some("S".into()),
+        version: Some("unspecified".into()),
+        description: Some("d".into()),
+        description_file: None,
+        priority: None,
+        severity: None,
+        assignee: None,
+        op_sys: None,
+        rep_platform: None,
+        blocks: vec![],
+        depends_on: vec![],
+        with_comment: with_comment.map(Into::into),
+        with_comment_file: None,
+        with_attachment,
+        attachment_description: descriptions.into_iter().map(Into::into).collect(),
+        create_fields: crate::cli::CreateFieldArgs::default(),
+    }
+}
+
+fn tmp_attachment(suffix: &str, body: &[u8]) -> tempfile::TempPath {
+    let mut f = tempfile::Builder::new()
+        .prefix("bzr-compound-")
+        .suffix(suffix)
+        .tempfile()
+        .unwrap();
+    f.write_all(body).unwrap();
+    f.into_temp_path()
+}
+
+#[test]
+fn build_compound_plan_more_descriptions_than_attachments_errors() {
+    let att = tmp_attachment(".log", b"x");
+    let args = compound_args(vec![att.to_path_buf()], vec!["d1", "d2"], None);
+    let err = super::build_compound_plan(&args).unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+    assert!(matches!(err, BzrError::InputValidation(_)));
+}
+
+#[test]
+fn build_compound_plan_description_without_attachment_errors() {
+    let args = compound_args(vec![], vec!["orphan"], None);
+    let err = super::build_compound_plan(&args).unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+}
+
+#[test]
+fn build_compound_plan_empty_comment_body_errors() {
+    let args = compound_args(vec![], vec![], Some("   "));
+    let err = super::build_compound_plan(&args).unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+}
+
+#[test]
+fn build_compound_plan_undescribed_attachment_defaults_summary_to_filename() {
+    let a = tmp_attachment(".log", b"one");
+    let b = tmp_attachment(".txt", b"two");
+    let args = compound_args(
+        vec![a.to_path_buf(), b.to_path_buf()],
+        vec!["first only"],
+        None,
+    );
+    let plan = super::build_compound_plan(&args).unwrap();
+    assert_eq!(plan.attachments.len(), 2);
+    assert_eq!(plan.attachments[0].summary, "first only");
+    assert_eq!(plan.attachments[1].summary, plan.attachments[1].file_name);
+}
+
+#[tokio::test]
+async fn compound_attachment_500_exits_11_with_id_on_stderr() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    let att = tmp_attachment(".log", b"trace data");
+    let file_name = att
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap()
+        .to_string();
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 50})))
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/50/attachment"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&mock)
+        .await;
+    let action = BugAction::Create(compound_args(vec![att.to_path_buf()], vec!["trace"], None));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::context::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err.exit_code(), 11);
+    assert!(io.err_str().contains("50"), "stderr: {}", io.err_str());
+    assert!(
+        io.err_str().contains(&file_name),
+        "stderr should name the file: {}",
+        io.err_str()
     );
 }

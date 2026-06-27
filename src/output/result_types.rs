@@ -343,11 +343,57 @@ pub struct BatchCreateResult {
 
 /// A single failure in a batch create, identified by its 0-based position in
 /// the input array.
+///
+/// A plain **create** failure (the bug was never filed) serializes as just
+/// `{index, error}` — byte-for-byte the original shape. A **sub-step** failure
+/// (the bug was filed but its comment or an attachment POST failed) additionally
+/// carries `bug_id` (the filed bug, which also appears in
+/// [`BatchCreateResult::created`]), `step` (`"comment"`/`"attachment"`), and
+/// `file` (the attachment filename, when applicable). The optional fields use
+/// `skip_serializing_if` so existing create-failure consumers are unaffected.
 #[derive(Debug, Serialize)]
 #[non_exhaustive]
 pub struct CreateFailure {
     pub index: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bug_id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
     pub error: String,
+}
+
+impl CreateFailure {
+    /// A create failure: the bug was never filed.
+    pub fn create(index: usize, error: impl Into<String>) -> Self {
+        Self {
+            index,
+            bug_id: None,
+            step: None,
+            file: None,
+            error: error.into(),
+        }
+    }
+
+    /// A sub-step failure: the bug (`bug_id`) was filed but `step`
+    /// (`"comment"`/`"attachment"`) failed; `file` names the attachment when
+    /// applicable.
+    pub fn sub_step(
+        index: usize,
+        bug_id: u64,
+        step: impl Into<String>,
+        file: Option<String>,
+        error: impl Into<String>,
+    ) -> Self {
+        Self {
+            index,
+            bug_id: Some(bug_id),
+            step: Some(step.into()),
+            file,
+            error: error.into(),
+        }
+    }
 }
 
 impl BatchCreateResult {
@@ -357,6 +403,61 @@ impl BatchCreateResult {
             resource: ResourceKind::Bug,
             action: ActionKind::Created,
             created,
+            failed,
+        }
+    }
+}
+
+/// One failed sub-step of a compound `bug create` (the comment or an
+/// attachment). `file` is present only for attachment failures.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct SubStepFailure {
+    pub step: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    pub error: String,
+}
+
+impl SubStepFailure {
+    pub fn comment(error: impl Into<String>) -> Self {
+        Self {
+            step: "comment".to_string(),
+            file: None,
+            error: error.into(),
+        }
+    }
+
+    pub fn attachment(file: impl Into<String>, error: impl Into<String>) -> Self {
+        Self {
+            step: "attachment".to_string(),
+            file: Some(file.into()),
+            error: error.into(),
+        }
+    }
+}
+
+/// Result of a single compound `bug create` (flag form or single-object
+/// `--from-json`) that filed the bug but had at least one sub-step fail. The
+/// created bug `id` is always present (it is the recovery handle); `failed`
+/// lists each sub-step failure. Full-success creates emit the plain
+/// [`ActionResult`] instead, so this type only appears on partial failure.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct CompoundCreateResult {
+    pub resource: ResourceKind,
+    pub action: ActionKind,
+    pub id: u64,
+    pub failed: Vec<SubStepFailure>,
+}
+
+impl CompoundCreateResult {
+    #[must_use]
+    pub fn new(id: u64, failed: Vec<SubStepFailure>) -> Self {
+        Self {
+            resource: ResourceKind::Bug,
+            action: ActionKind::Created,
+            id,
             failed,
         }
     }
