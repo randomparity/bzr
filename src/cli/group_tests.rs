@@ -94,7 +94,7 @@ fn parse_group_list_users_binds_details_flag() {
 #[test]
 fn parse_group_view_binds_positional() {
     match group_action(&["bzr", "group", "view", "editbugs"]) {
-        GroupAction::View { group } => assert_eq!(group, "editbugs"),
+        GroupAction::View { group, .. } => assert_eq!(group, "editbugs"),
         _ => panic!("expected View"),
     }
 }

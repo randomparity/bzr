@@ -95,6 +95,8 @@ pub(crate) enum GroupAction {
     View {
         /// Group name or ID
         group: String,
+        #[command(flatten)]
+        projection: crate::cli::ProjectionArgs,
     },
 
     /// Create a new Bugzilla group (admin only).

@@ -14,6 +14,10 @@ pub struct GroupInfo {
     pub membership: Vec<GroupMember>,
 }
 
+/// Serde JSON keys of [`GroupInfo`], for `--fields` / `--exclude-fields`
+/// validation on `group view`.
+pub const GROUP_INFO_FIELDS: &[&str] = &["id", "name", "description", "is_active", "membership"];
+
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct GroupMember {

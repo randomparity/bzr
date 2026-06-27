@@ -30,6 +30,7 @@ fn capabilities_are_anonymous_for_reads() {
 
     let view = super::capabilities(&GroupAction::View {
         group: "admin".into(),
+        projection: crate::cli::ProjectionArgs::default(),
     });
     assert!(!view.supports_dry_run());
     assert_eq!(view.credential_requirement(), None);

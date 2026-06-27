@@ -26,7 +26,7 @@ pub(crate) async fn execute(
             details,
             projection,
         } => list_users::handle(group, *details, projection, ctx, w).await,
-        GroupAction::View { group } => view::handle(group, ctx, w).await,
+        GroupAction::View { group, projection } => view::handle(group, projection, ctx, w).await,
         GroupAction::Create {
             from_json,
             name,
