@@ -63,8 +63,9 @@ the **current working directory**. Mode selection accounts for this (see below).
   present (the installer only *warns* when `bzr` is absent).
 - **No change to the local-clone path.** Running from a checkout behaves exactly as
   today (same folders, sentinels, guards, exit codes).
-- **No new install flags.** Remote mode is selected automatically by the absence of a
-  local `skills/` dir; overrides are environment variables only.
+- **No new install flags.** Remote mode is selected automatically — either because
+  `BZR_SKILL_TARBALL_URL`/`BZR_SKILL_REF` is set (explicit intent) or because no local
+  `skills/` dir is found (the piped case). All overrides are environment variables.
 
 ## Behavior
 
@@ -132,7 +133,11 @@ trigger a download or a forced-remote check. Only `install` fetches.
 
 ### Remote fetch (`install.ps1`)
 
-Same shape, Windows built-ins only:
+Same shape, Windows built-ins only. **It applies the identical rule 1/2/3 mode
+selection** (forced remote when `$env:BZR_SKILL_TARBALL_URL` or `$env:BZR_SKILL_REF`
+is set, else local probe, else remote) — the ps1 remote-mode test relies on the
+env override forcing remote even when a real `skills/` sits beside the script in the
+checkout.
 
 - **URL:** `${env:BZR_SKILL_TARBALL_URL}` or
   `https://codeload.github.com/randomparity/bzr/zip/<ref>` (note: **zip**, not tar.gz
@@ -150,9 +155,14 @@ Same shape, Windows built-ins only:
 
 ### Sentinel provenance in remote mode
 
-`source-commit` is derived from `git -C <script-dir> rev-parse` and returns
-`unknown` when not in a checkout — this already happens and is fine. `source-version`
-comes from the **downloaded** `VERSION`. No new sentinel fields.
+`source-version` comes from the **downloaded** `VERSION`. `source-commit` is **not**
+derived from git in remote mode: when piped, the script dir is the CWD, which may be
+an unrelated git repo, so `git -C <script-dir> rev-parse` would stamp a *foreign*
+commit into the sentinel. Instead, remote mode records `source-commit: remote:<ref>`
+(the resolved ref, or `remote:<url>` when `BZR_SKILL_TARBALL_URL` is used and no ref
+is known). Local mode keeps the existing git-derived commit. Implementation: a global
+the remote path sets (e.g. `SOURCE_COMMIT_OVERRIDE`) that `write_sentinel` prefers
+over the git call. No new sentinel fields.
 
 ## Failure modes
 
@@ -188,7 +198,12 @@ installer self-tests). New coverage, all hermetic (no network):
     non-zero and writes nothing to any destination; `--list`/`--uninstall` with the
     env override still set do **not** attempt a fetch.
 - **`installer-ps1-test.sh`:** add a remote-mode case guarded by the existing
-  `pwsh`-available skip, feeding a local fixture `.zip` via `BZR_SKILL_TARBALL_URL`.
+  `pwsh`-available skip, feeding a local fixture `.zip` via `BZR_SKILL_TARBALL_URL`
+  (which forces remote even though the checkout's `skills/` sits beside the script).
+  The fixture carries a `source-version` distinct from the checkout's `VERSION`, and
+  the test asserts the installed sentinel records the fixture's version — a
+  local-mode regression (using the checkout instead) would record the checkout's
+  version and fail.
 - Existing local-mode tests stay green unchanged (proves no regression).
 
 The drift/flag checks are unaffected (no CLI surface change).
