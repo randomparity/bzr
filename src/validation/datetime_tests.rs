@@ -333,3 +333,31 @@ fn accepts_maximum_offset_minutes_below_fourteen_hours() {
     let canon = parse_iso8601_or_date("2026-04-01T12:30:45+13:59", FLAG).unwrap();
     assert_eq!(canon, "2026-04-01T12:30:45+13:59");
 }
+
+#[test]
+fn rejected_iso8601_carries_field_and_value_attribution() {
+    let err = parse_iso8601_or_date("nope", FLAG).unwrap_err();
+    let d = err.structured_detail();
+    assert_eq!(
+        d.get("field").and_then(serde_json::Value::as_str),
+        Some(FLAG)
+    );
+    assert_eq!(
+        d.get("value").and_then(serde_json::Value::as_str),
+        Some("nope")
+    );
+}
+
+#[test]
+fn rejected_date_only_carries_field_and_value_attribution() {
+    let err = parse_date_only("2026-13-99", "--deadline").unwrap_err();
+    let d = err.structured_detail();
+    assert_eq!(
+        d.get("field").and_then(serde_json::Value::as_str),
+        Some("--deadline")
+    );
+    assert_eq!(
+        d.get("value").and_then(serde_json::Value::as_str),
+        Some("2026-13-99")
+    );
+}

@@ -23,11 +23,15 @@ use crate::error::{BzrError, Result};
 pub fn parse_iso8601_or_date(s: &str, flag: &str) -> Result<String> {
     match try_canonicalize(s) {
         Some(canon) => Ok(canon),
-        None => Err(BzrError::input(format!(
-            "{flag}: '{s}' is not a valid ISO-8601 date or datetime.\n\
-             Expected: YYYY-MM-DD, YYYY-MM-DDTHH:MM:SS, \
-             YYYY-MM-DDTHH:MM:SSZ, or YYYY-MM-DDTHH:MM:SS±HH:MM"
-        ))),
+        None => Err(BzrError::input_field(
+            format!(
+                "{flag}: '{s}' is not a valid ISO-8601 date or datetime.\n\
+                 Expected: YYYY-MM-DD, YYYY-MM-DDTHH:MM:SS, \
+                 YYYY-MM-DDTHH:MM:SSZ, or YYYY-MM-DDTHH:MM:SS±HH:MM"
+            ),
+            flag,
+            Some(s.to_string()),
+        )),
     }
 }
 
@@ -41,9 +45,11 @@ pub fn parse_date_only(s: &str, flag: &str) -> Result<String> {
     if s.is_ascii() && s.len() == 10 && parse_date(s).is_some() {
         Ok(s.to_string())
     } else {
-        Err(BzrError::input(format!(
-            "{flag}: '{s}' is not a valid date. Expected: YYYY-MM-DD"
-        )))
+        Err(BzrError::input_field(
+            format!("{flag}: '{s}' is not a valid date. Expected: YYYY-MM-DD"),
+            flag,
+            Some(s.to_string()),
+        ))
     }
 }
 

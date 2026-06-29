@@ -34,12 +34,30 @@ fn neither_is_identity() {
 fn unknown_include_token_errors() {
     let err = FieldProjection::resolve(Some("id,bogus"), None, KNOWN).unwrap_err();
     assert_eq!(err.exit_code(), 7);
+    let d = err.structured_detail();
+    assert_eq!(
+        d.get("field").and_then(serde_json::Value::as_str),
+        Some("--fields")
+    );
+    assert_eq!(
+        d.get("value").and_then(serde_json::Value::as_str),
+        Some("bogus")
+    );
 }
 
 #[test]
 fn unknown_exclude_token_errors() {
     let err = FieldProjection::resolve(None, Some("bogus"), KNOWN).unwrap_err();
     assert_eq!(err.exit_code(), 7);
+    let d = err.structured_detail();
+    assert_eq!(
+        d.get("field").and_then(serde_json::Value::as_str),
+        Some("--exclude-fields")
+    );
+    assert_eq!(
+        d.get("value").and_then(serde_json::Value::as_str),
+        Some("bogus")
+    );
 }
 
 #[test]

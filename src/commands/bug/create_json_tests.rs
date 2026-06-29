@@ -190,6 +190,21 @@ fn bug_create_input_schema_documents_array_form() {
 }
 
 #[test]
+fn missing_required_field_attributes_the_field() {
+    let err = JsonCreateBug::default().into_params().unwrap_err();
+    let d = err.structured_detail();
+    assert_eq!(
+        d.get("field").and_then(serde_json::Value::as_str),
+        Some("product"),
+        "missing-required error names the field: {d:?}"
+    );
+    assert!(
+        !d.contains_key("value"),
+        "value is absent for a missing field: {d:?}"
+    );
+}
+
+#[test]
 fn parse_one_or_many_rejects_non_object_scalar() {
     let err = crate::commands::runtime::input::from_json::parse_one_or_many::<JsonCreateBug>("42")
         .unwrap_err();
