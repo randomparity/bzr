@@ -19,7 +19,25 @@ inside the `bzr` repo so they stay in lockstep with the CLI they document:
 
 ## Install
 
-From a clone of this repo, run the installer in this directory and pick a target:
+Install without a clone, straight from GitHub:
+
+```
+curl -fsSL https://raw.githubusercontent.com/randomparity/bzr/main/agent-skills/install.sh | sh -s -- --agent all
+```
+
+Windows (PowerShell):
+
+```
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/randomparity/bzr/main/agent-skills/install.ps1))) -Agent all
+```
+
+When run without a local `skills/` directory beside it (the piped case) the
+installer downloads the skill payload from `main` and installs the extracted
+copy. Override the source with `BZR_SKILL_REF` (a branch, tag, or commit) or
+`BZR_SKILL_TARBALL_URL` (a full tarball/zip URL, or a local path for offline
+installs).
+
+From a clone of this repo, run the installer in this directory instead:
 
 ```
 cd agent-skills
@@ -27,9 +45,10 @@ cd agent-skills
 ```
 
 Targets: `standard`/`bob`/`codex` → `~/.agents/skills`, `claude` →
-`~/.claude/skills`, `all` → both. Run with no `--agent` to be prompted. Other
-flags: `--dry-run`, `--force` (overwrite a foreign same-named folder),
-`--uninstall`, `--list`. Windows: `install.ps1` with the same options.
+`~/.claude/skills`, `all` → both. Run with no `--agent` to be prompted (a
+terminal is required; the piped form must pass `--agent`). Other flags:
+`--dry-run`, `--force` (overwrite a foreign same-named folder), `--uninstall`,
+`--list`. Windows: `install.ps1` with the same options.
 
 The skills call the real `bzr` binary — install it from
 <https://github.com/randomparity/bzr> if you have not.

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Agent-skills installers (`agent-skills/install.sh`, `install.ps1`) can install
+  without a repo clone: piped via `curl … | sh` / a PowerShell scriptblock, they
+  download the skill payload from GitHub when no local `skills/` directory is
+  found. `BZR_SKILL_REF` (branch/tag/commit) and `BZR_SKILL_TARBALL_URL` (full
+  URL or local path) override the source; default is `main`. See ADR-0013. (#480)
+
 ## [0.7.0] - 2026-06-27
 
 ### Added
