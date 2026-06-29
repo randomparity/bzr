@@ -177,4 +177,45 @@ assert_eq "empty pid lock blocks (fail-closed)" "1" "$rc"
 assert_contains "empty pid lock message contains locked" "$out" "locked"
 rm -rf "$root"
 
+# --- remote mode (issue #480) ---------------------------------------------
+# Build a fixture tarball from the repo's own skills, with a DISTINCT version
+# so a local-mode regression (using the checkout) is detectable.
+fxroot=$(mktemp -d)
+mkdir -p "$fxroot/bzr-fixture/agent-skills"
+cp -R "$HERE/../skills" "$fxroot/bzr-fixture/agent-skills/skills"
+printf 'FIXTURE-9.9.9\n' >"$fxroot/bzr-fixture/agent-skills/VERSION"
+(cd "$fxroot" && tar czf fixture.tgz bzr-fixture)
+fixture="$fxroot/fixture.tgz"
+
+# remote install: BZR_SKILL_TARBALL_URL forces remote even with a local skills/
+root=$(newroot)
+tmpd=$(mktemp -d)
+out=$(TMPDIR="$tmpd" BZR_SKILL_DEST_ROOT="$root" BZR_SKILL_TARBALL_URL="$fixture" \
+  "$INSTALL" --agent standard 2>&1) && rc=0 || rc=$?
+assert_eq "remote install exits 0" "0" "$rc"
+assert_file "remote installs SKILL.md" "$root/.agents/skills/bzr-reference/SKILL.md"
+sv=$(cat "$root/.agents/skills/bzr-reference/$SENTINEL")
+assert_contains "remote sentinel uses fixture version" "$sv" "FIXTURE-9.9.9"
+assert_contains "remote sentinel commit is ref-based" "$sv" "source-commit: remote:"
+assert_eq "no temp workdir leaked on success" "" "$(ls -A "$tmpd")"
+rm -rf "$root" "$tmpd"
+
+# bogus tarball path aborts non-zero, writes nothing, leaks no temp dir
+root=$(newroot)
+tmpd=$(mktemp -d)
+out=$(TMPDIR="$tmpd" BZR_SKILL_DEST_ROOT="$root" BZR_SKILL_TARBALL_URL="$tmpd/nope.tgz" \
+  "$INSTALL" --agent standard 2>&1) && rc=0 || rc=$?
+assert_eq "bogus tarball aborts non-zero" "1" "$rc"
+assert_no_path "bogus tarball writes nothing" "$root/.agents/skills/bzr-reference"
+assert_eq "no temp workdir leaked on failure" "" "$(ls -A "$tmpd")"
+rm -rf "$root" "$tmpd"
+
+# --list with an env override set must NOT attempt a fetch (exit 0)
+root=$(newroot)
+out=$(BZR_SKILL_DEST_ROOT="$root" BZR_SKILL_TARBALL_URL="/nonexistent/x.tgz" \
+  "$INSTALL" --agent standard --list 2>&1) && rc=0 || rc=$?
+assert_eq "list does not fetch" "0" "$rc"
+rm -rf "$root"
+rm -rf "$fxroot"
+
 report "installer-test"
