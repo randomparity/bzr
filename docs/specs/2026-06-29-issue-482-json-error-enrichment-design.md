@@ -3,7 +3,7 @@
 - Status: Draft
 - Date: 2026-06-29
 - Issue: #482 (carved out of the closed #459)
-- Related: ADR-0007 (`schema_version` envelope), `schemas/error.json`
+- Related: ADR-0007 (`schema_version` envelope), ADR-0014 (this design's decisions), `schemas/error.json`
 
 ## Background
 
@@ -199,4 +199,3 @@ decision.
    conformance test passes.
 4. stdout, exit codes, and the stderr channel are unchanged for non-error and
    table-mode paths.
-```
