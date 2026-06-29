@@ -246,6 +246,84 @@ impl BzrError {
             BzrError::MidAirCollision { .. } => ERROR_TYPE_COLLISION,
         }
     }
+
+    /// Variant-specific structured keys for the `--json` / `--output ndjson`
+    /// error object, beyond the universal `type` / `message` / `exit_code`.
+    ///
+    /// Lets an agent branch on the offending field, the not-found identifier, or
+    /// the mid-air-collision retry tokens instead of pattern-matching `message`.
+    /// Returns an empty map for variants with no machine-useful detail. Every key
+    /// is additive and OPTIONAL in `schemas/error.json`; this method must never
+    /// emit the reserved `type` / `message` / `exit_code` keys (the formatter
+    /// writes those last). `BatchPartialFailure` reports only summary counts — the
+    /// per-element `failed[]` array is published on stdout in the command's result
+    /// body (see ADR-0014), not duplicated here.
+    pub fn structured_detail(&self) -> serde_json::Map<String, serde_json::Value> {
+        use serde_json::Value;
+        let mut map = serde_json::Map::new();
+        match self {
+            BzrError::InputValidation { field, value, .. } => {
+                if let Some(field) = field {
+                    map.insert("field".into(), Value::from(field.clone()));
+                }
+                if let Some(value) = value {
+                    map.insert("value".into(), Value::from(value.clone()));
+                }
+            }
+            BzrError::NotFound { resource, id } => {
+                map.insert("resource".into(), Value::from(*resource));
+                map.insert("identifier".into(), Value::from(id.clone()));
+            }
+            BzrError::HttpStatus { status, .. } => {
+                map.insert("status".into(), Value::from(*status));
+            }
+            BzrError::Api { code, .. } => {
+                map.insert("api_code".into(), Value::from(*code));
+            }
+            BzrError::BatchPartialFailure { succeeded, failed } => {
+                map.insert("succeeded".into(), Value::from(*succeeded as u64));
+                map.insert("failed".into(), Value::from(*failed as u64));
+            }
+            BzrError::MidAirCollision {
+                id,
+                expected,
+                actual,
+            } => {
+                map.insert("bug_id".into(), Value::from(*id));
+                map.insert("last_change_time".into(), Value::from(actual.clone()));
+                map.insert("if_match_token".into(), Value::from(expected.clone()));
+            }
+            BzrError::PinMismatch {
+                server,
+                expected,
+                actual,
+            } => {
+                map.insert("server".into(), Value::from(server.clone()));
+                map.insert("expected".into(), Value::from(expected.clone()));
+                map.insert("actual".into(), Value::from(actual.clone()));
+            }
+            BzrError::IssuerChanged {
+                server,
+                expected_issuer,
+                actual_issuer,
+            } => {
+                map.insert("server".into(), Value::from(server.clone()));
+                map.insert("expected".into(), Value::from(expected_issuer.clone()));
+                map.insert("actual".into(), Value::from(actual_issuer.clone()));
+            }
+            BzrError::Config(_)
+            | BzrError::Http(_)
+            | BzrError::Io(_)
+            | BzrError::TomlParse(_)
+            | BzrError::TomlSerialize(_)
+            | BzrError::XmlRpc(_)
+            | BzrError::Deserialize(_)
+            | BzrError::Auth(_)
+            | BzrError::DataIntegrity(_)
+            | BzrError::Keyring(_) => {}
+        }
+        map
+    }
 }
 
 #[cfg(test)]

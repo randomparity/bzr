@@ -237,6 +237,83 @@ fn format_dispatch_error_ndjson_renders_compact_json_object() {
     );
 }
 
+#[test]
+fn format_dispatch_error_collision_carries_retry_tokens() {
+    let err = BzrError::MidAirCollision {
+        id: 12345,
+        expected: "TOKEN-A".into(),
+        actual: "2026-06-22T01:02:04Z".into(),
+    };
+    for format in [OutputFormat::Json, OutputFormat::Ndjson] {
+        let out = format_dispatch_error(&err, format);
+        let parsed: serde_json::Value =
+            serde_json::from_str(&out).expect("output must be valid JSON");
+        let inner = &parsed["error"];
+        assert_eq!(inner["type"], "collision", "{out}");
+        assert_eq!(inner["bug_id"], 12345, "{out}");
+        assert_eq!(inner["last_change_time"], "2026-06-22T01:02:04Z", "{out}");
+        assert_eq!(inner["if_match_token"], "TOKEN-A", "{out}");
+    }
+}
+
+#[test]
+fn format_dispatch_error_input_field_carries_field_and_value() {
+    let err = BzrError::input_field(
+        "deadline: 'nope' is not a valid date".into(),
+        "deadline",
+        Some("nope".into()),
+    );
+    let out = format_dispatch_error(&err, OutputFormat::Json);
+    let parsed: serde_json::Value = serde_json::from_str(&out).expect("output must be valid JSON");
+    assert_eq!(parsed["error"]["field"], "deadline", "{out}");
+    assert_eq!(parsed["error"]["value"], "nope", "{out}");
+}
+
+#[test]
+fn format_dispatch_error_universal_keys_present_and_correct_across_variants() {
+    // Foreign-wrapped variants (Http(reqwest::Error), TomlParse) have no public
+    // constructor and are covered transitively by the shared formatter path.
+    let errors = [
+        BzrError::Config("c".into()),
+        BzrError::input("bad flag".into()),
+        BzrError::input_field("m".into(), "f", Some("v".into())),
+        BzrError::NotFound {
+            resource: "bug",
+            id: "1".into(),
+        },
+        BzrError::HttpStatus {
+            status: 404,
+            body: "nf".into(),
+        },
+        BzrError::Api {
+            code: 101,
+            message: "bad".into(),
+        },
+        BzrError::BatchPartialFailure {
+            succeeded: 1,
+            failed: 2,
+        },
+        BzrError::MidAirCollision {
+            id: 9,
+            expected: "a".into(),
+            actual: "b".into(),
+        },
+    ];
+    for err in &errors {
+        let out = format_dispatch_error(err, OutputFormat::Ndjson);
+        let parsed: serde_json::Value =
+            serde_json::from_str(&out).expect("output must be valid JSON");
+        let inner = &parsed["error"];
+        assert_eq!(inner["type"], err.error_type(), "{out}");
+        assert_eq!(inner["exit_code"], err.exit_code(), "{out}");
+        assert_eq!(
+            inner["message"].as_str().expect("message is string"),
+            err.to_string(),
+            "{out}"
+        );
+    }
+}
+
 async fn schema_from_command(name: &str) -> serde_json::Value {
     let mut out = Vec::new();
     let mut err = Vec::new();

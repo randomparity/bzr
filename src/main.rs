@@ -83,11 +83,13 @@ fn exit_code(e: &BzrError) -> ExitCode {
 /// matching the success path); `ndjson` stays bare. Table output renders the
 /// conventional `error: …` prefix.
 fn format_dispatch_error(err: &BzrError, format: OutputFormat) -> String {
-    let error_body = serde_json::json!({
-        "type": err.error_type(),
-        "message": err.to_string(),
-        "exit_code": err.exit_code(),
-    });
+    // Seed with the variant-specific structured keys, then write the three
+    // universal keys LAST so a detail key can never clobber them.
+    let mut error_object = err.structured_detail();
+    error_object.insert("type".into(), err.error_type().into());
+    error_object.insert("message".into(), err.to_string().into());
+    error_object.insert("exit_code".into(), err.exit_code().into());
+    let error_body = serde_json::Value::Object(error_object);
     let fallback = || r#"{"error":{"message":"serialization failed"}}"#.to_string();
     match format {
         OutputFormat::Json => serde_json::to_string(&serde_json::json!({
