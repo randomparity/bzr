@@ -337,7 +337,7 @@ async fn query_run_count_rejects_offset_and_paginate() {
         .await;
 
         assert!(
-            matches!(result, Err(crate::error::BzrError::InputValidation(ref message)) if message.contains("--count")),
+            matches!(result, Err(crate::error::BzrError::InputValidation { ref message, .. }) if message.contains("--count")),
             "expected count paging conflict, got {result:?}"
         );
     }

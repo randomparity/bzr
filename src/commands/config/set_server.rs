@@ -58,7 +58,7 @@ pub(super) async fn handle(
     }
 
     if api_key.is_some() && api_key_env.is_some() {
-        return Err(crate::error::BzrError::InputValidation(
+        return Err(crate::error::BzrError::input(
             "provide at most one of --api-key or --api-key-env".into(),
         ));
     }

@@ -106,7 +106,7 @@ pub(super) fn resolve_login_denied_text(
 
 fn validate_params(params: &UpdateUserParams) -> Result<()> {
     if params.real_name.is_none() && params.email.is_none() && params.login_denied_text.is_none() {
-        return Err(BzrError::InputValidation(
+        return Err(BzrError::input(
             "no fields to update; specify at least one field to change".into(),
         ));
     }

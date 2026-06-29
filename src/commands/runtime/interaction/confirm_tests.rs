@@ -52,7 +52,7 @@ fn read_yes_no_errors_on_eof_with_yes_hint() {
     let mut w = Vec::new();
     let err = read_yes_no(&mut reader, &mut w, 12).unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(m) if m.contains("--yes")),
+        matches!(&err, crate::error::BzrError::InputValidation { message: m, .. } if m.contains("--yes")),
         "EOF should error with a --yes hint, got {err:?}"
     );
 }

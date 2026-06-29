@@ -135,7 +135,7 @@ async fn group_from_json_rejects_unknown_field() {
     .await;
 
     assert!(
-        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+        matches!(result, Err(crate::error::BzrError::InputValidation { message: ref msg, .. })
             if msg.contains("unknown field") && msg.contains("bogus")),
         "expected unknown field validation, got {result:?}"
     );
@@ -160,7 +160,7 @@ async fn group_from_json_rejects_array_shape() {
     .await;
 
     assert!(
-        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+        matches!(result, Err(crate::error::BzrError::InputValidation { message: ref msg, .. })
             if msg.contains("expects a JSON object")),
         "expected object-shape validation, got {result:?}"
     );

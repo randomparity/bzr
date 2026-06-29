@@ -48,13 +48,13 @@ pub(crate) struct Page {
 
 fn overfetch_limit(limit: u32) -> Result<u32> {
     limit.checked_add(1).ok_or_else(|| {
-        BzrError::InputValidation("--limit is too large to detect additional search results".into())
+        BzrError::input("--limit is too large to detect additional search results".into())
     })
 }
 
 fn checked_next_offset(offset: u32, limit: u32) -> Result<u32> {
     offset.checked_add(limit).ok_or_else(|| {
-        BzrError::InputValidation(format!(
+        BzrError::input(format!(
             "--offset {offset} plus --limit {limit} is too large to calculate the next page"
         ))
     })
@@ -150,7 +150,7 @@ async fn fetch_all_pages_with_cap(
     if !reached_last_page {
         // The terminal `error` event is emitted by `main.rs` when this
         // propagates out of dispatch; the caller never reaches its `done`.
-        return Err(BzrError::InputValidation(format!(
+        return Err(BzrError::input(format!(
             "--paginate stopped at the {max_pages}-page safety cap before reaching a short page; \
              the server may be ignoring offset, so results would be incomplete"
         )));

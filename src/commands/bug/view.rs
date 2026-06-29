@@ -74,7 +74,7 @@ pub(super) async fn handle(
     } = args;
 
     if *permissive && ids.len() == 1 {
-        return Err(BzrError::InputValidation(
+        return Err(BzrError::input(
             "--permissive only meaningful with multiple IDs".into(),
         ));
     }

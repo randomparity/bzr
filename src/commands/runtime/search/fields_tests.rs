@@ -7,7 +7,7 @@ fn validate_table_columns_errors_for_all_unknown_include() {
     assert!(
         matches!(
             validate_table_columns(spec),
-            Err(crate::error::BzrError::InputValidation(ref msg))
+            Err(crate::error::BzrError::InputValidation { message: ref msg, .. })
                 if msg.contains("none of the requested fields are known bug fields")
         ),
         "all-unknown table field selection should be rejected"

@@ -1484,7 +1484,7 @@ async fn config_set_default_integration() {
 /// path as `main.rs::run()`.
 async fn dispatch_cli(args: &[&str]) -> bzr::error::Result<()> {
     let cli = bzr::cli::Cli::try_parse_from(args)
-        .map_err(|e| bzr::error::BzrError::InputValidation(e.to_string()))?;
+        .map_err(|e| bzr::error::BzrError::input(e.to_string()))?;
 
     let format = if cli.json {
         bzr::types::OutputFormat::Json
@@ -1503,7 +1503,7 @@ async fn dispatch_cli_with_output(args: &[&str]) -> (bzr::error::Result<()>, Str
         Ok(c) => c,
         Err(e) => {
             return (
-                Err(bzr::error::BzrError::InputValidation(e.to_string())),
+                Err(bzr::error::BzrError::input(e.to_string())),
                 String::new(),
             );
         }
@@ -1525,7 +1525,7 @@ async fn dispatch_cli_with_io(args: &[&str]) -> (bzr::error::Result<()>, String,
         Ok(c) => c,
         Err(e) => {
             return (
-                Err(bzr::error::BzrError::InputValidation(e.to_string())),
+                Err(bzr::error::BzrError::input(e.to_string())),
                 String::new(),
                 String::new(),
             );

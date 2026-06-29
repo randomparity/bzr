@@ -147,7 +147,7 @@ fn build_update_input(args: &UpdateArgs<'_>) -> Result<ComponentUpdateInput> {
 
 fn resolve_update_target(sources: UpdateTargetSources<'_>) -> Result<ComponentUpdateTarget> {
     if sources.cli_id.is_some() && sources.json_id.is_some() {
-        return Err(BzrError::InputValidation(
+        return Err(BzrError::input(
             "--from-json object cannot combine positional component ID with JSON id".into(),
         ));
     }
@@ -156,16 +156,16 @@ fn resolve_update_target(sources: UpdateTargetSources<'_>) -> Result<ComponentUp
     let id = sources.cli_id.or(sources.json_id);
 
     if id.is_some() && (cli_named.is_some() || json_named.is_some()) {
-        return Err(BzrError::InputValidation(
+        return Err(BzrError::input(
             "component update target must use either component ID or --product/--component, \
-             not both"
+         not both"
                 .into(),
         ));
     }
     if cli_named.is_some() && json_named.is_some() {
-        return Err(BzrError::InputValidation(
+        return Err(BzrError::input(
             "--from-json object cannot combine CLI --product/--component with JSON \
-             product/component target fields"
+         product/component target fields"
                 .into(),
         ));
     }
@@ -173,10 +173,10 @@ fn resolve_update_target(sources: UpdateTargetSources<'_>) -> Result<ComponentUp
         return Ok(ComponentUpdateTarget::Id(id));
     }
     let named = cli_named.or(json_named).ok_or_else(|| {
-        BzrError::InputValidation(
+        BzrError::input(
             "component update requires a component target: pass <ID>, \
-             --product <PRODUCT> --component <COMPONENT>, or JSON id/product/component \
-             via --from-json"
+         --product <PRODUCT> --component <COMPONENT>, or JSON id/product/component \
+         via --from-json"
                 .into(),
         )
     })?;
@@ -195,10 +195,10 @@ fn named_target_from_cli(
             product: product.to_string(),
             component: component.to_string(),
         })),
-        (Some(_), None) => Err(BzrError::InputValidation(
+        (Some(_), None) => Err(BzrError::input(
             "--product requires --component to target component update by name".into(),
         )),
-        (None, Some(_)) => Err(BzrError::InputValidation(
+        (None, Some(_)) => Err(BzrError::input(
             "--component requires --product to target component update by name".into(),
         )),
         (None, None) => Ok(None),
@@ -211,9 +211,9 @@ fn named_target_from_json(
 ) -> Result<Option<NamedComponentTarget>> {
     match (product, component) {
         (Some(product), Some(component)) => Ok(Some(NamedComponentTarget { product, component })),
-        (Some(_), None) | (None, Some(_)) => Err(BzrError::InputValidation(
+        (Some(_), None) | (None, Some(_)) => Err(BzrError::input(
             "--from-json: 'product' and 'component' must be supplied together for \
-             name-based component update targeting"
+         name-based component update targeting"
                 .into(),
         )),
         (None, None) => Ok(None),
@@ -240,7 +240,7 @@ fn find_component_id(product_data: &Product, product: &str, component_name: &str
             continue;
         }
         if found.is_some() {
-            return Err(BzrError::InputValidation(format!(
+            return Err(BzrError::input(format!(
                 "component name '{component_name}' is ambiguous in product '{product}'; \
                  use numeric component ID"
             )));
@@ -255,7 +255,7 @@ fn find_component_id(product_data: &Product, product: &str, component_name: &str
 
 fn validate_update_params(params: &UpdateComponentParams) -> Result<()> {
     if params.name.is_none() && params.description.is_none() && params.default_assignee.is_none() {
-        return Err(BzrError::InputValidation(
+        return Err(BzrError::input(
             "no fields to update; specify at least one field to change".into(),
         ));
     }

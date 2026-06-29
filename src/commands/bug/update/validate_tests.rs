@@ -31,7 +31,7 @@ fn validate_draft_rejects_dupe_of_with_status() {
     };
     let err = validate_draft(&draft, &[1]).unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains("--dupe-of") && msg.contains("--status")),
+        matches!(&err, crate::error::BzrError::InputValidation { message: msg, .. } if msg.contains("--dupe-of") && msg.contains("--status")),
         "expected dupe-of/status conflict, got {err:?}"
     );
 }
@@ -45,7 +45,7 @@ fn validate_draft_rejects_dupe_of_with_resolution() {
     };
     let err = validate_draft(&draft, &[1]).unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains("--dupe-of") && msg.contains("--resolution")),
+        matches!(&err, crate::error::BzrError::InputValidation { message: msg, .. } if msg.contains("--dupe-of") && msg.contains("--resolution")),
         "expected dupe-of/resolution conflict, got {err:?}"
     );
 }
@@ -58,7 +58,7 @@ fn validate_draft_rejects_alias_with_multiple_ids() {
     };
     let err = validate_draft(&draft, &[1, 2]).unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains("--alias")),
+        matches!(&err, crate::error::BzrError::InputValidation { message: msg, .. } if msg.contains("--alias")),
         "expected --alias single-bug error, got {err:?}"
     );
 }
@@ -81,7 +81,7 @@ fn validate_args_rejects_alias_with_multiple_ids() {
     };
     let err = validate_args(&args).unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains("--alias")),
+        matches!(&err, crate::error::BzrError::InputValidation { message: msg, .. } if msg.contains("--alias")),
         "expected --alias single-bug error, got {err:?}"
     );
 }

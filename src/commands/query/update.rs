@@ -35,7 +35,7 @@ fn clear_query_field(saved_query: &mut SavedQuery, field: &str) -> Result<()> {
         "changed-since" => saved_query.last_change_time = None,
         "sort" | "order" => saved_query.order = None,
         other => {
-            return Err(BzrError::InputValidation(format!(
+            return Err(BzrError::input(format!(
                 "unknown --clear field '{other}'; see `bzr query update --help` for valid names"
             )))
         }
@@ -142,9 +142,9 @@ pub(super) fn handle(
                 return Err(BzrError::config(format!("query '{name}' not found")));
             }
             if !query.has_filters() {
-                return Err(BzrError::InputValidation(
+                return Err(BzrError::input(
                     "update would leave the query with no filters; a saved query must keep at \
-                     least one filter set"
+                 least one filter set"
                         .into(),
                 ));
             }
@@ -162,14 +162,14 @@ pub(super) fn handle(
             last_change_time.as_deref(),
         )?;
         if !changed {
-            return Err(BzrError::InputValidation(
+            return Err(BzrError::input(
                 "no changes specified: provide a filter/field flag or --clear <field>".into(),
             ));
         }
         if !saved_query.has_filters() {
-            return Err(BzrError::InputValidation(
+            return Err(BzrError::input(
                 "update would leave the query with no filters; a saved query must keep at \
-                 least one filter set"
+             least one filter set"
                     .into(),
             ));
         }

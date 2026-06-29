@@ -63,7 +63,7 @@ fn parse_editor_buffer(raw: &str) -> Result<(String, String)> {
     let summary = iter
         .next()
         .map(|l| l.trim().to_string())
-        .ok_or_else(|| crate::error::BzrError::InputValidation("empty buffer, aborting".into()))?;
+        .ok_or_else(|| crate::error::BzrError::input("empty buffer, aborting".into()))?;
 
     let body: Vec<&str> = iter.collect();
     let start = body.iter().position(|l| !l.trim().is_empty()).unwrap_or(0);
@@ -146,7 +146,7 @@ fn resolve_description(
             "read bug description from stdin",
         )?;
         if buf.trim().is_empty() {
-            return Err(crate::error::BzrError::InputValidation(
+            return Err(crate::error::BzrError::input(
                 "no description supplied (piped stdin is empty)".into(),
             ));
         }
@@ -199,7 +199,7 @@ fn merge_fields(args: &CreateArgs, tmpl: Option<&BugTemplate>) -> Result<MergedF
         .clone()
         .or_else(|| tmpl.and_then(|t| t.product.clone()))
         .ok_or_else(|| {
-            crate::error::BzrError::InputValidation(
+            crate::error::BzrError::input(
                 "--product is required (provide it directly or via a template)".into(),
             )
         })?;
@@ -207,7 +207,7 @@ fn merge_fields(args: &CreateArgs, tmpl: Option<&BugTemplate>) -> Result<MergedF
         .clone()
         .or_else(|| tmpl.and_then(|t| t.component.clone()))
         .ok_or_else(|| {
-            crate::error::BzrError::InputValidation(
+            crate::error::BzrError::input(
                 "--component is required (provide it directly or via a template)".into(),
             )
         })?;
@@ -335,10 +335,8 @@ pub(super) async fn handle(
         product: merged.product,
         component: merged.component,
         summary: resolved_summary.ok_or_else(|| {
-            crate::error::BzrError::InputValidation(
-                "--summary is required (or run interactively without --description, --description-file, or piped stdin to compose in $EDITOR)"
-                    .into(),
-            )
+            crate::error::BzrError::input("--summary is required (or run interactively without --description, --description-file, or piped stdin to compose in $EDITOR)"
+                .into())
         })?,
         version: merged.version.unwrap_or_else(|| "unspecified".to_string()),
         description: final_description,
@@ -392,7 +390,7 @@ fn resolve_compound_comment(
         (None, None) => return Ok(None),
     };
     if text.trim().is_empty() {
-        return Err(crate::error::BzrError::InputValidation(
+        return Err(crate::error::BzrError::input(
             "--with-comment: empty comment body".into(),
         ));
     }
@@ -411,7 +409,7 @@ fn build_attachment_plan(
     let files = &args.with_attachment;
     let descriptions = &args.attachment_description;
     if descriptions.len() > files.len() {
-        return Err(crate::error::BzrError::InputValidation(format!(
+        return Err(crate::error::BzrError::input(format!(
             "--attachment-description given {} time(s) but there are {} --with-attachment file(s); \
              descriptions pair with attachments by position",
             descriptions.len(),

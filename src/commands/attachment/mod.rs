@@ -86,24 +86,24 @@ fn validate_action(action: &AttachmentAction) -> Result<()> {
             comment: None,
             comment_file: None,
             ..
-        }) => Err(crate::error::BzrError::InputValidation(
+        }) => Err(crate::error::BzrError::input(
             "--comment-private requires --comment or --comment-file".into(),
         )),
         AttachmentAction::Download { ids, bug_ids, .. } if ids.is_empty() && bug_ids.is_empty() => {
-            Err(crate::error::BzrError::InputValidation(
+            Err(crate::error::BzrError::input(
                 "specify at least one attachment ID or --bug <ID>".into(),
             ))
         }
         AttachmentAction::Download {
             ids, out: Some(_), ..
-        } if ids.len() != 1 => Err(crate::error::BzrError::InputValidation(
+        } if ids.len() != 1 => Err(crate::error::BzrError::input(
             "--out requires exactly one attachment ID".into(),
         )),
         AttachmentAction::Update(args) if !update_has_changes(args) => {
-            Err(crate::error::BzrError::InputValidation(
+            Err(crate::error::BzrError::input(
                 "no attachment fields to update; specify at least one of --summary, --file-name, \
-                 --content-type, --obsolete/--no-obsolete, --patch/--no-patch, \
-                 --private/--no-private, or --flag"
+             --content-type, --obsolete/--no-obsolete, --patch/--no-patch, \
+             --private/--no-private, or --flag"
                     .into(),
             ))
         }

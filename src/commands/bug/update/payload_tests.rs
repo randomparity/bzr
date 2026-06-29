@@ -119,7 +119,7 @@ fn build_update_params_rejects_invalid_deadline() {
     let err = build_update_params(as_update_args(&action)).unwrap_err();
     assert_eq!(err.exit_code(), 7);
     assert!(
-        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("--deadline")),
+        matches!(err, crate::error::BzrError::InputValidation { message: ref msg, .. } if msg.contains("--deadline")),
         "expected --deadline validation error, got {err:?}"
     );
 }
@@ -131,7 +131,7 @@ fn build_update_params_rejects_alias_with_multiple_ids() {
 
     let err = build_update_params(as_update_args(&action)).unwrap_err();
     assert!(
-        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("--alias")),
+        matches!(err, crate::error::BzrError::InputValidation { message: ref msg, .. } if msg.contains("--alias")),
         "expected --alias validation error, got {err:?}"
     );
 }
@@ -146,7 +146,7 @@ fn build_update_params_from_draft_validates_ids_passed_separately() {
     let err = build_update_params_from_draft(vec![42, 43], &draft).unwrap_err();
 
     assert!(
-        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("--alias")),
+        matches!(err, crate::error::BzrError::InputValidation { message: ref msg, .. } if msg.contains("--alias")),
         "expected --alias validation error, got {err:?}"
     );
 }
@@ -215,7 +215,7 @@ fn build_update_params_rejects_empty_keyword() {
     });
     let err = build_update_params(as_update_args(&action)).unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(FLAG_KEYWORDS_ADD)),
+        matches!(&err, crate::error::BzrError::InputValidation { message: msg, .. } if msg.contains(FLAG_KEYWORDS_ADD)),
         "expected InputValidation naming {FLAG_KEYWORDS_ADD}, got {err:?}",
     );
 }
@@ -229,7 +229,7 @@ fn build_update_params_rejects_empty_keyword_remove_with_remove_flag() {
     let err = build_update_params(as_update_args(&action)).unwrap_err();
 
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains("--keywords-remove")),
+        matches!(&err, crate::error::BzrError::InputValidation { message: msg, .. } if msg.contains("--keywords-remove")),
         "expected InputValidation naming --keywords-remove, got {err:?}",
     );
 }
@@ -242,7 +242,7 @@ fn build_update_params_rejects_whitespace_only_cc() {
     });
     let err = build_update_params(as_update_args(&action)).unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(FLAG_CC_ADD)),
+        matches!(&err, crate::error::BzrError::InputValidation { message: msg, .. } if msg.contains(FLAG_CC_ADD)),
         "expected InputValidation naming {FLAG_CC_ADD}, got {err:?}",
     );
 }
@@ -255,7 +255,7 @@ fn build_update_params_rejects_empty_groups_add() {
     });
     let err = build_update_params(as_update_args(&action)).unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(FLAG_GROUPS_ADD)),
+        matches!(&err, crate::error::BzrError::InputValidation { message: msg, .. } if msg.contains(FLAG_GROUPS_ADD)),
         "expected InputValidation naming {FLAG_GROUPS_ADD}, got {err:?}",
     );
 }
@@ -268,7 +268,7 @@ fn build_update_params_rejects_whitespace_only_see_also_remove() {
     });
     let err = build_update_params(as_update_args(&action)).unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg) if msg.contains(FLAG_SEE_ALSO_REMOVE)),
+        matches!(&err, crate::error::BzrError::InputValidation { message: msg, .. } if msg.contains(FLAG_SEE_ALSO_REMOVE)),
         "expected InputValidation naming {FLAG_SEE_ALSO_REMOVE}, got {err:?}",
     );
 }
@@ -310,7 +310,10 @@ fn build_update_params_rejects_private_without_body() {
         msg.contains("--comment-private"),
         "error should mention the flag: {msg}"
     );
-    assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
+    assert!(matches!(
+        err,
+        crate::error::BzrError::InputValidation { .. }
+    ));
 }
 
 #[test]
@@ -319,7 +322,7 @@ fn build_update_params_rejects_whitespace_only_comment() {
     let err = build_update_params(as_update_args(&action)).unwrap_err();
     assert!(matches!(
         err,
-        crate::error::BzrError::InputValidation(ref m) if m.contains("empty comment")
+        crate::error::BzrError::InputValidation { message: ref m, .. } if m.contains("empty comment")
     ));
 }
 
@@ -331,7 +334,7 @@ fn build_update_params_rejects_comment_and_comment_file_together() {
     let action = make_update_action_with_comment(vec![1], Some("inline"), Some(&path), false);
     let err = build_update_params(as_update_args(&action)).unwrap_err();
     match err {
-        crate::error::BzrError::InputValidation(msg) => {
+        crate::error::BzrError::InputValidation { message: msg, .. } => {
             assert!(msg.contains("--comment"), "names inline flag: {msg}");
             assert!(msg.contains("--comment-file"), "names file flag: {msg}");
         }
@@ -368,7 +371,10 @@ fn build_update_params_rejects_missing_comment_file() {
     let action = make_update_action_with_comment(vec![1], None, Some(path), false);
     let err = build_update_params(as_update_args(&action)).unwrap_err();
     let msg = err.to_string();
-    assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
+    assert!(matches!(
+        err,
+        crate::error::BzrError::InputValidation { .. }
+    ));
     assert!(
         msg.contains("/nonexistent/bzr-issue-161-test.txt"),
         "error should include path: {msg}"
@@ -382,7 +388,10 @@ fn build_update_params_rejects_non_utf8_comment_file() {
     std::fs::write(&path, [0xff_u8, 0xfe, 0xfd]).unwrap();
     let action = make_update_action_with_comment(vec![1], None, Some(&path), false);
     let err = build_update_params(as_update_args(&action)).unwrap_err();
-    assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
+    assert!(matches!(
+        err,
+        crate::error::BzrError::InputValidation { .. }
+    ));
 }
 
 #[test]
@@ -394,7 +403,7 @@ fn build_update_params_rejects_whitespace_only_comment_file() {
     let err = build_update_params(as_update_args(&action)).unwrap_err();
     assert!(matches!(
         err,
-        crate::error::BzrError::InputValidation(ref m) if m.contains("empty comment")
+        crate::error::BzrError::InputValidation { message: ref m, .. } if m.contains("empty comment")
     ));
 }
 
@@ -403,7 +412,7 @@ fn build_update_params_rejects_update_with_no_fields() {
     let action = make_empty_update_action(vec![42]);
     let err = build_update_params(as_update_args(&action)).unwrap_err();
     assert!(
-        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("at least one")),
+        matches!(err, crate::error::BzrError::InputValidation { message: ref msg, .. } if msg.contains("at least one")),
         "expected an at-least-one-field validation error, got {err:?}"
     );
 }

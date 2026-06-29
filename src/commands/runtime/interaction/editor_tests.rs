@@ -106,7 +106,7 @@ fn launch_propagates_editor_failure_as_input_validation() {
 
     let err = super::launch("initial\n", "test-fail").unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(m) if m.contains("exited with error")),
+        matches!(&err, crate::error::BzrError::InputValidation { message: m, .. } if m.contains("exited with error")),
         "got {err:?}"
     );
 

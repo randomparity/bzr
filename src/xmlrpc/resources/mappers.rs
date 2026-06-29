@@ -61,7 +61,7 @@ pub(crate) fn require_u64(m: &BTreeMap<String, Value>, key: &str, resource: &str
 
 pub(crate) fn xmlrpc_id(value: u64, label: &str) -> Result<Value> {
     i64::try_from(value).map(Value::Int).map_err(|_| {
-        BzrError::InputValidation(format!(
+        BzrError::input(format!(
             "{label} {value} is outside the XML-RPC signed integer range 0..={}",
             i64::MAX
         ))

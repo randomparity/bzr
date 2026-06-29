@@ -101,7 +101,7 @@ fn exit_code_http_status() {
 
 #[test]
 fn exit_code_input_validation() {
-    let err = BzrError::InputValidation("bad flag".into());
+    let err = BzrError::input("bad flag".into());
     assert_eq!(err.exit_code(), 7);
     assert_eq!(err.error_type(), "input");
     assert_eq!(err.to_string(), "bad flag");

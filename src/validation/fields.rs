@@ -40,9 +40,9 @@ impl FieldProjection {
                 .collect(),
         };
         if effective.is_empty() {
-            return Err(BzrError::InputValidation(
+            return Err(BzrError::input(
                 "the field selection leaves no fields to emit; \
-                 adjust --fields / --exclude-fields"
+             adjust --fields / --exclude-fields"
                     .into(),
             ));
         }
@@ -87,7 +87,7 @@ fn parse_tokens(list: Option<&str>, known: &[&str]) -> Result<Option<BTreeSet<St
             continue;
         }
         if !known.contains(&token) {
-            return Err(BzrError::InputValidation(format!(
+            return Err(BzrError::input(format!(
                 "unknown field '{token}'; known fields: {}",
                 known.join(", ")
             )));

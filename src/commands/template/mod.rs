@@ -45,7 +45,7 @@ fn clear_template_field(template: &mut BugTemplate, field: &str) -> Result<()> {
     if template.clear_field(field) {
         return Ok(());
     }
-    Err(BzrError::InputValidation(format!(
+    Err(BzrError::input(format!(
         "unknown --clear field '{field}'; valid fields: {}",
         BugTemplate::clearable_fields().join(", ")
     )))

@@ -85,7 +85,7 @@ fn validate_params(params: &UpdateProductParams) -> Result<()> {
         && params.default_milestone.is_none()
         && params.is_open.is_none()
     {
-        return Err(BzrError::InputValidation(
+        return Err(BzrError::input(
             "no fields to update; specify at least one field to change".into(),
         ));
     }

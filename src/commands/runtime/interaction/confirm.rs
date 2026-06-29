@@ -45,7 +45,7 @@ pub fn read_yes_no<R: BufRead, W: Write + ?Sized>(
     let _ = w.flush();
     let mut line = String::new();
     if reader.read_line(&mut line)? == 0 {
-        return Err(crate::error::BzrError::InputValidation(format!(
+        return Err(crate::error::BzrError::input(format!(
             "could not read a confirmation answer from stdin (it may have been \
              consumed by --comment - / --comment-file -); re-run with --yes to \
              confirm modifying {count} bugs"

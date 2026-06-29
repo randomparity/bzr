@@ -137,7 +137,7 @@ pub(crate) async fn ensure_unchanged_since(
     expected: &str,
 ) -> Result<()> {
     let expected_key = crate::validation::timestamp_compare_key(expected).ok_or_else(|| {
-        crate::error::BzrError::InputValidation(format!(
+        crate::error::BzrError::input(format!(
             "--expect-unchanged-since: '{expected}' is not a recognized UTC timestamp; \
              pass the last_change_time value from a preceding `bug view`"
         ))

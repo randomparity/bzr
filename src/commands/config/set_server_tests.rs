@@ -206,7 +206,10 @@ async fn set_server_rejects_both_api_key_and_env() {
     .await;
 
     let err = result.unwrap_err();
-    assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
+    assert!(matches!(
+        err,
+        crate::error::BzrError::InputValidation { .. }
+    ));
     assert!(err.to_string().contains("at most one"));
     // Nothing was written for the rejected server.
     assert!(!config_path().exists() || !load_config().servers.contains_key("dual"));

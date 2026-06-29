@@ -24,7 +24,7 @@ fn clean_string_list(field: &str, values: &[String]) -> Result<Vec<String>> {
     for raw in values {
         let trimmed = raw.trim();
         if trimmed.is_empty() {
-            return Err(crate::error::BzrError::InputValidation(format!(
+            return Err(crate::error::BzrError::input(format!(
                 "{field}: list value cannot be empty or whitespace-only"
             )));
         }
@@ -135,7 +135,7 @@ pub(crate) fn build_update_params_from_draft(
         comment_is_private: std::collections::HashMap::new(),
     };
     if params.is_empty() {
-        return Err(crate::error::BzrError::InputValidation(
+        return Err(crate::error::BzrError::input(
             "no fields to update; specify at least one field to change".into(),
         ));
     }

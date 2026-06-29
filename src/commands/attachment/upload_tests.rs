@@ -283,7 +283,7 @@ async fn attachment_upload_rejects_whitespace_comment() {
     .await;
     assert!(matches!(
         result,
-        Err(crate::error::BzrError::InputValidation(_))
+        Err(crate::error::BzrError::InputValidation { .. })
     ));
 }
 
@@ -319,7 +319,7 @@ async fn attachment_upload_rejects_whitespace_comment_file() {
     .await;
     assert!(matches!(
         result,
-        Err(crate::error::BzrError::InputValidation(_))
+        Err(crate::error::BzrError::InputValidation { .. })
     ));
 }
 
@@ -579,7 +579,7 @@ async fn attachment_upload_comment_private_without_comment_is_input_error() {
     .await;
     assert!(matches!(
         result,
-        Err(crate::error::BzrError::InputValidation(_))
+        Err(crate::error::BzrError::InputValidation { .. })
     ));
 }
 

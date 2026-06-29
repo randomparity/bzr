@@ -20,7 +20,7 @@ pub(crate) fn ensure_no_paging_with_count(
     paginate: bool,
 ) -> Result<()> {
     if count && (offset.is_some() || paginate) {
-        return Err(BzrError::InputValidation(
+        return Err(BzrError::input(
             "--count cannot be combined with --offset or --paginate".into(),
         ));
     }

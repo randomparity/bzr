@@ -34,9 +34,9 @@ fn resolve_save_info(
     };
     let name = if raw_name.is_empty() {
         suggested_name.ok_or_else(|| {
-            crate::error::BzrError::InputValidation(
+            crate::error::BzrError::input(
                 "no name provided for --save-as and URL has no known_name; \
-                 specify a name explicitly: --save-as <name>"
+             specify a name explicitly: --save-as <name>"
                     .into(),
             )
         })?
@@ -75,9 +75,7 @@ async fn resolve_client_and_params(args: &SearchArgs, ctx: &CommandContext) -> R
 
     let Some(url_str) = args.from_url.as_deref() else {
         let query_str = args.query.as_deref().ok_or_else(|| {
-            crate::error::BzrError::InputValidation(
-                "either a search query or --from-url is required".into(),
-            )
+            crate::error::BzrError::input("either a search query or --from-url is required".into())
         })?;
         let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
         let params = SearchParams {

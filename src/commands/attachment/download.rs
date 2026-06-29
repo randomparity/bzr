@@ -64,7 +64,7 @@ fn ensure_batch_out_dir(out_dir: &str) -> Result<()> {
 pub(super) fn safe_basename(name: &str) -> Result<String> {
     match Path::new(name).file_name().and_then(|n| n.to_str()) {
         Some(base) if base != "." && base != ".." && !base.is_empty() => Ok(base.to_string()),
-        _ => Err(crate::error::BzrError::InputValidation(format!(
+        _ => Err(crate::error::BzrError::input(format!(
             "attachment file name {name:?} has no usable file component",
         ))),
     }

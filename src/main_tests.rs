@@ -104,7 +104,7 @@ fn resolve_format_invalid_env_returns_input_validation_error() {
     with_bzr_output(Some("xml"), || {
         let cli = base_cli();
         let err = resolve_format(&cli).expect_err("invalid format should fail");
-        assert!(matches!(err, BzrError::InputValidation(_)));
+        assert!(matches!(err, BzrError::InputValidation { .. }));
     });
 }
 
@@ -160,7 +160,7 @@ fn resolve_format_falls_back_to_tty_detection() {
 fn exit_code_maps_known_error_to_exit_code() {
     // Spot-check that exit_code() produces an ExitCode for an in-range value.
     // The ExitCode type is opaque, so we only verify the call succeeds.
-    let err = BzrError::InputValidation("bad input".into());
+    let err = BzrError::input("bad input".into());
     let code = exit_code(&err);
     // ExitCode does not implement PartialEq; compare via Debug instead.
     let rendered = format!("{code:?}");
@@ -319,7 +319,7 @@ fn assert_error_matches_schema(schema: &serde_json::Value, value: &serde_json::V
 async fn format_dispatch_error_json_family_matches_published_schema() {
     let schema = schema_from_command("error").await;
     let errors = [
-        BzrError::InputValidation("bad input".into()),
+        BzrError::input("bad input".into()),
         BzrError::MidAirCollision {
             id: 123,
             expected: "2026-06-22T01:02:03Z".into(),

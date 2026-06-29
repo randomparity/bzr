@@ -201,9 +201,9 @@ fn ensure_dry_run_supported(
     if capabilities.supports_dry_run() {
         return Ok(());
     }
-    Err(error::BzrError::InputValidation(
+    Err(error::BzrError::input(
         "--dry-run is only supported for bug create/update/clone/resolve/close/reopen/dup, \
-         product create/update, component create/update, user create/update, and group create/update"
+     product create/update, component create/update, user create/update, and group create/update"
             .into(),
     ))
 }

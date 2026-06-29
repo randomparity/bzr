@@ -279,10 +279,10 @@ impl BugzillaClient {
 
     async fn search_bugs_rest(&self, params: &SearchParams) -> Result<Vec<Bug>> {
         if has_negated_filters(params) && has_raw_boolean_chart_params(params) {
-            return Err(crate::error::BzrError::InputValidation(
+            return Err(crate::error::BzrError::input(
                 "cannot combine negated filters (e.g. --status '!CLOSED') with a \
-                 URL-imported query containing boolean chart parameters; the chart \
-                 indices would collide"
+             URL-imported query containing boolean chart parameters; the chart \
+             indices would collide"
                     .into(),
             ));
         }

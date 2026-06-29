@@ -61,7 +61,7 @@ pub(super) fn handle(
     };
 
     if !query.has_filters() {
-        return Err(BzrError::InputValidation(
+        return Err(BzrError::input(
             "query must have at least one filter set".into(),
         ));
     }

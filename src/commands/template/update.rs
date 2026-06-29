@@ -20,7 +20,7 @@ pub(super) fn handle(
     } = args;
 
     if fields.is_empty_change() && clear.is_empty() {
-        return Err(BzrError::InputValidation(
+        return Err(BzrError::input(
             "no changes specified: provide a field flag or --clear <field>".into(),
         ));
     }
@@ -35,7 +35,7 @@ pub(super) fn handle(
         }
         super::validate_template(template)?;
         if template.is_empty() {
-            return Err(BzrError::InputValidation(
+            return Err(BzrError::input(
                 "update would clear all fields; a template must keep at least one field set".into(),
             ));
         }

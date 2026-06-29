@@ -147,7 +147,7 @@ async fn product_update_from_json_rejects_positional_and_json_target() {
     .await;
 
     assert!(
-        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+        matches!(result, Err(crate::error::BzrError::InputValidation { message: ref msg, .. })
             if msg.contains("cannot combine positional product name")),
         "expected target conflict, got {result:?}"
     );
@@ -176,7 +176,7 @@ async fn product_update_without_fields_is_rejected() {
     .await;
 
     assert!(
-        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+        matches!(result, Err(crate::error::BzrError::InputValidation { message: ref msg, .. })
             if msg.contains("no fields to update")),
         "expected input validation, got {result:?}"
     );
