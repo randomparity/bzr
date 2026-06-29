@@ -24,9 +24,9 @@ Two coupled decisions:
 **1. Fetch a full-repo tarball from GitHub `codeload` and extract the
 `agent-skills/skills` subtree.**
 
-- `install.sh` pulls `…/tar.gz/refs/heads/<ref>` via `curl -fsSL` (or `wget`
-  fallback) and `tar xzf`. `install.ps1` pulls the `…/zip/…` form and
-  `Expand-Archive` (native, no external tool).
+- `install.sh` pulls `…/tar.gz/<ref>` (bare-ref codeload form, so branches, tags, and
+  SHAs all resolve) via `curl -fsSL` (or `wget` fallback) and `tar xzf`. `install.ps1`
+  pulls the `…/zip/<ref>` form and `Expand-Archive` (native, no external tool).
 - Default `<ref>` is `main`, overridable via `BZR_SKILL_REF`; the whole URL is
   overridable via `BZR_SKILL_TARBALL_URL` (which also accepts a local path /
   `file://` for offline and test use).
