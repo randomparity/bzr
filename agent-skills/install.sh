@@ -11,6 +11,8 @@ SKILL_NAMES="bzr-reference bzr-setup bzr-file-bug bzr-triage-bug bzr-search-repo
 DEST_ROOT="${BZR_SKILL_DEST_ROOT:-$HOME}"
 AGENTS_DIR="$DEST_ROOT/.agents/skills"
 CLAUDE_DIR="$DEST_ROOT/.claude/skills"
+TMP_FETCH_DIR=""
+SOURCE_COMMIT_OVERRIDE=""
 
 AGENT=""
 DRY_RUN=0
@@ -50,7 +52,82 @@ source_version() {
 }
 
 source_commit() {
-  git -C "$SCRIPT_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown"
+  if [ -n "$SOURCE_COMMIT_OVERRIDE" ]; then
+    printf '%s\n' "$SOURCE_COMMIT_OVERRIDE"
+  else
+    git -C "$SCRIPT_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown"
+  fi
+}
+
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1 || die "remote install needs '$1' but it is not on PATH"
+}
+
+# $1 = url-or-path, $2 = destination file. Download (http/https) or copy (file://, path).
+fetch_tarball() {
+  case "$1" in
+  http://* | https://*)
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsSL "$1" -o "$2" || die "download failed: $1"
+    elif command -v wget >/dev/null 2>&1; then
+      wget -q -O "$2" "$1" || die "download failed: $1"
+    else
+      die "remote install needs 'curl' or 'wget' but neither is on PATH"
+    fi
+    ;;
+  file://*)
+    src=${1#file://}
+    [ -f "$src" ] || die "tarball not found: $src"
+    cp -- "$src" "$2" || die "cannot copy tarball: $src"
+    ;;
+  *)
+    [ -f "$1" ] || die "tarball not found: $1"
+    cp -- "$1" "$2" || die "cannot copy tarball: $1"
+    ;;
+  esac
+}
+
+# Decide local vs remote; in remote mode download+extract and repoint globals.
+resolve_skills_src() {
+  ref="${BZR_SKILL_REF:-main}"
+  # Default URL is the only path with no hermetic test (it would hit the network);
+  # the forced-remote tests exercise the same download/extract code via a fixture.
+  url="${BZR_SKILL_TARBALL_URL:-https://codeload.github.com/randomparity/bzr/tar.gz/$ref}"
+
+  if [ -z "${BZR_SKILL_TARBALL_URL:-}" ] && [ -z "${BZR_SKILL_REF:-}" ]; then
+    [ -d "$SKILLS_SRC/bzr-reference" ] && return 0
+  fi
+
+  need_cmd tar
+  need_cmd mktemp
+  TMP_FETCH_DIR=$(mktemp -d) || die "cannot create temp dir"
+  tarball="$TMP_FETCH_DIR/skills.tgz"
+  fetch_tarball "$url" "$tarball"
+  (cd "$TMP_FETCH_DIR" && tar xzf "$tarball") || die "cannot extract tarball: $url"
+
+  found=""
+  for d in "$TMP_FETCH_DIR"/*/agent-skills/skills; do
+    [ -d "$d/bzr-reference" ] || continue
+    found="$d"
+    break
+  done
+  [ -n "$found" ] || die "downloaded tarball has no agent-skills/skills/bzr-reference"
+  SKILLS_SRC="$found"
+  VERSION_FILE="$found/../VERSION"
+  if [ -n "${BZR_SKILL_REF:-}" ]; then
+    SOURCE_COMMIT_OVERRIDE="remote:$BZR_SKILL_REF"
+  elif [ -n "${BZR_SKILL_TARBALL_URL:-}" ]; then
+    SOURCE_COMMIT_OVERRIDE="remote:url"
+  else
+    SOURCE_COMMIT_OVERRIDE="remote:$ref"
+  fi
+}
+
+# Consolidated cleanup: remove the fetch workdir and release both locks.
+cleanup() {
+  [ -n "$TMP_FETCH_DIR" ] && rm -rf "$TMP_FETCH_DIR"
+  release_lock "$AGENTS_DIR"
+  release_lock "$CLAUDE_DIR"
 }
 
 # Echo the destination dir(s) for the chosen agent, one per line.
@@ -239,7 +316,6 @@ do_install() {
   rc=0
   for dest in "$@"; do reject_symlink_path "$dest"; done
   if [ "$DRY_RUN" -ne 1 ]; then
-    trap 'release_lock "$AGENTS_DIR"; release_lock "$CLAUDE_DIR"' EXIT INT TERM
     for dest in "$@"; do acquire_lock "$dest"; done
   fi
   for dest in "$@"; do
@@ -288,7 +364,6 @@ uninstall_skill() {
 do_uninstall() {
   rc=0
   for dest in "$@"; do reject_symlink_path "$dest"; done
-  trap 'release_lock "$AGENTS_DIR"; release_lock "$CLAUDE_DIR"' EXIT INT TERM
   for dest in "$@"; do
     [ -d "$dest" ] || continue
     acquire_lock "$dest"
@@ -339,11 +414,16 @@ main() {
   install)
     [ -n "$AGENT" ] || prompt_agent
     dests=$(resolve_destinations "$AGENT") || die "unknown agent: $AGENT"
-    [ "$DRY_RUN" -eq 1 ] || probe_bzr
+    if [ "$DRY_RUN" -ne 1 ]; then
+      probe_bzr
+      trap cleanup EXIT INT TERM
+      resolve_skills_src
+    fi
     ;;
   uninstall)
     [ -n "$AGENT" ] || die "no --agent given (try --help)"
     dests=$(resolve_destinations "$AGENT") || die "unknown agent: $AGENT"
+    trap cleanup EXIT INT TERM
     ;;
   list)
     [ -n "$AGENT" ] || AGENT="all"

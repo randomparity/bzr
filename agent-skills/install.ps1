@@ -27,6 +27,8 @@ $SkillNames = @('bzr-reference', 'bzr-setup', 'bzr-file-bug', 'bzr-triage-bug', 
 $DestRoot = if ($env:BZR_SKILL_DEST_ROOT) { $env:BZR_SKILL_DEST_ROOT } else { $HOME }
 $AgentsDir = Join-Path $DestRoot '.agents/skills'
 $ClaudeDir = Join-Path $DestRoot '.claude/skills'
+$script:TmpFetchDir = $null
+$script:SourceCommitOverride = $null
 
 function Show-Usage {
     @"
@@ -70,9 +72,44 @@ function Get-SourceVersion {
 }
 
 function Get-SourceCommit {
+    if ($script:SourceCommitOverride) { return $script:SourceCommitOverride }
     $commit = (& git -C $ScriptDir rev-parse --short HEAD 2>$null)
     if (-not $commit) { $commit = 'unknown' }
     return $commit
+}
+
+# Decide local vs remote; in remote mode download+extract and repoint script vars.
+function Resolve-SkillsSrc {
+    $ref = if ($env:BZR_SKILL_REF) { $env:BZR_SKILL_REF } else { 'main' }
+    $url = if ($env:BZR_SKILL_TARBALL_URL) { $env:BZR_SKILL_TARBALL_URL } `
+        else { "https://codeload.github.com/randomparity/bzr/zip/$ref" }
+
+    if (-not $env:BZR_SKILL_TARBALL_URL -and -not $env:BZR_SKILL_REF) {
+        if (Test-Path (Join-Path $SkillsSrc 'bzr-reference') -PathType Container) { return }
+    }
+
+    [Net.ServicePointManager]::SecurityProtocol = `
+        [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $script:TmpFetchDir = Join-Path ([IO.Path]::GetTempPath()) ("bzr-skill." + [Guid]::NewGuid())
+    New-Item -ItemType Directory -Path $script:TmpFetchDir -Force | Out-Null
+    $zip = Join-Path $script:TmpFetchDir 'skills.zip'
+    if ($url -match '^https?://') {
+        Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip
+    } else {
+        $path = $url -replace '^file://', ''
+        if (-not (Test-Path $path)) { throw "tarball not found: $path" }
+        Copy-Item $path $zip
+    }
+    Expand-Archive -Path $zip -DestinationPath $script:TmpFetchDir -Force
+    $found = Get-ChildItem -Path $script:TmpFetchDir -Recurse -Directory -Filter skills |
+        Where-Object { $_.Parent.Name -eq 'agent-skills' -and
+            (Test-Path (Join-Path $_.FullName 'bzr-reference')) } |
+        Select-Object -First 1
+    if (-not $found) { throw 'downloaded archive has no agent-skills/skills/bzr-reference' }
+    $script:SkillsSrc = $found.FullName
+    $script:VersionFile = Join-Path $found.Parent.FullName 'VERSION'
+    $script:SourceCommitOverride = if ($env:BZR_SKILL_REF) { "remote:$($env:BZR_SKILL_REF)" } `
+        elseif ($env:BZR_SKILL_TARBALL_URL) { 'remote:url' } else { "remote:$ref" }
 }
 
 function Test-Owned {
@@ -305,7 +342,14 @@ if ($Uninstall) {
 } elseif ($List) {
     Invoke-List $targets
 } else {
-    Invoke-Install $targets
+    try {
+        Resolve-SkillsSrc
+        Invoke-Install $targets
+    } finally {
+        if ($script:TmpFetchDir -and (Test-Path $script:TmpFetchDir)) {
+            Remove-Item $script:TmpFetchDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 if ($script:Failed) { exit 1 }
