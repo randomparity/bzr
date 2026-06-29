@@ -153,12 +153,16 @@ decision.
 ## Schema, version, docs, tests
 
 - **`schemas/error.json`**: add the new keys under `error.properties` as
-  optional (not in `required`). The object currently sets
-  `additionalProperties: false`, so the conformance test
-  (`format_dispatch_error_json_family_matches_published_schema`) fails until the
-  schema lists **every** key any variant can emit — schema and formatter move
-  together. Update the schema `description` (still stderr). Keep `exit_code`
-  bounds `1..=14`.
+  optional (not in `required`); the object keeps `additionalProperties: false`.
+  Update the schema `description` (still stderr). Keep `exit_code` bounds `1..=14`.
+  - **Caveat on the existing conformance test.** `assert_error_matches_schema`
+    (`main_tests.rs`) is a hand-rolled **partial** check: it asserts only the three
+    universal keys + `exit_code` bounds and does **not** enforce
+    `additionalProperties` or validate the new keys. So adding emitted keys does
+    *not* fail it, and it does *not* by itself keep schema and formatter in lockstep.
+    This work **strengthens** that test so an emitted key absent from the schema's
+    `error.properties` fails it (manual `additionalProperties:false` enforcement) —
+    that is the guardrail that keeps schema and formatter moving together.
   - **The schema is intentionally permissive about presence.** A single flat
     object with optional keys cannot express "a `collision`-type error MUST carry
     `if_match_token`" without per-type `if/then`/`oneOf` subschemas, which this
