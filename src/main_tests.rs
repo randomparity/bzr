@@ -390,6 +390,16 @@ fn assert_error_matches_schema(schema: &serde_json::Value, value: &serde_json::V
         (minimum..=maximum).contains(&exit_code),
         "formatted exit_code {exit_code} outside schema bounds {minimum}..={maximum}"
     );
+
+    // Enforce additionalProperties:false ourselves (the checks above do not):
+    // every key the formatter emits must be declared in the schema, so a typo'd
+    // or undeclared structured-detail key fails the test.
+    for key in error.keys() {
+        assert!(
+            properties.contains_key(key),
+            "emitted error.{key} is not declared in schemas/error.json error.properties"
+        );
+    }
 }
 
 #[tokio::test]
@@ -397,6 +407,28 @@ async fn format_dispatch_error_json_family_matches_published_schema() {
     let schema = schema_from_command("error").await;
     let errors = [
         BzrError::input("bad input".into()),
+        BzrError::input_field("bad date".into(), "--deadline", Some("nope".into())),
+        BzrError::NotFound {
+            resource: "bug",
+            id: "404".into(),
+        },
+        BzrError::HttpStatus {
+            status: 404,
+            body: "Not Found".into(),
+        },
+        BzrError::Api {
+            code: 101,
+            message: "Invalid Bug ID".into(),
+        },
+        BzrError::BatchPartialFailure {
+            succeeded: 2,
+            failed: 1,
+        },
+        BzrError::PinMismatch {
+            server: "bugzilla.example".into(),
+            expected: "AAAA".into(),
+            actual: "BBBB".into(),
+        },
         BzrError::MidAirCollision {
             id: 123,
             expected: "2026-06-22T01:02:03Z".into(),
