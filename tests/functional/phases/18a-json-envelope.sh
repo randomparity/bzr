@@ -12,7 +12,7 @@
 echo "── Phase 18a: JSON schema_version envelope ─────────────────"
 
 # Keep in lockstep with output::SCHEMA_VERSION.
-SCHEMA_VERSION="0.6.0"
+SCHEMA_VERSION="0.6.1"
 
 # bzr schema --json reports the contract version and wraps the names in `data`.
 test_begin "120a. schema --json reports schema_version"
@@ -41,5 +41,42 @@ test_begin "120d. ndjson output is not enveloped"
 run_bzr_raw --output ndjson --server-url "$BZ_URL" server info
 if assert_success &&
     assert_raw_json 'has("schema_version")' "false"; then test_pass; fi
+
+# --json failure: structured error object on STDERR carries the universal keys
+# plus the schema_version envelope (the date filter is validated client-side, so
+# this is deterministic and does not depend on server data).
+test_begin "120e. --json error body is structured on stderr (#482)"
+run_bzr bug list --created-since notadate
+if assert_exit_code 7 &&
+    assert_stderr_json '.schema_version' "$SCHEMA_VERSION" &&
+    assert_stderr_json '.error.type' "input" &&
+    assert_stderr_json '.error.exit_code' "7"; then test_pass; fi
+
+# Input-validation errors carry field/value attribution.
+test_begin "120f. input error names field and value"
+run_bzr bug list --created-since notadate
+if assert_stderr_json '.error.field' "--created-since" &&
+    assert_stderr_json '.error.value' "notadate"; then test_pass; fi
+
+# Uniform-projection verbs attribute an unknown --fields token to flag + value.
+test_begin "120g. unknown --fields token carries field/value"
+run_bzr comment list 1 --fields bogus
+if assert_exit_code 7 &&
+    assert_stderr_json '.error.field' "--fields" &&
+    assert_stderr_json '.error.value' "bogus"; then test_pass; fi
+
+# Server-side API faults carry api_code (credentialless not-found read path).
+test_begin "120h. server API error carries api_code"
+run_bzr_raw --json --server-url "$BZ_URL" bug view 999999999
+if assert_exit_code 4 &&
+    assert_stderr_json '.error.type' "api" &&
+    assert_stderr_json '.error.api_code' "101"; then test_pass; fi
+
+# --output ndjson failure: error stays a bare structured object (no envelope).
+test_begin "120i. ndjson error is bare structured object on stderr"
+run_bzr_raw --output ndjson bug list --created-since notadate
+if assert_exit_code 7 &&
+    assert_stderr_json '.error.type' "input" &&
+    assert_stderr_json 'has("schema_version")' "false"; then test_pass; fi
 
 echo ""

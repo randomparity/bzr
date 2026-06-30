@@ -200,6 +200,19 @@ assert_raw_json() {
     fi
 }
 
+# assert_stderr_json <jq-expr> <expected-value> — jq against the captured
+# stderr, where the structured `error` object lands under --json on failure.
+assert_stderr_json() {
+    local expr="$1"
+    local expected="$2"
+    local actual
+    actual=$(jq -r "$expr" "$BZR_STDERR" 2>/dev/null)
+    if [[ "$actual" != "$expected" ]]; then
+        test_fail "stderr jq '$expr' = '$actual', expected '$expected'"
+        return 1
+    fi
+}
+
 # assert_json_contains <jq-expr> <substring>
 assert_json_contains() {
     local expr="$1"
