@@ -72,6 +72,32 @@ This is the cardinal read-before-write rule made enforceable. To rehearse a
 change without writing, add `--dry-run` — bzr validates and prints the would-be
 payload (`"action":"dry-run"`) without calling the API.
 
+### Branch on structured errors instead of parsing prose
+
+When a command fails under `--json`, a structured `error` object is written to
+**stderr** (stdout stays clean). Detect failure by exit code, then read the
+`error` object — never grep the message. Branch on `error.type` first, then read
+the keys for that type:
+
+```
+bzr bug update <id> --status RESOLVED --resolution FIXED \
+  --expect-unchanged-since "$ts" --json 2>err.json
+case $? in
+  0)  ;;                                  # success
+  14) # mid-air collision: re-read against the server's current state and retry
+      ts=$(jq -r '.error.last_change_time' err.json) ;;
+  7)  # input rejected: jq -r '.error.field, .error.value' err.json names what to fix
+      ;;
+esac
+```
+
+Key error keys by `type`: `input` → `field`/`value`; `collision` →
+`bug_id`/`last_change_time`/`if_match_token`; `not_found` →
+`resource`/`identifier`; `http` → `status`; `api` → `api_code`. A partial batch
+(`batch_partial_failure`, exit 11) puts `succeeded`/`failed` counts in the error,
+while the per-element `failed[]` rows are in the **stdout** result body. Run
+`bzr schema error` for the full contract.
+
 ### Attachment reads
 
 Use JSON metadata for decisions, and use stdout only for the raw bytes of one
