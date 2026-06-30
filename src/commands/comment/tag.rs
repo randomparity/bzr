@@ -12,7 +12,7 @@ pub(super) async fn handle(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     if add.is_empty() && remove.is_empty() {
-        return Err(BzrError::InputValidation(
+        return Err(BzrError::input(
             "no comment tag changes; specify --add or --remove".into(),
         ));
     }

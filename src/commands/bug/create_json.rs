@@ -95,7 +95,7 @@ impl JsonCreateBug {
         let comment = match self.comment.take() {
             Some(c) => {
                 if c.body.trim().is_empty() {
-                    return Err(crate::error::BzrError::InputValidation(
+                    return Err(crate::error::BzrError::input(
                         "--from-json: 'comment.body' must not be empty".into(),
                     ));
                 }
@@ -131,9 +131,13 @@ impl JsonCreateBug {
     fn into_params(self) -> Result<CreateBugParams> {
         let required = |value: Option<String>, field: &str| {
             value.ok_or_else(|| {
-                crate::error::BzrError::InputValidation(format!(
-                    "--from-json: '{field}' is required (set it in the JSON or via --{field})"
-                ))
+                crate::error::BzrError::input_field(
+                    format!(
+                        "--from-json: '{field}' is required (set it in the JSON or via --{field})"
+                    ),
+                    field,
+                    None,
+                )
             })
         };
         let flags = crate::commands::runtime::input::flags::parse_flags(&self.flags)?;
@@ -348,7 +352,7 @@ pub(super) async fn handle(
         }
         JsonOneOrMany::Many(entries) => {
             if entries.is_empty() {
-                return Err(crate::error::BzrError::InputValidation(
+                return Err(crate::error::BzrError::input(
                     "--from-json: empty array, nothing to create".into(),
                 ));
             }

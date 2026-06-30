@@ -139,7 +139,7 @@ fn non_numeric_limit_rejected() {
     .unwrap_err();
     assert_eq!(err.exit_code(), 7);
     assert!(
-        matches!(err, BzrError::InputValidation(ref m) if m.contains("limit")),
+        matches!(err, BzrError::InputValidation { message: ref m, .. } if m.contains("limit")),
         "expected limit validation error, got {err:?}"
     );
 }

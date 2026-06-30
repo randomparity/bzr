@@ -79,7 +79,7 @@ async fn fetch_page_rejects_limit_that_cannot_overfetch() {
     };
 
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg)
+        matches!(&err, crate::error::BzrError::InputValidation { message: msg, .. }
             if msg.contains("--limit") && msg.contains("too large")),
         "limit overflow should be rejected before search: {err:?}"
     );
@@ -112,7 +112,7 @@ async fn fetch_page_rejects_next_offset_overflow() {
     };
 
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg)
+        matches!(&err, crate::error::BzrError::InputValidation { message: msg, .. }
             if msg.contains("--offset") && msg.contains("--limit")),
         "next offset overflow should be rejected before search: {err:?}"
     );
@@ -199,7 +199,7 @@ async fn fetch_page_paginate_rejects_next_offset_overflow() {
     };
 
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg)
+        matches!(&err, crate::error::BzrError::InputValidation { message: msg, .. }
             if msg.contains("--offset") && msg.contains("--limit")),
         "paginate offset overflow should be rejected before search: {err:?}"
     );
@@ -394,7 +394,7 @@ async fn fetch_all_pages_errors_when_safety_cap_reached_without_short_page() {
     .unwrap_err();
 
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(msg)
+        matches!(&err, crate::error::BzrError::InputValidation { message: msg, .. }
             if msg.contains("--paginate") && msg.contains("safety cap")),
         "cap exhaustion should fail instead of returning incomplete results: {err:?}"
     );

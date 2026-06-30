@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/randomparity/bzr/schemas/error.json",
   "title": "ErrorEnvelope",
-  "description": "Structured error object emitted on stderr under `--json` and `--output ndjson`. Under pretty `--json` a top-level `schema_version` is also present; under `--output ndjson` it is omitted (records stay bare).",
+  "description": "Structured error object emitted on stderr under `--json` and `--output ndjson`. Under pretty `--json` a top-level `schema_version` is also present; under `--output ndjson` it is omitted (records stay bare). Beyond the universal `type`/`message`/`exit_code`, an error carries variant-specific keys (e.g. `field`/`value` for input validation, `last_change_time`/`if_match_token` for a mid-air collision, `resource`/`identifier` for not-found). All extra keys are optional and keyed by `type`: branch on `type` first, then read the keys relevant to that type. For a partial-batch failure the error carries summary `succeeded`/`failed` counts; the per-element `failed[]` array is published on stdout in the command's result body, not duplicated here.",
   "type": "object",
   "properties": {
     "schema_version": {
@@ -22,6 +22,62 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 14
+        },
+        "field": {
+          "type": "string",
+          "description": "InputValidation: the offending field or CLI flag, when known."
+        },
+        "value": {
+          "type": "string",
+          "description": "InputValidation: the rejected value, when known."
+        },
+        "bug_id": {
+          "type": "integer",
+          "description": "MidAirCollision: the bug whose write was rejected."
+        },
+        "last_change_time": {
+          "type": "string",
+          "description": "MidAirCollision: the bug's current last_change_time; re-read and retry against this."
+        },
+        "if_match_token": {
+          "type": "string",
+          "description": "MidAirCollision: the token the client sent, now stale."
+        },
+        "resource": {
+          "type": "string",
+          "description": "NotFound: the resource kind (e.g. \"bug\")."
+        },
+        "identifier": {
+          "type": "string",
+          "description": "NotFound: the identifier that was not found."
+        },
+        "status": {
+          "type": "integer",
+          "description": "HttpStatus: the HTTP status code."
+        },
+        "api_code": {
+          "type": "integer",
+          "description": "Api/XmlRpc: the Bugzilla fault code."
+        },
+        "succeeded": {
+          "type": "integer",
+          "description": "BatchPartialFailure: count of elements that succeeded."
+        },
+        "failed": {
+          "type": "integer",
+          "description": "BatchPartialFailure: count of elements that failed."
+        },
+        "server": {
+          "type": "string",
+          "description": "PinMismatch/IssuerChanged: the server whose TLS trust changed."
+        },
+        "expected": {
+          "type": "string",
+          "description": "PinMismatch/IssuerChanged: the expected pin or issuer."
+        },
+        "actual": {
+          "type": "string",
+          "description": "PinMismatch/IssuerChanged: the actual pin or issuer presented."
         }
       },
       "required": [

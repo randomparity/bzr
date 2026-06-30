@@ -27,7 +27,7 @@ fn reject_json_comment_file_stdin(
 ) -> Result<()> {
     let cli_comment_file_stdin = args.comment_file.as_deref() == Some(std::path::Path::new("-"));
     if entry.comment_file.as_deref() == Some(std::path::Path::new("-")) && !cli_comment_file_stdin {
-        return Err(crate::error::BzrError::InputValidation(
+        return Err(crate::error::BzrError::input(
             "--from-json comment_file cannot read from stdin; use comment text in JSON instead"
                 .into(),
         ));
@@ -52,12 +52,12 @@ fn reject_cli_stdin_comment_source(args: &UpdateArgs, source: JsonUpdateInputSou
         return Ok(());
     }
     match source {
-        JsonUpdateInputSource::Stdin => Err(crate::error::BzrError::InputValidation(
+        JsonUpdateInputSource::Stdin => Err(crate::error::BzrError::input(
             "--from-json - cannot be combined with --comment - or --comment-file -".into(),
         )),
-        JsonUpdateInputSource::FileArray => Err(crate::error::BzrError::InputValidation(
+        JsonUpdateInputSource::FileArray => Err(crate::error::BzrError::input(
             "--from-json array input cannot combine with --comment - or --comment-file -; \
-             put per-entry comments in JSON"
+         put per-entry comments in JSON"
                 .into(),
         )),
         JsonUpdateInputSource::FileObject => Ok(()),
@@ -88,14 +88,14 @@ fn read_validated_update_input(
 fn object_ids(entry: &super::update::BugUpdateDraft, args: &UpdateArgs) -> Result<Vec<u64>> {
     if !args.ids.is_empty() {
         if entry.id.is_some() {
-            return Err(crate::error::BzrError::InputValidation(
+            return Err(crate::error::BzrError::input(
                 "--from-json object cannot combine positional IDs with JSON id".into(),
             ));
         }
         return Ok(args.ids.clone());
     }
     entry.id.map(|id| vec![id]).ok_or_else(|| {
-        crate::error::BzrError::InputValidation(
+        crate::error::BzrError::input(
             "--from-json object requires positional IDs or an id field".into(),
         )
     })
@@ -119,7 +119,7 @@ fn build_array_request(
     index: usize,
 ) -> Result<JsonUpdateRequest> {
     let id = entry.id.ok_or_else(|| {
-        crate::error::BzrError::InputValidation(format!("--from-json item {index}: id is required"))
+        crate::error::BzrError::input(format!("--from-json item {index}: id is required"))
     })?;
     let (_ids, params, expect_unchanged_since) = build_from_json(entry, args, vec![id])?;
     Ok(JsonUpdateRequest {
@@ -250,12 +250,12 @@ pub(super) async fn handle(
         }
         JsonOneOrMany::Many(entries) => {
             if !args.ids.is_empty() {
-                return Err(crate::error::BzrError::InputValidation(
+                return Err(crate::error::BzrError::input(
                     "--from-json array input cannot be combined with positional IDs".into(),
                 ));
             }
             if entries.is_empty() {
-                return Err(crate::error::BzrError::InputValidation(
+                return Err(crate::error::BzrError::input(
                     "--from-json: empty array, nothing to update".into(),
                 ));
             }

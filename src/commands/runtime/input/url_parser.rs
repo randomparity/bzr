@@ -109,18 +109,17 @@ fn strip_shell_backslashes(url: &str) -> String {
 /// Credential parameters are stripped from both `source_url` and `raw_params`.
 pub(crate) fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<ParsedUrl> {
     let cleaned = strip_shell_backslashes(url_str);
-    let url =
-        Url::parse(&cleaned).map_err(|e| BzrError::InputValidation(format!("invalid URL: {e}")))?;
+    let url = Url::parse(&cleaned).map_err(|e| BzrError::input(format!("invalid URL: {e}")))?;
 
     if !url.path().contains("buglist.cgi") {
-        return Err(BzrError::InputValidation(
+        return Err(BzrError::input(
             "URL must be a Bugzilla buglist.cgi URL".into(),
         ));
     }
 
     let url_host = url
         .host_str()
-        .ok_or_else(|| BzrError::InputValidation("URL has no hostname".into()))?;
+        .ok_or_else(|| BzrError::input("URL has no hostname".into()))?;
 
     let server = find_server_by_hostname(config, url_host);
     if server.is_none() && config.default_server.is_none() {
@@ -173,7 +172,7 @@ pub(crate) fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<Parse
                     // out-of-range values (e.g. `abc`, `99999999999`) are
                     // rejected here rather than silently dropped.
                     let n = trimmed.parse::<u32>().map_err(|_| {
-                        BzrError::InputValidation(format!(
+                        BzrError::input(format!(
                             "URL limit '{trimmed}' is not a valid integer in 0..={}",
                             u32::MAX
                         ))

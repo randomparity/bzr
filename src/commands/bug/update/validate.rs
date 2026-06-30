@@ -9,12 +9,12 @@ use super::BugUpdateDraft;
 /// Reject invalid field combinations before building the API payload.
 pub(super) fn validate_draft(draft: &BugUpdateDraft, ids: &[u64]) -> Result<()> {
     if draft.dupe_of.is_some() && (draft.status.is_some() || draft.resolution.is_some()) {
-        return Err(crate::error::BzrError::InputValidation(
+        return Err(crate::error::BzrError::input(
             "--dupe-of cannot be combined with --status or --resolution".into(),
         ));
     }
     if draft.alias.is_some() && ids.len() > 1 {
-        return Err(crate::error::BzrError::InputValidation(
+        return Err(crate::error::BzrError::input(
             "--alias can only be used when updating one bug".into(),
         ));
     }

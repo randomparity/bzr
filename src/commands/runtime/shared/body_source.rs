@@ -46,7 +46,7 @@ pub(crate) fn classify_body_source(
     file_flag: &str,
 ) -> Result<BodySource> {
     match (inline, file) {
-        (Some(_), Some(_)) => Err(BzrError::InputValidation(format!(
+        (Some(_), Some(_)) => Err(BzrError::input(format!(
             "{inline_flag} and {file_flag} are mutually exclusive"
         ))),
         (Some("-"), None) => Ok(BodySource::Stdin {
@@ -118,7 +118,7 @@ pub(crate) fn materialize_comment_body(
             CommentBodyRequirement::RequiredWithFallback(read_fallback) => {
                 Ok(Some(require_non_empty_comment_body(read_fallback()?)?))
             }
-            CommentBodyRequirement::PrivateRequiresBody => Err(BzrError::InputValidation(
+            CommentBodyRequirement::PrivateRequiresBody => Err(BzrError::input(
                 "--comment-private requires --comment or --comment-file".to_string(),
             )),
         };
@@ -142,7 +142,7 @@ pub(crate) fn materialize_optional_comment_body(
 /// Return comment text when it has non-whitespace content.
 fn require_non_empty_comment_body(text: String) -> Result<String> {
     if text.trim().is_empty() {
-        return Err(BzrError::InputValidation("empty comment, aborting".into()));
+        return Err(BzrError::input("empty comment, aborting".into()));
     }
     Ok(text)
 }
@@ -152,7 +152,7 @@ fn require_non_empty_comment_body(text: String) -> Result<String> {
 /// option name (e.g. `--description-file`) used to prefix the message.
 pub(crate) fn read_file_with_context(path: &std::path::Path, flag: &str) -> Result<String> {
     std::fs::read_to_string(path).map_err(|e| {
-        BzrError::InputValidation(format!(
+        BzrError::input(format!(
             "{flag} could not be read ({}): {e}",
             path.display()
         ))

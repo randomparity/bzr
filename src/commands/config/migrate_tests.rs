@@ -37,7 +37,7 @@ async fn migrate_to_keyring_without_yes_errors() {
     .await;
 
     let err = result.unwrap_err();
-    assert!(matches!(err, BzrError::InputValidation(_)));
+    assert!(matches!(err, BzrError::InputValidation { .. }));
     assert!(err.to_string().contains("--yes"));
 }
 

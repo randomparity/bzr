@@ -75,7 +75,7 @@ fn build_params(args: &UpdateArgs<'_>) -> Result<(String, UpdateGroupParams)> {
 
 fn validate_params(params: &UpdateGroupParams) -> Result<()> {
     if params.description.is_none() && params.is_active.is_none() {
-        return Err(BzrError::InputValidation(
+        return Err(BzrError::input(
             "no fields to update; specify at least one field to change".into(),
         ));
     }

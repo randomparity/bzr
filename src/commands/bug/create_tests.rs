@@ -206,7 +206,7 @@ async fn bug_create_rejects_malformed_deadline() {
     .await;
     let err = result.unwrap_err();
     assert!(
-        matches!(&err, BzrError::InputValidation(msg) if msg.contains("--deadline")),
+        matches!(&err, BzrError::InputValidation { message: msg, .. } if msg.contains("--deadline")),
         "got {err:?}"
     );
 }
@@ -247,7 +247,7 @@ async fn bug_create_missing_product_returns_input_validation() {
     let _output = __io2.out_str().to_string();
     let err = result.unwrap_err();
     assert!(
-        matches!(&err, BzrError::InputValidation(msg) if msg.contains("--product")),
+        matches!(&err, BzrError::InputValidation { message: msg, .. } if msg.contains("--product")),
         "got {err:?}"
     );
 }
@@ -288,7 +288,7 @@ async fn bug_create_missing_component_returns_input_validation() {
     let _output = __io3.out_str().to_string();
     let err = result.unwrap_err();
     assert!(
-        matches!(&err, BzrError::InputValidation(msg) if msg.contains("--component")),
+        matches!(&err, BzrError::InputValidation { message: msg, .. } if msg.contains("--component")),
         "got {err:?}"
     );
 }
@@ -659,7 +659,7 @@ async fn bug_create_description_file_missing_returns_input_validation() {
     let _output = __io8.out_str().to_string();
     let err = result.unwrap_err();
     assert!(
-        matches!(&err, BzrError::InputValidation(m) if m.contains("description-file")),
+        matches!(&err, BzrError::InputValidation { message: m, .. } if m.contains("description-file")),
         "got {err:?}"
     );
 }
@@ -705,7 +705,7 @@ async fn bug_create_description_file_non_utf8_returns_input_validation() {
     let err = result.unwrap_err();
     let _ = std::fs::remove_file(&bad_path);
     assert!(
-        matches!(&err, BzrError::InputValidation(m) if m.contains("description-file")),
+        matches!(&err, BzrError::InputValidation { message: m, .. } if m.contains("description-file")),
         "got {err:?}"
     );
 }
@@ -746,7 +746,7 @@ async fn bug_create_missing_summary_without_editor_flow_is_rejected() {
     let _output = __io10.out_str().to_string();
     let err = result.unwrap_err();
     assert!(
-        matches!(&err, BzrError::InputValidation(m) if m.contains("--summary")),
+        matches!(&err, BzrError::InputValidation { message: m, .. } if m.contains("--summary")),
         "got {err:?}"
     );
 }
@@ -801,7 +801,7 @@ fn parse_editor_buffer_empty_above_sentinel_errors() {
 ";
     let err = super::parse_editor_buffer(buf).unwrap_err();
     assert!(
-        matches!(&err, BzrError::InputValidation(m) if m.contains("empty buffer")),
+        matches!(&err, BzrError::InputValidation { message: m, .. } if m.contains("empty buffer")),
         "got {err:?}"
     );
 }
@@ -1044,7 +1044,7 @@ async fn bug_create_editor_branch_unreachable_when_stdin_piped() {
 
     let err = result.unwrap_err();
     assert!(
-        matches!(&err, BzrError::InputValidation(m) if m.contains("piped stdin")),
+        matches!(&err, BzrError::InputValidation { message: m, .. } if m.contains("piped stdin")),
         "expected InputValidation about empty piped stdin, got {err:?}"
     );
 }
@@ -1109,7 +1109,7 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
     let _output = __io14.out_str().to_string();
     let err = result.unwrap_err();
     assert!(
-        matches!(&err, BzrError::InputValidation(_)),
+        matches!(&err, BzrError::InputValidation { .. }),
         "expected InputValidation (template body should not auto-fill outside the editor flow), got {err:?}"
     );
 }
@@ -1119,7 +1119,7 @@ fn resolve_description_conflict_errors() {
     let err =
         super::resolve_description(Some("x"), Some(std::path::Path::new("/tmp/x"))).unwrap_err();
     match err {
-        BzrError::InputValidation(msg) => {
+        BzrError::InputValidation { message: msg, .. } => {
             assert!(msg.contains("--description"), "names inline flag: {msg}");
             assert!(msg.contains("--description-file"), "names file flag: {msg}");
         }
@@ -1315,7 +1315,7 @@ async fn from_json_rejects_unknown_field() {
     .await
     .unwrap_err();
     match err {
-        BzrError::InputValidation(msg) => assert!(
+        BzrError::InputValidation { message: msg, .. } => assert!(
             msg.contains("bogus") || msg.contains("unknown field"),
             "should name the unknown field: {msg}"
         ),
@@ -1338,7 +1338,9 @@ async fn from_json_missing_required_field_errors() {
     .await
     .unwrap_err();
     match err {
-        BzrError::InputValidation(msg) => assert!(msg.contains("summary"), "names field: {msg}"),
+        BzrError::InputValidation { message: msg, .. } => {
+            assert!(msg.contains("summary"), "names field: {msg}");
+        }
         other => panic!("expected InputValidation, got {other:?}"),
     }
 }
@@ -1655,7 +1657,7 @@ fn build_compound_plan_more_descriptions_than_attachments_errors() {
     let args = compound_args(vec![att.to_path_buf()], vec!["d1", "d2"], None);
     let err = super::build_compound_plan(&args).unwrap_err();
     assert_eq!(err.exit_code(), 7);
-    assert!(matches!(err, BzrError::InputValidation(_)));
+    assert!(matches!(err, BzrError::InputValidation { .. }));
 }
 
 #[test]

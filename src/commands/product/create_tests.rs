@@ -144,7 +144,7 @@ async fn product_from_json_rejects_unknown_field() {
     .await;
 
     assert!(
-        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+        matches!(result, Err(crate::error::BzrError::InputValidation { message: ref msg, .. })
             if msg.contains("bogus") || msg.contains("unknown field")),
         "expected unknown field validation, got {result:?}"
     );
@@ -169,7 +169,7 @@ async fn product_from_json_rejects_array_shape() {
     .await;
 
     assert!(
-        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+        matches!(result, Err(crate::error::BzrError::InputValidation { message: ref msg, .. })
             if msg.contains("expects a JSON object")),
         "expected object-shape validation, got {result:?}"
     );

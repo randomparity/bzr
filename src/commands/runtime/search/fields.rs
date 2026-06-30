@@ -21,7 +21,7 @@ pub(crate) fn validate_table_columns(spec: ColumnSpec<'_>) -> crate::error::Resu
                 if partition.unknown.is_empty() {
                     default_selected_fields()
                 } else {
-                    return Err(crate::error::BzrError::InputValidation(format!(
+                    return Err(crate::error::BzrError::input(format!(
                         "none of the requested fields are known bug fields: {}",
                         partition.unknown.join(", ")
                     )));
@@ -33,7 +33,7 @@ pub(crate) fn validate_table_columns(spec: ColumnSpec<'_>) -> crate::error::Resu
     };
     apply_exclude(&mut columns, spec.exclude);
     if columns.is_empty() {
-        return Err(crate::error::BzrError::InputValidation(
+        return Err(crate::error::BzrError::input(
             "--exclude-fields removed every table column; nothing left to display".into(),
         ));
     }
@@ -59,9 +59,9 @@ pub(crate) fn validate_json_field_selection(spec: ColumnSpec<'_>) -> crate::erro
         keys.remove(canonical);
     }
     if keys.is_empty() {
-        return Err(crate::error::BzrError::InputValidation(
+        return Err(crate::error::BzrError::input(
             "the field selection leaves no fields to emit; \
-             adjust --fields / --exclude-fields"
+         adjust --fields / --exclude-fields"
                 .into(),
         ));
     }

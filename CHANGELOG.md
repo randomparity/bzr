@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `--json` / `--output ndjson` error objects (on stderr) now carry optional,
+  variant-specific keys beyond `type`/`message`/`exit_code`, so an agent can
+  branch on structured data instead of parsing the message: `field`/`value` for
+  input validation, `bug_id`/`last_change_time`/`if_match_token` for a mid-air
+  collision, `resource`/`identifier` for not-found, `status` for HTTP errors,
+  `api_code` for API faults, `succeeded`/`failed` for a partial batch, and
+  `server`/`expected`/`actual` for TLS trust changes. The published
+  `bzr schema error` is extended and `SCHEMA_VERSION` bumps to `0.6.1` (additive).
+  The error stays on stderr; stdout and exit codes are unchanged. See ADR-0014.
+  (#482)
+
 - Agent-skills installers (`agent-skills/install.sh`, `install.ps1`) can install
   without a repo clone: piped via `curl … | sh` / a PowerShell scriptblock, they
   download the skill payload from GitHub when no local `skills/` directory is

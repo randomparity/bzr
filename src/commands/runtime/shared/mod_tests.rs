@@ -76,7 +76,7 @@ fn classify_both_is_mutually_exclusive_error() {
     )
     .unwrap_err();
     match err {
-        BzrError::InputValidation(msg) => {
+        BzrError::InputValidation { message: msg, .. } => {
             assert!(msg.contains("--comment"), "names inline flag: {msg}");
             assert!(msg.contains("--comment-file"), "names file flag: {msg}");
         }
@@ -124,7 +124,9 @@ fn materialize_missing_file_is_input_validation() {
     )
     .unwrap_err();
     match err {
-        BzrError::InputValidation(msg) => assert!(msg.contains("--body-file"), "{msg}"),
+        BzrError::InputValidation { message: msg, .. } => {
+            assert!(msg.contains("--body-file"), "{msg}");
+        }
         other => panic!("expected InputValidation, got {other:?}"),
     }
 }
@@ -173,7 +175,7 @@ fn materialize_optional_comment_body_rejects_private_without_body() {
     let err = materialize_optional_comment_body(None, None, true).unwrap_err();
     assert!(matches!(
         err,
-        BzrError::InputValidation(ref msg)
+        BzrError::InputValidation { message: ref msg, .. }
             if msg.contains("--comment-private") && msg.contains("--comment-file")
     ));
 }
@@ -188,7 +190,7 @@ fn materialize_comment_body_rejects_required_private_body() {
     .unwrap_err();
     assert!(matches!(
         err,
-        BzrError::InputValidation(ref msg)
+        BzrError::InputValidation { message: ref msg, .. }
             if msg.contains("--comment-private") && msg.contains("--comment-file")
     ));
 }
@@ -203,6 +205,6 @@ fn materialize_comment_body_rejects_whitespace() {
     .unwrap_err();
     assert!(matches!(
         err,
-        BzrError::InputValidation(ref msg) if msg.contains("empty comment")
+        BzrError::InputValidation { message: ref msg, .. } if msg.contains("empty comment")
     ));
 }

@@ -24,14 +24,14 @@ pub fn parse_flags(raw: &[String]) -> Result<Vec<FlagUpdate>> {
 fn parse_single_flag(s: &str) -> Result<(String, FlagStatus, Option<String>)> {
     // Find the status character (+, -, ?, X)
     let status_pos = s.find(['+', '-', '?', 'X']).ok_or_else(|| {
-        BzrError::InputValidation(format!(
+        BzrError::input(format!(
             "invalid flag '{s}': must contain +, -, ?, or X (e.g. 'review?')"
         ))
     })?;
 
     let name = s[..status_pos].to_string();
     if name.is_empty() {
-        return Err(BzrError::InputValidation(format!(
+        return Err(BzrError::input(format!(
             "invalid flag '{s}': flag name cannot be empty"
         )));
     }
@@ -50,7 +50,7 @@ fn parse_single_flag(s: &str) -> Result<(String, FlagStatus, Option<String>)> {
     } else if remainder.is_empty() {
         None
     } else {
-        return Err(BzrError::InputValidation(format!(
+        return Err(BzrError::input(format!(
             "invalid flag '{s}': requestee must be in parentheses"
         )));
     };

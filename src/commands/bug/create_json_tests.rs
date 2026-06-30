@@ -190,10 +190,25 @@ fn bug_create_input_schema_documents_array_form() {
 }
 
 #[test]
+fn missing_required_field_attributes_the_field() {
+    let err = JsonCreateBug::default().into_params().unwrap_err();
+    let d = err.structured_detail();
+    assert_eq!(
+        d.get("field").and_then(serde_json::Value::as_str),
+        Some("product"),
+        "missing-required error names the field: {d:?}"
+    );
+    assert!(
+        !d.contains_key("value"),
+        "value is absent for a missing field: {d:?}"
+    );
+}
+
+#[test]
 fn parse_one_or_many_rejects_non_object_scalar() {
     let err = crate::commands::runtime::input::from_json::parse_one_or_many::<JsonCreateBug>("42")
         .unwrap_err();
-    assert!(matches!(err, BzrError::InputValidation(_)));
+    assert!(matches!(err, BzrError::InputValidation { .. }));
 }
 
 #[test]
@@ -202,7 +217,9 @@ fn parse_one_or_many_rejects_malformed_json() {
         crate::commands::runtime::input::from_json::parse_one_or_many::<JsonCreateBug>("{not json")
             .unwrap_err();
     match err {
-        BzrError::InputValidation(msg) => assert!(msg.contains("invalid JSON"), "{msg}"),
+        BzrError::InputValidation { message: msg, .. } => {
+            assert!(msg.contains("invalid JSON"), "{msg}");
+        }
         other => panic!("expected InputValidation, got {other:?}"),
     }
 }
@@ -255,7 +272,7 @@ fn compound_empty_comment_body_is_rejected() {
     .unwrap();
     let err = entry.take_plan().unwrap_err();
     assert_eq!(err.exit_code(), 7);
-    assert!(matches!(err, BzrError::InputValidation(_)));
+    assert!(matches!(err, BzrError::InputValidation { .. }));
 }
 
 #[test]

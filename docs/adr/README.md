@@ -20,3 +20,4 @@ rejected.
 | [0011](0011-progress-ndjson-stream.md) | Structured progress stream on stderr (`--progress ndjson`) | Accepted |
 | [0012](0012-compound-create-report-not-rollback.md) | Compound `bug create` reports partial failure; it does not roll back | Accepted |
 | [0013](0013-skills-installer-remote-fetch.md) | Agent-skills installer fetches its payload from a GitHub tarball, unverified | Accepted |
+| [0014](0014-structured-error-detail-keys.md) | Structured per-variant detail keys on the `--json` error object | Accepted |

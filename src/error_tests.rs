@@ -101,7 +101,7 @@ fn exit_code_http_status() {
 
 #[test]
 fn exit_code_input_validation() {
-    let err = BzrError::InputValidation("bad flag".into());
+    let err = BzrError::input("bad flag".into());
     assert_eq!(err.exit_code(), 7);
     assert_eq!(err.error_type(), "input");
     assert_eq!(err.to_string(), "bad flag");
@@ -269,4 +269,191 @@ fn is_permissive_bug_view_error_false_for_transport_and_auth() {
 
     let err = BzrError::XmlRpc("transport".into());
     assert!(!err.is_permissive_bug_view_error());
+}
+
+fn detail(err: &BzrError) -> serde_json::Map<String, serde_json::Value> {
+    err.structured_detail()
+}
+
+#[test]
+fn structured_detail_collision_carries_retry_tokens() {
+    let err = BzrError::MidAirCollision {
+        id: 42,
+        expected: "TOKEN-A".into(),
+        actual: "2026-06-19T12:00:00Z".into(),
+    };
+    let d = detail(&err);
+    assert_eq!(
+        d.get("bug_id").and_then(serde_json::Value::as_u64),
+        Some(42)
+    );
+    assert_eq!(
+        d.get("last_change_time")
+            .and_then(serde_json::Value::as_str),
+        Some("2026-06-19T12:00:00Z")
+    );
+    assert_eq!(
+        d.get("if_match_token").and_then(serde_json::Value::as_str),
+        Some("TOKEN-A")
+    );
+}
+
+#[test]
+fn structured_detail_input_field_carries_field_and_value() {
+    let err = BzrError::input_field(
+        "deadline: 'x' is not a valid date".into(),
+        "deadline",
+        Some("x".into()),
+    );
+    let d = detail(&err);
+    assert_eq!(
+        d.get("field").and_then(serde_json::Value::as_str),
+        Some("deadline")
+    );
+    assert_eq!(
+        d.get("value").and_then(serde_json::Value::as_str),
+        Some("x")
+    );
+}
+
+#[test]
+fn structured_detail_plain_input_has_no_attribution() {
+    let err = BzrError::input("bad flag".into());
+    let d = detail(&err);
+    assert!(!d.contains_key("field"), "{d:?}");
+    assert!(!d.contains_key("value"), "{d:?}");
+}
+
+#[test]
+fn structured_detail_input_field_without_value_omits_value() {
+    let err = BzrError::input_field("product is required".into(), "product", None);
+    let d = detail(&err);
+    assert_eq!(
+        d.get("field").and_then(serde_json::Value::as_str),
+        Some("product")
+    );
+    assert!(!d.contains_key("value"), "value absent when unknown: {d:?}");
+}
+
+#[test]
+fn structured_detail_not_found_carries_resource_and_identifier() {
+    let err = BzrError::NotFound {
+        resource: "bug",
+        id: "999".into(),
+    };
+    let d = detail(&err);
+    assert_eq!(
+        d.get("resource").and_then(serde_json::Value::as_str),
+        Some("bug")
+    );
+    assert_eq!(
+        d.get("identifier").and_then(serde_json::Value::as_str),
+        Some("999")
+    );
+}
+
+#[test]
+fn structured_detail_http_status_carries_status() {
+    let err = BzrError::HttpStatus {
+        status: 404,
+        body: "Not Found".into(),
+    };
+    let d = detail(&err);
+    assert_eq!(
+        d.get("status").and_then(serde_json::Value::as_u64),
+        Some(404)
+    );
+}
+
+#[test]
+fn structured_detail_api_carries_api_code() {
+    let err = BzrError::Api {
+        code: 101,
+        message: "Invalid Bug ID".into(),
+    };
+    let d = detail(&err);
+    assert_eq!(
+        d.get("api_code").and_then(serde_json::Value::as_i64),
+        Some(101)
+    );
+}
+
+#[test]
+fn structured_detail_batch_partial_failure_carries_counts() {
+    let err = BzrError::BatchPartialFailure {
+        succeeded: 3,
+        failed: 2,
+    };
+    let d = detail(&err);
+    assert_eq!(
+        d.get("succeeded").and_then(serde_json::Value::as_u64),
+        Some(3)
+    );
+    assert_eq!(d.get("failed").and_then(serde_json::Value::as_u64), Some(2));
+}
+
+#[test]
+fn structured_detail_pin_mismatch_carries_server_and_pins() {
+    let err = BzrError::PinMismatch {
+        server: "bugzilla.example".into(),
+        expected: "AAAA".into(),
+        actual: "BBBB".into(),
+    };
+    let d = detail(&err);
+    assert_eq!(
+        d.get("server").and_then(serde_json::Value::as_str),
+        Some("bugzilla.example")
+    );
+    assert_eq!(
+        d.get("expected").and_then(serde_json::Value::as_str),
+        Some("AAAA")
+    );
+    assert_eq!(
+        d.get("actual").and_then(serde_json::Value::as_str),
+        Some("BBBB")
+    );
+}
+
+#[test]
+fn structured_detail_never_emits_reserved_keys() {
+    let errs = [
+        BzrError::input_field("m".into(), "f", Some("v".into())),
+        BzrError::NotFound {
+            resource: "bug",
+            id: "1".into(),
+        },
+        BzrError::HttpStatus {
+            status: 404,
+            body: String::new(),
+        },
+        BzrError::Api {
+            code: 1,
+            message: "m".into(),
+        },
+        BzrError::BatchPartialFailure {
+            succeeded: 1,
+            failed: 1,
+        },
+        BzrError::MidAirCollision {
+            id: 1,
+            expected: "a".into(),
+            actual: "b".into(),
+        },
+        BzrError::IssuerChanged {
+            server: "s".into(),
+            expected_issuer: "a".into(),
+            actual_issuer: "b".into(),
+        },
+        BzrError::Config("c".into()),
+    ];
+    for err in &errs {
+        let d = detail(err);
+        for reserved in ["type", "message", "exit_code"] {
+            assert!(
+                !d.contains_key(reserved),
+                "{} leaked reserved key {reserved}",
+                err.error_type()
+            );
+        }
+    }
 }

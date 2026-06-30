@@ -140,7 +140,7 @@ async fn dispatch_rejects_dry_run_on_unsupported_command() {
 
     assert!(matches!(
         result,
-        Err(error::BzrError::InputValidation(ref msg)) if msg.contains("--dry-run")
+        Err(error::BzrError::InputValidation { message: ref msg, .. }) if msg.contains("--dry-run")
     ));
 }
 
@@ -279,7 +279,7 @@ async fn dispatch_validates_mutation_args_before_credentials() {
 
     assert!(matches!(
         result,
-        Err(error::BzrError::InputValidation(ref msg))
+        Err(error::BzrError::InputValidation { message: ref msg, .. })
             if msg.contains("'name' is required")
     ));
 }
@@ -307,7 +307,7 @@ async fn dispatch_rejects_dry_run_on_group_membership_mutation() {
 
     assert!(matches!(
         result,
-        Err(error::BzrError::InputValidation(ref msg)) if msg.contains("product create")
+        Err(error::BzrError::InputValidation { message: ref msg, .. }) if msg.contains("product create")
             && msg.contains("group create/update")
     ));
 }

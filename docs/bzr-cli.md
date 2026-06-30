@@ -2318,7 +2318,7 @@ Every pretty `--json` response is wrapped in a stable envelope:
 
 ```json
 {
-  "schema_version": "0.6.0",
+  "schema_version": "0.6.1",
   "data": <the command's payload>
 }
 ```
@@ -2333,7 +2333,7 @@ bzr --json schema | jq -r '.schema_version'   # the contract version itself
 ```
 
 `--json` error output carries the version too, beside an `error` object:
-`{"schema_version":"0.6.0","error":{"type":...,"message":...,"exit_code":...}}`.
+`{"schema_version":"0.6.1","error":{"type":...,"message":...,"exit_code":...}}`.
 
 Two outputs are deliberately **not** enveloped:
 
@@ -2342,6 +2342,46 @@ Two outputs are deliberately **not** enveloped:
   out of band via `bzr schema --json` (`.schema_version`) or `bzr --version`.
 - **`bzr schema <name>`** — prints the raw JSON-Schema document verbatim. Only the
   bare `bzr schema` *list* is enveloped.
+
+### Structured error body
+
+When a command fails under `--json` / `--output ndjson`, the structured `error`
+object is written to **stderr** (stdout carries success payloads only; detect
+failure via the exit code, then read `error` from stderr). Its schema is
+published as `bzr schema error`. Every error carries three universal keys plus
+optional, variant-specific keys keyed by `type` — **branch on `type` first**,
+then read the keys relevant to that type:
+
+| Key | Type | Present for `type` | Meaning |
+|-----|------|--------------------|---------|
+| `type` | string | all | Error class (matches `BzrError::error_type()`). |
+| `message` | string | all | Human-readable message (same text as the stderr prose in table mode). |
+| `exit_code` | integer | all | Process exit code (matches the table below). |
+| `field` | string | `input` | The offending field or CLI flag (e.g. `--deadline`, `--fields`, `product`), when known. |
+| `value` | string | `input` | The rejected value, when known. |
+| `bug_id` | integer | `collision` | The bug whose write was rejected. |
+| `last_change_time` | string | `collision` | The bug's current `last_change_time`; re-read and retry against this. |
+| `if_match_token` | string | `collision` | The now-stale token the client sent. |
+| `resource` | string | `not_found` | The resource kind (e.g. `bug`). |
+| `identifier` | string | `not_found` | The identifier that was not found. |
+| `status` | integer | `http` | The HTTP status code. |
+| `api_code` | integer | `api` | The Bugzilla fault code. |
+| `succeeded` / `failed` | integer | `batch_partial_failure` | Counts of elements that succeeded / failed. |
+| `server` / `expected` / `actual` | string | `tls` | The server whose TLS trust changed and the expected vs. presented pin/issuer. |
+
+```bash
+# Recover the field an agent must fix after a rejected mutation:
+bzr --json bug update 123 --deadline bogus 2>err.json; jq -r '.error.field, .error.value' err.json
+# Retry a mid-air collision against the server's current state:
+tok=$(jq -r '.error.last_change_time' err.json)
+```
+
+For a **partial batch failure** (`type: "batch_partial_failure"`, exit 11) the
+`error` object carries only the `succeeded`/`failed` counts. The per-element
+`failed[]` array (each with `index` / `error`, and `step` for a compound
+sub-step) is part of the command's **stdout** result body
+(`batch-create-result` / `batch-result` schemas), printed before the error — read
+per-element detail there, not from the stderr `error` object.
 
 ### JSON Output Stability
 

@@ -102,7 +102,7 @@ pub(crate) fn launch(initial: &str, prefix: &str) -> Result<String> {
         })?;
 
     if !status.success() {
-        return Err(BzrError::InputValidation(format!(
+        return Err(BzrError::input(format!(
             "{editor} exited with error while editing '{}'",
             tmpfile.path.display()
         )));

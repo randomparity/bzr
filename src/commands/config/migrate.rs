@@ -23,7 +23,7 @@ pub(super) fn handle(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     if !yes {
-        return Err(crate::error::BzrError::InputValidation(
+        return Err(crate::error::BzrError::input(
             "migrate-to-keyring requires --yes to confirm non-interactive migration".into(),
         ));
     }

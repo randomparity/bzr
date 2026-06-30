@@ -33,7 +33,7 @@ pub(crate) fn merge_copy<T: Copy>(target: &mut Option<T>, value: Option<T>) {
 pub(crate) fn required_string(value: Option<String>, field: &str) -> Result<String> {
     let flag = field.replace('_', "-");
     value.ok_or_else(|| {
-        BzrError::InputValidation(format!(
+        BzrError::input(format!(
             "--from-json: '{field}' is required (set it in the JSON or via --{flag})"
         ))
     })
@@ -46,10 +46,10 @@ pub(crate) fn resolve_string_target(
     missing: &str,
 ) -> Result<String> {
     match (positional, json) {
-        (Some(_), Some(_)) => Err(BzrError::InputValidation(conflict.into())),
+        (Some(_), Some(_)) => Err(BzrError::input(conflict.into())),
         (Some(value), None) => Ok(value.to_string()),
         (None, Some(value)) => Ok(value),
-        (None, None) => Err(BzrError::InputValidation(missing.into())),
+        (None, None) => Err(BzrError::input(missing.into())),
     }
 }
 
@@ -66,23 +66,22 @@ fn read_raw(arg: &str) -> Result<String> {
 
 fn parse_object<T: DeserializeOwned>(raw: &str) -> Result<T> {
     let value: serde_json::Value = serde_json::from_str(raw)
-        .map_err(|e| BzrError::InputValidation(format!("--from-json: invalid JSON: {e}")))?;
+        .map_err(|e| BzrError::input(format!("--from-json: invalid JSON: {e}")))?;
     match value {
-        serde_json::Value::Object(_) => serde_json::from_value(value)
-            .map_err(|e| BzrError::InputValidation(format!("--from-json: {e}"))),
-        _ => Err(BzrError::InputValidation(
-            "--from-json expects a JSON object".into(),
-        )),
+        serde_json::Value::Object(_) => {
+            serde_json::from_value(value).map_err(|e| BzrError::input(format!("--from-json: {e}")))
+        }
+        _ => Err(BzrError::input("--from-json expects a JSON object".into())),
     }
 }
 
 pub(crate) fn parse_one_or_many<T: DeserializeOwned>(raw: &str) -> Result<JsonOneOrMany<T>> {
     let value: serde_json::Value = serde_json::from_str(raw)
-        .map_err(|e| BzrError::InputValidation(format!("--from-json: invalid JSON: {e}")))?;
+        .map_err(|e| BzrError::input(format!("--from-json: invalid JSON: {e}")))?;
     match value {
         serde_json::Value::Object(_) => {
             let one = serde_json::from_value(value)
-                .map_err(|e| BzrError::InputValidation(format!("--from-json: {e}")))?;
+                .map_err(|e| BzrError::input(format!("--from-json: {e}")))?;
             Ok(JsonOneOrMany::One(Box::new(one)))
         }
         serde_json::Value::Array(items) => {
@@ -90,14 +89,13 @@ pub(crate) fn parse_one_or_many<T: DeserializeOwned>(raw: &str) -> Result<JsonOn
                 .into_iter()
                 .enumerate()
                 .map(|(i, v)| {
-                    serde_json::from_value(v).map_err(|e| {
-                        BzrError::InputValidation(format!("--from-json item {i}: {e}"))
-                    })
+                    serde_json::from_value(v)
+                        .map_err(|e| BzrError::input(format!("--from-json item {i}: {e}")))
                 })
                 .collect::<Result<Vec<_>>>()?;
             Ok(JsonOneOrMany::Many(entries))
         }
-        _ => Err(BzrError::InputValidation(
+        _ => Err(BzrError::input(
             "--from-json expects a JSON object or an array of objects".into(),
         )),
     }

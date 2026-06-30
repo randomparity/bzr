@@ -195,7 +195,7 @@ async fn component_update_rejects_id_and_product_component_target() {
     .await;
 
     assert!(
-        matches!(result, Err(BzrError::InputValidation(ref msg))
+        matches!(result, Err(BzrError::InputValidation { message: ref msg, .. })
             if msg.contains("either component ID or --product/--component")),
         "expected mixed-target validation, got {result:?}"
     );
@@ -222,7 +222,7 @@ async fn component_update_rejects_product_without_component() {
     .await;
 
     assert!(
-        matches!(result, Err(BzrError::InputValidation(ref msg))
+        matches!(result, Err(BzrError::InputValidation { message: ref msg, .. })
             if msg.contains("--product requires --component")),
         "expected missing component validation, got {result:?}"
     );
@@ -280,7 +280,7 @@ async fn component_update_named_target_duplicate_component_is_ambiguous() {
     .await;
 
     assert!(
-        matches!(result, Err(BzrError::InputValidation(ref msg))
+        matches!(result, Err(BzrError::InputValidation { message: ref msg, .. })
             if msg.contains("ambiguous") && msg.contains("numeric component ID")),
         "expected duplicate component ambiguity, got {result:?}"
     );
@@ -437,7 +437,7 @@ async fn component_update_from_json_rejects_positional_and_json_target() {
     .await;
 
     assert!(
-        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+        matches!(result, Err(crate::error::BzrError::InputValidation { message: ref msg, .. })
             if msg.contains("cannot combine positional component ID")),
         "expected target conflict, got {result:?}"
     );
@@ -465,7 +465,7 @@ async fn component_update_from_json_rejects_id_and_product_component_target() {
     .await;
 
     assert!(
-        matches!(result, Err(BzrError::InputValidation(ref msg))
+        matches!(result, Err(BzrError::InputValidation { message: ref msg, .. })
             if msg.contains("either component ID or --product/--component")),
         "expected JSON mixed-target validation, got {result:?}"
     );
@@ -493,7 +493,7 @@ async fn component_update_from_json_rejects_partial_product_component_target() {
     .await;
 
     assert!(
-        matches!(result, Err(BzrError::InputValidation(ref msg))
+        matches!(result, Err(BzrError::InputValidation { message: ref msg, .. })
             if msg.contains("'product' and 'component' must be supplied together")),
         "expected partial JSON name-target validation, got {result:?}"
     );
@@ -520,7 +520,7 @@ async fn component_update_without_fields_is_rejected() {
     .await;
 
     assert!(
-        matches!(result, Err(crate::error::BzrError::InputValidation(ref msg))
+        matches!(result, Err(crate::error::BzrError::InputValidation { message: ref msg, .. })
             if msg.contains("no fields to update")),
         "expected input validation, got {result:?}"
     );

@@ -740,7 +740,10 @@ async fn list_count_with_offset_is_rejected() {
     )
     .await
     .unwrap_err();
-    assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
+    assert!(matches!(
+        err,
+        crate::error::BzrError::InputValidation { .. }
+    ));
     assert_eq!(err.exit_code(), 7);
 }
 

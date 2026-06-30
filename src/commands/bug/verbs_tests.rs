@@ -432,7 +432,7 @@ async fn reopen_unknown_status_is_rejected() {
     .await
     .unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(m)
+        matches!(&err, crate::error::BzrError::InputValidation { message: m, .. }
             if m.contains("REOPENED") && m.contains("CONFIRMED")),
         "got {err:?}"
     );
@@ -460,7 +460,7 @@ async fn close_wrong_case_status_is_rejected() {
     .await
     .unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(m) if m.contains("verified")),
+        matches!(&err, crate::error::BzrError::InputValidation { message: m, .. } if m.contains("verified")),
         "got {err:?}"
     );
 }
@@ -527,7 +527,7 @@ async fn close_dry_run_rejects_empty_status_without_network() {
     .unwrap_err();
 
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(m)
+        matches!(&err, crate::error::BzrError::InputValidation { message: m, .. }
             if m.contains("--status cannot be empty")),
         "got {err:?}"
     );
@@ -691,7 +691,7 @@ async fn close_private_comment_without_body_is_rejected() {
     .await;
     let err = result.unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(m) if m.contains("--comment-private")),
+        matches!(&err, crate::error::BzrError::InputValidation { message: m, .. } if m.contains("--comment-private")),
         "got {err:?}"
     );
 }

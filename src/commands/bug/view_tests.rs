@@ -578,7 +578,10 @@ async fn view_permissive_single_id_rejected() {
     .await;
     assert!(result.is_err());
     let err = result.unwrap_err();
-    assert!(matches!(err, crate::error::BzrError::InputValidation(_)));
+    assert!(matches!(
+        err,
+        crate::error::BzrError::InputValidation { .. }
+    ));
     assert_eq!(err.exit_code(), 7);
     assert!(err
         .to_string()

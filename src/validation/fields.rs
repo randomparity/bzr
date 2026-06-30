@@ -28,8 +28,8 @@ impl FieldProjection {
     /// Returns [`BzrError::InputValidation`] (exit 7) when any include or
     /// exclude token is not in `known`, or when the resolved key set is empty.
     pub fn resolve(include: Option<&str>, exclude: Option<&str>, known: &[&str]) -> Result<Self> {
-        let include_set = parse_tokens(include, known)?;
-        let exclude_set = parse_tokens(exclude, known)?.unwrap_or_default();
+        let include_set = parse_tokens(include, known, "--fields")?;
+        let exclude_set = parse_tokens(exclude, known, "--exclude-fields")?.unwrap_or_default();
 
         let effective: BTreeSet<String> = match &include_set {
             Some(inc) => inc.difference(&exclude_set).cloned().collect(),
@@ -40,9 +40,9 @@ impl FieldProjection {
                 .collect(),
         };
         if effective.is_empty() {
-            return Err(BzrError::InputValidation(
+            return Err(BzrError::input(
                 "the field selection leaves no fields to emit; \
-                 adjust --fields / --exclude-fields"
+             adjust --fields / --exclude-fields"
                     .into(),
             ));
         }
@@ -75,8 +75,14 @@ impl FieldProjection {
 }
 
 /// Tokenize a comma list, validating every non-blank token against `known`.
-/// Returns `None` when the input is absent or all-blank.
-fn parse_tokens(list: Option<&str>, known: &[&str]) -> Result<Option<BTreeSet<String>>> {
+/// Returns `None` when the input is absent or all-blank. `flag` names the
+/// originating CLI flag (`--fields` / `--exclude-fields`) so a rejected token is
+/// surfaced as the `field` / `value` attribution in `--json` error output.
+fn parse_tokens(
+    list: Option<&str>,
+    known: &[&str],
+    flag: &str,
+) -> Result<Option<BTreeSet<String>>> {
     let Some(list) = list else {
         return Ok(None);
     };
@@ -87,10 +93,14 @@ fn parse_tokens(list: Option<&str>, known: &[&str]) -> Result<Option<BTreeSet<St
             continue;
         }
         if !known.contains(&token) {
-            return Err(BzrError::InputValidation(format!(
-                "unknown field '{token}'; known fields: {}",
-                known.join(", ")
-            )));
+            return Err(BzrError::input_field(
+                format!(
+                    "unknown field '{token}'; known fields: {}",
+                    known.join(", ")
+                ),
+                flag,
+                Some(token.to_string()),
+            ));
         }
         out.insert(token.to_string());
     }

@@ -24,7 +24,7 @@ fn comment_update(args: &CommentArgs) -> Result<Option<CommentUpdate>> {
 /// or server lookup path.
 fn validate_target_status_value(status: &str) -> Result<()> {
     if status.trim().is_empty() {
-        return Err(BzrError::InputValidation("--status cannot be empty".into()));
+        return Err(BzrError::input("--status cannot be empty".into()));
     }
     Ok(())
 }
@@ -49,7 +49,7 @@ async fn validate_target_status(client: &BugzillaClient, status: &str) -> Result
         .filter_map(|v| v.name.as_deref())
         .filter(|n| !n.is_empty())
         .collect();
-    Err(BzrError::InputValidation(format!(
+    Err(BzrError::input(format!(
         "no status named '{status}' on this server; valid statuses: {}",
         valid.join(", ")
     )))

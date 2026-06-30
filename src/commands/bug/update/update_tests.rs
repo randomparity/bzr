@@ -438,7 +438,7 @@ async fn bug_update_from_json_rejects_unknown_field() {
     .unwrap_err();
 
     assert!(
-        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("bogus") || msg.contains("unknown field")),
+        matches!(err, crate::error::BzrError::InputValidation { message: ref msg, .. } if msg.contains("bogus") || msg.contains("unknown field")),
         "expected unknown-field validation, got {err:?}"
     );
     assert_eq!(received_put_count(&mock).await, 0);
@@ -458,7 +458,7 @@ async fn bug_update_from_json_rejects_empty_array() {
     .unwrap_err();
 
     assert!(
-        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("empty array")),
+        matches!(err, crate::error::BzrError::InputValidation { message: ref msg, .. } if msg.contains("empty array")),
         "expected empty-array validation, got {err:?}"
     );
     assert_eq!(received_put_count(&mock).await, 0);
@@ -479,7 +479,7 @@ async fn bug_update_from_json_rejects_array_item_without_id() {
     .unwrap_err();
 
     assert!(
-        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("id is required")),
+        matches!(err, crate::error::BzrError::InputValidation { message: ref msg, .. } if msg.contains("id is required")),
         "expected array-item id validation, got {err:?}"
     );
     assert_eq!(received_put_count(&mock).await, 0);
@@ -500,7 +500,7 @@ async fn bug_update_from_json_rejects_object_without_target_id() {
     .unwrap_err();
 
     assert!(
-        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("requires positional IDs") && msg.contains("id field")),
+        matches!(err, crate::error::BzrError::InputValidation { message: ref msg, .. } if msg.contains("requires positional IDs") && msg.contains("id field")),
         "expected object target validation, got {err:?}"
     );
     assert_eq!(received_put_count(&mock).await, 0);
@@ -521,7 +521,7 @@ async fn bug_update_from_json_rejects_mixed_positional_and_json_id() {
     .unwrap_err();
 
     assert!(
-        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("id") && msg.contains("positional")),
+        matches!(err, crate::error::BzrError::InputValidation { message: ref msg, .. } if msg.contains("id") && msg.contains("positional")),
         "expected mixed-id-source validation, got {err:?}"
     );
     assert_eq!(received_put_count(&mock).await, 0);
@@ -542,7 +542,7 @@ async fn bug_update_from_json_rejects_dupe_of_with_status() {
     .unwrap_err();
 
     assert!(
-        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("--dupe-of") && msg.contains("--status")),
+        matches!(err, crate::error::BzrError::InputValidation { message: ref msg, .. } if msg.contains("--dupe-of") && msg.contains("--status")),
         "expected dupe/status conflict validation, got {err:?}"
     );
     assert_eq!(received_put_count(&mock).await, 0);
@@ -563,7 +563,7 @@ async fn bug_update_from_json_rejects_json_comment_file_stdin() {
     .unwrap_err();
 
     assert!(
-        matches!(err, crate::error::BzrError::InputValidation(ref msg) if msg.contains("comment_file") && msg.contains("stdin")),
+        matches!(err, crate::error::BzrError::InputValidation { message: ref msg, .. } if msg.contains("comment_file") && msg.contains("stdin")),
         "expected comment_file stdin validation, got {err:?}"
     );
     assert_eq!(received_put_count(&mock).await, 0);
@@ -647,7 +647,7 @@ async fn bug_update_alias_multiple_ids_rejected_before_connect() {
 
     assert!(matches!(
         result,
-        Err(crate::error::BzrError::InputValidation(ref msg)) if msg.contains("--alias")
+        Err(crate::error::BzrError::InputValidation { message: ref msg, .. }) if msg.contains("--alias")
     ));
     let received = mock.received_requests().await.unwrap();
     assert!(
@@ -1005,7 +1005,7 @@ async fn bug_update_expect_unchanged_rejects_unparseable_expected_value() {
 
     let err = result.unwrap_err();
     assert!(
-        matches!(&err, crate::error::BzrError::InputValidation(_)),
+        matches!(&err, crate::error::BzrError::InputValidation { .. }),
         "unparseable expected value should be InputValidation, got {err:?}"
     );
     assert_eq!(err.exit_code(), 7);
@@ -1219,7 +1219,7 @@ async fn bug_update_dry_run_still_validates_empty_update() {
 
     assert!(matches!(
         result,
-        Err(crate::error::BzrError::InputValidation(_))
+        Err(crate::error::BzrError::InputValidation { .. })
     ));
 }
 

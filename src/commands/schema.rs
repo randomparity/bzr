@@ -92,7 +92,7 @@ pub async fn execute(name: Option<&str>, ctx: &CommandContext, w: &mut Writers<'
 /// it is emitted as-is regardless of `--format` (no table/NDJSON projection).
 fn write_one(name: &str, w: &mut Writers<'_>) -> Result<()> {
     let Some(body) = find(name) else {
-        return Err(BzrError::InputValidation(format!(
+        return Err(BzrError::input(format!(
             "unknown schema '{name}'; available: {}",
             available_names().join(", ")
         )));

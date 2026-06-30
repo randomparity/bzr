@@ -15,7 +15,7 @@ pub(super) fn handle(
     super::validate_template(&mut template)?;
 
     if template.is_empty() {
-        return Err(BzrError::InputValidation(
+        return Err(BzrError::input(
             "template must have at least one field set".into(),
         ));
     }

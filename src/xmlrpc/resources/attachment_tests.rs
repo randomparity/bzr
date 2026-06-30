@@ -131,7 +131,7 @@ async fn xmlrpc_get_attachments_rejects_bug_id_outside_xmlrpc_integer_range() {
 
     assert!(matches!(
         err,
-        BzrError::InputValidation(ref msg)
+        BzrError::InputValidation { message: ref msg, .. }
             if msg.contains("bug ID") && msg.contains("XML-RPC signed integer range")
     ));
 }
@@ -213,7 +213,7 @@ async fn xmlrpc_get_attachment_by_id_rejects_id_outside_xmlrpc_integer_range() {
 
     assert!(matches!(
         err,
-        BzrError::InputValidation(ref msg)
+        BzrError::InputValidation { message: ref msg, .. }
             if msg.contains("attachment ID") && msg.contains("XML-RPC signed integer range")
     ));
 }

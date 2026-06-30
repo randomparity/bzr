@@ -88,7 +88,7 @@ async fn search_bugs_rejects_id_outside_xmlrpc_integer_range() {
 
     assert!(matches!(
         err,
-        BzrError::InputValidation(ref msg)
+        BzrError::InputValidation { message: ref msg, .. }
             if msg.contains("bug ID") && msg.contains("XML-RPC signed integer range")
     ));
 }
