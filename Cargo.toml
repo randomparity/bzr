@@ -45,7 +45,7 @@ test-helpers = ["dep:wiremock", "dep:tempfile"]
 base64 = "=0.22.1"
 clap = { version = "=4.6.1", features = ["derive"] }
 clap_complete = "=4.6.5"
-rustls = { version = "=0.23.40", default-features = false, features = ["std"] }
+rustls = { version = "=0.23.41", default-features = false, features = ["std"] }
 rustls-native-certs = "=0.8.4"
 sha2 = "=0.10.9"
 webpki-roots = "=1.0.8"
