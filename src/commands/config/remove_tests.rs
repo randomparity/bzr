@@ -171,3 +171,46 @@ async fn remove_server_succeeds_with_other_credential_less_server() {
     assert!(!config.servers.contains_key("dropme"));
     assert!(config.servers.contains_key("keepme"));
 }
+
+/// `remove-server` must still work when an unrelated server is *structurally
+/// invalid* — the case the validation bypass exists for.
+///
+/// A hand-edited config can carry a server with conflicting credential sources
+/// (`api_key` and `api_key_env` both set), which whole-config validation
+/// rejects. Removal cannot worsen that, so it must not be blocked by it —
+/// otherwise the CLI cannot repair a config it can no longer load.
+///
+/// The sibling `remove_server_succeeds_with_other_credential_less_server` does
+/// not cover this: a credential-less server is structurally *valid*, so that
+/// test passes on the validating path too.
+#[tokio::test]
+async fn remove_server_succeeds_with_other_structurally_invalid_server() {
+    let (_lock, _tmp) = setup_empty_config_env().await;
+    seed_inline_server("broken", "https://broken.example.com", "b").await;
+    seed_inline_server("dropme", "https://drop.example.com", "d").await;
+
+    // Hand-edited state: two credential sources on one server.
+    crate::test_helpers::update_config_without_validation(|config| {
+        config.servers.get_mut("broken").unwrap().api_key_env = Some("BROKEN_KEY".into());
+        Ok(())
+    })
+    .unwrap();
+
+    let mut io = CapturedIo::new();
+    let result = execute(
+        &ConfigAction::RemoveServer {
+            name: "dropme".into(),
+        },
+        &CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "remove must not be blocked by an unrelated invalid server: {result:?}"
+    );
+
+    let config = load_config_unvalidated();
+    assert!(!config.servers.contains_key("dropme"));
+    assert!(config.servers.contains_key("broken"));
+}

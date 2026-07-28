@@ -255,3 +255,41 @@ async fn rename_server_succeeds_with_other_credential_less_server() {
     assert!(config.servers.contains_key("renamed"));
     assert!(!config.servers.contains_key("rename-me"));
 }
+
+/// `rename-server` must still work when an unrelated server is *structurally
+/// invalid* — the case the validation bypass exists for. See
+/// `remove_server_succeeds_with_other_structurally_invalid_server` for why the
+/// credential-less sibling test does not cover this.
+#[tokio::test]
+async fn rename_server_succeeds_with_other_structurally_invalid_server() {
+    let (_lock, _tmp) = setup_empty_config_env().await;
+    seed_inline_server("broken", "https://broken.example.com", "b").await;
+    seed_inline_server("rename-me", "https://rename.example.com", "r").await;
+
+    // Hand-edited state: two credential sources on one server.
+    crate::test_helpers::update_config_without_validation(|config| {
+        config.servers.get_mut("broken").unwrap().api_key_env = Some("BROKEN_KEY".into());
+        Ok(())
+    })
+    .unwrap();
+
+    let mut io = CapturedIo::new();
+    let result = execute(
+        &ConfigAction::RenameServer {
+            old: "rename-me".into(),
+            new: "renamed".into(),
+        },
+        &CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "rename must not be blocked by an unrelated invalid server: {result:?}"
+    );
+
+    let config = load_config_unvalidated();
+    assert!(config.servers.contains_key("renamed"));
+    assert!(!config.servers.contains_key("rename-me"));
+    assert!(config.servers.contains_key("broken"));
+}
