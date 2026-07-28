@@ -69,56 +69,47 @@ pub(super) fn set(
 }
 
 pub(super) fn unset(name: &str, ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
-    // Advisory snapshot only, so an unrelated invalid server does not block
-    // this repair path (same rationale as remove/rename). The write below is
-    // likewise unvalidated; a validating read here would make the bypass moot.
-    let config = Config::read_unvalidated_at(ctx.config_path_override())?;
-    let server = config
-        .servers
-        .get(name)
-        .ok_or_else(|| crate::error::BzrError::config(format!("server '{name}' not found")))?;
-    let server_url = server.url.clone();
-    if server.api_key_keyring.is_none() {
-        return Err(crate::error::BzrError::config(format!(
-            "server '{name}' has no keyring credential to unset"
-        )));
-    }
-
+    // Everything is decided inside the mutator, against the config read under
+    // the advisory lock. There is no pre-lock snapshot to disagree with it, so
+    // a concurrent `set-keyring` cannot make this delete the wrong entry, and
+    // the existence/credential checks cannot go stale between check and write.
+    //
     // `update_locked_without_validation`: dropping a credential source cannot
     // improve or worsen an unrelated invalid server, so avoid blocking on
     // whole-config validation (same rationale as remove/rename). Note the
     // resulting credential-less server is itself structurally *valid* —
     // a missing credential is an authentication-time error, not a write-time
-    // one (#278).
-    //
-    // Resolve the service/account from the config the mutator sees, not from
-    // the advisory snapshot above: the snapshot is taken outside the lock, so a
-    // concurrent `set-keyring` between the two would otherwise make this delete
-    // the *old* entry while clearing the *new* ref — orphaning the new secret.
-    let mut keyring_entry: Option<(String, String)> = None;
+    // one (#278). An error raised here aborts the write.
+    let mut keyring_entry = (String::new(), String::new());
     let updated =
         Config::update_locked_without_validation_at(ctx.config_path_override(), |config| {
             let server = config.servers.get_mut(name).ok_or_else(|| {
                 crate::error::BzrError::config(format!("server '{name}' not found"))
             })?;
-            // Re-assert the precondition against the locked read. Erroring here
-            // aborts the write, so a concurrent unset does not produce a
-            // spurious success.
             let keyring_ref = server.api_key_keyring.as_ref().ok_or_else(|| {
                 crate::error::BzrError::config(format!(
                     "server '{name}' has no keyring credential to unset"
                 ))
             })?;
-            keyring_entry = Some((
+            keyring_entry = (
                 keyring_ref.service_or_default().to_string(),
                 keyring_ref.account_or_default(name).to_string(),
-            ));
+            );
             server.api_key_keyring = None;
             Ok(())
         })?;
-    let (service_name, account_name) = keyring_entry.ok_or_else(|| {
-        crate::error::BzrError::config("internal error: keyring reference not captured under lock")
-    })?;
+    // The mutator either errored (aborting the write) or set this, so an empty
+    // pair here means a future edit added an early `Ok` return.
+    debug_assert!(
+        !keyring_entry.0.is_empty(),
+        "keyring coordinates must be captured inside the mutator"
+    );
+    let (service_name, account_name) = keyring_entry;
+    let server_url = updated
+        .servers
+        .get(name)
+        .map(|s| s.url.clone())
+        .unwrap_or_default();
 
     // Delete the secret only after the config write commits, so a failed write
     // never leaves the config pointing at a secret that no longer exists. The

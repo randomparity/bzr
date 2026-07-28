@@ -35,14 +35,14 @@ pub(super) fn handle(name: &str, ctx: &CommandContext, w: &mut Writers<'_>) -> R
     // *old* entry and orphan the secret the removed server actually pointed at.
     let mut keyring_entry: Option<(String, String)> = None;
     Config::update_locked_without_validation_at(ctx.config_path_override(), |config| {
-        if let Some(removed) = config.servers.remove(name) {
-            keyring_entry = removed.api_key_keyring.as_ref().map(|keyring_ref| {
+        keyring_entry = config.servers.remove(name).and_then(|removed| {
+            removed.api_key_keyring.map(|keyring_ref| {
                 (
                     keyring_ref.service_or_default().to_string(),
                     keyring_ref.account_or_default(name).to_string(),
                 )
-            });
-        }
+            })
+        });
         if config.default_server.as_deref() == Some(name) {
             config.default_server = None;
         }
