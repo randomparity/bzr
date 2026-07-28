@@ -256,3 +256,63 @@ async fn remove_server_keeps_the_secret_when_the_config_write_fails() {
     );
     crate::credentials::keyring::delete("bzr", "dropme").unwrap();
 }
+
+/// The keychain coordinates come from the server entry being removed, resolved
+/// from the locked read rather than the pre-lock snapshot.
+///
+/// A decoy secret sits at the *default* coordinates (`bzr` / server name). If
+/// the command ever fell back to defaults instead of reading the entry's
+/// explicit service/account, it would delete the decoy and leave the real
+/// entry behind.
+///
+/// Note: the concurrent-modification window this guards (a `set-keyring`
+/// landing between the snapshot and the lock) cannot be driven from a
+/// single-threaded test without a hook in production code, so this pins the
+/// resolution path rather than the race itself.
+#[cfg(feature = "keyring")]
+#[tokio::test]
+async fn remove_server_deletes_the_entry_named_by_the_removed_server() {
+    crate::credentials::keyring::install_test_store();
+    let (_lock, _tmp) = setup_empty_config_env().await;
+
+    seed_inline_server("dropme", "https://drop.example.com", "d").await;
+
+    // SAFETY: Serialized via ENV_LOCK held by setup_empty_config_env.
+    unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", "real-secret") };
+    execute(
+        &ConfigAction::SetKeyring {
+            name: "dropme".into(),
+            service: Some("custom-svc".into()),
+            account: Some("custom-acct".into()),
+        },
+        &CommandContext::new(None, OutputFormat::Json, None),
+        &mut CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
+    // SAFETY: Serialized via ENV_LOCK held by setup_empty_config_env.
+    unsafe { std::env::remove_var("BZR_KEYRING_TEST_SECRET") };
+
+    crate::credentials::keyring::store("bzr", "dropme", "decoy").unwrap();
+
+    execute(
+        &ConfigAction::RemoveServer {
+            name: "dropme".into(),
+        },
+        &CommandContext::new(None, OutputFormat::Json, None).with_assume_yes(true),
+        &mut CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
+
+    assert!(
+        crate::credentials::keyring::retrieve("custom-svc", "custom-acct").is_err(),
+        "the entry named by the removed server must be deleted"
+    );
+    assert_eq!(
+        crate::credentials::keyring::retrieve("bzr", "dropme").unwrap(),
+        "decoy",
+        "the default-coordinate entry must be untouched"
+    );
+    crate::credentials::keyring::delete("bzr", "dropme").unwrap();
+}

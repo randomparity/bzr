@@ -38,6 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   now prints a `warning:` on stderr when the file it just rewrote is still not
   loadable, instead of reporting plain success. (#278)
 
+- `bzr config unset-keyring` and `config remove-server` now resolve the OS
+  keychain service/account from the config read under the write lock, not from
+  the advisory snapshot taken before it. A `config set-keyring` landing between
+  the two could otherwise point the delete at the previous entry, destroying the
+  superseded secret while the config recorded the new one.
+
 - `bzr config unset-keyring` and `config remove-server` now delete the OS
   keychain entry only *after* the config write commits. Previously the secret
   was destroyed first, so a failed write (read-only config directory, full disk,
