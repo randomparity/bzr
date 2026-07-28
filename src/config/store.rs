@@ -181,6 +181,12 @@ impl Config {
         let content = toml::to_string_pretty(self).map_err(|e| {
             BzrError::config(format!("serialize config file '{}': {e}", path.display()))
         })?;
+        // Check the file mode BEFORE the write: `atomic_write` renames a
+        // `0o600` temp over the target, so afterwards the file always looks
+        // hardened and a pre-existing world-readable config would be silently
+        // fixed with no notice that the credentials in it had been exposed.
+        #[cfg(unix)]
+        warn_if_path_permissions_too_open(&path, 0o077, "config file");
         atomic_write(&path, &content)?;
         Self::warn_on_insecure_permissions(&path);
         Ok(())
