@@ -436,3 +436,50 @@ async fn unset_keyring_then_set_server_recredentials_successfully() {
         Some("RECRED_API_KEY")
     );
 }
+
+/// A failed config write must not destroy the keychain secret.
+///
+/// The delete runs only after the write commits, so a config that still points
+/// at the keyring entry still has a secret behind it. The reverse order leaves
+/// the server referencing a credential that no longer exists, which fails later
+/// with a confusing "entry not found" instead of a clear missing-credential
+/// error.
+#[cfg(all(unix, feature = "keyring"))]
+#[tokio::test]
+async fn unset_keyring_keeps_the_secret_when_the_config_write_fails() {
+    use crate::test_helpers::{config_path, load_config_unvalidated, seed_keyring_secret};
+    use std::os::unix::fs::PermissionsExt as _;
+
+    crate::credentials::keyring::install_test_store();
+    let (_lock, _tmp) = setup_empty_config_env().await;
+
+    seed_inline_server("wfail", "https://wfail.example.com", "w").await;
+    seed_keyring_secret("wfail", "wfail-secret").await;
+
+    // Make the config directory read-only so the locked write cannot proceed.
+    let dir = config_path().parent().unwrap().to_path_buf();
+    let original = std::fs::metadata(&dir).unwrap().permissions();
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+
+    let result = execute(
+        &ConfigAction::UnsetKeyring {
+            name: "wfail".into(),
+        },
+        &CommandContext::new(None, OutputFormat::Json, None),
+        &mut CapturedIo::new().writers(),
+    )
+    .await;
+
+    std::fs::set_permissions(&dir, original).unwrap();
+    assert!(result.is_err(), "precondition: the config write must fail");
+
+    // The config still references the keyring entry, so the secret must remain.
+    assert!(load_config_unvalidated().servers["wfail"]
+        .api_key_keyring
+        .is_some());
+    assert_eq!(
+        crate::credentials::keyring::retrieve("bzr", "wfail").unwrap(),
+        "wfail-secret"
+    );
+    crate::credentials::keyring::delete("bzr", "wfail").unwrap();
+}

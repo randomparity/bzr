@@ -85,8 +85,6 @@ pub(super) fn unset(name: &str, ctx: &CommandContext, w: &mut Writers<'_>) -> Re
     })?;
     let service_name = keyring_ref.service_or_default().to_string();
     let account_name = keyring_ref.account_or_default(name).to_string();
-    // Idempotent: missing entry is not an error.
-    crate::credentials::keyring::delete(&service_name, &account_name)?;
 
     // `update_locked_without_validation`: dropping a credential source cannot
     // improve or worsen an unrelated invalid server, so avoid blocking on
@@ -102,6 +100,15 @@ pub(super) fn unset(name: &str, ctx: &CommandContext, w: &mut Writers<'_>) -> Re
             server.api_key_keyring = None;
             Ok(())
         })?;
+
+    // Delete the secret only after the config write commits, so a failed write
+    // never leaves the config pointing at a secret that no longer exists. The
+    // reverse order loses the credential outright; this order can at worst
+    // orphan an unreferenced keychain entry, which `set-keyring` overwrites.
+    // (Same ordering as `config rename-server`.) Idempotent: a missing entry is
+    // not an error.
+    crate::credentials::keyring::delete(&service_name, &account_name)?;
+
     let path = Config::path_at(ctx.config_path_override())?;
 
     // The write above skipped validation, so the file may still be unloadable
