@@ -9,10 +9,11 @@ pub(super) fn handle(name: &str, ctx: &CommandContext, w: &mut Writers<'_>) -> R
     // Advisory snapshot: read unvalidated so an unrelated invalid server does
     // not block the removal.
     let config = Config::read_unvalidated_at(ctx.config_path_override())?;
-    let server = config
-        .servers
-        .get(name)
-        .ok_or_else(|| crate::error::BzrError::config(format!("server '{name}' not found")))?;
+    if !config.servers.contains_key(name) {
+        return Err(crate::error::BzrError::config(format!(
+            "server '{name}' not found"
+        )));
+    }
 
     // Refuse to remove the current default while other servers remain — that
     // would silently leave bzr with no default. Removing the only server is
@@ -25,17 +26,23 @@ pub(super) fn handle(name: &str, ctx: &CommandContext, w: &mut Writers<'_>) -> R
         )));
     }
 
-    let keyring_entry = server.api_key_keyring.as_ref().map(|keyring_ref| {
-        (
-            keyring_ref.service_or_default().to_string(),
-            keyring_ref.account_or_default(name).to_string(),
-        )
-    });
-
     // `update_locked_without_validation`: removal cannot improve or worsen an
     // unrelated invalid server, so avoid blocking on whole-config validation.
+    //
+    // Resolve the keychain coordinates from the config the mutator sees, not
+    // from the advisory snapshot above: the snapshot is taken outside the lock,
+    // so a concurrent `set-keyring` between the two would otherwise delete the
+    // *old* entry and orphan the secret the removed server actually pointed at.
+    let mut keyring_entry: Option<(String, String)> = None;
     Config::update_locked_without_validation_at(ctx.config_path_override(), |config| {
-        config.servers.remove(name);
+        if let Some(removed) = config.servers.remove(name) {
+            keyring_entry = removed.api_key_keyring.as_ref().map(|keyring_ref| {
+                (
+                    keyring_ref.service_or_default().to_string(),
+                    keyring_ref.account_or_default(name).to_string(),
+                )
+            });
+        }
         if config.default_server.as_deref() == Some(name) {
             config.default_server = None;
         }

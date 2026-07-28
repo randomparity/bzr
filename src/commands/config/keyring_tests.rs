@@ -483,3 +483,59 @@ async fn unset_keyring_keeps_the_secret_when_the_config_write_fails() {
     );
     crate::credentials::keyring::delete("bzr", "wfail").unwrap();
 }
+
+/// The keychain coordinates come from the server entry, resolved from the
+/// locked read rather than the pre-lock snapshot. A decoy at the *default*
+/// coordinates catches any fallback to defaults.
+///
+/// Note: the concurrent-modification window this guards (a `set-keyring`
+/// landing between the snapshot and the lock) cannot be driven from a
+/// single-threaded test without a hook in production code, so this pins the
+/// resolution path rather than the race itself.
+#[cfg(feature = "keyring")]
+#[tokio::test]
+async fn unset_keyring_deletes_the_entry_named_by_the_server() {
+    crate::credentials::keyring::install_test_store();
+    let (_lock, _tmp) = setup_empty_config_env().await;
+
+    seed_inline_server("named", "https://named.example.com", "n").await;
+
+    // SAFETY: Serialized via ENV_LOCK held by setup_empty_config_env.
+    unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", "real-secret") };
+    execute(
+        &ConfigAction::SetKeyring {
+            name: "named".into(),
+            service: Some("named-svc".into()),
+            account: Some("named-acct".into()),
+        },
+        &CommandContext::new(None, OutputFormat::Json, None),
+        &mut CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
+    // SAFETY: Serialized via ENV_LOCK held by setup_empty_config_env.
+    unsafe { std::env::remove_var("BZR_KEYRING_TEST_SECRET") };
+
+    crate::credentials::keyring::store("bzr", "named", "decoy").unwrap();
+
+    execute(
+        &ConfigAction::UnsetKeyring {
+            name: "named".into(),
+        },
+        &CommandContext::new(None, OutputFormat::Json, None),
+        &mut CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
+
+    assert!(
+        crate::credentials::keyring::retrieve("named-svc", "named-acct").is_err(),
+        "the entry named by the server must be deleted"
+    );
+    assert_eq!(
+        crate::credentials::keyring::retrieve("bzr", "named").unwrap(),
+        "decoy",
+        "the default-coordinate entry must be untouched"
+    );
+    crate::credentials::keyring::delete("bzr", "named").unwrap();
+}
