@@ -25,13 +25,12 @@ pub(super) fn handle(name: &str, ctx: &CommandContext, w: &mut Writers<'_>) -> R
         )));
     }
 
-    // Drop the keychain entry if the server kept its key there (idempotent —
-    // a missing entry is not an error).
-    if let Some(keyring_ref) = server.api_key_keyring.as_ref() {
-        let service = keyring_ref.service_or_default().to_string();
-        let account = keyring_ref.account_or_default(name).to_string();
-        crate::credentials::keyring::delete(&service, &account)?;
-    }
+    let keyring_entry = server.api_key_keyring.as_ref().map(|keyring_ref| {
+        (
+            keyring_ref.service_or_default().to_string(),
+            keyring_ref.account_or_default(name).to_string(),
+        )
+    });
 
     // `update_locked_without_validation`: removal cannot improve or worsen an
     // unrelated invalid server, so avoid blocking on whole-config validation.
@@ -42,6 +41,16 @@ pub(super) fn handle(name: &str, ctx: &CommandContext, w: &mut Writers<'_>) -> R
         }
         Ok(())
     })?;
+
+    // Drop the keychain entry only after the config write commits, so a failed
+    // write never destroys the secret for a server that is still configured.
+    // The reverse order loses the credential outright; this order can at worst
+    // orphan an unreferenced entry. (Same ordering as `config rename-server`.)
+    // Idempotent: a missing entry is not an error.
+    if let Some((service, account)) = keyring_entry {
+        crate::credentials::keyring::delete(&service, &account)?;
+    }
+
     let path = Config::path_at(ctx.config_path_override())?;
 
     let human = format!("Removed server '{name}'.\nConfig file: {}", path.display());

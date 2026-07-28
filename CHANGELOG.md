@@ -38,6 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   now prints a `warning:` on stderr when the file it just rewrote is still not
   loadable, instead of reporting plain success. (#278)
 
+- `bzr config unset-keyring` and `config remove-server` now delete the OS
+  keychain entry only *after* the config write commits. Previously the secret
+  was destroyed first, so a failed write (read-only config directory, full disk,
+  lock contention) left the config still referencing a credential that no longer
+  existed — `unset-keyring` on a server that was still keyring-backed, or a
+  still-configured server with no retrievable key. `config rename-server`
+  already ordered its keychain work this way.
+
 - Config writes now warn when the config file was world-readable *before* the
   write. The permission check ran after the atomic rename, which always leaves
   the file `0o600`, so an exposed config was silently hardened with no notice

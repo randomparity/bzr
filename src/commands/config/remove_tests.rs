@@ -214,3 +214,45 @@ async fn remove_server_succeeds_with_other_structurally_invalid_server() {
     assert!(!config.servers.contains_key("dropme"));
     assert!(config.servers.contains_key("broken"));
 }
+
+/// A failed config write must not destroy the keychain secret.
+///
+/// The delete runs only after the write commits, so a server that is still in
+/// the config still has its credential. The reverse order loses the secret with
+/// nothing left pointing at it.
+#[cfg(all(unix, feature = "keyring"))]
+#[tokio::test]
+async fn remove_server_keeps_the_secret_when_the_config_write_fails() {
+    use crate::test_helpers::{config_path, seed_keyring_secret};
+    use std::os::unix::fs::PermissionsExt as _;
+
+    crate::credentials::keyring::install_test_store();
+    let (_lock, _tmp) = setup_empty_config_env().await;
+
+    seed_inline_server("dropme", "https://drop.example.com", "d").await;
+    seed_keyring_secret("dropme", "drop-secret").await;
+
+    // Make the config directory read-only so the locked write cannot proceed.
+    let dir = config_path().parent().unwrap().to_path_buf();
+    let original = std::fs::metadata(&dir).unwrap().permissions();
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+
+    let result = execute(
+        &ConfigAction::RemoveServer {
+            name: "dropme".into(),
+        },
+        &CommandContext::new(None, OutputFormat::Json, None).with_assume_yes(true),
+        &mut CapturedIo::new().writers(),
+    )
+    .await;
+
+    std::fs::set_permissions(&dir, original).unwrap();
+    assert!(result.is_err(), "precondition: the config write must fail");
+
+    // The server is still configured, so its secret must still be retrievable.
+    assert_eq!(
+        crate::credentials::keyring::retrieve("bzr", "dropme").unwrap(),
+        "drop-secret"
+    );
+    crate::credentials::keyring::delete("bzr", "dropme").unwrap();
+}
