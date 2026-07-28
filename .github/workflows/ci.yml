@@ -167,6 +167,52 @@ jobs:
           key: aarch64-pc-windows-msvc
       - name: Check
         run: cargo check --locked --target aarch64-pc-windows-msvc
+
+  macos-keyring:
+    name: macOS keychain
+    # macos-14 is arm64, so aarch64-apple-darwin is native -- no cross needed.
+    # This is the only PR job that compiles apple-native-keyring-store (it is
+    # cfg(target_os = "macos") behind the default `keyring` feature), and the
+    # only one that exercises the Keychain at runtime. Without it, that
+    # dependency is first built at release time.
+    runs-on: macos-14
+    # A locked keychain makes SecItem calls block on a GUI prompt that will
+    # never be answered, so cap the job rather than burn a 6-hour default.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6e  # stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2
+        with:
+          key: macos-keyring
+
+      # `build`, not `check`: keyring-test.sh runs its own `cargo build`, so
+      # building here shares artifacts and keeps a compile break reported as a
+      # compile break rather than as a keychain failure.
+      - name: Build
+        run: cargo build --locked
+
+      # Run against a dedicated throwaway keychain rather than the runner's
+      # login keychain. A locked keychain does not fail a SecItem call -- it
+      # blocks on an unlock dialog no one can answer, so an inherited lock
+      # state hangs the job instead of failing it. Creating our own keeps the
+      # substrate deterministic. `set-keychain-settings` with no `-t` clears
+      # the ~5 minute auto-lock, which would otherwise fire mid-job.
+      - name: Prepare keychain
+        run: |
+          security create-keychain -p "" bzr-ci.keychain
+          security set-keychain-settings bzr-ci.keychain
+          security unlock-keychain -p "" bzr-ci.keychain
+          security default-keychain -s bzr-ci.keychain
+          security list-keychains -d user -s bzr-ci.keychain
+
+      # Unlike the Linux path, this has no skip-probe: on macOS the Keychain is
+      # always present, so a failure here is a real failure.
+      - name: Keychain round-trip
+        run: tests/functional/keyring-test.sh
+
   sonarqube:
     name: SonarQube
     # Skip on forked PRs and Dependabot PRs (neither has access to SONAR_TOKEN).
