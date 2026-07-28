@@ -224,7 +224,10 @@ impl Config {
             })
     }
 
-    pub(super) fn validate(&self) -> Result<()> {
+    /// Validate every server entry. `pub(crate)` so commands that write through
+    /// the unvalidated path (`config unset-keyring`) can report that the config
+    /// they just rewrote is still not loadable.
+    pub(crate) fn validate(&self) -> Result<()> {
         for (name, server) in &self.servers {
             server.validate(name)?;
         }

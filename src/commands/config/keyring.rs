@@ -13,6 +13,12 @@ pub(super) fn set(
 ) -> Result<()> {
     // Advisory existence check FIRST — lockless, so a nonexistent server is
     // rejected before prompting / writing to the keychain.
+    //
+    // Deliberately a *validating* read, unlike `unset` below. Adding a
+    // credential is an administrative operation, not a repair one: it can
+    // introduce new structural errors, so failing early on an already-broken
+    // config is correct. Do not "unify" these two paths — see
+    // `set_keyring_is_blocked_by_other_structurally_invalid_server`.
     let config = Config::load_at(ctx.config_path_override())?;
     if !config.servers.contains_key(name) {
         return Err(crate::error::BzrError::config(format!(
@@ -63,7 +69,10 @@ pub(super) fn set(
 }
 
 pub(super) fn unset(name: &str, ctx: &CommandContext, w: &mut Writers<'_>) -> Result<()> {
-    let config = Config::load_at(ctx.config_path_override())?;
+    // Advisory snapshot only, so an unrelated invalid server does not block
+    // this repair path (same rationale as remove/rename). The write below is
+    // likewise unvalidated; a validating read here would make the bypass moot.
+    let config = Config::read_unvalidated_at(ctx.config_path_override())?;
     let server = config
         .servers
         .get(name)
@@ -79,17 +88,32 @@ pub(super) fn unset(name: &str, ctx: &CommandContext, w: &mut Writers<'_>) -> Re
     // Idempotent: missing entry is not an error.
     crate::credentials::keyring::delete(&service_name, &account_name)?;
 
-    // Saving normally would fail validation (the server has no credential
-    // source now), but the on-disk hardening (0o600/0o700) must still apply.
-    Config::update_locked_without_validation_at(ctx.config_path_override(), |config| {
-        let server = config
-            .servers
-            .get_mut(name)
-            .ok_or_else(|| crate::error::BzrError::config(format!("server '{name}' not found")))?;
-        server.api_key_keyring = None;
-        Ok(())
-    })?;
+    // `update_locked_without_validation`: dropping a credential source cannot
+    // improve or worsen an unrelated invalid server, so avoid blocking on
+    // whole-config validation (same rationale as remove/rename). Note the
+    // resulting credential-less server is itself structurally *valid* —
+    // a missing credential is an authentication-time error, not a write-time
+    // one (#278).
+    let updated =
+        Config::update_locked_without_validation_at(ctx.config_path_override(), |config| {
+            let server = config.servers.get_mut(name).ok_or_else(|| {
+                crate::error::BzrError::config(format!("server '{name}' not found"))
+            })?;
+            server.api_key_keyring = None;
+            Ok(())
+        })?;
     let path = Config::path_at(ctx.config_path_override())?;
+
+    // The write above skipped validation, so the file may still be unloadable
+    // because of an unrelated entry. Say so rather than reporting plain success
+    // and leaving the user to hit the same error on their next command.
+    if let Err(e) = updated.validate() {
+        let _ = writeln!(
+            w.err,
+            "warning: keychain entry removed, but the config file is still not \
+             loadable: {e}"
+        );
+    }
 
     let human = format!(
         "Removed keychain entry for server '{name}' (service={service_name}, \

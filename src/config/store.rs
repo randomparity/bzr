@@ -160,15 +160,6 @@ impl Config {
         Ok(config)
     }
 
-    /// Persist the config **without** running validation.
-    ///
-    /// Used only in tests. Applies the same `0o600`/`0o700` hardening as `save`
-    /// so a recreated config file is never world-readable.
-    #[cfg(test)]
-    pub(super) fn save_without_validation_at(&self, path: &Path) -> Result<()> {
-        self.write_to_disk_at(Some(path))
-    }
-
     /// Serialize and write the config to its on-disk path atomically:
     /// a uniquely-named sibling temp is written `0o600`, fsync'd (unix),
     /// renamed over the target (atomic replace), and the directory is
@@ -181,6 +172,12 @@ impl Config {
         let content = toml::to_string_pretty(self).map_err(|e| {
             BzrError::config(format!("serialize config file '{}': {e}", path.display()))
         })?;
+        // Check the file mode BEFORE the write: `atomic_write` renames a
+        // `0o600` temp over the target, so afterwards the file always looks
+        // hardened and a pre-existing world-readable config would be silently
+        // fixed with no notice that the credentials in it had been exposed.
+        #[cfg(unix)]
+        warn_if_path_permissions_too_open(&path, 0o077, "config file");
         atomic_write(&path, &content)?;
         Self::warn_on_insecure_permissions(&path);
         Ok(())

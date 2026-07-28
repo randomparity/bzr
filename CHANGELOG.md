@@ -26,6 +26,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   found. `BZR_SKILL_REF` (branch/tag/commit) and `BZR_SKILL_TARBALL_URL` (full
   URL or local path) override the source; default is `main`. See ADR-0013. (#480)
 
+### Fixed
+
+- `bzr config unset-keyring` no longer fails when an *unrelated* server in the
+  config is structurally invalid (for example a hand-edited entry defining both
+  `api_key` and `api_key_env`). It took a validating read of the whole config
+  before doing its work, so one bad entry blocked unsetting a credential on any
+  other server. It now reads an unvalidated snapshot, matching `config
+  remove-server` and `config rename-server`, so the CLI can still repair a
+  config it cannot fully load. Because that write skips validation, the command
+  now prints a `warning:` on stderr when the file it just rewrote is still not
+  loadable, instead of reporting plain success. (#278)
+
+- Config writes now warn when the config file was world-readable *before* the
+  write. The permission check ran after the atomic rename, which always leaves
+  the file `0o600`, so an exposed config was silently hardened with no notice
+  that its credentials had been readable. Affects every command that writes the
+  config; hardening behavior itself is unchanged.
+
 ## [0.7.0] - 2026-06-27
 
 ### Added
