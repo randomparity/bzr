@@ -23,6 +23,11 @@ multiple-versions = "deny"
 wildcards = "allow"
 highlight = "all"
 skip = [
+    # Procedural-macro crates are moving to syn 3 independently, while the ICU,
+    # tracing, tokio, and wasm stacks still require syn 2. Keep syn 3 canonical
+    # and remove this exception once the remaining derive crates converge.
+    { name = "syn", version = "2.0.117" },
+
     # `dirs` -> `dirs-sys` -> `redox_users` and `rustls` -> `ring` still use
     # getrandom 0.2, while test-only randomness (`proptest`, `tempfile`) is on
     # getrandom 0.3. The duplicate is accepted until those upstream stacks
