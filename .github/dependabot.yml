@@ -12,6 +12,12 @@ updates:
         patterns:
           - "*"
     ignore:
+      # The direct dependency can move to base64 0.23 only by adding a second
+      # version: reqwest, wiremock, and rcgen still require base64 0.22.
+      # Revisit when those upstream crates support 0.23.
+      - dependency-name: "base64"
+        versions: ["0.23.x"]
+
       # `dbus-secret-service` (keyring default feature) pins sha2 0.10.x as a
       # transitive dep, so bumping the direct dep to 0.11.x cannot collapse to
       # a single version — it only adds a duplicate crypto stack
