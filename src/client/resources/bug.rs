@@ -66,6 +66,22 @@ struct BugListResponse {
     bugs: Vec<Bug>,
 }
 
+/// Re-surface the error that forced the search fallback, recording that the
+/// fallback itself came back empty. The code is preserved so the Hybrid arm's
+/// `Api { code: 100500 }` match still routes on to XML-RPC.
+fn annotate_search_fallback(original: BzrError, id: &str) -> BzrError {
+    match original {
+        BzrError::Api { code, message } => BzrError::Api {
+            code,
+            message: format!(
+                "{message} (direct lookup failed; the search fallback returned \
+                 no row for bug {id} accessible to this account)"
+            ),
+        },
+        other => other,
+    }
+}
+
 #[derive(Deserialize)]
 struct HistoryResponse {
     bugs: Vec<HistoryBugEntry>,
@@ -376,17 +392,25 @@ impl BugzillaClient {
         // If the direct endpoint fails with a server internal error (100500),
         // retry via the search endpoint (/rest/bug?id=X). Some Bugzilla
         // extensions only hook into the direct lookup path and crash there.
-        if let Err(BzrError::Api {
-            code: BUGZILLA_INTERNAL_ERROR,
-            ..
-        }) = &result
-        {
-            tracing::debug!("direct bug lookup returned 100500, retrying via search endpoint");
-            return self.get_bug_via_search(id, fields, exclude_fields).await;
-        }
+        // The original error travels with the retry: the search path filters
+        // rows the caller cannot see into an empty result rather than
+        // faulting, so an empty retry must not be reported as "not found".
+        let data = match result {
+            Err(
+                original @ BzrError::Api {
+                    code: BUGZILLA_INTERNAL_ERROR,
+                    ..
+                },
+            ) => {
+                tracing::debug!("direct bug lookup returned 100500, retrying via search endpoint");
+                return self
+                    .get_bug_via_search(id, fields, exclude_fields, original)
+                    .await;
+            }
+            other => other?,
+        };
 
-        result?
-            .bugs
+        data.bugs
             .into_iter()
             .next()
             .ok_or_else(|| BzrError::NotFound {
@@ -395,11 +419,19 @@ impl BugzillaClient {
             })
     }
 
+    /// Retry a failed direct lookup through the search endpoint.
+    ///
+    /// `original` is the error that forced the retry. When the search returns
+    /// no row it is re-surfaced instead of `NotFound`: Bugzilla's search path
+    /// omits bugs the caller cannot see rather than faulting, so an empty
+    /// result here means "the fallback could not answer", not "no such bug"
+    /// (issue #504, ADR 0015).
     async fn get_bug_via_search(
         &self,
         id: &str,
         include_fields: &str,
         exclude_fields: Option<&str>,
+        original: BzrError,
     ) -> Result<Bug> {
         let mut req_builder = self
             .http
@@ -411,13 +443,10 @@ impl BugzillaClient {
         let req = self.apply_auth(req_builder);
         let resp = self.send(req).await?;
         let data: BugListResponse = self.parse_json(resp).await?;
-        data.bugs
-            .into_iter()
-            .next()
-            .ok_or_else(|| BzrError::NotFound {
-                resource: "bug",
-                id: id.to_string(),
-            })
+        data.bugs.into_iter().next().ok_or_else(|| {
+            tracing::debug!("search fallback returned no accessible row; surfacing original error");
+            annotate_search_fallback(original, id)
+        })
     }
 
     /// Fetch isolated link nodes for `ids`. Inaccessible/nonexistent ids are
