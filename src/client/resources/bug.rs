@@ -68,7 +68,12 @@ struct BugListResponse {
 
 /// Re-surface the error that forced the search fallback, recording that the
 /// fallback itself came back empty. The code is preserved so the Hybrid arm's
-/// `Api { code: 100500 }` match still routes on to XML-RPC.
+/// `Api { code: 100500 }` match still routes on to XML-RPC — it is control
+/// flow two frames up, not just display text.
+///
+/// Only `Api` reaches the caller today (the sole call site matches on
+/// `Api { code: BUGZILLA_INTERNAL_ERROR }`); the other arm keeps the function
+/// total so a future caller cannot silently lose its error.
 fn annotate_search_fallback(original: BzrError, id: &str) -> BzrError {
     match original {
         BzrError::Api { code, message } => BzrError::Api {

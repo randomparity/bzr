@@ -89,6 +89,23 @@ Relaying faithfully cannot leak more than the server chose to emit.
   of them. That is the intended correction, but it is the change's main regression
   surface, and it is why the non-empty rule is scoped to content rather than
   replaced with "any error is fatal".
+
+- **The one way this turns working into failing: a legitimately empty result on
+  a server that warns unconditionally.** If a deployment attaches
+  `error: true` to *every* response as a standing warning, a search that
+  correctly matches nothing now fails instead of returning an empty list —
+  the response is indistinguishable from "an error, and no data". bzr cannot
+  tell a benign standing warning from an error that explains the emptiness,
+  and this ADR chooses to surface rather than swallow. The mitigation, if a
+  deployment hits it, is server-side: stop attaching `error: true` to
+  successful responses. This is accepted knowingly; it is the cost of the
+  decision, not an oversight.
+
+- **It also repairs a silent mutation failure.** `put_json` inspects the body
+  precisely because some deployments report a *rejected* mutation with HTTP
+  200. An error payload carrying an empty `bugs: []` defeated that guard, so a
+  `bug update` the server refused was reported as success. Rejections of that
+  shape now fail correctly.
 - **The functional suite could not have caught this.** `08c-bugs-create-fields.sh`
   test 146c asserted only `assert_failure` (exit `!= 0`), which passes for exit 2,
   4, 5, and 9 alike. It is tightened to assert the exit code and the message, and

@@ -678,3 +678,33 @@ async fn error_beside_nonempty_map_data_key_stays_lenient() {
         .unwrap()
         .is_empty());
 }
+
+#[tokio::test]
+async fn rejected_mutation_with_empty_data_key_is_not_success() {
+    // `put_json`'s body check exists because some deployments report a
+    // rejected mutation with a 200 status. An error payload carrying an empty
+    // `bugs: []` defeated that guard the same way it defeated `bug view`:
+    // `has_data_fields` saw the key and downgraded the error, so a failed
+    // update was reported as success (#504, ADR 0015).
+    let mock = MockServer::start().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/42"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "error": true,
+            "code": 115,
+            "message": "You are not permitted to edit bugs in product Secret.",
+            "bugs": [],
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client
+        .update_bug(42, &crate::types::bug::UpdateBugParams::default())
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, BzrError::Api { code: 115, .. }),
+        "a rejected mutation must not be reported as success, got {err:?}"
+    );
+}

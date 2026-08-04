@@ -31,11 +31,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     100500 code and could not previously be reached from this path — an
     affected lookup can now succeed instead of failing.
 
+  The same tightening fixes a silent mutation failure: `bzr bug update` checks
+  the response body because some deployments report a *rejected* mutation with
+  HTTP 200, and an error payload carrying an empty `bugs: []` defeated that
+  check — an update the server refused was reported as success. Rejections of
+  that shape now fail with the server's code and message.
+
   **Behaviour change:** a restricted bug that previously exited 2 (`not_found`)
   now exits 4 (`api`) carrying the server's `api_code` and message. Scripts
   branching on exit 2 to mean "absent or restricted" should branch on 2 or 4.
   Exit 2 now means the server itself returned an empty result with no error.
   See ADR-0015.
+
+  **Known trade-off:** on a deployment that attaches `error: true` to every
+  response as a standing warning, a query that legitimately matches nothing now
+  fails rather than returning an empty list — such a response is
+  indistinguishable from "an error, and no data". ADR-0015 accepts this
+  knowingly; the fix is server-side.
 
 ## [0.8.0] - 2026-07-28
 
