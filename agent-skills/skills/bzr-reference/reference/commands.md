@@ -52,12 +52,12 @@ Operate on bugs.
 - `bzr comment add 12345 --body "I reproduced this on Fedora 42"`
 - `bzr comment add 12345 --body-file notes.md` (or `--body-file -` for stdin)
 - `bzr comment add 12345 --body "internal note" --private`
-  - `--private` restricts the comment to users with elevated permissions on the
-    server (the insider group). It is a bare flag and takes no value — there is
-    no value-taking `is-private` form.
+  - `--private` restricts the comment to users with elevated permissions
+    (`editbugs`, or the server's insider group). It is a bare flag and takes no
+    value — there is no value-taking `is-private` form.
   - Omitting it posts a **public** comment. If a private comment is what was
     asked for, never fall back to posting without the flag; that discloses the
-    body. Marking a comment private needs `editbugs` or insider-group rights.
+    body.
 - `bzr comment tag 98765 --add needs-info`
 - `bzr comment search-tags <text>`
 
