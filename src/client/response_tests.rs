@@ -574,3 +574,107 @@ async fn parse_json_redacts_api_key_in_body_preview() {
         "redaction marker should be present: {msg}"
     );
 }
+
+// ── #504: an error payload beside an *empty* data key is not "data" ──────
+//
+// `has_data_fields` used to test key presence alone, so a server that
+// answered a restricted-bug lookup with an error *and* an empty `bugs`
+// placeholder had its error downgraded to a warning. The empty list then
+// became `NotFound` — "bug not found" for a bug the caller could see.
+// ADR 0015: the error is the only thing the server said, so it is fatal.
+
+/// Build a 200 response carrying a Bugzilla error alongside `bugs: <value>`.
+fn restricted_bug_body(bugs: &serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "error": true,
+        "code": 102,
+        "message": "You are not authorized to access bug #216593.",
+        "bugs": bugs,
+    })
+}
+
+async fn assert_restricted_bug_is_fatal(bugs: &serde_json::Value, case: &str) {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/216593"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(restricted_bug_body(bugs)))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_bug("216593", None, None).await.unwrap_err();
+
+    assert!(
+        matches!(err, BzrError::Api { code: 102, .. }),
+        "{case}: expected Api{{102}}, got {err:?}"
+    );
+    let msg = err.to_string();
+    assert!(
+        msg.contains("not authorized"),
+        "{case}: server message must be relayed: {msg}"
+    );
+    assert!(
+        !msg.contains("not found"),
+        "{case}: must not be masked as not-found: {msg}"
+    );
+}
+
+#[tokio::test]
+async fn error_with_empty_array_data_key_is_fatal() {
+    assert_restricted_bug_is_fatal(&serde_json::json!([]), "empty array").await;
+}
+
+#[tokio::test]
+async fn error_with_empty_object_data_key_is_fatal() {
+    assert_restricted_bug_is_fatal(&serde_json::json!({}), "empty object").await;
+}
+
+#[tokio::test]
+async fn error_with_null_data_key_is_fatal() {
+    assert_restricted_bug_is_fatal(&serde_json::Value::Null, "null").await;
+}
+
+#[tokio::test]
+async fn error_beside_populated_data_key_stays_lenient() {
+    // Regression guard for the IBM LTC accommodation: an extension's error
+    // alongside real data is informational — the data is the answer.
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/216593"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(restricted_bug_body(
+                &serde_json::json!([{"id": 216_593, "summary": "restricted", "status": "NEW"}]),
+            )),
+        )
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let bug = client.get_bug("216593", None, None).await.unwrap();
+    assert_eq!(bug.id, 216_593);
+}
+
+#[tokio::test]
+async fn error_beside_nonempty_map_data_key_stays_lenient() {
+    // `bug/<id>/comment` answers with a *map* keyed by bug id. A bug with no
+    // comments still yields `bugs: {"42": {"comments": []}}` — the outer map
+    // has a key, so it is data and the accompanying error stays a warning.
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "error": true,
+            "code": 100_500,
+            "message": "MirrorTool internal error",
+            "bugs": {"42": {"comments": []}},
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    assert!(client
+        .get_comments_since(42, None)
+        .await
+        .unwrap()
+        .is_empty());
+}
