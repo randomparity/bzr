@@ -63,6 +63,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   flag posts publicly, because the reported fallback was to drop it and post
   anyway, which discloses the body. (#503)
 
+- Agent-skill docs are now checked against the binary by a new
+  `agent-skills/tests/skills-flag-check.sh`, run by `make skills-test`. Every
+  long flag the skills show on a `bzr <group> <verb>` invocation must be a real
+  flag of that command; it currently covers 344 flag mentions across 37
+  commands. Unlike `flag-drift-check.sh` — which is bidirectional against the
+  exhaustive command tree in `docs/bzr-cli.md` — this check is one-directional,
+  because the skills are a curated cheat-sheet and an omitted flag is not an
+  error. A documented flag that does not exist is, since it makes an agent emit
+  a command that cannot parse. (#503)
+
 ## [0.8.0] - 2026-07-28
 
 ### Added
