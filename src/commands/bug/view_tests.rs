@@ -941,3 +941,57 @@ async fn execute_web_prints_url_when_fd1_not_a_tty() {
     assert!(out.starts_with(&mock.uri()), "url targets server:\n{out}");
     assert!(out.contains("/show_bug.cgi?id=55"), "{out}");
 }
+
+#[tokio::test]
+async fn view_multi_permissive_reports_access_reason_not_absence() {
+    // #504 / ADR 0015: an error payload carrying an empty `bugs: []` used to be
+    // swallowed, so a restricted bug in a batch was listed as "bug not found".
+    // The error now survives, and because 102 is a per-bug `Bug.get` code the
+    // batch still completes under --permissive — with the server's real reason
+    // in `failed[].error` instead of a fabricated absence.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(ok_bug_body(1, "visible")))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/216593"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "error": true,
+            "code": 102,
+            "message": "You are not authorized to access bug #216593.",
+            "bugs": [],
+        })))
+        .mount(&mock)
+        .await;
+
+    let action = make_view_action(&["1", "216593"], true);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "a per-bug access denial must not kill the batch: {:?}",
+        result.err()
+    );
+
+    let out: serde_json::Value = serde_json::from_str(io.out_str()).unwrap();
+    let data = out.get("data").unwrap_or(&out);
+    assert_eq!(data["bugs"].as_array().unwrap().len(), 1);
+    let failed = &data["failed"].as_array().unwrap()[0];
+    assert_eq!(failed["id"], "216593");
+    let reason = failed["error"].as_str().unwrap();
+    assert!(
+        reason.contains("not authorized"),
+        "failure must carry the server's reason: {reason}"
+    );
+    assert!(
+        !reason.contains("not found"),
+        "failure must not be reported as absence: {reason}"
+    );
+}

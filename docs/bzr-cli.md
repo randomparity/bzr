@@ -94,6 +94,14 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 
 *Exit code 2 is produced by clap for argument errors before bzr's error handling runs, in addition to resource-not-found errors from bzr itself.
 
+bzr reports exit 2 only when the server itself returned an empty result with no
+error attached. When the server explains why it withheld a resource — for
+example `102 You are not authorized to access bug #N` for a group-restricted
+bug you cannot see — that answer is relayed as an API error (exit 4, with
+`api_code` on the `--json` error object), not rewritten as not-found. Scripts
+that branched on exit 2 to mean "absent or restricted" should branch on 2 or 4.
+See ADR-0015.
+
 ## Field Projection (`--fields` / `--exclude-fields`)
 
 Most read verbs accept `--fields <a,b,c>` and `--exclude-fields <a,b,c>` to select
@@ -594,7 +602,8 @@ request), and a total cap of 1000 distinct related bugs. On hitting the cap,
 traversal stops, the records found so far are emitted, and a notice is written
 to stderr. Each bug is emitted once, at its first (minimal) depth; cycles are
 followed only once. A root id that cannot be fetched (nonexistent or no read
-permission) fails like `bzr bug view` (exit 2); inaccessible related bugs are
+permission) fails like `bzr bug view` — exit 2 when the server reports no such
+bug, exit 4 when it reports an access error; inaccessible related bugs are
 skipped silently. In table mode, a root with no in-scope relationships prints
 `No related bugs for #<id>.`.
 

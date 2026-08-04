@@ -89,7 +89,13 @@ if [[ -n "$GID" ]]; then
     run_bzr bug view "$GID"
     if assert_success && assert_json '.id' "$GID"; then
         run_bzr_raw --json --server public bug view "$GID"
-        if assert_failure; then
+        # #504: `assert_failure` alone passes for exit 2, 4, 5 and 9 alike, so
+        # it could not tell an access error from bzr masking one as
+        # "bug not found". Pin the code (ADR 0015); phase 08e covers the
+        # authenticated member/non-member directions.
+        if assert_exit_code 4 &&
+            assert_stderr_json '.error.api_code' "102" &&
+            assert_stderr_not_contains "not found"; then
             run_bzr_raw --json --server public bug list --whiteboard "$_GROUP_WB"
             if assert_success && assert_json_array_length '.' 0; then test_pass; fi
         fi
