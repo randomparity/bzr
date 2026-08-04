@@ -49,6 +49,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   indistinguishable from "an error, and no data". ADR-0015 accepts this
   knowingly; the fix is server-side.
 
+### Documentation
+
+- The bundled agent skills now document the comment privacy flags, which they
+  had never named. `bzr comment add --private` and `bzr bug update --comment` /
+  `--comment-file` / `--comment-private` are now in the command reference, and
+  `bzr-triage-bug` shows both forms. An agent working from the skills had no way
+  to learn the flag name and guessed; the reported guess was
+  `comment add --is-private true`, which has never existed (the real flag is a
+  bare `--private`, and the value-taking `--is-private` on `attachment update`
+  was removed in #312). The attachment privacy flags were already documented —
+  only the comment paths were stale. The wording also states that omitting the
+  flag posts publicly, because the reported fallback was to drop it and post
+  anyway, which discloses the body. (#503)
+
 ## [0.8.0] - 2026-07-28
 
 ### Added

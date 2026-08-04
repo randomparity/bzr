@@ -31,6 +31,14 @@ bzr bug update <id> --flag "review+(alice@example.com)"
 # Add context as a comment rather than overwriting the description
 bzr comment add <id> --body "Reproduced on Fedora 42; root cause is X."
 
+# Restrict a comment to the insider group (--private is a bare flag, no value).
+# Omitting it posts publicly, so never drop it as a fallback on a private note.
+bzr comment add <id> --body "Customer contact: ..." --private
+
+# Or post the comment atomically with the field change
+bzr bug update <id> --status RESOLVED --resolution FIXED \
+  --comment "Fixed by the patch in comment 4." --comment-private
+
 # Attach evidence or a patch with context in the same upload
 bzr attachment upload <id> trace.log --comment-file notes.md
 printf '%s\n' "Patch generated from branch foo." \
