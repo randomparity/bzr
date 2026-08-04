@@ -39,35 +39,52 @@ _RA=(--product FuncTestProd --component Backend --op-sys Linux
     --rep-platform PC --description d)
 
 test_begin "146i. fixture: second credentialed identity"
+# Create best-effort: the account survives in a reused container, and
+# Bugzilla's duplicate-account wording ("There is already an account with the
+# login name …") differs from other resources' "already exists". Verify the
+# outcome — that the identity authenticates — instead of pattern-matching the
+# error, so the fixture is idempotent on a warm container without depending on
+# any server message.
 run_bzr user create --email "$RESTRICTED_USER" --full-name "Restricted Member" \
     --password "RestrictPass1!"
-if [[ $BZR_EXIT -ne 0 ]] && ! grep -q "already exists" "$BZR_STDERR" 2>/dev/null; then
-    test_fail "could not create $RESTRICTED_USER"
-else
-    _RU_SQL=$(mktemp /tmp/bzr-func-restricted-key.XXXXXX.sql)
-    cat >"$_RU_SQL" <<SQL
+_RU_SQL=$(mktemp /tmp/bzr-func-restricted-key.XXXXXX.sql)
+cat >"$_RU_SQL" <<SQL
 INSERT IGNORE INTO user_api_keys (user_id, api_key, description, revoked)
 SELECT userid, '${RESTRICTED_KEY}', 'functional-test-restricted', 0
 FROM profiles
 WHERE login_name = '${RESTRICTED_USER}'
 LIMIT 1;
 SQL
-    if run_bugzilla_sql_file "$_RU_SQL"; then
-        run_bzr config set-server restricted --url "$BZ_URL" \
-            --api-key "$RESTRICTED_KEY" --auth-method query_param \
-            --email "$RESTRICTED_USER"
-        if assert_success; then test_pass; fi
-    else
-        test_fail "could not seed API key for $RESTRICTED_USER"
+if run_bugzilla_sql_file "$_RU_SQL"; then
+    run_bzr config set-server restricted --url "$BZ_URL" \
+        --api-key "$RESTRICTED_KEY" --auth-method query_param \
+        --email "$RESTRICTED_USER"
+    if assert_success; then
+        # Prove the credential works before the access tests lean on it; a
+        # silently-unseeded key would otherwise surface as a confusing
+        # config error four tests later.
+        run_bzr_raw --json --server restricted whoami
+        # `name` and `login` are both nullable and which one carries the login
+        # depends on the probe that detected auth, so match against either.
+        if assert_success && assert_json_exists '.id' &&
+            assert_json_contains \
+                '[.name, .login] | map(select(. != null)) | join(",")' \
+                "$RESTRICTED_USER"; then
+            test_pass
+        fi
     fi
-    rm -f "$_RU_SQL"
-    unset _RU_SQL
+else
+    test_fail "could not seed API key for $RESTRICTED_USER"
 fi
+rm -f "$_RU_SQL"
+unset _RU_SQL
 
 test_begin "146j. fixture: group-restricted bug"
+# The group name is per-run unique, so a plain success assertion is correct
+# here — unlike the account above, this cannot collide on a warm container.
 run_bzr group create --name "$RESTRICTED_GROUP" --description "restricted access"
-if [[ $BZR_EXIT -ne 0 ]] && ! grep -q "already exists" "$BZR_STDERR" 2>/dev/null; then
-    test_fail "could not create $RESTRICTED_GROUP"
+if ! assert_success; then
+    : # assert_success already recorded the failure
 else
     _RG_SQL=$(mktemp /tmp/bzr-func-restricted-ctl.XXXXXX.sql)
     cat >"$_RG_SQL" <<SQL
