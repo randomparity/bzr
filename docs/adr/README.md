@@ -21,3 +21,4 @@ rejected.
 | [0012](0012-compound-create-report-not-rollback.md) | Compound `bug create` reports partial failure; it does not roll back | Accepted |
 | [0013](0013-skills-installer-remote-fetch.md) | Agent-skills installer fetches its payload from a GitHub tarball, unverified | Accepted |
 | [0014](0014-structured-error-detail-keys.md) | Structured per-variant detail keys on the `--json` error object | Accepted |
+| [0015](0015-server-errors-are-never-masked.md) | A server error is never masked by an empty result | Accepted |

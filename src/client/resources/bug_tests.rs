@@ -1323,3 +1323,123 @@ async fn get_bug_links_nodes_empty_ids_makes_no_request() {
     let client = test_client(&mock.uri());
     assert!(client.get_bug_links_nodes(&[]).await.unwrap().is_empty());
 }
+
+// ── #504: the 100500 search fallback must not lose its cause ─────────────
+//
+// `get_bug_rest` retries via `/rest/bug?id=<id>` when the direct lookup
+// crashes with 100500, because some extensions only hook the direct path.
+// Bugzilla's search path filters bugs the caller cannot see into an empty
+// 200 result instead of faulting, so an empty retry used to be reported as
+// `NotFound` — discarding the 100500 the server actually sent.
+// ADR 0015: the original error is the answer; `NotFound` is reserved for
+// the direct path returning an empty result with no error payload.
+
+#[tokio::test]
+async fn search_fallback_empty_preserves_original_100500() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/216593"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "error": true,
+            "code": BUGZILLA_INTERNAL_ERROR,
+            "message": "Extension crash",
+        })))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("id", "216593"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_bug("216593", None, None).await.unwrap_err();
+
+    assert!(
+        matches!(
+            err,
+            BzrError::Api {
+                code: BUGZILLA_INTERNAL_ERROR,
+                ..
+            }
+        ),
+        "expected the original 100500 to survive the fallback, got {err:?}"
+    );
+    let msg = err.to_string();
+    assert!(
+        msg.contains("Extension crash"),
+        "server message must be relayed: {msg}"
+    );
+    assert!(
+        !msg.contains("not found"),
+        "must not be masked as not-found: {msg}"
+    );
+}
+
+#[tokio::test]
+async fn direct_empty_result_without_error_is_still_not_found() {
+    // The reserved case: the server said "no rows" and said nothing else.
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/404404"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_bug("404404", None, None).await.unwrap_err();
+    assert!(
+        matches!(
+            err,
+            BzrError::NotFound {
+                resource: "bug",
+                ..
+            }
+        ),
+        "expected NotFound, got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn hybrid_empty_search_fallback_recovers_via_xmlrpc() {
+    // #504 follow-on: preserving the 100500 through an *empty* search
+    // fallback keeps the Hybrid arm's `Api { code: 100500 }` match alive, so
+    // XML-RPC still gets its turn. Previously the empty search collapsed to
+    // `NotFound`, which the Hybrid arm does not match — the recovery path was
+    // unreachable and the user was told the bug did not exist.
+    let mock = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/216593"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "error": true,
+            "code": BUGZILLA_INTERNAL_ERROR,
+            "message": "Extension crash",
+        })))
+        .mount(&mock)
+        .await;
+
+    // Search sees no row it may return for this caller — an empty 200.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("id", "216593"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .mount(&mock)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(xmlrpc_bug_response(216_593, "restricted but visible")),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_hybrid(&mock.uri());
+    let bug = client.get_bug("216593", None, None).await.unwrap();
+    assert_eq!(bug.id, 216_593);
+    assert_eq!(bug.summary.as_deref(), Some("restricted but visible"));
+}

@@ -1,0 +1,235 @@
+# 08e-bugs-restricted-access
+# Sourced by run-tests.sh in order; assumes lib.sh helpers and the
+# orchestrator preamble (constants, shared globals, cleanup trap).
+# shellcheck shell=bash
+
+# ══════════════════════════════════════════════════════════════════════
+# Phase 8e: Restricted-bug access (issue #504)
+# ══════════════════════════════════════════════════════════════════════
+# #504: `bug view` reported "bug not found" (exit 2) for a bug in an
+# access-restricted product the caller could see. ADR 0015 settled that bzr
+# relays whatever the server said and never substitutes an empty result.
+#
+# Scope note, so the coverage is not overread: a *stock* Bugzilla cannot
+# reproduce #504. Both masking paths need a server-side quirk — an error
+# payload carrying an empty `bugs: []`, or a 100500 extension crash on the
+# direct lookup — and those are covered by wiremock unit tests in
+# `src/client/response_tests.rs` and `src/client/resources/bug_tests.rs`.
+# What this phase does is pin the *contract* against a real server, so a
+# regression that reintroduces masking (exit 2 / not_found) reddens the
+# suite instead of passing a bare "expected non-zero exit" check.
+#
+# The three directions below were verified against Bugzilla 5.0.6:
+#   authenticated group member  → exit 0, bug returned
+#   authenticated non-member    → exit 4, api_code 102
+#   anonymous                   → exit 4, api_code 102
+echo "── Phase 8e: Restricted-bug access (#504) ───────────────────"
+
+# ── Fixture: a second credentialed identity ──────────────────────────
+# Every version entrypoint seeds exactly one API key, bound to the admin.
+# With only that identity, the "member sees the restricted bug" direction is
+# untestable: the admin is the bug's own reporter and an admin besides, so a
+# passing view proves reporter/admin access, never group membership.
+RESTRICTED_USER="restricted-member@test.bzr"
+RESTRICTED_KEY="FuncTestRestricted0123456789abcdef012345"
+RESTRICTED_GROUP=$(unique_name restrict-grp)
+RESTRICTED_BUG=""
+# 08c unsets its own fixture array, so declare the shared create args here.
+_RA=(--product FuncTestProd --component Backend --op-sys Linux
+    --rep-platform PC --description d)
+
+test_begin "146i. fixture: second credentialed identity"
+# Create best-effort: the account survives in a reused container, and
+# Bugzilla's duplicate-account wording ("There is already an account with the
+# login name …") differs from other resources' "already exists". Verify the
+# outcome — that the identity authenticates — instead of pattern-matching the
+# error, so the fixture is idempotent on a warm container without depending on
+# any server message.
+run_bzr user create --email "$RESTRICTED_USER" --full-name "Restricted Member" \
+    --password "RestrictPass1!"
+_RU_SQL=$(mktemp /tmp/bzr-func-restricted-key.XXXXXX.sql)
+cat >"$_RU_SQL" <<SQL
+INSERT IGNORE INTO user_api_keys (user_id, api_key, description, revoked)
+SELECT userid, '${RESTRICTED_KEY}', 'functional-test-restricted', 0
+FROM profiles
+WHERE login_name = '${RESTRICTED_USER}'
+LIMIT 1;
+SQL
+if run_bugzilla_sql_file "$_RU_SQL"; then
+    run_bzr config set-server restricted --url "$BZ_URL" \
+        --api-key "$RESTRICTED_KEY" --auth-method query_param \
+        --email "$RESTRICTED_USER"
+    if assert_success; then
+        # Prove the credential works before the access tests lean on it; a
+        # silently-unseeded key would otherwise surface as a confusing
+        # config error four tests later.
+        run_bzr_raw --json --server restricted whoami
+        # `name` and `login` are both nullable and which one carries the login
+        # depends on the probe that detected auth, so match against either.
+        if assert_success && assert_json_exists '.id' &&
+            assert_json_contains \
+                '[.name, .login] | map(select(. != null)) | join(",")' \
+                "$RESTRICTED_USER"; then
+            test_pass
+        fi
+    fi
+else
+    test_fail "could not seed API key for $RESTRICTED_USER"
+fi
+rm -f "$_RU_SQL"
+unset _RU_SQL
+
+test_begin "146j. fixture: group-restricted bug"
+# The group name is per-run unique, so a plain success assertion is correct
+# here — unlike the account above, this cannot collide on a warm container.
+run_bzr group create --name "$RESTRICTED_GROUP" --description "restricted access"
+if ! assert_success; then
+    : # assert_success already recorded the failure
+else
+    _RG_SQL=$(mktemp /tmp/bzr-func-restricted-ctl.XXXXXX.sql)
+    cat >"$_RG_SQL" <<SQL
+INSERT INTO group_control_map
+    (group_id, product_id, entry, membercontrol, othercontrol, canedit,
+     editcomponents, editbugs, canconfirm)
+SELECT g.id, p.id, 0, 1, 1, 1, 0, 1, 1
+FROM groups AS g
+JOIN products AS p ON p.name = 'FuncTestProd'
+WHERE g.name = '${RESTRICTED_GROUP}'
+ON DUPLICATE KEY UPDATE membercontrol = 1, othercontrol = 1;
+SQL
+    if run_bugzilla_sql_file "$_RG_SQL"; then
+        RESTRICTED_BUG=$(make_bug "${_RA[@]}" --summary "restricted access probe" \
+            --groups "$RESTRICTED_GROUP")
+        if [[ -n "$RESTRICTED_BUG" ]]; then test_pass; else
+            test_fail "could not create restricted bug"
+        fi
+    else
+        test_fail "could not enable $RESTRICTED_GROUP on FuncTestProd"
+    fi
+    rm -f "$_RG_SQL"
+    unset _RG_SQL
+fi
+
+# ── The three access directions ──────────────────────────────────────
+
+test_begin "146k. anonymous view of a restricted bug reports access, not absence"
+if [[ -n "$RESTRICTED_BUG" ]]; then
+    run_bzr_raw --json --server public bug view "$RESTRICTED_BUG"
+    # The contract #504 broke: an access failure must not be reported as
+    # not-found. Assert the code, not merely "non-zero".
+    if assert_exit_code 4 &&
+        assert_stderr_json '.error.type' "api" &&
+        assert_stderr_json '.error.api_code' "102" &&
+        assert_stderr_not_contains "not found"; then
+        test_pass
+    fi
+else test_skip "no restricted bug"; fi
+
+test_begin "146l. authenticated non-member gets an access error, not absence"
+if [[ -n "$RESTRICTED_BUG" ]]; then
+    run_bzr_raw --json --server restricted bug view "$RESTRICTED_BUG"
+    if assert_exit_code 4 &&
+        assert_stderr_json '.error.type' "api" &&
+        assert_stderr_json '.error.api_code' "102" &&
+        assert_stderr_not_contains "not found"; then
+        test_pass
+    fi
+else test_skip "no restricted bug"; fi
+
+test_begin "146m. group member sees the restricted bug"
+# The reporter's actual scenario, and the direction the suite could not
+# reach before: access granted purely by group membership, not by being the
+# bug's reporter or an admin.
+if [[ -n "$RESTRICTED_BUG" ]]; then
+    run_bzr group add-user --group "$RESTRICTED_GROUP" --user "$RESTRICTED_USER"
+    if assert_success; then
+        run_bzr_raw --json --server restricted bug view "$RESTRICTED_BUG"
+        if assert_exit_code 0 && assert_json '.id' "$RESTRICTED_BUG"; then
+            test_pass
+        fi
+    fi
+else test_skip "no restricted bug"; fi
+
+test_begin "146n. member view is stable across repeated invocations"
+# #504 was reported as intermittent. A loop cannot prove absence of a race,
+# but it does catch a fix that only works on a cold cache or first request.
+if [[ -n "$RESTRICTED_BUG" ]]; then
+    _RB_FAILURES=0
+    for _ in 1 2 3 4 5; do
+        run_bzr_raw --json --server restricted bug view "$RESTRICTED_BUG"
+        if [[ $BZR_EXIT -ne 0 ]]; then
+            _RB_FAILURES=$((_RB_FAILURES + 1))
+        fi
+    done
+    if [[ $_RB_FAILURES -eq 0 ]]; then
+        test_pass
+    else
+        test_fail "$_RB_FAILURES/5 member views failed"
+    fi
+    unset _RB_FAILURES
+else test_skip "no restricted bug"; fi
+
+# ── Product-level restriction ────────────────────────────────────────
+# "Access restricted product" in the report. A mandatory group control
+# (membercontrol=3) puts every bug in the product into the group
+# automatically — a different Bugzilla path from per-bug group assignment.
+
+RESTRICTED_PRODUCT=$(unique_name RestrictProd)
+RESTRICTED_PROD_BUG=""
+
+test_begin "146o. fixture: product with a mandatory group"
+run_bzr product create --name "$RESTRICTED_PRODUCT" \
+    --description "product-level restriction" --version 1.0
+if assert_success; then
+    run_bzr component create --product "$RESTRICTED_PRODUCT" --name RestrictComp \
+        --description "restricted component" --default-assignee "$ADMIN_EMAIL"
+    if assert_success; then
+        _RP_SQL=$(mktemp /tmp/bzr-func-restricted-prod.XXXXXX.sql)
+        cat >"$_RP_SQL" <<SQL
+INSERT INTO group_control_map
+    (group_id, product_id, entry, membercontrol, othercontrol, canedit,
+     editcomponents, editbugs, canconfirm)
+SELECT g.id, p.id, 1, 3, 3, 0, 0, 0, 0
+FROM groups AS g
+JOIN products AS p ON p.name = '${RESTRICTED_PRODUCT}'
+WHERE g.name = '${RESTRICTED_GROUP}'
+ON DUPLICATE KEY UPDATE entry = 1, membercontrol = 3, othercontrol = 3;
+SQL
+        if run_bugzilla_sql_file "$_RP_SQL"; then test_pass; else
+            test_fail "could not apply mandatory group control"
+        fi
+        rm -f "$_RP_SQL"
+        unset _RP_SQL
+    fi
+fi
+
+test_begin "146p. bug in a restricted product: member sees it, anonymous gets 102"
+RESTRICTED_PROD_BUG=$(make_bug --product "$RESTRICTED_PRODUCT" \
+    --component RestrictComp --summary "product-restricted probe" \
+    --version 1.0 --op-sys Linux --rep-platform PC --description d)
+if [[ -n "$RESTRICTED_PROD_BUG" ]]; then
+    run_bzr_raw --json --server restricted bug view "$RESTRICTED_PROD_BUG"
+    if assert_exit_code 0 && assert_json '.id' "$RESTRICTED_PROD_BUG"; then
+        run_bzr_raw --json --server public bug view "$RESTRICTED_PROD_BUG"
+        if assert_exit_code 4 &&
+            assert_stderr_json '.error.api_code' "102" &&
+            assert_stderr_not_contains "not found"; then
+            test_pass
+        fi
+    fi
+else test_skip "no product-restricted bug"; fi
+
+test_begin "146q. anonymous product view relays the server's empty result"
+# Contrast with 146m, and the reason ADR 0015 is about *masking* rather than
+# about not-found: Bugzilla answers an anonymous product lookup with
+# `{"products":[]}` and HTTP 200 — no error payload at all. Reporting
+# not-found there is faithful relaying, and must stay exit 2.
+run_bzr_raw --json --server public product view "$RESTRICTED_PRODUCT"
+if assert_exit_code 2 && assert_stderr_json '.error.type' "not_found"; then
+    test_pass
+fi
+
+unset RESTRICTED_USER RESTRICTED_KEY RESTRICTED_GROUP RESTRICTED_BUG
+unset RESTRICTED_PRODUCT RESTRICTED_PROD_BUG _RA
+
+echo ""

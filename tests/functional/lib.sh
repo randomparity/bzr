@@ -202,11 +202,19 @@ assert_raw_json() {
 
 # assert_stderr_json <jq-expr> <expected-value> — jq against the captured
 # stderr, where the structured `error` object lands under --json on failure.
+#
+# stderr is a mixed stream: tracing diagnostics share it with the structured
+# error object. Some are one-shot per server (the "URL is not HTTPS — API key
+# will be sent in plaintext" warning fires on a credentialed server's first
+# connect), so parsing the whole file makes an assertion pass or fail on
+# whether an unrelated earlier test happened to warm that server. Select the
+# last JSON object line instead — the error object is always emitted compact,
+# one line, and last.
 assert_stderr_json() {
     local expr="$1"
     local expected="$2"
     local actual
-    actual=$(jq -r "$expr" "$BZR_STDERR" 2>/dev/null)
+    actual=$(grep '^{' "$BZR_STDERR" 2>/dev/null | tail -1 | jq -r "$expr" 2>/dev/null)
     if [[ "$actual" != "$expected" ]]; then
         test_fail "stderr jq '$expr' = '$actual', expected '$expected'"
         return 1

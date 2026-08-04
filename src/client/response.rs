@@ -54,10 +54,11 @@ fn deserialize_code<'de, D: serde::Deserializer<'de>>(
     deserializer.deserialize_any(CodeVisitor)
 }
 
-/// Bugzilla response keys that indicate real data is present alongside
-/// an error payload. When any of these exist, the error is a non-fatal
-/// server-side warning (e.g. from a Bugzilla extension) and the data
-/// should be used.
+/// Bugzilla response keys that can carry real data alongside an error
+/// payload. When one of them holds actual content, the error is a
+/// non-fatal server-side warning (e.g. from a Bugzilla extension) and the
+/// data should be used. Presence alone is not enough — see
+/// [`value_carries_data`].
 const DATA_KEYS: &[&str] = &[
     "bugs",
     "comments",
@@ -77,10 +78,12 @@ const DATA_KEYS: &[&str] = &[
 type EnvelopeCandidate<T> = (&'static str, fn(&serde_json::Value) -> Result<T>);
 
 impl BugzillaClient {
-    /// Check if a JSON object contains known Bugzilla data keys,
-    /// indicating the response has real data alongside any error fields.
+    /// Check whether a JSON object carries real Bugzilla data alongside any
+    /// error fields — i.e. a known data key whose value holds content.
     fn has_data_fields(map: &serde_json::Map<String, serde_json::Value>) -> bool {
-        DATA_KEYS.iter().any(|key| map.contains_key(*key))
+        DATA_KEYS
+            .iter()
+            .any(|key| map.get(*key).is_some_and(value_carries_data))
     }
 
     /// Validate a mutation (PUT) response body for a 200-status error
@@ -157,7 +160,12 @@ impl BugzillaClient {
     ///
     /// Some servers (e.g. IBM LTC Bugzilla) include error fields alongside
     /// valid data — only treat the error as fatal when the response doesn't
-    /// also contain real data (indicated by common Bugzilla result keys).
+    /// also carry real data (a common Bugzilla result key holding content).
+    ///
+    /// The data must be non-empty, not merely present: a server answering a
+    /// restricted-bug lookup with an error and an empty `bugs: []` placeholder
+    /// has told us only the error, and swallowing it leaves an empty result
+    /// that the caller reports as "bug not found" (issue #504, ADR 0015).
     fn check_bugzilla_200_error(value: &serde_json::Value, url: &str) -> Result<()> {
         let Some(map) = value.as_object() else {
             return Ok(());
@@ -296,6 +304,19 @@ impl BugzillaClient {
             });
         }
         Ok(response)
+    }
+}
+
+/// Whether a Bugzilla data key's value actually carries a result.
+///
+/// An empty array, an empty object, and `null` are placeholders the server
+/// emits beside an error, not data. Any other scalar counts as content.
+fn value_carries_data(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Null => false,
+        serde_json::Value::Array(items) => !items.is_empty(),
+        serde_json::Value::Object(map) => !map.is_empty(),
+        _ => true,
     }
 }
 

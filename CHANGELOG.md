@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `bzr bug view` no longer reports `bug not found` for a bug the server
+  declined to return for another reason. Two paths discarded the server's own
+  explanation and substituted an empty result, which surfaced as exit 2 —
+  intermittently, because both triggers are server-load dependent, so retrying
+  the same command eventually succeeded. (#504)
+
+  - A Bugzilla error payload arriving with HTTP 200 was downgraded to a warning
+    whenever the response merely *contained* a known data key, even an empty
+    one. A body such as `{"error":true,"code":102,"message":"You are not
+    authorized…","bugs":[]}` was swallowed, leaving nothing to return. A data
+    key must now hold content — an empty array, an empty object and `null` no
+    longer count — so the error is surfaced. An error alongside genuinely
+    populated data is still used as data and logged as a warning, unchanged.
+  - The retry through the search endpoint (used when a direct lookup fails with
+    Bugzilla's internal error 100500) dropped the original error when the
+    search came back empty. Bugzilla's search path omits rows the caller may
+    not see rather than faulting, so an empty retry is "the fallback could not
+    answer", not "no such bug". The original error is now re-surfaced. In
+    Hybrid mode this also repairs the XML-RPC fallback, which keys off the
+    100500 code and could not previously be reached from this path — an
+    affected lookup can now succeed instead of failing.
+
+  The same tightening fixes a silent mutation failure: `bzr bug update` checks
+  the response body because some deployments report a *rejected* mutation with
+  HTTP 200, and an error payload carrying an empty `bugs: []` defeated that
+  check — an update the server refused was reported as success. Rejections of
+  that shape now fail with the server's code and message.
+
+  **Behaviour change:** a restricted bug that previously exited 2 (`not_found`)
+  now exits 4 (`api`) carrying the server's `api_code` and message. Scripts
+  branching on exit 2 to mean "absent or restricted" should branch on 2 or 4.
+  Exit 2 now means the server itself returned an empty result with no error.
+  See ADR-0015.
+
+  **Known trade-off:** on a deployment that attaches `error: true` to every
+  response as a standing warning, a query that legitimately matches nothing now
+  fails rather than returning an empty list — such a response is
+  indistinguishable from "an error, and no data". ADR-0015 accepts this
+  knowingly; the fix is server-side.
+
 ## [0.8.0] - 2026-07-28
 
 ### Added
