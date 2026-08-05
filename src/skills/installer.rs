@@ -305,46 +305,58 @@ fn parse_sentinel(bytes: &[u8], skill: &str) -> bool {
     let mut fields = BTreeMap::new();
     let mut lines = text.split('\n').peekable();
     while let Some(line) = lines.next() {
-        if line.is_empty() && lines.peek().is_none() {
-            continue;
-        }
-        let line = if let Some(line) = line.strip_suffix('\r') {
-            if lines.peek().is_none() {
-                return false;
-            }
-            line
-        } else {
-            line
-        };
-        if line.contains('\r') {
+        if !parse_sentinel_line(line, lines.peek().is_some(), &mut fields) {
             return false;
         }
-        if line.is_empty() {
-            return false;
-        }
-        let Some((key, value)) = line.split_once(": ") else {
-            return false;
-        };
-        if key.is_empty() || key.contains(':') || value.is_empty() || fields.contains_key(key) {
-            return false;
-        }
-        fields.insert(key, value);
     }
+    required_sentinel_fields_are_valid(&fields, skill)
+}
 
+fn parse_sentinel_line<'a>(
+    raw: &'a str,
+    has_following_line: bool,
+    fields: &mut BTreeMap<&'a str, &'a str>,
+) -> bool {
+    if raw.is_empty() {
+        return !has_following_line;
+    }
+    let Some(line) = normalize_sentinel_line(raw, has_following_line) else {
+        return false;
+    };
+    let Some((key, value)) = line.split_once(": ") else {
+        return false;
+    };
+    if key.is_empty() || key.contains(':') || value.is_empty() {
+        return false;
+    }
+    fields.insert(key, value).is_none()
+}
+
+fn normalize_sentinel_line(raw: &str, has_following_line: bool) -> Option<&str> {
+    if raw.contains('\r') {
+        return raw.strip_suffix('\r').filter(|_| has_following_line);
+    }
+    Some(raw)
+}
+
+fn required_sentinel_fields_are_valid(fields: &BTreeMap<&str, &str>, skill: &str) -> bool {
     let required = [
         "managed-by",
         "installed-skill",
         "source-version",
         "source-commit",
     ];
-    if required.iter().any(|key| {
-        fields
-            .get(key)
-            .is_none_or(|value| !value.is_ascii() || value.is_empty())
-    }) {
-        return false;
-    }
-    fields.get("managed-by") == Some(&"bzr-skill") && fields.get("installed-skill") == Some(&skill)
+    required
+        .iter()
+        .all(|key| required_sentinel_value_is_valid(fields, key))
+        && fields.get("managed-by") == Some(&"bzr-skill")
+        && fields.get("installed-skill") == Some(&skill)
+}
+
+fn required_sentinel_value_is_valid(fields: &BTreeMap<&str, &str>, key: &str) -> bool {
+    fields
+        .get(key)
+        .is_some_and(|value| value.is_ascii() && !value.is_empty())
 }
 
 struct DestinationLock {
@@ -464,7 +476,10 @@ fn recover_or_refuse_existing_lock(lock_path: &Path) -> Result<()> {
     })?;
     if pid_metadata.file_type().is_symlink() || !pid_metadata.is_file() {
         return Err(BzrError::DataIntegrity(format!(
-            "refusing destination lock '{}': PID file '{}' is a symbolic link or not a regular file",
+            concat!(
+                "refusing destination lock '{}': PID file '{}' is a symbolic link ",
+                "or not a regular file"
+            ),
             lock_path.display(),
             pid_path.display()
         )));

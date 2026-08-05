@@ -38,7 +38,11 @@ assert_current_binary_sentinel \
   "$root/.agents/skills/bzr-reference/$SENTINEL"
 
 # Always exercise the exact PowerShell byte grammar, even without pwsh.
-printf '\357\273\277managed-by: bzr-skill\r\ninstalled-skill: bzr-reference\r\nsource-version: fixture\r\nsource-commit: fixture\r\n' \
+printf '%b%b%b%b' \
+  '\357\273\277managed-by: bzr-skill\r\n' \
+  'installed-skill: bzr-reference\r\n' \
+  'source-version: fixture\r\n' \
+  'source-commit: fixture\r\n' \
   >"$root/.agents/skills/bzr-reference/$SENTINEL"
 "$BZR_BIN" skills install --agent standard --project "$root" >/dev/null
 assert_current_binary_sentinel \

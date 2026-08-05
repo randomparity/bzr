@@ -184,8 +184,23 @@ fn successful_outcome(project: &Path, warnings: Vec<String>) -> InstallOutcome {
     }
 }
 
-#[test]
-fn installer_activation_or_restore_error_returns_classified_error_with_empty_stdout() {
+fn complete_project_table() -> &'static str {
+    concat!(
+        "+-----------------+-------------------------+\n",
+        "| Skill           | Destination             |\n",
+        "+-----------------+-------------------------+\n",
+        "| bzr-bulk-triage | /project/.agents/skills |\n",
+        "+-----------------+-------------------------+\n",
+        "| bzr-file-bug    | /project/.agents/skills |\n",
+        "+-----------------+-------------------------+\n",
+        "| bzr-bulk-triage | /project/.claude/skills |\n",
+        "+-----------------+-------------------------+\n",
+        "| bzr-file-bug    | /project/.claude/skills |\n",
+        "+-----------------+-------------------------+\n",
+    )
+}
+
+fn assert_install_error_is_silent(message: &str) {
     let project = tempfile::TempDir::new().unwrap();
     let mut out = Vec::new();
     let mut err = Vec::new();
@@ -197,24 +212,40 @@ fn installer_activation_or_restore_error_returns_classified_error_with_empty_std
         &project_args(project.path()),
         &context,
         &mut writers,
-        |_| {
-            Err(BzrError::DataIntegrity(
-                "activate '/project/skill' failed; installed before failure: bzr-one -> /project"
-                    .into(),
-            ))
-        },
+        |_| Err(BzrError::DataIntegrity(message.into())),
     );
 
-    let Err(BzrError::DataIntegrity(message)) = result else {
+    let Err(error @ BzrError::DataIntegrity(_)) = result else {
         panic!("installer failure must retain its classification");
     };
-    assert!(message.contains("installed before failure"));
+    assert_eq!(error.error_type(), "data_integrity");
+    let BzrError::DataIntegrity(actual) = error else {
+        unreachable!("variant was checked above");
+    };
+    assert_eq!(actual, message);
     assert!(out.is_empty());
     assert!(err.is_empty());
 }
 
 #[test]
-fn successful_cleanup_warning_emits_complete_json_and_recovery_stderr() {
+fn partial_activation_error_retains_classification_and_emits_nothing() {
+    assert_install_error_is_silent(
+        "activate '/project/bzr-file-bug' failed; installed before failure: \
+         bzr-bulk-triage -> /project/.agents/skills",
+    );
+}
+
+#[test]
+fn failed_restore_error_retains_recovery_paths_and_emits_nothing() {
+    assert_install_error_is_silent(
+        "activate '/project/bzr-bulk-triage' failed; restore failed: injected Restore; \
+         previous content remains at '/project/.bzr-skill.old'; staged content remains at \
+         '/project/.bzr-skill.stage'",
+    );
+}
+
+#[test]
+fn lock_cleanup_warning_emits_complete_json_and_exact_recovery_stderr() {
     let project = tempfile::TempDir::new().unwrap();
     let canonical = project.path().canonicalize().unwrap();
     let mut out = Vec::new();
@@ -222,7 +253,9 @@ fn successful_cleanup_warning_emits_complete_json_and_recovery_stderr() {
     let mut writers = Writers::new(&mut out, &mut err);
     let context =
         crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None);
-    let warning = "installation completed but could not release lock '/project/.bzr-skill.lock'; verify no process is using it";
+    let warning = "installation completed but could not release lock \
+                   '/project/.bzr-skill.lock.release.42': injected ReleaseLock; verify no bzr \
+                   skills install process is using it before removing it";
 
     execute_install_with(
         &project_args(project.path()),
@@ -234,43 +267,57 @@ fn successful_cleanup_warning_emits_complete_json_and_recovery_stderr() {
 
     let output = String::from_utf8(out).unwrap();
     let data = crate::test_helpers::json_envelope_data(&output);
-    assert_eq!(data["action"], "install");
-    assert_eq!(data["agent"], "all");
-    assert_eq!(data["scope"], "project");
-    assert_eq!(data["project"], canonical.display().to_string());
-    assert_eq!(data["destinations"][0]["layout"], "agents");
-    assert_eq!(data["destinations"][1]["layout"], "claude");
     assert_eq!(
-        data["destinations"][0]["installed"]
-            .as_array()
-            .unwrap()
-            .len(),
-        2
+        data,
+        serde_json::json!({
+            "action": "install",
+            "agent": "all",
+            "scope": "project",
+            "project": canonical.display().to_string(),
+            "destinations": [
+                {
+                    "layout": "agents",
+                    "path": canonical.join(".agents/skills").display().to_string(),
+                    "installed": ["bzr-bulk-triage", "bzr-file-bug"]
+                },
+                {
+                    "layout": "claude",
+                    "path": canonical.join(".claude/skills").display().to_string(),
+                    "installed": ["bzr-bulk-triage", "bzr-file-bug"]
+                }
+            ]
+        })
     );
     assert_eq!(String::from_utf8(err).unwrap(), format!("{warning}\n"));
 }
 
 #[test]
-fn successful_install_emits_the_complete_table_through_the_same_seam() {
+fn aside_cleanup_warning_emits_complete_table_and_exact_recovery_stderr() {
     let project = tempfile::TempDir::new().unwrap();
-    let canonical = project.path().canonicalize().unwrap();
     let mut out = Vec::new();
     let mut err = Vec::new();
     let mut writers = Writers::new(&mut out, &mut err);
     let context =
         crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None);
 
+    let warning = "installed 'bzr-bulk-triage' at '/project/.agents/skills/bzr-bulk-triage' \
+                   but could not remove residual aside '/project/.agents/skills/.bzr-skill.old': \
+                   injected RemoveAside; verify the installed target, then remove the aside";
+
     execute_install_with(
         &project_args(project.path()),
         &context,
         &mut writers,
-        |_| Ok(successful_outcome(&canonical, Vec::new())),
+        |_| {
+            Ok(successful_outcome(
+                Path::new("/project"),
+                vec![warning.into()],
+            ))
+        },
     )
     .unwrap();
 
     let output = String::from_utf8(out).unwrap();
-    assert!(output.contains("bzr-bulk-triage"));
-    assert!(output.contains(&canonical.join(".agents/skills").display().to_string()));
-    assert!(output.contains(&canonical.join(".claude/skills").display().to_string()));
-    assert!(err.is_empty());
+    assert_eq!(output, complete_project_table());
+    assert_eq!(String::from_utf8(err).unwrap(), format!("{warning}\n"));
 }

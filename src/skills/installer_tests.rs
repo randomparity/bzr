@@ -141,8 +141,62 @@ fn target(root: &Path) -> PathBuf {
 
 fn sentinel(skill: &str) -> String {
     format!(
-        "managed-by: bzr-skill\ninstalled-skill: {skill}\nsource-version: test\nsource-commit: abc\n"
+        concat!(
+            "managed-by: bzr-skill\n",
+            "installed-skill: {}\n",
+            "source-version: test\n",
+            "source-commit: abc\n"
+        ),
+        skill
     )
+}
+
+fn installed_sentinel(skill: &str) -> String {
+    format!(
+        "managed-by: bzr-skill\ninstalled-skill: {skill}\nsource-version: {}\nsource-commit: {}\n",
+        env!("CARGO_PKG_VERSION"),
+        env!("BZR_GIT_SHA")
+    )
+}
+
+fn embedded_file_bytes(skill: &str, relative: &str) -> &'static [u8] {
+    let path = format!("{skill}/{relative}");
+    embedded::files()
+        .iter()
+        .find(|file| file.relative_path == path)
+        .unwrap()
+        .bytes
+}
+
+fn assert_installed_skill_bytes(root: &Path, skill: &str) {
+    let installed = destination(root).join(skill);
+    assert_eq!(
+        fs::read(installed.join("SKILL.md")).unwrap(),
+        embedded_file_bytes(skill, "SKILL.md")
+    );
+    assert_eq!(
+        fs::read(installed.join(".bzr-skill-managed")).unwrap(),
+        installed_sentinel(skill).as_bytes()
+    );
+}
+
+fn residual_paths(destination: &Path, prefix: &str) -> Vec<PathBuf> {
+    let mut paths = fs::read_dir(destination)
+        .unwrap()
+        .collect::<std::io::Result<Vec<_>>>()
+        .unwrap()
+        .into_iter()
+        .filter(|entry| entry.file_name().to_string_lossy().starts_with(prefix))
+        .map(|entry| entry.path())
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths
+}
+
+fn only_residual_path(destination: &Path, prefix: &str) -> PathBuf {
+    let paths = residual_paths(destination, prefix);
+    assert_eq!(paths.len(), 1, "expected one {prefix} residual: {paths:?}");
+    paths.into_iter().next().unwrap()
 }
 
 fn create_owned(root: &Path, skill: &str) -> PathBuf {
@@ -246,7 +300,14 @@ fn accepts_posix_lf_and_powershell_bom_crlf_sentinels_with_unknown_fields() {
     for bytes in [
         sentinel(SKILL).into_bytes(),
         format!(
-            "\u{feff}managed-by: bzr-skill\r\ninstalled-skill: {SKILL}\r\nsource-version: test\r\nsource-commit: abc\r\nfuture-field: accepted\r\n"
+            concat!(
+                "\u{feff}managed-by: bzr-skill\r\n",
+                "installed-skill: {}\r\n",
+                "source-version: test\r\n",
+                "source-commit: abc\r\n",
+                "future-field: accepted\r\n"
+            ),
+            SKILL
         )
         .into_bytes(),
     ] {
@@ -265,11 +326,22 @@ fn refuses_every_malformed_or_mismatched_ownership_sentinel_without_tree_changes
         ("empty", Some("")),
         (
             "wrong-manager",
-            Some("managed-by: other\ninstalled-skill: bzr-bulk-triage\nsource-version: x\nsource-commit: y\n"),
+            Some(concat!(
+                "managed-by: other\n",
+                "installed-skill: bzr-bulk-triage\n",
+                "source-version: x\n",
+                "source-commit: y\n"
+            )),
         ),
         (
             "duplicate-manager",
-            Some("managed-by: bzr-skill\nmanaged-by: bzr-skill\ninstalled-skill: bzr-bulk-triage\nsource-version: x\nsource-commit: y\n"),
+            Some(concat!(
+                "managed-by: bzr-skill\n",
+                "managed-by: bzr-skill\n",
+                "installed-skill: bzr-bulk-triage\n",
+                "source-version: x\n",
+                "source-commit: y\n"
+            )),
         ),
         (
             "missing-field",
@@ -277,23 +349,48 @@ fn refuses_every_malformed_or_mismatched_ownership_sentinel_without_tree_changes
         ),
         (
             "empty-field",
-            Some("managed-by: bzr-skill\ninstalled-skill: bzr-bulk-triage\nsource-version: \nsource-commit: y\n"),
+            Some(concat!(
+                "managed-by: bzr-skill\n",
+                "installed-skill: bzr-bulk-triage\n",
+                "source-version: \n",
+                "source-commit: y\n"
+            )),
         ),
         (
             "wrong-skill",
-            Some("managed-by: bzr-skill\ninstalled-skill: other\nsource-version: x\nsource-commit: y\n"),
+            Some(concat!(
+                "managed-by: bzr-skill\n",
+                "installed-skill: other\n",
+                "source-version: x\n",
+                "source-commit: y\n"
+            )),
         ),
         (
             "malformed",
-            Some("managed-by:bzr-skill\ninstalled-skill: bzr-bulk-triage\nsource-version: x\nsource-commit: y\n"),
+            Some(concat!(
+                "managed-by:bzr-skill\n",
+                "installed-skill: bzr-bulk-triage\n",
+                "source-version: x\n",
+                "source-commit: y\n"
+            )),
         ),
         (
             "extra-trailing-newline",
-            Some("managed-by: bzr-skill\ninstalled-skill: bzr-bulk-triage\nsource-version: x\nsource-commit: y\n\n"),
+            Some(concat!(
+                "managed-by: bzr-skill\n",
+                "installed-skill: bzr-bulk-triage\n",
+                "source-version: x\n",
+                "source-commit: y\n\n"
+            )),
         ),
         (
             "bare-trailing-carriage-return",
-            Some("managed-by: bzr-skill\ninstalled-skill: bzr-bulk-triage\nsource-version: x\nsource-commit: y\r"),
+            Some(concat!(
+                "managed-by: bzr-skill\n",
+                "installed-skill: bzr-bulk-triage\n",
+                "source-version: x\n",
+                "source-commit: y\r"
+            )),
         ),
     ];
 
@@ -530,12 +627,13 @@ fn first_install_activation_failure_leaves_no_target_and_reports_stage_cleanup()
 fn activation_failure_restores_existing_owned_target() {
     let temp = tempfile::TempDir::new().unwrap();
     create_owned(temp.path(), SKILL);
+    let before = snapshot(temp.path());
     let error = run(temp.path(), Failure::Activate).unwrap_err();
+
     assert!(error.to_string().contains("restored previous content"));
-    assert_eq!(
-        fs::read(target(temp.path()).join("old.txt")).unwrap(),
-        b"old bytes"
-    );
+    assert_eq!(snapshot(temp.path()), before);
+    assert!(residual_paths(&destination(temp.path()), ".bzr-skill.stage.").is_empty());
+    assert!(residual_paths(&destination(temp.path()), ".bzr-skill.old.").is_empty());
 }
 
 #[test]
@@ -545,22 +643,67 @@ fn failed_restore_retains_authoritative_aside_and_stage_recovery_paths() {
     let mut ops = TestOps::with_failures(&[Failure::Activate, Failure::Restore]);
     let error =
         install_with_ops(request(temp.path(), AgentTarget::Standard), &mut ops).unwrap_err();
-    assert!(error.to_string().contains("restore failed"));
-    assert!(error.to_string().contains("previous content remains"));
+    let message = error.to_string();
+    let aside = only_residual_path(&destination(temp.path()), ".bzr-skill.old.");
+    let stage = only_residual_path(&destination(temp.path()), ".bzr-skill.stage.");
+
+    assert!(message.contains("restore failed"));
+    assert!(message.contains(&aside.display().to_string()));
+    assert!(message.contains(&stage.display().to_string()));
     assert!(!target(temp.path()).exists());
+    assert_eq!(fs::read(aside.join("old.txt")).unwrap(), b"old bytes");
+    assert_eq!(
+        fs::read(aside.join(".bzr-skill-managed")).unwrap(),
+        sentinel(SKILL).as_bytes()
+    );
+    assert_eq!(
+        fs::read(stage.join("SKILL.md")).unwrap(),
+        embedded_file_bytes(SKILL, "SKILL.md")
+    );
+    assert_eq!(
+        fs::read(stage.join(".bzr-skill-managed")).unwrap(),
+        installed_sentinel(SKILL).as_bytes()
+    );
 }
 
 #[test]
-fn aside_cleanup_and_lock_release_failures_are_success_warnings() {
-    for failure in [Failure::RemoveAside, Failure::ReleaseLock] {
-        let temp = tempfile::TempDir::new().unwrap();
-        create_owned(temp.path(), SKILL);
-        let outcome = run(temp.path(), failure).unwrap();
-        assert_eq!(outcome.destinations[0].installed, embedded::skill_names());
-        assert_eq!(outcome.warnings.len(), 1);
-        assert!(outcome.warnings[0].contains("verify"));
-        assert!(target(temp.path()).join("SKILL.md").is_file());
+fn aside_cleanup_failure_keeps_new_target_and_old_aside_bytes() {
+    let temp = tempfile::TempDir::new().unwrap();
+    create_owned(temp.path(), SKILL);
+    let outcome = run(temp.path(), Failure::RemoveAside).unwrap();
+    let aside = only_residual_path(&destination(temp.path()), ".bzr-skill.old.");
+
+    assert_eq!(outcome.destinations[0].installed, embedded::skill_names());
+    assert_eq!(outcome.warnings.len(), 1);
+    assert!(outcome.warnings[0].contains(&aside.display().to_string()));
+    assert_installed_skill_bytes(temp.path(), SKILL);
+    assert_eq!(fs::read(aside.join("old.txt")).unwrap(), b"old bytes");
+    assert_eq!(
+        fs::read(aside.join(".bzr-skill-managed")).unwrap(),
+        sentinel(SKILL).as_bytes()
+    );
+}
+
+#[test]
+fn lock_release_failure_keeps_installed_target_and_owned_detached_lock() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let outcome = run(temp.path(), Failure::ReleaseLock).unwrap();
+    let detached = only_residual_path(&destination(temp.path()), ".bzr-skill.lock.release.");
+
+    assert_eq!(outcome.destinations[0].installed, embedded::skill_names());
+    assert_eq!(outcome.warnings.len(), 1);
+    assert!(outcome.warnings[0].contains(&detached.display().to_string()));
+    for skill in embedded::skill_names() {
+        assert_installed_skill_bytes(temp.path(), skill);
     }
+    assert!(!destination(temp.path()).join(".bzr-skill.lock").exists());
+    assert_eq!(
+        fs::read(detached.join("pid")).unwrap(),
+        format!("{}\n", std::process::id()).as_bytes()
+    );
+    let mut successor = acquire_destination_lock(&destination(temp.path())).unwrap();
+    successor.release(&mut TestOps::new(Failure::None)).unwrap();
+    assert!(detached.is_dir());
 }
 
 #[test]
