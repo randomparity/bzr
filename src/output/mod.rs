@@ -11,6 +11,6 @@ pub const SCHEMA_VERSION: &str = "0.6.1";
 
 mod formatting;
 pub mod progress;
-pub(crate) mod resources;
+pub mod resources;
 pub(crate) mod result_types;
 pub mod writers;

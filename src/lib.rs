@@ -129,6 +129,7 @@ pub async fn dispatch(
         cli::Commands::Query { action } => commands::query::execute(action, &ctx, w).await,
         cli::Commands::Completion { shell } => commands::completion::execute(*shell, &ctx, w).await,
         cli::Commands::Schema { name } => commands::schema::execute(name.as_deref(), &ctx, w).await,
+        cli::Commands::Skills { action } => commands::skills::execute(action, &ctx, w).await,
     };
     if result.is_ok() {
         bugzilla_auth::clear_active_api_key();
@@ -235,7 +236,8 @@ fn command_capabilities(
         | cli::Commands::Template { .. }
         | cli::Commands::Query { .. }
         | cli::Commands::Completion { .. }
-        | cli::Commands::Schema { .. } => {
+        | cli::Commands::Schema { .. }
+        | cli::Commands::Skills { .. } => {
             commands::runtime::invocation::CommandCapabilities::anonymous()
         }
     }

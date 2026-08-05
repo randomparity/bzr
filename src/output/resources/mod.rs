@@ -9,5 +9,6 @@ pub(crate) mod group;
 pub(crate) mod product;
 pub(crate) mod query;
 pub(crate) mod server;
+pub mod skills;
 pub(crate) mod template;
 pub(crate) mod user;
