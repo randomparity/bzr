@@ -28,6 +28,7 @@ enum Failure {
     ReleaseLock,
     ReleaseHandoff,
     RaceForeign,
+    RaceForeignAtAside,
 }
 
 struct TestOps {
@@ -74,6 +75,14 @@ impl FileOperations for TestOps {
             .unwrap_or("");
         let to_name = to.file_name().and_then(|name| name.to_str()).unwrap_or("");
         if to_name.contains(".bzr-skill.old.") {
+            if self.failures.contains(&Failure::RaceForeignAtAside)
+                && self.triggered.insert(Failure::RaceForeignAtAside)
+                && from.ends_with(SKILL)
+            {
+                fs::remove_dir_all(from)?;
+                fs::create_dir(from)?;
+                fs::write(from.join("foreign.txt"), b"foreign bytes")?;
+            }
             self.fail_once(Failure::TargetToAside)?;
         } else if from_name.contains(".bzr-skill.stage.") {
             self.fail_once(Failure::Activate)?;
@@ -761,4 +770,46 @@ fn final_recheck_preserves_foreign_bytes_introduced_after_authoritative_pass() {
         fs::read(target(temp.path()).join("foreign.txt")).unwrap(),
         b"foreign bytes"
     );
+}
+
+#[test]
+fn post_check_foreign_swap_is_restored_without_activation_or_residuals() {
+    let temp = tempfile::TempDir::new().unwrap();
+    create_owned(temp.path(), SKILL);
+
+    let error = run(temp.path(), Failure::RaceForeignAtAside).unwrap_err();
+
+    assert!(error.to_string().contains("foreign"));
+    assert!(error.to_string().contains("restored foreign content"));
+    assert_eq!(
+        fs::read(target(temp.path()).join("foreign.txt")).unwrap(),
+        b"foreign bytes"
+    );
+    assert!(!target(temp.path()).join("SKILL.md").exists());
+    assert!(residual_paths(&destination(temp.path()), ".bzr-skill.stage.").is_empty());
+    assert!(residual_paths(&destination(temp.path()), ".bzr-skill.old.").is_empty());
+}
+
+#[test]
+fn failed_post_check_foreign_restore_retains_both_recovery_paths_and_bytes() {
+    let temp = tempfile::TempDir::new().unwrap();
+    create_owned(temp.path(), SKILL);
+    let mut ops = TestOps::with_failures(&[Failure::RaceForeignAtAside, Failure::Restore]);
+
+    let error =
+        install_with_ops(request(temp.path(), AgentTarget::Standard), &mut ops).unwrap_err();
+    let message = error.to_string();
+    let aside = only_residual_path(&destination(temp.path()), ".bzr-skill.old.");
+    let stage = only_residual_path(&destination(temp.path()), ".bzr-skill.stage.");
+
+    assert!(message.contains("foreign"));
+    assert!(message.contains("restore failed"));
+    assert!(message.contains(&aside.display().to_string()));
+    assert!(message.contains(&stage.display().to_string()));
+    assert!(!target(temp.path()).exists());
+    assert_eq!(
+        fs::read(aside.join("foreign.txt")).unwrap(),
+        b"foreign bytes"
+    );
+    assert_eq!(snapshot(&stage), expected_skill_snapshot(SKILL));
 }

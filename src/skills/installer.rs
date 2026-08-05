@@ -664,10 +664,29 @@ fn replace_target<O: FileOperations>(
         let error = io_error("move existing skill aside", target, error);
         return Err(clean_stage_after_error(error, stage, ops));
     }
+    if let Err(error) = validate_target(&aside, skill) {
+        return Err(restore_detached_target(
+            error,
+            &DetachedTarget {
+                target,
+                stage,
+                aside: &aside,
+            },
+            "restored foreign content",
+            ops,
+        ));
+    }
     if let Err(error) = ops.rename(stage, target) {
         let activation = io_error("activate staged skill", target, error);
-        return Err(restore_after_activation_failure(
-            activation, target, stage, &aside, ops,
+        return Err(restore_detached_target(
+            activation,
+            &DetachedTarget {
+                target,
+                stage,
+                aside: &aside,
+            },
+            "restored previous content",
+            ops,
         ));
     }
     if let Err(error) = ops.remove_dir_all(&aside) {
@@ -681,25 +700,30 @@ fn replace_target<O: FileOperations>(
     Ok(())
 }
 
-fn restore_after_activation_failure<O: FileOperations>(
-    activation: BzrError,
-    target: &Path,
-    stage: &Path,
-    aside: &Path,
+struct DetachedTarget<'a> {
+    target: &'a Path,
+    stage: &'a Path,
+    aside: &'a Path,
+}
+
+fn restore_detached_target<O: FileOperations>(
+    failure: BzrError,
+    detached: &DetachedTarget<'_>,
+    restored_detail: &str,
     ops: &mut O,
 ) -> BzrError {
-    match ops.rename(aside, target) {
+    match ops.rename(detached.aside, detached.target) {
         Ok(()) => {
-            let error = append_detail(activation, "restored previous content");
-            clean_stage_after_error(error, stage, ops)
+            let error = append_detail(failure, restored_detail);
+            clean_stage_after_error(error, detached.stage, ops)
         }
         Err(restore_error) => append_detail(
-            activation,
+            failure,
             &format!(
-                "restore failed: {restore_error}; previous content remains at '{}'; staged \
+                "restore failed: {restore_error}; detached content remains at '{}'; staged \
                  content remains at '{}'",
-                aside.display(),
-                stage.display()
+                detached.aside.display(),
+                detached.stage.display()
             ),
         ),
     }
