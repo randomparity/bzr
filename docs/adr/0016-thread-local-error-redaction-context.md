@@ -21,6 +21,8 @@ Keep the active API key in a crate-private thread-local redaction context. Clear
 context at the start of every dispatch and register a resolved credential before any
 authenticated request. The final `BzrError` display seam applies marker redaction and
 then masks every occurrence of that active key when it is at least eight bytes long.
+The binary clears the context after it has materialized the final formatted error, and
+also after a successful dispatch.
 
 Percent-encoded `Bugzilla_api_key%3D` markers remain marker-driven and are redacted at
 any value length. The existing `make check-no-spawn` guard is part of this decision: a
@@ -30,11 +32,16 @@ move to task fan-out or a multi-thread runtime requires replacing the context me
 
 - Every existing `BzrError::Api` and `BzrError::HttpStatus` construction site stays
   covered by one display seam, including failures before `BugzillaClient` construction.
-- The secret does not become a field of the public error enum or its derived `Debug`
-  output.
+- The design adds no separate secret-bearing field to the public error enum.
+- Raw server payloads stored in `Api` and `HttpStatus`, including their derived `Debug`
+  representation, remain unredacted. They are outside this decision's final CLI-output
+  boundary and must not be treated as safe diagnostics.
 - Tests running on separate OS threads cannot overwrite one another's active key.
-- Sequential dispatches on one thread cannot inherit a prior key because dispatch clears
-  the context first.
+- Sequential CLI invocations cannot inherit a prior key: dispatch clears before work and
+  the binary clears after success or after formatting an error. A library caller that
+  constructs clients directly retains the thread-local context until the next registration
+  or thread teardown; that caller must not treat unrelated `BzrError` display on the same
+  thread as an independently scoped operation.
 - Bare keys shorter than eight bytes are deliberately left unchanged to avoid shredding
   unrelated prose; marked values are still redacted.
 

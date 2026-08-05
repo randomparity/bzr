@@ -43,7 +43,8 @@ Decision: [ADR 0016](../../adr/0016-thread-local-error-redaction-context.md)
 operations: clear it, register a resolved key, and redact a message. `dispatch` clears the
 slot before building command context. Credential resolution registers a non-empty key as
 soon as it succeeds, before auth detection, version probing, or client construction can
-return a server error.
+return a server error. The binary clears the slot after successful dispatch and after it
+has converted a failed dispatch into its final formatted output string.
 
 `redact_api_key` remains the single function called by `BzrError` display. It recognizes
 literal `Bugzilla_api_key=` plus upper- and lower-case percent-encoded equals markers.
@@ -62,7 +63,10 @@ the following formatted error line is protected by the same seam.
 Credential lookup errors cannot leak a resolved secret because registration happens only
 after successful resolution. Anonymous commands leave the cleared context empty. A later
 dispatch on the same thread begins by clearing stale state. Keyring, inline, and
-environment-backed credentials all converge at the same resolver return.
+environment-backed credentials all converge at the same resolver return. Direct library
+client construction can leave a registered key on its thread until another registration
+or thread teardown; the guarantee here is final CLI output, not safe derived `Debug` for
+raw server payloads or isolation between unrelated direct-client displays.
 
 ## Threat model
 
@@ -87,7 +91,9 @@ reports are treated as destinations that must not receive that key.
   keys shorter than eight bytes to bound false positives.
 - Dispatch clearing and CONC-3's current-thread/no-fan-out guard bound the key to one CLI
   invocation and prevent concurrent task confusion.
-- The secret is not added to `BzrError`, serialized detail, logs, or persistence.
+- The secret is not added as a separate `BzrError` field, serialized detail, log field,
+  or persisted value. Raw server payloads inside `Api` and `HttpStatus` remain unredacted
+  in derived `Debug`; only the final CLI `Display` path is a safe output boundary.
 
 ### Explicitly out of scope
 
