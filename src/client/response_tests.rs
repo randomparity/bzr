@@ -708,3 +708,86 @@ async fn rejected_mutation_with_empty_data_key_is_not_success() {
         "a rejected mutation must not be reported as success, got {err:?}"
     );
 }
+
+/// The two `BzrError::Api` construction sites both build their message from
+/// server-supplied text. Whichever one fires, the rendered error must be
+/// redacted — the assertion is on `to_string()`, the shared `Display` seam,
+/// not on a redaction repeated at each site.
+#[tokio::test]
+async fn api_error_from_4xx_body_redacts_echoed_api_key() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/group"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
+            "error": true,
+            "code": 32000,
+            "message": "invalid request /rest/group?Bugzilla_api_key=SUPERSECRET&names=x"
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let resp = client
+        .http
+        .get(format!("{}/rest/group", mock.uri()))
+        .send()
+        .await
+        .unwrap();
+    let err = client.check_response_status(resp).await.unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        matches!(&err, crate::error::BzrError::Api { code: 32000, .. }),
+        "expected Api error from the 4xx body, got: {msg}"
+    );
+    assert!(!msg.contains("SUPERSECRET"), "key leaked: {msg}");
+    assert!(msg.contains("Bugzilla_api_key=[REDACTED]"), "{msg}");
+}
+
+#[tokio::test]
+async fn api_error_from_200_error_payload_redacts_echoed_api_key() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/product"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "error": true,
+            "code": 301,
+            "message": "denied for /rest/product?Bugzilla_api_key=SUPERSECRET&names=Secret"
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_product("Secret").await.unwrap_err();
+    let msg = err.to_string();
+    assert!(!msg.contains("SUPERSECRET"), "key leaked: {msg}");
+    assert!(msg.contains("Bugzilla_api_key=[REDACTED]"), "{msg}");
+    assert!(msg.contains("301"), "code must survive: {msg}");
+}
+
+/// A non-JSON 4xx/5xx body falls through to `HttpStatus`, which carries the
+/// raw body — the same gap, so it gets the same seam.
+#[tokio::test]
+async fn http_status_from_non_json_body_redacts_echoed_api_key() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .respond_with(
+            ResponseTemplate::new(500)
+                .set_body_string("upstream failed: GET /rest/user?Bugzilla_api_key=SUPERSECRET"),
+        )
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client
+        .search_users("anyone", UserDetailLevel::Basic)
+        .await
+        .unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        matches!(&err, crate::error::BzrError::HttpStatus { status: 500, .. }),
+        "expected HttpStatus from the non-JSON body, got: {msg}"
+    );
+    assert!(!msg.contains("SUPERSECRET"), "key leaked: {msg}");
+    assert!(msg.contains("Bugzilla_api_key=[REDACTED]"), "{msg}");
+}

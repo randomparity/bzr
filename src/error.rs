@@ -9,7 +9,12 @@ pub enum BzrError {
     #[error("Config error: {0}")]
     Config(String),
 
-    #[error("Bugzilla API error: {message} (code {code})")]
+    /// `message` is server-supplied text. It is redacted here rather than at
+    /// the construction sites in `client/response.rs` so the two cannot drift.
+    #[error(
+        "Bugzilla API error: {} (code {code})",
+        crate::bugzilla_auth::redact_api_key(.message)
+    )]
     Api { code: i64, message: String },
 
     #[error("IO error: {0}")]
@@ -27,7 +32,9 @@ pub enum BzrError {
     #[error("{resource} not found: {id}")]
     NotFound { resource: &'static str, id: String },
 
-    #[error("HTTP {status}: {body}")]
+    /// `body` is the raw server response body — same exposure as [`Self::Api`],
+    /// so it takes the same seam.
+    #[error("HTTP {status}: {}", crate::bugzilla_auth::redact_api_key(.body))]
     HttpStatus { status: u16, body: String },
 
     #[error("{message}")]

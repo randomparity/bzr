@@ -520,3 +520,40 @@ fn suppress_stdout_redirects_fd1_to_devnull() {
         "suppress_stdout did not redirect fd 1; marker reached temp file: {captured_str:?}"
     );
 }
+
+/// `--json` / `--output ndjson` render the error message through the same
+/// `Display` impl as the table path, so redaction lands on every format from
+/// the one seam. Asserting all three here is what makes that shared, rather
+/// than a property of the human path alone.
+#[test]
+fn format_dispatch_error_redacts_echoed_api_key_on_every_format() {
+    let errs = [
+        BzrError::Api {
+            code: 32000,
+            message: "bad request: /rest/bug?Bugzilla_api_key=SUPERSECRET&id=1".into(),
+        },
+        BzrError::HttpStatus {
+            status: 401,
+            body: "unauthorized for /rest/bug?Bugzilla_api_key=SUPERSECRET".into(),
+        },
+    ];
+    for err in &errs {
+        for format in [
+            OutputFormat::Json,
+            OutputFormat::Ndjson,
+            OutputFormat::Table,
+        ] {
+            let out = format_dispatch_error(err, format);
+            assert!(
+                !out.contains("SUPERSECRET"),
+                "{} leaked the key on {format:?}: {out}",
+                err.error_type()
+            );
+            assert!(
+                out.contains("Bugzilla_api_key=[REDACTED]"),
+                "{} not redacted on {format:?}: {out}",
+                err.error_type()
+            );
+        }
+    }
+}
