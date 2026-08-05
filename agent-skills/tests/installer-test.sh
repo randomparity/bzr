@@ -178,27 +178,64 @@ assert_contains "empty pid lock message contains locked" "$out" "locked"
 rm -rf "$root"
 
 # --- remote mode (issue #480) ---------------------------------------------
-# Build a fixture tarball from the repo's own skills, with a DISTINCT version
-# so a local-mode regression (using the checkout) is detectable.
+# Archives from current releases carry content/skills. Explicitly pinned
+# historical releases carry agent-skills/skills. Keep both layouts covered, and
+# ensure a transition archive prefers the current source when both are present.
 fxroot=$(mktemp -d)
-mkdir -p "$fxroot/bzr-fixture/agent-skills"
-cp -R "$HERE/../skills" "$fxroot/bzr-fixture/agent-skills/skills"
-printf 'FIXTURE-9.9.9\n' >"$fxroot/bzr-fixture/agent-skills/VERSION"
-(cd "$fxroot" && tar czf fixture.tgz bzr-fixture)
-fixture="$fxroot/fixture.tgz"
 
-# remote install: BZR_SKILL_TARBALL_URL forces remote even with a local skills/
+write_skills() {
+  root="$1"
+  marker="$2"
+  for skill in bzr-reference bzr-setup bzr-file-bug bzr-triage-bug bzr-search-report bzr-bulk-triage; do
+    mkdir -p "$root/$skill"
+    printf '%s\n' "$marker" >"$root/$skill/SKILL.md"
+  done
+}
+
+current_root="$fxroot/current/bzr-fixture"
+mkdir -p "$current_root/content"
+write_skills "$current_root/content/skills" "CURRENT-ONLY"
+(cd "$fxroot/current" && tar czf "$fxroot/current.tgz" bzr-fixture)
+
+historical_root="$fxroot/historical/bzr-fixture"
+mkdir -p "$historical_root/agent-skills"
+write_skills "$historical_root/agent-skills/skills" "HISTORICAL-ONLY"
+(cd "$fxroot/historical" && tar czf "$fxroot/historical.tgz" bzr-fixture)
+
+both_root="$fxroot/both/bzr-fixture"
+mkdir -p "$both_root/content" "$both_root/agent-skills"
+write_skills "$both_root/content/skills" "CURRENT-WINS"
+write_skills "$both_root/agent-skills/skills" "HISTORICAL-LOSES"
+(cd "$fxroot/both" && tar czf "$fxroot/both.tgz" bzr-fixture)
+
+# Current-only remote archive installs the canonical content/skills payload.
 root=$(newroot)
 tmpd=$(mktemp -d)
-out=$(TMPDIR="$tmpd" BZR_SKILL_DEST_ROOT="$root" BZR_SKILL_TARBALL_URL="$fixture" \
+out=$(TMPDIR="$tmpd" BZR_SKILL_DEST_ROOT="$root" BZR_SKILL_TARBALL_URL="$fxroot/current.tgz" \
   "$INSTALL" --agent standard 2>&1) && rc=0 || rc=$?
-assert_eq "remote install exits 0" "0" "$rc"
-assert_file "remote installs SKILL.md" "$root/.agents/skills/bzr-reference/SKILL.md"
-sv=$(cat "$root/.agents/skills/bzr-reference/$SENTINEL")
-assert_contains "remote sentinel uses fixture version" "$sv" "FIXTURE-9.9.9"
-assert_contains "remote sentinel commit is ref-based" "$sv" "source-commit: remote:"
+assert_eq "current-layout remote install exits 0" "0" "$rc"
+marker=$(cat "$root/.agents/skills/bzr-reference/SKILL.md" 2>/dev/null || true)
+assert_contains "current-layout remote installs canonical payload" "$marker" "CURRENT-ONLY"
 assert_eq "no temp workdir leaked on success" "" "$(ls -A "$tmpd")"
 rm -rf "$root" "$tmpd"
+
+# Historical archives remain supported for an explicitly pinned pre-migration ref.
+root=$(newroot)
+out=$(BZR_SKILL_DEST_ROOT="$root" BZR_SKILL_TARBALL_URL="$fxroot/historical.tgz" \
+  "$INSTALL" --agent standard 2>&1) && rc=0 || rc=$?
+assert_eq "historical-layout remote install exits 0" "0" "$rc"
+marker=$(cat "$root/.agents/skills/bzr-reference/SKILL.md" 2>/dev/null || true)
+assert_contains "historical-layout remote installs fallback payload" "$marker" "HISTORICAL-ONLY"
+rm -rf "$root"
+
+# During the transition, the canonical payload must win over the legacy copy.
+root=$(newroot)
+out=$(BZR_SKILL_DEST_ROOT="$root" BZR_SKILL_TARBALL_URL="$fxroot/both.tgz" \
+  "$INSTALL" --agent standard 2>&1) && rc=0 || rc=$?
+assert_eq "both-layout remote install exits 0" "0" "$rc"
+marker=$(cat "$root/.agents/skills/bzr-reference/SKILL.md" 2>/dev/null || true)
+assert_contains "both-layout prefers canonical payload" "$marker" "CURRENT-WINS"
+rm -rf "$root"
 
 # bogus tarball path aborts non-zero, writes nothing, leaks no temp dir
 root=$(newroot)

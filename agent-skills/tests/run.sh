@@ -12,6 +12,14 @@ run() {
 
 printf 'run: drift check uses BZR_BIN=%s\n' "${BZR_BIN:-<unset; will try PATH>}"
 
+WORKFLOW="$HERE/../../.github/workflows/agent-skills.yml"
+if grep -Fqx '      - "content/skills/**"' "$WORKFLOW"; then
+  printf 'run: workflow triggers on content/skills/**\n'
+else
+  printf 'run: ERROR workflow lacks content/skills/** trigger\n' >&2
+  rc=1
+fi
+
 # Content checks
 sh "$HERE/validate-skills.sh" || rc=1
 sh "$HERE/drift-check.sh" || rc=1

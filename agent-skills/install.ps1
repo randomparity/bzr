@@ -20,7 +20,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$SkillsSrc = Join-Path $ScriptDir 'skills'
+$SkillsSrc = Join-Path (Split-Path -Parent $ScriptDir) 'content/skills'
 $VersionFile = Join-Path $ScriptDir 'VERSION'
 $Sentinel = '.bzr-skill-managed'
 $SkillNames = @('bzr-reference', 'bzr-setup', 'bzr-file-bug', 'bzr-triage-bug', 'bzr-search-report', 'bzr-bulk-triage')
@@ -102,12 +102,24 @@ function Resolve-SkillsSrc {
     }
     Expand-Archive -Path $zip -DestinationPath $script:TmpFetchDir -Force
     $found = Get-ChildItem -Path $script:TmpFetchDir -Recurse -Directory -Filter skills |
-        Where-Object { $_.Parent.Name -eq 'agent-skills' -and
+        Where-Object { $_.Parent.Name -eq 'content' -and
             (Test-Path (Join-Path $_.FullName 'bzr-reference')) } |
         Select-Object -First 1
-    if (-not $found) { throw 'downloaded archive has no agent-skills/skills/bzr-reference' }
+    if ($found) {
+        $versionFile = Join-Path (Split-Path -Parent (Split-Path -Parent $found.FullName)) `
+            'agent-skills/VERSION'
+    } else {
+        $found = Get-ChildItem -Path $script:TmpFetchDir -Recurse -Directory -Filter skills |
+            Where-Object { $_.Parent.Name -eq 'agent-skills' -and
+                (Test-Path (Join-Path $_.FullName 'bzr-reference')) } |
+            Select-Object -First 1
+        if (-not $found) {
+            throw 'downloaded archive has no content/skills/bzr-reference or agent-skills/skills/bzr-reference'
+        }
+        $versionFile = Join-Path $found.Parent.FullName 'VERSION'
+    }
     $script:SkillsSrc = $found.FullName
-    $script:VersionFile = Join-Path $found.Parent.FullName 'VERSION'
+    $script:VersionFile = $versionFile
     $script:SourceCommitOverride = if ($env:BZR_SKILL_REF) { "remote:$($env:BZR_SKILL_REF)" } `
         elseif ($env:BZR_SKILL_TARBALL_URL) { 'remote:url' } else { "remote:$ref" }
 }

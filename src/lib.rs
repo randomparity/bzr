@@ -42,6 +42,7 @@ pub mod error;
 pub(crate) mod http;
 #[expect(clippy::expect_used)]
 pub mod output;
+pub mod skills;
 pub(crate) mod tls;
 pub mod types;
 #[cfg(not(feature = "test-helpers"))]

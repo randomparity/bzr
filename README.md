@@ -390,7 +390,9 @@ See [docs/bzr-cli.md](docs/bzr-cli.md) for the full command reference covering a
 
 ## Agent Integration
 
-`bzr` ships a set of installable agent skills under [`agent-skills/`](agent-skills/)
+`bzr` ships a set of installable agent skills sourced from
+[`content/skills/`](content/skills/), with standalone installers under
+[`agent-skills/`](agent-skills/)
 that teach AI coding agents to use the CLI correctly — the `--json` contract,
 the authentication model, the read-before-write rule, and the real command
 surface. They live in this repo so they track the CLI as it changes (CI runs a

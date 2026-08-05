@@ -2,7 +2,7 @@
 # Version-contract check for the agent-skills payload.
 #
 # agent-skills/README.md states the contract: `agent-skills/VERSION` matches the
-# crate version in Cargo.toml. Four other places assert something stronger --
+# crate version in Cargo.toml. Four files in content/skills assert something stronger --
 # that the skills were *authored against* that CLI surface. Issue #507 found all
 # five stale at 0.6.1-dev against a 0.8.1-dev crate, having shipped through two
 # releases, because no check read a version: drift-check.sh compares verbs, and
@@ -24,9 +24,10 @@
 # current CLI surface" onto an unrelated version literal hundreds of characters
 # later.
 #
-# Usage: version-check.sh [CARGO_TOML] [AGENT_SKILLS_DIR]
+# Usage: version-check.sh [CARGO_TOML] [AGENT_SKILLS_DIR] [PAYLOAD_DIR]
 #   CARGO_TOML        defaults to the repo-root Cargo.toml.
-#   AGENT_SKILLS_DIR  defaults to agent-skills; holds VERSION, README.md, skills.
+#   AGENT_SKILLS_DIR  defaults to agent-skills; holds VERSION and README.md.
+#   PAYLOAD_DIR       defaults to content/skills; holds the canonical payload.
 #
 # Exit: 1 on any disagreement, an unreadable Cargo.toml version, a missing
 #       VERSION file, or a required site with no claim. 0 when all five agree.
@@ -36,6 +37,7 @@ set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 CARGO_TOML="${1:-$HERE/../../Cargo.toml}"
 SKILLS_ROOT="${2:-$HERE/..}"
+PAYLOAD_ROOT="${3:-$HERE/../../content/skills}"
 fail=0
 
 err() {
@@ -84,21 +86,21 @@ VERSION_RE='[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*(-[0-9A-Za-z.-]*[0-9A-Za-z])?'
 CLAIM_RE="authored[[:space:]]+against[^0-9]{0,20}bzr[^0-9]{0,12}$VERSION_RE"
 
 # The sites the README's contract names. Each must carry a claim.
-REQUIRED_SITES='README.md
-skills/bzr-reference/SKILL.md
-skills/bzr-reference/reference/commands.md
-skills/bzr-reference/reference/commands.yml'
+REQUIRED_SITES="$SKILLS_ROOT/README.md
+$PAYLOAD_ROOT/bzr-reference/SKILL.md
+$PAYLOAD_ROOT/bzr-reference/reference/commands.md
+$PAYLOAD_ROOT/bzr-reference/reference/commands.yml"
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 : >"$WORK/claims"
 
-# The documentation payload: the README plus every file under skills/. The tests
-# directory is deliberately out of scope -- its fixtures name stale versions on
-# purpose.
+# The documentation payload: the README plus every file under the canonical
+# content/skills tree. The tests directory is deliberately out of scope -- its
+# fixtures name stale versions on purpose.
 scan_targets() {
   [ -f "$SKILLS_ROOT/README.md" ] && printf '%s\n' "$SKILLS_ROOT/README.md"
-  [ -d "$SKILLS_ROOT/skills" ] && find "$SKILLS_ROOT/skills" -type f | sort
+  [ -d "$PAYLOAD_ROOT" ] && find "$PAYLOAD_ROOT" -type f | sort
   return 0
 }
 
@@ -119,9 +121,9 @@ cut -f1 "$WORK/claims" | sort -u >"$WORK/claimed-files"
 
 printf '%s\n' "$REQUIRED_SITES" | while IFS= read -r rel; do
   [ -n "$rel" ] || continue
-  if ! grep -qxF "$SKILLS_ROOT/$rel" "$WORK/claimed-files"; then
+  if ! grep -qxF "$rel" "$WORK/claimed-files"; then
     printf 'version-check: ERROR %s: no "authored against bzr <version>" claim\n' \
-      "$SKILLS_ROOT/$rel" >&2
+      "$rel" >&2
     printf 'missing\n' >>"$WORK/missing"
   fi
 done

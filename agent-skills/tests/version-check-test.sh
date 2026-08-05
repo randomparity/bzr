@@ -9,6 +9,7 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
 ROOT="$WORK/agent-skills"
+PAYLOAD="$WORK/content/skills"
 CARGO="$WORK/Cargo.toml"
 
 # Other tables carry their own `version =`, so the parser must be bounded by
@@ -31,7 +32,8 @@ EOF
 # split across a line break, matching the real file's wrap.
 clean_tree() {
   rm -rf "$ROOT"
-  mkdir -p "$ROOT/skills/bzr-reference/reference"
+  rm -rf "$PAYLOAD"
+  mkdir -p "$ROOT" "$PAYLOAD/bzr-reference/reference"
   printf '1.2.3-dev\n' >"$ROOT/VERSION"
   cat >"$ROOT/README.md" <<'EOF'
 # Agent Skills
@@ -39,20 +41,20 @@ clean_tree() {
 The command surface is authored
 against `bzr` 1.2.3-dev. The installer copies whole skill folders.
 EOF
-  cat >"$ROOT/skills/bzr-reference/SKILL.md" <<'EOF'
+  cat >"$PAYLOAD/bzr-reference/SKILL.md" <<'EOF'
 This reference is authored against **bzr 1.2.3-dev**. Check `bzr --help`.
 EOF
-  cat >"$ROOT/skills/bzr-reference/reference/commands.md" <<'EOF'
+  cat >"$PAYLOAD/bzr-reference/reference/commands.md" <<'EOF'
 # bzr command surface (authored against bzr 1.2.3-dev)
 EOF
-  cat >"$ROOT/skills/bzr-reference/reference/commands.yml" <<'EOF'
+  cat >"$PAYLOAD/bzr-reference/reference/commands.yml" <<'EOF'
 # bzr command manifest — authored against bzr 1.2.3-dev.
 bug: list view
 EOF
 }
 
 run_check() {
-  "$CHECK" "$CARGO" "$ROOT" 2>&1
+  "$CHECK" "$CARGO" "$ROOT" "$PAYLOAD" 2>&1
 }
 
 # 1. Every site agrees -> exit 0. This also proves the [package] version wins
@@ -74,7 +76,7 @@ assert_contains "crate version named" "$out" "1.2.3-dev"
 # 3. A prose claim drifts while VERSION is correct -> still fails. A
 #    VERSION-only check would pass here, which is why this one is broader.
 clean_tree
-cat >"$ROOT/skills/bzr-reference/reference/commands.md" <<'EOF'
+cat >"$PAYLOAD/bzr-reference/reference/commands.md" <<'EOF'
 # bzr command surface (authored against bzr 0.6.1-dev)
 EOF
 out=$(run_check) && rc=0 || rc=$?
@@ -99,10 +101,10 @@ assert_contains "wrapped claim names the file" "$out" "README.md"
 #    one finding sends an author back for a second round per site.
 clean_tree
 printf '0.6.1-dev\n' >"$ROOT/VERSION"
-cat >"$ROOT/skills/bzr-reference/reference/commands.md" <<'EOF'
+cat >"$PAYLOAD/bzr-reference/reference/commands.md" <<'EOF'
 # bzr command surface (authored against bzr 0.7.0)
 EOF
-cat >"$ROOT/skills/bzr-reference/reference/commands.yml" <<'EOF'
+cat >"$PAYLOAD/bzr-reference/reference/commands.yml" <<'EOF'
 # bzr command manifest — authored against bzr 0.8.0.
 bug: list view
 EOF
@@ -115,8 +117,8 @@ assert_contains "second stale claim reported" "$out" "0.8.0"
 # 6. A claim in a skill other than bzr-reference is covered too: the scan
 #    discovers claims rather than reading a hardcoded path list.
 clean_tree
-mkdir -p "$ROOT/skills/bzr-setup"
-cat >"$ROOT/skills/bzr-setup/SKILL.md" <<'EOF'
+mkdir -p "$PAYLOAD/bzr-setup"
+cat >"$PAYLOAD/bzr-setup/SKILL.md" <<'EOF'
 This skill is authored against bzr 0.6.1-dev.
 EOF
 out=$(run_check) && rc=0 || rc=$?
@@ -127,8 +129,8 @@ assert_contains "other skill named" "$out" "bzr-setup"
 #     case-sensitive scan misses it silently -- and only outside the required
 #     sites, where "no claim" would otherwise have caught it.
 clean_tree
-mkdir -p "$ROOT/skills/bzr-setup"
-cat >"$ROOT/skills/bzr-setup/SKILL.md" <<'EOF'
+mkdir -p "$PAYLOAD/bzr-setup"
+cat >"$PAYLOAD/bzr-setup/SKILL.md" <<'EOF'
 Authored against `bzr` 0.6.1-dev. Run `bzr --version` to confirm.
 EOF
 out=$(run_check) && rc=0 || rc=$?
@@ -137,8 +139,8 @@ assert_contains "capitalized claim names the version" "$out" "0.6.1-dev"
 
 # 6c. Wordier phrasings around the `bzr` token are still claims.
 clean_tree
-mkdir -p "$ROOT/skills/bzr-setup"
-cat >"$ROOT/skills/bzr-setup/SKILL.md" <<'EOF'
+mkdir -p "$PAYLOAD/bzr-setup"
+cat >"$PAYLOAD/bzr-setup/SKILL.md" <<'EOF'
 These recipes are authored against the current `bzr` 0.6.1-dev surface, and
 the flags below are authored against bzr version 0.7.0.
 EOF
@@ -151,7 +153,7 @@ assert_contains "wordy claim after the token reported" "$out" "0.7.0"
 #    claim somewhere" would report this tree clean, which is the whole point of
 #    naming the required sites.
 clean_tree
-printf 'bug: list view\n' >"$ROOT/skills/bzr-reference/reference/commands.yml"
+printf 'bug: list view\n' >"$PAYLOAD/bzr-reference/reference/commands.yml"
 out=$(run_check) && rc=0 || rc=$?
 assert_eq "one required site without a claim fails" "1" "$rc"
 assert_contains "missing site named" "$out" "commands.yml"
@@ -159,9 +161,9 @@ assert_contains "missing site named" "$out" "commands.yml"
 # 7b. ...and with every claim gone, all four are reported, not just the first.
 clean_tree
 printf '# Agent Skills\n' >"$ROOT/README.md"
-printf 'no claim here\n' >"$ROOT/skills/bzr-reference/SKILL.md"
-printf 'no claim here\n' >"$ROOT/skills/bzr-reference/reference/commands.md"
-printf 'bug: list view\n' >"$ROOT/skills/bzr-reference/reference/commands.yml"
+printf 'no claim here\n' >"$PAYLOAD/bzr-reference/SKILL.md"
+printf 'no claim here\n' >"$PAYLOAD/bzr-reference/reference/commands.md"
+printf 'bug: list view\n' >"$PAYLOAD/bzr-reference/reference/commands.yml"
 out=$(run_check) && rc=0 || rc=$?
 assert_eq "zero claims fails" "1" "$rc"
 assert_contains "missing README reported" "$out" "README.md"
@@ -173,8 +175,8 @@ assert_contains "missing commands.yml reported" "$out" "commands.yml"
 #     cannot latch a version literal onto an "authored against" phrase far away.
 #     An unbounded gap flags this tree, and flags this repo's own README.
 clean_tree
-mkdir -p "$ROOT/skills/bzr-x"
-cat >"$ROOT/skills/bzr-x/SKILL.md" <<'EOF'
+mkdir -p "$PAYLOAD/bzr-x"
+cat >"$PAYLOAD/bzr-x/SKILL.md" <<'EOF'
 These recipes are authored against the current CLI surface; run `bzr --help`
 to confirm. Requires a Bugzilla server of version 5.0.0 or newer.
 EOF
@@ -191,7 +193,7 @@ assert_contains "missing VERSION named" "$out" "VERSION file not found"
 
 # 9. A missing Cargo.toml is an error.
 clean_tree
-out=$("$CHECK" "$WORK/nosuch.toml" "$ROOT" 2>&1) && rc=0 || rc=$?
+out=$("$CHECK" "$WORK/nosuch.toml" "$ROOT" "$PAYLOAD" 2>&1) && rc=0 || rc=$?
 assert_eq "missing Cargo.toml fails" "1" "$rc"
 assert_contains "missing Cargo.toml named" "$out" "Cargo.toml not found"
 
@@ -199,7 +201,7 @@ assert_contains "missing Cargo.toml named" "$out" "Cargo.toml not found"
 #     an empty comparison against every site.
 clean_tree
 printf '[dependencies]\nreqwest = { version = "9.9.9" }\n' >"$WORK/nopkg.toml"
-out=$("$CHECK" "$WORK/nopkg.toml" "$ROOT" 2>&1) && rc=0 || rc=$?
+out=$("$CHECK" "$WORK/nopkg.toml" "$ROOT" "$PAYLOAD" 2>&1) && rc=0 || rc=$?
 assert_eq "no [package] version fails" "1" "$rc"
 # Assert the guard is what fired. Without this the test passes either way: an
 # empty crate version makes every site mismatch, which also exits 1.

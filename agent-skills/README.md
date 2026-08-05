@@ -5,7 +5,7 @@ Bob, and other agents that read `~/.agents/skills`) how to drive the
 [`bzr`](https://github.com/randomparity/bzr) Bugzilla CLI correctly. These ship
 inside the `bzr` repo so they stay in lockstep with the CLI they document:
 `agent-skills/VERSION` matches the crate version in `Cargo.toml`, as does every
-"authored against `bzr` X.Y.Z" claim in the skills. `make skills-test` enforces
+"authored against `bzr` X.Y.Z" claim in `content/skills/`. `make skills-test` enforces
 that (`tests/version-check.sh`), so refreshing the skills for a new CLI surface
 and bumping the version are one change, not two.
 
@@ -34,7 +34,7 @@ Windows (PowerShell):
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/randomparity/bzr/main/agent-skills/install.ps1))) -Agent all
 ```
 
-When run without a local `skills/` directory beside it (the piped case) the
+When run without the repository's canonical `content/skills/` directory (the piped case) the
 installer downloads the skill payload from `main` and installs the extracted
 copy. Override the source with `BZR_SKILL_REF` (a branch, tag, or commit) or
 `BZR_SKILL_TARBALL_URL` (a full tarball/zip URL, or a local path for offline

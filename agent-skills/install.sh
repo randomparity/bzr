@@ -4,7 +4,7 @@ set -eu
 
 # shellcheck disable=SC1007  # CDPATH= is intentional: zero it before cd
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-SKILLS_SRC="$SCRIPT_DIR/skills"
+SKILLS_SRC="$SCRIPT_DIR/../content/skills"
 VERSION_FILE="$SCRIPT_DIR/VERSION"
 SENTINEL=".bzr-skill-managed"
 SKILL_NAMES="bzr-reference bzr-setup bzr-file-bug bzr-triage-bug bzr-search-report bzr-bulk-triage"
@@ -106,14 +106,24 @@ resolve_skills_src() {
   (cd "$TMP_FETCH_DIR" && tar xzf "$tarball") || die "cannot extract tarball: $url"
 
   found=""
-  for d in "$TMP_FETCH_DIR"/*/agent-skills/skills; do
+  version_file=""
+  for d in "$TMP_FETCH_DIR"/*/content/skills; do
     [ -d "$d/bzr-reference" ] || continue
     found="$d"
+    version_file="$d/../../agent-skills/VERSION"
     break
   done
-  [ -n "$found" ] || die "downloaded tarball has no agent-skills/skills/bzr-reference"
+  if [ -z "$found" ]; then
+    for d in "$TMP_FETCH_DIR"/*/agent-skills/skills; do
+      [ -d "$d/bzr-reference" ] || continue
+      found="$d"
+      version_file="$d/../VERSION"
+      break
+    done
+  fi
+  [ -n "$found" ] || die "downloaded tarball has no content/skills/bzr-reference or agent-skills/skills/bzr-reference"
   SKILLS_SRC="$found"
-  VERSION_FILE="$found/../VERSION"
+  VERSION_FILE="$version_file"
   if [ -n "${BZR_SKILL_REF:-}" ]; then
     SOURCE_COMMIT_OVERRIDE="remote:$BZR_SKILL_REF"
   elif [ -n "${BZR_SKILL_TARBALL_URL:-}" ]; then
