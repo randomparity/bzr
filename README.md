@@ -398,17 +398,24 @@ the authentication model, the read-before-write rule, and the real command
 surface. They live in this repo so they track the CLI as it changes (CI runs a
 command-surface drift check against the built binary).
 
-Install them from a clone:
+When `bzr` is installed, use its offline, release-matched payload and choose the scope
+explicitly:
 
 ```bash
-cd agent-skills
-./install.sh --agent all     # ~/.agents/skills and ~/.claude/skills
+bzr skills install --agent all --global
+bzr skills install --agent all --project .
 ```
 
 `standard`/`bob`/`codex` install to `~/.agents/skills`; `claude` installs to
-`~/.claude/skills`; `all` does both. Windows users run `install.ps1`. See
-[`agent-skills/README.md`](agent-skills/README.md) for the full skill list,
-flags (`--dry-run`, `--list`, `--uninstall`, `--force`), and development notes.
+`~/.claude/skills`; `all` does both. Project scope uses the same relative layouts
+beneath the selected repository. The command requires exactly one of `--global` and
+`--project <PATH>` and never needs Bugzilla configuration or network access.
+
+For machines without `bzr`, the standalone installers under `agent-skills/` fetch the
+payload from `main` by default; set `BZR_SKILL_REF` to pin a tag or commit. That payload
+may differ from the release-matched copy embedded in an installed binary. See
+[`agent-skills/README.md`](agent-skills/README.md) for standalone installation and
+development details.
 
 The skills shell out to the real `bzr` binary and are agent-agnostic: global
 flags are consistent, machine-readable output is built in, and saved templates

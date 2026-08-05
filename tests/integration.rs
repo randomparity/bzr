@@ -1680,6 +1680,46 @@ async fn e2e_config_show_via_cli_args() {
 }
 
 #[tokio::test]
+async fn e2e_skills_install_needs_no_config_or_server() {
+    let _lock = ENV_LOCK.lock().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let project = tmp.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let missing_config = tmp.path().join("missing").join("config.toml");
+
+    let (result, output) = dispatch_cli_with_output(&[
+        "bzr",
+        "--config",
+        missing_config.to_str().unwrap(),
+        "skills",
+        "install",
+        "--agent",
+        "standard",
+        "--project",
+        project.to_str().unwrap(),
+    ])
+    .await;
+
+    assert!(
+        result.is_ok(),
+        "local skill install should succeed: {result:?}"
+    );
+    assert!(
+        !missing_config.exists(),
+        "local skill install must not create or read a Bugzilla config"
+    );
+    assert!(
+        project
+            .join(".agents/skills/bzr-reference/reference/commands.md")
+            .is_file(),
+        "nested embedded payload should be installed"
+    );
+    let data = bzr::test_helpers::json_envelope_data(&output);
+    assert_eq!(data["scope"], "project");
+    assert_eq!(data["destinations"][0]["layout"], "agents");
+}
+
+#[tokio::test]
 async fn e2e_server_info_via_cli_args() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
