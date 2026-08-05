@@ -10,7 +10,9 @@
 - **Provenance:** issue #523; the user's 2026-08-05 choice of explicit scope;
   repository instructions; accepted ADR 0013 for the standalone installer.
 - **Exclusions:** uninstall, update, list, project-root discovery, new agent layouts,
-  and changes to ADR 0013's remote-fetch trust policy.
+  standalone no-binary installer behavior beyond directly required canonical-source
+  path compatibility, and changes to ADR 0018's carried-forward remote-fetch trust
+  policy.
 - **Permitted surface:** CLI and dispatch, focused installer/build modules,
   `content/skills/`, directly affected standalone compatibility assets, unit and
   functional tests, CLI documentation, and changelog.
@@ -71,10 +73,11 @@ default. This issue adds no update or version-arbitration mechanism.
 The installer expands an agent target into one or two destination roots. It performs a
 read-only preliminary validation, acquires every destination lock in sorted path order,
 then repeats the authoritative symlink, ownership-sentinel, and conflict checks while
-holding all locks. The shell and PowerShell standalone installers use the same lock
-directory and ownership rules. Each target is checked once more immediately before its
-first rename; this closes races among supported installers without claiming protection
-from hostile same-user processes.
+holding all locks. It uses the existing POSIX installer's `.bzr-skill.lock` convention,
+so those two paths coordinate when targeting the same destination. Each target is
+checked once more immediately before its first rename. The PowerShell installer and
+older standalone versions do not share this guarantee; concurrent use with them is
+unsupported and receives the same best-effort checks as any other same-user race.
 
 For each target the command creates a same-filesystem staging directory, writes only
 generated relative paths with `create_new`, adds the existing
@@ -186,16 +189,18 @@ from the trusted source tree is installed.
   symlinks. The platform-provided home is likewise the trusted global root.
 - Existing skill targets are inspected without following links. A target is owned only
   when it is a regular directory containing a regular, non-symlink
-  `.bzr-skill-managed` file that parses exactly one nonempty `installed-skill`,
-  `source-version`, and `source-commit` field, with `installed-skill` equal to the
-  target directory name. Unknown extra fields are tolerated for forward compatibility;
-  duplicate fields are malformed. Missing, unreadable, malformed, empty, mismatched,
-  directory, or symlink sentinels make the target foreign and untouchable. The binary,
-  shell, and PowerShell installers apply the same definition.
-- Atomic lock-directory acquisition in deterministic path order serializes the binary,
-  shell, and PowerShell installers per destination. Authoritative checks run only after
-  all locks are held and immediately before rename. An unexplained/stale lock fails
-  closed with recovery guidance.
+  `.bzr-skill-managed` file that parses exactly one nonempty `managed-by`,
+  `installed-skill`, `source-version`, and `source-commit` field. `managed-by` must be
+  `bzr-skill`, and `installed-skill` must equal the target directory name. Unknown extra
+  fields are tolerated for forward compatibility; duplicate fields are malformed.
+  Missing, unreadable, malformed, empty, mismatched, directory, or symlink sentinels
+  make the target foreign and untouchable. This is the binary's read rule; the existing
+  standalone installers continue writing the compatible four-field sentinel without
+  changing their ownership-read behavior.
+- Atomic lock-directory acquisition in deterministic path order serializes binary
+  invocations and coordinates with the current POSIX installer per destination.
+  Authoritative checks run only after all locks are held and immediately before rename.
+  An unexplained/stale lock fails closed with recovery guidance.
 - Staging uses unpredictable process-local names plus `create_dir`, and file creation
   uses `create_new`. Replacement stays on the destination filesystem and restores the
   previous owned directory if activation fails.
@@ -206,7 +211,12 @@ from the trusted source tree is installed.
 
 - Defending against a privileged process or the same user changing path components
   after validation is not possible with portable stable `std::fs` path APIs; the
-  lock coordinates supported installers, not hostile processes.
+  lock coordinates binary and current POSIX installer invocations, not uncoordinated
+  or hostile processes.
+- Concurrent installation by the PowerShell installer or an older standalone installer
+  is unsupported because those versions do not participate in the same lock. The binary
+  rechecks immediately before rename but cannot promise race-free replacement against
+  an uncoordinated same-user writer.
 - The command does not validate the semantic safety of repository-authored Markdown;
   source review and build provenance own that trust.
 - ADR 0013 governs the standalone remote installer's TLS/GitHub trust and remains
@@ -226,9 +236,10 @@ from the trusted source tree is installed.
   replacement failure restores the prior owned directory. Fault injection covers
   activation failure, failed restore, post-activation aside cleanup, stage cleanup,
   and lock release, asserting the state table above.
-- Ownership tests cover empty and malformed sentinels, duplicate/missing fields,
-  wrong-skill names, unreadable sentinels where the platform permits, and sentinel
-  directories and symlinks. Each case leaves the original tree byte-for-byte intact.
+- Ownership tests cover missing/wrong/duplicate `managed-by`, empty and malformed
+  sentinels, duplicate/missing fields, wrong-skill names, unreadable sentinels where the
+  platform permits, and sentinel directories and symlinks. Each case leaves the
+  original tree byte-for-byte intact.
 - A functional phase runs the actual binary with an isolated project directory and
   home override, proves both layouts and nested files, exercises `all`, and proves
   non-interactive missing-scope refusal without contacting Bugzilla.
