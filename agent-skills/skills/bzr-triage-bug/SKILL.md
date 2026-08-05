@@ -14,10 +14,19 @@ blind `bzr bug update` can overwrite fields another person just set.
 bzr bug view <id> --json        # current status, assignee, flags, fields
 bzr bug history <id>            # what changed recently, by whom
 bzr comment list <id>          # the discussion so far
+bzr bug links <id>              # what it blocks, depends on, or duplicates
 ```
 
 Understand who owns it, the current status/resolution, and any pending flags
 before deciding what to change.
+
+`bzr bug links` covers all six relationship types in one read, so you see what a
+resolution would unblock — or that the bug is already a duplicate — before
+writing. Under `--json` each record carries `id`, `relation`, `direction`,
+`depth`, `summary`, and `status`; `--recursive --depth <N>` walks further out.
+`bug history --json` emits one flattened record per changed field
+(`when`/`who`/`field`/`old_value`/`new_value`/`comment_id`), so filter on
+`.field` rather than digging through nested change arrays.
 
 ## 2. Decide, then change only what you mean to
 
@@ -99,12 +108,22 @@ case $? in
 esac
 ```
 
-Key error keys by `type`: `input` → `field`/`value`; `collision` →
-`bug_id`/`last_change_time`/`if_match_token`; `not_found` →
-`resource`/`identifier`; `http` → `status`; `api` → `api_code`. A partial batch
+Key error keys by `type`: `input` (exit 7) → `field`/`value`; `collision`
+(14) → `bug_id`/`last_change_time`/`if_match_token`; `not_found` (2) →
+`resource`/`identifier`; `api` (4) → `api_code`; `http` (5) → `status`; `tls`
+(13) → `server`/`expected`/`actual`. A partial batch
 (`batch_partial_failure`, exit 11) puts `succeeded`/`failed` counts in the error,
 while the per-element `failed[]` rows are in the **stdout** result body. Run
 `bzr schema error` for the full contract.
+
+**A read that fails is not necessarily a missing bug.** As of 0.8.1-dev a bug
+the server declines to return for another reason — most often a permission
+restriction — exits **4** (`api`) with the server's `api_code` and message,
+where it used to exit 2. Exit 2 now means the server returned an empty result
+with no error. Triage code that treats 2 as "absent or restricted" will report a
+bug you simply cannot see as one that does not exist: handle **2 or 4** on a
+read, and read `error.message` to tell them apart before closing anything as
+invalid.
 
 ### Attachment reads
 
