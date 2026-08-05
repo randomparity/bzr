@@ -244,9 +244,12 @@ if assert_exit_code 4 &&
     assert_stderr_json '.error.api_code' "101" &&
     assert_stderr_json '.error.message | length > 0' "true" &&
     assert_stderr_not_contains "$RESTRICTED_KEY"; then
-    run_bzr_raw --server restricted bug view 999999999
+    # `--output table` explicitly: `run_bzr_raw` redirects stdout to a file, so
+    # dropping `--json` alone still resolves to JSON (`resolve_format` falls back
+    # to JSON when stdout is not a TTY) and would re-test the path above.
+    run_bzr_raw --output table --server restricted bug view 999999999
     if assert_exit_code 4 &&
-        assert_stderr_contains "Bugzilla API error" &&
+        assert_stderr_contains "error: Bugzilla API error" &&
         assert_stderr_not_contains "$RESTRICTED_KEY"; then
         test_pass
     fi

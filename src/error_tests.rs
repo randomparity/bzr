@@ -508,9 +508,11 @@ fn display_leaves_server_text_without_the_marker_unchanged() {
     );
 }
 
-/// `structured_detail` publishes the machine-readable keys for these variants.
-/// Neither may carry the raw server text, or `--json` would re-leak what
-/// `Display` just masked.
+/// `structured_detail` publishes the machine-readable keys for these variants,
+/// and today emits only `api_code` / `status` — so this passes without the
+/// `Display` fix and proves nothing about it. It is a forward guard: a future
+/// detail key carrying the raw server text would re-leak on `--json` what
+/// `Display` masks.
 #[test]
 fn structured_detail_does_not_republish_raw_server_text() {
     let leaky = "Bugzilla_api_key=SUPERSECRET";
