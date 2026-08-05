@@ -2,7 +2,8 @@ CARGO ?= cargo
 RUST_MIN_VERSION := 1.89.0
 
 .PHONY: setup check-rust ensure-components ensure-coverage-prereqs ensure-mutants-prereq install-hooks \
-        build release test coverage fmt clippy lint check-test-layout check-no-spawn clean help man \
+        build release test coverage fmt clippy lint check-build-script check-test-layout \
+        check-no-spawn clean help man \
         skills-test \
         mutants mutants-fast mutants-list audit-mutant-skips \
         functional-build functional-start functional-test functional-stop \
@@ -93,7 +94,12 @@ fmt: ## Format source code
 clippy: ## Run clippy lints
 	$(CARGO) clippy --all-targets --features test-helpers -- -D warnings
 
-lint: fmt clippy check-test-layout check-no-spawn ## Run all linters (fmt + clippy + test-layout + no-spawn)
+lint: fmt clippy check-build-script check-test-layout check-no-spawn ## Run all linters
+
+check-build-script: ## Run dependency-free build-script validation tests
+	@mkdir -p target
+	rustc --edition=2021 --test build.rs -o target/build-script-tests
+	target/build-script-tests
 
 check-test-layout: ## Verify all test code lives in sibling *_tests.rs files
 	@command -v rg >/dev/null || { echo "ERROR: ripgrep (rg) is required for this guard"; exit 1; }

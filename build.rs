@@ -162,6 +162,7 @@ fn validate_skill_entrypoints(files: &[PayloadFile]) -> io::Result<()> {
     }
 
     for skill in skills {
+        validate_skill_name(skill)?;
         let entrypoint = format!("{skill}/SKILL.md");
         if !files.iter().any(|file| file.relative_path == entrypoint) {
             return Err(invalid_payload(format!(
@@ -171,6 +172,23 @@ fn validate_skill_entrypoints(files: &[PayloadFile]) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+fn validate_skill_name(skill: &str) -> io::Result<()> {
+    let valid = !skill.is_empty()
+        && skill.split('-').all(|segment| {
+            !segment.is_empty()
+                && segment
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+        });
+    if valid {
+        return Ok(());
+    }
+    Err(invalid_payload(format!(
+        "skill directory name must contain lowercase ASCII alphanumeric segments separated by \
+         single hyphens: {skill:?}"
+    )))
 }
 
 fn render_manifest(files: &[PayloadFile]) -> io::Result<String> {
@@ -196,3 +214,7 @@ fn render_manifest(files: &[PayloadFile]) -> io::Result<String> {
 fn invalid_payload(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message.into())
 }
+
+#[cfg(test)]
+#[path = "build_tests.rs"]
+mod tests;
