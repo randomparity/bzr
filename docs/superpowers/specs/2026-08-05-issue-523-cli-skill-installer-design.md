@@ -8,7 +8,8 @@
 - **Outcome:** add `bzr skills install` so bundled bzr skills can be installed for
   supported agents at an explicitly selected global or project location.
 - **Provenance:** issue #523; the user's 2026-08-05 choice of explicit scope;
-  repository instructions; accepted ADR 0013 for the standalone installer.
+  repository instructions; accepted ADR 0018, which supersedes ADR 0013 and carries
+  forward the standalone fetch policy.
 - **Exclusions:** uninstall, update, list, project-root discovery, new agent layouts,
   standalone no-binary installer behavior beyond directly required canonical-source
   path compatibility, and changes to ADR 0018's carried-forward remote-fetch trust
@@ -226,8 +227,8 @@ from the trusted source tree is installed.
   replacement against either uncoordinated same-user writer.
 - The command does not validate the semantic safety of repository-authored Markdown;
   source review and build provenance own that trust.
-- ADR 0013 governs the standalone remote installer's TLS/GitHub trust and remains
-  unchanged.
+- ADR 0018 governs and carries forward ADR 0013's standalone remote-fetch TLS/GitHub
+  trust policy unchanged.
 
 ## Testing and proof
 
@@ -245,6 +246,9 @@ from the trusted source tree is installed.
   idempotent replacement, foreign folders, target and ancestor symlinks, locks,
   nested files, a project-root symlink alias, state changes before lock acquisition,
   staged failure cleanup, and missing/invalid project paths.
+- A filesystem-seam race test changes an owned or absent target into a byte-distinct
+  foreign directory after locks and the ordinary authoritative pass but immediately
+  before the first rename. The final recheck must refuse and preserve those bytes.
 - Tests verify error paths leave foreign/original content untouched and that a
   replacement failure restores the prior owned directory. Fault injection covers
   activation failure with and without a prior target, failed restore, post-activation
