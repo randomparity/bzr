@@ -27,13 +27,6 @@ pub(crate) struct SkillsInstallResult {
 }
 
 /// Write a successful skill-install result in the selected output format.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "Task 3 writes the success result after filesystem installation"
-    )
-)]
 pub(crate) fn write_skills_install<W: Write + ?Sized>(
     result: &SkillsInstallResult,
     format: OutputFormat,

@@ -36,6 +36,7 @@ run "version-check-test.sh"
 run "post-release-bump-workflow-test.sh"
 run "installer-test.sh"
 run "installer-ps1-test.sh"
+run "installer-cli-compat-test.sh"
 
 # Lint shell sources
 printf '\n== shellcheck/shfmt ==\n'

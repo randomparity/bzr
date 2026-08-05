@@ -6,7 +6,11 @@ use std::path::{Path, PathBuf};
 use crate::cli::{AgentTarget, InstallArgs, SkillsAction};
 use crate::commands::runtime::invocation::CommandContext;
 use crate::error::{BzrError, Result};
+use crate::output::resources::skills::{
+    write_skills_install, SkillsDestinationResult, SkillsInstallResult,
+};
 use crate::output::writers::Writers;
+use crate::skills::installer::{self, InstallOutcome, InstallRequest};
 
 /// The explicitly selected installation root after command-time resolution.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,10 +53,22 @@ impl TerminalState {
 )]
 pub(crate) async fn execute(
     action: &SkillsAction,
-    _ctx: &CommandContext,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let SkillsAction::Install(args) = action;
+    execute_install_with(args, ctx, w, installer::install)
+}
+
+fn execute_install_with<F>(
+    args: &InstallArgs,
+    ctx: &CommandContext,
+    w: &mut Writers<'_>,
+    installer_fn: F,
+) -> Result<()>
+where
+    F: FnOnce(InstallRequest) -> Result<InstallOutcome>,
+{
     let cwd = std::env::current_dir().map_err(|error| {
         BzrError::input(format!(
             "could not resolve the current directory for skill installation: {error}"
@@ -65,14 +81,42 @@ pub(crate) async fn execute(
         &cwd,
         w.err,
     )?;
+    let outcome = installer_fn(InstallRequest {
+        agent: args.agent,
+        scope: scope.clone(),
+        home: dirs::home_dir(),
+    })?;
+    let result = install_result(args.agent, &scope, outcome.destinations);
+    write_skills_install(&result, ctx.format(), w.out);
+    for warning in outcome.warnings {
+        let _ = writeln!(w.err, "{warning}");
+    }
+    Ok(())
+}
 
-    let scope_name = match scope {
-        InstallScope::Global => "global",
-        InstallScope::Project(_) => "project",
+fn install_result(
+    agent: AgentTarget,
+    scope: &InstallScope,
+    destinations: Vec<installer::InstalledDestination>,
+) -> SkillsInstallResult {
+    let (scope_name, project) = match scope {
+        InstallScope::Global => ("global", None),
+        InstallScope::Project(project) => ("project", Some(project.display().to_string())),
     };
-    Err(BzrError::input(format!(
-        "skill installation for the {scope_name} scope is not available yet"
-    )))
+    SkillsInstallResult {
+        action: "install".into(),
+        agent,
+        scope: scope_name.into(),
+        project,
+        destinations: destinations
+            .into_iter()
+            .map(|destination| SkillsDestinationResult {
+                layout: destination.layout.into(),
+                path: destination.path.display().to_string(),
+                installed: destination.installed,
+            })
+            .collect(),
+    }
 }
 
 /// Resolve an explicit scope or write terminal-appropriate guidance for an omission.

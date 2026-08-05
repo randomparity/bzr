@@ -43,6 +43,19 @@ pub(crate) mod http;
 #[expect(clippy::expect_used)]
 pub mod output;
 pub mod skills;
+#[cfg(feature = "test-helpers")]
+pub mod skills_test_helpers {
+    //! Public test-only shims used by cross-process integration tests.
+
+    use std::path::Path;
+
+    /// Hold the production destination lock until `release` appears.
+    pub fn hold_destination_lock(path: &Path, ready: &Path, release: &Path) -> error::Result<()> {
+        crate::skills::installer::hold_destination_lock(path, ready, release)
+    }
+
+    use crate::error;
+}
 pub(crate) mod tls;
 pub mod types;
 #[cfg(not(feature = "test-helpers"))]

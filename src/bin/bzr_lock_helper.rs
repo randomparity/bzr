@@ -1,39 +1,58 @@
-//! Test-only helper: acquire an exclusive lock on argv[1], create the ready
-//! file argv[2], then poll for the release file argv[3] before exiting.
-//! Used by the CONC-2 two-process mutual-exclusion test. Not shipped (gated
-//! behind the `test-helpers` feature).
-#![expect(clippy::expect_used)]
+//! Cross-process lock holder used only by integration tests.
 use std::fs::{File, OpenOptions};
 use std::path::Path;
 
-fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    let lock_path = &args[1];
-    let ready_path = &args[2];
-    let release_path = &args[3];
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|arg| arg == "skills") {
+        return run_skills_mode(&args).map_err(Into::into);
+    }
+    run_config_mode(&args).map_err(Into::into)
+}
+
+fn run_skills_mode(args: &[String]) -> bzr::error::Result<()> {
+    let [mode, destination, ready, release] = args else {
+        return Err(bzr::error::BzrError::input(
+            "usage: bzr_lock_helper skills <destination> <ready-file> <release-file>".into(),
+        ));
+    };
+    if mode != "skills" {
+        return Err(bzr::error::BzrError::input(
+            "skills lock-helper mode was not selected".into(),
+        ));
+    }
+    bzr::skills_test_helpers::hold_destination_lock(
+        Path::new(destination),
+        Path::new(ready),
+        Path::new(release),
+    )
+}
+
+fn run_config_mode(args: &[String]) -> std::io::Result<()> {
+    let [lock_path, ready_path, release_path] = args else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "usage: bzr_lock_helper <lock-file> <ready-file> <release-file>",
+        ));
+    };
 
     let file = OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
         .truncate(false)
-        .open(lock_path)
-        .expect("open lock file");
-    file.lock().expect("acquire exclusive lock");
+        .open(lock_path)?;
+    file.lock()?;
+    File::create(ready_path)?;
 
-    File::create(ready_path).expect("write ready file");
-
-    // Bounded wait: if the parent test aborts before creating the release file
-    // (e.g. a panic, or CI cancellation), self-terminate instead of spinning
-    // forever holding the lock. The happy path releases in milliseconds.
     let step = std::time::Duration::from_millis(10);
     let mut remaining = std::time::Duration::from_secs(30);
     while !Path::new(release_path).exists() {
         if remaining.is_zero() {
-            return;
+            return Ok(());
         }
         std::thread::sleep(step);
         remaining = remaining.saturating_sub(step);
     }
-    // Lock released on drop / process exit.
+    Ok(())
 }

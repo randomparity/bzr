@@ -28,6 +28,18 @@ fn wait_for(path: &Path) {
     panic!("timed out waiting for {}", path.display());
 }
 
+fn wait_for_or_stop(path: &Path, child: &mut std::process::Child) {
+    for _ in 0..500 {
+        if path.exists() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    panic!("timed out waiting for {}", path.display());
+}
+
 #[test]
 fn second_process_holding_the_lock_blocks_try_lock() {
     let _serial = SERIAL
@@ -129,4 +141,83 @@ fn update_locked_waits_for_a_held_lock_then_completes() {
     // The write actually landed on disk.
     let reloaded = Config::load_at(Some(&cfg_dir.join("config.toml"))).unwrap();
     assert_eq!(reloaded.default_server.as_deref(), Some("sentinel"));
+}
+
+#[test]
+fn skills_mode_requires_exactly_destination_ready_and_release_arguments() {
+    let _serial = SERIAL
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let helper = env!("CARGO_BIN_EXE_bzr_lock_helper");
+    let status = Command::new(helper)
+        .args(["skills", "/tmp/destination", "/tmp/ready"])
+        .status()
+        .unwrap();
+
+    assert!(!status.success());
+}
+
+#[test]
+fn real_skills_install_refuses_a_helper_held_destination_lock() {
+    let _serial = SERIAL
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let project = tempfile::TempDir::new().unwrap();
+    let destination = project.path().join(".agents/skills");
+    std::fs::create_dir_all(&destination).unwrap();
+    let ready = project.path().join("skills-ready");
+    let release = project.path().join("skills-release");
+    let helper = env!("CARGO_BIN_EXE_bzr_lock_helper");
+    let mut child = Command::new(helper)
+        .arg("skills")
+        .arg(&destination)
+        .arg(&ready)
+        .arg(&release)
+        .spawn()
+        .expect("spawn skills lock helper");
+    wait_for_or_stop(&ready, &mut child);
+
+    let output = Command::new(env!("CARGO_BIN_EXE_bzr"))
+        .args(["skills", "install", "--agent", "standard", "--project"])
+        .arg(project.path())
+        .output()
+        .expect("run real bzr binary");
+
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("locked"));
+    assert!(
+        child.try_wait().unwrap().is_none(),
+        "helper must retain ownership"
+    );
+    assert!(destination.join(".bzr-skill.lock").is_dir());
+
+    File::create(&release).unwrap();
+    assert!(child.wait().unwrap().success());
+    assert!(!destination.join(".bzr-skill.lock").exists());
+}
+
+#[test]
+fn skills_mode_timeout_exits_nonzero_and_removes_its_lock() {
+    let _serial = SERIAL
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let project = tempfile::TempDir::new().unwrap();
+    let destination = project.path().join("skills");
+    std::fs::create_dir(&destination).unwrap();
+    let ready = project.path().join("timeout-ready");
+    let release = project.path().join("never-released");
+    let helper = env!("CARGO_BIN_EXE_bzr_lock_helper");
+    let mut child = Command::new(helper)
+        .arg("skills")
+        .arg(&destination)
+        .arg(&ready)
+        .arg(&release)
+        .spawn()
+        .expect("spawn timeout lock helper");
+    wait_for_or_stop(&ready, &mut child);
+
+    let status = child.wait().expect("timeout helper exits boundedly");
+
+    assert!(!status.success());
+    assert!(!destination.join(".bzr-skill.lock").exists());
 }
