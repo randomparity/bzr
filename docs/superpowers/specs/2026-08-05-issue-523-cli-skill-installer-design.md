@@ -90,9 +90,9 @@ staging, aside, and lock paths created and still owned by this process.
 | `target -> aside` | existing target | remove stage; stop | failed, original untouched |
 | `stage -> target`, restore succeeds | restored existing target | remove stage; stop | failed, original restored |
 | `stage -> target`, restore fails | aside holds previous content; target absent | retain aside and stage; stop immediately | failed with both recovery paths; never call it restored |
-| aside removal after activation | new target | retain aside; continue because activation succeeded | installed with warning naming residual aside |
+| aside removal after activation | new target | retain aside; continue because activation succeeded | exit 0; normal success output plus warning naming residual aside |
 | stage cleanup after a failure | state from the preceding row | retain stage; stop | primary failure plus residual stage path |
-| lock release | all completed target states remain authoritative | retain lock; no more writes | warning naming lock and safe recovery check |
+| lock release | all completed target states remain authoritative | retain lock; no more writes | exit 0; normal success output plus warning naming lock and safe recovery check |
 
 A test-only filesystem-operation seam injects rename, restore, removal, and lock-release
 failures. It exists only to prove these user-visible states and is not a reusable runtime
@@ -130,11 +130,14 @@ deduplicated and ordered `agents`, then `claude`; skill names are complete and s
 lexicographically. Each destination path is canonical-root-based and absolute. The
 example abbreviates the installed array; real success contains every embedded skill.
 
-On any failure, stdout is empty: the command does not emit a success object for a
-partial install. The standard stderr error contains the failed operation/path and a
-deterministically ordered list of already installed skill/destination pairs. JSON-family
-error output remains the repository's existing structured error envelope; partial detail
-is in `message`, and this issue adds no error-schema keys.
+On a failure that prevents activation or leaves authoritative content unresolved,
+stdout is empty: the command does not emit a success object for a partial install. The
+standard stderr error contains the failed operation/path and a deterministically ordered
+list of already installed skill/destination pairs. JSON-family error output remains the
+repository's existing structured error envelope; partial detail is in `message`, and
+this issue adds no error-schema keys. Once activation succeeds, aside-removal and final
+lock-release cleanup failures are warnings: the command exits 0, emits the complete
+normal success result, and writes deterministic recovery guidance to stderr.
 
 ## Error behavior
 
@@ -181,8 +184,14 @@ from the trusted source tree is installed.
   path. Every component created or traversed below that trusted root is inspected with
   `symlink_metadata`; `.agents`, `.claude`, `skills`, and skill targets may not be
   symlinks. The platform-provided home is likewise the trusted global root.
-- Existing skill targets are inspected without following links and are replaceable
-  only when a regular directory contains the ownership sentinel.
+- Existing skill targets are inspected without following links. A target is owned only
+  when it is a regular directory containing a regular, non-symlink
+  `.bzr-skill-managed` file that parses exactly one nonempty `installed-skill`,
+  `source-version`, and `source-commit` field, with `installed-skill` equal to the
+  target directory name. Unknown extra fields are tolerated for forward compatibility;
+  duplicate fields are malformed. Missing, unreadable, malformed, empty, mismatched,
+  directory, or symlink sentinels make the target foreign and untouchable. The binary,
+  shell, and PowerShell installers apply the same definition.
 - Atomic lock-directory acquisition in deterministic path order serializes the binary,
   shell, and PowerShell installers per destination. Authoritative checks run only after
   all locks are held and immediately before rename. An unexplained/stale lock fails
@@ -217,12 +226,18 @@ from the trusted source tree is installed.
   replacement failure restores the prior owned directory. Fault injection covers
   activation failure, failed restore, post-activation aside cleanup, stage cleanup,
   and lock release, asserting the state table above.
+- Ownership tests cover empty and malformed sentinels, duplicate/missing fields,
+  wrong-skill names, unreadable sentinels where the platform permits, and sentinel
+  directories and symlinks. Each case leaves the original tree byte-for-byte intact.
 - A functional phase runs the actual binary with an isolated project directory and
   home override, proves both layouts and nested files, exercises `all`, and proves
   non-interactive missing-scope refusal without contacting Bugzilla.
 - Unit and functional assertions pin the full JSON and NDJSON success shapes,
   deterministic ordering, canonical project path, global `project: null`, `all`
   destination deduplication, stdout-empty partial failure, and stderr recovery detail.
+  Aside-removal and lock-release warning cases explicitly assert exit 0, the normal
+  success object, and the warning; activation/restore failures assert nonzero and empty
+  stdout.
 - Run `cargo fmt --check`, `cargo clippy --all-targets --features test-helpers --
   -D warnings`, `make check-test-layout`, `make check-no-spawn`, `cargo test
   --features test-helpers`, `make skills-test`, and `make functional-test-all`.
