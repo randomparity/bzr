@@ -19,8 +19,10 @@ Decision: [ADR 0016](../../adr/0016-thread-local-error-redaction-context.md)
 - **Exclusions:** cookies and session tokens; tracing work owned by #511; response-body
   bounding owned by #512.
 - **Surface:** authentication redaction and credential-resolution seams, final error
-  rendering, directly related tests, functional phase, changelog, and issue-specific
-  design artifacts.
+  rendering, the production thread-handoff guard in `Makefile`, directly related tests,
+  functional phase, changelog, and issue-specific design artifacts. The orchestrator
+  approved the `Makefile` expansion after spec review found the existing CONC-3 gate
+  incomplete for this decision.
 - **Ambiguities:** none. The issue explicitly delegates the seam and minimum-length
   decisions.
 
@@ -90,7 +92,8 @@ reports are treated as destinations that must not receive that key.
 - Bare substring redaction uses the exact resolved credential, not a guess, and refuses
   keys shorter than eight bytes to bound false positives.
 - Dispatch clearing and CONC-3's current-thread/no-fan-out guard bound the key to one CLI
-  invocation and prevent concurrent task confusion.
+  invocation. The guard must reject production uses of Tokio task fan-out,
+  `spawn_blocking`, and `std::thread::spawn`; test-only thread use remains permitted.
 - The secret is not added as a separate `BzrError` field, serialized detail, log field,
   or persisted value. Raw server payloads inside `Api` and `HttpStatus` remain unredacted
   in derived `Debug`; only the final CLI `Display` path is a safe output boundary.
@@ -98,18 +101,24 @@ reports are treated as destinations that must not receive that key.
 ### Explicitly out of scope
 
 Cookie and session-token redaction remain outside issue #509. Response tracing and body
-size limits remain owned by #511 and #512. A future multi-thread runtime must replace the
-thread-local context; the existing static guard forces that redesign.
+size limits remain owned by #511 and #512. A future multi-thread runtime or production
+thread-handoff API must replace the thread-local context; the static guard covers the
+in-repository entry points above, while dependency-internal threads that do not move this
+crate's futures or redaction calls remain outside the invariant.
 
 ## Testing
 
 - Unit tests pin literal and case-insensitive encoded markers, multiple occurrences,
   exact bare-key replacement, the eight-byte boundary, short-key refusal, stale-context
-  clearing, Unicode surrounding text, and idempotence.
+  clearing at dispatch entry, Unicode surrounding text, and idempotence.
 - Wiremock tests make both `Api` construction sites echo the active key bare; the
   non-JSON `HttpStatus` path receives equivalent coverage.
 - Main formatting tests assert the configured bare key is absent and `[REDACTED]` is
   present for table, JSON, and NDJSON, including progress-enabled formatting semantics.
+  Separate tests exercise both lifecycle exits: after final error formatting and after
+  successful dispatch, an unrelated error containing the former key remains unchanged.
+- The `check-no-spawn` guard gets biting fixtures proving it rejects production
+  `std::thread::spawn` and `spawn_blocking` while ignoring test-only thread use.
 - The existing real-container phase is extended to exercise `--progress ndjson` alongside
   table and JSON, asserting the configured key never reaches stderr. Stock Bugzilla does
   not echo the key bare, so synthetic unit/wiremock tests remain the positive regression
