@@ -91,7 +91,7 @@ fn format_dispatch_error(err: &BzrError, format: OutputFormat) -> String {
     error_object.insert("exit_code".into(), err.exit_code().into());
     let error_body = serde_json::Value::Object(error_object);
     let fallback = || r#"{"error":{"message":"serialization failed"}}"#.to_string();
-    match format {
+    let formatted = match format {
         OutputFormat::Json => serde_json::to_string(&serde_json::json!({
             "schema_version": bzr::output::SCHEMA_VERSION,
             "error": error_body,
@@ -100,7 +100,9 @@ fn format_dispatch_error(err: &BzrError, format: OutputFormat) -> String {
         OutputFormat::Ndjson => serde_json::to_string(&serde_json::json!({ "error": error_body }))
             .unwrap_or_else(|_| fallback()),
         OutputFormat::Table => format!("error: {err}"),
-    }
+    };
+    bzr::error::clear_error_redaction_context();
+    formatted
 }
 
 /// Select the tracing filter directive based on CLI flags.

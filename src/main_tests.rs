@@ -557,3 +557,59 @@ fn format_dispatch_error_redacts_echoed_api_key_on_every_format() {
         }
     }
 }
+
+#[cfg(feature = "test-helpers")]
+#[tokio::test]
+async fn format_dispatch_error_redacts_bare_configured_key_and_clears_context() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, ResponseTemplate};
+
+    let (mock, _tmp, config_path) = bzr::test_helpers::setup_isolated_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
+            "error": true,
+            "code": 32000,
+            "message": "server rejected test-key"
+        })))
+        .mount(&mock)
+        .await;
+
+    for format in [
+        OutputFormat::Json,
+        OutputFormat::Ndjson,
+        OutputFormat::Table,
+    ] {
+        let config = config_path.to_string_lossy();
+        let cli = Cli::try_parse_from([
+            "bzr",
+            "--config",
+            config.as_ref(),
+            "--server",
+            "test",
+            "bug",
+            "view",
+            "42",
+        ])
+        .expect("CLI parses");
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let mut writers = bzr::output::writers::Writers::new(&mut stdout, &mut stderr);
+        let err = bzr::dispatch(&cli, format, &mut writers)
+            .await
+            .expect_err("mocked Bugzilla error");
+
+        let out = format_dispatch_error(&err, format);
+        assert!(!out.contains("test-key"), "key leaked on {format:?}: {out}");
+        assert!(out.contains("[REDACTED]"), "key not masked: {out}");
+
+        let unrelated = BzrError::Api {
+            code: 1,
+            message: "unrelated test-key text".into(),
+        };
+        assert!(
+            unrelated.to_string().contains("test-key"),
+            "formatting did not clear the redaction context"
+        );
+    }
+}
