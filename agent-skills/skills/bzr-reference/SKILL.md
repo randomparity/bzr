@@ -147,7 +147,7 @@ problem.
 
 Three traps worth knowing:
 
-- **Exit 2 no longer means "absent or restricted".** As of 0.8.2-dev a bug the
+- **Exit 2 no longer means "absent or restricted".** A bug the
   server declines to return for another reason — most often *you are not
   authorized* — exits **4** (`api`) carrying the server's `api_code` and
   message. Exit 2 now means the server returned an empty result with no error
