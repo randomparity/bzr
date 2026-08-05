@@ -91,6 +91,7 @@ staging, aside, and lock paths created and still owned by this process.
 |---|---|---|---|
 | staging/write/validation | existing target, if any | remove stage; do not rename target; stop | failed, plus stage path if cleanup fails |
 | `target -> aside` | existing target | remove stage; stop | failed, original untouched |
+| `stage -> target` with no prior target | no installed target | remove stage; if cleanup fails retain it only as a residual | nonzero, empty stdout, failed path plus residual stage path when present |
 | `stage -> target`, restore succeeds | restored existing target | remove stage; stop | failed, original restored |
 | `stage -> target`, restore fails | aside holds previous content; target absent | retain aside and stage; stop immediately | failed with both recovery paths; never call it restored |
 | aside removal after activation | new target | retain aside; continue because activation succeeded | exit 0; normal success output plus warning naming residual aside |
@@ -197,6 +198,12 @@ from the trusted source tree is installed.
   make the target foreign and untouchable. This is the binary's read rule; the existing
   standalone installers continue writing the compatible four-field sentinel without
   changing their ownership-read behavior.
+- Sentinel bytes must be UTF-8 with an optional leading UTF-8 BOM. LF and CRLF line
+  endings are accepted, as is one trailing newline. Each nonempty line is exactly
+  `key: value`; required keys and values are ASCII, values are not trimmed beyond the
+  format's single separator space, and malformed lines make the sentinel foreign.
+  This accepts the exact current POSIX and Windows PowerShell output while keeping
+  duplicate/missing/value checks strict.
 - Atomic lock-directory acquisition in deterministic path order serializes binary
   invocations and coordinates with the current POSIX installer per destination.
   Authoritative checks run only after all locks are held and immediately before rename.
@@ -234,12 +241,16 @@ from the trusted source tree is installed.
   staged failure cleanup, and missing/invalid project paths.
 - Tests verify error paths leave foreign/original content untouched and that a
   replacement failure restores the prior owned directory. Fault injection covers
-  activation failure, failed restore, post-activation aside cleanup, stage cleanup,
-  and lock release, asserting the state table above.
+  activation failure with and without a prior target, failed restore, post-activation
+  aside cleanup, stage cleanup, and lock release, asserting the state table above.
 - Ownership tests cover missing/wrong/duplicate `managed-by`, empty and malformed
   sentinels, duplicate/missing fields, wrong-skill names, unreadable sentinels where the
   platform permits, and sentinel directories and symlinks. Each case leaves the
   original tree byte-for-byte intact.
+- Compatibility tests create sentinels through the real POSIX installer and, when
+  PowerShell is available, the real PowerShell installer, then prove the binary accepts
+  and replaces them. Checked byte fixtures cover BOM+CRLF PowerShell output even on
+  hosts without PowerShell.
 - A functional phase runs the actual binary with an isolated project directory and
   home override, proves both layouts and nested files, exercises `all`, and proves
   non-interactive missing-scope refusal without contacting Bugzilla.
@@ -249,6 +260,12 @@ from the trusted source tree is installed.
   Aside-removal and lock-release warning cases explicitly assert exit 0, the normal
   success object, and the warning; activation/restore failures assert nonzero and empty
   stdout.
+- Cross-process tests pin the shared `.bzr-skill.lock` protocol. A real POSIX installer
+  held after lock acquisition by a blocking test tool makes the binary refuse the same
+  destination. In the reverse direction, `bzr_lock_helper` acquires the binary's real
+  guard while the POSIX installer must refuse it. Protocol fixtures cover missing,
+  transient empty, live, and dead PID files. An `all` contention test proves a later
+  lock failure releases every earlier lock.
 - Run `cargo fmt --check`, `cargo clippy --all-targets --features test-helpers --
   -D warnings`, `make check-test-layout`, `make check-no-spawn`, `cargo test
   --features test-helpers`, `make skills-test`, and `make functional-test-all`.
