@@ -29,11 +29,86 @@ fn main() -> io::Result<()> {
 
     println!("cargo:rustc-env=BZR_GIT_SHA={sha}");
 
-    if Path::new(".git/HEAD").exists() {
-        println!("cargo:rerun-if-changed=.git/HEAD");
+    if let Some(manifest_dir) = env::var_os("CARGO_MANIFEST_DIR") {
+        for path in git_rerun_paths(Path::new(&manifest_dir)) {
+            println!("cargo:rerun-if-changed={}", path.display());
+        }
     }
 
     Ok(())
+}
+
+fn git_rerun_paths(manifest_dir: &Path) -> Vec<PathBuf> {
+    let Some(git_dir) = resolve_git_dir(manifest_dir) else {
+        return Vec::new();
+    };
+    let head = git_dir.join("HEAD");
+    let mut paths = vec![head.clone()];
+    let Some(reference) = read_symbolic_ref(&head) else {
+        return paths;
+    };
+    let Some(common_dir) = resolve_common_git_dir(&git_dir) else {
+        return paths;
+    };
+    paths.push(common_dir.join(reference));
+    paths
+}
+
+fn resolve_git_dir(manifest_dir: &Path) -> Option<PathBuf> {
+    let dot_git = manifest_dir.join(".git");
+    let metadata = fs::metadata(&dot_git).ok()?;
+    if metadata.is_dir() {
+        return fs::canonicalize(dot_git).ok();
+    }
+    if !metadata.is_file() {
+        return None;
+    }
+    let contents = fs::read_to_string(dot_git).ok()?;
+    let path = contents.strip_prefix("gitdir: ")?.trim_end();
+    if path.is_empty() || path.contains(['\n', '\r']) {
+        return None;
+    }
+    let path = Path::new(path);
+    let path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        manifest_dir.join(path)
+    };
+    fs::canonicalize(path).ok()
+}
+
+fn read_symbolic_ref(head: &Path) -> Option<PathBuf> {
+    let contents = fs::read_to_string(head).ok()?;
+    let reference = contents.strip_prefix("ref: ")?.trim_end();
+    let path = Path::new(reference);
+    if reference.contains(['\n', '\r'])
+        || path.is_absolute()
+        || !path
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
+        || path.components().next() != Some(Component::Normal("refs".as_ref()))
+    {
+        return None;
+    }
+    Some(path.to_path_buf())
+}
+
+fn resolve_common_git_dir(git_dir: &Path) -> Option<PathBuf> {
+    let commondir = git_dir.join("commondir");
+    let Ok(contents) = fs::read_to_string(commondir) else {
+        return Some(git_dir.to_path_buf());
+    };
+    let path = contents.trim_end();
+    if path.is_empty() || path.contains(['\n', '\r']) {
+        return None;
+    }
+    let path = Path::new(path);
+    let path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        git_dir.join(path)
+    };
+    fs::canonicalize(path).ok()
 }
 
 fn generate_embedded_skills() -> io::Result<()> {
