@@ -14,23 +14,28 @@ how a compiled binary discovers a changing directory tree.
 
 ## Decision
 
-Keep one canonical payload under `content/skills/`. Extend `build.rs` to enumerate
-regular payload files deterministically and generate a Rust manifest in `OUT_DIR`;
-the command compiles that manifest with each file embedded as bytes. The build fails
-on symlinks, non-files, invalid relative paths, a missing `SKILL.md`, or an empty
-payload. Cargo rebuild directives cover the canonical tree.
+Keep one canonical payload under `content/skills/`. Extend `build.rs` to traverse
+directories, enumerate regular payload files deterministically, and generate a Rust
+manifest in `OUT_DIR`; the command compiles that manifest with each file embedded as
+bytes. Empty directories are ignored. The build rejects every other entry type,
+invalid relative paths, a missing `SKILL.md`, or an empty payload. Cargo rebuild
+directives cover the canonical tree.
 
 The standalone installers continue to provide the no-binary bootstrap path, but
 read and remotely extract `content/skills/` rather than owning a second skill tree.
-They retain ADR 0013's transport and verification policy. The binary never fetches
-skills at runtime and adds no embedding dependency.
+When a user explicitly pins a pre-migration branch, tag, or commit, remote extraction
+falls back to that archive's historical `agent-skills/skills/` path. The fallback is
+read-only compatibility for immutable old layouts, not a second current source. The
+installers retain ADR 0013's transport and verification policy. The binary never
+fetches skills at runtime and adds no embedding dependency.
 
 ## Consequences
 
 - The installed payload always matches the running binary and works offline.
 - A skill addition is automatically embedded without maintaining a second file
   manifest, while deterministic sorting keeps builds reproducible.
-- The binary grows by the compressed executable cost of the Markdown payload.
+- The installed binary grows by approximately the raw Markdown payload plus manifest
+  overhead; compression reduces the effect on release-archive download size only.
 - `build.rs` becomes responsible for validating and enumerating non-Rust content.
 - Release archives, crates.io packages, and local builds use the same checked-in
   canonical source; packaging tests must prove that source is present.

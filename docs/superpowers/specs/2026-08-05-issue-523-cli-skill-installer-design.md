@@ -58,6 +58,11 @@ resolution and output. Focused leaf modules under `src/skills/` own the embedded
 manifest and filesystem installation so command parsing, presentation, and mutation
 logic remain independently testable.
 
+The standalone installers use `content/skills/` in current checkouts and archives.
+For an explicitly pinned historical ref whose archive predates that path, remote
+extraction accepts `agent-skills/skills/` as a read-only compatibility layout. Current
+trees never define or synchronize a second payload copy.
+
 The installer expands an agent target into one or two destination roots. It validates
 all destinations and existing skill folders before acquiring destination locks. For
 each target it creates a same-filesystem staging directory, writes only generated
