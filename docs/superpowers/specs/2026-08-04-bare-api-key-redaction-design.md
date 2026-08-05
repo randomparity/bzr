@@ -1,6 +1,6 @@
 # Bare API-key error redaction design
 
-Issue: #509  
+Issue: #509
 Decision: [ADR 0016](../../adr/0016-thread-local-error-redaction-context.md)
 
 ## Scope charter
