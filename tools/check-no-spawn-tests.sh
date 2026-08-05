@@ -10,6 +10,7 @@ new_fixture() {
   local name=$1
   local root="$FIXTURES/$name"
   mkdir -p "$root/src" "$root/docs"
+  cp "$SCRIPT_DIR/../clippy.toml" "$root/clippy.toml"
   printf '#[tokio::main(flavor = "current_thread")]\nasync fn main() {}\n' >"$root/src/main.rs"
   printf 'pub fn safe() {}\n' >"$root/src/lib.rs"
   printf '%s\n' "$root"
@@ -40,6 +41,10 @@ expect_rejected "missing current-thread runtime" "$missing_main"
 wrong_main=$(new_fixture wrong-main)
 printf '#[tokio::main(flavor = "multi_thread")]\nasync fn main() {}\n' >"$wrong_main/src/main.rs"
 expect_rejected "multi-thread runtime" "$wrong_main"
+
+missing_semantic_guard=$(new_fixture missing-semantic-guard)
+sed -i.bak '/"tokio::task::spawn",/d' "$missing_semantic_guard/clippy.toml"
+expect_rejected "missing semantic spawn guard" "$missing_semantic_guard"
 
 forbidden=(
   'tokio::spawn(async {})'

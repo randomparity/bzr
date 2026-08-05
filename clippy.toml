@@ -9,3 +9,24 @@ too-many-arguments-threshold = 5
 # threshold, so this only raises the bar for that one spurious report. Revert to
 # the default once the MSRV moves past the clippy fix.
 array-size-threshold = 32768
+
+# ADR 0016 keeps the active API key in thread-local state. These semantic
+# lints reject task/thread handoff even when the API is imported or renamed.
+disallowed-methods = [
+  "std::thread::spawn",
+  "std::thread::Builder::spawn",
+  "std::thread::scope",
+  "std::thread::Scope::spawn",
+  "tokio::task::spawn",
+  "tokio::task::spawn_blocking",
+  "tokio::task::spawn_local",
+]
+disallowed-types = [
+  "tokio::task::JoinSet",
+  "tokio::task::LocalSet",
+]
+disallowed-macros = [
+  "tokio::join",
+  "tokio::select",
+  "tokio::try_join",
+]

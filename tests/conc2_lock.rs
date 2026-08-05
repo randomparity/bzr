@@ -1,7 +1,12 @@
 #![cfg(feature = "test-helpers")]
 //! CONC-2 mutual-exclusion: a second process holding config.lock must block
 //! this process's try-lock, which succeeds once the holder releases.
-#![expect(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![expect(
+    clippy::disallowed_methods,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unwrap_used
+)]
 use std::fs::{File, OpenOptions, TryLockError};
 use std::path::Path;
 use std::process::Command;

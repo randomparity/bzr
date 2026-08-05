@@ -11,9 +11,11 @@ Bugzilla can echo an API key in an error message without the usual
 human, JSON, and progress-NDJSON error paths. Redacting a bare value requires the
 configured secret at formatting time, after command dispatch has returned an error.
 
-The CLI runs on Tokio's current-thread runtime, and `make check-no-spawn` rejects task
-fan-out in production code. Credential resolution and final error formatting therefore
-happen on the same OS thread for one invocation.
+The CLI runs on Tokio's current-thread runtime. Clippy's semantic disallow lists reject
+task and thread handoff even when an API is imported or renamed, while
+`make check-no-spawn` verifies that policy and scans for additional fan-out constructs.
+Credential resolution and final error formatting therefore happen on the same OS thread
+for one invocation.
 
 ## Decision
 
@@ -33,8 +35,9 @@ been materialized; calling it before `Display` deliberately disables bare-key re
 for that error.
 
 Percent-encoded `Bugzilla_api_key%3D` markers remain marker-driven and are redacted at
-any value length. The existing `make check-no-spawn` guard is part of this decision: a
-move to task fan-out or a multi-thread runtime requires replacing the context mechanism.
+any value length. The semantic Clippy policy and `make check-no-spawn` guard are part of
+this decision: a move to task fan-out or a multi-thread runtime requires replacing the
+context mechanism.
 
 ## Consequences
 
