@@ -114,7 +114,8 @@ function Resolve-SkillsSrc {
                 (Test-Path (Join-Path $_.FullName 'bzr-reference')) } |
             Select-Object -First 1
         if (-not $found) {
-            throw 'downloaded archive has no content/skills/bzr-reference or agent-skills/skills/bzr-reference'
+            $message = 'downloaded archive has no content/skills/bzr-reference '
+            throw ($message + 'or agent-skills/skills/bzr-reference')
         }
         $versionFile = Join-Path $found.Parent.FullName 'VERSION'
     }

@@ -63,7 +63,10 @@ if [ "$update_rc" -eq 0 ]; then
     "$normal/content/skills/bzr-reference/reference/commands.md" \
     "$normal/content/skills/bzr-reference/reference/commands.yml" | wc -l | tr -d ' ')
   assert_eq "all four claims updated" "4" "$claim_count"
-  out=$("$VERSION_CHECK" "$normal/Cargo.toml" "$normal/agent-skills" "$normal/content/skills" 2>&1) && rc=0 || rc=$?
+  out=$("$VERSION_CHECK" \
+    "$normal/Cargo.toml" \
+    "$normal/agent-skills" \
+    "$normal/content/skills" 2>&1) && rc=0 || rc=$?
   assert_eq "updated fixture satisfies version contract" "0" "$rc"
 
   missing="$WORK/missing"

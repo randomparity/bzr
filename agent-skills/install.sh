@@ -121,7 +121,9 @@ resolve_skills_src() {
       break
     done
   fi
-  [ -n "$found" ] || die "downloaded tarball has no content/skills/bzr-reference or agent-skills/skills/bzr-reference"
+  missing_payload="downloaded tarball has no content/skills/bzr-reference "
+  missing_payload="${missing_payload}or agent-skills/skills/bzr-reference"
+  [ -n "$found" ] || die "$missing_payload"
   SKILLS_SRC="$found"
   VERSION_FILE="$version_file"
   if [ -n "${BZR_SKILL_REF:-}" ]; then

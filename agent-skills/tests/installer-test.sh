@@ -186,26 +186,31 @@ fxroot=$(mktemp -d)
 write_skills() {
   root="$1"
   marker="$2"
-  for skill in bzr-reference bzr-setup bzr-file-bug bzr-triage-bug bzr-search-report bzr-bulk-triage; do
+  for skill in \
+    bzr-reference bzr-setup bzr-file-bug bzr-triage-bug \
+    bzr-search-report bzr-bulk-triage; do
     mkdir -p "$root/$skill"
     printf '%s\n' "$marker" >"$root/$skill/SKILL.md"
   done
 }
 
 current_root="$fxroot/current/bzr-fixture"
-mkdir -p "$current_root/content"
+mkdir -p "$current_root/content" "$current_root/agent-skills"
 write_skills "$current_root/content/skills" "CURRENT-ONLY"
+printf '%s\n' 'CURRENT-9.9.1' >"$current_root/agent-skills/VERSION"
 (cd "$fxroot/current" && tar czf "$fxroot/current.tgz" bzr-fixture)
 
 historical_root="$fxroot/historical/bzr-fixture"
 mkdir -p "$historical_root/agent-skills"
 write_skills "$historical_root/agent-skills/skills" "HISTORICAL-ONLY"
+printf '%s\n' 'HISTORICAL-9.9.2' >"$historical_root/agent-skills/VERSION"
 (cd "$fxroot/historical" && tar czf "$fxroot/historical.tgz" bzr-fixture)
 
 both_root="$fxroot/both/bzr-fixture"
 mkdir -p "$both_root/content" "$both_root/agent-skills"
 write_skills "$both_root/content/skills" "CURRENT-WINS"
 write_skills "$both_root/agent-skills/skills" "HISTORICAL-LOSES"
+printf '%s\n' 'BOTH-9.9.3' >"$both_root/agent-skills/VERSION"
 (cd "$fxroot/both" && tar czf "$fxroot/both.tgz" bzr-fixture)
 
 # Current-only remote archive installs the canonical content/skills payload.
@@ -216,6 +221,8 @@ out=$(TMPDIR="$tmpd" BZR_SKILL_DEST_ROOT="$root" BZR_SKILL_TARBALL_URL="$fxroot/
 assert_eq "current-layout remote install exits 0" "0" "$rc"
 marker=$(cat "$root/.agents/skills/bzr-reference/SKILL.md" 2>/dev/null || true)
 assert_contains "current-layout remote installs canonical payload" "$marker" "CURRENT-ONLY"
+sv=$(cat "$root/.agents/skills/bzr-reference/$SENTINEL")
+assert_contains "current-layout remote uses canonical version" "$sv" "CURRENT-9.9.1"
 assert_eq "no temp workdir leaked on success" "" "$(ls -A "$tmpd")"
 rm -rf "$root" "$tmpd"
 
@@ -226,6 +233,8 @@ out=$(BZR_SKILL_DEST_ROOT="$root" BZR_SKILL_TARBALL_URL="$fxroot/historical.tgz"
 assert_eq "historical-layout remote install exits 0" "0" "$rc"
 marker=$(cat "$root/.agents/skills/bzr-reference/SKILL.md" 2>/dev/null || true)
 assert_contains "historical-layout remote installs fallback payload" "$marker" "HISTORICAL-ONLY"
+sv=$(cat "$root/.agents/skills/bzr-reference/$SENTINEL")
+assert_contains "historical-layout remote uses fallback version" "$sv" "HISTORICAL-9.9.2"
 rm -rf "$root"
 
 # During the transition, the canonical payload must win over the legacy copy.
@@ -235,6 +244,8 @@ out=$(BZR_SKILL_DEST_ROOT="$root" BZR_SKILL_TARBALL_URL="$fxroot/both.tgz" \
 assert_eq "both-layout remote install exits 0" "0" "$rc"
 marker=$(cat "$root/.agents/skills/bzr-reference/SKILL.md" 2>/dev/null || true)
 assert_contains "both-layout prefers canonical payload" "$marker" "CURRENT-WINS"
+sv=$(cat "$root/.agents/skills/bzr-reference/$SENTINEL")
+assert_contains "both-layout remote uses canonical version" "$sv" "BOTH-9.9.3"
 rm -rf "$root"
 
 # bogus tarball path aborts non-zero, writes nothing, leaks no temp dir
