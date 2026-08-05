@@ -67,6 +67,17 @@ pub(crate) fn utf8_prefix(body: &str, max_bytes: usize) -> &str {
     &body[..end]
 }
 
+/// Return a human-scaled response-body excerpt without splitting UTF-8.
+pub(crate) fn diagnostic_body_preview(body: &str) -> String {
+    let prefix = utf8_prefix(body, DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES);
+    let mut preview = String::with_capacity(prefix.len() + 3);
+    preview.push_str(prefix);
+    if prefix.len() < body.len() {
+        preview.push('…');
+    }
+    preview
+}
+
 /// Backoff before retry `attempt` (0-based): `RETRY_BACKOFF_BASE * 2^attempt`,
 /// capped at [`RETRY_BACKOFF_CAP`]. A server `Retry-After` is honored when it is
 /// longer than the exponential base (and is itself capped), so the client never

@@ -309,7 +309,7 @@ impl BugzillaClient {
             }
             return Err(BzrError::HttpStatus {
                 status: status.as_u16(),
-                body,
+                body: crate::http::diagnostic_body_preview(&body),
             });
         }
         Ok(response)
@@ -357,12 +357,7 @@ const BODY_TRACE_MAX_BYTES: usize = 2048;
 ///
 /// Called by `parse_json` when deserializing JSON fails.
 fn format_body_preview(body: &str) -> String {
-    let prefix = crate::http::utf8_prefix(body, BODY_PREVIEW_MAX_BYTES);
-    let mut preview = String::with_capacity(prefix.len() + 4);
-    preview.push_str(prefix);
-    if prefix.len() < body.len() {
-        preview.push('…');
-    }
+    let preview = crate::http::diagnostic_body_preview(body);
 
     // Collapse whitespace so the preview stays on one line in error output.
     let collapsed: String = preview

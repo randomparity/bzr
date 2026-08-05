@@ -35,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- HTTP error-status bodies are now capped to a 512-byte, UTF-8-safe preview
+  when the error is constructed. Oversized proxy and portal responses no
+  longer remain attached to the error or flood stderr and structured error
+  output; truncated bodies end with an ellipsis. REST and XML-RPC use the same
+  limit, while status codes, error types, exit codes, and API-key redaction are
+  unchanged. (#512)
+
 - `bzr bug view` no longer reports `bug not found` for a bug the server
   declined to return for another reason. Two paths discarded the server's own
   explanation and substituted an empty result, which surfaced as exit 2 —
