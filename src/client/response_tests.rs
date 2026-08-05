@@ -278,7 +278,7 @@ async fn http_error_preview_redacts_bare_key_crossing_boundary() {
         crate::error::BzrError::HttpStatus { body, .. } => {
             assert!(!body.contains("conf"), "stored key prefix leaked: {body}");
             assert!(
-                body.ends_with("[REDACTED]…"),
+                body.ends_with("[REDACTED] …"),
                 "redaction marker missing: {body}"
             );
             assert!(body.len() <= BODY_PREVIEW_MAX_BYTES + '…'.len_utf8());
@@ -289,6 +289,48 @@ async fn http_error_preview_redacts_bare_key_crossing_boundary() {
         !err.to_string().contains("conf"),
         "displayed key prefix leaked: {err}"
     );
+}
+
+#[tokio::test]
+async fn http_error_preview_keeps_marker_after_marked_key_redaction() {
+    for marker in ["Bugzilla_api_key=", "Bugzilla_api_key%3D"] {
+        let mock = MockServer::start().await;
+        let body = format!("{}{marker}{}", "a".repeat(480), "s".repeat(100));
+        Mock::given(method("GET"))
+            .and(path("/rest/group"))
+            .respond_with(ResponseTemplate::new(500).set_body_string(body))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let resp = client
+            .http
+            .get(format!("{}/rest/group", mock.uri()))
+            .send()
+            .await
+            .unwrap();
+        let err = client.check_response_status(resp).await.unwrap_err();
+
+        match &err {
+            crate::error::BzrError::HttpStatus { body, .. } => {
+                assert!(!body.contains("ssss"), "stored marked key leaked: {body}");
+                assert!(
+                    body.ends_with("[REDACTED] …"),
+                    "stored truncation marker missing: {body}"
+                );
+            }
+            other => assert!(matches!(other, crate::error::BzrError::HttpStatus { .. })),
+        }
+        let displayed = err.to_string();
+        assert!(
+            !displayed.contains("ssss"),
+            "displayed marked key leaked: {displayed}"
+        );
+        assert!(
+            displayed.ends_with("[REDACTED] …"),
+            "displayed truncation marker missing: {displayed}"
+        );
+    }
 }
 
 #[tokio::test]
