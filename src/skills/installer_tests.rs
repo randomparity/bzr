@@ -24,6 +24,7 @@ enum Failure {
     Restore,
     RemoveAside,
     RemoveStage,
+    FinalCheck,
     ReleaseLock,
     ReleaseHandoff,
     RaceForeign,
@@ -109,6 +110,7 @@ impl FileOperations for TestOps {
     }
 
     fn before_final_target_check(&mut self, target: &Path) -> std::io::Result<()> {
+        self.fail_once(Failure::FinalCheck)?;
         if self.failures.contains(&Failure::RaceForeign)
             && self.triggered.insert(Failure::RaceForeign)
             && target.ends_with(SKILL)
@@ -197,6 +199,30 @@ fn only_residual_path(destination: &Path, prefix: &str) -> PathBuf {
     let paths = residual_paths(destination, prefix);
     assert_eq!(paths.len(), 1, "expected one {prefix} residual: {paths:?}");
     paths.into_iter().next().unwrap()
+}
+
+fn expected_skill_snapshot(skill: &str) -> BTreeMap<PathBuf, (String, Vec<u8>)> {
+    let mut expected = BTreeMap::new();
+    let prefix = format!("{skill}/");
+    for file in embedded::files() {
+        let Some(relative) = file.relative_path.strip_prefix(&prefix) else {
+            continue;
+        };
+        let relative = PathBuf::from(relative);
+        let mut directory = PathBuf::new();
+        if let Some(parent) = relative.parent() {
+            for component in parent.components() {
+                directory.push(component);
+                expected.insert(directory.clone(), ("dir".into(), Vec::new()));
+            }
+        }
+        expected.insert(relative, ("file".into(), file.bytes.to_vec()));
+    }
+    expected.insert(
+        PathBuf::from(".bzr-skill-managed"),
+        ("file".into(), installed_sentinel(skill).into_bytes()),
+    );
+    expected
 }
 
 fn create_owned(root: &Path, skill: &str) -> PathBuf {
@@ -621,6 +647,8 @@ fn first_install_activation_failure_leaves_no_target_and_reports_stage_cleanup()
         .to_string()
         .contains(&target(temp.path()).display().to_string()));
     assert!(!target(temp.path()).exists());
+    assert!(residual_paths(&destination(temp.path()), ".bzr-skill.stage.").is_empty());
+    assert!(residual_paths(&destination(temp.path()), ".bzr-skill.old.").is_empty());
 }
 
 #[test]
@@ -709,17 +737,19 @@ fn lock_release_failure_keeps_installed_target_and_owned_detached_lock() {
 #[test]
 fn stage_cleanup_failure_reports_the_residual_stage_path() {
     let temp = tempfile::TempDir::new().unwrap();
-    let mut ops = TestOps::with_failures(&[Failure::Write, Failure::RemoveStage]);
+    let mut ops = TestOps::with_failures(&[Failure::FinalCheck, Failure::RemoveStage]);
     let error =
         install_with_ops(request(temp.path(), AgentTarget::Standard), &mut ops).unwrap_err();
-    assert!(error.to_string().contains("residual stage"));
-    assert!(fs::read_dir(destination(temp.path()))
-        .unwrap()
-        .any(|entry| entry
-            .unwrap()
-            .file_name()
-            .to_string_lossy()
-            .contains(".stage.")));
+    let stage = only_residual_path(&destination(temp.path()), ".bzr-skill.stage.");
+    let expected_detail = format!(
+        "could not remove residual stage '{}': injected RemoveStage",
+        stage.display()
+    );
+
+    assert!(error.to_string().contains(&expected_detail));
+    assert!(!target(temp.path()).exists());
+    assert!(residual_paths(&destination(temp.path()), ".bzr-skill.old.").is_empty());
+    assert_eq!(snapshot(&stage), expected_skill_snapshot(SKILL));
 }
 
 #[test]
