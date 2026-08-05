@@ -67,12 +67,27 @@ pub(crate) fn utf8_prefix(body: &str, max_bytes: usize) -> &str {
     &body[..end]
 }
 
-/// Return a human-scaled response-body excerpt without splitting UTF-8.
+/// Return a redacted, human-scaled response-body excerpt without splitting UTF-8.
 pub(crate) fn diagnostic_body_preview(body: &str) -> String {
-    let prefix = utf8_prefix(body, DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES);
-    let mut preview = String::with_capacity(prefix.len() + 3);
-    preview.push_str(prefix);
-    if prefix.len() < body.len() {
+    const REDACTION_MARKER: &str = "[REDACTED]";
+
+    let redacted = crate::bugzilla_auth::redact_api_key(body);
+    let prefix = utf8_prefix(&redacted, DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES);
+    let mut preview = String::with_capacity(DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES + 3);
+
+    let partial_marker_start = prefix.rfind('[').filter(|start| {
+        let suffix = &prefix[*start..];
+        suffix.len() < REDACTION_MARKER.len() && REDACTION_MARKER.starts_with(suffix)
+    });
+    if let Some(marker_start) = partial_marker_start {
+        let text_limit = DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES - REDACTION_MARKER.len();
+        preview.push_str(utf8_prefix(&redacted[..marker_start], text_limit));
+        preview.push_str(REDACTION_MARKER);
+    } else {
+        preview.push_str(prefix);
+    }
+
+    if body.len() > DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES || prefix.len() < redacted.len() {
         preview.push('…');
     }
     preview
