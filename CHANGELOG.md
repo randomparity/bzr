@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+- Server-supplied error text is now API-key redacted before it is displayed.
+  A deployment that quotes the request URL back in an error message echoes the
+  credential with it, and `bzr` printed that verbatim to stderr and into the
+  `--json` / `--output ndjson` error object — from where it travels into CI
+  logs, terminal transcripts, and pasted bug reports. `Bugzilla_api_key=<key>`
+  in a Bugzilla API error message or in an HTTP error-status body now renders
+  as `Bugzilla_api_key=[REDACTED]`, matching what transport errors already did.
+  The redaction applies at the single point every output format renders
+  through, so the human and JSON paths cannot diverge. Error text without the
+  marker is unchanged, and codes, statuses, and exit codes are untouched.
+  Redaction is keyed on the `Bugzilla_api_key=` marker, so a server that echoes
+  a bare key with no marker (`invalid api key <key>`) is not yet covered. (#505)
+
 ### Fixed
 
 - `bzr bug view` no longer reports `bug not found` for a bug the server

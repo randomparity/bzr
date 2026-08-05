@@ -457,3 +457,78 @@ fn structured_detail_never_emits_reserved_keys() {
         }
     }
 }
+
+/// A server that quotes the request URL back in its error text echoes the
+/// credential with it. Both variants carry server-supplied strings, so both
+/// redact at the `Display` seam every output format renders through.
+#[test]
+fn api_display_redacts_api_key_echoed_by_the_server() {
+    let err = BzrError::Api {
+        code: 32000,
+        message: "bad request: /rest/bug?Bugzilla_api_key=SUPERSECRET&id=1".into(),
+    };
+    let msg = err.to_string();
+    assert!(!msg.contains("SUPERSECRET"), "key leaked in Display: {msg}");
+    assert!(msg.contains("Bugzilla_api_key=[REDACTED]"), "{msg}");
+    assert!(msg.contains("code 32000"), "code must survive: {msg}");
+}
+
+#[test]
+fn http_status_display_redacts_api_key_echoed_by_the_server() {
+    let err = BzrError::HttpStatus {
+        status: 401,
+        body: "unauthorized for /rest/bug?Bugzilla_api_key=SUPERSECRET".into(),
+    };
+    let msg = err.to_string();
+    assert!(!msg.contains("SUPERSECRET"), "key leaked in Display: {msg}");
+    assert!(msg.contains("Bugzilla_api_key=[REDACTED]"), "{msg}");
+    assert!(msg.starts_with("HTTP 401: "), "status must survive: {msg}");
+}
+
+/// The redaction is marker-driven: text with no `Bugzilla_api_key=` marker
+/// must render byte-for-byte as before, so ordinary server errors are not
+/// mangled.
+#[test]
+fn display_leaves_server_text_without_the_marker_unchanged() {
+    assert_eq!(
+        BzrError::Api {
+            code: 101,
+            message: "Invalid Bug ID".into(),
+        }
+        .to_string(),
+        "Bugzilla API error: Invalid Bug ID (code 101)"
+    );
+    assert_eq!(
+        BzrError::HttpStatus {
+            status: 503,
+            body: "Service Unavailable".into(),
+        }
+        .to_string(),
+        "HTTP 503: Service Unavailable"
+    );
+}
+
+/// `structured_detail` publishes the machine-readable keys for these variants.
+/// Neither may carry the raw server text, or `--json` would re-leak what
+/// `Display` just masked.
+#[test]
+fn structured_detail_does_not_republish_raw_server_text() {
+    let leaky = "Bugzilla_api_key=SUPERSECRET";
+    for err in [
+        BzrError::Api {
+            code: 32000,
+            message: format!("bad request: {leaky}"),
+        },
+        BzrError::HttpStatus {
+            status: 401,
+            body: format!("unauthorized: {leaky}"),
+        },
+    ] {
+        let rendered = serde_json::to_string(&err.structured_detail()).unwrap();
+        assert!(
+            !rendered.contains("SUPERSECRET"),
+            "{} leaked the key via structured_detail: {rendered}",
+            err.error_type()
+        );
+    }
+}

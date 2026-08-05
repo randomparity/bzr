@@ -229,6 +229,29 @@ if assert_exit_code 2 && assert_stderr_json '.error.type' "not_found"; then
     test_pass
 fi
 
+# ── Credentialed error output (issue #505) ───────────────────────────
+# The `restricted` server authenticates with `--auth-method query_param`, so
+# its key travels in the request URL — the shape that leaks when a deployment
+# quotes the URL back in its error text. A stock Bugzilla does not echo it, so
+# what this pins is the no-regression direction: the server's own message still
+# reaches the user intact on both output paths, and the key appears on neither.
+# The redaction itself is asserted by unit tests (`src/error_tests.rs`,
+# `src/client/response_tests.rs`), which can synthesize the echo no real server
+# produces.
+test_begin "146r. credentialed API error keeps its message and omits the key (#505)"
+run_bzr_raw --json --server restricted bug view 999999999
+if assert_exit_code 4 &&
+    assert_stderr_json '.error.api_code' "101" &&
+    assert_stderr_json '.error.message | length > 0' "true" &&
+    assert_stderr_not_contains "$RESTRICTED_KEY"; then
+    run_bzr_raw --server restricted bug view 999999999
+    if assert_exit_code 4 &&
+        assert_stderr_contains "Bugzilla API error" &&
+        assert_stderr_not_contains "$RESTRICTED_KEY"; then
+        test_pass
+    fi
+fi
+
 unset RESTRICTED_USER RESTRICTED_KEY RESTRICTED_GROUP RESTRICTED_BUG
 unset RESTRICTED_PRODUCT RESTRICTED_PROD_BUG _RA
 
