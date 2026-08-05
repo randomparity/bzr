@@ -11,9 +11,13 @@ if [[ ! -f $main ]] || ! rg -q 'flavor = "current_thread"' "$main"; then
   exit 1
 fi
 
-fan_out='tokio(::task)?::spawn(_local|_blocking)?[[:space:]]*\(|tokio::task::(LocalSet|JoinSet)|((tokio::)?(try_)?join|tokio::select)!|FuturesUnordered|\.buffered[[:space:]]*\(|\.buffer_unordered[[:space:]]*\(|\.for_each_concurrent[[:space:]]*\(|(std::)?thread::spawn[[:space:]]*\('
+fan_out='tokio(::task)?::spawn(_local|_blocking)?[[:space:]]*\('
+fan_out+='|tokio::task::(LocalSet|JoinSet)|((tokio::)?(try_)?join|tokio::select)!'
+fan_out+='|FuturesUnordered|\.buffered[[:space:]]*\(|\.buffer_unordered[[:space:]]*\('
+fan_out+='|\.for_each_concurrent[[:space:]]*\(|(std::)?thread::spawn[[:space:]]*\('
 
-if rg -n --glob '*.rs' --glob '!*_tests.rs' --glob '!test_helpers.rs' "$fan_out" "$repo_root/src"; then
+if rg -n --glob '*.rs' --glob '!*_tests.rs' --glob '!test_helpers.rs' \
+  "$fan_out" "$repo_root/src"; then
   echo "ERROR: task or thread fan-out found in production Rust." >&2
   echo "Re-evaluate the CONC-* invariants (config writes, redaction context, shared state)." >&2
   exit 1

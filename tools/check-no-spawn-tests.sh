@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 CHECKER="$SCRIPT_DIR/check-no-spawn.sh"
 FIXTURES=$(mktemp -d)
-trap 'rm -rf "$FIXTURES"' EXIT
+trap 'rm -r "$FIXTURES"' EXIT
 
 new_fixture() {
   local name=$1
