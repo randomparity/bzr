@@ -35,12 +35,11 @@
 6. The command refuses symlinked destination components and same-named foreign
    folders without modifying them. There is no force option in this issue.
 7. Each skill is fully staged and checked for `SKILL.md` before its existing owned
-   directory is moved aside. A failed replacement restores that directory. A failure
-   after another skill was installed reports the partial outcome; valid installed
-   skills are not rolled back.
+   directory is moved aside. A failed replacement attempts to restore that directory.
+   A failure after another skill was installed reports the partial outcome; valid
+   installed skills are not rolled back.
 8. User-facing output goes through `Writers`. Table output names each installed skill
-   and destination; JSON-family output returns one result containing scope,
-   destinations, and installed skill names.
+   and destination. JSON-family success output has the exact shape defined below.
 9. The reusable source of truth is `content/skills/`. Agent-specific trees and the
    compiled binary consume it; they do not define a second skill or command source.
 
@@ -69,21 +68,82 @@ last-writer-wins replacement. The binary is the release-matched path; the standa
 installer remains the no-binary or explicitly ref-selected path and follows `main` by
 default. This issue adds no update or version-arbitration mechanism.
 
-The installer expands an agent target into one or two destination roots. It validates
-all destinations and existing skill folders before acquiring destination locks. For
-each target it creates a same-filesystem staging directory, writes only generated
-relative paths with `create_new`, adds the existing `.bzr-skill-managed` sentinel,
-and verifies `SKILL.md`. Replacement uses `target -> aside`, `stage -> target`, then
-removes `aside`; failure of the second rename restores `aside`. Cleanup guards remove
-only staging/aside/lock paths created by this process.
+The installer expands an agent target into one or two destination roots. It performs a
+read-only preliminary validation, acquires every destination lock in sorted path order,
+then repeats the authoritative symlink, ownership-sentinel, and conflict checks while
+holding all locks. The shell and PowerShell standalone installers use the same lock
+directory and ownership rules. Each target is checked once more immediately before its
+first rename; this closes races among supported installers without claiming protection
+from hostile same-user processes.
+
+For each target the command creates a same-filesystem staging directory, writes only
+generated relative paths with `create_new`, adds the existing
+`.bzr-skill-managed` sentinel, and verifies `SKILL.md`. Replacement uses
+`target -> aside`, `stage -> target`, then removes `aside`. Cleanup code removes only
+staging, aside, and lock paths created and still owned by this process.
+
+### Replacement failure states
+
+| Failure | Authoritative content | Residual and behavior | Report |
+|---|---|---|---|
+| staging/write/validation | existing target, if any | remove stage; do not rename target; stop | failed, plus stage path if cleanup fails |
+| `target -> aside` | existing target | remove stage; stop | failed, original untouched |
+| `stage -> target`, restore succeeds | restored existing target | remove stage; stop | failed, original restored |
+| `stage -> target`, restore fails | aside holds previous content; target absent | retain aside and stage; stop immediately | failed with both recovery paths; never call it restored |
+| aside removal after activation | new target | retain aside; continue because activation succeeded | installed with warning naming residual aside |
+| stage cleanup after a failure | state from the preceding row | retain stage; stop | primary failure plus residual stage path |
+| lock release | all completed target states remain authoritative | retain lock; no more writes | warning naming lock and safe recovery check |
+
+A test-only filesystem-operation seam injects rename, restore, removal, and lock-release
+failures. It exists only to prove these user-visible states and is not a reusable runtime
+abstraction.
+
+## Output contract
+
+On success, JSON emits the normal `schema_version` envelope and NDJSON emits its bare
+`data` object as one compact line. The data object is:
+
+```json
+{
+  "action": "install",
+  "agent": "all",
+  "scope": "project",
+  "project": "/canonical/project/path",
+  "destinations": [
+    {
+      "layout": "agents",
+      "path": "/canonical/project/path/.agents/skills",
+      "installed": ["bzr-bulk-triage", "bzr-file-bug"]
+    },
+    {
+      "layout": "claude",
+      "path": "/canonical/project/path/.claude/skills",
+      "installed": ["bzr-bulk-triage", "bzr-file-bug"]
+    }
+  ]
+}
+```
+
+`agent` is the requested clap value. `scope` is `global` or `project`; `project` is
+`null` for global installs and otherwise the canonical absolute root. Destinations are
+deduplicated and ordered `agents`, then `claude`; skill names are complete and sorted
+lexicographically. Each destination path is canonical-root-based and absolute. The
+example abbreviates the installed array; real success contains every embedded skill.
+
+On any failure, stdout is empty: the command does not emit a success object for a
+partial install. The standard stderr error contains the failed operation/path and a
+deterministically ordered list of already installed skill/destination pairs. JSON-family
+error output remains the repository's existing structured error envelope; partial detail
+is in `message`, and this issue adds no error-schema keys.
 
 ## Error behavior
 
 - Missing scope is an input-validation error (exit 7), with expanded guidance only
   when stdin and stderr are terminals.
-- A missing home directory, nonexistent/non-directory project path, symlinked path
-  component, foreign folder, active lock, malformed embedded manifest, or filesystem
-  failure is actionable and names the operation and safe target path.
+- A missing home directory, nonexistent/non-directory project path, symlinked
+  destination component below the selected root, foreign folder, active lock,
+  malformed embedded manifest, or filesystem failure is actionable and names the
+  operation and safe target path.
 - The implementation does not follow a symlink to inspect its sentinel.
 - Preflight detects deterministic conflicts across every selected destination before
   writes begin. Unpredictable I/O failures can still yield a partial install; the
@@ -116,13 +176,17 @@ from the trusted source tree is installed.
 - The build rejects absolute paths, parent traversal, symlinks, non-files, empty
   payloads, and skill directories without `SKILL.md`; runtime joins only those
   generated relative paths.
-- Project roots must already exist as directories and are canonicalized. Every
-  destination component below the trusted root is inspected with
-  `symlink_metadata`; absent components are created one at a time and rechecked.
+- Project roots must already exist as directories and are canonicalized. An explicitly
+  supplied symlink alias for the root is accepted and output uses the canonical absolute
+  path. Every component created or traversed below that trusted root is inspected with
+  `symlink_metadata`; `.agents`, `.claude`, `skills`, and skill targets may not be
+  symlinks. The platform-provided home is likewise the trusted global root.
 - Existing skill targets are inspected without following links and are replaceable
   only when a regular directory contains the ownership sentinel.
-- An atomic lock-directory acquisition serializes cooperating installers per
-  destination. An unexplained/stale lock fails closed with recovery guidance.
+- Atomic lock-directory acquisition in deterministic path order serializes the binary,
+  shell, and PowerShell installers per destination. Authoritative checks run only after
+  all locks are held and immediately before rename. An unexplained/stale lock fails
+  closed with recovery guidance.
 - Staging uses unpredictable process-local names plus `create_dir`, and file creation
   uses `create_new`. Replacement stays on the destination filesystem and restores the
   previous owned directory if activation fails.
@@ -147,12 +211,18 @@ from the trusted source tree is installed.
   content.
 - Filesystem unit tests use temporary fixtures for global/project mappings,
   idempotent replacement, foreign folders, target and ancestor symlinks, locks,
-  nested files, staged failure cleanup, and missing/invalid project paths.
+  nested files, a project-root symlink alias, state changes before lock acquisition,
+  staged failure cleanup, and missing/invalid project paths.
 - Tests verify error paths leave foreign/original content untouched and that a
-  replacement failure restores the prior owned directory.
+  replacement failure restores the prior owned directory. Fault injection covers
+  activation failure, failed restore, post-activation aside cleanup, stage cleanup,
+  and lock release, asserting the state table above.
 - A functional phase runs the actual binary with an isolated project directory and
   home override, proves both layouts and nested files, exercises `all`, and proves
   non-interactive missing-scope refusal without contacting Bugzilla.
+- Unit and functional assertions pin the full JSON and NDJSON success shapes,
+  deterministic ordering, canonical project path, global `project: null`, `all`
+  destination deduplication, stdout-empty partial failure, and stderr recovery detail.
 - Run `cargo fmt --check`, `cargo clippy --all-targets --features test-helpers --
   -D warnings`, `make check-test-layout`, `make check-no-spawn`, `cargo test
   --features test-helpers`, `make skills-test`, and `make functional-test-all`.
