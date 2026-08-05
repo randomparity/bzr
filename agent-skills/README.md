@@ -72,7 +72,7 @@ check against the freshly built `bzr` (it fails closed — a set-but-missing
 `BZR_BIN` errors rather than silently skipping), enforces the version contract
 above, exercises the installer's guards hermetically, and lints all shell
 sources. The command surface is authored
-against `bzr` 0.8.1-dev. The installer copies whole skill folders, marks each
+against `bzr` 0.8.1. The installer copies whole skill folders, marks each
 with a `.bzr-skill-managed` sentinel so it only ever touches its own folders, and
 refuses to write through a symlinked destination or overwrite an unmarked
 ("foreign") folder without `--force`.

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-08-05
+
 ### Security
 
 - Server-supplied error text is now API-key redacted before it is displayed.
