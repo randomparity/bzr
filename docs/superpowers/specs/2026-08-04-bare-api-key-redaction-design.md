@@ -19,10 +19,10 @@ Decision: [ADR 0016](../../adr/0016-thread-local-error-redaction-context.md)
 - **Exclusions:** cookies and session tokens; tracing work owned by #511; response-body
   bounding owned by #512.
 - **Surface:** authentication redaction and credential-resolution seams, final error
-  rendering, the production thread-handoff guard in `Makefile`, directly related tests,
-  functional phase, changelog, and issue-specific design artifacts. The orchestrator
-  approved the `Makefile` expansion after spec review found the existing CONC-3 gate
-  incomplete for this decision.
+  rendering, the production thread-handoff guard in `Makefile` and its focused shell
+  checker/fixtures, directly related tests, functional phase, changelog, and
+  issue-specific design artifacts. The orchestrator approved this guard expansion after
+  spec review found the existing CONC-3 gate incomplete for this decision.
 - **Ambiguities:** none. The issue explicitly delegates the seam and minimum-length
   decisions.
 
@@ -95,8 +95,13 @@ log paths remain owned by #511 and must not infer safety from this design.
 - Bare substring redaction uses the exact resolved credential, not a guess, and refuses
   keys shorter than eight bytes to bound false positives.
 - Dispatch clearing and CONC-3's current-thread/no-fan-out guard bound the key to one CLI
-  invocation. The guard must reject production uses of Tokio task fan-out,
-  `spawn_blocking`, and `std::thread::spawn`; test-only thread use remains permitted.
+  invocation. The bounded scanner rejects these in production Rust files: Tokio
+  `spawn`, `spawn_local`, `spawn_blocking`, `LocalSet`, `JoinSet`, `join!`, `try_join!`,
+  and `select!`; futures `FuturesUnordered`, `buffered`, `buffer_unordered`, and
+  `for_each_concurrent`; and `std::thread::spawn` / `thread::spawn`. Adding another
+  concurrency primitive to the dependency or source surface requires updating this
+  inventory. Sibling `*_tests.rs`, test helpers, and documentation are excluded so
+  examples and tests do not create false failures.
 - The secret is not added as a separate `BzrError` field, serialized detail, log field,
   or persisted value. Raw server payloads inside `Api` and `HttpStatus` remain unredacted
   in derived `Debug`; only the final CLI `Display` path is a safe output boundary.
@@ -120,8 +125,11 @@ crate's futures or redaction calls remain outside the invariant.
   present for table, JSON, and NDJSON, including progress-enabled formatting semantics.
   Separate tests exercise both lifecycle exits: after final error formatting and after
   successful dispatch, an unrelated error containing the former key remains unchanged.
-- The `check-no-spawn` guard gets biting fixtures proving it rejects production
-  `std::thread::spawn` and `spawn_blocking` while ignoring test-only thread use.
+- The `check-no-spawn` guard delegates to one shell checker. Its self-test builds temporary
+  fixture trees and proves representative tokens from every forbidden family fail in a
+  production `.rs` file, while the same tokens in sibling tests, test helpers, and docs
+  pass. `make check-no-spawn` runs both the real scan and this self-test, so CI exercises
+  the regex and the file-selection boundary together.
 - The existing real-container phase is extended to exercise `--progress ndjson` alongside
   table and JSON, asserting the configured key never reaches stderr. Stock Bugzilla does
   not echo the key bare, so synthetic unit/wiremock tests remain the positive regression
