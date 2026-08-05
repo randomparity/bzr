@@ -1,8 +1,10 @@
 #![expect(clippy::unwrap_used, clippy::panic)]
 
+use std::cell::Cell;
+use std::io;
 use std::path::{Path, PathBuf};
 
-use super::{execute_install_with, resolve_scope, TerminalState};
+use super::{execute_install_with, execute_install_with_current_dir, resolve_scope, TerminalState};
 use crate::cli::{AgentTarget, InstallArgs};
 use crate::error::BzrError;
 use crate::output::writers::Writers;
@@ -79,6 +81,98 @@ fn explicit_global_resolves_without_reading_filesystem() {
     .unwrap();
 
     assert_eq!(format!("{scope:?}"), "Global");
+}
+
+#[test]
+fn explicit_global_command_does_not_resolve_current_directory() {
+    let args = InstallArgs {
+        agent: AgentTarget::Codex,
+        global: true,
+        project: None,
+    };
+    let called = Cell::new(false);
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+    let mut writers = Writers::new(&mut out, &mut err);
+    let context =
+        crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None);
+
+    execute_install_with_current_dir(
+        &args,
+        &context,
+        &mut writers,
+        |_| {
+            Ok(InstallOutcome {
+                destinations: Vec::new(),
+                warnings: Vec::new(),
+            })
+        },
+        || {
+            called.set(true);
+            Err(io::Error::other("injected current-dir failure"))
+        },
+    )
+    .unwrap();
+
+    assert!(!called.get());
+}
+
+#[test]
+fn absolute_project_command_does_not_resolve_current_directory() {
+    let project = tempfile::TempDir::new().unwrap();
+    let args = project_args(project.path());
+    let called = Cell::new(false);
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+    let mut writers = Writers::new(&mut out, &mut err);
+    let context =
+        crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None);
+
+    execute_install_with_current_dir(
+        &args,
+        &context,
+        &mut writers,
+        |_| {
+            Ok(InstallOutcome {
+                destinations: Vec::new(),
+                warnings: Vec::new(),
+            })
+        },
+        || {
+            called.set(true);
+            Err(io::Error::other("injected current-dir failure"))
+        },
+    )
+    .unwrap();
+
+    assert!(!called.get());
+}
+
+#[test]
+fn relative_project_command_reports_current_directory_failure() {
+    let args = project_args(Path::new("relative-project"));
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+    let mut writers = Writers::new(&mut out, &mut err);
+    let context =
+        crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None);
+
+    let error = execute_install_with_current_dir(
+        &args,
+        &context,
+        &mut writers,
+        |_| panic!("installer must not run when project resolution fails"),
+        || Err(io::Error::other("injected current-dir failure")),
+    )
+    .unwrap_err();
+
+    assert_eq!(error.exit_code(), 7);
+    assert!(error.to_string().contains(
+        "could not resolve the current directory for relative skill-install project \
+         'relative-project': injected current-dir failure"
+    ));
+    assert!(out.is_empty());
+    assert!(err.is_empty());
 }
 
 #[test]

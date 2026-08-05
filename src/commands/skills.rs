@@ -57,9 +57,10 @@ pub(crate) async fn execute(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let SkillsAction::Install(args) = action;
-    execute_install_with(args, ctx, w, installer::install)
+    execute_install_with_current_dir(args, ctx, w, installer::install, std::env::current_dir)
 }
 
+#[cfg(test)]
 fn execute_install_with<F>(
     args: &InstallArgs,
     ctx: &CommandContext,
@@ -69,17 +70,26 @@ fn execute_install_with<F>(
 where
     F: FnOnce(InstallRequest) -> Result<InstallOutcome>,
 {
-    let cwd = std::env::current_dir().map_err(|error| {
-        BzrError::input(format!(
-            "could not resolve the current directory for skill installation: {error}"
-        ))
-    })?;
-    let scope = resolve_scope(
+    execute_install_with_current_dir(args, ctx, w, installer_fn, std::env::current_dir)
+}
+
+fn execute_install_with_current_dir<F, C>(
+    args: &InstallArgs,
+    ctx: &CommandContext,
+    w: &mut Writers<'_>,
+    installer_fn: F,
+    current_dir: C,
+) -> Result<()>
+where
+    F: FnOnce(InstallRequest) -> Result<InstallOutcome>,
+    C: FnOnce() -> std::io::Result<PathBuf>,
+{
+    let scope = resolve_scope_with_current_dir(
         args,
         TerminalState::current(),
         dirs::home_dir().as_deref(),
-        &cwd,
         w.err,
+        current_dir,
     )?;
     let outcome = installer_fn(InstallRequest {
         agent: args.agent,
@@ -120,6 +130,7 @@ fn install_result(
 }
 
 /// Resolve an explicit scope or write terminal-appropriate guidance for an omission.
+#[cfg(test)]
 fn resolve_scope(
     args: &InstallArgs,
     terminal: TerminalState,
@@ -127,6 +138,19 @@ fn resolve_scope(
     cwd: &Path,
     err: &mut (impl Write + ?Sized),
 ) -> Result<InstallScope> {
+    resolve_scope_with_current_dir(args, terminal, home, err, || Ok(cwd.to_path_buf()))
+}
+
+fn resolve_scope_with_current_dir<C>(
+    args: &InstallArgs,
+    terminal: TerminalState,
+    home: Option<&Path>,
+    err: &mut (impl Write + ?Sized),
+    current_dir: C,
+) -> Result<InstallScope>
+where
+    C: FnOnce() -> std::io::Result<PathBuf>,
+{
     if args.global {
         return Ok(InstallScope::Global);
     }
@@ -134,6 +158,13 @@ fn resolve_scope(
         let project = if project.is_absolute() {
             project.clone()
         } else {
+            let cwd = current_dir().map_err(|error| {
+                BzrError::input(format!(
+                    "could not resolve the current directory for relative skill-install project \
+                     '{}': {error}",
+                    project.display()
+                ))
+            })?;
             cwd.join(project)
         };
         let project = project.canonicalize().map_err(|error| {
@@ -151,7 +182,13 @@ fn resolve_scope(
         return Ok(InstallScope::Project(project));
     }
 
-    write_scope_guidance(args.agent, terminal, home, cwd, err);
+    let cwd = terminal
+        .is_interactive()
+        .then(current_dir)
+        .transpose()
+        .ok()
+        .flatten();
+    write_scope_guidance(args.agent, terminal, home, cwd.as_deref(), err);
     Err(BzrError::input(
         "choose exactly one skill-install scope: --global or --project <PATH>".into(),
     ))
@@ -161,13 +198,13 @@ fn write_scope_guidance(
     agent: AgentTarget,
     terminal: TerminalState,
     home: Option<&Path>,
-    cwd: &Path,
+    cwd: Option<&Path>,
     err: &mut (impl Write + ?Sized),
 ) {
     if terminal.is_interactive() {
         let _ = writeln!(err, "Choose where to install bzr skills:");
         write_destination_patterns("Global destinations", agent, home, err);
-        write_destination_patterns("Project destinations", agent, Some(cwd), err);
+        write_destination_patterns("Project destinations", agent, cwd, err);
     }
     let agent = agent_name(agent);
     let _ = writeln!(err, "Examples:");
