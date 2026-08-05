@@ -61,34 +61,56 @@ else
 fi
 
 SKILLS_NDJSON="$FUNC_CONFIG_DIR/skills-ndjson"
+SKILLS_NDJSON_EXPECTED="$FUNC_CONFIG_DIR/skills-ndjson-expected.json"
 mkdir "$SKILLS_NDJSON"
 SKILLS_NDJSON_CANONICAL=$(cd "$SKILLS_NDJSON" && pwd -P)
+jq -n --arg project "$SKILLS_NDJSON_CANONICAL" '
+  {
+    action: "install",
+    agent: "all",
+    scope: "project",
+    project: $project,
+    destinations: [
+      {
+        layout: "agents",
+        path: ($project + "/.agents/skills"),
+        installed: [
+          "bzr-bulk-triage",
+          "bzr-file-bug",
+          "bzr-reference",
+          "bzr-search-report",
+          "bzr-setup",
+          "bzr-triage-bug"
+        ]
+      },
+      {
+        layout: "claude",
+        path: ($project + "/.claude/skills"),
+        installed: [
+          "bzr-bulk-triage",
+          "bzr-file-bug",
+          "bzr-reference",
+          "bzr-search-report",
+          "bzr-setup",
+          "bzr-triage-bug"
+        ]
+      }
+    ]
+  }
+' >"$SKILLS_NDJSON_EXPECTED"
 test_begin "123d. skills install emits one bare, complete NDJSON object"
 run_bzr_raw --output ndjson skills install --agent all --project "$SKILLS_NDJSON"
 if assert_success &&
   assert_ndjson_line_count 1 &&
-  jq -e --arg project "$SKILLS_NDJSON_CANONICAL" '
-    .action == "install" and
-    .agent == "all" and
-    .scope == "project" and
-    .project == $project and
-    [.destinations[].layout] == ["agents", "claude"] and
-    all(.destinations[];
-      .installed == [
-        "bzr-bulk-triage",
-        "bzr-file-bug",
-        "bzr-reference",
-        "bzr-search-report",
-        "bzr-setup",
-        "bzr-triage-bug"
-      ])
-  ' "$BZR_STDOUT" >/dev/null; then
+  jq -e --slurpfile expected "$SKILLS_NDJSON_EXPECTED" \
+    '. == $expected[0]' "$BZR_STDOUT" >/dev/null; then
   test_pass
 else
   [[ $FAIL_COUNT -gt 0 ]] || test_fail "NDJSON skill result did not match the contract"
 fi
 
 SKILLS_FOREIGN="$FUNC_CONFIG_DIR/skills-foreign"
+SKILLS_FOREIGN_BEFORE="$FUNC_CONFIG_DIR/skills-foreign-before"
 mkdir -p "$SKILLS_FOREIGN/.agents/skills/bzr-reference"
 printf 'foreign bytes\n' >"$SKILLS_FOREIGN/.agents/skills/bzr-reference/keep.txt"
 cat >"$SKILLS_FOREIGN/.agents/skills/bzr-reference/.bzr-skill-managed" <<'EOF'
@@ -97,13 +119,12 @@ installed-skill: bzr-reference
 source-version: foreign
 source-commit: foreign
 EOF
+cp -R "$SKILLS_FOREIGN/.agents" "$SKILLS_FOREIGN_BEFORE"
 test_begin "123e. skills install refuses and preserves a foreign skill"
 run_bzr skills install --agent codex --project "$SKILLS_FOREIGN"
 if assert_failure &&
   [[ ! -s "$BZR_STDOUT_RAW" ]] &&
-  [[ $(cat "$SKILLS_FOREIGN/.agents/skills/bzr-reference/keep.txt") == "foreign bytes" ]] &&
-  grep -q "managed-by: somebody-else" \
-    "$SKILLS_FOREIGN/.agents/skills/bzr-reference/.bzr-skill-managed"; then
+  diff -r "$SKILLS_FOREIGN_BEFORE" "$SKILLS_FOREIGN/.agents" >/dev/null; then
   test_pass
 else
   [[ $FAIL_COUNT -gt 0 ]] || test_fail "foreign skill changed during refusal"
@@ -125,17 +146,20 @@ else
 fi
 
 SKILLS_NO_CONFIG="$FUNC_CONFIG_DIR/skills-no-config"
-SKILLS_MISSING_CONFIG="$FUNC_CONFIG_DIR/does-not-exist/config.toml"
+SKILLS_BAD_CONFIG="$FUNC_CONFIG_DIR/skills-malformed-config.toml"
+SKILLS_BAD_CONFIG_BEFORE="$FUNC_CONFIG_DIR/skills-malformed-config-before.toml"
 mkdir "$SKILLS_NO_CONFIG"
-test_begin "123g. skills install needs no Bugzilla server or config file"
-run_bzr --config "$SKILLS_MISSING_CONFIG" skills install \
+printf 'not = [valid toml\n' >"$SKILLS_BAD_CONFIG"
+cp "$SKILLS_BAD_CONFIG" "$SKILLS_BAD_CONFIG_BEFORE"
+test_begin "123g. skills install ignores and preserves malformed Bugzilla config"
+run_bzr --config "$SKILLS_BAD_CONFIG" skills install \
   --agent standard --project "$SKILLS_NO_CONFIG"
 if assert_success &&
-  [[ ! -e "$SKILLS_MISSING_CONFIG" ]] &&
+  cmp -s "$SKILLS_BAD_CONFIG_BEFORE" "$SKILLS_BAD_CONFIG" &&
   [[ -f "$SKILLS_NO_CONFIG/.agents/skills/bzr-reference/SKILL.md" ]]; then
   test_pass
 else
-  [[ $FAIL_COUNT -gt 0 ]] || test_fail "local install consulted or created Bugzilla config"
+  [[ $FAIL_COUNT -gt 0 ]] || test_fail "local install consulted or changed Bugzilla config"
 fi
 
 test_begin "123h. skills install refuses an omitted scope without stdout"

@@ -1680,17 +1680,19 @@ async fn e2e_config_show_via_cli_args() {
 }
 
 #[tokio::test]
-async fn e2e_skills_install_needs_no_config_or_server() {
+async fn e2e_skills_install_ignores_malformed_config_and_needs_no_server() {
     let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
     let project = tmp.path().join("project");
     std::fs::create_dir(&project).unwrap();
-    let missing_config = tmp.path().join("missing").join("config.toml");
+    let malformed_config = tmp.path().join("malformed-config.toml");
+    let malformed_bytes = b"not = [valid toml\n";
+    std::fs::write(&malformed_config, malformed_bytes).unwrap();
 
     let (result, output) = dispatch_cli_with_output(&[
         "bzr",
         "--config",
-        missing_config.to_str().unwrap(),
+        malformed_config.to_str().unwrap(),
         "skills",
         "install",
         "--agent",
@@ -1705,8 +1707,13 @@ async fn e2e_skills_install_needs_no_config_or_server() {
         "local skill install should succeed: {result:?}"
     );
     assert!(
-        !missing_config.exists(),
-        "local skill install must not create or read a Bugzilla config"
+        malformed_config.exists(),
+        "local skill install must not remove a Bugzilla config"
+    );
+    assert_eq!(
+        std::fs::read(&malformed_config).unwrap(),
+        malformed_bytes,
+        "local skill install must not parse or rewrite malformed Bugzilla config"
     );
     assert!(
         project
