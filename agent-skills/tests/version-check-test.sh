@@ -123,6 +123,30 @@ out=$(run_check) && rc=0 || rc=$?
 assert_eq "stale claim in another skill fails" "1" "$rc"
 assert_contains "other skill named" "$out" "bzr-setup"
 
+# 6b. The same claim at the start of a sentence is the same claim. A
+#     case-sensitive scan misses it silently -- and only outside the required
+#     sites, where "no claim" would otherwise have caught it.
+clean_tree
+mkdir -p "$ROOT/skills/bzr-setup"
+cat >"$ROOT/skills/bzr-setup/SKILL.md" <<'EOF'
+Authored against `bzr` 0.6.1-dev. Run `bzr --version` to confirm.
+EOF
+out=$(run_check) && rc=0 || rc=$?
+assert_eq "capitalized stale claim fails" "1" "$rc"
+assert_contains "capitalized claim names the version" "$out" "0.6.1-dev"
+
+# 6c. Wordier phrasings around the `bzr` token are still claims.
+clean_tree
+mkdir -p "$ROOT/skills/bzr-setup"
+cat >"$ROOT/skills/bzr-setup/SKILL.md" <<'EOF'
+These recipes are authored against the current `bzr` 0.6.1-dev surface, and
+the flags below are authored against bzr version 0.7.0.
+EOF
+out=$(run_check) && rc=0 || rc=$?
+assert_eq "wordy stale claims fail" "1" "$rc"
+assert_contains "wordy claim before the token reported" "$out" "0.6.1-dev"
+assert_contains "wordy claim after the token reported" "$out" "0.7.0"
+
 # 7. Dropping the claim from ONE required site fails. A floor of "at least one
 #    claim somewhere" would report this tree clean, which is the whole point of
 #    naming the required sites.
