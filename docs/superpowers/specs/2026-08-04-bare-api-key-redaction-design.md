@@ -41,8 +41,13 @@ Decision: [ADR 0016](../../adr/0016-thread-local-error-redaction-context.md)
 
 ## Design
 
-`bugzilla_auth` owns a thread-local optional redaction key and exposes three crate-private
-operations: clear it, register a resolved key, and redact a message. `dispatch` clears the
+`bugzilla_auth` owns a thread-local optional redaction key and exposes crate-private
+clear, register, and redact operations. The public `error` module provides one doc-hidden
+`clear_error_redaction_context()` hook so the separate binary crate can shorten the
+context lifetime without accessing or returning secret material. Its API documentation
+requires callers to materialize the protected error string first; clearing earlier
+disables bare-key masking and is covered by a characterization test. The hook is a public
+compatibility commitment even though rustdoc hides it. `dispatch` clears the
 slot before building command context. Credential resolution registers a non-empty key as
 soon as it succeeds, before auth detection, version probing, or client construction can
 return a server error. `dispatch` clears the slot before returning success, and the binary
@@ -78,7 +83,10 @@ raw server payloads or isolation between unrelated direct-client displays.
   the server can repeat request credentials in arbitrary text.
 - **Existing boundary used:** configured secret material crosses from config, environment,
   or keyring into request authentication and the redaction context.
-- **No new external boundary:** the context is memory-only and crate-private.
+- **New public control boundary:** the context and registration stay private, but the
+  doc-hidden cleanup hook lets the package binary and downstream crates clear it. Callers
+  cannot read or register the secret and are trusted to clear only after materializing the
+  protected error; premature clearing disables bare-key protection.
 
 ### Actors and trust
 
@@ -87,7 +95,8 @@ controls configuration and is trusted with the key. Final CLI error output prote
 recognized marker values at every length and bare configured keys of at least eight bytes
 before they reach terminal transcripts or copied reports. A shorter bare key remains an
 explicit false-positive trade-off and may appear unchanged. Tracing and other diagnostic
-log paths remain owned by #511 and must not infer safety from this design.
+log paths remain owned by #511 and must not infer safety from this design. Downstream Rust
+callers of the cleanup hook are trusted to obey its after-materialization contract.
 
 ### Controls
 
@@ -103,8 +112,9 @@ log paths remain owned by #511 and must not infer safety from this design.
   inventory. Sibling `*_tests.rs`, test helpers, and documentation are excluded so
   examples and tests do not create false failures.
 - The secret is not added as a separate `BzrError` field, serialized detail, log field,
-  or persisted value. Raw server payloads inside `Api` and `HttpStatus` remain unredacted
-  in derived `Debug`; only the final CLI `Display` path is a safe output boundary.
+  or persisted value. The doc-hidden public cleanup hook reveals no credential. Raw server
+  payloads inside `Api` and `HttpStatus` remain unredacted in derived `Debug`; only the
+  final CLI `Display` path is a safe output boundary.
 
 ### Explicitly out of scope
 
