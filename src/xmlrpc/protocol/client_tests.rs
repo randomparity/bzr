@@ -121,6 +121,41 @@ async fn http_error_preview_handles_multibyte_debug_preview_boundary() {
 }
 
 #[tokio::test]
+async fn http_error_preview_redacts_bare_key_crossing_boundary() {
+    let secret = "configured-secret";
+    let _redaction_guard = crate::bugzilla_auth::active_api_key_test_guard(Some(secret));
+    let mock = MockServer::start().await;
+    let body = format!(
+        "{}{secret} trailing",
+        "a".repeat(crate::http::DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES - 4)
+    );
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(500).set_body_string(body))
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
+    let err = client.call("Bug.get", BTreeMap::new()).await.unwrap_err();
+
+    match &err {
+        BzrError::HttpStatus { body, .. } => {
+            assert!(!body.contains("conf"), "stored key prefix leaked: {body}");
+            assert!(
+                body.ends_with("[REDACTED]…"),
+                "redaction marker missing: {body}"
+            );
+            assert!(body.len() <= crate::http::DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES + '…'.len_utf8());
+        }
+        other => assert!(matches!(other, BzrError::HttpStatus { .. })),
+    }
+    assert!(
+        !err.to_string().contains("conf"),
+        "displayed key prefix leaked: {err}"
+    );
+}
+
+#[tokio::test]
 async fn http_error_debug_body_redacts_api_key() {
     let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::DEBUG);
     let mock = MockServer::start().await;

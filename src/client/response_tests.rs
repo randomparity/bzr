@@ -1,4 +1,7 @@
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::disallowed_methods, clippy::unwrap_used)]
+
+use std::io::{Read as _, Write as _};
+use std::net::TcpListener;
 
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -17,6 +20,21 @@ fn multibyte_body_crossing_preview_boundary() -> String {
     body.push('é');
     body.push_str(" trailing");
     body
+}
+
+fn spawn_truncated_http_error_server() -> (String, std::thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let handle = std::thread::spawn(move || {
+        let Ok((mut stream, _addr)) = listener.accept() else {
+            return;
+        };
+        let _ = stream.read(&mut [0_u8; 1024]);
+        let _ = stream
+            .write_all(b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 32\r\n\r\noops");
+    });
+
+    (format!("http://127.0.0.1:{port}"), handle)
 }
 
 fn assert_log_redacted(log: &str, secret: &str) {
@@ -230,6 +248,69 @@ async fn http_error_preview_handles_multibyte_debug_preview_boundary() {
     );
     assert_eq!(err.exit_code(), 5);
     assert_eq!(err.error_type(), "http");
+}
+
+#[tokio::test]
+async fn http_error_preview_redacts_bare_key_crossing_boundary() {
+    let secret = "configured-secret";
+    let _redaction_guard = crate::bugzilla_auth::active_api_key_test_guard(Some(secret));
+    let mock = MockServer::start().await;
+    let body = format!(
+        "{}{secret} trailing",
+        "a".repeat(BODY_PREVIEW_MAX_BYTES - 4)
+    );
+    Mock::given(method("GET"))
+        .and(path("/rest/group"))
+        .respond_with(ResponseTemplate::new(500).set_body_string(body))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let resp = client
+        .http
+        .get(format!("{}/rest/group", mock.uri()))
+        .send()
+        .await
+        .unwrap();
+    let err = client.check_response_status(resp).await.unwrap_err();
+
+    match &err {
+        crate::error::BzrError::HttpStatus { body, .. } => {
+            assert!(!body.contains("conf"), "stored key prefix leaked: {body}");
+            assert!(
+                body.ends_with("[REDACTED]…"),
+                "redaction marker missing: {body}"
+            );
+            assert!(body.len() <= BODY_PREVIEW_MAX_BYTES + '…'.len_utf8());
+        }
+        other => assert!(matches!(other, crate::error::BzrError::HttpStatus { .. })),
+    }
+    assert!(
+        !err.to_string().contains("conf"),
+        "displayed key prefix leaked: {err}"
+    );
+}
+
+#[tokio::test]
+async fn http_error_body_read_failure_preserves_bounded_context() {
+    let (url, handle) = spawn_truncated_http_error_server();
+    let client = test_client(&url);
+    let resp = client.http.get(&url).send().await.unwrap();
+
+    let err = client.check_response_status(resp).await.unwrap_err();
+    handle.join().unwrap();
+
+    match &err {
+        crate::error::BzrError::HttpStatus { status, body } => {
+            assert_eq!(*status, 500);
+            assert!(
+                body.contains("failed to read response body"),
+                "missing context: {body}"
+            );
+            assert!(body.len() <= BODY_PREVIEW_MAX_BYTES + '…'.len_utf8());
+        }
+        other => assert!(matches!(other, crate::error::BzrError::HttpStatus { .. })),
+    }
 }
 
 #[test]

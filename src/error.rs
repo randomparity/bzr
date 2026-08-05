@@ -32,8 +32,8 @@ pub enum BzrError {
     #[error("{resource} not found: {id}")]
     NotFound { resource: &'static str, id: String },
 
-    /// `body` is the raw server response body — same exposure as [`Self::Api`],
-    /// so it takes the same seam.
+    /// `body` is a bounded preview of the server response body — same exposure
+    /// as [`Self::Api`], so it takes the same redaction seam.
     #[error("HTTP {status}: {}", crate::bugzilla_auth::redact_api_key(.body))]
     HttpStatus { status: u16, body: String },
 

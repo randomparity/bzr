@@ -285,9 +285,10 @@ impl BugzillaClient {
                 // error is reported with a real diagnostic rather than being
                 // silently swallowed into an empty string.
                 Err(e) => {
+                    let body = format!("<failed to read response body: {e}>");
                     return Err(BzrError::HttpStatus {
                         status: status.as_u16(),
-                        body: format!("<failed to read response body: {e}>"),
+                        body: crate::http::diagnostic_body_preview(&body),
                     });
                 }
             };
