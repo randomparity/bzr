@@ -128,15 +128,24 @@ message: it is server-supplied and changes between deployments.
 | `type` | exit | keys beyond `type`/`message`/`exit_code` |
 |---|---|---|
 | `not_found` | 2 | `resource`, `identifier` |
+| `config` | 3 | — |
 | `api` | 4 | `api_code` |
 | `http` | 5 | `status` |
+| `io` | 6 | — |
 | `input` | 7 | `field`, `value` |
+| `deserialize` | 8 | — |
 | `auth` | 9 | — |
+| `data_integrity` | 10 | — |
 | `batch_partial_failure` | 11 | `succeeded`, `failed` (counts) |
+| `keyring` | 12 | — |
 | `tls` | 13 | `server`, `expected`, `actual` (pin mismatch or issuer change) |
 | `collision` | 14 | `bug_id`, `last_change_time`, `if_match_token` |
 
-Two traps worth knowing:
+That is the whole set. `config` (3) is the one a fresh agent hits first — no
+server configured — so handle it before assuming a network or permission
+problem.
+
+Three traps worth knowing:
 
 - **Exit 2 no longer means "absent or restricted".** As of 0.8.1-dev a bug the
   server declines to return for another reason — most often *you are not
@@ -147,8 +156,12 @@ Two traps worth knowing:
   `error.message` to tell them apart.
 - For a partial batch the error carries only `succeeded`/`failed` **counts**;
   the per-element `failed[]` rows are in the result body on **stdout**.
+- **A usage error is not in this table.** clap rejects a malformed invocation
+  (unknown flag, bad enum value, out-of-range number) with exit 2 and plain
+  text on stderr, with no `error` object at all — even under `--json`. So
+  before parsing stderr as JSON on exit 2, check that it parses.
 
-`bzr schema error` is the full contract.
+`bzr schema error` is the full contract for the keys.
 
 ## Cardinal rules
 

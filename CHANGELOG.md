@@ -105,21 +105,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the `server_name`/`auth_mode` keys on `whoami --json`. The published schema
   list, the `schema_version` literal in the `jq` recipes (`0.6.0` → `0.6.1`),
   and the `bug clone` exit-11 case are corrected too. `bzr-reference` now
-  enumerates the error object's variant-specific keys by `type` — previously
-  only `bzr-triage-bug` carried a partial list — and both skills state that a
-  restricted bug exits 4 (`api`), not 2, so triage code no longer reports a bug
-  it cannot see as one that does not exist. `agent-skills/VERSION` and the four
-  "authored against" strings move to 0.8.1-dev in the same change. (#507)
+  carries the whole error surface — every `type`, its exit code, and the keys
+  it adds — where previously only `bzr-triage-bug` had a partial list and the
+  canonical reference had none. Both skills state that a restricted bug exits 4
+  (`api`), not 2, so triage code no longer reports a bug it cannot see as one
+  that does not exist, and both distinguish a clap *usage* error (exit 2, plain
+  text, no `error` object even under `--json`) from the `not_found` exit 2.
+  `agent-skills/VERSION` and the four "authored against" strings move to
+  0.8.1-dev in the same change. (#507)
 
 - A new `agent-skills/tests/version-check.sh`, run by `make skills-test`,
   enforces the version contract stated in `agent-skills/README.md`. It checks
   all five version sites against the `[package]` version in `Cargo.toml` —
   `VERSION` plus every "authored against `bzr` X.Y.Z" claim in the README and
   the skills — rather than `VERSION` alone, which would leave the four prose
-  claims free to drift on their own. The claims are found by scanning the
-  documentation payload, not from a hardcoded path list, so a claim written
-  into a new skill is covered the day it is written, and finding zero claims is
-  an error rather than a pass. (#507)
+  claims free to drift on their own. Each of the four sites the contract names
+  is required to carry a claim, so rewording a heading cannot silently drop a
+  version stamp; the rest of the payload is scanned as well, so a claim written
+  into a new skill is covered the day it is written. (#507)
 
 ## [0.8.0] - 2026-07-28
 
