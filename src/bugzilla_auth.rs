@@ -44,21 +44,41 @@ pub(crate) fn apply_auth(
     }
 }
 
-/// Redact a Bugzilla API key value out of a string for safe display.
+/// Ends an API key value in free text: any whitespace, or a delimiter that
+/// cannot appear inside a Bugzilla key (which is alphanumeric). Whitespace is
+/// included because a raw HTTP error body is multi-line — scanning past a
+/// newline would swallow the following line and, worse, run over a second
+/// occurrence of the marker and leave that key exposed.
+fn ends_api_key_value(c: char) -> bool {
+    c.is_whitespace() || matches!(c, '&' | ')' | '"' | '\'' | '<' | '>' | '#')
+}
+
+/// Redact every Bugzilla API key value out of a string for safe display.
 ///
-/// Looks for the literal `Bugzilla_api_key=` marker and replaces the value up
-/// to the next `&`, `)`, or space with `[REDACTED]`. If the marker is absent
-/// the input is returned unchanged.
+/// Replaces the value following each literal `Bugzilla_api_key=` marker —
+/// up to the next whitespace or `&`, `)`, `"`, `'`, `<`, `>`, `#` — with
+/// `[REDACTED]`. A string with no marker is returned byte-for-byte unchanged,
+/// and re-running the function over its own output is a no-op.
+///
+/// Every occurrence is redacted, not just the first: this runs over raw HTTP
+/// error bodies (`BzrError::HttpStatus`), and an error page from a proxy or
+/// `CGI::Carp` typically echoes the request URI more than once.
 pub(crate) fn redact_api_key(msg: &str) -> String {
     let marker = format!("{AUTH_QUERY_PARAM}=");
-    if let Some(idx) = msg.find(&marker) {
-        let prefix = &msg[..idx + marker.len()];
-        let rest = &msg[idx + marker.len()..];
-        let end = rest.find(['&', ')', ' ']).unwrap_or(rest.len());
-        format!("{prefix}[REDACTED]{}", &rest[end..])
-    } else {
-        msg.to_string()
+    if !msg.contains(&marker) {
+        return msg.to_string();
     }
+    let mut out = String::with_capacity(msg.len());
+    let mut rest = msg;
+    while let Some(idx) = rest.find(&marker) {
+        out.push_str(&rest[..idx + marker.len()]);
+        out.push_str("[REDACTED]");
+        let value = &rest[idx + marker.len()..];
+        let end = value.find(ends_api_key_value).unwrap_or(value.len());
+        rest = &value[end..];
+    }
+    out.push_str(rest);
+    out
 }
 
 #[cfg(test)]

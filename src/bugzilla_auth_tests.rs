@@ -141,3 +141,68 @@ fn redact_api_key_preserves_subsequent_query_params() {
         "other params should be preserved: {result}"
     );
 }
+
+// The cases below arrived with #505, which routed `HttpStatus { body }` — a
+// complete, untruncated server response — through this helper. The earlier
+// callers both guaranteed a single-line, single-URL string: reqwest's error
+// chain is one line, and `format_body_preview` collapses whitespace before
+// calling. A raw body carries neither guarantee.
+
+#[test]
+fn redact_api_key_redacts_every_occurrence() {
+    // A proxy or CGI::Carp 5xx page echoes the request URI more than once —
+    // in the <title> and again in the prose.
+    let input = "<title>500 /rest/bug?Bugzilla_api_key=SECRET1</title>\
+                 The URL /rest/bug?Bugzilla_api_key=SECRET2 failed";
+    let result = redact_api_key(input);
+    assert!(!result.contains("SECRET1"), "first key leaked: {result}");
+    assert!(!result.contains("SECRET2"), "second key leaked: {result}");
+    assert_eq!(
+        result.matches("Bugzilla_api_key=[REDACTED]").count(),
+        2,
+        "{result}"
+    );
+}
+
+#[test]
+fn redact_api_key_stops_at_a_line_break() {
+    let input = "error\nBugzilla_api_key=secret\nnext line here";
+    assert_eq!(
+        redact_api_key(input),
+        "error\nBugzilla_api_key=[REDACTED]\nnext line here"
+    );
+}
+
+#[test]
+fn redact_api_key_stops_at_markup_and_quote_delimiters() {
+    let input = "<a href=\"/rest/bug?Bugzilla_api_key=secret\">link</a>";
+    assert_eq!(
+        redact_api_key(input),
+        "<a href=\"/rest/bug?Bugzilla_api_key=[REDACTED]\">link</a>"
+    );
+}
+
+#[test]
+fn redact_api_key_handles_empty_value_at_end_of_string() {
+    assert_eq!(
+        redact_api_key("no key supplied: Bugzilla_api_key="),
+        "no key supplied: Bugzilla_api_key=[REDACTED]"
+    );
+}
+
+#[test]
+fn redact_api_key_handles_multibyte_text_around_the_marker() {
+    // A raw body is arbitrary text; slicing on a non-char boundary would panic.
+    let input = "naïve café ?Bugzilla_api_key=secret&é=1 … déjà vu";
+    let result = redact_api_key(input);
+    assert_eq!(
+        result,
+        "naïve café ?Bugzilla_api_key=[REDACTED]&é=1 … déjà vu"
+    );
+}
+
+#[test]
+fn redact_api_key_is_idempotent() {
+    let once = redact_api_key("url?Bugzilla_api_key=secret&id=1");
+    assert_eq!(redact_api_key(&once), once);
+}

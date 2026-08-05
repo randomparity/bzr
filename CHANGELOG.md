@@ -18,9 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   as `Bugzilla_api_key=[REDACTED]`, matching what transport errors already did.
   The redaction applies at the single point every output format renders
   through, so the human and JSON paths cannot diverge. Error text without the
-  marker is unchanged, and codes, statuses, and exit codes are untouched.
-  Redaction is keyed on the `Bugzilla_api_key=` marker, so a server that echoes
-  a bare key with no marker (`invalid api key <key>`) is not yet covered. (#505)
+  marker is unchanged, and codes, statuses, and exit codes are untouched. Every
+  occurrence in a message is masked, not just the first — an error page echoing
+  the request URI more than once was the shape most likely to leak.
+
+  Two gaps remain, both deliberate: redaction is keyed on the
+  `Bugzilla_api_key=` marker, so a server echoing a bare key with no marker
+  (`invalid api key <key>`) is not covered; and diagnostic logging (`-vv` /
+  `RUST_LOG`, which prints raw response bodies) is a separate channel from
+  error display and is not covered by this change. (#505)
 
 ### Fixed
 

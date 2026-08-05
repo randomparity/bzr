@@ -765,16 +765,18 @@ async fn api_error_from_200_error_payload_redacts_echoed_api_key() {
 }
 
 /// A non-JSON 4xx/5xx body falls through to `HttpStatus`, which carries the
-/// raw body — the same gap, so it gets the same seam.
+/// raw body — the same gap, so it gets the same seam. The body here is the
+/// realistic shape: an untruncated, multi-line error page echoing the request
+/// URI twice, which a first-match-only redaction would leave half-exposed.
 #[tokio::test]
 async fn http_status_from_non_json_body_redacts_echoed_api_key() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/rest/user"))
-        .respond_with(
-            ResponseTemplate::new(500)
-                .set_body_string("upstream failed: GET /rest/user?Bugzilla_api_key=SUPERSECRET"),
-        )
+        .respond_with(ResponseTemplate::new(500).set_body_string(
+            "<title>500 /rest/user?Bugzilla_api_key=SUPERSECRET</title>\n\
+             upstream failed: GET /rest/user?Bugzilla_api_key=SUPERSECRET",
+        ))
         .mount(&mock)
         .await;
 
@@ -789,5 +791,13 @@ async fn http_status_from_non_json_body_redacts_echoed_api_key() {
         "expected HttpStatus from the non-JSON body, got: {msg}"
     );
     assert!(!msg.contains("SUPERSECRET"), "key leaked: {msg}");
-    assert!(msg.contains("Bugzilla_api_key=[REDACTED]"), "{msg}");
+    assert_eq!(
+        msg.matches("Bugzilla_api_key=[REDACTED]").count(),
+        2,
+        "both echoes must be redacted: {msg}"
+    );
+    assert!(
+        msg.contains("upstream failed"),
+        "body text must survive: {msg}"
+    );
 }
