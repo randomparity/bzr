@@ -29,6 +29,9 @@ enum Failure {
     ReleaseHandoff,
     RaceForeign,
     RaceForeignAtAside,
+    DestinationCreateRace,
+    DestinationCreateRaceFile,
+    DestinationCreateRaceSymlink,
 }
 
 struct TestOps {
@@ -62,6 +65,34 @@ impl TestOps {
 }
 
 impl FileOperations for TestOps {
+    fn create_dir(&mut self, path: &Path) -> std::io::Result<()> {
+        let race = [
+            Failure::DestinationCreateRace,
+            Failure::DestinationCreateRaceFile,
+            Failure::DestinationCreateRaceSymlink,
+        ]
+        .into_iter()
+        .find(|failure| self.failures.contains(failure) && self.triggered.insert(*failure));
+        if let Some(race) = race {
+            match race {
+                Failure::DestinationCreateRace => fs::create_dir(path)?,
+                Failure::DestinationCreateRaceFile => fs::write(path, b"foreign bytes")?,
+                #[cfg(unix)]
+                Failure::DestinationCreateRaceSymlink => {
+                    std::os::unix::fs::symlink(path.parent().unwrap(), path)?;
+                }
+                #[cfg(not(unix))]
+                Failure::DestinationCreateRaceSymlink => unreachable!(),
+                _ => unreachable!(),
+            }
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "injected concurrent directory creation",
+            ));
+        }
+        fs::create_dir(path)
+    }
+
     fn write_new(&mut self, path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         self.fail_once(Failure::Write)?;
         let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
@@ -313,6 +344,53 @@ fn maps_every_agent_for_project_and_global_scopes_without_duplicate_all_destinat
 fn global_scope_requires_a_home_directory() {
     let error = destinations_for(AgentTarget::Codex, &InstallScope::Global, None).unwrap_err();
     assert!(error.to_string().contains("home directory"));
+}
+
+#[test]
+fn destination_creation_race_reinspects_the_concurrently_created_directory() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let mut ops = TestOps::new(Failure::DestinationCreateRace);
+
+    let outcome = install_with_ops(request(temp.path(), AgentTarget::Standard), &mut ops).unwrap();
+
+    assert!(ops.triggered.contains(&Failure::DestinationCreateRace));
+    assert_eq!(outcome.destinations[0].installed, embedded::skill_names());
+    assert!(destination(temp.path()).is_dir());
+}
+
+#[test]
+fn destination_creation_race_rejects_and_preserves_a_concurrently_created_file() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let mut ops = TestOps::new(Failure::DestinationCreateRaceFile);
+
+    let error =
+        install_with_ops(request(temp.path(), AgentTarget::Standard), &mut ops).unwrap_err();
+
+    assert!(ops.triggered.contains(&Failure::DestinationCreateRaceFile));
+    assert!(error.to_string().contains("not a directory"));
+    assert_eq!(
+        fs::read(temp.path().join(".agents")).unwrap(),
+        b"foreign bytes"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn destination_creation_race_rejects_and_preserves_a_concurrently_created_symlink() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let mut ops = TestOps::new(Failure::DestinationCreateRaceSymlink);
+
+    let error =
+        install_with_ops(request(temp.path(), AgentTarget::Standard), &mut ops).unwrap_err();
+
+    assert!(ops
+        .triggered
+        .contains(&Failure::DestinationCreateRaceSymlink));
+    assert!(error.to_string().contains("symbolic link"));
+    assert!(fs::symlink_metadata(temp.path().join(".agents"))
+        .unwrap()
+        .file_type()
+        .is_symlink());
 }
 
 #[test]

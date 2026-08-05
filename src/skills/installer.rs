@@ -43,6 +43,7 @@ struct ResolvedDestination {
 }
 
 trait FileOperations {
+    fn create_dir(&mut self, path: &Path) -> std::io::Result<()>;
     fn write_new(&mut self, path: &Path, bytes: &[u8]) -> std::io::Result<()>;
     fn rename(&mut self, from: &Path, to: &Path) -> std::io::Result<()>;
     fn remove_dir_all(&mut self, path: &Path) -> std::io::Result<()>;
@@ -54,6 +55,10 @@ trait FileOperations {
 struct StdFileOperations;
 
 impl FileOperations for StdFileOperations {
+    fn create_dir(&mut self, path: &Path) -> std::io::Result<()> {
+        fs::create_dir(path)
+    }
+
     fn write_new(&mut self, path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
         file.write_all(bytes)
@@ -85,7 +90,7 @@ fn install_with_ops<O: FileOperations>(
         preflight_destination(root, &destination.path, &skills)?;
     }
     for destination in &destinations {
-        ensure_destination(root, &destination.path)?;
+        ensure_destination(root, &destination.path, ops)?;
     }
 
     let mut locks = acquire_all_locks(&destinations, ops)?;
@@ -228,7 +233,11 @@ fn validate_components(root: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
-fn ensure_destination(root: &Path, destination: &Path) -> Result<()> {
+fn ensure_destination<O: FileOperations>(
+    root: &Path,
+    destination: &Path,
+    ops: &mut O,
+) -> Result<()> {
     let relative = destination.strip_prefix(root).map_err(|_| {
         BzrError::DataIntegrity(format!(
             "destination escaped root: '{}'",
@@ -253,11 +262,36 @@ fn ensure_destination(root: &Path, destination: &Path) -> Result<()> {
             }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                fs::create_dir(&current)
-                    .map_err(|error| io_error("create destination directory", &current, error))?;
+                match ops.create_dir(&current) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                        validate_concurrently_created_directory(&current)?;
+                    }
+                    Err(error) => {
+                        return Err(io_error("create destination directory", &current, error));
+                    }
+                }
             }
             Err(error) => return Err(io_error("inspect destination component", &current, error)),
         }
+    }
+    Ok(())
+}
+
+fn validate_concurrently_created_directory(path: &Path) -> Result<()> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| io_error("inspect concurrently created directory", path, error))?;
+    if metadata.file_type().is_symlink() {
+        return Err(BzrError::DataIntegrity(format!(
+            "refusing concurrently created destination '{}': path is a symbolic link",
+            path.display()
+        )));
+    }
+    if !metadata.is_dir() {
+        return Err(BzrError::DataIntegrity(format!(
+            "refusing concurrently created destination '{}': path is not a directory",
+            path.display()
+        )));
     }
     Ok(())
 }
