@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::disallowed_methods, clippy::unwrap_used)]
 
 use clap::Parser;
 use std::io::{Read as _, Write as _};

@@ -135,11 +135,11 @@ crate's futures or redaction calls remain outside the invariant.
   present for table, JSON, and NDJSON, including progress-enabled formatting semantics.
   Separate tests exercise both lifecycle exits: after final error formatting and after
   `dispatch` returns success, an unrelated error containing the former key remains unchanged.
-- The `check-no-spawn` guard delegates to one shell checker. Its self-test builds temporary
-  fixture trees and proves representative tokens from every forbidden family fail in a
-  production `.rs` file, while the same tokens in sibling tests, test helpers, and docs
-  pass. `make check-no-spawn` runs both the real scan and this self-test, so CI exercises
-  the regex and the file-selection boundary together.
+- Clippy's disallowed methods, types, and macros reject task and thread handoff
+  semantically, including imported and renamed calls. The `check-no-spawn` shell checker
+  verifies that policy remains configured, anchors the current-thread runtime attribute,
+  and scans production Rust for additional fan-out constructs. Its temporary-fixture
+  self-test pins the policy inventory, representative scan tokens, and test/doc exclusions.
 - The existing real-container phase is extended to exercise `--progress ndjson` alongside
   table and JSON, asserting the configured key never reaches stderr. Stock Bugzilla does
   not echo the key bare, so synthetic unit/wiremock tests remain the positive regression
