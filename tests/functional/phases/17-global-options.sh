@@ -48,6 +48,19 @@ if [[ -n "$BUG1" ]]; then
     if assert_success && assert_stdout_empty; then test_pass; fi
 else test_skip "no BUG1"; fi
 
+test_begin "102d. verbose response-body diagnostics redact API keys"
+_TRACE_SECRET="TraceEchoSecret0123456789"
+_TRACE_BUG=$(make_bug --product FuncTestProd --component Backend --op-sys Linux \
+    --rep-platform PC --description d \
+    --summary "response echo Bugzilla_api_key=${_TRACE_SECRET}")
+if [[ -n "$_TRACE_BUG" ]]; then
+    run_bzr_raw -vvv bug view "$_TRACE_BUG"
+    if assert_success &&
+        assert_stderr_contains 'Bugzilla_api_key=\[REDACTED\]' &&
+        assert_stderr_not_contains "$_TRACE_SECRET"; then test_pass; fi
+else test_fail "could not create trace redaction fixture"; fi
+unset _TRACE_SECRET _TRACE_BUG
+
 test_begin "103. --server test whoami"
 run_bzr_raw --server test whoami
 if assert_success; then test_pass; fi

@@ -26,9 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   <key>`, are now masked too when the key is at least eight bytes long. The
   floor avoids replacing short, common strings throughout otherwise useful
   server messages. Percent-encoded markers (`Bugzilla_api_key%3D<key>`) are
-  also recognized. Diagnostic logging (`-vv` / `RUST_LOG`, which prints raw
-  response bodies) remains a separate channel from error display and is
-  untouched by this change. (#505, #509)
+  also recognized. (#505, #509)
+
+- Diagnostic logging now applies the same API-key redaction before recording
+  REST and XML-RPC response bodies, body previews, or server error messages.
+  Verbose output (`-vv` / `-vvv` / `RUST_LOG`) no longer bypasses the error
+  display seam when a server echoes `Bugzilla_api_key=<key>`. (#511)
 
 ### Fixed
 

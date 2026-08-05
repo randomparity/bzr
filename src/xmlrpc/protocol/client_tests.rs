@@ -13,14 +13,6 @@ fn test_http_client() -> reqwest::Client {
     reqwest::Client::new()
 }
 
-fn debug_logging_guard() -> tracing::dispatcher::DefaultGuard {
-    let subscriber = tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
-        .with_writer(std::io::sink)
-        .finish();
-    tracing::subscriber::set_default(subscriber)
-}
-
 fn multibyte_body_crossing_preview_boundary() -> String {
     let mut body = "a".repeat(511);
     body.push('é');
@@ -103,7 +95,7 @@ async fn http_error_maps_to_xmlrpc_error() {
 
 #[tokio::test]
 async fn http_error_preview_handles_multibyte_debug_preview_boundary() {
-    let _guard = debug_logging_guard();
+    let (_capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::DEBUG);
     let mock = MockServer::start().await;
     let body = multibyte_body_crossing_preview_boundary();
     Mock::given(method("POST"))
@@ -121,6 +113,34 @@ async fn http_error_preview_handles_multibyte_debug_preview_boundary() {
             BzrError::HttpStatus { status: 500, body: returned } if returned == &body
         ),
         "expected HTTP 500 with original body, got: {err}"
+    );
+}
+
+#[tokio::test]
+async fn http_error_debug_body_redacts_api_key() {
+    let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::DEBUG);
+    let mock = MockServer::start().await;
+    let secret = "XmlRpcSecret123";
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(
+            ResponseTemplate::new(500)
+                .set_body_string(format!("request Bugzilla_api_key={secret} rejected")),
+        )
+        .mount(&mock)
+        .await;
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
+
+    let _ = client.call("Bug.get", BTreeMap::new()).await;
+
+    let log = capture.output();
+    assert!(
+        !log.contains(secret),
+        "API key leaked in tracing output: {log}"
+    );
+    assert!(
+        log.contains("Bugzilla_api_key=[REDACTED]"),
+        "redaction marker missing from tracing output: {log}"
     );
 }
 

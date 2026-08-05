@@ -22,8 +22,8 @@ impl XmlRpcClient {
     }
 
     // SECURITY: When configured, the request body contains Bugzilla_api_key in
-    // plain text. Never log the request body. Response bodies are safe to log
-    // at trace level since Bugzilla does not echo auth credentials back.
+    // plain text. Never log the request body. Redact response body diagnostics:
+    // extensions and intermediary servers can echo request URLs or credentials.
     //
     // NOTE: XML-RPC transmits the API key in the request body (as a method
     // parameter), regardless of the REST AuthMethod detected for this server.
@@ -63,10 +63,10 @@ impl XmlRpcClient {
             };
             tracing::debug!(
                 %status,
-                body = crate::http::utf8_prefix(
+                body = crate::bugzilla_auth::redact_api_key(crate::http::utf8_prefix(
                     &body,
                     crate::http::DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES,
-                ),
+                )),
                 "XML-RPC HTTP error"
             );
             return Err(BzrError::HttpStatus {
