@@ -141,9 +141,10 @@ async fn http_error_preview_redacts_bare_key_crossing_boundary() {
     match &err {
         BzrError::HttpStatus { body, .. } => {
             assert!(!body.contains("conf"), "stored key prefix leaked: {body}");
+            assert!(body.ends_with('…'), "truncation marker missing: {body}");
             assert!(
-                body.ends_with("[REDACTED] …"),
-                "redaction marker missing: {body}"
+                !body.contains("[REDACTED]"),
+                "raw body was redacted: {body}"
             );
             assert!(body.len() <= crate::http::DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES + '…'.len_utf8());
         }
@@ -173,7 +174,11 @@ async fn http_error_preview_keeps_marker_after_marked_key_redaction() {
             BzrError::HttpStatus { body, .. } => {
                 assert!(!body.contains("ssss"), "stored marked key leaked: {body}");
                 assert!(
-                    body.ends_with("[REDACTED] …"),
+                    !body.contains("Bugzilla_api_key"),
+                    "partial marker retained: {body}"
+                );
+                assert!(
+                    body.ends_with('…'),
                     "stored truncation marker missing: {body}"
                 );
             }
@@ -185,10 +190,31 @@ async fn http_error_preview_keeps_marker_after_marked_key_redaction() {
             "displayed marked key leaked: {displayed}"
         );
         assert!(
-            displayed.ends_with("[REDACTED] …"),
+            displayed.ends_with('…'),
             "displayed truncation marker missing: {displayed}"
         );
     }
+}
+
+#[tokio::test]
+async fn short_http_error_keeps_raw_body_until_display() {
+    let secret = "configured-secret";
+    let _redaction_guard = crate::bugzilla_auth::active_api_key_test_guard(Some(secret));
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(500).set_body_string(format!("denied {secret}")))
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
+    let err = client.call("Bug.get", BTreeMap::new()).await.unwrap_err();
+
+    match &err {
+        BzrError::HttpStatus { body, .. } => assert_eq!(body, "denied configured-secret"),
+        other => assert!(matches!(other, BzrError::HttpStatus { .. })),
+    }
+    assert_eq!(err.to_string(), "HTTP 500: denied [REDACTED]");
 }
 
 #[tokio::test]

@@ -277,9 +277,10 @@ async fn http_error_preview_redacts_bare_key_crossing_boundary() {
     match &err {
         crate::error::BzrError::HttpStatus { body, .. } => {
             assert!(!body.contains("conf"), "stored key prefix leaked: {body}");
+            assert!(body.ends_with('…'), "truncation marker missing: {body}");
             assert!(
-                body.ends_with("[REDACTED] …"),
-                "redaction marker missing: {body}"
+                !body.contains("[REDACTED]"),
+                "raw body was redacted: {body}"
             );
             assert!(body.len() <= BODY_PREVIEW_MAX_BYTES + '…'.len_utf8());
         }
@@ -315,7 +316,11 @@ async fn http_error_preview_keeps_marker_after_marked_key_redaction() {
             crate::error::BzrError::HttpStatus { body, .. } => {
                 assert!(!body.contains("ssss"), "stored marked key leaked: {body}");
                 assert!(
-                    body.ends_with("[REDACTED] …"),
+                    !body.contains("Bugzilla_api_key"),
+                    "partial marker retained: {body}"
+                );
+                assert!(
+                    body.ends_with('…'),
                     "stored truncation marker missing: {body}"
                 );
             }
@@ -327,7 +332,7 @@ async fn http_error_preview_keeps_marker_after_marked_key_redaction() {
             "displayed marked key leaked: {displayed}"
         );
         assert!(
-            displayed.ends_with("[REDACTED] …"),
+            displayed.ends_with('…'),
             "displayed truncation marker missing: {displayed}"
         );
     }
@@ -985,6 +990,16 @@ async fn http_status_from_non_json_body_redacts_echoed_api_key() {
         .await
         .unwrap_err();
     let msg = err.to_string();
+    match &err {
+        crate::error::BzrError::HttpStatus { body, .. } => {
+            assert_eq!(
+                body.matches("test-key").count(),
+                2,
+                "raw body changed: {body}"
+            );
+        }
+        other => assert!(matches!(other, crate::error::BzrError::HttpStatus { .. })),
+    }
     assert!(
         matches!(&err, crate::error::BzrError::HttpStatus { status: 500, .. }),
         "expected HttpStatus from the non-JSON body, got: {msg}"
