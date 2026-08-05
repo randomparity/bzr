@@ -71,7 +71,7 @@ impl XmlRpcClient {
             );
             return Err(BzrError::HttpStatus {
                 status: status.as_u16(),
-                body,
+                body: crate::http::diagnostic_body_preview(&body),
             });
         }
 

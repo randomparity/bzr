@@ -219,14 +219,17 @@ async fn http_error_preview_handles_multibyte_debug_preview_boundary() {
         .unwrap();
     let err = client.check_response_status(resp).await.unwrap_err();
 
+    let expected = format!("{}…", "a".repeat(super::BODY_PREVIEW_MAX_BYTES - 1));
     assert!(
         matches!(
             &err,
             crate::error::BzrError::HttpStatus { status: 500, body: returned }
-                if returned == &body
+                if returned == &expected
         ),
-        "expected HTTP 500 with original body, got: {err}"
+        "expected HTTP 500 with a UTF-8-safe bounded body, got: {err}"
     );
+    assert_eq!(err.exit_code(), 5);
+    assert_eq!(err.error_type(), "http");
 }
 
 #[test]

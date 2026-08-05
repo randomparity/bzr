@@ -107,12 +107,16 @@ async fn http_error_preview_handles_multibyte_debug_preview_boundary() {
     let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
     let err = client.call("Bug.get", BTreeMap::new()).await.unwrap_err();
 
+    let expected = format!(
+        "{}…",
+        "a".repeat(crate::http::DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES - 1)
+    );
     assert!(
         matches!(
             &err,
-            BzrError::HttpStatus { status: 500, body: returned } if returned == &body
+            BzrError::HttpStatus { status: 500, body: returned } if returned == &expected
         ),
-        "expected HTTP 500 with original body, got: {err}"
+        "expected HTTP 500 with a UTF-8-safe bounded body, got: {err}"
     );
 }
 
