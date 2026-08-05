@@ -788,6 +788,42 @@ jobs:
           mv Cargo.toml.new Cargo.toml
           grep -n "^version = " Cargo.toml | head -n 1
 
+      - name: Update bundled-skill versions
+        env:
+          NEXT: ${{ steps.ver.outputs.next }}
+        run: |
+          set -euo pipefail
+          python3 - "$NEXT" <<'PYEOF'
+          import re
+          import sys
+          from pathlib import Path
+
+          version = sys.argv[1]
+          version_pattern = r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]*[0-9A-Za-z])?"
+          claim_pattern = re.compile(
+              rf"(authored\s+against[^0-9]{{0,20}}bzr[^0-9]{{0,12}}){version_pattern}",
+              re.IGNORECASE,
+          )
+          claim_paths = (
+              Path("agent-skills/README.md"),
+              Path("agent-skills/skills/bzr-reference/SKILL.md"),
+              Path("agent-skills/skills/bzr-reference/reference/commands.md"),
+              Path("agent-skills/skills/bzr-reference/reference/commands.yml"),
+          )
+
+          Path("agent-skills/VERSION").write_text(f"{version}\n")
+          for path in claim_paths:
+              original = path.read_text()
+              updated, count = claim_pattern.subn(
+                  lambda match: f"{match.group(1)}{version}", original
+              )
+              if count != 1:
+                  raise SystemExit(
+                      f"{path}: expected exactly one authored-against claim, found {count}"
+                  )
+              path.write_text(updated)
+          PYEOF
+
       - name: Refresh Cargo.lock
         run: cargo update -p bzr
 
@@ -809,6 +845,9 @@ jobs:
           ' CHANGELOG.md > CHANGELOG.md.new
           mv CHANGELOG.md.new CHANGELOG.md
 
+      - name: Verify bundled-skill version contract
+        run: sh agent-skills/tests/version-check.sh
+
       - name: Commit and push branch
         env:
           BRANCH: ${{ steps.ver.outputs.branch }}
@@ -819,7 +858,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
-          git add Cargo.toml Cargo.lock CHANGELOG.md
+          git add \
+            Cargo.toml \
+            Cargo.lock \
+            CHANGELOG.md \
+            agent-skills/VERSION \
+            agent-skills/README.md \
+            agent-skills/skills/bzr-reference/SKILL.md \
+            agent-skills/skills/bzr-reference/reference/commands.md \
+            agent-skills/skills/bzr-reference/reference/commands.yml
           if git diff --staged --quiet; then
             echo "::error::No changes staged after bump steps; investigate." >&2
             exit 1
