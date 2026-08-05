@@ -232,6 +232,12 @@ from the trusted source tree is installed.
 ## Testing and proof
 
 - Parser tests cover every agent value, both scopes, conflicts, and omitted scope.
+- A focused command/output test injects interactive stdin/stderr terminal status and
+  invokes omitted scope. It asserts exit 7, both resolved destination patterns,
+  copyable `--global` and `--project .` examples, and no filesystem writes. Scope
+  guidance receives no stdin reader, proving the command presents choices without
+  reading a selection. The complementary non-interactive test asserts concise examples
+  and no interactive destination expansion.
 - Build/manifest tests prove nested reference files are embedded, every skill has
   `SKILL.md`, paths are normalized, and `cargo package --list` includes canonical
   content.
