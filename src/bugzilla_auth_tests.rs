@@ -229,3 +229,49 @@ fn redact_api_key_is_idempotent() {
         assert_eq!(redact_api_key(&once), once, "not idempotent for {input:?}");
     }
 }
+
+#[test]
+fn redact_api_key_masks_every_bare_active_key_occurrence() {
+    let _guard = active_api_key_test_guard(Some("configured-secret"));
+    assert_eq!(
+        redact_api_key("invalid configured-secret; configured-secret rejected"),
+        "invalid [REDACTED]; [REDACTED] rejected"
+    );
+}
+
+#[test]
+fn redact_api_key_applies_the_eight_byte_bare_key_floor() {
+    {
+        let _guard = active_api_key_test_guard(Some("seven77"));
+        assert_eq!(redact_api_key("invalid seven77"), "invalid seven77");
+    }
+    {
+        let _guard = active_api_key_test_guard(Some("eight888"));
+        assert_eq!(redact_api_key("invalid eight888"), "invalid [REDACTED]");
+    }
+}
+
+#[test]
+fn redact_api_key_masks_encoded_markers_at_any_value_length() {
+    let _guard = active_api_key_test_guard(None);
+    for marker in [
+        "Bugzilla_api_key=",
+        "Bugzilla_api_key%3D",
+        "Bugzilla_api_key%3d",
+    ] {
+        assert_eq!(
+            redact_api_key(&format!("error: {marker}x&next=1")),
+            format!("error: {marker}[REDACTED]&next=1")
+        );
+    }
+}
+
+#[test]
+fn active_api_key_test_guard_restores_prior_thread_state() {
+    {
+        let _guard = active_api_key_test_guard(Some("former-secret"));
+        assert_eq!(redact_api_key("former-secret"), "[REDACTED]");
+    }
+    let _guard = active_api_key_test_guard(None);
+    assert_eq!(redact_api_key("former-secret"), "former-secret");
+}

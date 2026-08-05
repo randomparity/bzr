@@ -474,6 +474,18 @@ fn api_display_redacts_api_key_echoed_by_the_server() {
 }
 
 #[test]
+fn clearing_redaction_context_before_display_disables_bare_key_masking() {
+    let _guard = crate::bugzilla_auth::active_api_key_test_guard(Some("SUPERSECRET"));
+    super::clear_error_redaction_context();
+    let err = BzrError::Api {
+        code: 32000,
+        message: "invalid SUPERSECRET".into(),
+    };
+
+    assert!(err.to_string().contains("SUPERSECRET"));
+}
+
+#[test]
 fn http_status_display_redacts_api_key_echoed_by_the_server() {
     let err = BzrError::HttpStatus {
         status: 401,

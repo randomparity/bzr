@@ -89,6 +89,17 @@ pub enum BzrError {
 
 pub type Result<T> = std::result::Result<T, BzrError>;
 
+/// Clear the active API key after materializing the final error output.
+///
+/// Calling this before formatting a [`BzrError`] disables bare-key redaction
+/// for that error. The package binary uses it only after building the complete
+/// output string; it is public solely because the library and binary are
+/// separate crates.
+#[doc(hidden)]
+pub fn clear_error_redaction_context() {
+    crate::bugzilla_auth::clear_active_api_key();
+}
+
 pub(crate) fn io_with_context(context: impl fmt::Display, error: &std::io::Error) -> BzrError {
     BzrError::Io(std::io::Error::new(
         error.kind(),

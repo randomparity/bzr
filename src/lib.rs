@@ -102,11 +102,12 @@ pub async fn dispatch(
     format: types::OutputFormat,
     w: &mut output::writers::Writers<'_>,
 ) -> error::Result<()> {
+    bugzilla_auth::clear_active_api_key();
     let capabilities = command_capabilities(&cli.command);
     let ctx = build_command_context(cli, format, capabilities);
     ensure_dispatch_allowed(cli, capabilities)?;
 
-    match &cli.command {
+    let result = match &cli.command {
         cli::Commands::Bug { action } => commands::bug::execute(action, &ctx, w).await,
         cli::Commands::Comment { action } => commands::comment::execute(action, &ctx, w).await,
         cli::Commands::Attachment { action } => {
@@ -127,7 +128,11 @@ pub async fn dispatch(
         cli::Commands::Query { action } => commands::query::execute(action, &ctx, w).await,
         cli::Commands::Completion { shell } => commands::completion::execute(*shell, &ctx, w).await,
         cli::Commands::Schema { name } => commands::schema::execute(name.as_deref(), &ctx, w).await,
+    };
+    if result.is_ok() {
+        bugzilla_auth::clear_active_api_key();
     }
+    result
 }
 
 fn ensure_dispatch_allowed(
