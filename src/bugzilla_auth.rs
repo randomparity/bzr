@@ -44,11 +44,18 @@ pub(crate) fn apply_auth(
     }
 }
 
-/// Ends an API key value in free text: any whitespace, or a delimiter that
-/// cannot appear inside a Bugzilla key (which is alphanumeric). Whitespace is
-/// included because a raw HTTP error body is multi-line — scanning past a
-/// newline would swallow the following line and, worse, run over a second
-/// occurrence of the marker and leave that key exposed.
+/// Ends an API key value in free text: any whitespace, or a URL/markup
+/// delimiter.
+///
+/// None of these can truncate a redaction early, whatever charset a server's
+/// key generator uses: [`apply_auth_to_request`] passes the key through
+/// reqwest's `.query()`, which percent-encodes it, so the URL a server can echo
+/// back never contains one of these characters unescaped.
+///
+/// Whitespace is a terminator because a raw HTTP error body is multi-line —
+/// scanning past a newline would swallow the start of the following line and,
+/// in the same motion, run over a second occurrence of the marker and leave
+/// that key exposed.
 fn ends_api_key_value(c: char) -> bool {
     c.is_whitespace() || matches!(c, '&' | ')' | '"' | '\'' | '<' | '>' | '#')
 }
@@ -65,9 +72,6 @@ fn ends_api_key_value(c: char) -> bool {
 /// `CGI::Carp` typically echoes the request URI more than once.
 pub(crate) fn redact_api_key(msg: &str) -> String {
     let marker = format!("{AUTH_QUERY_PARAM}=");
-    if !msg.contains(&marker) {
-        return msg.to_string();
-    }
     let mut out = String::with_capacity(msg.len());
     let mut rest = msg;
     while let Some(idx) = rest.find(&marker) {
