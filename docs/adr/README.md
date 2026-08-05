@@ -24,3 +24,4 @@ rejected.
 | [0015](0015-server-errors-are-never-masked.md) | A server error is never masked by an empty result | Accepted |
 | [0016](0016-thread-local-error-redaction-context.md) | Thread-local error-redaction context | Accepted |
 | [0017](0017-post-release-skill-version-update-stays-inline.md) | Post-release skill version updates stay inline | Accepted |
+| [0018](0018-embed-canonical-skills-in-binary.md) | Embed canonical skills in the bzr binary | Accepted |
