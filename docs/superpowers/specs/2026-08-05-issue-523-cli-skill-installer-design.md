@@ -74,10 +74,11 @@ The installer expands an agent target into one or two destination roots. It perf
 read-only preliminary validation, acquires every destination lock in sorted path order,
 then repeats the authoritative symlink, ownership-sentinel, and conflict checks while
 holding all locks. It uses the existing POSIX installer's `.bzr-skill.lock` convention,
-so those two paths coordinate when targeting the same destination. Each target is
-checked once more immediately before its first rename. The PowerShell installer and
-older standalone versions do not share this guarantee; concurrent use with them is
-unsupported and receives the same best-effort checks as any other same-user race.
+but guarantees serialization only among binary invocations. The standalone POSIX
+cleanup can remove a lock it did not acquire, and changing that behavior is excluded
+from this issue. Each target is checked once more immediately before its first rename.
+All standalone versions are therefore uncoordinated writers; concurrent use with them
+is unsupported and receives the same best-effort checks as any other same-user race.
 
 For each target the command creates a same-filesystem staging directory, writes only
 generated relative paths with `create_new`, adds the existing
@@ -205,7 +206,7 @@ from the trusted source tree is installed.
   This accepts the exact current POSIX and Windows PowerShell output while keeping
   duplicate/missing/value checks strict.
 - Atomic lock-directory acquisition in deterministic path order serializes binary
-  invocations and coordinates with the current POSIX installer per destination.
+  invocations per destination.
   Authoritative checks run only after all locks are held and immediately before rename.
   An unexplained/stale lock fails closed with recovery guidance.
 - Staging uses unpredictable process-local names plus `create_dir`, and file creation
@@ -218,12 +219,11 @@ from the trusted source tree is installed.
 
 - Defending against a privileged process or the same user changing path components
   after validation is not possible with portable stable `std::fs` path APIs; the
-  lock coordinates binary and current POSIX installer invocations, not uncoordinated
-  or hostile processes.
-- Concurrent installation by the PowerShell installer or an older standalone installer
-  is unsupported because those versions do not participate in the same lock. The binary
-  rechecks immediately before rename but cannot promise race-free replacement against
-  an uncoordinated same-user writer.
+  lock coordinates binary invocations, not standalone or hostile processes.
+- Concurrent installation by any standalone installer is unsupported. The current POSIX
+  cleanup can remove a lock it failed to acquire, while PowerShell does not acquire this
+  lock. The binary rechecks immediately before rename but cannot promise race-free
+  replacement against either uncoordinated same-user writer.
 - The command does not validate the semantic safety of repository-authored Markdown;
   source review and build provenance own that trust.
 - ADR 0013 governs the standalone remote installer's TLS/GitHub trust and remains
@@ -266,12 +266,11 @@ from the trusted source tree is installed.
   Aside-removal and lock-release warning cases explicitly assert exit 0, the normal
   success object, and the warning; activation/restore failures assert nonzero and empty
   stdout.
-- Cross-process tests pin the shared `.bzr-skill.lock` protocol. A real POSIX installer
-  held after lock acquisition by a blocking test tool makes the binary refuse the same
-  destination. In the reverse direction, `bzr_lock_helper` acquires the binary's real
-  guard while the POSIX installer must refuse it. Protocol fixtures cover missing,
-  transient empty, live, and dead PID files. An `all` contention test proves a later
-  lock failure releases every earlier lock.
+- Cross-process tests pin binary-to-binary `.bzr-skill.lock` serialization:
+  `bzr_lock_helper` acquires the binary's real guard while a real binary invocation must
+  refuse it without deleting the live lock. Protocol fixtures cover missing, transient
+  empty, live, and dead PID files. An `all` contention test proves a later lock failure
+  releases every earlier lock.
 - Run `cargo fmt --check`, `cargo clippy --all-targets --features test-helpers --
   -D warnings`, `make check-test-layout`, `make check-no-spawn`, `cargo test
   --features test-helpers`, `make skills-test`, and `make functional-test-all`.
