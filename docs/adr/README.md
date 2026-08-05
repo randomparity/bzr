@@ -22,4 +22,4 @@ rejected.
 | [0013](0013-skills-installer-remote-fetch.md) | Agent-skills installer fetches its payload from a GitHub tarball, unverified | Accepted |
 | [0014](0014-structured-error-detail-keys.md) | Structured per-variant detail keys on the `--json` error object | Accepted |
 | [0015](0015-server-errors-are-never-masked.md) | A server error is never masked by an empty result | Accepted |
-| [0016](0016-thread-local-error-redaction-context.md) | Thread-local context protects final error redaction | Accepted |
+| [0016](0016-thread-local-error-redaction-context.md) | Thread-local error-redaction context | Accepted |
