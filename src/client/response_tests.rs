@@ -8,11 +8,8 @@ use crate::client::test_helpers::test_client;
 use crate::client::UserDetailLevel;
 
 fn debug_logging_guard() -> tracing::dispatcher::DefaultGuard {
-    let subscriber = tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
-        .with_writer(std::io::sink)
-        .finish();
-    tracing::subscriber::set_default(subscriber)
+    let (_capture, guard) = crate::test_helpers::TracingCapture::install(tracing::Level::DEBUG);
+    guard
 }
 
 fn multibyte_body_crossing_preview_boundary() -> String {
@@ -20,6 +17,79 @@ fn multibyte_body_crossing_preview_boundary() -> String {
     body.push('é');
     body.push_str(" trailing");
     body
+}
+
+fn assert_log_redacted(log: &str, secret: &str) {
+    assert!(
+        !log.contains(secret),
+        "API key leaked in tracing output: {log}"
+    );
+    assert!(
+        log.contains("Bugzilla_api_key=[REDACTED]"),
+        "redaction marker missing from tracing output: {log}"
+    );
+}
+
+#[test]
+fn trace_response_body_redacts_api_key() {
+    let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::TRACE);
+    let secret = "TraceSecret123";
+    let body = format!(r#"{{"echo":"Bugzilla_api_key={secret}"}}"#);
+
+    BugzillaClient::parse_body_to_value(&body, "http://bugzilla.test").unwrap();
+
+    assert_log_redacted(&capture.output(), secret);
+}
+
+#[test]
+fn invalid_json_debug_preview_redacts_api_key() {
+    let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::DEBUG);
+    let secret = "InvalidJsonSecret123";
+    let body = format!("not json Bugzilla_api_key={secret}");
+
+    let _ = BugzillaClient::parse_body_to_value(&body, "http://bugzilla.test");
+
+    assert_log_redacted(&capture.output(), secret);
+}
+
+#[test]
+fn error_payload_debug_message_redacts_api_key() {
+    let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::DEBUG);
+    let secret = "PayloadSecret123";
+    let value = serde_json::json!({
+        "error": true,
+        "code": 102,
+        "message": format!("request Bugzilla_api_key={secret} rejected")
+    });
+
+    let _ = BugzillaClient::check_bugzilla_200_error(&value, "http://bugzilla.test");
+
+    assert_log_redacted(&capture.output(), secret);
+}
+
+#[tokio::test]
+async fn http_error_debug_body_redacts_api_key() {
+    let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::DEBUG);
+    let mock = MockServer::start().await;
+    let secret = "HttpErrorSecret123";
+    Mock::given(method("GET"))
+        .and(path("/error"))
+        .respond_with(
+            ResponseTemplate::new(500)
+                .set_body_string(format!("request Bugzilla_api_key={secret} rejected")),
+        )
+        .mount(&mock)
+        .await;
+    let client = test_client(&mock.uri());
+    let response = reqwest::Client::new()
+        .get(format!("{}/error", mock.uri()))
+        .send()
+        .await
+        .unwrap();
+
+    let _ = client.check_response_status(response).await;
+
+    assert_log_redacted(&capture.output(), secret);
 }
 
 #[tokio::test]

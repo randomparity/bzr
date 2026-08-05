@@ -3,6 +3,53 @@
 //! Tests that set `XDG_CONFIG_HOME` must hold `ENV_LOCK` to avoid races.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::Write;
+use std::sync::{Arc, Mutex};
+
+/// Captures formatted tracing events emitted by the current thread.
+pub struct TracingCapture {
+    bytes: Arc<Mutex<Vec<u8>>>,
+}
+
+struct CaptureWriter(Arc<Mutex<Vec<u8>>>);
+
+impl Write for CaptureWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl TracingCapture {
+    /// Install a thread-local tracing subscriber and return its capture handle.
+    pub fn install(level: tracing::Level) -> (Self, tracing::dispatcher::DefaultGuard) {
+        let bytes = Arc::new(Mutex::new(Vec::new()));
+        let writer_bytes = Arc::clone(&bytes);
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_max_level(level)
+            .with_writer(move || CaptureWriter(Arc::clone(&writer_bytes)))
+            .finish();
+        let guard = tracing::subscriber::set_default(subscriber);
+        (Self { bytes }, guard)
+    }
+
+    /// Return the captured log stream as UTF-8 with invalid bytes replaced.
+    pub fn output(&self) -> String {
+        let bytes = self
+            .bytes
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+}
 
 /// Acquire `ENV_LOCK`, start a mock server, create a temp dir, and configure it.
 /// Returns the guard, mock server, and temp dir (all must stay alive for the test).

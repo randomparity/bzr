@@ -134,7 +134,10 @@ impl BugzillaClient {
     fn parse_body_to_value(body: &str, safe_url: &str) -> Result<serde_json::Value> {
         tracing::trace!(
             url = safe_url,
-            body = crate::http::utf8_prefix(body, BODY_TRACE_MAX_BYTES),
+            body = crate::bugzilla_auth::redact_api_key(crate::http::utf8_prefix(
+                body,
+                BODY_TRACE_MAX_BYTES,
+            )),
             "response body"
         );
 
@@ -142,7 +145,10 @@ impl BugzillaClient {
             tracing::debug!(
                 url = safe_url,
                 error = %e,
-                body_preview = crate::http::utf8_prefix(body, BODY_PREVIEW_MAX_BYTES),
+                body_preview = crate::bugzilla_auth::redact_api_key(crate::http::utf8_prefix(
+                    body,
+                    BODY_PREVIEW_MAX_BYTES,
+                )),
                 "JSON deserialization failed"
             );
             BzrError::Deserialize(format!(
@@ -186,7 +192,7 @@ impl BugzillaClient {
         tracing::debug!(
             url,
             code,
-            message = message.as_deref().unwrap_or("unknown"),
+            message = crate::bugzilla_auth::redact_api_key(message.as_deref().unwrap_or("unknown")),
             has_data,
             "error payload in 200 response"
         );
@@ -287,7 +293,10 @@ impl BugzillaClient {
             };
             tracing::debug!(
                 %status,
-                body = crate::http::utf8_prefix(&body, BODY_PREVIEW_MAX_BYTES),
+                body = crate::bugzilla_auth::redact_api_key(crate::http::utf8_prefix(
+                    &body,
+                    BODY_PREVIEW_MAX_BYTES,
+                )),
                 "API error response"
             );
             if let Ok(err) = serde_json::from_str::<ErrorResponse>(&body) {
