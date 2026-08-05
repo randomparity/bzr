@@ -45,8 +45,8 @@ Decision: [ADR 0016](../../adr/0016-thread-local-error-redaction-context.md)
 operations: clear it, register a resolved key, and redact a message. `dispatch` clears the
 slot before building command context. Credential resolution registers a non-empty key as
 soon as it succeeds, before auth detection, version probing, or client construction can
-return a server error. The binary clears the slot after successful dispatch and after it
-has converted a failed dispatch into its final formatted output string.
+return a server error. `dispatch` clears the slot before returning success, and the binary
+clears it after converting a failed dispatch into its final formatted output string.
 
 `redact_api_key` remains the single function called by `BzrError` display. It recognizes
 literal `Bugzilla_api_key=` plus upper- and lower-case percent-encoded equals markers.
@@ -124,7 +124,7 @@ crate's futures or redaction calls remain outside the invariant.
 - Main formatting tests assert the configured bare key is absent and `[REDACTED]` is
   present for table, JSON, and NDJSON, including progress-enabled formatting semantics.
   Separate tests exercise both lifecycle exits: after final error formatting and after
-  successful dispatch, an unrelated error containing the former key remains unchanged.
+  `dispatch` returns success, an unrelated error containing the former key remains unchanged.
 - The `check-no-spawn` guard delegates to one shell checker. Its self-test builds temporary
   fixture trees and proves representative tokens from every forbidden family fail in a
   production `.rs` file, while the same tokens in sibling tests, test helpers, and docs

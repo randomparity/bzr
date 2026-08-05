@@ -22,7 +22,7 @@ context at the start of every dispatch and register a resolved credential before
 authenticated request. The final `BzrError` display seam applies marker redaction and
 then masks every occurrence of that active key when it is at least eight bytes long.
 The binary clears the context after it has materialized the final formatted error, and
-also after a successful dispatch.
+`dispatch` clears it before returning success.
 
 Percent-encoded `Bugzilla_api_key%3D` markers remain marker-driven and are redacted at
 any value length. The existing `make check-no-spawn` guard is part of this decision: a
@@ -38,7 +38,7 @@ move to task fan-out or a multi-thread runtime requires replacing the context me
   boundary and must not be treated as safe diagnostics.
 - Tests running on separate OS threads cannot overwrite one another's active key.
 - Sequential CLI invocations cannot inherit a prior key: dispatch clears before work and
-  the binary clears after success or after formatting an error. A library caller that
+  before returning success, while the binary clears after formatting an error. A library caller that
   constructs clients directly retains the thread-local context until the next registration
   or thread teardown; that caller must not treat unrelated `BzrError` display on the same
   thread as an independently scoped operation.
