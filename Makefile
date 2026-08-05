@@ -79,7 +79,7 @@ release: ## Build in release mode
 test: ## Run tests
 	$(CARGO) test
 
-skills-test: ## Build bzr and run the agent-skills shell suite (drift, installer, lint)
+skills-test: ## Build bzr and run agent-skills checks (package, drift, installer, lint)
 	$(CARGO) build --locked
 	BZR_BIN="$$PWD/target/debug/bzr" sh agent-skills/tests/run.sh
 

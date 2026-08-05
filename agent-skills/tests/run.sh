@@ -26,6 +26,7 @@ sh "$HERE/drift-check.sh" || rc=1
 sh "$HERE/flag-drift-check.sh" || rc=1
 sh "$HERE/skills-flag-check.sh" || rc=1
 sh "$HERE/version-check.sh" || rc=1
+sh "$HERE/package-content-check.sh" || rc=1
 
 # Self-tests
 run "validate-skills-test.sh"
@@ -34,6 +35,7 @@ run "flag-drift-check-test.sh"
 run "skills-flag-check-test.sh"
 run "version-check-test.sh"
 run "post-release-bump-workflow-test.sh"
+run "package-content-check-test.sh"
 run "installer-test.sh"
 run "installer-ps1-test.sh"
 run "installer-cli-compat-test.sh"
