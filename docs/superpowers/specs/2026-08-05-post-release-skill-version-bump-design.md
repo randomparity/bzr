@@ -103,15 +103,31 @@ concerns are unchanged and are not required to repair the version-stamp drift in
 
 ## Verification
 
-Before implementation, reproduce the defect in a temporary copy by applying the current Cargo
-bump without the skill update and observe `version-check.sh` fail. After implementation, apply
-the designed mutation to a temporary copy with a synthetic development version and observe the
-same checker pass.
+Add `agent-skills/tests/post-release-bump-workflow-test.sh` and invoke it from the existing
+agent-skills test runner. The regression test reads `release.yml`, extracts the actual shell body
+of `Update bundled-skill versions`, and executes that body in temporary fixtures rather than
+copying its mutation logic into the test.
+
+The test first fails on the current workflow because the named update step is absent. After the
+workflow change, it proves:
+
+- a normal fixture updates `agent-skills/VERSION` and all four claims to a synthetic development
+  version;
+- a fixture with one missing claim fails and names that file;
+- a fixture with a duplicate claim fails and names that file;
+- the commit step stages all five skill-version paths; and
+- `Verify bundled-skill version contract` occurs after metadata mutation but before `Commit and
+  push branch`.
+
+The existing version checker then validates the successful fixture and the real checkout. This
+keeps the test coupled to the shipped workflow body without creating a supported updater entry
+point.
 
 Run these repository guardrails before committing implementation:
 
 - `actionlint .github/workflows/release.yml`
 - `zizmor .github/workflows/release.yml`
+- `sh agent-skills/tests/post-release-bump-workflow-test.sh`
 - `make skills-test`
 - `make lint`
 - `cargo test --locked --features test-helpers`
