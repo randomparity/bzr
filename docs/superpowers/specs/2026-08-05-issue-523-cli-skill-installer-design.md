@@ -46,8 +46,9 @@
 
 ## Architecture
 
-[ADR 0018](../../adr/0018-embed-canonical-skills-in-binary.md) selects compile-time
-embedding without a new dependency. `build.rs` walks `content/skills/`, validates the
+[ADR 0018](../../adr/0018-embed-canonical-skills-in-binary.md) supersedes ADR 0013,
+selects compile-time embedding without a new dependency, and carries forward the
+standalone fetcher's transport/trust policy. `build.rs` walks `content/skills/`, validates the
 tree, sorts relative paths, and writes an `embedded_skills.rs` manifest to `OUT_DIR`.
 The generated manifest is private build output and contains byte inclusions, not copied
 payload bytes.
@@ -62,6 +63,11 @@ The standalone installers use `content/skills/` in current checkouts and archive
 For an explicitly pinned historical ref whose archive predates that path, remote
 extraction accepts `agent-skills/skills/` as a read-only compatibility layout. Current
 trees never define or synchronize a second payload copy.
+
+Both installation paths recognize the same ownership sentinel and intentionally use
+last-writer-wins replacement. The binary is the release-matched path; the standalone
+installer remains the no-binary or explicitly ref-selected path and follows `main` by
+default. This issue adds no update or version-arbitration mechanism.
 
 The installer expands an agent target into one or two destination roots. It validates
 all destinations and existing skill folders before acquiring destination locks. For

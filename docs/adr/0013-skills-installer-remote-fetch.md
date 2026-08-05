@@ -2,6 +2,9 @@
 
 **Status:** Accepted
 
+> **Superseded by [0018](0018-embed-canonical-skills-in-binary.md)**
+> (2026-08-05)
+
 ## Context
 
 The `agent-skills/install.sh` / `install.ps1` scripts copy skill folders from a
