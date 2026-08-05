@@ -217,22 +217,13 @@ async fn short_http_error_keeps_raw_body_until_display() {
     assert_eq!(err.to_string(), "HTTP 500: denied [REDACTED]");
 }
 
-#[tokio::test]
-async fn http_error_debug_body_redacts_api_key() {
+#[test]
+fn http_error_debug_body_redacts_api_key() {
     let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::DEBUG);
-    let mock = MockServer::start().await;
     let secret = "XmlRpcSecret123";
-    Mock::given(method("POST"))
-        .and(path("/xmlrpc.cgi"))
-        .respond_with(
-            ResponseTemplate::new(500)
-                .set_body_string(format!("request Bugzilla_api_key={secret} rejected")),
-        )
-        .mount(&mock)
-        .await;
-    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
+    let body = format!("request Bugzilla_api_key={secret} rejected");
 
-    let _ = client.call("Bug.get", BTreeMap::new()).await;
+    super::trace_http_error(reqwest::StatusCode::INTERNAL_SERVER_ERROR, &body);
 
     let log = capture.output();
     assert!(

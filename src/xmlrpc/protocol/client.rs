@@ -61,14 +61,7 @@ impl XmlRpcClient {
                 Ok(body) => body,
                 Err(e) => format!("<failed to read response body: {e}>"),
             };
-            tracing::debug!(
-                %status,
-                body = crate::bugzilla_auth::redact_api_key(crate::http::utf8_prefix(
-                    &body,
-                    crate::http::DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES,
-                )),
-                "XML-RPC HTTP error"
-            );
+            trace_http_error(status, &body);
             return Err(BzrError::HttpStatus {
                 status: status.as_u16(),
                 body: crate::http::diagnostic_body_preview(&body),
@@ -80,6 +73,17 @@ impl XmlRpcClient {
 
         parse_response(&body_text)
     }
+}
+
+fn trace_http_error(status: reqwest::StatusCode, body: &str) {
+    tracing::debug!(
+        %status,
+        body = crate::bugzilla_auth::redact_api_key(crate::http::utf8_prefix(
+            body,
+            crate::http::DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES,
+        )),
+        "XML-RPC HTTP error"
+    );
 }
 
 #[cfg(test)]
