@@ -147,7 +147,7 @@ problem.
 
 Three traps worth knowing:
 
-- **Exit 2 no longer means "absent or restricted".** As of 0.8.1 a bug the
+- **Exit 2 no longer means "absent or restricted".** As of 0.8.2-dev a bug the
   server declines to return for another reason — most often *you are not
   authorized* — exits **4** (`api`) carrying the server's `api_code` and
   message. Exit 2 now means the server returned an empty result with no error
@@ -171,6 +171,6 @@ Three traps worth knowing:
   `bzr-triage-bug` skill walks this through.
 - **Keep writes explicit and minimal.** Change only the fields you intend to.
 
-This reference is authored against **bzr 0.8.1**. If `bzr --version` is much
+This reference is authored against **bzr 0.8.2-dev**. If `bzr --version` is much
 newer and a command here is rejected, the surface may have moved; check
 `bzr <group> --help`.

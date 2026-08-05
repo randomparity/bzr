@@ -113,7 +113,7 @@ The two types triage hits most are `collision` (exit 14, carrying
 carrying `field`/`value` naming what to fix). `bzr-reference` has the full
 `type` → exit → keys table; `bzr schema error` is the contract.
 
-**A read that fails is not necessarily a missing bug.** As of 0.8.1 a bug
+**A read that fails is not necessarily a missing bug.** As of 0.8.2-dev a bug
 the server declines to return for another reason — most often a permission
 restriction — exits **4** (`api`) with the server's `api_code` and message,
 where it used to exit 2. Exit 2 now means the server returned an empty result
