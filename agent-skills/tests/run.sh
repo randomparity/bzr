@@ -25,6 +25,7 @@ run "drift-check-test.sh"
 run "flag-drift-check-test.sh"
 run "skills-flag-check-test.sh"
 run "version-check-test.sh"
+run "post-release-bump-workflow-test.sh"
 run "installer-test.sh"
 run "installer-ps1-test.sh"
 
