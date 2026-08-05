@@ -1,7 +1,43 @@
+use std::cell::RefCell;
+
 /// Bugzilla's non-standard auth header (not `Authorization`).
 pub(crate) const AUTH_HEADER_NAME: &str = "X-BUGZILLA-API-KEY";
 /// Bugzilla's query-param auth key, used by servers that reject header auth.
 pub(crate) const AUTH_QUERY_PARAM: &str = "Bugzilla_api_key";
+
+const MIN_BARE_KEY_LEN: usize = 8;
+
+thread_local! {
+    static ACTIVE_API_KEY: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+pub(crate) fn clear_active_api_key() {
+    ACTIVE_API_KEY.with(|slot| *slot.borrow_mut() = None);
+}
+
+pub(crate) fn register_active_api_key(api_key: &str) {
+    if !api_key.is_empty() {
+        ACTIVE_API_KEY.with(|slot| *slot.borrow_mut() = Some(api_key.to_string()));
+    }
+}
+
+#[cfg(test)]
+pub(crate) struct ActiveApiKeyTestGuard {
+    previous: Option<String>,
+}
+
+#[cfg(test)]
+impl Drop for ActiveApiKeyTestGuard {
+    fn drop(&mut self) {
+        ACTIVE_API_KEY.with(|slot| *slot.borrow_mut() = self.previous.take());
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn active_api_key_test_guard(api_key: Option<&str>) -> ActiveApiKeyTestGuard {
+    let previous = ACTIVE_API_KEY.with(|slot| slot.replace(api_key.map(String::from)));
+    ActiveApiKeyTestGuard { previous }
+}
 
 /// Apply a pre-validated header value or query-param key to a request builder.
 ///
@@ -70,11 +106,10 @@ fn ends_api_key_value(c: char) -> bool {
 /// Every occurrence is redacted, not just the first: this runs over raw HTTP
 /// error bodies (`BzrError::HttpStatus`), and an error page from a proxy or
 /// `CGI::Carp` typically echoes the request URI more than once.
-pub(crate) fn redact_api_key(msg: &str) -> String {
-    let marker = format!("{AUTH_QUERY_PARAM}=");
+fn redact_marked_api_key(msg: &str, marker: &str) -> String {
     let mut out = String::with_capacity(msg.len());
     let mut rest = msg;
-    while let Some(idx) = rest.find(&marker) {
+    while let Some(idx) = rest.find(marker) {
         out.push_str(&rest[..idx + marker.len()]);
         out.push_str("[REDACTED]");
         let value = &rest[idx + marker.len()..];
@@ -83,6 +118,21 @@ pub(crate) fn redact_api_key(msg: &str) -> String {
     }
     out.push_str(rest);
     out
+}
+
+pub(crate) fn redact_api_key(msg: &str) -> String {
+    let mut redacted = msg.to_string();
+    for suffix in ["=", "%3D", "%3d"] {
+        let marker = format!("{AUTH_QUERY_PARAM}{suffix}");
+        redacted = redact_marked_api_key(&redacted, &marker);
+    }
+    ACTIVE_API_KEY.with(|slot| {
+        let key = slot.borrow();
+        match key.as_deref() {
+            Some(key) if key.len() >= MIN_BARE_KEY_LEN => redacted.replace(key, "[REDACTED]"),
+            _ => redacted,
+        }
+    })
 }
 
 #[cfg(test)]

@@ -20,10 +20,14 @@ pub(crate) fn resolve_optional_api_key(
     server_name: &str,
 ) -> Result<Option<String>> {
     let source = server.credential_source()?;
-    match source.as_ref() {
+    let api_key = match source.as_ref() {
         Some(source) => resolve_source(source, server_name).map(Some),
         None => Ok(None),
+    }?;
+    if let Some(api_key) = api_key.as_deref() {
+        crate::bugzilla_auth::register_active_api_key(api_key);
     }
+    Ok(api_key)
 }
 
 pub(crate) fn resolve_api_key(server: &ServerConfig, server_name: &str) -> Result<String> {

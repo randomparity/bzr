@@ -25,6 +25,7 @@ fn resolve_optional_api_key_returns_none_without_source() {
 
 #[test]
 fn resolve_api_key_from_environment() {
+    let _redaction_guard = crate::bugzilla_auth::active_api_key_test_guard(None);
     let _lock = crate::ENV_LOCK.blocking_lock();
     // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
     unsafe { std::env::set_var("BZR_CREDENTIALS_TEST_KEY", "secret-from-env") };
@@ -34,6 +35,10 @@ fn resolve_api_key_from_environment() {
     assert_eq!(
         super::resolve_api_key(&server, "test").unwrap(),
         "secret-from-env"
+    );
+    assert_eq!(
+        crate::bugzilla_auth::redact_api_key("rejected secret-from-env"),
+        "rejected [REDACTED]"
     );
 }
 

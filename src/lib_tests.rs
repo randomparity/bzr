@@ -23,6 +23,43 @@ fn cli_with_config(config_path: &std::path::Path, args: &[&str]) -> cli::Cli {
 }
 
 #[tokio::test]
+async fn dispatch_clears_stale_redaction_key_at_entry() {
+    let _guard = crate::bugzilla_auth::active_api_key_test_guard(Some("STALEKEY"));
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    let cli = cli_with_config(&config_path, &["--json", "config", "show"]);
+    let mut io = crate::test_helpers::CapturedIo::new();
+
+    dispatch(&cli, OutputFormat::Json, &mut io.writers())
+        .await
+        .unwrap();
+
+    assert_eq!(crate::bugzilla_auth::redact_api_key("STALEKEY"), "STALEKEY");
+}
+
+#[tokio::test]
+async fn dispatch_clears_active_redaction_key_on_success() {
+    let _guard = crate::bugzilla_auth::active_api_key_test_guard(None);
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": 1,
+            "name": "admin@example.com",
+            "real_name": "Admin User"
+        })))
+        .mount(&mock)
+        .await;
+    let cli = cli_with_config(&config_path, &["--server", "test", "--json", "whoami"]);
+    let mut io = crate::test_helpers::CapturedIo::new();
+
+    dispatch(&cli, OutputFormat::Json, &mut io.writers())
+        .await
+        .unwrap();
+
+    assert_eq!(crate::bugzilla_auth::redact_api_key("test-key"), "test-key");
+}
+
+#[tokio::test]
 async fn dispatch_whoami_defaults_to_show_action() {
     let (mock, _tmp, config_path) = setup_isolated_env().await;
 
