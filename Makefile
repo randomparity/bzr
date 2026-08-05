@@ -107,19 +107,8 @@ check-test-layout: ## Verify all test code lives in sibling *_tests.rs files
 
 check-no-spawn: ## Guard the single-threaded-runtime assumption (CONC-3)
 	@command -v rg >/dev/null || { echo "ERROR: ripgrep (rg) is required for this guard"; exit 1; }
-	@if ! rg -q 'flavor = "current_thread"' src/main.rs; then \
-	  echo "ERROR: src/main.rs no longer declares the current_thread runtime."; \
-	  echo "The concurrency engagement assumes no in-process parallelism."; \
-	  echo "Re-evaluate the CONC-* invariants before changing the runtime flavor."; \
-	  exit 1; \
-	fi
-	@# Note: this also matches these words in comments/strings (false-fail, never
-	@# false-pass). If prose trips the guard, reword the prose rather than weaken it.
-	@if rg -n 'tokio::spawn|tokio::task::spawn|join!|try_join!|select!|FuturesUnordered|buffer_unordered' src/; then \
-	  echo "ERROR: task fan-out found in src/ — in-process data races become possible."; \
-	  echo "Re-evaluate the CONC-* invariants (config writes, shared state)."; \
-	  exit 1; \
-	fi
+	bash tools/check-no-spawn.sh .
+	bash tools/check-no-spawn-tests.sh
 
 clean: ## Remove build artifacts
 	$(CARGO) clean
