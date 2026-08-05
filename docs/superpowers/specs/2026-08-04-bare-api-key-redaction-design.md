@@ -83,8 +83,10 @@ raw server payloads or isolation between unrelated direct-client displays.
 ### Actors and trust
 
 The Bugzilla server or an intermediary proxy controls response text. The local operator
-controls configuration and is trusted with the key. Terminal transcripts and reports
-copied from final CLI error output must not receive that key. Tracing and other diagnostic
+controls configuration and is trusted with the key. Final CLI error output protects
+recognized marker values at every length and bare configured keys of at least eight bytes
+before they reach terminal transcripts or copied reports. A shorter bare key remains an
+explicit false-positive trade-off and may appear unchanged. Tracing and other diagnostic
 log paths remain owned by #511 and must not infer safety from this design.
 
 ### Controls
