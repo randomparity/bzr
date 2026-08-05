@@ -164,22 +164,34 @@ fn redact_api_key_redacts_every_occurrence() {
     );
 }
 
+/// Every terminator, each proved by exact equality so the text that follows the
+/// value is shown to survive. Dropping any one of these from
+/// `ends_api_key_value` must redden a case here — otherwise the set drifts to
+/// whatever a later reader assumes it is. The space case matters most:
+/// `format_body_preview` collapses `\n\r\t` to spaces *before* calling, so
+/// space termination is what keeps every body preview from over-consuming.
 #[test]
-fn redact_api_key_stops_at_a_line_break() {
-    let input = "error\nBugzilla_api_key=secret\nnext line here";
-    assert_eq!(
-        redact_api_key(input),
-        "error\nBugzilla_api_key=[REDACTED]\nnext line here"
-    );
-}
-
-#[test]
-fn redact_api_key_stops_at_markup_and_quote_delimiters() {
-    let input = "<a href=\"/rest/bug?Bugzilla_api_key=secret\">link</a>";
-    assert_eq!(
-        redact_api_key(input),
-        "<a href=\"/rest/bug?Bugzilla_api_key=[REDACTED]\">link</a>"
-    );
+fn redact_api_key_ends_the_value_at_each_terminator() {
+    let cases = [
+        ("GET ?Bugzilla_api_key=secret HTTP/1.1", "space"),
+        ("a\nBugzilla_api_key=secret\nnext line", "newline"),
+        ("a\r\nBugzilla_api_key=secret\r\nnext line", "crlf"),
+        ("col\tBugzilla_api_key=secret\tnext col", "tab"),
+        ("?Bugzilla_api_key=secret&id=1", "ampersand"),
+        ("url (?Bugzilla_api_key=secret) failed", "close paren"),
+        ("href=\"?Bugzilla_api_key=secret\">link", "double quote"),
+        ("href='?Bugzilla_api_key=secret'>link", "single quote"),
+        ("<?Bugzilla_api_key=secret<tag>", "less than"),
+        ("v=?Bugzilla_api_key=secret>rest", "greater than"),
+        ("?Bugzilla_api_key=secret#fragment", "hash"),
+    ];
+    for (input, terminator) in cases {
+        assert_eq!(
+            redact_api_key(input),
+            input.replace("secret", "[REDACTED]"),
+            "value not terminated by {terminator}"
+        );
+    }
 }
 
 #[test]
@@ -201,8 +213,19 @@ fn redact_api_key_handles_multibyte_text_around_the_marker() {
     );
 }
 
+/// The shapes that matter are the ones where `[REDACTED]` is not followed by a
+/// terminator — at end of string, and where the original value was empty — since
+/// those are where a second pass could consume the placeholder itself.
 #[test]
 fn redact_api_key_is_idempotent() {
-    let once = redact_api_key("url?Bugzilla_api_key=secret&id=1");
-    assert_eq!(redact_api_key(&once), once);
+    for input in [
+        "url?Bugzilla_api_key=secret&id=1",
+        "Bugzilla_api_key=secret",
+        "Bugzilla_api_key=",
+        "a\nBugzilla_api_key=k\nb",
+        "no marker at all",
+    ] {
+        let once = redact_api_key(input);
+        assert_eq!(redact_api_key(&once), once, "not idempotent for {input:?}");
+    }
 }
