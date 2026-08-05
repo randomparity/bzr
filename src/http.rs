@@ -88,6 +88,15 @@ pub(crate) fn diagnostic_body_preview(body: &str) -> String {
     }
 
     if body.len() > DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES || prefix.len() < redacted.len() {
+        if preview.ends_with(REDACTION_MARKER) {
+            let marker_start = preview.len() - REDACTION_MARKER.len();
+            let text_limit = DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES - REDACTION_MARKER.len() - 1;
+            let text = utf8_prefix(&preview[..marker_start], text_limit).to_string();
+            preview.clear();
+            preview.push_str(&text);
+            preview.push_str(REDACTION_MARKER);
+            preview.push(' ');
+        }
         preview.push('…');
     }
     preview

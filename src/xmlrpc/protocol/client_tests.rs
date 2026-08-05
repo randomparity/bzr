@@ -142,7 +142,7 @@ async fn http_error_preview_redacts_bare_key_crossing_boundary() {
         BzrError::HttpStatus { body, .. } => {
             assert!(!body.contains("conf"), "stored key prefix leaked: {body}");
             assert!(
-                body.ends_with("[REDACTED]…"),
+                body.ends_with("[REDACTED] …"),
                 "redaction marker missing: {body}"
             );
             assert!(body.len() <= crate::http::DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES + '…'.len_utf8());
@@ -153,6 +153,42 @@ async fn http_error_preview_redacts_bare_key_crossing_boundary() {
         !err.to_string().contains("conf"),
         "displayed key prefix leaked: {err}"
     );
+}
+
+#[tokio::test]
+async fn http_error_preview_keeps_marker_after_marked_key_redaction() {
+    for marker in ["Bugzilla_api_key=", "Bugzilla_api_key%3D"] {
+        let mock = MockServer::start().await;
+        let body = format!("{}{marker}{}", "a".repeat(480), "s".repeat(100));
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .respond_with(ResponseTemplate::new(500).set_body_string(body))
+            .mount(&mock)
+            .await;
+
+        let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
+        let err = client.call("Bug.get", BTreeMap::new()).await.unwrap_err();
+
+        match &err {
+            BzrError::HttpStatus { body, .. } => {
+                assert!(!body.contains("ssss"), "stored marked key leaked: {body}");
+                assert!(
+                    body.ends_with("[REDACTED] …"),
+                    "stored truncation marker missing: {body}"
+                );
+            }
+            other => assert!(matches!(other, BzrError::HttpStatus { .. })),
+        }
+        let displayed = err.to_string();
+        assert!(
+            !displayed.contains("ssss"),
+            "displayed marked key leaked: {displayed}"
+        );
+        assert!(
+            displayed.ends_with("[REDACTED] …"),
+            "displayed truncation marker missing: {displayed}"
+        );
+    }
 }
 
 #[tokio::test]
