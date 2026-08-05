@@ -22,12 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   occurrence in a message is masked, not just the first — an error page echoing
   the request URI more than once was the shape most likely to leak.
 
-  Two gaps remain, both deliberate. Redaction is keyed on the literal
-  `Bugzilla_api_key=` marker, so neither a bare key echoed without it
-  (`invalid api key <key>`) nor a percent-encoded marker
-  (`Bugzilla_api_key%3D<key>`, which some proxies produce) is covered. And
-  diagnostic logging (`-vv` / `RUST_LOG`, which prints raw response bodies) is a
-  separate channel from error display and is untouched by this change. (#505)
+  Configured keys echoed without a parameter marker, such as `invalid api key
+  <key>`, are now masked too when the key is at least eight bytes long. The
+  floor avoids replacing short, common strings throughout otherwise useful
+  server messages. Percent-encoded markers (`Bugzilla_api_key%3D<key>`) are
+  also recognized. Diagnostic logging (`-vv` / `RUST_LOG`, which prints raw
+  response bodies) remains a separate channel from error display and is
+  untouched by this change. (#505, #509)
 
 ### Fixed
 

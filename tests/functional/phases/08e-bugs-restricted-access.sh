@@ -238,7 +238,7 @@ fi
 # The redaction itself is asserted by unit tests (`src/error_tests.rs`,
 # `src/client/response_tests.rs`), which can synthesize the echo no real server
 # produces.
-test_begin "146r. credentialed API error keeps its message and omits the key (#505)"
+test_begin "146r. credentialed API error keeps its message and omits the key (#505, #509)"
 run_bzr_raw --json --server restricted bug view 999999999
 if assert_exit_code 4 &&
     assert_stderr_json '.error.api_code' "101" &&
@@ -251,7 +251,15 @@ if assert_exit_code 4 &&
     if assert_exit_code 4 &&
         assert_stderr_contains "error: Bugzilla API error" &&
         assert_stderr_not_contains "$RESTRICTED_KEY"; then
-        test_pass
+        run_bzr_raw --progress ndjson --output table --server restricted \
+            bug view 999999999
+        if assert_exit_code 4 &&
+            assert_stderr_contains '"event":"error"' &&
+            assert_stderr_contains '"error_type":"api"' &&
+            assert_stderr_contains "error: Bugzilla API error" &&
+            assert_stderr_not_contains "$RESTRICTED_KEY"; then
+            test_pass
+        fi
     fi
 fi
 
