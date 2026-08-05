@@ -60,7 +60,7 @@ plus two local (no-network) top-level commands: `completion` (shell completion
 scripts) and `schema` (published JSON Schemas for `--json` output and
 `--from-json` input).
 
-Two surface facts agents get wrong:
+Surface facts agents get wrong:
 
 - **Components** have their own read verbs as of 0.5.0:
   `bzr component list --product <product>` and
@@ -69,6 +69,14 @@ Two surface facts agents get wrong:
   often the convenient one-shot view.
 - **Flags** are changed through `bzr bug update --flag ...` — there is **no**
   standalone `bzr flags` command.
+- **Relationships** have a dedicated verb as of 0.7.0: `bzr bug links <id>`
+  emits one record per related bug across all six Bugzilla relationship types,
+  with `--recursive --depth <N>` for a bounded, cycle-safe walk. Do not
+  reconstruct a graph by repeatedly parsing `bug view`.
+- **Server behavior** is `bzr server capabilities` (0.7.0) — auth modes,
+  status transitions, custom fields, attachment-size limit. `bzr server info`
+  reports version and extensions only. Read capabilities before planning a
+  mutation against an unfamiliar server.
 
 ## Global flags worth knowing
 
@@ -104,7 +112,43 @@ override matching JSON fields, and unknown JSON keys exit 7 instead of being
 ignored. Bugs support object and array payloads; admin resources accept one
 object payload. Use `bzr schema <name>` to inspect the contract, e.g.
 `bug-create-input`, `bug-update-input`, `product-update-input`,
-`component-create-input`, or `error`.
+`component-create-input`, or `error`. Output shapes are published too —
+`envelope` (the `{schema_version, data}` wrapper), `history`, `whoami`,
+`server-capabilities`, `compound-create-result`, and one per resource. `bzr
+schema` with no name lists every published name; treat that as authoritative
+rather than any list written in prose.
+
+## Errors: branch on the structured object, never on prose
+
+Under `--json` / `--output ndjson` a failure writes an `error` object to
+**stderr** (stdout stays clean) and exits non-zero. Detect failure by exit code,
+then read `error.type`, then read the keys that type carries. Never grep the
+message: it is server-supplied and changes between deployments.
+
+| `type` | exit | keys beyond `type`/`message`/`exit_code` |
+|---|---|---|
+| `not_found` | 2 | `resource`, `identifier` |
+| `api` | 4 | `api_code` |
+| `http` | 5 | `status` |
+| `input` | 7 | `field`, `value` |
+| `auth` | 9 | — |
+| `batch_partial_failure` | 11 | `succeeded`, `failed` (counts) |
+| `tls` | 13 | `server`, `expected`, `actual` (pin mismatch or issuer change) |
+| `collision` | 14 | `bug_id`, `last_change_time`, `if_match_token` |
+
+Two traps worth knowing:
+
+- **Exit 2 no longer means "absent or restricted".** As of 0.8.1-dev a bug the
+  server declines to return for another reason — most often *you are not
+  authorized* — exits **4** (`api`) carrying the server's `api_code` and
+  message. Exit 2 now means the server returned an empty result with no error
+  at all. Code branching on 2 alone to mean "no such bug" will misreport a
+  permission failure as a missing bug; branch on **2 or 4**, and read
+  `error.message` to tell them apart.
+- For a partial batch the error carries only `succeeded`/`failed` **counts**;
+  the per-element `failed[]` rows are in the result body on **stdout**.
+
+`bzr schema error` is the full contract.
 
 ## Cardinal rules
 
@@ -114,6 +158,6 @@ object payload. Use `bzr schema <name>` to inspect the contract, e.g.
   `bzr-triage-bug` skill walks this through.
 - **Keep writes explicit and minimal.** Change only the fields you intend to.
 
-This reference is authored against **bzr 0.6.1-dev**. If `bzr --version` is much
+This reference is authored against **bzr 0.8.1-dev**. If `bzr --version` is much
 newer and a command here is rejected, the surface may have moved; check
 `bzr <group> --help`.

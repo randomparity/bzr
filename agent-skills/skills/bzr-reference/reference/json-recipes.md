@@ -1,7 +1,7 @@
 # bzr --json + jq recipes
 
 All read paths support `--json`. Output is wrapped in a versioned envelope —
-`{"schema_version": "0.6.0", "data": <payload>}` — so read fields under `.data`.
+`{"schema_version": "0.6.1", "data": <payload>}` — so read fields under `.data`.
 Pipe to `jq`. (`--output ndjson` records stay bare; see below.)
 
 ```
@@ -31,6 +31,20 @@ bzr bug my --status \!CLOSED --json | jq '.data | length'
 
 # Match count without fetching the rows (server side, cheaper)
 bzr bug list --product Foo --status NEW --count --json | jq '.data.count'
+
+# Which server a key actually resolved against, before a write
+bzr whoami --json | jq -r '.data.server_name, .data.auth_mode'
+
+# Everything blocking a bug, two hops out
+bzr bug links 12345 --recursive --depth 2 --json \
+  | jq -r '.data[] | select(.relation=="depends_on") | "\(.id)\t\(.status)\t\(.summary)"'
+
+# Who last touched the status field (history records are flattened, one per field)
+bzr bug history 12345 --json \
+  | jq -r '.data[] | select(.field=="status") | "\(.when) \(.who) \(.old_value)->\(.new_value)"'
+
+# What the server will let you do, before planning a mutation
+bzr server capabilities --json | jq '.data.status_transitions'
 ```
 
 ## Streaming with `--output ndjson`

@@ -1,4 +1,4 @@
-# bzr command surface (authored against bzr 0.6.1-dev)
+# bzr command surface (authored against bzr 0.8.1-dev)
 
 Global (place before the subcommand): `--json` (force JSON; long form
 `--output json`), `--output ndjson` (one compact record per line, for `jq -c`),
@@ -23,12 +23,20 @@ Operate on bugs.
 - `bzr bug create --product Foo --component bar --summary "..." --description "..."`
   - Field parity with update in one call: `--alias --url --whiteboard
     --target-milestone --deadline --cc --keywords --groups --flag`.
+  - Compound create — file the bug, its first comment, and attachments in one
+    operation: `--with-comment <body>` / `--with-comment-file <path|->`,
+    `--with-attachment <path>` (repeatable), and `--attachment-description
+    <text>` (the Nth applies to the Nth attachment). On a post-create sub-step
+    failure it prints the new bug ID and exits 11, so the ID is never lost —
+    finish the missing step rather than re-filing. See the `bzr-file-bug` skill.
   - `bzr bug create --from-json <path|->`   # one object = one bug; an array batches
 - `bzr bug clone 12345`
   - Override create fields on the clone: `--summary --product --component
     --version --description --priority --severity --assignee --op-sys
     --rep-platform --url --whiteboard --target-milestone --deadline --cc
     --keywords --groups --flag`.
+  - Exits 11 when the bug is created but the "Cloned from bug #N" comment fails;
+    the new bug ID is still printed.
 - `bzr bug update 12345 --status RESOLVED --resolution FIXED --flag "review+(a@b.com)"`
   - `--expect-unchanged-since <last_change_time>`   # abort (exit 14) on mid-air collision
   - `--comment <body>` / `--comment-file <path|->` post a comment atomically with
@@ -39,6 +47,17 @@ Operate on bugs.
 - `bzr bug close 12345 [--status CLOSED]` / `reopen 12345 [--status REOPENED]`
   (default to stock statuses VERIFIED / CONFIRMED) / `dup 12345 100`
 - `bzr bug history 12345 [--since 2025-01-01]`
+  - Under `--json`/`--output ndjson` this emits **flattened** records: one per
+    changed field, with `when`/`who`/`field`/`old_value`/`new_value`/`comment_id`.
+    An entry that changed N fields expands to N records sharing `when`/`who`.
+    `bzr schema history` is the contract.
+- `bzr bug links 12345`   # the bug's relationship graph, one record per related bug
+  - Covers all six relationship types: `depends_on`, `blocks`, `dupe_of`,
+    `duplicates`, `regressed_by`, `regressions`. Each record carries `id`,
+    `relation`, `direction`, `depth`, `summary`, `status`.
+  - `--recursive --depth <1..=10>` walks breadth-first and cycle-safe instead of
+    one hop; `--relation <type>` restricts traversal and output to one type (an
+    unknown value is exit 2). Read-only; works without an API key.
 - `bzr bug my [--status \!CLOSED] [--product Foo] [--component Bar]`
   - Supports the shared list filters: `--product --component --priority
     --severity --created-since --changed-since --whiteboard --target-milestone
@@ -106,9 +125,19 @@ Operate on bugs.
 
 ## whoami
 - `bzr whoami [--json]`
+  - `--json`/`--output ndjson` add two connection-metadata keys alongside the
+    user fields: `server_name` (the resolved server, or the inline one) and
+    `auth_mode`. Use them to confirm *which* server a key resolved against
+    before a write.
 
 ## server
-- `bzr server info [--json]`           # version, extensions, capabilities
+- `bzr server info [--json]`           # version and extensions
+- `bzr server capabilities [--json]`   # what the server lets you do
+  - Reports API transports, auth modes, status-transition summaries, custom
+    field definitions, and the attachment-size limit. Fields a stock server
+    does not expose anonymously (e.g. `max_attachment_size`) come back `null`
+    rather than failing; `flag_types` is `null` today. Works without an API key.
+    `bzr schema server-capabilities` is the contract.
 
 ## classification
 - `bzr classification list [--json]`          # all classifications
@@ -145,8 +174,12 @@ Operate on bugs.
 - `bzr completion <bash|zsh|fish|powershell|elvish>`   # prints a completion script (local, no network)
 
 ## schema
-- `bzr schema`            # list the published JSON Schema names
+- `bzr schema`            # list the published JSON Schema names — the authoritative list
 - `bzr schema bug`        # print one schema (draft 2020-12) for `--json` output
 - `bzr schema bug-create-input`  # `bug create --from-json` payload
 - `bzr schema bug-update-input`  # `bug update --from-json` payload
 - `bzr schema error`      # common JSON/NDJSON error envelope
+- `bzr schema envelope`   # the `{schema_version, data}` wrapper itself
+- Also published: `history`, `whoami`, `server-capabilities`,
+  `compound-create-result`, and one per resource and result type. Run
+  `bzr schema` rather than trusting a list in prose.
