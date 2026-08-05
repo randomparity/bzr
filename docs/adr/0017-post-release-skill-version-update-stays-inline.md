@@ -39,9 +39,12 @@ and changelog files.
 ## Considered & rejected
 
 - **Add a reusable skill-version updater script.** This would be easy to unit-test, but it
-  creates a new repository entry point for a single workflow caller and duplicates ownership
-  with the existing checker.
+  creates a new supported repository entry point for a single workflow caller. Both designs
+  still separate mutation from validation and repeat the required-site inventory that defines
+  the current contract.
 - **Replace version-looking text through a glob or broad search.** This is shorter, but it can
   rewrite historical or explanatory prose that is not part of the version contract.
 - **Update only `agent-skills/VERSION` and let the checker tolerate stale claims.** This keeps
   the original defect: installed reference material would advertise a different CLI surface.
+- **Leave the workflow unchanged.** Generated post-release branches would remain
+  contract-invalid and require the manual repair demonstrated by PR #520.
