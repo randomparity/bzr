@@ -10,7 +10,7 @@ use crate::types::output::OutputFormat;
 
 /// One agent-layout destination populated by an installation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct SkillsDestinationResult {
+pub(crate) struct SkillsDestinationResult {
     pub layout: String,
     pub path: String,
     pub installed: Vec<String>,
@@ -18,7 +18,7 @@ pub struct SkillsDestinationResult {
 
 /// The complete successful result of a bundled skill installation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct SkillsInstallResult {
+pub(crate) struct SkillsInstallResult {
     pub action: String,
     pub agent: AgentTarget,
     pub scope: String,
@@ -27,7 +27,14 @@ pub struct SkillsInstallResult {
 }
 
 /// Write a successful skill-install result in the selected output format.
-pub fn write_skills_install<W: Write + ?Sized>(
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Task 3 writes the success result after filesystem installation"
+    )
+)]
+pub(crate) fn write_skills_install<W: Write + ?Sized>(
     result: &SkillsInstallResult,
     format: OutputFormat,
     out: &mut W,

@@ -42,12 +42,22 @@ fn table_names_each_installed_skill_and_destination() {
         OutputFormat::Table,
     );
 
-    assert!(output.contains("Skill"));
-    assert!(output.contains("Destination"));
-    assert!(output.contains("bzr-bulk-triage"));
-    assert!(output.contains("bzr-file-bug"));
-    assert!(output.contains("/canonical/project/.agents/skills"));
-    assert!(output.contains("/canonical/project/.claude/skills"));
+    assert_eq!(
+        output,
+        concat!(
+            "+-----------------+-----------------------------------+\n",
+            "| Skill           | Destination                       |\n",
+            "+-----------------+-----------------------------------+\n",
+            "| bzr-bulk-triage | /canonical/project/.agents/skills |\n",
+            "+-----------------+-----------------------------------+\n",
+            "| bzr-file-bug    | /canonical/project/.agents/skills |\n",
+            "+-----------------+-----------------------------------+\n",
+            "| bzr-bulk-triage | /canonical/project/.claude/skills |\n",
+            "+-----------------+-----------------------------------+\n",
+            "| bzr-file-bug    | /canonical/project/.claude/skills |\n",
+            "+-----------------+-----------------------------------+\n",
+        )
+    );
 }
 
 #[test]

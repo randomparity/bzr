@@ -9,7 +9,7 @@ use serde::Serialize;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ValueEnum)]
 #[serde(rename_all = "lowercase")]
 #[value(rename_all = "lower")]
-pub enum AgentTarget {
+pub(crate) enum AgentTarget {
     Standard,
     Bob,
     Codex,

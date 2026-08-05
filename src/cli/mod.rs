@@ -10,7 +10,7 @@ mod group;
 mod product;
 mod query;
 mod server;
-pub mod skills;
+mod skills;
 mod template;
 mod user;
 
