@@ -1,6 +1,6 @@
 # Post-release bundled-skill version bump design
 
-**Issue:** [#521](https://github.com/randomparity/bzr/issues/521)  
+**Issue:** [#521](https://github.com/randomparity/bzr/issues/521)
 **Decision:** [ADR 0017](../../adr/0017-post-release-skill-version-update-stays-inline.md)
 
 ## Scope charter
