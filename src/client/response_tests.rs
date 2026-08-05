@@ -715,13 +715,14 @@ async fn rejected_mutation_with_empty_data_key_is_not_success() {
 /// not on a redaction repeated at each site.
 #[tokio::test]
 async fn api_error_from_4xx_body_redacts_echoed_api_key() {
+    let _redaction_guard = crate::bugzilla_auth::active_api_key_test_guard(Some("test-key"));
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/rest/group"))
         .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
             "error": true,
             "code": 32000,
-            "message": "invalid request /rest/group?Bugzilla_api_key=SUPERSECRET&names=x"
+            "message": "invalid request for test-key"
         })))
         .mount(&mock)
         .await;
@@ -739,19 +740,20 @@ async fn api_error_from_4xx_body_redacts_echoed_api_key() {
         matches!(&err, crate::error::BzrError::Api { code: 32000, .. }),
         "expected Api error from the 4xx body, got: {msg}"
     );
-    assert!(!msg.contains("SUPERSECRET"), "key leaked: {msg}");
-    assert!(msg.contains("Bugzilla_api_key=[REDACTED]"), "{msg}");
+    assert!(!msg.contains("test-key"), "key leaked: {msg}");
+    assert!(msg.contains("invalid request for [REDACTED]"), "{msg}");
 }
 
 #[tokio::test]
 async fn api_error_from_200_error_payload_redacts_echoed_api_key() {
+    let _redaction_guard = crate::bugzilla_auth::active_api_key_test_guard(Some("test-key"));
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/rest/product"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "error": true,
             "code": 301,
-            "message": "denied for /rest/product?Bugzilla_api_key=SUPERSECRET&names=Secret"
+            "message": "denied for test-key"
         })))
         .mount(&mock)
         .await;
@@ -759,8 +761,8 @@ async fn api_error_from_200_error_payload_redacts_echoed_api_key() {
     let client = test_client(&mock.uri());
     let err = client.get_product("Secret").await.unwrap_err();
     let msg = err.to_string();
-    assert!(!msg.contains("SUPERSECRET"), "key leaked: {msg}");
-    assert!(msg.contains("Bugzilla_api_key=[REDACTED]"), "{msg}");
+    assert!(!msg.contains("test-key"), "key leaked: {msg}");
+    assert!(msg.contains("denied for [REDACTED]"), "{msg}");
     assert!(msg.contains("301"), "code must survive: {msg}");
 }
 
@@ -770,12 +772,13 @@ async fn api_error_from_200_error_payload_redacts_echoed_api_key() {
 /// URI twice, which a first-match-only redaction would leave half-exposed.
 #[tokio::test]
 async fn http_status_from_non_json_body_redacts_echoed_api_key() {
+    let _redaction_guard = crate::bugzilla_auth::active_api_key_test_guard(Some("test-key"));
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/rest/user"))
         .respond_with(ResponseTemplate::new(500).set_body_string(
-            "<title>500 /rest/user?Bugzilla_api_key=SUPERSECRET</title>\n\
-             upstream failed: GET /rest/user?Bugzilla_api_key=SUPERSECRET",
+            "<title>500 invalid test-key</title>\n\
+             upstream rejected test-key",
         ))
         .mount(&mock)
         .await;
@@ -790,14 +793,14 @@ async fn http_status_from_non_json_body_redacts_echoed_api_key() {
         matches!(&err, crate::error::BzrError::HttpStatus { status: 500, .. }),
         "expected HttpStatus from the non-JSON body, got: {msg}"
     );
-    assert!(!msg.contains("SUPERSECRET"), "key leaked: {msg}");
+    assert!(!msg.contains("test-key"), "key leaked: {msg}");
     assert_eq!(
-        msg.matches("Bugzilla_api_key=[REDACTED]").count(),
+        msg.matches("[REDACTED]").count(),
         2,
         "both echoes must be redacted: {msg}"
     );
     assert!(
-        msg.contains("upstream failed"),
+        msg.contains("upstream rejected"),
         "body text must survive: {msg}"
     );
 }
