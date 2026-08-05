@@ -20,10 +20,9 @@
 #
 # The scan joins each file's lines before matching, because the README wraps its
 # claim across a line break ("...is authored\nagainst `bzr` 0.8.1-dev."). The
-# gaps around `bzr` are tightly bounded: an unbounded gap latches "authored
-# against the current CLI surface" onto an unrelated version literal hundreds of
-# characters later, and matches this repo's own README, which names the claim
-# shape ("authored against `bzr` X.Y.Z") as documentation.
+# gaps around `bzr` are bounded: an unbounded gap latches "authored against the
+# current CLI surface" onto an unrelated version literal hundreds of characters
+# later.
 #
 # Usage: version-check.sh [CARGO_TOML] [AGENT_SKILLS_DIR]
 #   CARGO_TOML        defaults to the repo-root Cargo.toml.
@@ -77,7 +76,12 @@ fi
 # A semver-ish literal whose optional pre-release part cannot end in punctuation,
 # so a claim terminated by a period ("...bzr 0.8.1-dev.") yields "0.8.1-dev".
 VERSION_RE='[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*(-[0-9A-Za-z.-]*[0-9A-Za-z])?'
-CLAIM_RE="authored[[:space:]]+against[^0-9]{0,12}bzr[^0-9]{0,4}$VERSION_RE"
+# Matched case-insensitively: the same claim at the start of a sentence is the
+# same claim. The gaps are wide enough for the phrasings an author reaches for
+# ("against the current `bzr` X", "against bzr version X") and no wider -- an
+# unbounded gap matches this repo's own README, which names the claim shape as
+# documentation.
+CLAIM_RE="authored[[:space:]]+against[^0-9]{0,20}bzr[^0-9]{0,12}$VERSION_RE"
 
 # The sites the README's contract names. Each must carry a claim.
 REQUIRED_SITES='README.md
@@ -100,7 +104,7 @@ scan_targets() {
 
 scan_targets | while IFS= read -r f; do
   tr '\n' ' ' <"$f" |
-    grep -oE "$CLAIM_RE" |
+    grep -oiE "$CLAIM_RE" |
     grep -oE "$VERSION_RE\$" |
     awk -v file="$f" '{ print file "\t" $0 }' >>"$WORK/claims"
 done

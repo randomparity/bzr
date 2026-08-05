@@ -122,6 +122,12 @@ bug you simply cannot see as one that does not exist: handle **2 or 4** on a
 read, and read `error.message` to tell them apart before closing anything as
 invalid.
 
+Exit 2 has a third source: a malformed invocation — an unknown flag, a bad enum
+value, an out-of-range number — is rejected by the argument parser with plain
+text on stderr and **no `error` object at all**, even under `--json`. So check
+that stderr parses as JSON before branching on it; a typo that yields `null`
+from `jq` otherwise reads as a bug that does not exist.
+
 ### Attachment reads
 
 Use JSON metadata for decisions, and use stdout only for the raw bytes of one
