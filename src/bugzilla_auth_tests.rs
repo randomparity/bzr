@@ -240,6 +240,42 @@ fn redact_api_key_masks_every_bare_active_key_occurrence() {
 }
 
 #[test]
+fn preview_boundary_preserves_short_and_fully_contained_keys() {
+    let _guard = active_api_key_test_guard(Some("configured-secret"));
+    let short = "denied configured-secret";
+    assert_eq!(
+        safe_api_key_preview_boundary(short, short.len()),
+        short.len()
+    );
+
+    let body = format!("configured-secret{}", "x".repeat(600));
+    assert_eq!(safe_api_key_preview_boundary(&body, 512), 512);
+}
+
+#[test]
+fn preview_boundary_moves_before_intersected_bare_key() {
+    let _guard = active_api_key_test_guard(Some("configured-secret"));
+    let body = format!("{}configured-secret trailing", "a".repeat(508));
+    assert_eq!(safe_api_key_preview_boundary(&body, 512), 508);
+}
+
+#[test]
+fn preview_boundary_moves_before_intersected_marked_values() {
+    for marker in [
+        "Bugzilla_api_key=",
+        "Bugzilla_api_key%3D",
+        "Bugzilla_api_key%3d",
+    ] {
+        let body = format!("{}{marker}{}", "a".repeat(480), "s".repeat(100));
+        assert_eq!(
+            safe_api_key_preview_boundary(&body, 512),
+            480,
+            "marker: {marker}"
+        );
+    }
+}
+
+#[test]
 fn redact_api_key_applies_the_eight_byte_bare_key_floor() {
     {
         let _guard = active_api_key_test_guard(Some("seven77"));

@@ -135,6 +135,43 @@ pub(crate) fn redact_api_key(msg: &str) -> String {
     })
 }
 
+/// Move a response-preview boundary before any API key it would split.
+///
+/// Keys wholly before the boundary remain raw for the final error-display
+/// redaction seam. Only an active bare key or marked value intersected by the
+/// cut moves the boundary, preventing a credential prefix from being retained.
+pub(crate) fn safe_api_key_preview_boundary(body: &str, boundary: usize) -> usize {
+    let mut boundary = boundary;
+    for suffix in ["=", "%3D", "%3d"] {
+        let marker = format!("{AUTH_QUERY_PARAM}{suffix}");
+        let mut offset = 0;
+        while let Some(relative_start) = body[offset..].find(&marker) {
+            let marker_start = offset + relative_start;
+            let value_start = marker_start + marker.len();
+            let value_end = body[value_start..]
+                .find(ends_api_key_value)
+                .map_or(body.len(), |end| value_start + end);
+            if marker_start < boundary && value_end > boundary {
+                boundary = marker_start;
+            }
+            offset = value_start;
+        }
+    }
+
+    ACTIVE_API_KEY.with(|slot| {
+        let key = slot.borrow();
+        let Some(key) = key.as_deref().filter(|key| key.len() >= MIN_BARE_KEY_LEN) else {
+            return boundary;
+        };
+        for (key_start, _) in body.match_indices(key) {
+            if key_start < boundary && key_start + key.len() > boundary {
+                boundary = boundary.min(key_start);
+            }
+        }
+        boundary
+    })
+}
+
 #[cfg(test)]
 #[path = "bugzilla_auth_tests.rs"]
 mod tests;
