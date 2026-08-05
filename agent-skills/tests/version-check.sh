@@ -11,20 +11,26 @@
 # So this checks all five, not just VERSION. A VERSION-only check leaves the
 # four prose claims free to drift on their own, which is the drift #507 reported.
 #
-# The prose claims are found by scanning rather than from a hardcoded path list,
-# so a claim written into a new skill is covered the day it is written. At least
-# one must be found: a check that passes on zero claims cannot tell "all five
-# agree" from "the files moved and I read nothing".
+# Claims are checked from both ends. The four sites the contract names are
+# REQUIRED to carry one, so rewording a heading cannot silently drop a version
+# stamp -- a check whose only floor is "at least one claim somewhere" reports a
+# clean tree after three of the four are deleted. Everything else under skills/
+# is scanned too, so a claim written into a new skill is covered the day it is
+# written without editing this file.
 #
 # The scan joins each file's lines before matching, because the README wraps its
-# claim across a line break ("...is authored\nagainst `bzr` 0.8.1-dev.").
+# claim across a line break ("...is authored\nagainst `bzr` 0.8.1-dev."). The
+# gaps around `bzr` are tightly bounded: an unbounded gap latches "authored
+# against the current CLI surface" onto an unrelated version literal hundreds of
+# characters later, and matches this repo's own README, which names the claim
+# shape ("authored against `bzr` X.Y.Z") as documentation.
 #
 # Usage: version-check.sh [CARGO_TOML] [AGENT_SKILLS_DIR]
 #   CARGO_TOML        defaults to the repo-root Cargo.toml.
 #   AGENT_SKILLS_DIR  defaults to agent-skills; holds VERSION, README.md, skills.
 #
 # Exit: 1 on any disagreement, an unreadable Cargo.toml version, a missing
-#       VERSION file, or zero authored-against claims. 0 when all five agree.
+#       VERSION file, or a required site with no claim. 0 when all five agree.
 set -eu
 
 # shellcheck disable=SC1007  # CDPATH= is a per-command env var, not an assignment
@@ -71,6 +77,13 @@ fi
 # A semver-ish literal whose optional pre-release part cannot end in punctuation,
 # so a claim terminated by a period ("...bzr 0.8.1-dev.") yields "0.8.1-dev".
 VERSION_RE='[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*(-[0-9A-Za-z.-]*[0-9A-Za-z])?'
+CLAIM_RE="authored[[:space:]]+against[^0-9]{0,12}bzr[^0-9]{0,4}$VERSION_RE"
+
+# The sites the README's contract names. Each must carry a claim.
+REQUIRED_SITES='README.md
+skills/bzr-reference/SKILL.md
+skills/bzr-reference/reference/commands.md
+skills/bzr-reference/reference/commands.yml'
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
@@ -87,21 +100,30 @@ scan_targets() {
 
 scan_targets | while IFS= read -r f; do
   tr '\n' ' ' <"$f" |
-    grep -oE "authored[[:space:]]+against[^0-9]*$VERSION_RE" |
+    grep -oE "$CLAIM_RE" |
     grep -oE "$VERSION_RE\$" |
     awk -v file="$f" '{ print file "\t" $0 }' >>"$WORK/claims"
 done
 
-claims=0
 while IFS="$(printf '\t')" read -r file claimed; do
-  claims=$((claims + 1))
   if [ "$claimed" != "$CRATE_VERSION" ]; then
     err "$file: authored-against claim says $claimed but Cargo.toml says $CRATE_VERSION"
   fi
 done <"$WORK/claims"
 
-if [ "$claims" -eq 0 ]; then
-  err "no 'authored against <version>' claim found under $SKILLS_ROOT"
+cut -f1 "$WORK/claims" | sort -u >"$WORK/claimed-files"
+
+printf '%s\n' "$REQUIRED_SITES" | while IFS= read -r rel; do
+  [ -n "$rel" ] || continue
+  if ! grep -qxF "$SKILLS_ROOT/$rel" "$WORK/claimed-files"; then
+    printf 'version-check: ERROR %s: no "authored against bzr <version>" claim\n' \
+      "$SKILLS_ROOT/$rel" >&2
+    printf 'missing\n' >>"$WORK/missing"
+  fi
+done
+
+if [ -f "$WORK/missing" ]; then
+  fail=1
 fi
 
 exit "$fail"

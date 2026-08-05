@@ -24,7 +24,8 @@ Operate on bugs.
   - Field parity with update in one call: `--alias --url --whiteboard
     --target-milestone --deadline --cc --keywords --groups --flag`.
   - Compound create — file the bug, its first comment, and attachments in one
-    operation: `--with-comment <body>` / `--with-comment-file <path|->`,
+    operation: `--with-comment <body>` / `--with-comment-file <path>` (a real
+    path only — this one does not read `-`/stdin),
     `--with-attachment <path>` (repeatable), and `--attachment-description
     <text>` (the Nth applies to the Nth attachment). On a post-create sub-step
     failure it prints the new bug ID and exits 11, so the ID is never lost —
@@ -56,8 +57,12 @@ Operate on bugs.
     `duplicates`, `regressed_by`, `regressions`. Each record carries `id`,
     `relation`, `direction`, `depth`, `summary`, `status`.
   - `--recursive --depth <1..=10>` walks breadth-first and cycle-safe instead of
-    one hop; `--relation <type>` restricts traversal and output to one type (an
-    unknown value is exit 2). Read-only; works without an API key.
+    one hop; `--relation <type>` restricts traversal and output to one type.
+    Read-only; works without an API key.
+  - An unknown `--relation`, or a `--depth` outside `1..=10` or without
+    `--recursive`, is a *usage* error: exit 2 with plain text on stderr and **no
+    JSON error object**, even under `--json`. That is clap rejecting the
+    invocation, not the `not_found` exit 2 in the error table.
 - `bzr bug my [--status \!CLOSED] [--product Foo] [--component Bar]`
   - Supports the shared list filters: `--product --component --priority
     --severity --created-since --changed-since --whiteboard --target-milestone

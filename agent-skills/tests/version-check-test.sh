@@ -11,16 +11,20 @@ trap 'rm -rf "$WORK"' EXIT
 ROOT="$WORK/agent-skills"
 CARGO="$WORK/Cargo.toml"
 
-# A dependency table carries its own `version =`, so the parser must be bounded
-# by [package] rather than taking the first one it sees.
+# Other tables carry their own `version =`, so the parser must be bounded by
+# [package]. One of them is placed *before* [package]: with both decoys after
+# it, a naive "first version = anywhere" parser would still pass this fixture.
 cat >"$CARGO" <<'EOF'
+[workspace.package]
+version = "9.9.9"
+
 [package]
 name = "bzr"
 version = "1.2.3-dev"
 edition = "2021"
 
 [dependencies]
-reqwest = { version = "9.9.9" }
+reqwest = { version = "8.8.8" }
 EOF
 
 # A tree where all five sites agree with the crate version. The README claim is
@@ -52,10 +56,11 @@ run_check() {
 }
 
 # 1. Every site agrees -> exit 0. This also proves the [package] version wins
-#    over the 9.9.9 in [dependencies].
+#    over the decoys in [workspace.package] and [dependencies].
 clean_tree
 out=$(run_check) && rc=0 || rc=$?
 assert_eq "agreeing tree exits 0" "0" "$rc"
+assert_not_contains "decoy [workspace.package] version not used" "$out" "9.9.9"
 
 # 2. VERSION alone drifts -> fail naming both versions. This is the exact shape
 #    of #507: the file the README's contract sentence points at.
@@ -118,16 +123,40 @@ out=$(run_check) && rc=0 || rc=$?
 assert_eq "stale claim in another skill fails" "1" "$rc"
 assert_contains "other skill named" "$out" "bzr-setup"
 
-# 7. Zero claims is an error, not a pass: without it, deleting or rewording
-#    every claim would turn the check green while enforcing nothing.
+# 7. Dropping the claim from ONE required site fails. A floor of "at least one
+#    claim somewhere" would report this tree clean, which is the whole point of
+#    naming the required sites.
+clean_tree
+printf 'bug: list view\n' >"$ROOT/skills/bzr-reference/reference/commands.yml"
+out=$(run_check) && rc=0 || rc=$?
+assert_eq "one required site without a claim fails" "1" "$rc"
+assert_contains "missing site named" "$out" "commands.yml"
+
+# 7b. ...and with every claim gone, all four are reported, not just the first.
 clean_tree
 printf '# Agent Skills\n' >"$ROOT/README.md"
-rm -f "$ROOT/skills/bzr-reference/SKILL.md" \
-  "$ROOT/skills/bzr-reference/reference/commands.md" \
-  "$ROOT/skills/bzr-reference/reference/commands.yml"
+printf 'no claim here\n' >"$ROOT/skills/bzr-reference/SKILL.md"
+printf 'no claim here\n' >"$ROOT/skills/bzr-reference/reference/commands.md"
+printf 'bug: list view\n' >"$ROOT/skills/bzr-reference/reference/commands.yml"
 out=$(run_check) && rc=0 || rc=$?
 assert_eq "zero claims fails" "1" "$rc"
-assert_contains "zero claims explained" "$out" "no 'authored against"
+assert_contains "missing README reported" "$out" "README.md"
+assert_contains "missing SKILL.md reported" "$out" "SKILL.md"
+assert_contains "missing commands.md reported" "$out" "commands.md"
+assert_contains "missing commands.yml reported" "$out" "commands.yml"
+
+# 7c. The gap between "against" and the version is bounded, so unrelated prose
+#     cannot latch a version literal onto an "authored against" phrase far away.
+#     An unbounded gap flags this tree, and flags this repo's own README.
+clean_tree
+mkdir -p "$ROOT/skills/bzr-x"
+cat >"$ROOT/skills/bzr-x/SKILL.md" <<'EOF'
+These recipes are authored against the current CLI surface; run `bzr --help`
+to confirm. Requires a Bugzilla server of version 5.0.0 or newer.
+EOF
+out=$(run_check) && rc=0 || rc=$?
+assert_eq "distant version literal is not a claim" "0" "$rc"
+assert_not_contains "distant literal not reported" "$out" "5.0.0"
 
 # 8. A missing VERSION file is an error, not a silent pass.
 clean_tree
@@ -148,5 +177,8 @@ clean_tree
 printf '[dependencies]\nreqwest = { version = "9.9.9" }\n' >"$WORK/nopkg.toml"
 out=$("$CHECK" "$WORK/nopkg.toml" "$ROOT" 2>&1) && rc=0 || rc=$?
 assert_eq "no [package] version fails" "1" "$rc"
+# Assert the guard is what fired. Without this the test passes either way: an
+# empty crate version makes every site mismatch, which also exits 1.
+assert_contains "no [package] version explained" "$out" "no [package] version in"
 
 report "version-check-test"

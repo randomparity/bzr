@@ -108,13 +108,10 @@ case $? in
 esac
 ```
 
-Key error keys by `type`: `input` (exit 7) → `field`/`value`; `collision`
-(14) → `bug_id`/`last_change_time`/`if_match_token`; `not_found` (2) →
-`resource`/`identifier`; `api` (4) → `api_code`; `http` (5) → `status`; `tls`
-(13) → `server`/`expected`/`actual`. A partial batch
-(`batch_partial_failure`, exit 11) puts `succeeded`/`failed` counts in the error,
-while the per-element `failed[]` rows are in the **stdout** result body. Run
-`bzr schema error` for the full contract.
+The two types triage hits most are `collision` (exit 14, carrying
+`bug_id`/`last_change_time`/`if_match_token` to retry with) and `input` (exit 7,
+carrying `field`/`value` naming what to fix). `bzr-reference` has the full
+`type` → exit → keys table; `bzr schema error` is the contract.
 
 **A read that fails is not necessarily a missing bug.** As of 0.8.1-dev a bug
 the server declines to return for another reason — most often a permission
