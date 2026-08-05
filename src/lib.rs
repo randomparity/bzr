@@ -42,7 +42,14 @@ pub mod error;
 pub(crate) mod http;
 #[expect(clippy::expect_used)]
 pub mod output;
-pub mod skills;
+/// Internal implementation for the `skills` command.
+///
+/// This module is deliberately absent from the normal downstream API:
+///
+/// ```compile_fail
+/// use bzr::skills::embedded;
+/// ```
+pub(crate) mod skills;
 #[cfg(feature = "test-helpers")]
 pub mod skills_test_helpers {
     //! Public test-only shims used by cross-process integration tests.

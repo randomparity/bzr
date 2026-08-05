@@ -1,4 +1,4 @@
-pub mod embedded;
+pub(crate) mod embedded;
 pub(crate) mod installer;
 
 #[cfg(test)]
