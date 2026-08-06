@@ -1,13 +1,13 @@
 #![expect(clippy::panic, clippy::unwrap_used)]
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{self, OpenOptions};
-use std::io::Write as _;
+use std::fs::{self, File, OpenOptions};
+use std::io::{Read as _, Seek as _, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
 
 use super::{
     acquire_destination_lock, destinations_for, install_with_ops, DestinationLock, FileOperations,
-    InstallRequest,
+    InstallRequest, SENTINEL_MAX_BYTES,
 };
 use crate::cli::AgentTarget;
 use crate::commands::skills::InstallScope;
@@ -430,6 +430,78 @@ fn accepts_posix_lf_and_powershell_bom_crlf_sentinels_with_unknown_fields() {
         run(temp.path(), Failure::None).unwrap();
         assert!(target.join("SKILL.md").is_file());
     }
+}
+
+fn sentinel_with_size(size: usize) -> Vec<u8> {
+    let mut bytes = sentinel(SKILL).into_bytes();
+    let prefix = b"future-field: ";
+    let value_len = size - bytes.len() - prefix.len() - 1;
+    bytes.extend_from_slice(prefix);
+    bytes.extend(std::iter::repeat_n(b'x', value_len));
+    bytes.push(b'\n');
+    assert_eq!(bytes.len(), size);
+    bytes
+}
+
+#[test]
+fn accepts_an_ownership_sentinel_at_the_size_limit() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let target = create_owned(temp.path(), SKILL);
+    fs::write(
+        target.join(".bzr-skill-managed"),
+        sentinel_with_size(SENTINEL_MAX_BYTES),
+    )
+    .unwrap();
+
+    run(temp.path(), Failure::None).unwrap();
+
+    assert_installed_skill_bytes(temp.path(), SKILL);
+}
+
+#[test]
+fn refuses_a_sentinel_one_byte_over_the_limit_without_tree_changes() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let target = create_owned(temp.path(), SKILL);
+    let sentinel_path = target.join(".bzr-skill-managed");
+    let bytes = sentinel_with_size(SENTINEL_MAX_BYTES + 1);
+    fs::write(&sentinel_path, &bytes).unwrap();
+
+    let error = run(temp.path(), Failure::None).unwrap_err();
+
+    assert!(error.to_string().contains("foreign"));
+    assert_eq!(fs::read(sentinel_path).unwrap(), bytes);
+    assert_eq!(fs::read(target.join("old.txt")).unwrap(), b"old bytes");
+}
+
+#[test]
+fn refuses_a_large_sparse_sentinel_without_changing_it_or_its_target() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let target = create_owned(temp.path(), SKILL);
+    let sentinel_path = target.join(".bzr-skill-managed");
+    let mut file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(&sentinel_path)
+        .unwrap();
+    file.write_all(b"managed-by: bzr-skill\n").unwrap();
+    file.set_len(1024 * 1024 * 1024).unwrap();
+    file.seek(SeekFrom::End(-1)).unwrap();
+    file.write_all(b"z").unwrap();
+    drop(file);
+
+    let error = run(temp.path(), Failure::None).unwrap_err();
+
+    assert!(error.to_string().contains("foreign"));
+    assert_eq!(
+        fs::metadata(&sentinel_path).unwrap().len(),
+        1024 * 1024 * 1024
+    );
+    let mut file = File::open(sentinel_path).unwrap();
+    file.seek(SeekFrom::End(-1)).unwrap();
+    let mut last = [0_u8; 1];
+    file.read_exact(&mut last).unwrap();
+    assert_eq!(last, [b'z']);
+    assert_eq!(fs::read(target.join("old.txt")).unwrap(), b"old bytes");
 }
 
 #[test]

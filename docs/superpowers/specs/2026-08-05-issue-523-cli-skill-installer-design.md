@@ -209,7 +209,12 @@ from the trusted source tree is installed.
   `key: value`; required keys and values are ASCII, values are not trimmed beyond the
   format's single separator space, and malformed lines make the sentinel foreign.
   This accepts the exact current POSIX and Windows PowerShell output while keeping
-  duplicate/missing/value checks strict.
+  duplicate/missing/value checks strict. A sentinel is at most 16 KiB: the current four
+  fields use well under 1 KiB, so this leaves room for many forward-compatible fields
+  without allowing an ownership claim to drive an unbounded allocation. Metadata over
+  the limit is rejected before opening; otherwise the parser reads at most 16 KiB plus
+  one byte and rejects that extra byte so file growth between inspection and reading
+  cannot bypass the bound.
 - Atomic lock-directory acquisition in deterministic path order serializes binary
   invocations per destination.
   Authoritative checks run only after all locks are held and immediately before rename.

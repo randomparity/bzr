@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions, TryLockError};
 use std::hash::BuildHasher as _;
-use std::io::Write as _;
+use std::io::{Read as _, Write as _};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -13,6 +13,9 @@ use crate::error::{BzrError, Result};
 use crate::skills::embedded;
 
 const SENTINEL: &str = ".bzr-skill-managed";
+// Four current fields need under 1 KiB. 16 KiB leaves ample forward-compatible
+// metadata room while bounding reads of an untrusted ownership claim.
+const SENTINEL_MAX_BYTES: usize = 16 * 1024;
 const LOCK_DIRECTORY: &str = ".bzr-skill.lock";
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -325,9 +328,21 @@ fn has_valid_sentinel(target: &Path, skill: &str) -> bool {
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         return false;
     }
-    let Ok(bytes) = fs::read(path) else {
+    if metadata.len() > SENTINEL_MAX_BYTES as u64 {
+        return false;
+    }
+    let Ok(file) = File::open(path) else {
         return false;
     };
+    let mut bytes = Vec::with_capacity(SENTINEL_MAX_BYTES + 1);
+    if file
+        .take((SENTINEL_MAX_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .is_err()
+        || bytes.len() > SENTINEL_MAX_BYTES
+    {
+        return false;
+    }
     parse_sentinel(&bytes, skill)
 }
 
