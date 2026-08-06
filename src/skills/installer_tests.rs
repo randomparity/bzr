@@ -648,6 +648,63 @@ fn lock_protocol_handles_absent_transient_live_dead_and_malformed_pid_files() {
     guard.release(&mut ops).unwrap();
 }
 
+#[test]
+fn stale_lock_with_extra_file_or_directory_is_preserved() {
+    for extra_name in ["foreign-file", "foreign-directory"] {
+        let temp = tempfile::TempDir::new().unwrap();
+        let destination = temp.path().join("skills");
+        let lock = destination.join(".bzr-skill.lock");
+        fs::create_dir_all(&lock).unwrap();
+        fs::write(lock.join("pid"), b"999999999\n").unwrap();
+        let extra = lock.join(extra_name);
+        if extra_name == "foreign-file" {
+            fs::write(&extra, b"foreign bytes").unwrap();
+        } else {
+            fs::create_dir(&extra).unwrap();
+            fs::write(extra.join("nested"), b"nested foreign bytes").unwrap();
+        }
+
+        let Err(error) = acquire_destination_lock(&destination) else {
+            panic!("lock with extra entry must be refused");
+        };
+
+        assert!(error.to_string().contains("unexpected entry"));
+        assert_eq!(fs::read(lock.join("pid")).unwrap(), b"999999999\n");
+        if extra_name == "foreign-file" {
+            assert_eq!(fs::read(extra).unwrap(), b"foreign bytes");
+        } else {
+            assert_eq!(
+                fs::read(extra.join("nested")).unwrap(),
+                b"nested foreign bytes"
+            );
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn stale_lock_with_extra_symlink_is_preserved() {
+    use std::os::unix::fs::symlink;
+
+    let temp = tempfile::TempDir::new().unwrap();
+    let destination = temp.path().join("skills");
+    let lock = destination.join(".bzr-skill.lock");
+    let outside = temp.path().join("outside");
+    fs::create_dir_all(&lock).unwrap();
+    fs::write(lock.join("pid"), b"999999999\n").unwrap();
+    fs::write(&outside, b"outside bytes").unwrap();
+    symlink(&outside, lock.join("foreign-link")).unwrap();
+
+    let Err(error) = acquire_destination_lock(&destination) else {
+        panic!("lock with extra symlink must be refused");
+    };
+
+    assert!(error.to_string().contains("unexpected entry"));
+    assert_eq!(fs::read(lock.join("pid")).unwrap(), b"999999999\n");
+    assert_eq!(fs::read(&outside).unwrap(), b"outside bytes");
+    assert_eq!(fs::read_link(lock.join("foreign-link")).unwrap(), outside);
+}
+
 #[cfg(unix)]
 #[test]
 fn lock_protocol_refuses_symlinked_lock_directory_and_pid_file() {

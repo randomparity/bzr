@@ -499,6 +499,7 @@ fn recover_or_refuse_existing_lock(lock_path: &Path) -> Result<()> {
             lock_path.display()
         )));
     }
+    validate_stale_lock_entries(lock_path)?;
     let pid_path = lock_path.join("pid");
     let pid_metadata = fs::symlink_metadata(&pid_path).map_err(|error| {
         BzrError::DataIntegrity(format!(
@@ -557,15 +558,37 @@ fn recover_or_refuse_existing_lock(lock_path: &Path) -> Result<()> {
             Err(io_error("inspect destination lock", &pid_path, error))
         }
         Ok(()) => {
+            validate_stale_lock_entries(lock_path)?;
             let cleanup = lock_cleanup_path(lock_path)
                 .map_err(|error| io_error("prepare stale-lock cleanup", lock_path, error))?;
             fs::rename(lock_path, &cleanup)
                 .map_err(|error| io_error("detach stale destination lock", lock_path, error))?;
             drop(file);
-            fs::remove_dir_all(&cleanup)
+            validate_stale_lock_entries(&cleanup)?;
+            fs::remove_file(cleanup.join("pid"))
+                .map_err(|error| io_error("remove stale destination lock PID", &cleanup, error))?;
+            fs::remove_dir(&cleanup)
                 .map_err(|error| io_error("remove stale destination lock", &cleanup, error))
         }
     }
+}
+
+fn validate_stale_lock_entries(lock_path: &Path) -> Result<()> {
+    let entries = fs::read_dir(lock_path)
+        .map_err(|error| io_error("inspect destination lock entries", lock_path, error))?;
+    for entry in entries {
+        let entry =
+            entry.map_err(|error| io_error("inspect destination lock entry", lock_path, error))?;
+        if entry.file_name() != "pid" {
+            return Err(BzrError::DataIntegrity(format!(
+                "destination lock '{}' has unexpected entry '{}'; preserve it and remove the lock \
+                 only after verifying no bzr skills install process is using it",
+                lock_path.display(),
+                entry.path().display()
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn acquire_all_locks<O: FileOperations>(

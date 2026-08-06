@@ -209,7 +209,12 @@ from the trusted source tree is installed.
 - Atomic lock-directory acquisition in deterministic path order serializes binary
   invocations per destination.
   Authoritative checks run only after all locks are held and immediately before rename.
-  An unexplained/stale lock fails closed with recovery guidance.
+  A recoverable stale lock has exactly one entry: a regular, non-symlink `pid` file
+  containing a numeric PID. Any additional file, directory, or symlink makes the lock
+  unexplained, so the command fails closed with recovery guidance and leaves the lock
+  unchanged. Recovery rechecks this exact shape before detaching the stale lock and
+  removes the PID and now-empty directory individually rather than recursively deleting
+  the detached path.
 - Staging uses unpredictable process-local names plus `create_dir`, and file creation
   uses `create_new`. Replacement stays on the destination filesystem and restores the
   previous owned directory if activation fails.
