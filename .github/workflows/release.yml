@@ -185,8 +185,10 @@ jobs:
 
       - name: Package (unix)
         if: matrix.archive == 'tar.gz'
+        env:
+          TAG_NAME: ${{ github.ref_name }}
         run: |
-          STAGING="bzr-${{ github.ref_name }}-${{ matrix.target }}"
+          STAGING="bzr-${TAG_NAME}-${{ matrix.target }}"
           mkdir "$STAGING"
           cp "target/${{ matrix.target }}/release/bzr" "$STAGING/"
           cp LICENSE README.md "$STAGING/"
@@ -197,8 +199,10 @@ jobs:
 
       - name: Package (windows)
         if: matrix.archive == 'zip'
+        env:
+          TAG_NAME: ${{ github.ref_name }}
         run: |
-          $STAGING = "bzr-${{ github.ref_name }}-${{ matrix.target }}"
+          $STAGING = "bzr-$env:TAG_NAME-${{ matrix.target }}"
           New-Item -ItemType Directory -Path $STAGING
           Copy-Item "target\${{ matrix.target }}\release\bzr.exe" "$STAGING\"
           Copy-Item LICENSE, README.md "$STAGING\"
@@ -380,9 +384,11 @@ jobs:
       - name: Extract release notes from CHANGELOG.md
         id: notes
         shell: bash
+        env:
+          TAG_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          TAG="${{ github.ref_name }}"
+          TAG="$TAG_NAME"
           VERSION="${TAG#v}"
           NOTES_FILE="$(mktemp)"
           awk -v v="$VERSION" '
