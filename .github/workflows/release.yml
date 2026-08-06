@@ -806,9 +806,9 @@ jobs:
           )
           claim_paths = (
               Path("agent-skills/README.md"),
-              Path("agent-skills/skills/bzr-reference/SKILL.md"),
-              Path("agent-skills/skills/bzr-reference/reference/commands.md"),
-              Path("agent-skills/skills/bzr-reference/reference/commands.yml"),
+              Path("content/skills/bzr-reference/SKILL.md"),
+              Path("content/skills/bzr-reference/reference/commands.md"),
+              Path("content/skills/bzr-reference/reference/commands.yml"),
           )
 
           Path("agent-skills/VERSION").write_text(f"{version}\n")
@@ -864,9 +864,9 @@ jobs:
             CHANGELOG.md \
             agent-skills/VERSION \
             agent-skills/README.md \
-            agent-skills/skills/bzr-reference/SKILL.md \
-            agent-skills/skills/bzr-reference/reference/commands.md \
-            agent-skills/skills/bzr-reference/reference/commands.yml
+            content/skills/bzr-reference/SKILL.md \
+            content/skills/bzr-reference/reference/commands.md \
+            content/skills/bzr-reference/reference/commands.yml
           if git diff --staged --quiet; then
             echo "::error::No changes staged after bump steps; investigate." >&2
             exit 1

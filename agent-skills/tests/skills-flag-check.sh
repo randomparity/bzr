@@ -32,7 +32,7 @@
 # Usage: skills-flag-check.sh [MANIFEST] [SKILLS_DIR]
 #   MANIFEST   defaults to the bzr-reference commands.yml (same file as
 #              drift-check.sh); it bounds which (group, verb) pairs are checked.
-#   SKILLS_DIR defaults to agent-skills/skills.
+#   SKILLS_DIR defaults to content/skills.
 # Env: BZR_BIN overrides the bzr binary path.
 #
 # Exit: 1 on any phantom flag, a missing skills dir, or a fail-closed BZR_BIN.
@@ -41,8 +41,8 @@ set -eu
 
 # shellcheck disable=SC1007  # CDPATH= is a per-command env var, not an assignment
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-MANIFEST="${1:-$HERE/../skills/bzr-reference/reference/commands.yml}"
-SKILLS_DIR="${2:-$HERE/../skills}"
+MANIFEST="${1:-$HERE/../../content/skills/bzr-reference/reference/commands.yml}"
+SKILLS_DIR="${2:-$HERE/../../content/skills}"
 BZR="${BZR_BIN:-bzr}"
 fail=0
 

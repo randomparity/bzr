@@ -10,6 +10,7 @@ mod group;
 mod product;
 mod query;
 mod server;
+mod skills;
 mod template;
 mod user;
 
@@ -42,6 +43,7 @@ pub(crate) use query::{
 #[cfg(test)]
 pub(crate) use query::QueryRunFilterArgs;
 pub(crate) use server::ServerAction;
+pub(crate) use skills::{AgentTarget, InstallArgs, SkillsAction};
 pub(crate) use template::{TemplateAction, TemplateFields, UpdateArgs as TemplateUpdateArgs};
 pub(crate) use user::UserAction;
 
@@ -722,8 +724,32 @@ pub(crate) enum Commands {
         /// Schema name to print; omit to list all available schema names.
         name: Option<String>,
     },
+
+    /// Install bzr's bundled agent skills for a named coding agent.
+    ///
+    /// The bundled skills teach supported coding agents how to work with bzr.
+    /// Choose exactly one destination scope: `--global` installs into your
+    /// agent-wide skills directory, while `--project <PATH>` installs beneath
+    /// an existing project directory. The command never guesses a scope.
+    ///
+    /// Examples:
+    ///
+    ///   bzr skills install --agent codex --global
+    ///   bzr skills install --agent all --project .
+    ///
+    /// This command is local: it makes no network calls and needs no configured
+    /// Bugzilla server.
+    #[command(verbatim_doc_comment)]
+    Skills {
+        #[command(subcommand)]
+        action: SkillsAction,
+    },
 }
 
 #[cfg(test)]
 #[path = "mod_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "skills_tests.rs"]
+mod skills_tests;

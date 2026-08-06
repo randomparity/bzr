@@ -12,6 +12,7 @@ pub mod query;
 pub mod runtime;
 pub mod schema;
 pub mod server;
+pub mod skills;
 pub mod template;
 pub mod user;
 pub mod whoami;

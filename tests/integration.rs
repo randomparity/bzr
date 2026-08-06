@@ -1680,6 +1680,53 @@ async fn e2e_config_show_via_cli_args() {
 }
 
 #[tokio::test]
+async fn e2e_skills_install_ignores_malformed_config_and_needs_no_server() {
+    let _lock = ENV_LOCK.lock().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let project = tmp.path().join("project");
+    std::fs::create_dir(&project).unwrap();
+    let malformed_config = tmp.path().join("malformed-config.toml");
+    let malformed_bytes = b"not = [valid toml\n";
+    std::fs::write(&malformed_config, malformed_bytes).unwrap();
+
+    let (result, output) = dispatch_cli_with_output(&[
+        "bzr",
+        "--config",
+        malformed_config.to_str().unwrap(),
+        "skills",
+        "install",
+        "--agent",
+        "standard",
+        "--project",
+        project.to_str().unwrap(),
+    ])
+    .await;
+
+    assert!(
+        result.is_ok(),
+        "local skill install should succeed: {result:?}"
+    );
+    assert!(
+        malformed_config.exists(),
+        "local skill install must not remove a Bugzilla config"
+    );
+    assert_eq!(
+        std::fs::read(&malformed_config).unwrap(),
+        malformed_bytes,
+        "local skill install must not parse or rewrite malformed Bugzilla config"
+    );
+    assert!(
+        project
+            .join(".agents/skills/bzr-reference/reference/commands.md")
+            .is_file(),
+        "nested embedded payload should be installed"
+    );
+    let data = bzr::test_helpers::json_envelope_data(&output);
+    assert_eq!(data["scope"], "project");
+    assert_eq!(data["destinations"][0]["layout"], "agents");
+}
+
+#[tokio::test]
 async fn e2e_server_info_via_cli_args() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 

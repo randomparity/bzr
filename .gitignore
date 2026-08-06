@@ -11,9 +11,10 @@ mutants.out.old/
 # IBM Bob
 .bob/
 reference/
-# The agent-skills bzr-reference skill ships its own reference/ subtree; the
+# The canonical bzr-reference skill ships its own reference/ subtree; the
 # broad "reference/" rule above would otherwise silently exclude it.
-!agent-skills/skills/bzr-reference/reference/
+!content/skills/bzr-reference/reference/
+!content/skills/bzr-reference/reference/**
 
 # Claude Flow
 .claude-flow/

@@ -1,11 +1,11 @@
 #!/bin/sh
 # Validate skill folders: frontmatter, name==folder, description<=500, links.
-# Usage: validate-skills.sh [SKILLS_DIR]   (defaults to ../skills relative to repo)
+# Usage: validate-skills.sh [SKILLS_DIR]   (defaults to content/skills relative to repo)
 set -eu
 
 # shellcheck disable=SC1007  # CDPATH= is a per-command env var, not an assignment
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-SKILLS_DIR="${1:-$HERE/../skills}"
+SKILLS_DIR="${1:-$HERE/../../content/skills}"
 MAX_DESC=500
 fail=0
 

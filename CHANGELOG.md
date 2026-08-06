@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `bzr skills install` installs every bundled bzr agent skill from the offline,
+  release-matched payload embedded in the running binary. Callers choose an explicit
+  `--global` or `--project <PATH>` scope (`--project .` selects the current
+  repository) and an agent layout with `--agent standard|bob|codex|claude|all`.
+  Re-running updates managed skills, while foreign folders and symlinked destination
+  components are refused without modification. JSON and NDJSON expose the selected
+  scope, canonical project path, destinations, and sorted installed skills. The
+  standalone installers remain available for no-binary use and fetch `main` by
+  default, with `BZR_SKILL_REF` for a pinned payload. (#523)
+
 ## [0.8.1] - 2026-08-05
 
 ### Security

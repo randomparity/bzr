@@ -23,7 +23,7 @@ extract_step() {
 
 make_fixture() {
   fixture=$1
-  mkdir -p "$fixture/agent-skills/skills/bzr-reference/reference"
+  mkdir -p "$fixture/agent-skills" "$fixture/content/skills/bzr-reference/reference"
   cat >"$fixture/Cargo.toml" <<'EOF'
 [package]
 name = "fixture"
@@ -34,11 +34,11 @@ EOF
   printf '%s\n' 'The surface is authored against `bzr` 0.8.2-dev.' \
     >"$fixture/agent-skills/README.md"
   printf '%s\n' 'This reference is authored against **bzr 0.8.2-dev**.' \
-    >"$fixture/agent-skills/skills/bzr-reference/SKILL.md"
+    >"$fixture/content/skills/bzr-reference/SKILL.md"
   printf '%s\n' '# commands (authored against bzr 0.8.2-dev)' \
-    >"$fixture/agent-skills/skills/bzr-reference/reference/commands.md"
+    >"$fixture/content/skills/bzr-reference/reference/commands.md"
   printf '%s\n' '# manifest — authored against bzr 0.8.2-dev.' \
-    >"$fixture/agent-skills/skills/bzr-reference/reference/commands.yml"
+    >"$fixture/content/skills/bzr-reference/reference/commands.yml"
 }
 
 UPDATE="$WORK/update.sh"
@@ -59,17 +59,20 @@ if [ "$update_rc" -eq 0 ]; then
   assert_eq "VERSION updated" "9.8.7-dev" "$(cat "$normal/agent-skills/VERSION")"
   claim_count=$(grep -E -i -l 'authored against.*bzr.*9\.8\.7-dev' \
     "$normal/agent-skills/README.md" \
-    "$normal/agent-skills/skills/bzr-reference/SKILL.md" \
-    "$normal/agent-skills/skills/bzr-reference/reference/commands.md" \
-    "$normal/agent-skills/skills/bzr-reference/reference/commands.yml" | wc -l | tr -d ' ')
+    "$normal/content/skills/bzr-reference/SKILL.md" \
+    "$normal/content/skills/bzr-reference/reference/commands.md" \
+    "$normal/content/skills/bzr-reference/reference/commands.yml" | wc -l | tr -d ' ')
   assert_eq "all four claims updated" "4" "$claim_count"
-  out=$("$VERSION_CHECK" "$normal/Cargo.toml" "$normal/agent-skills" 2>&1) && rc=0 || rc=$?
+  out=$("$VERSION_CHECK" \
+    "$normal/Cargo.toml" \
+    "$normal/agent-skills" \
+    "$normal/content/skills" 2>&1) && rc=0 || rc=$?
   assert_eq "updated fixture satisfies version contract" "0" "$rc"
 
   missing="$WORK/missing"
   make_fixture "$missing"
   printf '%s\n' '# no version claim' \
-    >"$missing/agent-skills/skills/bzr-reference/reference/commands.md"
+    >"$missing/content/skills/bzr-reference/reference/commands.md"
   out=$(cd "$missing" && NEXT=9.8.7-dev bash "$UPDATE" 2>&1) && rc=0 || rc=$?
   assert_eq "missing claim fails" "1" "$rc"
   assert_contains "missing claim names file" "$out" "commands.md"
@@ -77,7 +80,7 @@ if [ "$update_rc" -eq 0 ]; then
   duplicate="$WORK/duplicate"
   make_fixture "$duplicate"
   printf '%s\n' '# second claim authored against bzr 0.8.2-dev' \
-    >>"$duplicate/agent-skills/skills/bzr-reference/reference/commands.yml"
+    >>"$duplicate/content/skills/bzr-reference/reference/commands.yml"
   out=$(cd "$duplicate" && NEXT=9.8.7-dev bash "$UPDATE" 2>&1) && rc=0 || rc=$?
   assert_eq "duplicate claim fails" "1" "$rc"
   assert_contains "duplicate claim names file" "$out" "commands.yml"
@@ -87,9 +90,9 @@ commit_step=$(extract_step 'Commit and push branch')
 for path in \
   agent-skills/VERSION \
   agent-skills/README.md \
-  agent-skills/skills/bzr-reference/SKILL.md \
-  agent-skills/skills/bzr-reference/reference/commands.md \
-  agent-skills/skills/bzr-reference/reference/commands.yml; do
+  content/skills/bzr-reference/SKILL.md \
+  content/skills/bzr-reference/reference/commands.md \
+  content/skills/bzr-reference/reference/commands.yml; do
   assert_contains "commit stages $path" "$commit_step" "$path"
 done
 

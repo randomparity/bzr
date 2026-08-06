@@ -6,7 +6,7 @@ set -eu
 
 # shellcheck disable=SC1007  # CDPATH= is a per-command env var, not an assignment
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-MANIFEST="${1:-$HERE/../skills/bzr-reference/reference/commands.yml}"
+MANIFEST="${1:-$HERE/../../content/skills/bzr-reference/reference/commands.yml}"
 BZR="${BZR_BIN:-bzr}"
 fail=0
 

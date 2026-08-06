@@ -23,6 +23,7 @@ For installation and quick start, see [README.md](../README.md).
 - [Credential storage](#credential-storage)
 - [template](#bzr-template----bug-template-management)
 - [query](#bzr-query----saved-query-management)
+- [skills](#bzr-skills----bundled-agent-skills)
 - [completion](#bzr-completion----shell-completion)
 - [schema](#bzr-schema----published-json-schemas)
 - [Flag Syntax](#flag-syntax)
@@ -291,6 +292,9 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │                  [--resolution <R>...] [--version <V>...] [--op-sys <OS>...] [--platform <P>...]
 │                  [--whiteboard <W>] [--target-milestone <M>...] [--qa-contact <Q>...] [--url <U>]
 │                  [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
+├── skills
+│   └── install --agent <standard|bob|codex|claude|all>
+│               (--global | --project <PATH>)
 ├── completion <bash|zsh|fish|powershell>
 └── schema [NAME]
 ```
@@ -2221,6 +2225,44 @@ field; omitting it keeps the saved value. These overrides apply to
 this run only — to change a saved field permanently use
 [`bzr query update`](#bzr-query-update) (with `--clear <FIELD>` to
 reset one).
+
+---
+
+## `bzr skills` -- Bundled Agent Skills
+
+Install every agent skill embedded in the running `bzr` binary. The command is
+offline: it does not read Bugzilla configuration or contact a server. The embedded
+payload matches the installed `bzr` release.
+
+```bash
+# Install for Codex in the global ~/.agents/skills layout
+bzr skills install --agent codex --global
+
+# Install both supported layouts beneath the current repository
+bzr skills install --agent all --project .
+```
+
+Exactly one scope is required. `--global` installs under the current user's home;
+`--project <PATH>` requires an existing directory and uses its canonical absolute
+path. The command never guesses a repository root. Omitting both flags exits 7 with
+copyable examples; passing both is a clap usage error.
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `--agent <AGENT>` | Yes | `standard`, `bob`, or `codex` installs `.agents/skills`; `claude` installs `.claude/skills`; `all` installs both, in that order. |
+| `--global` | One scope | Install beneath the current user's home directory. Conflicts with `--project`. |
+| `--project <PATH>` | One scope | Install beneath an existing project directory. Use `--project .` for the current directory. Conflicts with `--global`. |
+
+Re-running the command replaces skill directories managed by `bzr` or by the
+standalone installer. It refuses a same-named foreign directory or any symlinked
+destination component; there is no force flag. Successful table output names each
+skill and destination. JSON uses the normal envelope, while NDJSON emits one bare
+compact result object.
+
+For a machine without `bzr`, the standalone installers in
+[`agent-skills/`](../agent-skills/) fetch `main` by default. Set `BZR_SKILL_REF` to a
+tag or commit for a pinned standalone payload. That path is intentionally independent
+of the release-matched payload embedded in a `bzr` binary.
 
 ---
 
