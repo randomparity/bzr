@@ -6,8 +6,8 @@ use std::io::{Read as _, Seek as _, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
 
 use super::{
-    acquire_destination_lock, destinations_for, install_with_ops, DestinationLock, FileOperations,
-    InstallRequest, SENTINEL_MAX_BYTES,
+    acquire_destination_lock, destinations_for, install_with_ops, read_pid_bytes, DestinationLock,
+    FileOperations, InstallRequest, PID_MARKER_MAX_BYTES, SENTINEL_MAX_BYTES,
 };
 use crate::cli::AgentTarget;
 use crate::commands::skills::InstallScope;
@@ -718,6 +718,64 @@ fn lock_protocol_handles_absent_transient_live_dead_and_malformed_pid_files() {
     fs::write(lock.join("pid"), b"999999999\n").unwrap();
     let mut guard = acquire_destination_lock(&destination).unwrap();
     guard.release(&mut ops).unwrap();
+}
+
+#[test]
+fn oversized_pid_markers_are_refused_without_changing_the_lock_tree() {
+    const LARGE_SPARSE_PID_BYTES: u64 = 1 << 40;
+
+    for marker_size in [PID_MARKER_MAX_BYTES as u64 + 1, LARGE_SPARSE_PID_BYTES] {
+        let temp = tempfile::TempDir::new().unwrap();
+        let destination = temp.path().join("skills");
+        let lock = destination.join(".bzr-skill.lock");
+        let pid_path = lock.join("pid");
+        fs::create_dir_all(&lock).unwrap();
+        let pid_file = File::create(&pid_path).unwrap();
+        pid_file.set_len(marker_size).unwrap();
+        drop(pid_file);
+
+        let Err(error) = acquire_destination_lock(&destination) else {
+            panic!("oversized PID marker must be refused");
+        };
+
+        assert!(error.to_string().contains("exceeds the maximum"));
+        assert!(lock.is_dir());
+        assert_eq!(fs::symlink_metadata(&pid_path).unwrap().len(), marker_size);
+    }
+}
+
+#[test]
+fn pid_marker_growth_during_read_is_bounded_and_preserves_the_lock_tree() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let lock = temp.path().join(".bzr-skill.lock");
+    let pid_path = lock.join("pid");
+    let exact_limit_marker = format!("{}\n", u32::MAX).into_bytes();
+    assert_eq!(exact_limit_marker.len(), PID_MARKER_MAX_BYTES);
+    fs::create_dir(&lock).unwrap();
+    fs::write(&pid_path, &exact_limit_marker).unwrap();
+    let mut grown_marker = exact_limit_marker.clone();
+    grown_marker.push(b'0');
+
+    let error = read_pid_bytes(std::io::Cursor::new(grown_marker), &pid_path).unwrap_err();
+
+    assert!(error.to_string().contains("exceeds the maximum"));
+    assert!(lock.is_dir());
+    assert_eq!(fs::read(&pid_path).unwrap(), exact_limit_marker);
+}
+
+#[test]
+fn exact_limit_pid_marker_still_allows_stale_lock_recovery() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let destination = temp.path().join("skills");
+    let lock = destination.join(".bzr-skill.lock");
+    let marker = format!("{}\n", u32::MAX);
+    assert_eq!(marker.len(), PID_MARKER_MAX_BYTES);
+    fs::create_dir_all(&lock).unwrap();
+    fs::write(lock.join("pid"), marker).unwrap();
+
+    let mut guard = acquire_destination_lock(&destination).unwrap();
+
+    guard.release(&mut TestOps::new(Failure::None)).unwrap();
 }
 
 #[test]
