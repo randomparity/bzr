@@ -11,6 +11,7 @@ use super::{
 };
 use crate::cli::AgentTarget;
 use crate::commands::skills::InstallScope;
+use crate::error::BzrError;
 use crate::skills::embedded;
 
 const SKILL: &str = "bzr-bulk-triage";
@@ -756,11 +757,37 @@ fn pid_marker_growth_during_read_is_bounded_and_preserves_the_lock_tree() {
     let mut grown_marker = exact_limit_marker.clone();
     grown_marker.push(b'0');
 
-    let error = read_pid_bytes(std::io::Cursor::new(grown_marker), &pid_path).unwrap_err();
+    let error = read_pid_bytes(std::io::Cursor::new(grown_marker), &pid_path, &lock).unwrap_err();
 
     assert!(error.to_string().contains("exceeds the maximum"));
     assert!(lock.is_dir());
     assert_eq!(fs::read(&pid_path).unwrap(), exact_limit_marker);
+}
+
+#[test]
+fn pid_marker_read_failure_keeps_integrity_error_and_preserves_the_lock_tree() {
+    struct FailingReader;
+
+    impl std::io::Read for FailingReader {
+        fn read(&mut self, _buffer: &mut [u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("injected PID read failure"))
+        }
+    }
+
+    let temp = tempfile::TempDir::new().unwrap();
+    let lock = temp.path().join(".bzr-skill.lock");
+    let pid_path = lock.join("pid");
+    fs::create_dir(&lock).unwrap();
+    fs::write(&pid_path, b"999999999\n").unwrap();
+
+    let error = read_pid_bytes(FailingReader, &pid_path, &lock).unwrap_err();
+
+    let BzrError::DataIntegrity(message) = error else {
+        panic!("PID read failure must remain a data-integrity error");
+    };
+    assert!(message.contains("missing or unreadable"));
+    assert!(lock.is_dir());
+    assert_eq!(fs::read(&pid_path).unwrap(), b"999999999\n");
 }
 
 #[test]
