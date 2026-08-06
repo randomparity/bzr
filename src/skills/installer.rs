@@ -600,15 +600,27 @@ fn read_pid_marker(pid_path: &Path, lock_path: &Path, marker_len: u64) -> Result
             pid_path.display()
         ))
     })?;
-    read_pid_bytes(file, pid_path)
+    read_pid_bytes(file, pid_path, lock_path)
 }
 
-fn read_pid_bytes<R: std::io::Read>(reader: R, pid_path: &Path) -> Result<Vec<u8>> {
+fn read_pid_bytes<R: std::io::Read>(
+    reader: R,
+    pid_path: &Path,
+    lock_path: &Path,
+) -> Result<Vec<u8>> {
     let mut bytes = Vec::with_capacity(PID_MARKER_MAX_BYTES + 1);
     reader
         .take((PID_MARKER_MAX_BYTES + 1) as u64)
         .read_to_end(&mut bytes)
-        .map_err(|error| io_error("read destination lock PID", pid_path, error))?;
+        .map_err(|error| {
+            BzrError::DataIntegrity(format!(
+                "destination is locked at '{}'; PID file '{}' is missing or unreadable: \
+                 {error}; remove the lock only after verifying no bzr skills install process is \
+                 using it",
+                lock_path.display(),
+                pid_path.display()
+            ))
+        })?;
     if bytes.len() > PID_MARKER_MAX_BYTES {
         return Err(BzrError::DataIntegrity(format!(
             "destination lock PID marker '{}' exceeds the maximum of {} bytes",
