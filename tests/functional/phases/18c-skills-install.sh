@@ -43,6 +43,7 @@ fi
 
 SKILLS_HOME="$FUNC_CONFIG_DIR/skills-home"
 mkdir "$SKILLS_HOME"
+SKILLS_HOME_CANONICAL=$(cd "$SKILLS_HOME" && pwd -P)
 ORIGINAL_HOME=$HOME
 export HOME="$SKILLS_HOME"
 test_begin "123c. skills install populates isolated global layouts"
@@ -51,8 +52,8 @@ export HOME="$ORIGINAL_HOME"
 if assert_success &&
   assert_json '.scope' "global" &&
   assert_json '.project == null' "true" &&
-  assert_json '.destinations[0].path' "$SKILLS_HOME/.agents/skills" &&
-  assert_json '.destinations[1].path' "$SKILLS_HOME/.claude/skills" &&
+  assert_json '.destinations[0].path' "$SKILLS_HOME_CANONICAL/.agents/skills" &&
+  assert_json '.destinations[1].path' "$SKILLS_HOME_CANONICAL/.claude/skills" &&
   [[ -f "$SKILLS_HOME/.agents/skills/bzr-reference/reference/commands.md" ]] &&
   [[ -f "$SKILLS_HOME/.claude/skills/bzr-reference/reference/commands.md" ]]; then
   test_pass
