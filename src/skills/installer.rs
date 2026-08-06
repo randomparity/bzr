@@ -17,6 +17,8 @@ const SENTINEL: &str = ".bzr-skill-managed";
 // metadata room while bounding reads of an untrusted ownership claim.
 const SENTINEL_MAX_BYTES: usize = 16 * 1024;
 const LOCK_DIRECTORY: &str = ".bzr-skill.lock";
+// A u32 PID needs at most ten decimal digits plus the trailing newline we write.
+const PID_MARKER_MAX_BYTES: usize = 11;
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone)]
@@ -534,14 +536,7 @@ fn recover_or_refuse_existing_lock(lock_path: &Path) -> Result<()> {
             pid_path.display()
         )));
     }
-    let bytes = fs::read(&pid_path).map_err(|error| {
-        BzrError::DataIntegrity(format!(
-            "destination is locked at '{}'; PID file '{}' is missing or unreadable: {error}; \
-             remove the lock only after verifying no bzr skills install process is using it",
-            lock_path.display(),
-            pid_path.display()
-        ))
-    })?;
+    let bytes = read_pid_marker(&pid_path, lock_path, pid_metadata.len())?;
     let pid = std::str::from_utf8(&bytes)
         .ok()
         .map(str::trim_end)
@@ -586,6 +581,42 @@ fn recover_or_refuse_existing_lock(lock_path: &Path) -> Result<()> {
                 .map_err(|error| io_error("remove stale destination lock", &cleanup, error))
         }
     }
+}
+
+fn read_pid_marker(pid_path: &Path, lock_path: &Path, marker_len: u64) -> Result<Vec<u8>> {
+    if marker_len > PID_MARKER_MAX_BYTES as u64 {
+        return Err(BzrError::DataIntegrity(format!(
+            "destination lock '{}' PID marker exceeds the maximum of {} bytes",
+            lock_path.display(),
+            PID_MARKER_MAX_BYTES
+        )));
+    }
+
+    let file = File::open(pid_path).map_err(|error| {
+        BzrError::DataIntegrity(format!(
+            "destination is locked at '{}'; PID file '{}' is missing or unreadable: {error}; \
+             remove the lock only after verifying no bzr skills install process is using it",
+            lock_path.display(),
+            pid_path.display()
+        ))
+    })?;
+    read_pid_bytes(file, pid_path)
+}
+
+fn read_pid_bytes<R: std::io::Read>(reader: R, pid_path: &Path) -> Result<Vec<u8>> {
+    let mut bytes = Vec::with_capacity(PID_MARKER_MAX_BYTES + 1);
+    reader
+        .take((PID_MARKER_MAX_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|error| io_error("read destination lock PID", pid_path, error))?;
+    if bytes.len() > PID_MARKER_MAX_BYTES {
+        return Err(BzrError::DataIntegrity(format!(
+            "destination lock PID marker '{}' exceeds the maximum of {} bytes",
+            pid_path.display(),
+            PID_MARKER_MAX_BYTES
+        )));
+    }
+    Ok(bytes)
 }
 
 fn validate_stale_lock_entries(lock_path: &Path) -> Result<()> {
