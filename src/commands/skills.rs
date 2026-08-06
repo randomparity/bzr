@@ -57,7 +57,13 @@ pub(crate) async fn execute(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let SkillsAction::Install(args) = action;
-    execute_install_with_current_dir(args, ctx, w, installer::install, std::env::current_dir)
+    execute_install_with_resolvers(
+        args,
+        ctx,
+        w,
+        installer::install,
+        (std::env::current_dir, dirs::home_dir),
+    )
 }
 
 #[cfg(test)]
@@ -70,9 +76,16 @@ fn execute_install_with<F>(
 where
     F: FnOnce(InstallRequest) -> Result<InstallOutcome>,
 {
-    execute_install_with_current_dir(args, ctx, w, installer_fn, std::env::current_dir)
+    execute_install_with_resolvers(
+        args,
+        ctx,
+        w,
+        installer_fn,
+        (std::env::current_dir, dirs::home_dir),
+    )
 }
 
+#[cfg(test)]
 fn execute_install_with_current_dir<F, C>(
     args: &InstallArgs,
     ctx: &CommandContext,
@@ -84,17 +97,43 @@ where
     F: FnOnce(InstallRequest) -> Result<InstallOutcome>,
     C: FnOnce() -> std::io::Result<PathBuf>,
 {
+    execute_install_with_resolvers(args, ctx, w, installer_fn, (current_dir, dirs::home_dir))
+}
+
+fn execute_install_with_resolvers<F, C, H>(
+    args: &InstallArgs,
+    ctx: &CommandContext,
+    w: &mut Writers<'_>,
+    installer_fn: F,
+    resolvers: (C, H),
+) -> Result<()>
+where
+    F: FnOnce(InstallRequest) -> Result<InstallOutcome>,
+    C: FnOnce() -> std::io::Result<PathBuf>,
+    H: FnOnce() -> Option<PathBuf>,
+{
+    let (current_dir, home_dir) = resolvers;
+    let supplied_home = if args.project.is_none() {
+        home_dir()
+    } else {
+        None
+    };
+    let resolved_home = if args.global {
+        Some(resolve_global_home(supplied_home)?)
+    } else {
+        supplied_home.and_then(|home| resolve_global_home(Some(home)).ok())
+    };
     let scope = resolve_scope_with_current_dir(
         args,
         TerminalState::current(),
-        dirs::home_dir().as_deref(),
+        resolved_home.as_deref(),
         w.err,
         current_dir,
     )?;
     let outcome = installer_fn(InstallRequest {
         agent: args.agent,
         scope: scope.clone(),
-        home: dirs::home_dir(),
+        home: resolved_home,
     })?;
     let result = install_result(args.agent, &scope, outcome.destinations);
     write_skills_install(&result, ctx.format(), w.out);
@@ -192,6 +231,36 @@ where
     Err(BzrError::input(
         "choose exactly one skill-install scope: --global or --project <PATH>".into(),
     ))
+}
+
+fn resolve_global_home(home: Option<PathBuf>) -> Result<PathBuf> {
+    let home = home.ok_or_else(|| {
+        BzrError::input(
+            "could not resolve the home directory for global skill installation; set HOME to an \
+             absolute existing directory"
+                .into(),
+        )
+    })?;
+    if !home.is_absolute() {
+        return Err(BzrError::input(format!(
+            "home directory '{}' for global skill installation is not absolute; set HOME to an \
+             absolute existing directory",
+            home.display()
+        )));
+    }
+    let home = home.canonicalize().map_err(|error| {
+        BzrError::input(format!(
+            "could not resolve home directory '{}' for global skill installation: {error}",
+            home.display()
+        ))
+    })?;
+    if !home.is_dir() {
+        return Err(BzrError::input(format!(
+            "home directory '{}' for global skill installation is not a directory",
+            home.display()
+        )));
+    }
+    Ok(home)
 }
 
 fn write_scope_guidance(

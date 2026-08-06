@@ -170,7 +170,8 @@ normal success result, and writes deterministic recovery guidance to stderr.
   runtime filesystem paths.
 - **Widened:** existing `.bzr-skill-managed` directories may be replaced by either the
   standalone installer or the new command.
-- **Existing:** the global home path comes from the platform directory provider.
+- **Existing:** the global home path comes from the platform directory provider, which
+  may consult process environment such as Unix `HOME`.
 
 ### Actors and trust
 
@@ -189,7 +190,10 @@ from the trusted source tree is installed.
   supplied symlink alias for the root is accepted and output uses the canonical absolute
   path. Every component created or traversed below that trusted root is inspected with
   `symlink_metadata`; `.agents`, `.claude`, `skills`, and skill targets may not be
-  symlinks. The platform-provided home is likewise the trusted global root.
+  symlinks. The provider-supplied global home must be absolute and resolve to an existing
+  directory, then is canonicalized once before destinations are derived. A home symlink
+  alias is accepted, and installation plus output both use that same canonical path;
+  relative, missing, and non-directory homes fail before filesystem mutation.
 - Existing skill targets are inspected without following links. A target is owned only
   when it is a regular directory containing a regular, non-symlink
   `.bzr-skill-managed` file that parses exactly one nonempty `managed-by`,
