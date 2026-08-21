@@ -132,11 +132,11 @@ AGENTS.md (CLAUDE.md is its symlink).
 
    ```markdown
    Test output selection for agent loops: `make test` runs quiet by default —
-   a summary line per suite plus full details for failures — which is the
-   right default for routine verification. Use `make test-verbose` (or
-   `VERBOSE=1 make test`) only when diagnosing a failure that needs the full
-   per-test listing or captured output from passing tests; only the exact
-   value `VERBOSE=1` enables it.
+   a summary line per suite, with failing tests still printing their captured
+   output and a full failure summary — which is the right default for routine
+   verification. Use `make test-verbose` (or `VERBOSE=1 make test`) only when
+   diagnosing a failure that needs the full per-test listing or compilation
+   detail; only the exact value `VERBOSE=1` enables it.
    ```
 
 3. Verify the symlink covers CLAUDE.md: `readlink CLAUDE.md` — expected

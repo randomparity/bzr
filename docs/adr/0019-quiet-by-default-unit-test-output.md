@@ -26,7 +26,8 @@ verbose mode; any other value keeps quiet mode — and a dedicated
 discoverable as a target, not only as a flag. AGENTS.md documents both and
 states the selection rule: use the quiet default for routine verification;
 switch to `make test-verbose` when diagnosing a failure that needs the full
-per-test listing or captured output that quiet mode does not surface.
+per-test listing or compilation detail — quiet mode already prints failing
+tests' captured output and summaries (verified below).
 
 `cargo test --quiet` keeps failure behavior intact: failing tests still print
 their captured stdout/stderr, the failure list, and the summary. verified: a

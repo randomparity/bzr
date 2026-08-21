@@ -18,8 +18,11 @@ agents (and humans) select the right mode.
   `cargo test` output, available both as `VERBOSE=1 make test` and as a
   discoverable `make test-verbose` target.
 - **R3 — Documented selection.** AGENTS.md documents both modes and states
-  when each is appropriate. CLAUDE.md is covered by the existing symlink to
-  AGENTS.md.
+  when each is appropriate: the quiet default for routine verification;
+  `make test-verbose` when diagnosing a failure that needs the full per-test
+  listing or compilation detail (quiet mode already prints failing tests'
+  captured output and summaries). CLAUDE.md is covered by the existing
+  symlink to AGENTS.md.
 - **R4 — Guardrails stay green.** `make lint` and `make test` pass; CI
   workflows, git hooks, functional-test targets, and all production Rust code
   are unchanged.
