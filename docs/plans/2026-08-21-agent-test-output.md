@@ -3,9 +3,11 @@
 **Goal:** `make test` runs quiet by default; `VERBOSE=1 make test` / `make
 test-verbose` restore full output; AGENTS.md documents the selection rule.
 
-**Architecture:** A Makefile-only change. The `test` target's cargo invocation
-gains a `TEST_FLAGS` variable that defaults to `--quiet` and is emptied when
-`VERBOSE` is exactly `1`. A new `test-verbose` phony target delegates to
+**Architecture:** A Makefile-only change. The `test` target inlines
+`$(if $(filter 1,$(VERBOSE)),,--quiet)` in its cargo invocation — quiet by
+default, full output when `VERBOSE` is exactly `1`, and deliberately no
+`TEST_FLAGS` variable that an override could put ahead of the switch. A new
+`test-verbose` phony target delegates to
 `$(MAKE) --no-print-directory VERBOSE=1 test`. Documentation changes live in
 AGENTS.md (CLAUDE.md is its symlink).
 
@@ -46,8 +48,8 @@ AGENTS.md (CLAUDE.md is its symlink).
 1. Baseline the current output shape (for the comparison in the acceptance
    criteria): run `make test 2>&1 | tail -5` and note that per-test `running N
    tests` / `test <name> ... ok` lines appear. (No edit yet.)
-2. In `Makefile`, extend the `.PHONY` line to include `test-verbose`. The
-   current line 4-11 block lists phony targets; add `test-verbose` to it.
+2. In `Makefile`, extend the `.PHONY` continuation list to include
+   `test-verbose`.
 3. Change the `test` target (immediately after the `release:` target) from
    `$(CARGO) test` to the verbosity-controlled form, verbatim:
 
@@ -89,8 +91,12 @@ AGENTS.md (CLAUDE.md is its symlink).
    ```
 
    Run `make test 2>&1 | grep -c 'q539 temporary failure-visibility probe'`.
-   Expected: count ≥ 1 (the assertion message prints under quiet mode). Then
-   remove the temporary test and confirm `git diff` shows it gone.
+   Expected: count ≥ 1 (the assertion message prints under quiet mode).
+   **Remove the temporary test as the first action after running the probe,
+   regardless of the count**, then confirm `git diff` shows it gone. If the
+   count is 0, do not run steps 8–9 and do not commit Task 1: stop and treat
+   spec R1's failure-visibility premise as falsified with the observed
+   output.
 8. Verify strictness: run `VERBOSE=true make test 2>&1 | grep -m1 'test .* \.\.\. ok' || echo quiet`
    — expected output: `quiet`.
 9. Run `make lint`. Expected: exit 0, no warnings.
