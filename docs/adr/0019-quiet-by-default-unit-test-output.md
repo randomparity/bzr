@@ -16,14 +16,14 @@ CLAUDE.md symlink) currently offers no quieter alternative and no guidance on
 when full output is warranted.
 
 ## Decision
-
 `make test` runs `cargo test --quiet` by default. A `VERBOSE=1` variable
-restores the full, unquiet cargo output, and a dedicated `make test-verbose`
-target delegates to `VERBOSE=1 make test` so the mode is discoverable as a
-target, not only as a flag. AGENTS.md documents both and states the selection
-rule: use the quiet default for routine verification; switch to
-`make test-verbose` when diagnosing a failure that needs the full per-test
-listing or captured output that quiet mode does not surface.
+restores the full, unquiet cargo output — only the exact value `1` enables
+verbose mode; any other value keeps quiet mode — and a dedicated
+`make test-verbose` target delegates to `VERBOSE=1 make test` so the mode is
+discoverable as a target, not only as a flag. AGENTS.md documents both and
+states the selection rule: use the quiet default for routine verification;
+switch to `make test-verbose` when diagnosing a failure that needs the full
+per-test listing or captured output that quiet mode does not surface.
 
 `cargo test --quiet` keeps failure behavior intact: failing tests still print
 their captured stdout/stderr, the failure list, and the summary. Quiet mode
@@ -43,12 +43,10 @@ run unattended where full output costs nothing.
   consults it, and any future target that adopts it must document that here.
 
 ## Considered & rejected
-
-- **Adopt cargo-nextest as the test runner.** verified: `command -v
-  cargo-nextest` is not installed on the development host (run 2026-08-21,
-  Fedora Linux host, no output), so it would add a required tool and a
-  dependency-policy exception for output shaping the standard libtest already
-  provides.
+- **Adopt cargo-nextest as the test runner.** judgment: a new required tool,
+  provisioned on every development and CI build host, is justified by missing
+  capability, and output shaping is not a missing capability — the standard
+  libtest already provides the failure behavior this change needs.
 - **Keep the status quo (always full output).** judgment: the cost lands on
   every agent test run, and issue #539 exists precisely because that cost is
   not acceptable.
