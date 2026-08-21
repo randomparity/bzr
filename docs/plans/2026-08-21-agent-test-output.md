@@ -48,23 +48,21 @@ AGENTS.md (CLAUDE.md is its symlink).
    tests` / `test <name> ... ok` lines appear. (No edit yet.)
 2. In `Makefile`, extend the `.PHONY` line to include `test-verbose`. The
    current line 4-11 block lists phony targets; add `test-verbose` to it.
-3. Insert the verbosity control immediately above the `test:` target (after
-   the `release:` target), verbatim:
+3. Change the `test` target (immediately after the `release:` target) from
+   `$(CARGO) test` to the verbosity-controlled form, verbatim:
 
    ```make
    # Agent ergonomics: `make test` runs quiet by default so agent loops keep
    # their context small; VERBOSE=1 (or `make test-verbose`) restores the full
    # cargo output for debugging.
-   TEST_FLAGS ?= --quiet
-   ifeq ($(VERBOSE),1)
-   TEST_FLAGS :=
-   endif
+   test: ## Run tests (quiet by default; VERBOSE=1 or test-verbose for full output)
+   	$(CARGO) test $(if $(filter 1,$(VERBOSE)),,--quiet)
    ```
 
-4. Change the `test` target body from `$(CARGO) test` to
-   `$(CARGO) test $(TEST_FLAGS)` and its help comment to
-   `## Run tests (quiet by default; VERBOSE=1 or test-verbose for full output)`.
-5. Add the new target immediately after `test`:
+   (Recipe line is indented with a literal TAB. The `$(if ...)` form is
+   deliberate: there is no `TEST_FLAGS` variable, so no command-line or
+   exported value can silently outrank the `VERBOSE` switch.)
+4. Add the new target immediately after `test`:
 
    ```make
    test-verbose: ## Run tests with full output (same as VERBOSE=1 make test)
@@ -72,15 +70,15 @@ AGENTS.md (CLAUDE.md is its symlink).
    ```
 
    (Recipe lines are indented with a literal TAB.)
-6. Verify quiet default: run `make test 2>&1 | tail -5`. Expected: a summary
+5. Verify quiet default: run `make test 2>&1 | tail -5`. Expected: a summary
    line of the form `test result: <n> passed; 0 failed; ...` (or cargo's
    quiet equivalent) and **no** `test <name> ... ok` lines in the tail.
-7. Verify verbose target: run `make test-verbose 2>&1 | grep -c '^test .* \.\.\. ok'`
+6. Verify verbose target: run `make test-verbose 2>&1 | grep -c '^test .* \.\.\. ok'`
    or, if the count is large, `make test-verbose 2>&1 | grep -m3 'test .* \.\.\. ok'`.
    Expected: at least one `test <name> ... ok` line (the full per-test listing
    is back). Also run `VERBOSE=1 make test 2>&1 | grep -m1 'test .* \.\.\. ok'`
    — expected: one such line.
-8. Verify failure visibility: temporarily add to the end of
+7. Verify failure visibility: temporarily add to the end of
    `src/error_tests.rs` (an existing sibling test file):
 
    ```rust
@@ -93,19 +91,19 @@ AGENTS.md (CLAUDE.md is its symlink).
    Run `make test 2>&1 | grep -c 'q539 temporary failure-visibility probe'`.
    Expected: count ≥ 1 (the assertion message prints under quiet mode). Then
    remove the temporary test and confirm `git diff` shows it gone.
-9. Verify strictness: run `VERBOSE=true make test 2>&1 | grep -m1 'test .* \.\.\. ok' || echo quiet`
+8. Verify strictness: run `VERBOSE=true make test 2>&1 | grep -m1 'test .* \.\.\. ok' || echo quiet`
    — expected output: `quiet`.
-10. Run `make lint`. Expected: exit 0, no warnings.
+9. Run `make lint`. Expected: exit 0, no warnings.
 
 **Acceptance criteria:**
 
-- `make test` prints no per-test success lines; failures still print details
-  (step 8 proof).
+- `make test` prints no `test <name> ... ok` lines; failures still print
+  details (step 7 proof).
 - `make test-verbose` and `VERBOSE=1 make test` print per-test success lines.
 - `VERBOSE=true make test` stays quiet.
 - `make lint` exits 0.
-- `git diff Makefile` shows only the `.PHONY` addition, the flag block, the
-  test-target change, and the new target.
+- `git diff Makefile` shows only the `.PHONY` addition, the comment + test
+  target change, and the new target.
 
 **Commit:** `git add Makefile && git commit -m "build: quiet make test by default with VERBOSE escape hatch"`
 

@@ -11,9 +11,12 @@ agents (and humans) select the right mode.
 
 ## Requirements
 
-- **R1 — Quiet default.** `make test` produces minimized cargo output: no
-  per-test success lines and no compilation chatter. Failing tests must still
-  print their captured stdout/stderr, the failure list, and the summary.
+- **R1 — Quiet default.** `make test` suppresses per-test success lines
+  (`test <name> ... ok`) and cargo compilation status lines (`Compiling`,
+  `Finished`). rustc warnings and errors still print, as do libtest's
+  per-suite `running N tests` header and its compact quiet progress markers.
+  Failing tests must still print their captured stdout/stderr, the failure
+  list, and the summary.
 - **R2 — Verbose mode.** An explicit opt-in restores the current full
   `cargo test` output, available both as `VERBOSE=1 make test` and as a
   discoverable `make test-verbose` target.
@@ -35,13 +38,8 @@ One mechanism, in the Makefile only:
 # Agent ergonomics: `make test` runs quiet by default so agent loops keep
 # their context small; VERBOSE=1 (or `make test-verbose`) restores the full
 # cargo output for debugging.
-TEST_FLAGS ?= --quiet
-ifeq ($(VERBOSE),1)
-TEST_FLAGS :=
-endif
-
 test: ## Run tests (quiet by default; VERBOSE=1 or test-verbose for full output)
-	$(CARGO) test $(TEST_FLAGS)
+	$(CARGO) test $(if $(filter 1,$(VERBOSE)),,--quiet)
 
 test-verbose: ## Run tests with full output (same as VERBOSE=1 make test)
 	$(MAKE) --no-print-directory VERBOSE=1 test
@@ -50,7 +48,10 @@ test-verbose: ## Run tests with full output (same as VERBOSE=1 make test)
 Properties:
 
 - Only the `test` target consults `VERBOSE`; every other target is untouched.
-- `TEST_FLAGS ?=` keeps the flag overridable without editing the Makefile.
+- Verbosity is controlled solely by `VERBOSE=1`. There is deliberately no
+  `TEST_FLAGS` override surface: a named variable would let a command-line or
+  exported value silently outrank the `VERBOSE` switch, and the contract this
+  design exists to keep is that `VERBOSE=1 make test` is always verbose.
 - Exactly `VERBOSE=1` enables verbose output; any other value (including
   `VERBOSE=true`) leaves quiet mode on. This strictness is deliberate and
   documented, because "truthy" handling differs across tools and a silent
@@ -60,8 +61,9 @@ Properties:
 
 - *Quiet hides an error an agent needs.* Rejected as unreachable: libtest
   always prints failing-test captured output and failure summaries regardless
-  of `-q`; verified empirically during implementation with a deliberately
-  failing test before the change lands.
+  of `-q`. ADR 0019 records an independent scratch-crate verification of this
+  property (2026-08-21); implementation must re-verify it against this
+  repository's real suites per plan Task 1 step 8 before the change lands.
 - *Agent sets VERBOSE=true expecting verbose.* Output stays quiet; AGENTS.md
   documents that only `1` counts, and `make test-verbose` exists as the
   unambiguous spelling.
