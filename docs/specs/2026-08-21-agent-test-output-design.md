@@ -1,0 +1,80 @@
+# Agent-friendly unit-test output — design
+
+Issue: [#539](https://github.com/randomparity/bzr/issues/539)
+Decision record: [ADR 0019](../adr/0019-quiet-by-default-unit-test-output.md)
+
+## Goal
+
+Make the default unit-test invocation usable inside an agent loop: minimal
+output by default, full output on explicit request, and documented guidance so
+agents (and humans) select the right mode.
+
+## Requirements
+
+- **R1 — Quiet default.** `make test` produces minimized cargo output: no
+  per-test success lines and no compilation chatter. Failing tests must still
+  print their captured stdout/stderr, the failure list, and the summary.
+- **R2 — Verbose mode.** An explicit opt-in restores the current full
+  `cargo test` output, available both as `VERBOSE=1 make test` and as a
+  discoverable `make test-verbose` target.
+- **R3 — Documented selection.** AGENTS.md documents both modes and states
+  when each is appropriate. CLAUDE.md is covered by the existing symlink to
+  AGENTS.md.
+- **R4 — Guardrails stay green.** `make lint` and `make test` pass; CI
+  workflows, git hooks, functional-test targets, and all production Rust code
+  are unchanged.
+
+## Design
+
+One mechanism, in the Makefile only:
+
+```make
+# Agent ergonomics: `make test` runs quiet by default so agent loops keep
+# their context small; VERBOSE=1 (or `make test-verbose`) restores the full
+# cargo output for debugging.
+TEST_FLAGS ?= --quiet
+ifeq ($(VERBOSE),1)
+TEST_FLAGS :=
+endif
+
+test: ## Run tests (quiet by default; VERBOSE=1 or test-verbose for full output)
+	$(CARGO) test $(TEST_FLAGS)
+
+test-verbose: ## Run tests with full output (same as VERBOSE=1 make test)
+	$(MAKE) --no-print-directory VERBOSE=1 test
+```
+
+Properties:
+
+- Only the `test` target consults `VERBOSE`; every other target is untouched.
+- `TEST_FLAGS ?=` keeps the flag overridable without editing the Makefile.
+- Exactly `VERBOSE=1` enables verbose output; any other value (including
+  `VERBOSE=true`) leaves quiet mode on. This strictness is deliberate and
+  documented, because "truthy" handling differs across tools and a silent
+  mismatch is hard to diagnose.
+
+## Failure modes considered
+
+- *Quiet hides an error an agent needs.* Rejected as unreachable: libtest
+  always prints failing-test captured output and failure summaries regardless
+  of `-q`; verified empirically during implementation with a deliberately
+  failing test before the change lands.
+- *Agent sets VERBOSE=true expecting verbose.* Output stays quiet; AGENTS.md
+  documents that only `1` counts, and `make test-verbose` exists as the
+  unambiguous spelling.
+
+## Testing
+
+The Makefile has no automated test harness in this repository; verification is
+behavioral, executed during implementation and recorded in the plan's steps:
+
+1. `make test` completes and prints a summary without per-test `ok` lines.
+2. `make test-verbose` and `VERBOSE=1 make test` print per-test lines.
+3. A temporarily introduced failing test still prints its assertion message
+   under `make test` (then removed).
+4. `make lint` passes.
+
+## Out of scope
+
+CI workflow files, git hooks, functional tests, production Rust code, and any
+new tooling such as cargo-nextest (see ADR 0019).
