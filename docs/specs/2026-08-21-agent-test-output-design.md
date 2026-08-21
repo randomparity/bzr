@@ -45,6 +45,9 @@ test-verbose: ## Run tests with full output (same as VERBOSE=1 make test)
 	$(MAKE) --no-print-directory VERBOSE=1 test
 ```
 
+(Register `test-verbose` in the Makefile's `.PHONY` line when adding the
+target.)
+
 Properties:
 
 - Only the `test` target consults `VERBOSE`; every other target is untouched.
@@ -62,8 +65,7 @@ Properties:
 - *Quiet hides an error an agent needs.* Rejected as unreachable: libtest
   always prints failing-test captured output and failure summaries regardless
   of `-q`. ADR 0019 records an independent scratch-crate verification of this
-  property (2026-08-21); implementation must re-verify it against this
-  repository's real suites per plan Task 1 step 8 before the change lands.
+  repository's real suites per plan Task 1 step 7 before the change lands.
 - *Agent sets VERBOSE=true expecting verbose.* Output stays quiet; AGENTS.md
   documents that only `1` counts, and `make test-verbose` exists as the
   unambiguous spelling.
