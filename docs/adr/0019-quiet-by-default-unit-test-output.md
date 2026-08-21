@@ -26,10 +26,14 @@ switch to `make test-verbose` when diagnosing a failure that needs the full
 per-test listing or captured output that quiet mode does not surface.
 
 `cargo test --quiet` keeps failure behavior intact: failing tests still print
-their captured stdout/stderr, the failure list, and the summary. Quiet mode
-removes per-test success lines and compilation noise only. CI, the pre-commit
-hook, the pre-push hook, and the functional-test targets are unchanged; they
-run unattended where full output costs nothing.
+their captured stdout/stderr, the failure list, and the summary. verified: a
+scratch crate on this host with one passing and one failing test (stdout and
+stderr prints before an `assert_eq!` failure), run 2026-08-21 — `cargo test
+--quiet` printed the captured output, panic message, failure list, and
+`test result: FAILED` summary (exit 101) while suppressing per-test ok lines.
+Quiet mode removes per-test success lines and compilation noise only. CI, the
+pre-commit hook, the pre-push hook, and the functional-test targets are
+unchanged; they run unattended where full output costs nothing.
 
 ## Consequences
 
@@ -41,6 +45,8 @@ run unattended where full output costs nothing.
   made directly (hooks, CI, docs) keep their existing behavior and output.
 - `VERBOSE` is a conventional, generic variable name; only the `test` target
   consults it, and any future target that adopts it must document that here.
+  The same conventionality cuts the other way: a shell with `VERBOSE=1`
+  exported for some other tool silently flips `make test` to verbose output.
 
 ## Considered & rejected
 - **Adopt cargo-nextest as the test runner.** judgment: a new required tool,
