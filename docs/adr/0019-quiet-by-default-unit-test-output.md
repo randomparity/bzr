@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted
+Accepted for the implementing change of issue #539
+(`docs/plans/2026-08-21-agent-test-output.md`, same PR): the Decision
+describes the repository state at that change's merge, not at this record's
+commit.
 
 ## Context
 
