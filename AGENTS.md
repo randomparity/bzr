@@ -13,6 +13,8 @@ cargo build                        # Debug build
 cargo build --release              # Release build
 cargo test                         # Run all tests
 cargo test <test_name>             # Run a single test
+make test                          # Run tests (quiet output; failures still print details)
+make test-verbose                  # Run tests with full cargo output (or: VERBOSE=1 make test)
 cargo fmt                          # Format code
 cargo clippy -- -D warnings        # Lint (warnings are errors)
 make lint                          # Format + clippy in one step
@@ -22,6 +24,16 @@ cargo install --path .             # Install locally
 ```
 
 Git hooks: `make install-hooks` installs a pre-commit hook (`cargo fmt --check` + `cargo clippy`) and a pre-push hook (`cargo test`). Run `make setup` to install everything, including hooks.
+
+Test output selection for agent loops: `make test` runs quiet by default —
+a summary line per suite, with failing tests still printing their captured
+output and a full failure summary — which is the right default for routine
+verification. Use `make test-verbose` (or `VERBOSE=1 make test`) only when
+diagnosing a failure that needs the full per-test listing or compilation
+detail; only the exact value `VERBOSE=1` enables it. Note that `VERBOSE` is
+a generic name: a shell where `VERBOSE=1` is exported for some other tool
+will make `make test` verbose unexpectedly, so prefer the unambiguous
+`make test-verbose`.
 
 ## Architecture
 
