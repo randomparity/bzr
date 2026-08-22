@@ -2,7 +2,7 @@ CARGO ?= cargo
 RUST_MIN_VERSION := 1.89.0
 
 .PHONY: setup check-rust ensure-components ensure-coverage-prereqs ensure-mutants-prereq install-hooks \
-        build release test coverage fmt clippy lint check-build-script check-test-layout \
+        build release test test-verbose coverage fmt clippy lint check-build-script check-test-layout \
         check-no-spawn clean help man \
         skills-test \
         mutants mutants-fast mutants-list audit-mutant-skips \
@@ -76,8 +76,14 @@ build: ## Build in debug mode
 release: ## Build in release mode
 	$(CARGO) build --release
 
-test: ## Run tests
-	$(CARGO) test
+# Agent ergonomics: `make test` runs quiet by default so agent loops keep
+# their context small; VERBOSE=1 (or `make test-verbose`) restores the full
+# cargo output for debugging.
+test: ## Run tests (quiet by default; VERBOSE=1 or test-verbose for full output)
+	$(CARGO) test $(if $(filter 1,$(VERBOSE)),,--quiet)
+
+test-verbose: ## Run tests with full output (same as VERBOSE=1 make test)
+	$(MAKE) --no-print-directory VERBOSE=1 test
 
 skills-test: ## Build bzr and run agent-skills checks (package, drift, installer, lint)
 	$(CARGO) build --locked
