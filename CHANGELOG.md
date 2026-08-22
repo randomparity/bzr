@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Project logo (`docs/assets/bzr-logo.png`) now appears at the top of the README.
+- Project website at `https://randomparity.github.io/bzr/`, built by the new
+  `site.yml` GitHub Pages workflow. The Home and Changelog pages are generated
+  from `README.md` and `CHANGELOG.md` on every push to `main`, so the site never
+  drifts from the repo; the full CLI reference links to `docs/bzr-cli.md` on
+  GitHub.
 - `bzr skills install` installs every bundled bzr agent skill from the offline,
   release-matched payload embedded in the running binary. Callers choose an explicit
   `--global` or `--project <PATH>` scope (`--project .` selects the current
