@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="docs/assets/bzr-logo.png" alt="bzr logo" width="128">
+</div>
+
 # bzr - Bugzilla CLI
 
 [![CI](https://github.com/randomparity/bzr/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/randomparity/bzr/actions/workflows/ci.yml)

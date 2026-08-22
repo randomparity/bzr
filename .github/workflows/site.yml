@@ -1,0 +1,58 @@
+name: Site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'README.md'
+      - 'CHANGELOG.md'
+      - 'site/**'
+      - 'docs/assets/**'
+      - '.github/workflows/site.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build pages from README and CHANGELOG
+        run: |
+          mkdir -p _site/docs
+          cp -r docs/assets _site/docs/assets
+          cp scorecard.png _site/scorecard.png
+          pandoc -f gfm -t html5 --template site/template.html \
+            --metadata title="bzr - Bugzilla CLI" \
+            --output _site/index.html README.md
+          pandoc -f gfm -t html5 --template site/template.html \
+            --metadata title="bzr Changelog" \
+            --output _site/changelog.html CHANGELOG.md
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@f33f41b675f0ab2dc5a6863c9a170fe83af3571e # v4.0.0
