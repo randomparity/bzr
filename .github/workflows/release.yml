@@ -395,9 +395,15 @@ jobs:
           fi
           echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
 
+      - name: Validate release-note security assessment
+        env:
+          NOTES_FILE: ${{ steps.notes.outputs.notes_file }}
+        run: bash tools/check-release-security-notes.sh "$NOTES_FILE"
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          NOTES_FILE: ${{ steps.notes.outputs.notes_file }}
         run: |
           PRERELEASE=""
           if [[ "$GITHUB_REF_NAME" == *-* ]]; then
@@ -405,7 +411,7 @@ jobs:
           fi
           gh release create "$GITHUB_REF_NAME" \
             --title "bzr $GITHUB_REF_NAME" \
-            --notes-file "${{ steps.notes.outputs.notes_file }}" \
+            --notes-file "$NOTES_FILE" \
             $PRERELEASE \
             artifacts/*
 

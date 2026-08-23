@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+VALIDATOR="$SCRIPT_DIR/check-release-security-notes.sh"
+FIXTURES=$(mktemp -d)
+SIDE_EFFECT="$FIXTURES/side-effect"
+trap 'rm -r "$FIXTURES"' EXIT
+
+NO_VULNERABILITIES='Security assessment: No publicly identified runtime vulnerabilities in bzr were fixed in this release.'
+QUALIFYING_VULNERABILITIES='Security assessment: Publicly identified runtime vulnerabilities in bzr were fixed in this release.'
+
+write_fixture() {
+	local name=$1
+	cat >"$FIXTURES/$name"
+	printf '%s\n' "$FIXTURES/$name"
+}
+
+expect_allowed() {
+	local name=$1
+	local fixture=$2
+	if ! bash "$VALIDATOR" "$fixture" >/dev/null 2>&1; then
+		echo "expected release-security validator to allow $name" >&2
+		return 1
+	fi
+}
+
+expect_rejected() {
+	local name=$1
+	local fixture=$2
+	if bash "$VALIDATOR" "$fixture" >/dev/null 2>&1; then
+		echo "expected release-security validator to reject $name" >&2
+		return 1
+	fi
+}
+
+no_qualifying=$(
+	write_fixture no-qualifying <<EOF
+$NO_VULNERABILITIES
+EOF
+)
+expect_allowed "exact no-qualifying assessment" "$no_qualifying"
+
+dependency_note=$(
+	write_fixture dependency-note <<EOF
+$NO_VULNERABILITIES
+
+### Dependency security
+
+- Updated a dependency to address CVE-2026-12345.
+EOF
+)
+expect_allowed "dependency CVE after no-qualifying assessment" "$dependency_note"
+
+unidentified_issue=$(
+	write_fixture unidentified-issue <<EOF
+$NO_VULNERABILITIES
+
+- Fixed a runtime issue that has no public identifier.
+EOF
+)
+expect_allowed "fixed issue without public identifier" "$unidentified_issue"
+
+complete_entry=$(
+	write_fixture complete-entry <<EOF
+$QUALIFYING_VULNERABILITIES
+#### Vulnerability: GHSA-1234-5678-9abc
+- Affected bzr versions: < 1.2.3
+- First fixed version: 1.2.3
+- Runtime impact: A remote server could cause a denial of service.
+- Advisory: https://github.com/randomparity/bzr/security/advisories/GHSA-1234-5678-9abc
+- Upgrade guidance: Upgrade to bzr 1.2.3 or later.
+EOF
+)
+expect_allowed "complete qualifying entry" "$complete_entry"
+
+missing_assessment=$(
+	write_fixture missing-assessment <<'EOF'
+### Dependency security
+
+- Updated a dependency to address CVE-2026-12345.
+EOF
+)
+expect_rejected "missing assessment" "$missing_assessment"
+
+both_outcomes=$(
+	write_fixture both-outcomes <<EOF
+$NO_VULNERABILITIES
+$QUALIFYING_VULNERABILITIES
+EOF
+)
+expect_rejected "both outcomes" "$both_outcomes"
+
+empty_field=$(
+	write_fixture empty-field <<EOF
+$QUALIFYING_VULNERABILITIES
+#### Vulnerability: GHSA-empty-field
+- Affected bzr versions: < 1.2.3
+- First fixed version:
+- Runtime impact: A remote server could cause a denial of service.
+- Advisory: https://github.com/randomparity/bzr/security/advisories/GHSA-empty-field
+- Upgrade guidance: Upgrade to bzr 1.2.3 or later.
+EOF
+)
+expect_rejected "empty field" "$empty_field"
+
+duplicate_field=$(
+	write_fixture duplicate-field <<EOF
+$QUALIFYING_VULNERABILITIES
+#### Vulnerability: GHSA-duplicate-field
+- Affected bzr versions: < 1.2.3
+- First fixed version: 1.2.3
+- Runtime impact: A remote server could cause a denial of service.
+- Advisory: https://github.com/randomparity/bzr/security/advisories/GHSA-duplicate-field
+- Advisory: https://example.com/duplicate
+- Upgrade guidance: Upgrade to bzr 1.2.3 or later.
+EOF
+)
+expect_rejected "duplicate field" "$duplicate_field"
+
+non_https_advisory=$(
+	write_fixture non-https-advisory <<EOF
+$QUALIFYING_VULNERABILITIES
+#### Vulnerability: GHSA-http-advisory
+- Affected bzr versions: < 1.2.3
+- First fixed version: 1.2.3
+- Runtime impact: A remote server could cause a denial of service.
+- Advisory: http://example.com/advisory
+- Upgrade guidance: Upgrade to bzr 1.2.3 or later.
+EOF
+)
+expect_rejected "non-HTTPS advisory" "$non_https_advisory"
+
+dependency_only=$(
+	write_fixture dependency-only <<'EOF'
+### Dependency security
+
+#### Vulnerability: CVE-2026-12345
+- Affected bzr versions: dependency only
+- First fixed version: dependency update
+- Runtime impact: Dependency-only issue.
+- Advisory: https://example.com/CVE-2026-12345
+- Upgrade guidance: Update the dependency.
+EOF
+)
+expect_rejected "dependency-only CVE without project assessment" "$dependency_only"
+
+incomplete_second_entry=$(
+	write_fixture incomplete-second-entry <<EOF
+$QUALIFYING_VULNERABILITIES
+#### Vulnerability: GHSA-complete-entry
+- Affected bzr versions: < 1.2.3
+- First fixed version: 1.2.3
+- Runtime impact: A remote server could cause a denial of service.
+- Advisory: https://example.com/GHSA-complete-entry
+- Upgrade guidance: Upgrade to bzr 1.2.3 or later.
+#### Vulnerability: GHSA-incomplete-entry
+- Affected bzr versions: < 1.2.4
+- First fixed version: 1.2.4
+- Runtime impact: A remote server could cause a denial of service.
+- Advisory: https://example.com/GHSA-incomplete-entry
+EOF
+)
+expect_rejected "incomplete second entry" "$incomplete_second_entry"
+
+over_1_mib="$FIXTURES/over-1-mib"
+dd if=/dev/zero of="$over_1_mib" bs=1048577 count=1 2>/dev/null
+expect_rejected "file over 1 MiB" "$over_1_mib"
+
+over_4096_byte_line="$FIXTURES/over-4096-byte-line"
+printf '%*s\n' 4097 '' >"$over_4096_byte_line"
+expect_rejected "line over 4,096 bytes" "$over_4096_byte_line"
+
+literal_metacharacters=$(
+	write_fixture literal-metacharacters <<EOF
+$QUALIFYING_VULNERABILITIES
+#### Vulnerability: GHSA-literal-data
+- Affected bzr versions: \$(touch "$SIDE_EFFECT")
+- First fixed version: 1.2.3; echo not-executed
+- Runtime impact: \$HOME & | < > \`backticks\`
+- Advisory: https://example.com/advisory?note=\$(touch "$SIDE_EFFECT")
+- Upgrade guidance: Keep literal \$(touch "$SIDE_EFFECT") text as data.
+EOF
+)
+expect_allowed "literal shell metacharacters" "$literal_metacharacters"
+if [[ -e $SIDE_EFFECT ]]; then
+	echo "validator executed a release-note field value" >&2
+	exit 1
+fi
+
+if bash "$VALIDATOR" >/dev/null 2>&1; then
+	echo "expected release-security validator to reject missing arguments" >&2
+	exit 1
+fi
+
+if bash "$VALIDATOR" "$no_qualifying" "$complete_entry" >/dev/null 2>&1; then
+	echo "expected release-security validator to reject extra arguments" >&2
+	exit 1
+fi
+
+if bash "$VALIDATOR" "$FIXTURES" >/dev/null 2>&1; then
+	echo "expected release-security validator to reject a directory" >&2
+	exit 1
+fi

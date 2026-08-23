@@ -100,7 +100,7 @@ fmt: ## Format source code
 clippy: ## Run clippy lints
 	$(CARGO) clippy --all-targets --features test-helpers -- -D warnings
 
-lint: fmt clippy check-build-script check-test-layout check-no-spawn ## Run all linters
+lint: fmt clippy check-build-script check-test-layout check-no-spawn check-release-security-notes ## Run all linters
 
 check-build-script: ## Run dependency-free build-script validation tests
 	@mkdir -p target
@@ -121,6 +121,9 @@ check-no-spawn: ## Guard the single-threaded-runtime assumption (CONC-3)
 	@command -v rg >/dev/null || { echo "ERROR: ripgrep (rg) is required for this guard"; exit 1; }
 	bash tools/check-no-spawn.sh .
 	bash tools/check-no-spawn-tests.sh
+
+check-release-security-notes: ## Validate release-note security assessments
+	bash tools/check-release-security-notes-tests.sh
 
 clean: ## Remove build artifacts
 	$(CARGO) clean
