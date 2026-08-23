@@ -29,15 +29,15 @@ make_fixture() {
 name = "fixture"
 version = "9.8.7-dev"
 EOF
-  printf '%s\n' '0.8.2' >"$fixture/agent-skills/VERSION"
+  printf '%s\n' '0.8.2-dev' >"$fixture/agent-skills/VERSION"
   # shellcheck disable=SC2016  # Literal backticks document the authored-against claim.
-  printf '%s\n' 'The surface is authored against `bzr` 0.8.2.' \
+  printf '%s\n' 'The surface is authored against `bzr` 0.8.2-dev.' \
     >"$fixture/agent-skills/README.md"
-  printf '%s\n' 'This reference is authored against **bzr 0.8.2**.' \
+  printf '%s\n' 'This reference is authored against **bzr 0.8.2-dev**.' \
     >"$fixture/content/skills/bzr-reference/SKILL.md"
-  printf '%s\n' '# commands (authored against bzr 0.8.2)' \
+  printf '%s\n' '# commands (authored against bzr 0.8.2-dev)' \
     >"$fixture/content/skills/bzr-reference/reference/commands.md"
-  printf '%s\n' '# manifest — authored against bzr 0.8.2.' \
+  printf '%s\n' '# manifest — authored against bzr 0.8.2-dev.' \
     >"$fixture/content/skills/bzr-reference/reference/commands.yml"
 }
 
@@ -79,7 +79,7 @@ if [ "$update_rc" -eq 0 ]; then
 
   duplicate="$WORK/duplicate"
   make_fixture "$duplicate"
-  printf '%s\n' '# second claim authored against bzr 0.8.2' \
+  printf '%s\n' '# second claim authored against bzr 0.8.2-dev' \
     >>"$duplicate/content/skills/bzr-reference/reference/commands.yml"
   out=$(cd "$duplicate" && NEXT=9.8.7-dev bash "$UPDATE" 2>&1) && rc=0 || rc=$?
   assert_eq "duplicate claim fails" "1" "$rc"
