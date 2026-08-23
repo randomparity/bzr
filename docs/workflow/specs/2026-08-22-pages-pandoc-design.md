@@ -25,10 +25,11 @@ The `deploy` job depends on `build`. It is skipped when
 continue through the existing protected `github-pages` environment and
 `actions/deploy-pages` step.
 
-Workflow concurrency uses a production group for pushes and manual dispatches
-and a pull-request-specific group for each pull request. Production deployments
-stay serialized, but pull-request builds cannot occupy or replace a pending
-production run.
+Workflow concurrency retains `pages` for pushes and manual dispatches and uses
+`pages-pr-<number>` for pull requests. GitHub replaces an existing pending run
+when another run enters the same concurrency group, even when
+`cancel-in-progress` is false. Separate groups therefore keep PR activity from
+replacing a pending production run.
 
 ## Failure behavior
 
@@ -80,8 +81,8 @@ Pandoc package. Only non-PR events are trusted to reach deployment.
 - The deploy job alone retains `pages: write` and `id-token: write`.
 - The deploy job's event guard excludes pull requests before the environment or
   deployment action runs.
-- Event-specific concurrency groups prevent pull requests from occupying or
-  replacing the production deployment lane.
+- Event-specific concurrency groups prevent pull requests from replacing a
+  pending production deployment run.
 - Pandoc receives repository files as files, not interpolated shell values.
 - Output existence checks prevent upload of a silently incomplete site.
 

@@ -25,16 +25,17 @@ dispatches keep the deployment behavior they had before pull-request coverage
 was added.
 
 Pull-request and production runs use distinct concurrency groups. Production
-runs remain serialized, while a pull-request build cannot replace a pending
-`main` deployment run.
+runs retain the existing `pages` group, while each pull request uses a group
+keyed by its number. This separation is required because GitHub replaces an
+existing pending run when another run enters the same concurrency group, even
+when `cancel-in-progress` is false.
 
 ## Consequences
 
 - The same commands that produce the deployed artifact execute before merge.
 - Pull requests download an Ubuntu package and upload a temporary Pages
   artifact, but cannot invoke `actions/deploy-pages`.
-- Pull-request builds cannot occupy or replace the serialized production
-  deployment lane.
+- Pull-request builds cannot replace a pending production deployment run.
 - Package availability is owned by Ubuntu's repository for the runner image;
   an unavailable package fails visibly before site generation.
 - The post-merge deployment remains the final proof of the public URL because a
