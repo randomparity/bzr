@@ -7,19 +7,19 @@ readonly MAX_FILE_BYTES=1048576
 readonly MAX_LINE_BYTES=4096
 
 if (($# != 2)); then
-	echo "ERROR: release-note extraction requires a changelog file and version." >&2
-	exit 1
+  echo "ERROR: release-note extraction requires a changelog file and version." >&2
+  exit 1
 fi
 
 changelog_file=$1
 version=$2
 if [[ ! -f $changelog_file || ! -r $changelog_file ]]; then
-	echo "ERROR: release-note extraction requires a readable regular changelog file." >&2
-	exit 1
+  echo "ERROR: release-note extraction requires a readable regular changelog file." >&2
+  exit 1
 fi
 if [[ -z $version ]]; then
-	echo "ERROR: release-note extraction requires a non-empty version." >&2
-	exit 1
+  echo "ERROR: release-note extraction requires a non-empty version." >&2
+  exit 1
 fi
 
 notes_file=$(mktemp)
@@ -74,18 +74,18 @@ if ! awk -v version="$version" '
     }
   }
 ' <"$changelog_file" >"$notes_file"; then
-	exit 1
+  exit 1
 fi
 
 file_bytes=$(wc -c <"$notes_file")
 if ((file_bytes > MAX_FILE_BYTES)); then
-	echo "ERROR: candidate release notes must not exceed 1 MiB." >&2
-	exit 1
+  echo "ERROR: candidate release notes must not exceed 1 MiB." >&2
+  exit 1
 fi
 
 if ! awk -v maximum="$MAX_LINE_BYTES" 'length($0) > maximum { exit 1 }' <"$notes_file"; then
-	echo "ERROR: candidate release-note lines must not exceed 4,096 bytes." >&2
-	exit 1
+  echo "ERROR: candidate release-note lines must not exceed 4,096 bytes." >&2
+  exit 1
 fi
 
 if ! awk '
@@ -102,10 +102,11 @@ if ! awk '
   }
 
   is_tilde_fence($0) || index($0, "<") != 0 || index($0, ">") != 0 || \
-    index($0, "[") != 0 || index($0, "]") != 0 || index($0, "`") != 0 { exit 1 }
+    index($0, "[") != 0 || index($0, "]") != 0 || index($0, "`") != 0 || \
+    index($0, "&") != 0 { exit 1 }
 ' <"$notes_file"; then
-	echo "ERROR: candidate release notes must use the bounded plain-text grammar." >&2
-	exit 1
+  echo "ERROR: candidate release notes must use the bounded plain-text grammar." >&2
+  exit 1
 fi
 
 cat "$notes_file"

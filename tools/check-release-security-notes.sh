@@ -9,28 +9,28 @@ readonly NO_VULNERABILITIES='Security assessment: No publicly identified runtime
 readonly QUALIFYING_VULNERABILITIES='Security assessment: Publicly identified runtime vulnerabilities in bzr were fixed in this release.'
 
 fail() {
-	local requirement=$1
-	echo "ERROR: release-note vulnerability assessment violates $requirement." >&2
-	echo "Update the release's CHANGELOG.md section." >&2
-	exit 1
+  local requirement=$1
+  echo "ERROR: release-note vulnerability assessment violates $requirement." >&2
+  echo "Update the release's CHANGELOG.md section." >&2
+  exit 1
 }
 
 if (($# != 1)); then
-	fail "the validator requires exactly one release-notes file"
+  fail "the validator requires exactly one release-notes file"
 fi
 
 notes_file=$1
 if [[ ! -f $notes_file || ! -r $notes_file ]]; then
-	fail "the release-notes input must be a readable regular file"
+  fail "the release-notes input must be a readable regular file"
 fi
 
 file_bytes=$(wc -c <"$notes_file")
 if ((file_bytes > MAX_FILE_BYTES)); then
-	fail "the release-notes file must not exceed 1 MiB"
+  fail "the release-notes file must not exceed 1 MiB"
 fi
 
 if ! awk -v maximum="$MAX_LINE_BYTES" 'length($0) > maximum { exit 1 }' <"$notes_file"; then
-	fail "release-note lines must not exceed 4,096 bytes"
+  fail "release-note lines must not exceed 4,096 bytes"
 fi
 
 if ! awk '
@@ -61,14 +61,15 @@ if ! awk '
   }
 
   is_fence_marker($0) || index($0, "<") != 0 || index($0, ">") != 0 || \
-    index($0, "[") != 0 || index($0, "]") != 0 || index($0, "`") != 0 { exit 1 }
+    index($0, "[") != 0 || index($0, "]") != 0 || index($0, "`") != 0 || \
+    index($0, "&") != 0 { exit 1 }
 ' <"$notes_file"; then
-	fail "release notes must use the bounded plain-text grammar"
+  fail "release notes must use the bounded plain-text grammar"
 fi
 
 awk \
-	-v no_vulnerabilities="$NO_VULNERABILITIES" \
-	-v qualifying_vulnerabilities="$QUALIFYING_VULNERABILITIES" '
+  -v no_vulnerabilities="$NO_VULNERABILITIES" \
+  -v qualifying_vulnerabilities="$QUALIFYING_VULNERABILITIES" '
   function fail(requirement, entry_number, message) {
     message = "ERROR: release-note vulnerability assessment"
     if (entry_number != "") {
