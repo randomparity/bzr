@@ -14,7 +14,7 @@ pub(crate) enum CommentAction {
     ///
     ///   bzr comment list 12345
     ///   bzr comment list 12345 --since 2026-01-01
-    ///   bzr comment list 12345 --json | jq '.comments | length'
+    ///   bzr comment list 12345 --json | jq '.data | length'
     ///
     /// See bzr-bug-history(1) for the full bug change log including
     /// non-comment events and bzr-comment-add(1) to post a comment.

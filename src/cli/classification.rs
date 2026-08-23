@@ -16,7 +16,7 @@ pub(crate) enum ClassificationAction {
     /// Examples:
     ///
     ///   bzr classification list
-    ///   bzr classification list --json | jq '.[].name'
+    ///   bzr classification list --json | jq -r '.data[].name'
     ///
     /// See bzr-classification-view(1) for one classification's full detail.
     #[command(verbatim_doc_comment)]
@@ -40,7 +40,7 @@ pub(crate) enum ClassificationAction {
     ///
     ///   bzr classification view Unclassified
     ///   bzr classification view "Red Hat" --json
-    ///   bzr classification view 1 --json | jq '.products[].name'
+    ///   bzr classification view 1 --json | jq -r '.data.products[].name'
     ///
     /// See bzr-product-list(1) for the flat product catalog and
     /// bzr-product-view(1) for one product's full details.

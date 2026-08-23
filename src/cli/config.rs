@@ -186,7 +186,7 @@ pub(crate) enum ConfigAction {
     /// Examples:
     ///
     ///   bzr config show
-    ///   bzr config show --json | jq '.servers[] | .url'
+    ///   bzr config show --json | jq -r '.data.servers[] | .url'
     ///
     /// See bzr-config-set-server(1) to add or modify entries.
     #[command(verbatim_doc_comment)]

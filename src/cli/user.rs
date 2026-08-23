@@ -14,7 +14,7 @@ pub(crate) enum UserAction {
     ///
     ///   bzr user search alice
     ///   bzr user search example.com --details
-    ///   bzr user search alice --json | jq '.users[].login'
+    ///   bzr user search alice --json | jq -r '.data[].email'
     ///
     /// See bzr-user-create(1) to add a user (admin only) and
     /// bzr-group(1) for group-membership management.

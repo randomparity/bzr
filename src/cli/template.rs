@@ -175,7 +175,7 @@ pub(crate) enum TemplateAction {
     /// Examples:
     ///
     ///   bzr template list
-    ///   bzr template list --json | jq '.templates[].name'
+    ///   bzr template list --json | jq -r '.data | keys[]'
     ///
     /// See bzr-template-show(1) for the full parameters of one
     /// template.

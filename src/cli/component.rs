@@ -16,7 +16,7 @@ pub(crate) enum ComponentAction {
     /// Examples:
     ///
     ///   bzr component list --product MyApp
-    ///   bzr --json component list --product MyApp | jq '.[].name'
+    ///   bzr --json component list --product MyApp | jq -r '.data[].name'
     ///
     /// See bzr-component-view(1) for a single component's detail.
     #[command(verbatim_doc_comment)]
