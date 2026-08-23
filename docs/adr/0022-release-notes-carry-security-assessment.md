@@ -15,12 +15,16 @@ their presence can also be mistaken for disclosure of a project vulnerability.
 
 Every release-note section carries exactly one explicit project-vulnerability assessment. A
 release that fixes no qualifying vulnerability says so. A release that does lists every
-qualifying public identifier known at release-preparation time and records affected `bzr`
+qualifying public identifier known when the GitHub Release is created and records affected `bzr`
 versions, the first fixed version, runtime impact, advisory link, and upgrade guidance.
 
 Keep GitHub Security Advisories as the canonical public inventory. Keep dependency-only advisory
 notes separate from the project assessment. Validate the assessment in the release workflow
-before creating the GitHub Release.
+before creating the GitHub Release. The release operator performs the final inventory review and
+attests the notes immediately before pushing the tag. The structural validator cannot make that
+external review atomic with publication, so an identifier published in the interval between tag
+push and GitHub Release creation remains a disclosed residual race; maintainers update the release
+notes promptly if it occurs.
 
 ## Consequences
 
@@ -29,6 +33,8 @@ before creating the GitHub Release.
 - Dependency security updates remain visible without satisfying the project-vulnerability rule.
 - Automation checks structure and presence, but maintainers remain responsible for completeness
   against the advisory inventory.
+- A public identifier can appear after the final pre-tag review but before automated release
+  creation; correcting the published notes is an explicit maintainer responsibility.
 
 ## Considered & rejected
 
