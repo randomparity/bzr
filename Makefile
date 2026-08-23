@@ -3,7 +3,7 @@ RUST_MIN_VERSION := 1.89.0
 
 .PHONY: setup check-rust ensure-components ensure-coverage-prereqs ensure-mutants-prereq install-hooks \
         build release test test-verbose test-fast test-one coverage fmt clippy lint check-build-script check-test-layout \
-        check-no-spawn check-release-security-notes clean help man \
+        check-no-spawn check-release-security-notes check-shell clean help man \
         skills-test \
         mutants mutants-fast mutants-list audit-mutant-skips \
         functional-build functional-start functional-test functional-stop \
@@ -133,6 +133,12 @@ check-no-spawn: ## Guard the single-threaded-runtime assumption (CONC-3)
 
 check-release-security-notes: ## Validate release-note security assessments
 	bash tools/check-release-security-notes-tests.sh
+
+check-shell: ## Lint shell scripts (shellcheck + shfmt, POSIX and bash)
+	shellcheck -s sh install.sh tests/installer/smoke.sh
+	shellcheck tools/*.sh
+	shfmt -d -ln posix -i 2 install.sh tests/installer/smoke.sh
+	shfmt -d -i 2 tools/*.sh
 
 clean: ## Remove build artifacts
 	$(CARGO) clean
