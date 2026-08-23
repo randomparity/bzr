@@ -14,9 +14,11 @@ Do not report vulnerabilities publicly. Follow the private process in the
 
 ## Development setup
 
-Development requires Git, Rust 1.89 or newer, and the native packages needed by the default
-features. Functional tests additionally require Podman or Docker; see the
-[functional-test guide](tests/functional/README.md) for supported runtimes.
+Development requires Git, GNU Make, Rust 1.89 or newer, and the native packages needed by the
+default features. On Linux, the default keyring backend requires `pkg-config` and the libdbus
+development headers (`libdbus-1-dev` on Debian and Ubuntu). Functional tests additionally require
+Podman or Docker; see the [functional-test guide](tests/functional/README.md) for supported
+runtimes.
 
 Clone your fork, enter the checkout, and run:
 
@@ -25,8 +27,9 @@ make setup
 ```
 
 This checks the Rust toolchain, installs the required Rust components and coverage tools, installs
-the repository hooks, and builds `bzr`. If setup reports a missing system library, install the
-development package named by the error and run it again.
+the repository hooks, and builds `bzr`. It does not install operating-system packages. If Cargo or
+`pkg-config` reports a missing library, install its development headers with your platform's
+package manager and run setup again.
 
 ## Making changes
 
