@@ -256,14 +256,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y shellcheck
-          curl -fsSL https://github.com/mvdan/sh/releases/download/v3.7.0/shfmt_v3.7.0_linux_amd64 -o /tmp/shfmt
+          curl -fsSL https://github.com/mvdan/sh/releases/download/v3.13.1/shfmt_v3.13.1_linux_amd64 -o /tmp/shfmt
           sudo install -m 0755 /tmp/shfmt /usr/local/bin/shfmt
 
-      - name: Run shellcheck
-        run: shellcheck -s sh install.sh tests/installer/smoke.sh
-
-      - name: Run shfmt (check only)
-        run: shfmt -d -ln posix -i 2 install.sh tests/installer/smoke.sh
+      - name: Run shell lint (shellcheck + shfmt)
+        run: make check-shell
 
       - name: Run PSScriptAnalyzer
         shell: pwsh

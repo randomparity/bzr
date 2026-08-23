@@ -3,7 +3,7 @@ RUST_MIN_VERSION := 1.89.0
 
 .PHONY: setup check-rust ensure-components ensure-coverage-prereqs ensure-mutants-prereq install-hooks \
         build release test test-verbose test-fast test-one coverage fmt clippy lint check-build-script check-test-layout \
-        check-no-spawn check-release-security-notes clean help man \
+        check-no-spawn check-release-security-notes check-shell clean help man \
         skills-test \
         mutants mutants-fast mutants-list audit-mutant-skips \
         functional-build functional-start functional-test functional-stop \
@@ -109,7 +109,7 @@ fmt: ## Format source code
 clippy: ## Run clippy lints
 	$(CARGO) clippy --all-targets --features test-helpers -- -D warnings
 
-lint: fmt clippy check-build-script check-test-layout check-no-spawn check-release-security-notes ## Run all linters
+lint: fmt clippy check-build-script check-test-layout check-no-spawn check-release-security-notes check-shell ## Run all linters
 
 check-build-script: ## Run dependency-free build-script validation tests
 	@mkdir -p target
@@ -133,6 +133,14 @@ check-no-spawn: ## Guard the single-threaded-runtime assumption (CONC-3)
 
 check-release-security-notes: ## Validate release-note security assessments
 	bash tools/check-release-security-notes-tests.sh
+
+check-shell: ## Lint shell scripts (shellcheck + shfmt, POSIX and bash)
+	@command -v shellcheck >/dev/null || { echo "ERROR: shellcheck is required for this guard"; echo "  Install: brew install shellcheck  |  apt-get install shellcheck"; exit 1; }
+	@command -v shfmt >/dev/null || { echo "ERROR: shfmt is required for this guard"; echo "  Install: brew install shfmt  |  https://github.com/mvdan/sh/releases"; exit 1; }
+	shellcheck -s sh install.sh tests/installer/smoke.sh
+	shellcheck -s bash tools/*.sh
+	shfmt -d -ln posix -i 2 install.sh tests/installer/smoke.sh
+	shfmt -d -ln bash -i 2 tools/*.sh
 
 clean: ## Remove build artifacts
 	$(CARGO) clean
