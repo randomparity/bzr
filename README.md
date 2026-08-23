@@ -7,8 +7,8 @@
 [![CI](https://github.com/randomparity/bzr/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/randomparity/bzr/actions/workflows/ci.yml)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=randomparity_bzr&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=randomparity_bzr)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/randomparity/bzr/badge)](https://scorecard.dev/viewer/?uri=github.com/randomparity/bzr)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![MSRV: 1.89](https://img.shields.io/badge/MSRV-1.89-blue.svg)](https://blog.rust-lang.org/2025/06/26/Rust-1.89.0/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/randomparity/bzr/blob/main/LICENSE)
+[![MSRV: 1.89](https://img.shields.io/badge/MSRV-1.89-blue.svg)](https://blog.rust-lang.org/2025/08/07/Rust-1.89.0/)
 [![crates.io](https://img.shields.io/crates/v/bzr.svg)](https://crates.io/crates/bzr)
 
 A command-line interface for Bugzilla servers, written in Rust. Inspired by the
@@ -17,28 +17,42 @@ comments and attachments, switch between multiple Bugzilla instances, and use
 REST, XML-RPC, or hybrid API transport as each server requires — all from your
 terminal.
 
-> **A note on the name.** `bzr` was historically the command for [GNU Bazaar](https://en.wikipedia.org/wiki/GNU_Bazaar), a version-control system. Bazaar's last release was in 2016, Canonical [announced its retirement in 2025](https://blog.launchpad.net/general/phasing-out-bazaar-code-hosting), and its maintained successor **Breezy renamed its command to `brz`** — so the `bzr` name is effectively being vacated by the VCS world. This project keeps `bzr` (it reads as "Bugzilla" the way `gh` reads as "GitHub"). If you also have GNU Bazaar/Breezy installed and want to keep using `bzr` for it, alias this tool instead, e.g. `alias bz=bzr`. See [the decision record](docs/decisions/0001-bzr-command-name.md) for the full rationale.
+<div align="center">
+  <img src="docs/assets/bzr-demo.gif" alt="Animated terminal session: listing bugs in a colored table, viewing a bug, adding a comment, updating its status, and piping JSON output to jq">
+</div>
+
+## Quick start
+
+```bash
+# Install (Homebrew shown; see Installation for .deb/.rpm, one-line installer, cargo)
+brew tap randomparity/tap && brew install bzr
+
+# Point bzr at a server — public servers work read-only with no credentials
+bzr config set-server myserver --url https://bugzilla.example.com
+
+# Search, view, comment
+bzr bug list --product MyProduct --status NEW
+bzr bug view 12345
+bzr comment add 12345 --body "Reproduced on Fedora 42"
+
+# JSON output for scripting
+bzr --output json bug view 12345 | jq -r '.data.assigned_to'
+```
+
+See [Getting started](#getting-started) for authentication and a fuller
+walkthrough.
 
 ## Features
 
-- **Bug management** — list, search, view, create, clone, update, and batch-update bugs; view change history
-- **Bug workflow** — view your bugs (`bzr bug my`), save reusable field templates, and run saved queries
-- **Comments** — list and add comments, with `$EDITOR` integration for composing
-- **Comment tags** — add, remove, and search comment tags
-- **Attachments** — list, download, upload, and update file attachments with auto-detected MIME types
+- **Bugs** — list, search, view, create, clone, update, and batch-update bugs; view change history; see your own bugs at a glance (`bzr bug my`)
+- **Comments & attachments** — list and add comments (with `$EDITOR` integration), tag comments, and download, upload, and update attachments with auto-detected MIME types
 - **Flags** — set, request, and clear flags on bugs and attachments
-- **Products** — list, view, create, and update products
-- **Components** — list, view, create, and update product components
-- **Classifications** — list and view classification details
-- **Fields** — look up valid values for bug fields (status, priority, severity, etc.)
-- **Users** — search, create, and update users
-- **Groups** — list members, add/remove users, view, create, and update groups
-- **Server diagnostics** — check server version and extensions (`whoami`, `server info`)
-- **Admin operations** — create and update products, components, users, and groups
-- **Multi-server** — configure and switch between multiple Bugzilla instances
-- **Output formats** — human-readable tables (with colored status), JSON, or NDJSON for scripting
-- **Schemas** — print embedded JSON Schemas for output objects and JSON input payloads
-- **Secure auth** — API key sent via `X-BUGZILLA-API-KEY` header by default; falls back to query parameter auth for older servers
+- **Templates & saved queries** — save reusable bug field templates and search queries, then run them by name
+- **Admin & metadata** — create and update products, components, users, and groups; view classifications; look up valid values for bug fields
+- **Multi-server** — configure several Bugzilla instances, switch per invocation, and check any server's version and extensions (`whoami`, `server info`)
+- **Works with old and new servers** — REST, XML-RPC, or hybrid API transport, auto-detected per server
+- **Scriptable output** — human-readable tables with colored status, JSON in a versioned envelope, or NDJSON, plus embedded JSON Schemas for every output object
+- **Secure by default** — header-based API-key auth with fallback for older servers, OS-keychain credential storage, and TLS CA / fingerprint pinning
 
 ## Installation
 
@@ -217,8 +231,8 @@ cargo install bzr --locked --no-default-features
 A build without the feature still supports plaintext and environment
 variable credentials; only the `config set-keyring` /
 `migrate-to-keyring` subcommands become unavailable. See
-[`docs/troubleshooting.md`](docs/troubleshooting.md) for diagnosing
-keychain errors.
+[`docs/troubleshooting.md`](https://github.com/randomparity/bzr/blob/main/docs/troubleshooting.md)
+for diagnosing keychain errors.
 
 ### Manual pages
 
@@ -265,36 +279,16 @@ bzr completion powershell >> $PROFILE
 
 ### See also
 
-- [`RELEASING.md`](RELEASING.md) — what each release artifact is, how it gets built, and how to verify SHA256 sums and SLSA attestations.
-- [`homebrew/README.md`](homebrew/README.md) — Homebrew tap layout and bootstrap.
+- [`RELEASING.md`](https://github.com/randomparity/bzr/blob/main/RELEASING.md) — what each release artifact is, how it gets built, and how to verify SHA256 sums and SLSA attestations.
+- [`homebrew/README.md`](https://github.com/randomparity/bzr/blob/main/homebrew/README.md) — Homebrew tap layout and bootstrap.
 
-## Onboarding
+## Getting started
 
-If you are new to `bzr`, this is the fastest path from install to a working Bugzilla session.
+If you are new to `bzr`, this is the fastest path from install to a working
+Bugzilla session. Install first — see [Installation](#installation) for the
+full menu and tradeoffs — then:
 
-### 1. Install `bzr`
-
-Pick the one that fits your platform (see [Installation](#installation)
-for the full menu and tradeoffs):
-
-```bash
-# macOS or Linux with Homebrew
-brew tap randomparity/tap && brew install bzr
-
-# Debian / Ubuntu
-sudo apt install ./bzr_X.Y.Z-1_amd64.deb
-
-# Fedora / RHEL
-sudo dnf install ./bzr-X.Y.Z-1.x86_64.rpm
-
-# Anywhere with Rust installed (no manpages — see Installation > Manual pages)
-cargo install bzr --locked
-
-# Local source checkout
-cargo install --path . --locked
-```
-
-### 2. Configure your first server
+### 1. Configure your first server
 
 ```bash
 # Public read-only exploration can omit credentials
@@ -317,14 +311,14 @@ bzr config set-server myserver --url https://bugzilla.example.com --api-key YOUR
 To store the API key in your OS keychain instead of an env var, see
 [Credential storage](#credential-storage).
 
-### 3. Verify connectivity and authentication
+### 2. Verify connectivity and authentication
 
 ```bash
 bzr server info
 bzr whoami  # requires credentials
 ```
 
-### 4. Run your first queries
+### 3. Run your first queries
 
 ```bash
 # List the user's open bugs
@@ -340,7 +334,7 @@ bzr bug view 12345
 bzr bug search "crash on startup"
 ```
 
-### 5. Save time with local workflows
+### 4. Save time with local workflows
 
 ```bash
 # Save a reusable bug template
@@ -356,10 +350,9 @@ bzr query save my-open-bugs --assignee you@example.com --status NEW --status ASS
 bzr query run my-open-bugs
 ```
 
-## Quick Start
+### Everyday commands
 
 ```bash
-# Common day-to-day commands
 bzr bug history 12345 --since 2025-01-01
 bzr bug update 12345 --status RESOLVED --resolution FIXED --flag "review+(alice@example.com)"
 bzr comment add 12345 --body "I can reproduce this on Fedora 42"
@@ -371,72 +364,14 @@ bzr user search "alice"
 bzr group add-user --group testers --user alice@example.com
 ```
 
-## Testing
-
-For regular validation:
-
-```bash
-cargo test
-make functional-test-all
-```
-
-To reproduce the CI coverage summary locally:
-
-```bash
-cargo install cargo-llvm-cov
-rustup component add llvm-tools-preview
-make coverage
-```
-
-## Contributing
-
-See the [contribution policy](CONTRIBUTING.md) for development setup, required verification,
-pull-request expectations, and issue-reporting guidance.
-
-## CLI Reference
-
-See [docs/bzr-cli.md](docs/bzr-cli.md) for the full command reference covering all commands and options.
-
-## Agent Integration
-
-`bzr` ships a set of installable agent skills sourced from
-[`content/skills/`](content/skills/), with standalone installers under
-[`agent-skills/`](agent-skills/)
-that teach AI coding agents to use the CLI correctly — the `--json` contract,
-the authentication model, the read-before-write rule, and the real command
-surface. They live in this repo so they track the CLI as it changes (CI runs a
-command-surface drift check against the built binary).
-
-When `bzr` is installed, use its offline, release-matched payload and choose the scope
-explicitly:
-
-```bash
-bzr skills install --agent all --global
-bzr skills install --agent all --project .
-```
-
-`standard`/`bob`/`codex` install to `~/.agents/skills`; `claude` installs to
-`~/.claude/skills`; `all` does both. Project scope uses the same relative layouts
-beneath the selected repository. The command requires exactly one of `--global` and
-`--project <PATH>` and never needs Bugzilla configuration or network access.
-
-For machines without `bzr`, the standalone installers under `agent-skills/` fetch the
-payload from `main` by default; set `BZR_SKILL_REF` to pin a tag or commit. That payload
-may differ from the release-matched copy embedded in an installed binary. See
-[`agent-skills/README.md`](agent-skills/README.md) for standalone installation and
-development details.
-
-The skills shell out to the real `bzr` binary and are agent-agnostic: global
-flags are consistent, machine-readable output is built in, and saved templates
-and queries let agents reuse local workflows without custom wrappers.
-
-## JSON Output
+## JSON output
 
 All list and view commands support `--output json` for scripting and piping to
 tools like `jq`. Output is wrapped in a versioned envelope —
 `{"schema_version": "0.6.0", "data": <payload>}` — so read fields under `.data`
 (`--output ndjson` records stay bare). See
-[docs/bzr-cli.md](docs/bzr-cli.md#json-output) for the stability policy.
+[docs/bzr-cli.md](https://github.com/randomparity/bzr/blob/main/docs/bzr-cli.md#json-output)
+for the stability policy.
 
 ```bash
 # Get bug IDs matching a search
@@ -455,13 +390,26 @@ bzr --output json product view Fedora | jq -r '.data.components[].name'
 bzr --output json field list status | jq '.data[] | select(.name == "NEW") | .can_change_to'
 ```
 
-## Configuration & Authentication
+## Configuration & authentication
 
-Configuration is stored in `~/.config/bzr/config.toml` with support for multiple named servers. Point bzr at a different file with the global `--config <PATH>` flag or the `BZR_CONFIG` environment variable (the flag wins) — handy for CI, throwaway agent runs, and per-profile configs. See [docs/bzr-cli.md](docs/bzr-cli.md#configuration-file-format) for the full file format.
+Configuration is stored in `~/.config/bzr/config.toml` with support for
+multiple named servers. Point bzr at a different file with the global
+`--config <PATH>` flag or the `BZR_CONFIG` environment variable (the flag
+wins) — handy for CI, throwaway agent runs, and per-profile configs. See
+[docs/bzr-cli.md](https://github.com/randomparity/bzr/blob/main/docs/bzr-cli.md#configuration-file-format)
+for the full file format.
 
-## Authentication
-
-`bzr` authenticates using Bugzilla API keys when a command needs an identity or write access. Public Bugzilla servers can omit credentials for read-only commands; writes and identity-derived reads such as `whoami` and `bug my` fail fast until a credential source is configured. Prefer `--api-key-env` so the secret stays out of `config.toml`, shell history, and most process listings. `bzr` warns when the config directory or file permissions are too broad on Unix systems. It also auto-detects whether your server supports header-based auth (`X-BUGZILLA-API-KEY`) or query parameter auth (`Bugzilla_api_key`), and caches the result. See [docs/bzr-cli.md](docs/bzr-cli.md#authentication) for details on generating and configuring API keys.
+`bzr` authenticates using Bugzilla API keys when a command needs an identity
+or write access. Public Bugzilla servers can omit credentials for read-only
+commands; writes and identity-derived reads such as `whoami` and `bug my`
+fail fast until a credential source is configured. Prefer `--api-key-env` so
+the secret stays out of `config.toml`, shell history, and most process
+listings. `bzr` warns when the config directory or file permissions are too
+broad on Unix systems. It also auto-detects whether your server supports
+header-based auth (`X-BUGZILLA-API-KEY`) or query parameter auth
+(`Bugzilla_api_key`), and caches the result. See
+[docs/bzr-cli.md](https://github.com/randomparity/bzr/blob/main/docs/bzr-cli.md#authentication)
+for details on generating and configuring API keys.
 
 ## Credential storage
 
@@ -486,9 +434,9 @@ bzr config migrate-to-keyring myserver --yes
 
 `bzr config show` labels each server's credential source so you can see
 at a glance which mechanism is in use. See
-[`docs/troubleshooting.md`](docs/troubleshooting.md) for diagnosing
-keychain errors (locked keyring, missing Secret Service daemon, builds
-compiled without the feature, etc.).
+[`docs/troubleshooting.md`](https://github.com/randomparity/bzr/blob/main/docs/troubleshooting.md)
+for diagnosing keychain errors (locked keyring, missing Secret Service
+daemon, builds compiled without the feature, etc.).
 
 ## TLS certificate pinning
 
@@ -554,10 +502,58 @@ reproducible trust.
 Pins live in `~/.config/bzr/config.toml`, per-server, alongside other
 server config. They are not stored in the OS keyring (which is
 reserved for credentials). The full reference for these flags is in
-[`docs/bzr-cli.md`](docs/bzr-cli.md).
+[`docs/bzr-cli.md`](https://github.com/randomparity/bzr/blob/main/docs/bzr-cli.md).
+
+## Agent integration
+
+`bzr` ships a set of installable agent skills sourced from
+[`content/skills/`](https://github.com/randomparity/bzr/tree/main/content/skills),
+with standalone installers under
+[`agent-skills/`](https://github.com/randomparity/bzr/tree/main/agent-skills)
+that teach AI coding agents to use the CLI correctly — the `--json` contract,
+the authentication model, the read-before-write rule, and the real command
+surface. They live in this repo so they track the CLI as it changes (CI runs a
+command-surface drift check against the built binary).
+
+When `bzr` is installed, use its offline, release-matched payload and choose the scope
+explicitly:
+
+```bash
+bzr skills install --agent all --global
+bzr skills install --agent all --project .
+```
+
+`standard`/`bob`/`codex` install to `~/.agents/skills`; `claude` installs to
+`~/.claude/skills`; `all` does both. Project scope uses the same relative layouts
+beneath the selected repository. The command requires exactly one of `--global` and
+`--project <PATH>` and never needs Bugzilla configuration or network access.
+
+For machines without `bzr`, the standalone installers under `agent-skills/` fetch the
+payload from `main` by default; set `BZR_SKILL_REF` to pin a tag or commit. That payload
+may differ from the release-matched copy embedded in an installed binary. See
+[`agent-skills/README.md`](https://github.com/randomparity/bzr/blob/main/agent-skills/README.md)
+for standalone installation and development details.
+
+The skills shell out to the real `bzr` binary and are agent-agnostic: global
+flags are consistent, machine-readable output is built in, and saved templates
+and queries let agents reuse local workflows without custom wrappers.
+
+## Documentation
+
+- [CLI reference](https://github.com/randomparity/bzr/blob/main/docs/bzr-cli.md) — every command, flag, and output format.
+- [Changelog](https://github.com/randomparity/bzr/blob/main/CHANGELOG.md) — what's new in each release.
+- [Troubleshooting](https://github.com/randomparity/bzr/blob/main/docs/troubleshooting.md) — keychain, TLS, and connectivity diagnostics.
+
+## Contributing
+
+See the [contribution policy](https://github.com/randomparity/bzr/blob/main/CONTRIBUTING.md)
+for development setup, how to run the test suites, required verification,
+pull-request expectations, and issue-reporting guidance.
+
+## Why the name `bzr`?
+
+`bzr` was historically the command for [GNU Bazaar](https://en.wikipedia.org/wiki/GNU_Bazaar), a version-control system. Bazaar's last release was in 2016, Canonical [announced its retirement in 2025](https://blog.launchpad.net/general/phasing-out-bazaar-code-hosting), and its maintained successor **Breezy renamed its command to `brz`** — so the `bzr` name is effectively being vacated by the VCS world. This project keeps `bzr` (it reads as "Bugzilla" the way `gh` reads as "GitHub"). If you also have GNU Bazaar/Breezy installed and want to keep using `bzr` for it, alias this tool instead, e.g. `alias bz=bzr`. See [the decision record](https://github.com/randomparity/bzr/blob/main/docs/decisions/0001-bzr-command-name.md) for the full rationale.
 
 ## License
 
 MIT
-
-![Desloppify Score: overall 92.4, strict 92.3](scorecard.png)

@@ -28,6 +28,25 @@ Security assessment: No publicly identified runtime vulnerabilities in bzr were 
   scope, canonical project path, destinations, and sorted installed skills. The
   standalone installers remain available for no-binary use and fetch main by
   default, with BZR_SKILL_REF for a pinned payload. (#523)
+- Terminal demo at docs/assets/bzr-demo.gif near the top of the README,
+  recorded from a real session against the functional-test Bugzilla container.
+  tools/record-demo.sh regenerates it when CLI output changes.
+
+### Changed
+
+- README restructured for the project website: a quick-start section now leads,
+  the feature list is grouped, the onboarding walkthrough and command examples
+  are merged into one "Getting started" section, the bzr-name history moved to
+  a "Why the name" section near the end, repo-relative links were converted to
+  absolute GitHub URLs so they resolve on the Pages site, and the Desloppify
+  scorecard image was removed.
+
+### Fixed
+
+- The GitHub Pages site now ships site/style.css. The Pages workflow never
+  copied the stylesheet into the deployed site, so every page rendered
+  unstyled. The build now fails if the stylesheet or logo is missing.
+- The MSRV badge linked to a nonexistent Rust 1.89.0 blog URL.
 
 ## [0.8.1] - 2026-08-05
 
