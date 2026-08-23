@@ -639,6 +639,7 @@ forbidden_candidate_chars=(
   'raw ] square closer'
   'raw ` code delimiter'
   'raw & character-reference opener'
+  'raw \ escape delimiter'
 )
 for index in "${!forbidden_candidate_chars[@]}"; do
   version="3.0.$index"
@@ -747,6 +748,20 @@ $QUALIFYING_VULNERABILITIES
 EOF
 )
 expect_rejected "zero-width-only required fields" "$zero_width_fields"
+
+backslash_only_fields=$(
+  write_fixture backslash-only-fields <<'EOF'
+Security assessment: Publicly identified runtime vulnerabilities in bzr were fixed in this release.
+
+#### Vulnerability: GHSA-backslash-only-fields
+- Affected bzr versions: \
+- First fixed version: \
+- Runtime impact: \
+- Advisory: https://github.com/randomparity/bzr/security/advisories/GHSA-backslash-only-fields
+- Upgrade guidance: \
+EOF
+)
+expect_rejected "backslash-only required fields" "$backslash_only_fields"
 
 duplicate_field=$(
   write_fixture duplicate-field <<EOF

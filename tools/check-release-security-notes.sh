@@ -62,7 +62,7 @@ if ! awk '
 
   is_fence_marker($0) || index($0, "<") != 0 || index($0, ">") != 0 || \
     index($0, "[") != 0 || index($0, "]") != 0 || index($0, "`") != 0 || \
-    index($0, "&") != 0 { exit 1 }
+    index($0, "&") != 0 || index($0, "\\") != 0 { exit 1 }
 ' <"$notes_file"; then
   fail "release notes must use the bounded plain-text grammar"
 fi

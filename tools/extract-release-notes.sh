@@ -103,7 +103,7 @@ if ! awk '
 
   is_tilde_fence($0) || index($0, "<") != 0 || index($0, ">") != 0 || \
     index($0, "[") != 0 || index($0, "]") != 0 || index($0, "`") != 0 || \
-    index($0, "&") != 0 { exit 1 }
+    index($0, "&") != 0 || index($0, "\\") != 0 { exit 1 }
 ' <"$notes_file"; then
   echo "ERROR: candidate release notes must use the bounded plain-text grammar." >&2
   exit 1

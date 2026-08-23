@@ -94,7 +94,7 @@ publication. Update the published release notes promptly if this occurs.
 
 The release extractor intentionally accepts a bounded Markdown subset in the
 candidate release body. Do not use literal angle brackets, square brackets,
-ampersands, or backticks there, and do not use fenced-code marker lines made
+ampersands, backslashes, or backticks there, and do not use fenced-code marker lines made
 from three or more backticks or tildes. Historical release sections remain outside this
 check. A vulnerability heading must contain exactly one visible ASCII public
 identifier token; Markdown wrappers and optional ATX closing hashes are not
