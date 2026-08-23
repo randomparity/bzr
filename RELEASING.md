@@ -91,6 +91,15 @@ review but before GitHub Release creation is a residual publication race: the
 structural validator cannot make the external advisory inventory atomic with
 publication. Update the published release notes promptly if this occurs.
 
+The release extractor intentionally accepts a bounded Markdown subset. Do not
+use fenced-code marker lines (zero to three leading spaces followed by three or
+more backticks or tildes) or the HTML-comment delimiter tokens `<!--` and `-->`
+anywhere in `CHANGELOG.md`; extraction fails before selecting a release section
+when these constructs are present. Ordinary inline backticks remain valid when
+their contents do not include either comment delimiter. A vulnerability
+heading may use optional ATX closing hashes only when a public identifier
+remains visible before them.
+
 `N/A` is for an external compliance questionnaire only, and is truthful only
 when there are no release notes, no publicly known qualifying project
 vulnerabilities, or users cannot practically update the software themselves.

@@ -19,46 +19,40 @@ if [[ -z $version ]]; then
 	exit 1
 fi
 
-awk -v version="$version" '
-  function strip_fence_indent(line) {
+if ! awk '
+  function strip_marker_indent(line) {
     if (substr(line, 1, 3) == "   ") {
-      line = substr(line, 4)
-    } else if (substr(line, 1, 2) == "  ") {
-      line = substr(line, 3)
-    } else if (substr(line, 1, 1) == " ") {
-      line = substr(line, 2)
+      return substr(line, 4)
+    }
+    if (substr(line, 1, 2) == "  ") {
+      return substr(line, 3)
+    }
+    if (substr(line, 1, 1) == " ") {
+      return substr(line, 2)
     }
     return line
   }
 
-  function opening_fence(line, fence_line, character, run_length) {
-    fence_line = strip_fence_indent(line)
-    character = substr(fence_line, 1, 1)
+  function is_fence_marker(line, marker, character, run_length) {
+    marker = strip_marker_indent(line)
+    character = substr(marker, 1, 1)
     if (character != "`" && character != "~") {
-      return ""
-    }
-    run_length = 0
-    while (substr(fence_line, run_length + 1, 1) == character) {
-      run_length++
-    }
-    if (run_length < 3) {
-      return ""
-    }
-    return substr(fence_line, 1, run_length)
-  }
-
-  function closes_fence(line, character, minimum_length, fence_line, run_length) {
-    fence_line = strip_fence_indent(line)
-    if (substr(fence_line, 1, 1) != character) {
       return 0
     }
     run_length = 0
-    while (substr(fence_line, run_length + 1, 1) == character) {
+    while (substr(marker, run_length + 1, 1) == character) {
       run_length++
     }
-    return run_length >= minimum_length && substr(fence_line, run_length + 1) ~ /^ *$/
+    return run_length >= 3
   }
 
+  is_fence_marker($0) || index($0, "<!--") != 0 || index($0, "-->") != 0 { exit 1 }
+' <"$changelog_file"; then
+	echo "ERROR: CHANGELOG.md must not contain fenced-code markers or HTML-comment delimiters." >&2
+	exit 1
+fi
+
+awk -v version="$version" '
   function is_candidate_heading(line, prefix, date) {
     prefix = "## [" version "]"
     if (version == "Unreleased") {
@@ -87,48 +81,6 @@ awk -v version="$version" '
     date = substr(line, separator + 4)
     return release_version != "" && length(date) == 10 && \
       date ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/
-  }
-
-  {
-    if (fence_character != "") {
-      if (capture) {
-        print
-      }
-      if (closes_fence($0, fence_character, fence_length)) {
-        fence_character = ""
-        fence_length = 0
-      }
-      next
-    }
-    if (in_html_comment) {
-      if (capture) {
-        print
-      }
-      if (index($0, "-->") != 0) {
-        in_html_comment = 0
-      }
-      next
-    }
-
-    current_fence = opening_fence($0)
-    if (current_fence != "") {
-      if (capture) {
-        print
-      }
-      fence_character = substr(current_fence, 1, 1)
-      fence_length = length(current_fence)
-      next
-    }
-
-    if (index($0, "<!--") != 0) {
-      if (capture) {
-        print
-      }
-      if (index(substr($0, index($0, "<!--") + 4), "-->") == 0) {
-        in_html_comment = 1
-      }
-      next
-    }
   }
 
   is_candidate_heading($0) {

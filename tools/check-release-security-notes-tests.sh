@@ -173,6 +173,32 @@ EOF
 )
 expect_allowed "complete qualifying entry" "$complete_entry"
 
+empty_rendered_identifier=$(
+	write_fixture empty-rendered-identifier <<EOF
+$QUALIFYING_VULNERABILITIES
+#### Vulnerability: ###
+- Affected bzr versions: < 1.2.3
+- First fixed version: 1.2.3
+- Runtime impact: A remote server could cause a denial of service.
+- Advisory: https://example.com/GHSA-empty-rendered-identifier
+- Upgrade guidance: Upgrade to bzr 1.2.3 or later.
+EOF
+)
+expect_rejected "ATX closing hashes with no rendered identifier" "$empty_rendered_identifier"
+
+identifier_with_closing_hashes=$(
+	write_fixture identifier-with-closing-hashes <<EOF
+$QUALIFYING_VULNERABILITIES
+#### Vulnerability: GHSA-visible-identifier ###
+- Affected bzr versions: < 1.2.3
+- First fixed version: 1.2.3
+- Runtime impact: A remote server could cause a denial of service.
+- Advisory: https://example.com/GHSA-visible-identifier
+- Upgrade guidance: Upgrade to bzr 1.2.3 or later.
+EOF
+)
+expect_allowed "identifier before optional ATX closing hashes" "$identifier_with_closing_hashes"
+
 expect_indented_vulnerability_heading \
 	"no-outcome-one-space-vulnerability-heading" \
 	' ' \
@@ -295,8 +321,8 @@ longer_fence_closer="$FIXTURES/longer-fence-closer"
 	printf '%s   \n' '`````'
 	printf '%s\n' "$NO_VULNERABILITIES"
 } >"$longer_fence_closer"
-expect_allowed \
-	"longer fence closer followed only by spaces" \
+expect_rejected \
+	"fenced code with a longer closer" \
 	"$longer_fence_closer"
 
 commented_fields=$(
@@ -380,8 +406,8 @@ $NO_VULNERABILITIES
 $QUALIFYING_VULNERABILITIES
 EOF
 )
-expect_extracted_validation_allowed \
-	"release heading hidden in fenced code" \
+expect_extraction_rejected \
+	"fenced code before a release heading" \
 	"$fenced_boundary_changelog" \
 	"2.0.0"
 
@@ -398,8 +424,8 @@ $NO_VULNERABILITIES
 $QUALIFYING_VULNERABILITIES
 EOF
 )
-expect_extracted_validation_allowed \
-	"release heading hidden in an HTML comment" \
+expect_extraction_rejected \
+	"HTML comment before a release heading" \
 	"$commented_boundary_changelog" \
 	"2.1.0"
 
@@ -418,6 +444,91 @@ expect_extracted_validation_allowed \
 	"bracketed non-release heading" \
 	"$non_release_boundary_changelog" \
 	"2.2.0"
+
+backtick_info_changelog=$(
+	write_fixture backtick-info-changelog <<EOF
+## [2.3.0] - 2026-08-22
+$NO_VULNERABILITIES
+\`\`\`text\`literal
+## [2.2.0] - 2026-08-01
+$QUALIFYING_VULNERABILITIES
+EOF
+)
+expect_extraction_rejected \
+	"backtick fence marker with a backtick in its info string" \
+	"$backtick_info_changelog" \
+	"2.3.0"
+
+tabbed_fence_closer_changelog="$FIXTURES/tabbed-fence-closer-changelog"
+{
+	printf '%s\n' '## [2.4.0] - 2026-08-22'
+	printf '%s\n' "$NO_VULNERABILITIES"
+	printf '%s\n' '```text'
+	printf '%s\n' 'A code sample.'
+	printf '```\t\n'
+	printf '%s\n' '## [2.3.0] - 2026-08-01'
+	printf '%s\n' "$QUALIFYING_VULNERABILITIES"
+} >"$tabbed_fence_closer_changelog"
+expect_extraction_rejected \
+	"backtick fence marker with a tabbed closer" \
+	"$tabbed_fence_closer_changelog" \
+	"2.4.0"
+
+tilde_fence_changelog=$(
+	write_fixture tilde-fence-changelog <<EOF
+## [2.5.0] - 2026-08-22
+$NO_VULNERABILITIES
+~~~text
+## [2.4.0] - 2026-08-01
+$QUALIFYING_VULNERABILITIES
+EOF
+)
+expect_extraction_rejected \
+	"tilde fence marker" \
+	"$tilde_fence_changelog" \
+	"2.5.0"
+
+inline_comment_token_changelog=$(
+	write_fixture inline-comment-token-changelog <<EOF
+## [2.6.0] - 2026-08-22
+$NO_VULNERABILITIES
+- Use \`<!--\` when describing an HTML comment opener.
+## [2.5.0] - 2026-08-01
+$QUALIFYING_VULNERABILITIES
+EOF
+)
+expect_extraction_rejected \
+	"HTML comment opener token inside inline code" \
+	"$inline_comment_token_changelog" \
+	"2.6.0"
+
+comment_closer_token_changelog=$(
+	write_fixture comment-closer-token-changelog <<EOF
+## [2.7.0] - 2026-08-22
+$NO_VULNERABILITIES
+- A literal --> token is outside the bounded release-note grammar.
+## [2.6.0] - 2026-08-01
+$QUALIFYING_VULNERABILITIES
+EOF
+)
+expect_extraction_rejected \
+	"HTML comment closer token" \
+	"$comment_closer_token_changelog" \
+	"2.7.0"
+
+ordinary_inline_backticks_changelog=$(
+	write_fixture ordinary-inline-backticks-changelog <<EOF
+## [2.8.0] - 2026-08-22
+$NO_VULNERABILITIES
+- Use \`bzr bug view\` to inspect a bug.
+## [2.7.0] - 2026-08-01
+$QUALIFYING_VULNERABILITIES
+EOF
+)
+expect_extracted_validation_allowed \
+	"ordinary inline backticks without comment tokens" \
+	"$ordinary_inline_backticks_changelog" \
+	"2.8.0"
 
 leading_hyphen_directory="$FIXTURES/leading-hyphen"
 mkdir "$leading_hyphen_directory"
