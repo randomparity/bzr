@@ -109,7 +109,7 @@ fmt: ## Format source code
 clippy: ## Run clippy lints
 	$(CARGO) clippy --all-targets --features test-helpers -- -D warnings
 
-lint: fmt clippy check-build-script check-test-layout check-no-spawn check-release-security-notes ## Run all linters
+lint: fmt clippy check-build-script check-test-layout check-no-spawn check-release-security-notes check-shell ## Run all linters
 
 check-build-script: ## Run dependency-free build-script validation tests
 	@mkdir -p target
@@ -136,9 +136,9 @@ check-release-security-notes: ## Validate release-note security assessments
 
 check-shell: ## Lint shell scripts (shellcheck + shfmt, POSIX and bash)
 	shellcheck -s sh install.sh tests/installer/smoke.sh
-	shellcheck tools/*.sh
+	shellcheck -s bash tools/*.sh
 	shfmt -d -ln posix -i 2 install.sh tests/installer/smoke.sh
-	shfmt -d -i 2 tools/*.sh
+	shfmt -d -ln bash -i 2 tools/*.sh
 
 clean: ## Remove build artifacts
 	$(CARGO) clean
