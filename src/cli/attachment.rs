@@ -148,7 +148,7 @@ pub(crate) enum AttachmentAction {
     /// Examples:
     ///
     ///   bzr attachment list 12345
-    ///   bzr attachment list 12345 --json | jq '.attachments[].id'
+    ///   bzr attachment list 12345 --json | jq -r '.data[].id'
     ///
     /// See bzr-attachment-download(1) to fetch one and
     /// bzr-attachment-upload(1) to add a new attachment.
@@ -170,7 +170,7 @@ pub(crate) enum AttachmentAction {
     /// Examples:
     ///
     ///   bzr attachment view 9876
-    ///   bzr --json attachment view 9876 | jq '.summary, .size'
+    ///   bzr --json attachment view 9876 | jq '.data.summary, .data.size'
     ///
     /// See bzr-attachment-list(1) to discover attachment IDs for a bug and
     /// bzr-attachment-download(1) to fetch the bytes.

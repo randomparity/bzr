@@ -44,7 +44,7 @@ Examples:
   bzr bug view 12345
   bzr bug view 12345 12346 12347
   bzr bug view 12345 my-alias 12347 --permissive
-  bzr bug view 12345 --json | jq .summary
+  bzr bug view 12345 --json | jq .data.summary
   bzr bug view my-alias --fields id,summary,status
 
 See bzr-bug-history(1) for the change log and

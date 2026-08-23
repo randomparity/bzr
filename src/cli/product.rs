@@ -21,7 +21,7 @@ pub(crate) enum ProductAction {
     ///
     ///   bzr product list
     ///   bzr product list --type selectable
-    ///   bzr product list --json | jq '.products[].name'
+    ///   bzr product list --json | jq -r '.data[].name'
     ///
     /// See bzr-product-view(1) for one product's full details.
     #[command(verbatim_doc_comment)]
@@ -44,7 +44,7 @@ pub(crate) enum ProductAction {
     /// Examples:
     ///
     ///   bzr product view Firefox
-    ///   bzr product view Firefox --json | jq '.components[].name'
+    ///   bzr product view Firefox --json | jq -r '.data.components[].name'
     ///
     /// See bzr-product-list(1) for the catalog and bzr-bug-create(1)
     /// for filing a bug against a product.

@@ -282,7 +282,7 @@ pub(crate) enum QueryAction {
     /// Examples:
     ///
     ///   bzr query list
-    ///   bzr query list --json | jq '.queries[].name'
+    ///   bzr query list --json | jq -r '.data | keys[]'
     ///
     /// See bzr-query-show(1) for the full parameters of one query.
     #[command(verbatim_doc_comment)]

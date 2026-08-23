@@ -79,7 +79,7 @@ use crate::types::transport::ApiMode;
 ///   bzr config set-server prod --url <https://bugzilla.example.com> \
 ///     --api-key-env BZR_API_KEY
 ///   bzr bug list --product Firefox --status NEW --limit 25
-///   bzr bug view 12345 --json | jq .summary
+///   bzr bug view 12345 --json | jq .data.summary
 ///
 /// See bzr-bug(1), bzr-config(1), bzr-comment(1), bzr-attachment(1),
 /// bzr-product(1), bzr-user(1), bzr-group(1), bzr-template(1),

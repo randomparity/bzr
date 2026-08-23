@@ -21,7 +21,7 @@ pub(crate) enum ServerAction {
     ///
     ///   bzr server info
     ///   bzr --server staging server info --json
-    ///   bzr server info --json | jq .extensions
+    ///   bzr server info --json | jq .data.extensions
     ///
     /// Exit codes: 0 on success, 5 on HTTP/network error, 9 on
     /// auth failure, 13 on TLS pin mismatch.
@@ -50,7 +50,7 @@ pub(crate) enum ServerAction {
     ///
     ///   bzr server capabilities --json
     ///   bzr --server-url <https://bugzilla.example.com> server capabilities --json
-    ///   bzr server capabilities --json | jq .status_transitions
+    ///   bzr server capabilities --json | jq '.data.status_transitions'
     ///
     /// Exit codes: 0 on success, 5 on HTTP/network error, 9 on auth
     /// failure, 13 on TLS pin mismatch.

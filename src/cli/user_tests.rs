@@ -177,3 +177,26 @@ fn parse_user_update_from_json_relaxes_user() {
         _ => panic!("expected Update"),
     }
 }
+
+/// Guard against issue #555: the `user search --help` example must route
+/// through the `{schema_version, data}` envelope that `--json` actually
+/// emits (`BugzillaUser` serializes `email`, and there is no top-level
+/// `.users` key). Rendered help is the observable surface agents copy.
+#[test]
+fn user_search_help_example_jq_path_matches_json_envelope() {
+    use clap::CommandFactory as _;
+    let mut cmd = Cli::command();
+    let search_cmd = cmd
+        .find_subcommand_mut("user")
+        .and_then(|user| user.find_subcommand_mut("search"))
+        .unwrap_or_else(|| panic!("bzr user search subcommand must exist"));
+    let help = search_cmd.render_long_help().to_string();
+    assert!(
+        help.contains("jq -r '.data[].email'"),
+        "`user search --help` example must use the envelope path .data[].email"
+    );
+    assert!(
+        !help.contains(".users["),
+        "--json output has no top-level .users key; help must not teach one"
+    );
+}
