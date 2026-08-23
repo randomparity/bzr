@@ -61,11 +61,11 @@ fail-fast behavior; no fallback artifact is produced.
 
 ### Boundary inventory
 
-- Existing boundary: repository-controlled Markdown and templates enter
-  Pandoc in the GitHub-hosted build job. This design does not widen the set of
-  files or actors controlling them.
-- Added boundary: pull-request events can start the build job and cause an
-  Ubuntu package download plus Pages artifact upload.
+- Existing files: repository-controlled Markdown and templates enter Pandoc in
+  the GitHub-hosted build job.
+- Added actor boundary: pull-request authors, including fork authors, can cause
+  their proposed Markdown, template, and asset changes to enter Pandoc, trigger
+  an Ubuntu package download, and produce a Pages artifact.
 - Existing boundary retained: the deploy job writes to GitHub Pages using an
   OIDC token and the `pages: write` permission.
 
@@ -88,9 +88,9 @@ Pandoc package. Only non-PR events are trusted to reach deployment.
 
 ### Out of scope
 
-This change does not add untrusted fork execution beyond GitHub's normal
-pull-request model, preview deployments, custom domains, content sanitization,
-or changes to Pages environment protection.
+This change does not execute repository scripts for pull requests and does not
+add preview deployments, custom domains, content sanitization, or changes to
+Pages environment protection.
 
 ## Scope boundaries
 
