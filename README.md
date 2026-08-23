@@ -388,6 +388,11 @@ rustup component add llvm-tools-preview
 make coverage
 ```
 
+## Contributing
+
+See the [contribution policy](CONTRIBUTING.md) for development setup, required verification,
+pull-request expectations, and issue-reporting guidance.
+
 ## CLI Reference
 
 See [docs/bzr-cli.md](docs/bzr-cli.md) for the full command reference covering all commands and options.
