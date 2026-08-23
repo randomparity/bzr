@@ -25,6 +25,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   standalone installers remain available for no-binary use and fetch `main` by
   default, with `BZR_SKILL_REF` for a pinned payload. (#523)
 
+### Changed
+
+- README restructured for the project website: a quick-start section now leads,
+  the feature list is grouped, the onboarding walkthrough and command examples
+  are merged into one "Getting started" section, the `bzr`-name history moved
+  to a "Why the name" section near the end, repo-relative links were converted
+  to absolute GitHub URLs so they resolve on the Pages site, and the
+  Desloppify scorecard image was removed.
+
+### Fixed
+
+- The GitHub Pages site now ships `site/style.css`; the Pages workflow never
+  copied the stylesheet into the deployed site, so every page rendered
+  unstyled. The build now fails if the stylesheet or logo is missing.
+- The MSRV badge linked to a nonexistent Rust 1.89.0 blog URL.
+
 ## [0.8.1] - 2026-08-05
 
 ### Security
