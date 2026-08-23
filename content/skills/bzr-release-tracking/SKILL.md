@@ -17,7 +17,7 @@ This reference is authored against **bzr 0.8.2-dev**.
 ```
 # Everything not closed on the 9.0 milestone
 bzr bug list --target-milestone 9.0 --status \!CLOSED --paginate --json \
-  | jq -r '.data[] | "\(.id)\t\(.status)\t\(.assigned_to)\t\(.summary)"'
+  | jq -r '.data[] | "\(.id)\t\(.status)\t\(.assigned_to // "-")\t\(.summary)"'
 
 # Headline number only
 bzr bug list --target-milestone 9.0 --status \!CLOSED --count          # table: integer
@@ -67,10 +67,11 @@ at all since the baseline while sitting outside the milestone.
 
 ## 3. Rebalance assignee and CC
 
-Resolve a person's name to their login first — never guess an email:
+Resolve a person's name to their login first — never guess an email. The
+login is the account's `email` in the `user search` JSON:
 
 ```
-bzr user search "Alice Example" --json | jq -r '.users[].login'
+bzr user search "Alice Example" --json | jq -r '.data[].email'
 ```
 
 Then reassign and adjust CC. CC edits are incremental pairs — add and remove
@@ -100,7 +101,7 @@ Project exactly the columns stakeholders read and emit a markdown table:
 bzr bug list --target-milestone 9.0 --status \!CLOSED \
   --fields id,summary,status,assignee,priority --paginate --json \
   | jq -r '.data | sort_by(.priority)[]
-      | "| #\(.id) | \(.summary) | \(.status) | \(.assignee // "-") | \(.priority // "-") |"'
+      | "| #\(.id) | \(.summary) | \(.status) | \(.assigned_to // "-") | \(.priority // "-") |"'
 ```
 
 Wrap it with the header rows:
@@ -118,10 +119,11 @@ instead of inventing variants.
 
 ## 5. Close out the milestone
 
-Once the release ships, bulk-transition what remains:
-
+Once the release ships, bulk-transition what remains. Negations OR together,
+so exclude every terminal state you do not want to touch:
 ```
-bzr bug list --target-milestone 9.0 --status \!RESOLVED --paginate --output ndjson \
+bzr bug list --target-milestone 9.0 --status \!RESOLVED --status \!VERIFIED --status \!CLOSED \
+  --paginate --output ndjson \
   | while IFS= read -r line; do
       id=$(printf '%s' "$line" | jq -r '.id')
       bzr bug update "$id" --status RESOLVED --resolution FIXED --dry-run &&
