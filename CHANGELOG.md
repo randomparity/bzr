@@ -31,6 +31,22 @@ Security assessment: No publicly identified runtime vulnerabilities in bzr were 
 - Terminal demo at docs/assets/bzr-demo.gif near the top of the README,
   recorded from a real session against the functional-test Bugzilla container.
   tools/record-demo.sh regenerates it when CLI output changes.
+- New agent skill `bzr-dry-run-confirm` (under `agent-skills/`) teaching the
+  preview-then-write pattern for mutations: run any supported mutation with the
+  global `--dry-run` flag, parse and verify the printed payload with `jq`, then
+  re-run the same command without `--dry-run` to commit. Covers bug
+  create/update/clone/resolve/close/reopen/dup, product/component/user/group
+  create+update, batch previews via `--from-json`, exit-code triage, and
+  `--yes` batch-confirm semantics. No new CLI verbs; it codifies an
+  existing-capability workflow and cross-references the mutation skills.
+  The installers and skills table list it. (#460)
+- New agent skill `bzr-release-tracking` (under `agent-skills/`) teaching the
+  milestone/release workflow: enumerate what is open on a target milestone with
+  repeatable/negatable filters and `--paginate`, detect bugs that drifted into
+  or out of the release via `bzr bug history`, rebalance assignees and CC,
+  publish a release-ready digest, then close the milestone out. No new CLI
+  verbs; it composes `bzr bug list`, `bzr bug history`, and `bzr bug update`.
+  The installers and skills table list it. (#463)
 
 ### Changed
 
