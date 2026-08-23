@@ -50,12 +50,10 @@ fail-fast behavior; no fallback artifact is produced.
   exact build job on GitHub's `ubuntu-latest` runner before merge and must show
   deployment as skipped.
 - After merge, the push-triggered Site workflow must build and deploy, and the
-  public URL must return a 2xx response. The operator who merges the pull request
-  checks the completed workflow and retries the URL for up to ten minutes at
-  30-second intervals. A failed deployment or continuing non-2xx response keeps
-  issue #542 open and triggers either an immediate workflow revert or a
-  fix-forward under the same issue. This is post-merge evidence and is not
-  claimed by pre-merge CI.
+  public URL must return a 2xx response before issue #542 closes. A failed
+  deployment or continuing non-2xx response keeps the issue open for
+  investigation. This is post-merge evidence and is not claimed by pre-merge
+  CI.
 
 ## Threat model
 
