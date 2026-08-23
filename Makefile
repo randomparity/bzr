@@ -3,7 +3,7 @@ RUST_MIN_VERSION := 1.89.0
 
 .PHONY: setup check-rust ensure-components ensure-coverage-prereqs ensure-mutants-prereq install-hooks \
         build release test test-verbose coverage fmt clippy lint check-build-script check-test-layout \
-        check-no-spawn clean help man \
+        check-no-spawn check-release-security-notes clean help man \
         skills-test \
         mutants mutants-fast mutants-list audit-mutant-skips \
         functional-build functional-start functional-test functional-stop \

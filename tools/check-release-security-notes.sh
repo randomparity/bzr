@@ -124,6 +124,13 @@ awk \
       }
       next
     }
+    if (in_html_comment) {
+      if (index($0, "-->") != 0) {
+        in_html_comment = 0
+      }
+      next
+    }
+
     current_fence = opening_fence($0)
     if (current_fence != "") {
       if (assessment == "qualifying" && in_block && in_entry) {
@@ -131,13 +138,6 @@ awk \
       }
       fence_character = substr(current_fence, 1, 1)
       fence_length = length(current_fence)
-      next
-    }
-
-    if (in_html_comment) {
-      if (index($0, "-->") != 0) {
-        in_html_comment = 0
-      }
       next
     }
     if (index($0, "<!--") != 0) {
@@ -166,7 +166,8 @@ awk \
   }
 
   {
-    if (index($0, vulnerability_heading) == 1) {
+    heading_line = strip_fence_indent($0)
+    if (index(heading_line, vulnerability_heading) == 1) {
       vulnerability_headings++
 
       if (assessment != "qualifying" || !in_block) {
@@ -181,7 +182,7 @@ awk \
         seen[field] = 0
       }
 
-      identifier = trim(substr($0, length(vulnerability_heading) + 1))
+      identifier = trim(substr(heading_line, length(vulnerability_heading) + 1))
       if (identifier == "") {
         fail("each vulnerability heading must include a public identifier", entry_count)
       }

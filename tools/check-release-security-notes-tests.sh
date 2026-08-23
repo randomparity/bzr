@@ -111,6 +111,28 @@ expect_indented_level_three_heading_rejected() {
 	expect_rejected "$name ends an entry" "$fixture"
 }
 
+expect_indented_vulnerability_heading() {
+	local name=$1
+	local indentation=$2
+	local assessment=$3
+	local expectation=$4
+	local fixture="$FIXTURES/$name"
+	{
+		printf '%s\n' "$assessment"
+		printf '%s%s\n' "$indentation" "#### Vulnerability: GHSA-$name"
+		printf '%s\n' '- Affected bzr versions: < 1.2.3'
+		printf '%s\n' '- First fixed version: 1.2.3'
+		printf '%s\n' '- Runtime impact: A remote server could cause a denial of service.'
+		printf '%s\n' "- Advisory: https://example.com/GHSA-$name"
+		printf '%s\n' '- Upgrade guidance: Upgrade to bzr 1.2.3 or later.'
+	} >"$fixture"
+	if [[ $expectation == allowed ]]; then
+		expect_allowed "$name" "$fixture"
+	else
+		expect_rejected "$name" "$fixture"
+	fi
+}
+
 no_qualifying=$(
 	write_fixture no-qualifying <<EOF
 $NO_VULNERABILITIES
@@ -150,6 +172,37 @@ $QUALIFYING_VULNERABILITIES
 EOF
 )
 expect_allowed "complete qualifying entry" "$complete_entry"
+
+expect_indented_vulnerability_heading \
+	"no-outcome-one-space-vulnerability-heading" \
+	' ' \
+	"$NO_VULNERABILITIES" \
+	rejected
+expect_indented_vulnerability_heading \
+	"no-outcome-two-space-vulnerability-heading" \
+	'  ' \
+	"$NO_VULNERABILITIES" \
+	rejected
+expect_indented_vulnerability_heading \
+	"no-outcome-three-space-vulnerability-heading" \
+	'   ' \
+	"$NO_VULNERABILITIES" \
+	rejected
+expect_indented_vulnerability_heading \
+	"qualifying-one-space-vulnerability-heading" \
+	' ' \
+	"$QUALIFYING_VULNERABILITIES" \
+	allowed
+expect_indented_vulnerability_heading \
+	"qualifying-two-space-vulnerability-heading" \
+	'  ' \
+	"$QUALIFYING_VULNERABILITIES" \
+	allowed
+expect_indented_vulnerability_heading \
+	"qualifying-three-space-vulnerability-heading" \
+	'   ' \
+	"$QUALIFYING_VULNERABILITIES" \
+	allowed
 
 bare_level_three_heading=$(
 	write_fixture bare-level-three-heading <<EOF
@@ -312,6 +365,60 @@ expect_extraction_rejected \
 	"$regex_collision_changelog" \
 	"9.9.9"
 
+fenced_boundary_changelog=$(
+	write_fixture fenced-boundary-changelog <<EOF
+## [2.0.0] - 2026-08-22
+\`\`\`\`text
+\`\`\`
+## [9.9.8] - 2026-08-22
+\`\`\`\`not-a-closer
+## [9.9.9] - 2026-08-22
+\`\`\`\`
+$NO_VULNERABILITIES
+
+## [1.9.0] - 2026-08-01
+$QUALIFYING_VULNERABILITIES
+EOF
+)
+expect_extracted_validation_allowed \
+	"release heading hidden in fenced code" \
+	"$fenced_boundary_changelog" \
+	"2.0.0"
+
+commented_boundary_changelog=$(
+	write_fixture commented-boundary-changelog <<EOF
+## [2.1.0] - 2026-08-22
+<!--
+\`\`\`text
+## [9.9.9] - 2026-08-22
+-->
+$NO_VULNERABILITIES
+
+## [2.0.0] - 2026-08-01
+$QUALIFYING_VULNERABILITIES
+EOF
+)
+expect_extracted_validation_allowed \
+	"release heading hidden in an HTML comment" \
+	"$commented_boundary_changelog" \
+	"2.1.0"
+
+non_release_boundary_changelog=$(
+	write_fixture non-release-boundary-changelog <<EOF
+## [2.2.0] - 2026-08-22
+## [not-a-release-heading]
+- This bracketed heading belongs to the current release notes.
+$NO_VULNERABILITIES
+
+## [2.1.0] - 2026-08-01
+$QUALIFYING_VULNERABILITIES
+EOF
+)
+expect_extracted_validation_allowed \
+	"bracketed non-release heading" \
+	"$non_release_boundary_changelog" \
+	"2.2.0"
+
 leading_hyphen_directory="$FIXTURES/leading-hyphen"
 mkdir "$leading_hyphen_directory"
 printf '%s\n' "$NO_VULNERABILITIES" >"$leading_hyphen_directory/-release-notes"
@@ -446,5 +553,19 @@ fi
 
 if bash "$VALIDATOR" "$FIXTURES" >/dev/null 2>&1; then
 	echo "expected release-security validator to reject a directory" >&2
+	exit 1
+fi
+
+phony_probe="$FIXTURES/phony-probe"
+mkdir "$phony_probe"
+touch "$phony_probe/check-release-security-notes"
+phony_output=$(
+	make --no-print-directory \
+		-C "$phony_probe" \
+		-f "$SCRIPT_DIR/../Makefile" \
+		-n check-release-security-notes
+)
+if [[ $phony_output != *'bash tools/check-release-security-notes-tests.sh'* ]]; then
+	echo "expected check-release-security-notes Make target to remain runnable when a same-name file exists" >&2
 	exit 1
 fi
