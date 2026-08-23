@@ -142,4 +142,4 @@ file a well-formed bug with `bzr-file-bug`; single-bug read-before-write
 triage with `bzr-triage-bug`; query-driven bulk sweeps with `bzr-bulk-triage`.
 Command-surface reference (flags, JSON envelope, auth): `bzr-reference`.
 
-This reference is authored against **bzr 0.8.2**.
+This reference is authored against **bzr 0.8.3-dev**.

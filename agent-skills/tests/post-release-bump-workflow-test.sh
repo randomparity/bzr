@@ -74,8 +74,15 @@ if [ "$update_rc" -eq 0 ]; then
   printf '%s\n' '# no version claim' \
     >"$missing/content/skills/bzr-reference/reference/commands.md"
   out=$(cd "$missing" && NEXT=9.8.7-dev bash "$UPDATE" 2>&1) && rc=0 || rc=$?
-  assert_eq "missing claim fails" "1" "$rc"
-  assert_contains "missing claim names file" "$out" "commands.md"
+  # Discovery-based update skips the claim-less file instead of failing;
+  # the workflow's version-contract verify step is what rejects it.
+  assert_eq "update skips missing-claim file" "0" "$rc"
+  out=$("$VERSION_CHECK" \
+    "$missing/Cargo.toml" \
+    "$missing/agent-skills" \
+    "$missing/content/skills" 2>&1) && rc=0 || rc=$?
+  assert_eq "verify rejects skipped missing claim" "1" "$rc"
+  assert_contains "verify names stale file" "$out" "commands.md"
 
   duplicate="$WORK/duplicate"
   make_fixture "$duplicate"
@@ -88,11 +95,11 @@ fi
 
 commit_step=$(extract_step 'Commit and push branch')
 for path in \
-  agent-skills/VERSION \
-  agent-skills/README.md \
-  content/skills/bzr-reference/SKILL.md \
-  content/skills/bzr-reference/reference/commands.md \
-  content/skills/bzr-reference/reference/commands.yml; do
+  Cargo.toml \
+  Cargo.lock \
+  CHANGELOG.md \
+  agent-skills \
+  content; do
   assert_contains "commit stages $path" "$commit_step" "$path"
 done
 

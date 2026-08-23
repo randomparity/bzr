@@ -808,12 +808,21 @@ jobs:
               rf"(authored\s+against[^0-9]{{0,20}}bzr[^0-9]{{0,12}}){version_pattern}",
               re.IGNORECASE,
           )
-          claim_paths = (
-              Path("agent-skills/README.md"),
-              Path("content/skills/bzr-reference/SKILL.md"),
-              Path("content/skills/bzr-reference/reference/commands.md"),
-              Path("content/skills/bzr-reference/reference/commands.yml"),
+          # Discover every payload file carrying an authored-against claim
+          # instead of maintaining a hand-written list; version-check.sh
+          # scans the same trees, so a new skill's claim is picked up the
+          # day it is written. Only .md/.yml files match: test fixtures
+          # embed sample claims that must never be rewritten.
+          claim_paths = sorted(
+              path
+              for root in (Path("agent-skills"), Path("content/skills"))
+              for path in root.rglob("*")
+              if path.is_file()
+              and path.suffix in (".md", ".yml")
+              and claim_pattern.search(path.read_text())
           )
+          if not claim_paths:
+              raise SystemExit("no authored-against claims found; refusing no-op bump")
 
           Path("agent-skills/VERSION").write_text(f"{version}\n")
           for path in claim_paths:
@@ -866,11 +875,8 @@ jobs:
             Cargo.toml \
             Cargo.lock \
             CHANGELOG.md \
-            agent-skills/VERSION \
-            agent-skills/README.md \
-            content/skills/bzr-reference/SKILL.md \
-            content/skills/bzr-reference/reference/commands.md \
-            content/skills/bzr-reference/reference/commands.yml
+            agent-skills \
+            content
           if git diff --staged --quiet; then
             echo "::error::No changes staged after bump steps; investigate." >&2
             exit 1
