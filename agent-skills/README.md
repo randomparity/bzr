@@ -19,6 +19,7 @@ and bumping the version are one change, not two.
 | `bzr-triage-bug` | Read-before-write triage of an existing bug |
 | `bzr-search-report` | Search and build a digest with `--json` + `jq` |
 | `bzr-bulk-triage` | Stream a query and mutate many bugs safely (preview before write) |
+| `bzr-release-tracking` | Track a release milestone: enumerate, drift-check, rebalance, digest, close out |
 
 ## Install
 

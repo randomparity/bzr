@@ -10,6 +10,7 @@ fn embeds_all_current_skills_in_lexical_order() {
             "bzr-bulk-triage",
             "bzr-file-bug",
             "bzr-reference",
+            "bzr-release-tracking",
             "bzr-search-report",
             "bzr-setup",
             "bzr-triage-bug",
