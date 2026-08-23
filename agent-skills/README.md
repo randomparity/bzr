@@ -20,6 +20,7 @@ and bumping the version are one change, not two.
 | `bzr-search-report` | Search and build a digest with `--json` + `jq` |
 | `bzr-dry-run-confirm` | Preview-then-write round-trip: `--dry-run`, verify, commit |
 | `bzr-bulk-triage` | Stream a query and mutate many bugs safely (preview before write) |
+| `bzr-release-tracking` | Track a release milestone: enumerate, drift-check, rebalance, digest, close out |
 
 ## Install
 
