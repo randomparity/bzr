@@ -173,8 +173,8 @@ awk \
       for (field = 1; field <= field_count; field++) {
         if (index($0, fields[field]) == 1) {
           value = trim(substr($0, length(fields[field]) + 1))
-          if (value == "") {
-            fail("vulnerability fields must have non-empty same-line values", entry_count)
+          if (value !~ /[!-~]/) {
+            fail("vulnerability fields must have a visible same-line value", entry_count)
           }
           if (++seen[field] != 1) {
             fail("each vulnerability field must appear exactly once per entry", entry_count)

@@ -10,6 +10,7 @@ trap 'rm -r "$FIXTURES"' EXIT
 
 NO_VULNERABILITIES='Security assessment: No publicly identified runtime vulnerabilities in bzr were fixed in this release.'
 QUALIFYING_VULNERABILITIES='Security assessment: Publicly identified runtime vulnerabilities in bzr were fixed in this release.'
+ZERO_WIDTH_SPACE=$(printf '\342\200\213')
 
 write_fixture() {
   local name=$1
@@ -732,6 +733,20 @@ $QUALIFYING_VULNERABILITIES
 EOF
 )
 expect_rejected "character references that render required fields empty" "$render_empty_entity_fields"
+
+zero_width_fields=$(
+  write_fixture zero-width-fields <<EOF
+$QUALIFYING_VULNERABILITIES
+
+#### Vulnerability: GHSA-zero-width-fields
+- Affected bzr versions: $ZERO_WIDTH_SPACE
+- First fixed version: $ZERO_WIDTH_SPACE
+- Runtime impact: $ZERO_WIDTH_SPACE
+- Advisory: https://github.com/randomparity/bzr/security/advisories/GHSA-zero-width-fields
+- Upgrade guidance: $ZERO_WIDTH_SPACE
+EOF
+)
+expect_rejected "zero-width-only required fields" "$zero_width_fields"
 
 duplicate_field=$(
   write_fixture duplicate-field <<EOF
