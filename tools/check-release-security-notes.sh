@@ -110,7 +110,7 @@ awk \
       next
     }
 
-    if (assessment == "qualifying" && in_block && $0 ~ /^###([[:space:]]|$)/) {
+    if (assessment == "qualifying" && in_block && $0 ~ /^(   |  | )?###([[:space:]]|$)/) {
       complete_entry()
       in_block = 0
       next

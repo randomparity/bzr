@@ -44,6 +44,23 @@ expect_allowed_from_directory() {
 	fi
 }
 
+expect_indented_level_three_heading_rejected() {
+	local name=$1
+	local indentation=$2
+	local fixture="$FIXTURES/$name"
+	{
+		printf '%s\n' "$QUALIFYING_VULNERABILITIES"
+		printf '%s\n' "#### Vulnerability: GHSA-$name"
+		printf '%s\n' '- Affected bzr versions: < 1.2.3'
+		printf '%s\n' '- First fixed version: 1.2.3'
+		printf '%s### Dependency security\n' "$indentation"
+		printf '%s\n' '- Runtime impact: A remote server could cause a denial of service.'
+		printf '%s\n' "- Advisory: https://example.com/GHSA-$name"
+		printf '%s\n' '- Upgrade guidance: Upgrade to bzr 1.2.3 or later.'
+	} >"$fixture"
+	expect_rejected "$name ends an entry" "$fixture"
+}
+
 no_qualifying=$(
 	write_fixture no-qualifying <<EOF
 $NO_VULNERABILITIES
@@ -110,6 +127,24 @@ tabbed_level_three_heading="$FIXTURES/tabbed-level-three-heading"
 	printf '%s\n' '- Upgrade guidance: Upgrade to bzr 1.2.3 or later.'
 } >"$tabbed_level_three_heading"
 expect_rejected "tabbed level-three heading ends an entry" "$tabbed_level_three_heading"
+
+expect_indented_level_three_heading_rejected one-space-level-three-heading ' '
+expect_indented_level_three_heading_rejected two-space-level-three-heading '  '
+expect_indented_level_three_heading_rejected three-space-level-three-heading '   '
+
+four_space_code_block=$(
+	write_fixture four-space-code-block <<EOF
+$QUALIFYING_VULNERABILITIES
+#### Vulnerability: GHSA-four-space-code-block
+- Affected bzr versions: < 1.2.3
+- First fixed version: 1.2.3
+    ### Dependency security
+- Runtime impact: A remote server could cause a denial of service.
+- Advisory: https://example.com/GHSA-four-space-code-block
+- Upgrade guidance: Upgrade to bzr 1.2.3 or later.
+EOF
+)
+expect_allowed "four-space code block does not end an entry" "$four_space_code_block"
 
 leading_hyphen_directory="$FIXTURES/leading-hyphen"
 mkdir "$leading_hyphen_directory"
