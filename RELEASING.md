@@ -102,7 +102,8 @@ Immediately before pushing the tag, refresh the advisory inventory and validate
 the exact candidate release body. Replace `X.Y.Z` with the candidate version,
 whose heading must already be `## [X.Y.Z] - YYYY-MM-DD`; the trap removes the
 temporary file when the subshell completes, without replacing the caller's EXIT
-trap.
+trap. For the current development section only, set `VERSION=Unreleased`; its
+heading must be exactly `## [Unreleased]` and is the only accepted undated form.
 
 ```bash
 (
@@ -112,7 +113,11 @@ trap.
   trap 'rm -f "$notes_file"' EXIT
   awk -v version="$VERSION" '
     function is_candidate_heading(line, prefix, date) {
-      prefix = "## [" version "] - "
+      prefix = "## [" version "]"
+      if (version == "Unreleased") {
+        return line == prefix
+      }
+      prefix = prefix " - "
       if (index(line, prefix) != 1 || length(line) != length(prefix) + 10) {
         return 0
       }
