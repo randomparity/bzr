@@ -11,6 +11,25 @@ SKILLS_PROJECT="$FUNC_CONFIG_DIR/skills-project"
 mkdir "$SKILLS_PROJECT"
 SKILLS_PROJECT_CANONICAL=$(cd "$SKILLS_PROJECT" && pwd -P)
 
+# The installer replaces every skill in the embedded payload, so this list must
+# track content/skills/ exactly (build.rs embeds it sorted by relative path,
+# which is also the emitted order of `.destinations[*].installed`; that order
+# equals plain lexical name order only while no skill name is a hyphen-prefix
+# of another). Drift trips src/skills/embedded_tests.rs
+# (embeds_all_current_skills_in_lexical_order) under make test-fast first,
+# then fails here on count or fixture mismatch — update all three lists
+# together.
+SKILLS_EXPECTED=(
+  bzr-bulk-triage
+  bzr-dry-run-confirm
+  bzr-file-bug
+  bzr-reference
+  bzr-release-tracking
+  bzr-search-report
+  bzr-setup
+  bzr-triage-bug
+)
+
 test_begin "123a. skills install populates both project layouts"
 run_bzr skills install --agent all --project "$SKILLS_PROJECT"
 if assert_success &&
@@ -34,8 +53,8 @@ run_bzr skills install --agent all --project "$SKILLS_PROJECT"
 if assert_success &&
   ! grep -q "local stale marker" \
     "$SKILLS_PROJECT/.agents/skills/bzr-reference/SKILL.md" &&
-  [[ $(jq -r '.destinations[0].installed | length' "$BZR_STDOUT") == 6 ]] &&
-  [[ $(jq -r '.destinations[1].installed | length' "$BZR_STDOUT") == 6 ]]; then
+  [[ $(jq -r '.destinations[0].installed | length' "$BZR_STDOUT") == ${#SKILLS_EXPECTED[@]} ]] &&
+  [[ $(jq -r '.destinations[1].installed | length' "$BZR_STDOUT") == ${#SKILLS_EXPECTED[@]} ]]; then
   test_pass
 else
   [[ $FAIL_COUNT -gt 0 ]] || test_fail "owned skill was not replaced from embedded payload"
@@ -65,7 +84,7 @@ SKILLS_NDJSON="$FUNC_CONFIG_DIR/skills-ndjson"
 SKILLS_NDJSON_EXPECTED="$FUNC_CONFIG_DIR/skills-ndjson-expected.json"
 mkdir "$SKILLS_NDJSON"
 SKILLS_NDJSON_CANONICAL=$(cd "$SKILLS_NDJSON" && pwd -P)
-jq -n --arg project "$SKILLS_NDJSON_CANONICAL" '
+jq -n --arg project "$SKILLS_NDJSON_CANONICAL" --args '
   {
     action: "install",
     agent: "all",
@@ -75,30 +94,16 @@ jq -n --arg project "$SKILLS_NDJSON_CANONICAL" '
       {
         layout: "agents",
         path: ($project + "/.agents/skills"),
-        installed: [
-          "bzr-bulk-triage",
-          "bzr-file-bug",
-          "bzr-reference",
-          "bzr-search-report",
-          "bzr-setup",
-          "bzr-triage-bug"
-        ]
+        installed: $ARGS.positional
       },
       {
         layout: "claude",
         path: ($project + "/.claude/skills"),
-        installed: [
-          "bzr-bulk-triage",
-          "bzr-file-bug",
-          "bzr-reference",
-          "bzr-search-report",
-          "bzr-setup",
-          "bzr-triage-bug"
-        ]
+        installed: $ARGS.positional
       }
     ]
   }
-' >"$SKILLS_NDJSON_EXPECTED"
+' "${SKILLS_EXPECTED[@]}" >"$SKILLS_NDJSON_EXPECTED"
 test_begin "123d. skills install emits one bare, complete NDJSON object"
 run_bzr_raw --output ndjson skills install --agent all --project "$SKILLS_NDJSON"
 if assert_success &&
