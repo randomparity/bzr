@@ -99,21 +99,33 @@ release that fixes no qualifying vulnerability uses the exact no-vulnerability
 marker above, never `N/A`.
 
 Immediately before pushing the tag, refresh the advisory inventory and validate
-the exact candidate release body. Replace `X.Y.Z` with the candidate version;
-the trap removes the temporary file on success, validation failure, or an
-interruption handled by the shell.
+the exact candidate release body. Replace `X.Y.Z` with the candidate version,
+whose heading must already be `## [X.Y.Z] - YYYY-MM-DD`; the trap removes the
+temporary file when the subshell completes, without replacing the caller's EXIT
+trap.
 
 ```bash
-VERSION=X.Y.Z
-notes_file=$(mktemp)
-trap 'rm -f "$notes_file"' EXIT
-awk -v version="$VERSION" '
-  $0 ~ "^## \\[" version "\\]" { capture = 1; next }
-  capture && /^## \[/ { exit }
-  capture { print }
-' CHANGELOG.md >"$notes_file"
-test -s "$notes_file"
-bash tools/check-release-security-notes.sh "$notes_file"
+(
+  set -euo pipefail
+  VERSION=X.Y.Z
+  notes_file=$(mktemp)
+  trap 'rm -f "$notes_file"' EXIT
+  awk -v version="$VERSION" '
+    function is_candidate_heading(line, prefix, date) {
+      prefix = "## [" version "] - "
+      if (index(line, prefix) != 1 || length(line) != length(prefix) + 10) {
+        return 0
+      }
+      date = substr(line, length(prefix) + 1)
+      return date ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/
+    }
+    is_candidate_heading($0) { capture = 1; next }
+    capture && index($0, "## [") == 1 { exit }
+    capture { print }
+  ' CHANGELOG.md >"$notes_file"
+  test -s "$notes_file"
+  bash tools/check-release-security-notes.sh "$notes_file"
+)
 ```
 
 If the final refresh or validator finds a problem before tag push, correct the
