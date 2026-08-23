@@ -17,6 +17,10 @@ comments and attachments, switch between multiple Bugzilla instances, and use
 REST, XML-RPC, or hybrid API transport as each server requires — all from your
 terminal.
 
+<div align="center">
+  <img src="docs/assets/bzr-demo.gif" alt="Animated terminal session: listing bugs in a colored table, viewing a bug, adding a comment, updating its status, and piping JSON output to jq">
+</div>
+
 ## Quick start
 
 ```bash

@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   scope, canonical project path, destinations, and sorted installed skills. The
   standalone installers remain available for no-binary use and fetch `main` by
   default, with `BZR_SKILL_REF` for a pinned payload. (#523)
+- Terminal demo (`docs/assets/bzr-demo.gif`) near the top of the README,
+  recorded from a real session against the functional-test Bugzilla container;
+  `tools/record-demo.sh` regenerates it when CLI output changes.
 
 ### Changed
 
