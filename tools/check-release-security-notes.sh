@@ -29,7 +29,7 @@ if ((file_bytes > MAX_FILE_BYTES)); then
 	fail "the release-notes file must not exceed 1 MiB"
 fi
 
-if ! awk -v maximum="$MAX_LINE_BYTES" 'length($0) > maximum { exit 1 }' "$notes_file"; then
+if ! awk -v maximum="$MAX_LINE_BYTES" 'length($0) > maximum { exit 1 }' <"$notes_file"; then
 	fail "release-note lines must not exceed 4,096 bytes"
 fi
 
@@ -110,7 +110,7 @@ awk \
       next
     }
 
-    if (assessment == "qualifying" && in_block && $0 ~ /^### /) {
+    if (assessment == "qualifying" && in_block && $0 ~ /^###([[:space:]]|$)/) {
       complete_entry()
       in_block = 0
       next
@@ -160,4 +160,4 @@ awk \
       fail("the qualifying assessment requires at least one complete vulnerability entry")
     }
   }
-' "$notes_file"
+' <"$notes_file"

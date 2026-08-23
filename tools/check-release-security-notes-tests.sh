@@ -34,6 +34,16 @@ expect_rejected() {
 	fi
 }
 
+expect_allowed_from_directory() {
+	local name=$1
+	local directory=$2
+	local fixture_name=$3
+	if ! (cd "$directory" && bash "$VALIDATOR" "$fixture_name") >/dev/null 2>&1; then
+		echo "expected release-security validator to allow $name" >&2
+		return 1
+	fi
+}
+
 no_qualifying=$(
 	write_fixture no-qualifying <<EOF
 $NO_VULNERABILITIES
@@ -73,6 +83,38 @@ $QUALIFYING_VULNERABILITIES
 EOF
 )
 expect_allowed "complete qualifying entry" "$complete_entry"
+
+bare_level_three_heading=$(
+	write_fixture bare-level-three-heading <<EOF
+$QUALIFYING_VULNERABILITIES
+#### Vulnerability: GHSA-bare-heading
+- Affected bzr versions: < 1.2.3
+- First fixed version: 1.2.3
+###
+- Runtime impact: A remote server could cause a denial of service.
+- Advisory: https://example.com/GHSA-bare-heading
+- Upgrade guidance: Upgrade to bzr 1.2.3 or later.
+EOF
+)
+expect_rejected "bare level-three heading ends an entry" "$bare_level_three_heading"
+
+tabbed_level_three_heading="$FIXTURES/tabbed-level-three-heading"
+{
+	printf '%s\n' "$QUALIFYING_VULNERABILITIES"
+	printf '%s\n' '#### Vulnerability: GHSA-tabbed-heading'
+	printf '%s\n' '- Affected bzr versions: < 1.2.3'
+	printf '%s\n' '- First fixed version: 1.2.3'
+	printf '###\tDependency security\n'
+	printf '%s\n' '- Runtime impact: A remote server could cause a denial of service.'
+	printf '%s\n' '- Advisory: https://example.com/GHSA-tabbed-heading'
+	printf '%s\n' '- Upgrade guidance: Upgrade to bzr 1.2.3 or later.'
+} >"$tabbed_level_three_heading"
+expect_rejected "tabbed level-three heading ends an entry" "$tabbed_level_three_heading"
+
+leading_hyphen_directory="$FIXTURES/leading-hyphen"
+mkdir "$leading_hyphen_directory"
+printf '%s\n' "$NO_VULNERABILITIES" >"$leading_hyphen_directory/-release-notes"
+expect_allowed_from_directory "leading-hyphen filename" "$leading_hyphen_directory" '-release-notes'
 
 missing_assessment=$(
 	write_fixture missing-assessment <<'EOF'
