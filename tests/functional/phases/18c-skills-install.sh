@@ -13,7 +13,12 @@ SKILLS_PROJECT_CANONICAL=$(cd "$SKILLS_PROJECT" && pwd -P)
 
 # The installer replaces every skill in the embedded payload, so this list must
 # track content/skills/ exactly (build.rs embeds it sorted by relative path,
-# which is also the emitted order of `.destinations[*].installed`).
+# which is also the emitted order of `.destinations[*].installed`; that order
+# equals plain lexical name order only while no skill name is a hyphen-prefix
+# of another). Drift trips src/skills/embedded_tests.rs
+# (embeds_all_current_skills_in_lexical_order) under make test-fast first,
+# then fails here on count or fixture mismatch — update all three lists
+# together.
 SKILLS_EXPECTED=(
   bzr-bulk-triage
   bzr-dry-run-confirm
