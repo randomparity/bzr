@@ -47,7 +47,7 @@ jobs:
         run: |
           mkdir -p _site/docs
           cp -r docs/assets _site/docs/assets
-          cp scorecard.png _site/scorecard.png
+          cp site/style.css _site/style.css
           pandoc -f gfm -t html5 --template site/template.html \
             --metadata title="bzr - Bugzilla CLI" \
             --output _site/index.html README.md
@@ -56,6 +56,8 @@ jobs:
             --output _site/changelog.html CHANGELOG.md
           test -s _site/index.html
           test -s _site/changelog.html
+          test -s _site/style.css
+          test -s _site/docs/assets/bzr-logo.png
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
