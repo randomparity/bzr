@@ -9,13 +9,24 @@ on:
       - 'site/**'
       - 'docs/assets/**'
       - '.github/workflows/site.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'README.md'
+      - 'CHANGELOG.md'
+      - 'site/**'
+      - 'docs/assets/**'
+      - '.github/workflows/site.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: pages
+  group: >-
+    ${{ github.event_name == 'pull_request'
+        && format('pages-pr-{0}', github.event.pull_request.number)
+        || 'pages' }}
   cancel-in-progress: false
 
 jobs:
@@ -26,6 +37,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Install Pandoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc
 
       - name: Build pages from README and CHANGELOG
         run: |
@@ -38,6 +54,8 @@ jobs:
           pandoc -f gfm -t html5 --template site/template.html \
             --metadata title="bzr Changelog" \
             --output _site/changelog.html CHANGELOG.md
+          test -s _site/index.html
+          test -s _site/changelog.html
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
@@ -45,6 +63,7 @@ jobs:
 
   deploy:
     name: Deploy to GitHub Pages
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     permissions:
