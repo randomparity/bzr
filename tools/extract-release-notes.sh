@@ -3,6 +3,9 @@ set -euo pipefail
 
 export LC_ALL=C
 
+readonly MAX_FILE_BYTES=1048576
+readonly MAX_LINE_BYTES=4096
+
 if (($# != 2)); then
 	echo "ERROR: release-note extraction requires a changelog file and version." >&2
 	exit 1
@@ -19,40 +22,10 @@ if [[ -z $version ]]; then
 	exit 1
 fi
 
-if ! awk '
-  function strip_marker_indent(line) {
-    if (substr(line, 1, 3) == "   ") {
-      return substr(line, 4)
-    }
-    if (substr(line, 1, 2) == "  ") {
-      return substr(line, 3)
-    }
-    if (substr(line, 1, 1) == " ") {
-      return substr(line, 2)
-    }
-    return line
-  }
+notes_file=$(mktemp)
+trap 'rm -f "$notes_file"' EXIT
 
-  function is_fence_marker(line, marker, character, run_length) {
-    marker = strip_marker_indent(line)
-    character = substr(marker, 1, 1)
-    if (character != "`" && character != "~") {
-      return 0
-    }
-    run_length = 0
-    while (substr(marker, run_length + 1, 1) == character) {
-      run_length++
-    }
-    return run_length >= 3
-  }
-
-  is_fence_marker($0) || index($0, "<!--") != 0 || index($0, "-->") != 0 { exit 1 }
-' <"$changelog_file"; then
-	echo "ERROR: CHANGELOG.md must not contain fenced-code markers or HTML-comment delimiters." >&2
-	exit 1
-fi
-
-awk -v version="$version" '
+if ! awk -v version="$version" '
   function is_candidate_heading(line, prefix, date) {
     prefix = "## [" version "]"
     if (version == "Unreleased") {
@@ -100,4 +73,39 @@ awk -v version="$version" '
       exit 1
     }
   }
-' <"$changelog_file"
+' <"$changelog_file" >"$notes_file"; then
+	exit 1
+fi
+
+file_bytes=$(wc -c <"$notes_file")
+if ((file_bytes > MAX_FILE_BYTES)); then
+	echo "ERROR: candidate release notes must not exceed 1 MiB." >&2
+	exit 1
+fi
+
+if ! awk -v maximum="$MAX_LINE_BYTES" 'length($0) > maximum { exit 1 }' <"$notes_file"; then
+	echo "ERROR: candidate release-note lines must not exceed 4,096 bytes." >&2
+	exit 1
+fi
+
+if ! awk '
+  function strip_marker_indent(line) {
+    sub(/^   /, "", line)
+    sub(/^  /, "", line)
+    sub(/^ /, "", line)
+    return line
+  }
+
+  function is_tilde_fence(line) {
+    line = strip_marker_indent(line)
+    return line ~ /^~~~/
+  }
+
+  is_tilde_fence($0) || index($0, "<") != 0 || index($0, ">") != 0 || \
+    index($0, "[") != 0 || index($0, "]") != 0 || index($0, "`") != 0 { exit 1 }
+' <"$notes_file"; then
+	echo "ERROR: candidate release notes must use the bounded plain-text grammar." >&2
+	exit 1
+fi
+
+cat "$notes_file"

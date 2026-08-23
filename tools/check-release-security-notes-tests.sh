@@ -13,7 +13,10 @@ QUALIFYING_VULNERABILITIES='Security assessment: Publicly identified runtime vul
 
 write_fixture() {
 	local name=$1
-	cat >"$FIXTURES/$name"
+	{
+		printf '%s\n\n' '### Security'
+		cat
+	} >"$FIXTURES/$name"
 	printf '%s\n' "$FIXTURES/$name"
 }
 
@@ -101,7 +104,7 @@ expect_indented_level_three_heading_rejected() {
 	{
 		printf '%s\n' "$QUALIFYING_VULNERABILITIES"
 		printf '%s\n' "#### Vulnerability: GHSA-$name"
-		printf '%s\n' '- Affected bzr versions: < 1.2.3'
+		printf '%s\n' '- Affected bzr versions: before 1.2.3'
 		printf '%s\n' '- First fixed version: 1.2.3'
 		printf '%s### Dependency security\n' "$indentation"
 		printf '%s\n' '- Runtime impact: A remote server could cause a denial of service.'
@@ -120,7 +123,7 @@ expect_indented_vulnerability_heading() {
 	{
 		printf '%s\n' "$assessment"
 		printf '%s%s\n' "$indentation" "#### Vulnerability: GHSA-$name"
-		printf '%s\n' '- Affected bzr versions: < 1.2.3'
+		printf '%s\n' '- Affected bzr versions: before 1.2.3'
 		printf '%s\n' '- First fixed version: 1.2.3'
 		printf '%s\n' '- Runtime impact: A remote server could cause a denial of service.'
 		printf '%s\n' "- Advisory: https://example.com/GHSA-$name"
@@ -163,8 +166,9 @@ expect_allowed "fixed issue without public identifier" "$unidentified_issue"
 complete_entry=$(
 	write_fixture complete-entry <<EOF
 $QUALIFYING_VULNERABILITIES
+
 #### Vulnerability: GHSA-1234-5678-9abc
-- Affected bzr versions: < 1.2.3
+- Affected bzr versions: before 1.2.3
 - First fixed version: 1.2.3
 - Runtime impact: A remote server could cause a denial of service.
 - Advisory: https://github.com/randomparity/bzr/security/advisories/GHSA-1234-5678-9abc
@@ -173,11 +177,69 @@ EOF
 )
 expect_allowed "complete qualifying entry" "$complete_entry"
 
+image_wrapped_assessment=$(
+	write_fixture image-wrapped-assessment <<EOF
+![
+$NO_VULNERABILITIES
+](https://example.com/image.png)
+EOF
+)
+expect_rejected "assessment in a multiline image label" "$image_wrapped_assessment"
+
+html_wrapped_assessment=$(
+	write_fixture html-wrapped-assessment <<EOF
+<details>
+$NO_VULNERABILITIES
+</details>
+EOF
+)
+expect_rejected "assessment in a raw HTML container" "$html_wrapped_assessment"
+
+late_assessment=$(
+	write_fixture late-assessment <<EOF
+Release overview.
+
+$NO_VULNERABILITIES
+EOF
+)
+expect_rejected "assessment outside the first Security paragraph" "$late_assessment"
+
+render_empty_identifier=$(
+	write_fixture render-empty-identifier <<EOF
+$QUALIFYING_VULNERABILITIES
+
+#### Vulnerability: []()
+- Affected bzr versions: before 1.2.3
+- First fixed version: 1.2.3
+- Runtime impact: A remote server could cause a denial of service.
+- Advisory: https://example.com/GHSA-render-empty
+- Upgrade guidance: Upgrade to bzr 1.2.3 or later.
+EOF
+)
+expect_rejected "render-empty vulnerability identifier" "$render_empty_identifier"
+
+for public_identifier in CVE-2026-12345 GHSA-1234-5678-9abc RUSTSEC-2026-0001; do
+	visible_identifier=$(
+		write_fixture "visible-$public_identifier" <<EOF
+$QUALIFYING_VULNERABILITIES
+
+#### Vulnerability: $public_identifier
+- Affected bzr versions: before 1.2.3
+- First fixed version: 1.2.3
+- Runtime impact: A remote server could cause a denial of service.
+- Advisory: https://example.com/$public_identifier
+- Upgrade guidance: Upgrade to bzr 1.2.3 or later.
+EOF
+	)
+	expect_allowed "visible $public_identifier token" "$visible_identifier"
+done
+
 empty_rendered_identifier=$(
 	write_fixture empty-rendered-identifier <<EOF
 $QUALIFYING_VULNERABILITIES
+
 #### Vulnerability: ###
-- Affected bzr versions: < 1.2.3
+- Affected bzr versions: before 1.2.3
 - First fixed version: 1.2.3
 - Runtime impact: A remote server could cause a denial of service.
 - Advisory: https://example.com/GHSA-empty-rendered-identifier
@@ -189,15 +251,16 @@ expect_rejected "ATX closing hashes with no rendered identifier" "$empty_rendere
 identifier_with_closing_hashes=$(
 	write_fixture identifier-with-closing-hashes <<EOF
 $QUALIFYING_VULNERABILITIES
+
 #### Vulnerability: GHSA-visible-identifier ###
-- Affected bzr versions: < 1.2.3
+- Affected bzr versions: before 1.2.3
 - First fixed version: 1.2.3
 - Runtime impact: A remote server could cause a denial of service.
 - Advisory: https://example.com/GHSA-visible-identifier
 - Upgrade guidance: Upgrade to bzr 1.2.3 or later.
 EOF
 )
-expect_allowed "identifier before optional ATX closing hashes" "$identifier_with_closing_hashes"
+expect_rejected "identifier with ATX closing hashes" "$identifier_with_closing_hashes"
 
 expect_indented_vulnerability_heading \
 	"no-outcome-one-space-vulnerability-heading" \
@@ -218,23 +281,24 @@ expect_indented_vulnerability_heading \
 	"qualifying-one-space-vulnerability-heading" \
 	' ' \
 	"$QUALIFYING_VULNERABILITIES" \
-	allowed
+	rejected
 expect_indented_vulnerability_heading \
 	"qualifying-two-space-vulnerability-heading" \
 	'  ' \
 	"$QUALIFYING_VULNERABILITIES" \
-	allowed
+	rejected
 expect_indented_vulnerability_heading \
 	"qualifying-three-space-vulnerability-heading" \
 	'   ' \
 	"$QUALIFYING_VULNERABILITIES" \
-	allowed
+	rejected
 
 bare_level_three_heading=$(
 	write_fixture bare-level-three-heading <<EOF
 $QUALIFYING_VULNERABILITIES
+
 #### Vulnerability: GHSA-bare-heading
-- Affected bzr versions: < 1.2.3
+- Affected bzr versions: before 1.2.3
 - First fixed version: 1.2.3
 ###
 - Runtime impact: A remote server could cause a denial of service.
@@ -248,7 +312,7 @@ tabbed_level_three_heading="$FIXTURES/tabbed-level-three-heading"
 {
 	printf '%s\n' "$QUALIFYING_VULNERABILITIES"
 	printf '%s\n' '#### Vulnerability: GHSA-tabbed-heading'
-	printf '%s\n' '- Affected bzr versions: < 1.2.3'
+	printf '%s\n' '- Affected bzr versions: before 1.2.3'
 	printf '%s\n' '- First fixed version: 1.2.3'
 	printf '###\tDependency security\n'
 	printf '%s\n' '- Runtime impact: A remote server could cause a denial of service.'
@@ -264,8 +328,9 @@ expect_indented_level_three_heading_rejected three-space-level-three-heading '  
 four_space_code_block=$(
 	write_fixture four-space-code-block <<EOF
 $QUALIFYING_VULNERABILITIES
+
 #### Vulnerability: GHSA-four-space-code-block
-- Affected bzr versions: < 1.2.3
+- Affected bzr versions: before 1.2.3
 - First fixed version: 1.2.3
     ### Dependency security
 - Runtime impact: A remote server could cause a denial of service.
@@ -278,9 +343,10 @@ expect_allowed "four-space code block does not end an entry" "$four_space_code_b
 fenced_fields=$(
 	write_fixture fenced-fields <<EOF
 $QUALIFYING_VULNERABILITIES
+
 #### Vulnerability: GHSA-fenced-fields
 \`\`\`text
-- Affected bzr versions: < 1.2.3
+- Affected bzr versions: before 1.2.3
 - First fixed version: 1.2.3
 - Runtime impact: These fields are hidden in a fenced code block.
 - Advisory: https://example.com/GHSA-fenced-fields
@@ -328,9 +394,10 @@ expect_rejected \
 commented_fields=$(
 	write_fixture commented-fields <<EOF
 $QUALIFYING_VULNERABILITIES
+
 #### Vulnerability: GHSA-commented-fields
 <!--
-- Affected bzr versions: < 1.2.3
+- Affected bzr versions: before 1.2.3
 - First fixed version: 1.2.3
 - Runtime impact: These fields are hidden in an HTML comment.
 - Advisory: https://example.com/GHSA-commented-fields
@@ -343,6 +410,8 @@ expect_rejected "required fields hidden in an HTML comment" "$commented_fields"
 prerelease_changelog=$(
 	write_fixture prerelease-changelog <<EOF
 ## [1.2.3-rc.1] - 2026-08-22
+### Security
+
 $NO_VULNERABILITIES
 
 ## [1.2.2] - 2026-08-01
@@ -357,6 +426,8 @@ expect_extracted_validation_allowed \
 regex_collision_changelog=$(
 	write_fixture regex-collision-changelog <<EOF
 ## [1x2y3] - 2026-08-22
+### Security
+
 $NO_VULNERABILITIES
 
 ## [1.2.3] - 2026-08-22
@@ -375,9 +446,13 @@ expect_extracted_validation_rejected \
 duplicate_headings_changelog=$(
 	write_fixture duplicate-headings-changelog <<EOF
 ## [1.2.3] - 2026-08-22
+### Security
+
 $NO_VULNERABILITIES
 
 ## [1.2.3] - 2026-08-21
+### Security
+
 $NO_VULNERABILITIES
 EOF
 )
@@ -403,6 +478,8 @@ fenced_boundary_changelog=$(
 $NO_VULNERABILITIES
 
 ## [1.9.0] - 2026-08-01
+### Security
+
 $QUALIFYING_VULNERABILITIES
 EOF
 )
@@ -421,6 +498,8 @@ commented_boundary_changelog=$(
 $NO_VULNERABILITIES
 
 ## [2.0.0] - 2026-08-01
+### Security
+
 $QUALIFYING_VULNERABILITIES
 EOF
 )
@@ -437,20 +516,26 @@ non_release_boundary_changelog=$(
 $NO_VULNERABILITIES
 
 ## [2.1.0] - 2026-08-01
+### Security
+
 $QUALIFYING_VULNERABILITIES
 EOF
 )
-expect_extracted_validation_allowed \
-	"bracketed non-release heading" \
+expect_extraction_rejected \
+	"bracketed non-release heading in candidate body" \
 	"$non_release_boundary_changelog" \
 	"2.2.0"
 
 backtick_info_changelog=$(
 	write_fixture backtick-info-changelog <<EOF
 ## [2.3.0] - 2026-08-22
+### Security
+
 $NO_VULNERABILITIES
 \`\`\`text\`literal
 ## [2.2.0] - 2026-08-01
+### Security
+
 $QUALIFYING_VULNERABILITIES
 EOF
 )
@@ -477,9 +562,13 @@ expect_extraction_rejected \
 tilde_fence_changelog=$(
 	write_fixture tilde-fence-changelog <<EOF
 ## [2.5.0] - 2026-08-22
+### Security
+
 $NO_VULNERABILITIES
 ~~~text
 ## [2.4.0] - 2026-08-01
+### Security
+
 $QUALIFYING_VULNERABILITIES
 EOF
 )
@@ -491,9 +580,13 @@ expect_extraction_rejected \
 inline_comment_token_changelog=$(
 	write_fixture inline-comment-token-changelog <<EOF
 ## [2.6.0] - 2026-08-22
+### Security
+
 $NO_VULNERABILITIES
 - Use \`<!--\` when describing an HTML comment opener.
 ## [2.5.0] - 2026-08-01
+### Security
+
 $QUALIFYING_VULNERABILITIES
 EOF
 )
@@ -505,9 +598,13 @@ expect_extraction_rejected \
 comment_closer_token_changelog=$(
 	write_fixture comment-closer-token-changelog <<EOF
 ## [2.7.0] - 2026-08-22
+### Security
+
 $NO_VULNERABILITIES
 - A literal --> token is outside the bounded release-note grammar.
 ## [2.6.0] - 2026-08-01
+### Security
+
 $QUALIFYING_VULNERABILITIES
 EOF
 )
@@ -519,20 +616,75 @@ expect_extraction_rejected \
 ordinary_inline_backticks_changelog=$(
 	write_fixture ordinary-inline-backticks-changelog <<EOF
 ## [2.8.0] - 2026-08-22
+### Security
+
 $NO_VULNERABILITIES
 - Use \`bzr bug view\` to inspect a bug.
 ## [2.7.0] - 2026-08-01
+### Security
+
 $QUALIFYING_VULNERABILITIES
 EOF
 )
-expect_extracted_validation_allowed \
-	"ordinary inline backticks without comment tokens" \
+expect_extraction_rejected \
+	"ordinary inline backticks in candidate body" \
 	"$ordinary_inline_backticks_changelog" \
 	"2.8.0"
 
+forbidden_candidate_chars=(
+	'raw < opener'
+	'raw > closer'
+	'raw [ square opener'
+	'raw ] square closer'
+	'raw ` code delimiter'
+)
+for index in "${!forbidden_candidate_chars[@]}"; do
+	version="3.0.$index"
+	forbidden_candidate=$(
+		write_fixture "forbidden-candidate-$index" <<EOF
+## [$version] - 2026-08-22
+### Security
+
+$NO_VULNERABILITIES
+
+${forbidden_candidate_chars[$index]}
+EOF
+	)
+	expect_extraction_rejected \
+		"candidate containing ${forbidden_candidate_chars[$index]}" \
+		"$forbidden_candidate" \
+		"$version"
+done
+
+historical_forbidden_syntax=$(
+	write_fixture historical-forbidden-syntax <<EOF
+## [3.1.0] - 2026-08-22
+### Security
+
+$NO_VULNERABILITIES
+
+### Added
+
+- Plain candidate prose.
+
+## [3.0.0] - 2026-08-01
+~~~text
+<details>[historical link]</details>
+~~~
+EOF
+)
+historical_notes="$FIXTURES/historical-forbidden-syntax.notes"
+bash "$EXTRACTOR" "$historical_forbidden_syntax" 3.1.0 >"$historical_notes"
+expect_allowed "historical forbidden syntax is outside the candidate" "$historical_notes"
+if grep -Eq '[<>\[\]`]' "$historical_notes"; then
+	echo "extractor emitted forbidden historical syntax" >&2
+	exit 1
+fi
+
 leading_hyphen_directory="$FIXTURES/leading-hyphen"
 mkdir "$leading_hyphen_directory"
-printf '%s\n' "$NO_VULNERABILITIES" >"$leading_hyphen_directory/-release-notes"
+printf '%s\n\n%s\n' '### Security' "$NO_VULNERABILITIES" \
+	>"$leading_hyphen_directory/-release-notes"
 expect_allowed_from_directory "leading-hyphen filename" "$leading_hyphen_directory" '-release-notes'
 
 missing_assessment=$(
@@ -555,8 +707,9 @@ expect_rejected "both outcomes" "$both_outcomes"
 empty_field=$(
 	write_fixture empty-field <<EOF
 $QUALIFYING_VULNERABILITIES
+
 #### Vulnerability: GHSA-empty-field
-- Affected bzr versions: < 1.2.3
+- Affected bzr versions: before 1.2.3
 - First fixed version:
 - Runtime impact: A remote server could cause a denial of service.
 - Advisory: https://github.com/randomparity/bzr/security/advisories/GHSA-empty-field
@@ -568,8 +721,9 @@ expect_rejected "empty field" "$empty_field"
 duplicate_field=$(
 	write_fixture duplicate-field <<EOF
 $QUALIFYING_VULNERABILITIES
+
 #### Vulnerability: GHSA-duplicate-field
-- Affected bzr versions: < 1.2.3
+- Affected bzr versions: before 1.2.3
 - First fixed version: 1.2.3
 - Runtime impact: A remote server could cause a denial of service.
 - Advisory: https://github.com/randomparity/bzr/security/advisories/GHSA-duplicate-field
@@ -582,8 +736,9 @@ expect_rejected "duplicate field" "$duplicate_field"
 non_https_advisory=$(
 	write_fixture non-https-advisory <<EOF
 $QUALIFYING_VULNERABILITIES
+
 #### Vulnerability: GHSA-http-advisory
-- Affected bzr versions: < 1.2.3
+- Affected bzr versions: before 1.2.3
 - First fixed version: 1.2.3
 - Runtime impact: A remote server could cause a denial of service.
 - Advisory: http://example.com/advisory
@@ -609,14 +764,15 @@ expect_rejected "dependency-only CVE without project assessment" "$dependency_on
 incomplete_second_entry=$(
 	write_fixture incomplete-second-entry <<EOF
 $QUALIFYING_VULNERABILITIES
+
 #### Vulnerability: GHSA-complete-entry
-- Affected bzr versions: < 1.2.3
+- Affected bzr versions: before 1.2.3
 - First fixed version: 1.2.3
 - Runtime impact: A remote server could cause a denial of service.
 - Advisory: https://example.com/GHSA-complete-entry
 - Upgrade guidance: Upgrade to bzr 1.2.3 or later.
 #### Vulnerability: GHSA-incomplete-entry
-- Affected bzr versions: < 1.2.4
+- Affected bzr versions: before 1.2.4
 - First fixed version: 1.2.4
 - Runtime impact: A remote server could cause a denial of service.
 - Advisory: https://example.com/GHSA-incomplete-entry
@@ -638,10 +794,11 @@ expect_rejected "line over 4,096 bytes" "$over_4096_byte_line"
 literal_metacharacters=$(
 	write_fixture literal-metacharacters <<EOF
 $QUALIFYING_VULNERABILITIES
+
 #### Vulnerability: GHSA-literal-data
 - Affected bzr versions: \$(touch "$SIDE_EFFECT")
 - First fixed version: 1.2.3; echo not-executed
-- Runtime impact: \$HOME & | < > \`backticks\`
+- Runtime impact: \$HOME & | ; wildcards * ? remain data
 - Advisory: https://example.com/advisory?note=\$(touch "$SIDE_EFFECT")
 - Upgrade guidance: Keep literal \$(touch "$SIDE_EFFECT") text as data.
 EOF

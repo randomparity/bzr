@@ -60,9 +60,10 @@ if ! awk '
     return run_length >= 3
   }
 
-  is_fence_marker($0) || index($0, "<!--") != 0 || index($0, "-->") != 0 { exit 1 }
+  is_fence_marker($0) || index($0, "<") != 0 || index($0, ">") != 0 || \
+    index($0, "[") != 0 || index($0, "]") != 0 || index($0, "`") != 0 { exit 1 }
 ' <"$notes_file"; then
-	fail "release notes must not contain fenced-code markers or HTML-comment delimiters"
+	fail "release notes must use the bounded plain-text grammar"
 fi
 
 awk \
@@ -83,26 +84,6 @@ awk \
     sub(/^[[:space:]]+/, "", value)
     sub(/[[:space:]]+$/, "", value)
     return value
-  }
-
-  function visible_heading_text(value) {
-    value = trim(value)
-    if (value ~ /^#+$/) {
-      return ""
-    }
-    sub(/[[:space:]]+#+$/, "", value)
-    return trim(value)
-  }
-
-  function strip_heading_indent(line) {
-    if (substr(line, 1, 3) == "   ") {
-      line = substr(line, 4)
-    } else if (substr(line, 1, 2) == "  ") {
-      line = substr(line, 3)
-    } else if (substr(line, 1, 1) == " ") {
-      line = substr(line, 2)
-    }
-    return line
   }
 
   function complete_entry(  field_index) {
@@ -129,8 +110,17 @@ awk \
     vulnerability_heading = "#### Vulnerability: "
   }
 
+  {
+    lines[NR] = $0
+    if ($0 == "### Security") {
+      security_heading_count++
+      security_heading_line = NR
+    }
+  }
+
   $0 == no_vulnerabilities {
     assessment_count++
+    assessment_line = NR
     assessment = "no"
     in_block = 0
     next
@@ -138,13 +128,14 @@ awk \
 
   $0 == qualifying_vulnerabilities {
     assessment_count++
+    assessment_line = NR
     assessment = "qualifying"
     in_block = 1
     next
   }
 
   {
-    heading_line = strip_heading_indent($0)
+    heading_line = $0
     if (index(heading_line, vulnerability_heading) == 1) {
       vulnerability_headings++
 
@@ -160,14 +151,14 @@ awk \
         seen[field] = 0
       }
 
-      identifier = visible_heading_text(substr(heading_line, length(vulnerability_heading) + 1))
-      if (identifier == "") {
-        fail("each vulnerability heading must include a public identifier", entry_count)
+      identifier = substr(heading_line, length(vulnerability_heading) + 1)
+      if (identifier !~ /^[A-Za-z0-9][A-Za-z0-9._:-]*$/) {
+        fail("each vulnerability heading must include one visible public identifier token", entry_count)
       }
       next
     }
 
-    if (assessment == "qualifying" && in_block && $0 ~ /^(   |  | )?###([[:space:]]|$)/) {
+    if (assessment == "qualifying" && in_block && $0 ~ /^###([[:space:]]|$)/) {
       complete_entry()
       in_block = 0
       next
@@ -202,6 +193,12 @@ awk \
     }
     if (assessment_count != 1) {
       fail("exactly one whole-line security assessment marker is required")
+    }
+    if (security_heading_count != 1 || assessment_line != security_heading_line + 2 || \
+        lines[security_heading_line + 1] != "" || \
+        (assessment_line < NR && lines[assessment_line + 1] != "" && \
+         lines[assessment_line + 1] !~ /^#{1,6}([[:space:]]|$)/)) {
+      fail("the assessment must be an isolated first paragraph immediately under ### Security")
     }
     if (assessment == "no") {
       if (vulnerability_headings != 0) {

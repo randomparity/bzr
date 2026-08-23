@@ -77,12 +77,13 @@ or comparable public identifier qualifies.
 
 ```text
 Security assessment: Publicly identified runtime vulnerabilities in bzr were fixed in this release.
-#### Vulnerability: <public identifier>
-- Affected bzr versions: <version range>
-- First fixed version: <version>
-- Runtime impact: <impact>
+
+#### Vulnerability: PUBLIC-IDENTIFIER
+- Affected bzr versions: VERSION RANGE
+- First fixed version: VERSION
+- Runtime impact: IMPACT
 - Advisory: https://public-advisory-url
-- Upgrade guidance: <guidance>
+- Upgrade guidance: GUIDANCE
 ```
 
 The advisory link and the advisory itself must use the required fields in
@@ -91,14 +92,13 @@ review but before GitHub Release creation is a residual publication race: the
 structural validator cannot make the external advisory inventory atomic with
 publication. Update the published release notes promptly if this occurs.
 
-The release extractor intentionally accepts a bounded Markdown subset. Do not
-use fenced-code marker lines (zero to three leading spaces followed by three or
-more backticks or tildes) or the HTML-comment delimiter tokens `<!--` and `-->`
-anywhere in `CHANGELOG.md`; extraction fails before selecting a release section
-when these constructs are present. Ordinary inline backticks remain valid when
-their contents do not include either comment delimiter. A vulnerability
-heading may use optional ATX closing hashes only when a public identifier
-remains visible before them.
+The release extractor intentionally accepts a bounded Markdown subset in the
+candidate release body. Do not use literal angle brackets, square brackets, or
+backticks there, and do not use fenced-code marker lines made from three or
+more backticks or tildes. Historical release sections remain outside this
+check. A vulnerability heading must contain exactly one visible ASCII public
+identifier token; Markdown wrappers and optional ATX closing hashes are not
+accepted.
 
 `N/A` is for an external compliance questionnaire only, and is truthful only
 when there are no release notes, no publicly known qualifying project

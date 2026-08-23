@@ -13,21 +13,21 @@ Security assessment: No publicly identified runtime vulnerabilities in bzr were 
 
 ### Added
 
-- Project logo (`docs/assets/bzr-logo.png`) now appears at the top of the README.
-- Project website at `https://randomparity.github.io/bzr/`, built by the new
-  `site.yml` GitHub Pages workflow. The Home and Changelog pages are generated
-  from `README.md` and `CHANGELOG.md` on every push to `main`, so the site never
-  drifts from the repo; the full CLI reference links to `docs/bzr-cli.md` on
+- Project logo at docs/assets/bzr-logo.png now appears at the top of the README.
+- Project website at https://randomparity.github.io/bzr/, built by the new
+  site.yml GitHub Pages workflow. The Home and Changelog pages are generated
+  from README.md and CHANGELOG.md on every push to main, so the site never
+  drifts from the repo; the full CLI reference links to docs/bzr-cli.md on
   GitHub.
-- `bzr skills install` installs every bundled bzr agent skill from the offline,
+- bzr skills install installs every bundled bzr agent skill from the offline,
   release-matched payload embedded in the running binary. Callers choose an explicit
-  `--global` or `--project <PATH>` scope (`--project .` selects the current
-  repository) and an agent layout with `--agent standard|bob|codex|claude|all`.
+  --global or --project PATH scope (--project . selects the current repository)
+  and an agent layout with --agent standard|bob|codex|claude|all.
   Re-running updates managed skills, while foreign folders and symlinked destination
   components are refused without modification. JSON and NDJSON expose the selected
   scope, canonical project path, destinations, and sorted installed skills. The
-  standalone installers remain available for no-binary use and fetch `main` by
-  default, with `BZR_SKILL_REF` for a pinned payload. (#523)
+  standalone installers remain available for no-binary use and fetch main by
+  default, with BZR_SKILL_REF for a pinned payload. (#523)
 
 ## [0.8.1] - 2026-08-05
 
