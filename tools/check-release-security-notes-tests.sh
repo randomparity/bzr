@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 VALIDATOR="$SCRIPT_DIR/check-release-security-notes.sh"
+EXTRACTOR="$SCRIPT_DIR/extract-release-notes.sh"
 FIXTURES=$(mktemp -d)
 SIDE_EFFECT="$FIXTURES/side-effect"
 trap 'rm -r "$FIXTURES"' EXIT
@@ -34,6 +35,21 @@ expect_rejected() {
 	fi
 }
 
+expect_rejected_with_stderr() {
+	local name=$1
+	local fixture=$2
+	local expected=$3
+	local stderr_file="$FIXTURES/$name.stderr"
+	if bash "$VALIDATOR" "$fixture" >/dev/null 2>"$stderr_file"; then
+		echo "expected release-security validator to reject $name" >&2
+		return 1
+	fi
+	if ! grep -Fqx "$expected" "$stderr_file"; then
+		echo "expected release-security validator stderr for $name to contain: $expected" >&2
+		return 1
+	fi
+}
+
 expect_allowed_from_directory() {
 	local name=$1
 	local directory=$2
@@ -42,6 +58,40 @@ expect_allowed_from_directory() {
 		echo "expected release-security validator to allow $name" >&2
 		return 1
 	fi
+}
+
+expect_extraction_rejected() {
+	local name=$1
+	local changelog=$2
+	local version=$3
+	if bash "$EXTRACTOR" "$changelog" "$version" >"$FIXTURES/$name.notes" 2>/dev/null; then
+		echo "expected release-note extraction to reject $name" >&2
+		return 1
+	fi
+}
+
+expect_extracted_validation_rejected() {
+	local name=$1
+	local changelog=$2
+	local version=$3
+	local notes_file="$FIXTURES/$name.notes"
+	if ! bash "$EXTRACTOR" "$changelog" "$version" >"$notes_file"; then
+		echo "expected release-note extraction to select $name" >&2
+		return 1
+	fi
+	expect_rejected "$name" "$notes_file"
+}
+
+expect_extracted_validation_allowed() {
+	local name=$1
+	local changelog=$2
+	local version=$3
+	local notes_file="$FIXTURES/$name.notes"
+	if ! bash "$EXTRACTOR" "$changelog" "$version" >"$notes_file"; then
+		echo "expected release-note extraction to select $name" >&2
+		return 1
+	fi
+	expect_allowed "$name" "$notes_file"
 }
 
 expect_indented_level_three_heading_rejected() {
@@ -146,6 +196,87 @@ EOF
 )
 expect_allowed "four-space code block does not end an entry" "$four_space_code_block"
 
+fenced_fields=$(
+	write_fixture fenced-fields <<EOF
+$QUALIFYING_VULNERABILITIES
+#### Vulnerability: GHSA-fenced-fields
+\`\`\`text
+- Affected bzr versions: < 1.2.3
+- First fixed version: 1.2.3
+- Runtime impact: These fields are hidden in a fenced code block.
+- Advisory: https://example.com/GHSA-fenced-fields
+- Upgrade guidance: Upgrade to bzr 1.2.3 or later.
+\`\`\`
+EOF
+)
+expect_rejected "required fields hidden in a fenced code block" "$fenced_fields"
+
+commented_fields=$(
+	write_fixture commented-fields <<EOF
+$QUALIFYING_VULNERABILITIES
+#### Vulnerability: GHSA-commented-fields
+<!--
+- Affected bzr versions: < 1.2.3
+- First fixed version: 1.2.3
+- Runtime impact: These fields are hidden in an HTML comment.
+- Advisory: https://example.com/GHSA-commented-fields
+- Upgrade guidance: Upgrade to bzr 1.2.3 or later.
+-->
+EOF
+)
+expect_rejected "required fields hidden in an HTML comment" "$commented_fields"
+
+prerelease_changelog=$(
+	write_fixture prerelease-changelog <<EOF
+## [1.2.3-rc.1] - 2026-08-22
+$NO_VULNERABILITIES
+
+## [1.2.2] - 2026-08-01
+- Earlier release.
+EOF
+)
+expect_extracted_validation_allowed \
+	"literal dated prerelease heading" \
+	"$prerelease_changelog" \
+	"1.2.3-rc.1"
+
+regex_collision_changelog=$(
+	write_fixture regex-collision-changelog <<EOF
+## [1x2y3] - 2026-08-22
+$NO_VULNERABILITIES
+
+## [1.2.3] - 2026-08-22
+### Added
+- The actual candidate body has no security assessment.
+
+## [1.2.2] - 2026-08-01
+- Earlier release.
+EOF
+)
+expect_extracted_validation_rejected \
+	"regex-collision heading" \
+	"$regex_collision_changelog" \
+	"1.2.3"
+
+duplicate_headings_changelog=$(
+	write_fixture duplicate-headings-changelog <<EOF
+## [1.2.3] - 2026-08-22
+$NO_VULNERABILITIES
+
+## [1.2.3] - 2026-08-21
+$NO_VULNERABILITIES
+EOF
+)
+expect_extraction_rejected \
+	"duplicate literal candidate headings" \
+	"$duplicate_headings_changelog" \
+	"1.2.3"
+
+expect_extraction_rejected \
+	"missing literal candidate heading" \
+	"$regex_collision_changelog" \
+	"9.9.9"
+
 leading_hyphen_directory="$FIXTURES/leading-hyphen"
 mkdir "$leading_hyphen_directory"
 printf '%s\n' "$NO_VULNERABILITIES" >"$leading_hyphen_directory/-release-notes"
@@ -238,7 +369,10 @@ $QUALIFYING_VULNERABILITIES
 - Advisory: https://example.com/GHSA-incomplete-entry
 EOF
 )
-expect_rejected "incomplete second entry" "$incomplete_second_entry"
+expect_rejected_with_stderr \
+	"incomplete-second-entry" \
+	"$incomplete_second_entry" \
+	"ERROR: release-note vulnerability assessment entry 2 violates each vulnerability entry must contain every required field exactly once."
 
 over_1_mib="$FIXTURES/over-1-mib"
 dd if=/dev/zero of="$over_1_mib" bs=1048577 count=1 2>/dev/null

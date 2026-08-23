@@ -36,8 +36,12 @@ fi
 awk \
 	-v no_vulnerabilities="$NO_VULNERABILITIES" \
 	-v qualifying_vulnerabilities="$QUALIFYING_VULNERABILITIES" '
-  function fail(requirement) {
-    print "ERROR: release-note vulnerability assessment violates " requirement "." > "/dev/stderr"
+  function fail(requirement, entry_number, message) {
+    message = "ERROR: release-note vulnerability assessment"
+    if (entry_number != "") {
+      message = message " entry " entry_number
+    }
+    print message " violates " requirement "." > "/dev/stderr"
     print "Update the release CHANGELOG.md section." > "/dev/stderr"
     invalid = 1
     exit 1
@@ -49,6 +53,23 @@ awk \
     return value
   }
 
+  function fence_character(line) {
+    if (substr(line, 1, 3) == "   ") {
+      line = substr(line, 4)
+    } else if (substr(line, 1, 2) == "  ") {
+      line = substr(line, 3)
+    } else if (substr(line, 1, 1) == " ") {
+      line = substr(line, 2)
+    }
+    if (substr(line, 1, 3) == "```") {
+      return "`"
+    }
+    if (substr(line, 1, 3) == "~~~") {
+      return "~"
+    }
+    return ""
+  }
+
   function complete_entry(  field_index) {
     if (!in_entry) {
       return
@@ -56,7 +77,7 @@ awk \
 
     for (field_index = 1; field_index <= field_count; field_index++) {
       if (seen[field_index] != 1) {
-        fail("each vulnerability entry must contain every required field exactly once")
+        fail("each vulnerability entry must contain every required field exactly once", entry_count)
       }
     }
 
@@ -71,6 +92,39 @@ awk \
     fields[4] = "- Advisory:"
     fields[5] = "- Upgrade guidance:"
     vulnerability_heading = "#### Vulnerability: "
+  }
+
+  {
+    current_fence = fence_character($0)
+    if (fence != "") {
+      if (current_fence == fence) {
+        fence = ""
+      }
+      next
+    }
+    if (current_fence != "") {
+      if (assessment == "qualifying" && in_block && in_entry) {
+        fail("vulnerability entries must not contain fenced code", entry_count)
+      }
+      fence = current_fence
+      next
+    }
+
+    if (in_html_comment) {
+      if (index($0, "-->") != 0) {
+        in_html_comment = 0
+      }
+      next
+    }
+    if (index($0, "<!--") != 0) {
+      if (assessment == "qualifying" && in_block && in_entry) {
+        fail("vulnerability entries must not contain HTML comments", entry_count)
+      }
+      if (index(substr($0, index($0, "<!--") + 4), "-->") == 0) {
+        in_html_comment = 1
+      }
+      next
+    }
   }
 
   $0 == no_vulnerabilities {
@@ -97,15 +151,15 @@ awk \
       }
 
       complete_entry()
-      identifier = trim(substr($0, length(vulnerability_heading) + 1))
-      if (identifier == "") {
-        fail("each vulnerability heading must include a public identifier")
-      }
-
       entry_count++
       in_entry = 1
       for (field = 1; field <= field_count; field++) {
         seen[field] = 0
+      }
+
+      identifier = trim(substr($0, length(vulnerability_heading) + 1))
+      if (identifier == "") {
+        fail("each vulnerability heading must include a public identifier", entry_count)
       }
       next
     }
@@ -125,13 +179,13 @@ awk \
         if (index($0, fields[field]) == 1) {
           value = trim(substr($0, length(fields[field]) + 1))
           if (value == "") {
-            fail("vulnerability fields must have non-empty same-line values")
+            fail("vulnerability fields must have non-empty same-line values", entry_count)
           }
           if (++seen[field] != 1) {
-            fail("each vulnerability field must appear exactly once per entry")
+            fail("each vulnerability field must appear exactly once per entry", entry_count)
           }
           if (field == 4 && index(value, "https://") != 1) {
-            fail("each advisory value must begin with https://")
+            fail("each advisory value must begin with https://", entry_count)
           }
           next
         }
