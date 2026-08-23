@@ -141,7 +141,10 @@ published the original version.
    Run `cargo build` (or `cargo check`) after the bump so `Cargo.lock` regenerates with the new version.
 
 2. If `rust-version` changed, update the MSRV badge in `README.md` and the "Requires Rust X+" line in the "From source" install section.
-3. Add a matching dated entry to `CHANGELOG.md`. Entries must use `## [X.Y.Z] - YYYY-MM-DD` exactly — `release.yml` extracts release notes by matching that heading format, and a different format silently produces an empty release body. For prereleases, use the full prerelease version (`## [0.2.0-rc5] - 2026-05-04`).
+3. Add a matching dated entry to `CHANGELOG.md`. Entries must use
+   `## [X.Y.Z] - YYYY-MM-DD` exactly. The shared extractor stops publication when it cannot select
+   that exact dated heading. For prereleases, use the full prerelease version
+   (`## [0.2.0-rc5] - 2026-05-04`).
 4. Verify installation docs still match the published crate name.
 5. Run the release checks locally:
 

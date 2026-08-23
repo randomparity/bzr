@@ -53,7 +53,7 @@ awk \
     return value
   }
 
-  function fence_character(line) {
+  function strip_fence_indent(line) {
     if (substr(line, 1, 3) == "   ") {
       line = substr(line, 4)
     } else if (substr(line, 1, 2) == "  ") {
@@ -61,13 +61,35 @@ awk \
     } else if (substr(line, 1, 1) == " ") {
       line = substr(line, 2)
     }
-    if (substr(line, 1, 3) == "```") {
-      return "`"
+    return line
+  }
+
+  function opening_fence(line, fence_line, character, run_length) {
+    fence_line = strip_fence_indent(line)
+    character = substr(fence_line, 1, 1)
+    if (character != "`" && character != "~") {
+      return ""
     }
-    if (substr(line, 1, 3) == "~~~") {
-      return "~"
+    run_length = 0
+    while (substr(fence_line, run_length + 1, 1) == character) {
+      run_length++
     }
-    return ""
+    if (run_length < 3) {
+      return ""
+    }
+    return substr(fence_line, 1, run_length)
+  }
+
+  function closes_fence(line, character, minimum_length, fence_line, run_length) {
+    fence_line = strip_fence_indent(line)
+    if (substr(fence_line, 1, 1) != character) {
+      return 0
+    }
+    run_length = 0
+    while (substr(fence_line, run_length + 1, 1) == character) {
+      run_length++
+    }
+    return run_length >= minimum_length && substr(fence_line, run_length + 1) ~ /^ *$/
   }
 
   function complete_entry(  field_index) {
@@ -95,18 +117,20 @@ awk \
   }
 
   {
-    current_fence = fence_character($0)
-    if (fence != "") {
-      if (current_fence == fence) {
-        fence = ""
+    if (fence_character != "") {
+      if (closes_fence($0, fence_character, fence_length)) {
+        fence_character = ""
+        fence_length = 0
       }
       next
     }
+    current_fence = opening_fence($0)
     if (current_fence != "") {
       if (assessment == "qualifying" && in_block && in_entry) {
         fail("vulnerability entries must not contain fenced code", entry_count)
       }
-      fence = current_fence
+      fence_character = substr(current_fence, 1, 1)
+      fence_length = length(current_fence)
       next
     }
 

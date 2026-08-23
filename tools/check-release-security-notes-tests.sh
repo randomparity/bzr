@@ -211,6 +211,41 @@ EOF
 )
 expect_rejected "required fields hidden in a fenced code block" "$fenced_fields"
 
+shorter_fence_pseudo_closer=$(
+	write_fixture shorter-fence-pseudo-closer <<EOF
+\`\`\`\`text
+\`\`\`
+$NO_VULNERABILITIES
+\`\`\`\`
+EOF
+)
+expect_rejected \
+	"assessment hidden after a shorter fence pseudo-closer" \
+	"$shorter_fence_pseudo_closer"
+
+trailing_text_pseudo_closer=$(
+	write_fixture trailing-text-pseudo-closer <<EOF
+\`\`\`text
+\`\`\`not-a-closer
+$NO_VULNERABILITIES
+\`\`\`
+EOF
+)
+expect_rejected \
+	"assessment hidden after a trailing-text fence pseudo-closer" \
+	"$trailing_text_pseudo_closer"
+
+longer_fence_closer="$FIXTURES/longer-fence-closer"
+{
+	printf '%s\n' '````text'
+	printf '%s\n' 'This fenced text is ignored.'
+	printf '%s   \n' '`````'
+	printf '%s\n' "$NO_VULNERABILITIES"
+} >"$longer_fence_closer"
+expect_allowed \
+	"longer fence closer followed only by spaces" \
+	"$longer_fence_closer"
+
 commented_fields=$(
 	write_fixture commented-fields <<EOF
 $QUALIFYING_VULNERABILITIES
