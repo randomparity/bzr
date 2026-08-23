@@ -54,6 +54,89 @@ purely additional traceability and breaks no automation, since
 `installer-smoke` does substring matching and `preflight` reads
 `Cargo.toml` directly.
 
+## Security assessment
+
+While preparing the dated `CHANGELOG.md` section, review the canonical
+[GitHub Security Advisories](https://github.com/randomparity/bzr/security/advisories)
+inventory. Every release section must carry exactly one of the following
+whole-line markers, which are validated before publication. A dependency update
+belongs under a separate dependency heading or explicitly says it is
+dependency-only; it never replaces the project-vulnerability assessment.
+
+Use this template when no publicly identified runtime vulnerability in `bzr`
+was fixed:
+
+```text
+Security assessment: No publicly identified runtime vulnerabilities in bzr were fixed in this release.
+```
+
+Use this template when one or more publicly identified runtime vulnerabilities
+in `bzr` were fixed. List every qualifying vulnerability that has a public
+identifier when the GitHub Release is created; a CVE, GHSA, RUSTSEC identifier,
+or comparable public identifier qualifies.
+
+```text
+Security assessment: Publicly identified runtime vulnerabilities in bzr were fixed in this release.
+
+#### Vulnerability: PUBLIC-IDENTIFIER
+- Affected bzr versions: VERSION RANGE
+- First fixed version: VERSION
+- Runtime impact: IMPACT
+- Advisory: https://public-advisory-url
+- Upgrade guidance: GUIDANCE
+```
+
+The advisory link and the advisory itself must use the required fields in
+[`SECURITY.md`](SECURITY.md). A public identifier that appears after the final
+review but before GitHub Release creation is a residual publication race: the
+structural validator cannot make the external advisory inventory atomic with
+publication. Update the published release notes promptly if this occurs.
+
+The release extractor intentionally accepts a bounded Markdown subset in the
+candidate release body. Do not use literal angle brackets, square brackets,
+ampersands, backslashes, or backticks there, and do not use fenced-code marker lines made
+from three or more backticks or tildes. Historical release sections remain outside this
+check. A vulnerability heading must contain exactly one visible ASCII public
+identifier token; Markdown wrappers and optional ATX closing hashes are not
+accepted.
+
+`N/A` is for an external compliance questionnaire only, and is truthful only
+when there are no release notes, no publicly known qualifying project
+vulnerabilities, or users cannot practically update the software themselves.
+`bzr` normally publishes release notes and users can update it, so a normal
+release that fixes no qualifying vulnerability uses the exact no-vulnerability
+marker above, never `N/A`.
+
+Immediately before pushing the tag, refresh the advisory inventory and validate
+the exact candidate release body. Replace `X.Y.Z` with the candidate version,
+whose heading must already be `## [X.Y.Z] - YYYY-MM-DD`; the trap removes the
+temporary file when the subshell completes, without replacing the caller's EXIT
+trap. Extraction requires exactly one literal candidate heading and rejects a
+missing or duplicate heading. For the current development section only, set
+`VERSION=Unreleased`; its heading must be exactly `## [Unreleased]` and is the
+only accepted undated form.
+
+```bash
+(
+  set -euo pipefail
+  VERSION=X.Y.Z
+  notes_file=$(mktemp)
+  trap 'rm -f "$notes_file"' EXIT
+  bash tools/extract-release-notes.sh CHANGELOG.md "$VERSION" >"$notes_file"
+  test -s "$notes_file"
+  bash tools/check-release-security-notes.sh "$notes_file"
+)
+```
+
+If the final refresh or validator finds a problem before tag push, correct the
+release-preparation changes and repeat the final refresh and validation before
+pushing a tag. If the tag-triggered validation fails or a required correction
+is discovered after the tag is public, do not move or reuse that tag. First
+determine whether crates.io or another channel partially published the original
+version and clearly mark any partial GitHub Release. Correct the notes, then
+cut a new patch version; the independent crates.io workflow may already have
+published the original version.
+
 ## Release checklist
 
 1. Update the version in `Cargo.toml` to match the tag exactly,
@@ -67,7 +150,10 @@ purely additional traceability and breaks no automation, since
    Run `cargo build` (or `cargo check`) after the bump so `Cargo.lock` regenerates with the new version.
 
 2. If `rust-version` changed, update the MSRV badge in `README.md` and the "Requires Rust X+" line in the "From source" install section.
-3. Add a matching dated entry to `CHANGELOG.md`. Entries must use `## [X.Y.Z] - YYYY-MM-DD` exactly — `release.yml` extracts release notes by matching that heading format, and a different format silently produces an empty release body. For prereleases, use the full prerelease version (`## [0.2.0-rc5] - 2026-05-04`).
+3. Add a matching dated entry to `CHANGELOG.md`. Entries must use
+   `## [X.Y.Z] - YYYY-MM-DD` exactly. The shared extractor stops publication when it cannot select
+   that exact dated heading. For prereleases, use the full prerelease version
+   (`## [0.2.0-rc5] - 2026-05-04`).
 4. Verify installation docs still match the published crate name.
 5. Run the release checks locally:
 
@@ -99,7 +185,11 @@ The project blocks direct pushes to `main` (a pre-commit-style guardrail mirrore
    success before tagging. It executes `tests/functional/run-all-versions.sh`
    against the real Bugzilla bz50, bz52, and bz53 containers.
 
-9. Tag the merge commit and push the tag:
+9. Immediately before pushing the tag, perform the final advisory refresh and
+   run the security-assessment extraction and validation command above. Resolve
+   any result before continuing.
+
+10. Tag the merge commit and push the tag:
 
 ```bash
 git checkout main

@@ -28,3 +28,4 @@ rejected.
 | [0019](0019-quiet-by-default-unit-test-output.md) | `make test` runs quiet by default; `VERBOSE=1`/`test-verbose` restore full output | Accepted |
 | [0020](0020-pages-build-runs-on-pull-requests.md) | Pages builds run on pull requests; deployment remains gated | Accepted |
 | [0021](0021-contributor-guidance-lives-in-contributing.md) | Contributor guidance lives in `CONTRIBUTING.md` | Accepted |
+| [0022](0022-release-notes-carry-security-assessment.md) | Release notes carry an explicit security assessment | Accepted |
