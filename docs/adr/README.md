@@ -26,3 +26,4 @@ rejected.
 | [0017](0017-post-release-skill-version-update-stays-inline.md) | Post-release skill version updates stay inline | Accepted |
 | [0018](0018-embed-canonical-skills-in-binary.md) | Embed canonical skills and retain standalone fetch | Accepted |
 | [0019](0019-quiet-by-default-unit-test-output.md) | `make test` runs quiet by default; `VERBOSE=1`/`test-verbose` restore full output | Accepted |
+| [0020](0020-pages-build-runs-on-pull-requests.md) | Pages builds run on pull requests; deployment remains gated | Accepted |
