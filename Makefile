@@ -135,6 +135,8 @@ check-release-security-notes: ## Validate release-note security assessments
 	bash tools/check-release-security-notes-tests.sh
 
 check-shell: ## Lint shell scripts (shellcheck + shfmt, POSIX and bash)
+	@command -v shellcheck >/dev/null || { echo "ERROR: shellcheck is required for this guard"; echo "  Install: brew install shellcheck  |  apt-get install shellcheck"; exit 1; }
+	@command -v shfmt >/dev/null || { echo "ERROR: shfmt is required for this guard"; echo "  Install: brew install shfmt  |  https://github.com/mvdan/sh/releases"; exit 1; }
 	shellcheck -s sh install.sh tests/installer/smoke.sh
 	shellcheck -s bash tools/*.sh
 	shfmt -d -ln posix -i 2 install.sh tests/installer/smoke.sh
