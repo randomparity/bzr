@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.8.2] - 2026-08-23
 
 ### Security
 
@@ -13,12 +13,6 @@ Security assessment: No publicly identified runtime vulnerabilities in bzr were 
 
 ### Added
 
-- Project logo at docs/assets/bzr-logo.png now appears at the top of the README.
-- Project website at https://randomparity.github.io/bzr/, built by the new
-  site.yml GitHub Pages workflow. The Home and Changelog pages are generated
-  from README.md and CHANGELOG.md on every push to main, so the site never
-  drifts from the repo; the full CLI reference links to docs/bzr-cli.md on
-  GitHub.
 - bzr skills install installs every bundled bzr agent skill from the offline,
   release-matched payload embedded in the running binary. Callers choose an explicit
   --global or --project PATH scope (--project . selects the current repository)
@@ -28,41 +22,22 @@ Security assessment: No publicly identified runtime vulnerabilities in bzr were 
   scope, canonical project path, destinations, and sorted installed skills. The
   standalone installers remain available for no-binary use and fetch main by
   default, with BZR_SKILL_REF for a pinned payload. (#523)
-- Terminal demo at docs/assets/bzr-demo.gif near the top of the README,
-  recorded from a real session against the functional-test Bugzilla container.
-  tools/record-demo.sh regenerates it when CLI output changes.
-- New agent skill `bzr-dry-run-confirm` (under `agent-skills/`) teaching the
+- New agent skill bzr-dry-run-confirm (under agent-skills/) teaching the
   preview-then-write pattern for mutations: run any supported mutation with the
-  global `--dry-run` flag, parse and verify the printed payload with `jq`, then
-  re-run the same command without `--dry-run` to commit. Covers bug
+  global --dry-run flag, parse and verify the printed payload with jq, then
+  re-run the same command without --dry-run to commit. Covers bug
   create/update/clone/resolve/close/reopen/dup, product/component/user/group
-  create+update, batch previews via `--from-json`, exit-code triage, and
-  `--yes` batch-confirm semantics. No new CLI verbs; it codifies an
+  create+update, batch previews via --from-json, exit-code triage, and
+  --yes batch-confirm semantics. No new CLI verbs; it codifies an
   existing-capability workflow and cross-references the mutation skills.
   The installers and skills table list it. (#460)
-- New agent skill `bzr-release-tracking` (under `agent-skills/`) teaching the
+- New agent skill bzr-release-tracking (under agent-skills/) teaching the
   milestone/release workflow: enumerate what is open on a target milestone with
-  repeatable/negatable filters and `--paginate`, detect bugs that drifted into
-  or out of the release via `bzr bug history`, rebalance assignees and CC,
+  repeatable/negatable filters and --paginate, detect bugs that drifted into
+  or out of the release via bzr bug history, rebalance assignees and CC,
   publish a release-ready digest, then close the milestone out. No new CLI
-  verbs; it composes `bzr bug list`, `bzr bug history`, and `bzr bug update`.
+  verbs; it composes bzr bug list, bzr bug history, and bzr bug update.
   The installers and skills table list it. (#463)
-
-### Changed
-
-- README restructured for the project website: a quick-start section now leads,
-  the feature list is grouped, the onboarding walkthrough and command examples
-  are merged into one "Getting started" section, the bzr-name history moved to
-  a "Why the name" section near the end, repo-relative links were converted to
-  absolute GitHub URLs so they resolve on the Pages site, and the Desloppify
-  scorecard image was removed.
-
-### Fixed
-
-- The GitHub Pages site now ships site/style.css. The Pages workflow never
-  copied the stylesheet into the deployed site, so every page rendered
-  unstyled. The build now fails if the stylesheet or logo is missing.
-- The MSRV badge linked to a nonexistent Rust 1.89.0 blog URL.
 
 ## [0.8.1] - 2026-08-05
 

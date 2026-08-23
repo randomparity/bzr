@@ -1,4 +1,4 @@
-# bzr command surface (authored against bzr 0.8.2-dev)
+# bzr command surface (authored against bzr 0.8.2)
 
 Global (place before the subcommand): `--json` (force JSON; long form
 `--output json`), `--output ndjson` (one compact record per line, for `jq -c`),
