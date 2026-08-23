@@ -2,7 +2,7 @@ CARGO ?= cargo
 RUST_MIN_VERSION := 1.89.0
 
 .PHONY: setup check-rust ensure-components ensure-coverage-prereqs ensure-mutants-prereq install-hooks \
-        build release test test-verbose coverage fmt clippy lint check-build-script check-test-layout \
+        build release test test-verbose test-fast test-one coverage fmt clippy lint check-build-script check-test-layout \
         check-no-spawn check-release-security-notes clean help man \
         skills-test \
         mutants mutants-fast mutants-list audit-mutant-skips \
@@ -64,7 +64,7 @@ install-hooks: ## Install git pre-commit and pre-push hooks
 	mkdir -p "$$HOOKS_DIR" && \
 	printf '#!/bin/sh\nset -eu\ncargo fmt -- --check || { echo "Run cargo fmt before committing."; exit 1; }\ncargo clippy --all-targets --features test-helpers -- -D warnings\nmake check-test-layout\n' > "$$HOOKS_DIR/pre-commit" && \
 	chmod +x "$$HOOKS_DIR/pre-commit" && \
-	printf '#!/bin/sh\nset -eu\ncargo test\n' > "$$HOOKS_DIR/pre-push" && \
+	printf '#!/bin/sh\nset -eu\nmake test\n' > "$$HOOKS_DIR/pre-push" && \
 	chmod +x "$$HOOKS_DIR/pre-push" && \
 	echo "Installed pre-commit (fmt + clippy + test-layout) and pre-push (test) hooks."
 
@@ -84,6 +84,15 @@ test: ## Run tests (quiet by default; VERBOSE=1 or test-verbose for full output)
 
 test-verbose: ## Run tests with full output (same as VERBOSE=1 make test)
 	$(MAKE) --no-print-directory VERBOSE=1 test
+
+test-fast: ## Run unit tests only (--lib; skips the integration suite)
+	$(CARGO) test --lib $(if $(filter 1,$(VERBOSE)),,--quiet)
+
+test-one: ## Run tests matching a name substring: make test-one T=bug_list_returns_bugs
+ifeq ($(T),)
+	$(error T=<name-substring> is required, e.g. make test-one T=bug_list_returns_bugs)
+endif
+	$(CARGO) test $(T) $(if $(filter 1,$(VERBOSE)),,--quiet)
 
 skills-test: ## Build bzr and run agent-skills checks (package, drift, installer, lint)
 	$(CARGO) build --locked

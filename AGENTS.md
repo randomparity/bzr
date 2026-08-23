@@ -23,7 +23,7 @@ make functional-test-all           # Run functional tests against real Bugzilla 
 cargo install --path .             # Install locally
 ```
 
-Git hooks: `make install-hooks` installs a pre-commit hook (`cargo fmt --check` + `cargo clippy`) and a pre-push hook (`cargo test`). Run `make setup` to install everything, including hooks.
+Git hooks: `make install-hooks` installs a pre-commit hook (`cargo fmt --check` + `cargo clippy`) and a pre-push hook (`make test`, the quiet suite). Run `make setup` to install everything, including hooks.
 
 Test output selection for agent loops: `make test` runs quiet by default —
 a summary line per suite, with failing tests still printing their captured
@@ -34,6 +34,13 @@ detail; only the exact value `VERBOSE=1` enables it. Note that `VERBOSE` is
 a generic name: a shell where `VERBOSE=1` is exported for some other tool
 will make `make test` verbose unexpectedly, so prefer the unambiguous
 `make test-verbose`.
+
+Iteration loop for agent runs: while writing or fixing tests, scope the run —
+`make test-one T=<name-substring>` runs only the matching tests, and
+`make test-fast` runs unit tests only (`--lib`, skipping the integration
+suite). Reserve full `make test` for pre-commit verification. Never invoke
+bare `cargo test`: it prints hundreds of per-test lines that pollute agent
+context and bypasses the quiet default.
 
 ## Architecture
 
