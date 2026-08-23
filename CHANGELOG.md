@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+Security assessment: No publicly identified runtime vulnerabilities in bzr were fixed in this release.
+
 ### Added
 
 - Project logo (`docs/assets/bzr-logo.png`) now appears at the top of the README.

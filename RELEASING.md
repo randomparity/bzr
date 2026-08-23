@@ -54,6 +54,77 @@ purely additional traceability and breaks no automation, since
 `installer-smoke` does substring matching and `preflight` reads
 `Cargo.toml` directly.
 
+## Security assessment
+
+While preparing the dated `CHANGELOG.md` section, review the canonical
+[GitHub Security Advisories](https://github.com/randomparity/bzr/security/advisories)
+inventory. Every release section must carry exactly one of the following
+whole-line markers, which are validated before publication. A dependency update
+belongs under a separate dependency heading or explicitly says it is
+dependency-only; it never replaces the project-vulnerability assessment.
+
+Use this template when no publicly identified runtime vulnerability in `bzr`
+was fixed:
+
+```text
+Security assessment: No publicly identified runtime vulnerabilities in bzr were fixed in this release.
+```
+
+Use this template when one or more publicly identified runtime vulnerabilities
+in `bzr` were fixed. List every qualifying vulnerability that has a public
+identifier when the GitHub Release is created; a CVE, GHSA, RUSTSEC identifier,
+or comparable public identifier qualifies.
+
+```text
+Security assessment: Publicly identified runtime vulnerabilities in bzr were fixed in this release.
+#### Vulnerability: <public identifier>
+- Affected bzr versions: <version range>
+- First fixed version: <version>
+- Runtime impact: <impact>
+- Advisory: https://public-advisory-url
+- Upgrade guidance: <guidance>
+```
+
+The advisory link and the advisory itself must use the required fields in
+[`SECURITY.md`](SECURITY.md). A public identifier that appears after the final
+review but before GitHub Release creation is a residual publication race: the
+structural validator cannot make the external advisory inventory atomic with
+publication. Update the published release notes promptly if this occurs.
+
+`N/A` is for an external compliance questionnaire only, and is truthful only
+when there are no release notes, no publicly known qualifying project
+vulnerabilities, or users cannot practically update the software themselves.
+`bzr` normally publishes release notes and users can update it, so a normal
+release that fixes no qualifying vulnerability uses the exact no-vulnerability
+marker above, never `N/A`.
+
+Immediately before pushing the tag, refresh the advisory inventory and validate
+the exact candidate release body. Replace `X.Y.Z` with the candidate version;
+the trap removes the temporary file on success, validation failure, or an
+interruption handled by the shell.
+
+```bash
+VERSION=X.Y.Z
+notes_file=$(mktemp)
+trap 'rm -f "$notes_file"' EXIT
+awk -v version="$VERSION" '
+  $0 ~ "^## \\[" version "\\]" { capture = 1; next }
+  capture && /^## \[/ { exit }
+  capture { print }
+' CHANGELOG.md >"$notes_file"
+test -s "$notes_file"
+bash tools/check-release-security-notes.sh "$notes_file"
+```
+
+If the final refresh or validator finds a problem before tag push, correct the
+release-preparation changes and repeat the final refresh and validation before
+pushing a tag. If the tag-triggered validation fails or a required correction
+is discovered after the tag is public, do not move or reuse that tag. First
+determine whether crates.io or another channel partially published the original
+version and clearly mark any partial GitHub Release. Correct the notes, then
+cut a new patch version; the independent crates.io workflow may already have
+published the original version.
+
 ## Release checklist
 
 1. Update the version in `Cargo.toml` to match the tag exactly,
@@ -99,7 +170,11 @@ The project blocks direct pushes to `main` (a pre-commit-style guardrail mirrore
    success before tagging. It executes `tests/functional/run-all-versions.sh`
    against the real Bugzilla bz50, bz52, and bz53 containers.
 
-9. Tag the merge commit and push the tag:
+9. Immediately before pushing the tag, perform the final advisory refresh and
+   run the security-assessment extraction and validation command above. Resolve
+   any result before continuing.
+
+10. Tag the merge commit and push the tag:
 
 ```bash
 git checkout main
