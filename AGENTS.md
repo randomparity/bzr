@@ -145,7 +145,18 @@ Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches the
     (they need containers), so the discipline is on the author, not the pipeline.
 - Clippy pedantic is enabled with strict rules (see `[lints.clippy]` in Cargo.toml). `unwrap_used` is denied, `expect_used` and `allow_attributes` are warned.
 - CLI reference documentation lives in `docs/bzr-cli.md`. When adding a new command, update that file.
-- `CHANGELOG.md` entries are written **as the work lands**, not deferred to a release-prep commit. When a feature PR ships user-visible behavior, add (or extend) the relevant `## [X.Y.Z]` section in the same PR. The release-prep commit then only needs to confirm the date and version. `release.yml` reads this file via awk to source the GitHub release notes; it does not generate or modify entries. (Earlier releases used dedicated `release: add CHANGELOG entry` commits — that convention is superseded.)
+- `CHANGELOG.md` is **generated from conventional commits at release time**
+  (`git cliff` via `cliff.toml` + `tools/generate-changelog-section.sh`; do not
+  hand-edit release sections). The contract: an entry documents a change to the
+  compiled `bzr` artifact — commands, flags, output shapes, exit codes,
+  config/TLS/auth semantics, or the embedded skills payload. Repo plumbing
+  (website, CI, README, dev tooling) never qualifies. To land in the notes, at
+  least one commit in the PR must carry a conventional type of `feat`, `fix`,
+  `perf`, or `refactor` with an explicit non-infra scope (infra scopes:
+  `site`, `release`, `ci`, `adr`, `plan`, `spec`, `changelog`, `build`,
+  `test`, `docs`, `deps`). Unscoped product commits are excluded by design —
+  scope them. Commit bodies are ignored; put anything the notes must say into
+  the subject line.
 - System package dependencies (e.g. `libdbus-1-dev` for the `keyring` default feature) must be installed in **every** place the crate is built, not just one workflow. When adding or changing a native dependency, audit all of:
   - `.github/workflows/ci.yml` (native host jobs)
   - `.github/workflows/release.yml` (native host jobs **and** the QEMU container for `powerpc64le`)

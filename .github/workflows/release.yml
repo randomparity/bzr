@@ -321,6 +321,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          # Release-note generation walks PREV_TAG..TAG, so the full
+          # history including tags must be present.
+          fetch-depth: 0
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
         with:
@@ -374,7 +378,12 @@ jobs:
           echo "Generated SHA256SUMS:"
           cat SHA256SUMS
 
-      - name: Extract release notes from CHANGELOG.md
+      - name: Install git-cliff
+        uses: taiki-e/install-action@82cd3e7658a6f96c86c0234aeeda1748937cb0a1  # v2.85.13
+        with:
+          tool: git-cliff
+
+      - name: Generate release notes from conventional commits
         id: notes
         shell: bash
         env:
@@ -382,14 +391,14 @@ jobs:
         run: |
           set -euo pipefail
           TAG="$TAG_NAME"
-          VERSION="${TAG#v}"
+          PREV="$(git describe --tags --abbrev=0 "${TAG}^")"
+          echo "Generating release notes for ${PREV}..${TAG}"
+          SECTION_FILE="$(mktemp)"
+          bash tools/generate-changelog-section.sh "$TAG" "$PREV" > "$SECTION_FILE"
           NOTES_FILE="$(mktemp)"
-          if ! bash tools/extract-release-notes.sh CHANGELOG.md "$VERSION" > "$NOTES_FILE"; then
-            echo "::error::Expected exactly one dated CHANGELOG.md entry for the tag version"
-            exit 1
-          fi
+          tail -n +2 "$SECTION_FILE" > "$NOTES_FILE"
           if ! [ -s "$NOTES_FILE" ]; then
-            echo "::error::The tag version's CHANGELOG.md entry is empty"
+            echo "::error::Generated release notes for ${PREV}..${TAG} are empty"
             exit 1
           fi
           echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
@@ -745,6 +754,10 @@ jobs:
           ref: main
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6e  # stable
+      - name: Install git-cliff
+        uses: taiki-e/install-action@82cd3e7658a6f96c86c0234aeeda1748937cb0a1  # v2.85.13
+        with:
+          tool: git-cliff
 
       - name: Compute next dev version
         id: ver
@@ -840,19 +853,24 @@ jobs:
       - name: Refresh Cargo.lock
         run: cargo update -p bzr
 
-      - name: Prepend [Unreleased] to CHANGELOG.md
+      - name: Insert generated section into CHANGELOG.md
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          if grep -q '^## \[Unreleased\]' CHANGELOG.md; then
-            echo "[Unreleased] section already present; skipping prepend."
-            exit 0
-          fi
-          awk '
-            BEGIN { inserted = 0 }
-            !inserted && /^## \[/ {
-              print "## [Unreleased]"
-              print ""
-              inserted = 1
+          PREV="$(git describe --tags --abbrev=0 "${TAG}^")"
+          SECTION_FILE="$(mktemp)"
+          bash tools/generate-changelog-section.sh "$TAG" "$PREV" > "$SECTION_FILE"
+          # Splice the dated section between the file header and the most
+          # recent release section. Unlike the old hand-authored flow there
+          # is no [Unreleased] block to prepend; sections appear only at
+          # release time.
+          awk -v section="$SECTION_FILE" '
+            BEGIN { in_header = 1 }
+            in_header && /^## \[/ {
+              while ((getline line < section) > 0) print line
+              close(section)
+              in_header = 0
             }
             { print }
           ' CHANGELOG.md > CHANGELOG.md.new

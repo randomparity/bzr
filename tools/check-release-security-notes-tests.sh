@@ -3,7 +3,6 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 VALIDATOR="$SCRIPT_DIR/check-release-security-notes.sh"
-EXTRACTOR="$SCRIPT_DIR/extract-release-notes.sh"
 FIXTURES=$(mktemp -d)
 SIDE_EFFECT="$FIXTURES/side-effect"
 trap 'rm -r "$FIXTURES"' EXIT
@@ -62,40 +61,6 @@ expect_allowed_from_directory() {
     echo "expected release-security validator to allow $name" >&2
     return 1
   fi
-}
-
-expect_extraction_rejected() {
-  local name=$1
-  local changelog=$2
-  local version=$3
-  if bash "$EXTRACTOR" "$changelog" "$version" >"$FIXTURES/$name.notes" 2>/dev/null; then
-    echo "expected release-note extraction to reject $name" >&2
-    return 1
-  fi
-}
-
-expect_extracted_validation_rejected() {
-  local name=$1
-  local changelog=$2
-  local version=$3
-  local notes_file="$FIXTURES/$name.notes"
-  if ! bash "$EXTRACTOR" "$changelog" "$version" >"$notes_file"; then
-    echo "expected release-note extraction to select $name" >&2
-    return 1
-  fi
-  expect_rejected "$name" "$notes_file"
-}
-
-expect_extracted_validation_allowed() {
-  local name=$1
-  local changelog=$2
-  local version=$3
-  local notes_file="$FIXTURES/$name.notes"
-  if ! bash "$EXTRACTOR" "$changelog" "$version" >"$notes_file"; then
-    echo "expected release-note extraction to select $name" >&2
-    return 1
-  fi
-  expect_allowed "$name" "$notes_file"
 }
 
 expect_indented_level_three_heading_rejected() {
@@ -408,231 +373,10 @@ EOF
 )
 expect_rejected "required fields hidden in an HTML comment" "$commented_fields"
 
-prerelease_changelog=$(
-  write_fixture prerelease-changelog <<EOF
-## [1.2.3-rc.1] - 2026-08-22
-### Security
-
-$NO_VULNERABILITIES
-
-## [1.2.2] - 2026-08-01
-- Earlier release.
-EOF
-)
-expect_extracted_validation_allowed \
-  "literal dated prerelease heading" \
-  "$prerelease_changelog" \
-  "1.2.3-rc.1"
-
-regex_collision_changelog=$(
-  write_fixture regex-collision-changelog <<EOF
-## [1x2y3] - 2026-08-22
-### Security
-
-$NO_VULNERABILITIES
-
-## [1.2.3] - 2026-08-22
-### Added
-- The actual candidate body has no security assessment.
-
-## [1.2.2] - 2026-08-01
-- Earlier release.
-EOF
-)
-expect_extracted_validation_rejected \
-  "regex-collision heading" \
-  "$regex_collision_changelog" \
-  "1.2.3"
-
-duplicate_headings_changelog=$(
-  write_fixture duplicate-headings-changelog <<EOF
-## [1.2.3] - 2026-08-22
-### Security
-
-$NO_VULNERABILITIES
-
-## [1.2.3] - 2026-08-21
-### Security
-
-$NO_VULNERABILITIES
-EOF
-)
-expect_extraction_rejected \
-  "duplicate literal candidate headings" \
-  "$duplicate_headings_changelog" \
-  "1.2.3"
-
-expect_extraction_rejected \
-  "missing literal candidate heading" \
-  "$regex_collision_changelog" \
-  "9.9.9"
-
-fenced_boundary_changelog=$(
-  write_fixture fenced-boundary-changelog <<EOF
-## [2.0.0] - 2026-08-22
-\`\`\`\`text
-\`\`\`
-## [9.9.8] - 2026-08-22
-\`\`\`\`not-a-closer
-## [9.9.9] - 2026-08-22
-\`\`\`\`
-$NO_VULNERABILITIES
-
-## [1.9.0] - 2026-08-01
-### Security
-
-$QUALIFYING_VULNERABILITIES
-EOF
-)
-expect_extraction_rejected \
-  "fenced code before a release heading" \
-  "$fenced_boundary_changelog" \
-  "2.0.0"
-
-commented_boundary_changelog=$(
-  write_fixture commented-boundary-changelog <<EOF
-## [2.1.0] - 2026-08-22
-<!--
-\`\`\`text
-## [9.9.9] - 2026-08-22
--->
-$NO_VULNERABILITIES
-
-## [2.0.0] - 2026-08-01
-### Security
-
-$QUALIFYING_VULNERABILITIES
-EOF
-)
-expect_extraction_rejected \
-  "HTML comment before a release heading" \
-  "$commented_boundary_changelog" \
-  "2.1.0"
-
-non_release_boundary_changelog=$(
-  write_fixture non-release-boundary-changelog <<EOF
-## [2.2.0] - 2026-08-22
-## [not-a-release-heading]
-- This bracketed heading belongs to the current release notes.
-$NO_VULNERABILITIES
-
-## [2.1.0] - 2026-08-01
-### Security
-
-$QUALIFYING_VULNERABILITIES
-EOF
-)
-expect_extraction_rejected \
-  "bracketed non-release heading in candidate body" \
-  "$non_release_boundary_changelog" \
-  "2.2.0"
-
-backtick_info_changelog=$(
-  write_fixture backtick-info-changelog <<EOF
-## [2.3.0] - 2026-08-22
-### Security
-
-$NO_VULNERABILITIES
-\`\`\`text\`literal
-## [2.2.0] - 2026-08-01
-### Security
-
-$QUALIFYING_VULNERABILITIES
-EOF
-)
-expect_extraction_rejected \
-  "backtick fence marker with a backtick in its info string" \
-  "$backtick_info_changelog" \
-  "2.3.0"
-
-tabbed_fence_closer_changelog="$FIXTURES/tabbed-fence-closer-changelog"
-{
-  printf '%s\n' '## [2.4.0] - 2026-08-22'
-  printf '%s\n' "$NO_VULNERABILITIES"
-  printf '%s\n' '```text'
-  printf '%s\n' 'A code sample.'
-  printf '```\t\n'
-  printf '%s\n' '## [2.3.0] - 2026-08-01'
-  printf '%s\n' "$QUALIFYING_VULNERABILITIES"
-} >"$tabbed_fence_closer_changelog"
-expect_extraction_rejected \
-  "backtick fence marker with a tabbed closer" \
-  "$tabbed_fence_closer_changelog" \
-  "2.4.0"
-
-tilde_fence_changelog=$(
-  write_fixture tilde-fence-changelog <<EOF
-## [2.5.0] - 2026-08-22
-### Security
-
-$NO_VULNERABILITIES
-~~~text
-## [2.4.0] - 2026-08-01
-### Security
-
-$QUALIFYING_VULNERABILITIES
-EOF
-)
-expect_extraction_rejected \
-  "tilde fence marker" \
-  "$tilde_fence_changelog" \
-  "2.5.0"
-
-inline_comment_token_changelog=$(
-  write_fixture inline-comment-token-changelog <<EOF
-## [2.6.0] - 2026-08-22
-### Security
-
-$NO_VULNERABILITIES
-- Use \`<!--\` when describing an HTML comment opener.
-## [2.5.0] - 2026-08-01
-### Security
-
-$QUALIFYING_VULNERABILITIES
-EOF
-)
-expect_extraction_rejected \
-  "HTML comment opener token inside inline code" \
-  "$inline_comment_token_changelog" \
-  "2.6.0"
-
-comment_closer_token_changelog=$(
-  write_fixture comment-closer-token-changelog <<EOF
-## [2.7.0] - 2026-08-22
-### Security
-
-$NO_VULNERABILITIES
-- A literal --> token is outside the bounded release-note grammar.
-## [2.6.0] - 2026-08-01
-### Security
-
-$QUALIFYING_VULNERABILITIES
-EOF
-)
-expect_extraction_rejected \
-  "HTML comment closer token" \
-  "$comment_closer_token_changelog" \
-  "2.7.0"
-
-ordinary_inline_backticks_changelog=$(
-  write_fixture ordinary-inline-backticks-changelog <<EOF
-## [2.8.0] - 2026-08-22
-### Security
-
-$NO_VULNERABILITIES
-- Use \`bzr bug view\` to inspect a bug.
-## [2.7.0] - 2026-08-01
-### Security
-
-$QUALIFYING_VULNERABILITIES
-EOF
-)
-expect_extraction_rejected \
-  "ordinary inline backticks in candidate body" \
-  "$ordinary_inline_backticks_changelog" \
-  "2.8.0"
-
-forbidden_candidate_chars=(
+# The bounded plain-text grammar is enforced by the validator on the full
+# generated notes; each fixture below is a complete notes file.
+# shellcheck disable=SC2016  # Backticks are fixture content, not command substitution.
+forbidden_note_lines=(
   'raw < opener'
   'raw > closer'
   'raw [ square opener'
@@ -640,49 +384,21 @@ forbidden_candidate_chars=(
   'raw ` code delimiter'
   'raw & character-reference opener'
   'raw \ escape delimiter'
+  '- Use `bzr bug view` to inspect a bug.'
+  '- Use <!-- when describing an HTML comment opener.'
+  '- A literal --> token.'
 )
-for index in "${!forbidden_candidate_chars[@]}"; do
-  version="3.0.$index"
-  forbidden_candidate=$(
-    write_fixture "forbidden-candidate-$index" <<EOF
-## [$version] - 2026-08-22
-### Security
-
+for index in "${!forbidden_note_lines[@]}"; do
+  offending=${forbidden_note_lines[$index]}
+  fixture=$(
+    write_fixture "forbidden-note-$index" <<EOF
 $NO_VULNERABILITIES
 
-${forbidden_candidate_chars[$index]}
+$offending
 EOF
   )
-  expect_extraction_rejected \
-    "candidate containing ${forbidden_candidate_chars[$index]}" \
-    "$forbidden_candidate" \
-    "$version"
+  expect_rejected "notes containing $offending" "$fixture"
 done
-
-historical_forbidden_syntax=$(
-  write_fixture historical-forbidden-syntax <<EOF
-## [3.1.0] - 2026-08-22
-### Security
-
-$NO_VULNERABILITIES
-
-### Added
-
-- Plain candidate prose.
-
-## [3.0.0] - 2026-08-01
-~~~text
-<details>[historical link]</details> &NewLine;
-~~~
-EOF
-)
-historical_notes="$FIXTURES/historical-forbidden-syntax.notes"
-bash "$EXTRACTOR" "$historical_forbidden_syntax" 3.1.0 >"$historical_notes"
-expect_allowed "historical forbidden syntax is outside the candidate" "$historical_notes"
-if grep -Eq '[<>&\[\]`]' "$historical_notes"; then
-  echo "extractor emitted forbidden historical syntax" >&2
-  exit 1
-fi
 
 leading_hyphen_directory="$FIXTURES/leading-hyphen"
 mkdir "$leading_hyphen_directory"

@@ -1,0 +1,73 @@
+# Generated changelog configuration.
+#
+# Contract: CHANGELOG.md documents changes to the compiled bzr artifact only.
+# Entries are generated from conventional commits at release time; repo
+# plumbing (site, release tooling, ADR/spec/plan prose, CI, build scripts)
+# never qualifies regardless of its commit type.
+
+[changelog]
+header = """
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/),
+and this project adheres to [Semantic Versioning](https://semver.org/).
+"""
+body = """
+
+## [{% if version %}{{ version | trim_start_matches(pat="v") }}{% else %}Unreleased{% endif %}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{%- set added = commits | filter(attribute="group", value="Added") -%}
+{%- set changed = commits | filter(attribute="group", value="Changed") -%}
+{%- set fixed = commits | filter(attribute="group", value="Fixed") -%}
+{%- if added | length > 0 %}
+
+### Added
+{% for commit in added %}
+- {{ commit.message | upper_first | trim }}
+{%- endfor %}
+{%- endif %}
+{%- if changed | length > 0 %}
+
+### Changed
+{% for commit in changed %}
+- {{ commit.message | upper_first | trim }}
+{%- endfor %}
+{%- endif %}
+{%- if fixed | length > 0 %}
+
+### Fixed
+{% for commit in fixed %}
+- {{ commit.message | upper_first | trim }}
+{%- endfor %}
+{%- endif %}
+"""
+trim = true
+footer = ""
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+protect_breaking_commits = true
+filter_commits = false
+topo_order = false
+sort_commits = "oldest"
+
+commit_parsers = [
+  # Infra scopes never qualify, whatever their type.
+  { message = "^\\w+\\((site|release|ci|adr|plan|spec|changelog|build|test|docs|deps)\\)", group = "Excluded" },
+
+  # Unscoped feat/fix/perf/refactor have no declared audience; requiring a
+  # product scope is what keeps release tooling out of the notes. The PR
+  # gate enforces the same rule from the other side.
+  { message = "^(feat|fix|perf|refactor):", group = "Excluded" },
+
+  # Product changes carry a non-infra scope.
+  { message = "^feat", group = "Added" },
+  { message = "^fix", group = "Fixed" },
+  { message = "^perf|^refactor", group = "Changed" },
+
+  # docs, test, chore, ci, style and anything else is plumbing.
+  { message = ".*", group = "Excluded" },
+]
