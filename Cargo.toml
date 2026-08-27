@@ -78,7 +78,7 @@ default-features = false
 apple-native-keyring-store = { version = "=1.0.2", features = ["keychain"], optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies.dbus-secret-service-keyring-store]
-version = "=1.0.0"
+version = "=1.0.1"
 features = ["crypto-rust"]
 optional = true
 
