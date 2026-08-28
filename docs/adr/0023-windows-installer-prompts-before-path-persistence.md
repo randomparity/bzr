@@ -14,10 +14,11 @@ choice.
 
 ## Decision
 
-When the install directory is absent from both the user and current-process PATH values, the
-Windows installer prompts the user to add it. A `Y` response appends one path entry to the current
-user's persistent PATH and to the running PowerShell process. A `N` response, empty response, or
-unavailable interactive input leaves both values unchanged and prints the manual command.
+When the install directory is absent from either the user or current-process PATH value, the
+Windows installer prompts the user to complete the missing PATH state. A `Y` response appends one
+path entry to each scope where it is absent. A `N` response, empty response, or unavailable
+interactive input leaves both values unchanged and prints the manual command. When both scopes
+already contain the directory, the installer does not prompt or rewrite either value.
 
 PATH membership is determined by case-insensitive comparison of semicolon-delimited entries after
 trimming surrounding whitespace and trailing directory separators. The installer never rewrites or
@@ -34,8 +35,9 @@ normalizes existing entries.
 ## Considered & rejected
 
 - **Continue printing instructions only.** verified: issue #566 records a successful installation
-  followed by `bzr` not being found, showing that the existing guidance does not complete the
-  reported installation path.
+  followed by `bzr` not being found in the same session after the existing guidance was printed.
+  judgment: the operator explicitly chose a consent prompt instead of relying on users to notice
+  and execute follow-up instructions.
 - **Modify PATH unconditionally.** judgment: changing persistent user environment state without
   consent is disproportionate to installing one executable.
 - **Modify only the persistent user PATH.** verified: Windows processes inherit an environment

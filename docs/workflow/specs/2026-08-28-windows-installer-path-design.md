@@ -21,15 +21,14 @@ the installer offers to add its directory to PATH and only does so with consent.
 
 After copying and smoke-checking `bzr.exe`, the installer compares its install directory against
 the current user's persistent PATH and the current process PATH. Comparison splits on semicolons,
-trims whitespace and trailing `\` or `/`, and ignores case. If either PATH already contains an
+trims whitespace and trailing `\` or `/`, and ignores case. If both PATH values already contain an
 equivalent entry, the installer does not prompt or rewrite either value.
 
-If neither PATH contains the directory, the installer asks `Add bzr to your PATH? [Y/N]`. Only a
+If either PATH lacks the directory, the installer asks `Add bzr to your PATH? [Y/N]`. Only a
 trimmed, case-insensitive `Y` or `Yes` is affirmative. On affirmation, it appends the directory to
-the user PATH with exactly one separator when needed and applies the same entry to `$env:Path` if
-still absent there. On `N`, empty input, any other input, or a prompt failure, it changes neither
-value and prints the existing actionable persistent command plus a note that a new shell is needed
-after running it.
+each missing scope with exactly one separator when needed. On `N`, empty input, any other input, or
+a prompt failure, it changes neither value and prints the existing actionable persistent command
+plus a note that a new shell is needed after running it.
 
 If persisting PATH fails after an affirmative response, installation remains successful but the
 installer reports the failed PATH operation and the manual command. It must not claim PATH was
