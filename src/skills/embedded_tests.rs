@@ -41,3 +41,49 @@ fn embeds_normalized_payload_paths_and_each_skill_entrypoint() {
         assert_eq!(entrypoints, 1, "{skill} must have one SKILL.md");
     }
 }
+
+#[test]
+fn embeds_complete_dependency_analysis_payload() {
+    let paths: Vec<_> = embedded::files()
+        .iter()
+        .filter_map(|file| file.relative_path.strip_prefix("bzr-dependency-analysis/"))
+        .collect();
+
+    assert_eq!(
+        paths,
+        vec![
+            "SKILL.md",
+            "scripts/analyze.py",
+            "scripts/collect.py",
+            "scripts/render.py",
+            "tests/fixtures/alias-collapse.expected.json",
+            "tests/fixtures/alias-collapse.policy.json",
+            "tests/fixtures/branch.analysis.json",
+            "tests/fixtures/branch.collection.json",
+            "tests/fixtures/cross-server.analysis.json",
+            "tests/fixtures/cross-server.collection.json",
+            "tests/fixtures/cycle.analysis.json",
+            "tests/fixtures/cycle.collection.json",
+            "tests/fixtures/diamond.analysis.json",
+            "tests/fixtures/diamond.collection.json",
+            "tests/fixtures/empty-partial.analysis.json",
+            "tests/fixtures/empty-partial.collection.json",
+            "tests/fixtures/hostile.analysis.json",
+            "tests/fixtures/hostile.expected.md",
+            "tests/fixtures/hostile.expected.mmd",
+            "tests/fixtures/inaccessible.analysis.json",
+            "tests/fixtures/inaccessible.collection.json",
+            "tests/fixtures/missing.analysis.json",
+            "tests/fixtures/missing.collection.json",
+            "tests/fixtures/recording_runner.py",
+            "tests/fixtures/resolved.analysis.json",
+            "tests/fixtures/resolved.collection.json",
+            "tests/fixtures/stale.analysis.json",
+            "tests/fixtures/stale.collection.json",
+            "tests/skill-contract.sh",
+            "tests/test_analyze.py",
+            "tests/test_collect.py",
+            "tests/test_render.py",
+        ]
+    );
+}

@@ -44,6 +44,7 @@ CLONE_ID=""
 TMPL_BUG=""
 COMMENT_ID=""
 ATTACH_ID=""
+RESTRICTED_BUG=""
 
 # ── Config isolation ─────────────────────────────────────────────────
 FUNC_CONFIG_DIR=$(mktemp -d /tmp/bzr-func-config.XXXXXX)
@@ -69,7 +70,7 @@ for _phase in \
     10-bug-clone 11-batch-update 11b-bug-verbs 12-my-bugs 13-templates 14-queries \
     15-comments 15b-comments-private 16-attachments 16b-attachments-private \
     17-global-options 17b-arg-validation 18-completion-schema 18a-json-envelope \
-    18b-http-error-preview 18c-skills-install 99-sequences; do
+    18b-http-error-preview 18c-skills-install 18d-dependency-analysis 99-sequences; do
     # shellcheck source=/dev/null
     source "$SCRIPT_DIR/phases/${_phase}.sh"
 done
