@@ -74,8 +74,8 @@ command-level failure exposes the versioned structured error envelope. It theref
 one command per admitted bug. The field list additionally
 requests `product`, `target_milestone`, or `version` when the corresponding restriction is
 active. Query restrictions use the bounded, fully paginated server-qualified membership set
-described above. Returned adjacency lists add
-edges even when the target is already fetched. Classified per-ID failures create unknown nodes
+described above. Returned adjacency lists add an observation when both endpoint nodes are admitted,
+even when the target is already fetched. Classified per-ID failures create unknown nodes
 carrying only the server, requested identifier, and structured error type. A failed or missing node is never
 silently removed.
 
@@ -124,8 +124,11 @@ The normative collection shape is:
   "nodes": [{
     "assigned_to": null,
     "depth": 0,
+    "error_type": null,
     "id": 1200,
     "last_change_time": null,
+    "provenance": {"command": "bug view", "server": "primary"},
+    "requested": "1200",
     "resolution": null,
     "server": "primary",
     "state": "known",
@@ -144,8 +147,12 @@ The normative collection shape is:
 }
 ```
 
-All displayed keys are required. Nullable node values use JSON null; node `state` is `known`,
-`unknown`, or `boundary`. Nodes sort by server, depth, then ID; observations sort by source server,
+All displayed keys are required. Node `state` is `known`, `unknown`, or `boundary`; `requested` is
+always the original string identifier and `id` is an integer when resolved or null otherwise.
+Known nodes require the fetched fields and null `error_type`; unknown nodes require a stable
+`error_type` and null fetched fields; boundary nodes require an ID and null fetched fields and
+`error_type`. Provenance contains only the allowlisted command name and server alias. Nodes sort by
+server, depth, resolved ID (null last), then requested string; observations sort by source server,
 source ID, target server, target ID, then field; roots and provenance retain canonical scope order;
 limitations are sorted stable codes. Serialization is UTF-8, sorted object keys, two-space indent,
 and one trailing newline. Starting-scope overflow sets `scope_truncated: true`, status `partial`, and
@@ -154,6 +161,9 @@ limitation `scope-node-cap`; the first `max_nodes` roots remain. Traversal exhau
 `graph-node-cap`. An oversized membership restriction emits no nodes, status `partial`, limitation
 `restriction-node-cap`, and `scope_truncated: true`; traversal does not start. Fatal collection adds
 its stable run-level limitation code and status `partial` without changing already recorded nodes.
+Every observation endpoint must occur in `nodes`. When cap admission rejects a newly discovered
+identity, all observations to that identity are omitted and the identity contributes exactly once
+to `omitted_discovered_identities`.
 
 Resolved-node policy is applied after recording the node and incoming edge. Status meanings
 are installation-specific, so the skill asks which statuses count as resolved or states the
