@@ -22,20 +22,23 @@ Files: create `content/skills/bzr-weekly-status/SKILL.md`,
 `content/skills/bzr-weekly-status/scripts/compare-snapshots.jq`,
 `content/skills/bzr-weekly-status/scripts/scope-fingerprint.sh`,
 `content/skills/bzr-weekly-status/scripts/safe-output.jq`,
+`content/skills/bzr-weekly-status/scripts/select-baseline.sh`,
 `content/skills/bzr-weekly-status/scripts/publish-run.sh`, an eval-case manifest, and fixtures under
 `content/skills/bzr-weekly-status/tests/`; modify `agent-skills/tests/run.sh` to execute them.
 
 Interfaces: `compare-snapshots.jq` consumes two validated snapshot-v1 JSON objects plus effective
 rules and emits deterministic JSON groups for membership, field transitions, staleness, and
-limitations. The fingerprint helper consumes `query show --json`; safe-output filters own rendered
-cell/text/link values. `publish-run.sh ROOT RUN STAGING` requires staging below `ROOT/.staging`, validates `STAGING/snapshot.json`, atomically renames
+limitations. The fingerprint helper consumes `query show --json`; the selector consumes current
+snapshot, runs directory, and required fields; the comparator consumes snapshot rules and emits
+opened/resolved, field-transition, staleness-crossing, and unchanged-attention groups; safe-output
+filters own rendered cell/text/link values. `publish-run.sh ROOT RUN STAGING` requires staging below `ROOT/.staging`, validates `STAGING/snapshot.json`, atomically renames
 the staging directory to `ROOT/runs/RUN`, and atomically replaces `ROOT/latest` with a relative
 symlink. The skill consumes both; Task 2 documents the exact `bzr` collection commands.
 
 Steps:
 
 1. Add failing fixture cases for first run, compatible changes, removed scope, inaccessible data,
-   same-name changed query definition and reordered equivalents, incompatible format/server/scope/fields,
+   same-name changed query definition, reordered equivalents without tuple collisions, X→Y→X newest-compatible selection, incompatible format/server/scope/fields,
    rendered spreadsheet/HTML/URL payload safety, and a publisher failure after immutable-run creation but before pointer replacement.
    Run the new fixture script directly and expect nonzero because implementation is absent.
 2. Add the minimum jq comparator, JSON schema, safe-output rules, executable atomic publisher, and

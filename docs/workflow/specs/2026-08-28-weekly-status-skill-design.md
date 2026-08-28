@@ -23,9 +23,11 @@ artifact capability. It performs no Bugzilla mutation.
    a human scope label, a SHA-256 fingerprint of the canonical effective query definition, effective
    fields and rules, optional `bzr schema --json` version, and sorted bug
    records. Exclude credentials, comments, attachment contents, and unrelated configuration.
-4. Select the newest prior compatible immutable snapshot. Compatibility requires equal format,
-   server, and scope plus a prior field set containing every field needed by the requested rules.
-   Reject incompatibility explicitly. The first run says no comparison is available.
+4. The baseline selector scans immutable run snapshots, orders candidates by UTC `created_at` and
+   run-directory name, skips the current and incompatible runs, and returns the newest compatible
+   prior snapshot. Compatibility requires equal format, server, and scope fingerprint plus a prior
+   field set containing every field needed by the requested rules. The first run says no comparison
+   is available.
 5. Compute added/removed scope membership and supported field transitions. Removal is never called
    closure; only current status/resolution or targeted detail/history evidence may establish that.
    Missing or inaccessible bugs remain limitations/unknowns.
@@ -44,10 +46,10 @@ The reference fixture defines required JSON keys and compatibility examples. Bug
 by decimal ID and carry only selected fields. The source URL is sanitized by removing credential
 parameters and userinfo; when trustworthy sanitization cannot be established, store a stable scope
 label instead. For named queries and URL imports, canonicalize the effective `query show --json`
-definition with the shipped fingerprint helper: object keys sorted, volatile display metadata,
-human query name, and source URL removed; URL userinfo and credential parameters are rejected before
-import; and
-membership parameters represented as sorted arrays; hash those UTF-8 bytes with SHA-256. Persist the
+definition with the shipped fingerprint helper: object keys sorted; known order-insensitive filter
+arrays sorted; raw parameter pairs sorted only as complete pairs, preserving each key/value order;
+volatile display metadata, human query name, and source URL removed; and URL userinfo and credential
+parameters rejected before import. Hash those UTF-8 bytes with SHA-256. Persist the
 human label separately. Rules are normalized JSON values so changing a staleness threshold or terminal-status
 set is visible provenance, while only rules that affect a requested comparison make an older
 snapshot incompatible.
@@ -90,7 +92,7 @@ changed scope; inaccessible nodes; incompatible
 server/scope/version/fields; injected formulas and HTML; forced report/snapshot-write failure;
 ambiguous scope requiring clarification; stale/conflicting data; and bounded history use. The
 repository has no agent-execution harness, so deterministic tests validate the executable fingerprint
-builder, comparator, publisher, safe-output filters, schema, documented command allowlist, mutation
+builder, baseline selector, rule-driven comparator, publisher, safe-output filters, schema, documented command allowlist, mutation
 denylist, briefing labels, and eval-case manifest. A release reviewer runs the manifest's prompt cases
 in an active agent environment and records the transcript as acceptance evidence. Without that run,
 the AI-behavior criteria remain explicitly unverified. No model self-grading is accepted.

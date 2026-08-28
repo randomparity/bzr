@@ -7,7 +7,7 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
 snapshot() {
-  jq -n --arg server "$1" --arg fingerprint "$2" --argjson bugs "$3" '{format_version:1,created_at:"2026-08-28T00:00:00Z",server:$server,scope_label:"core-weekly",scope_fingerprint:$fingerprint,fields:["id","resolution","status","summary"],rules:{},bugs:$bugs,limitations:[]}'
+  jq -n --arg server "$1" --arg fingerprint "$2" --argjson bugs "$3" '{format_version:1,created_at:"2026-08-28T00:00:00Z",server:$server,scope_label:"core-weekly",scope_fingerprint:$fingerprint,fields:["assigned_to","blocks","deadline","depends_on","id","last_change_time","priority","resolution","severity","status","summary","target_milestone","whiteboard"],rules:{terminal_statuses:["RESOLVED","CLOSED"],stale_after_days:10},bugs:$bugs,limitations:[]}'
 }
 
 fp=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -20,7 +20,8 @@ jq -n --slurpfile previous "$WORK/no-previous.json" --slurpfile current "$WORK/n
 
 jq -n --slurpfile previous "$WORK/old.json" --slurpfile current "$WORK/new.json" --argjson required_fields '["id","summary","status","resolution"]' -f "$FILTER" >"$WORK/changed.json"
 [ "$(jq -r '.added[0]' "$WORK/changed.json")" = 2 ]
-[ "$(jq -r '.changed[0].id' "$WORK/changed.json")" = 1 ]
+[ "$(jq -r '.newly_resolved[0]' "$WORK/changed.json")" = 1 ]
+[ "$(jq -r '.transitions[] | select(.field=="status") | .id' "$WORK/changed.json")" = 1 ]
 
 snapshot server-a "$fp" '{"2":{"id":2,"summary":"still here","status":"NEW","resolution":""}}' >"$WORK/removed.json"
 jq -n --slurpfile previous "$WORK/old.json" --slurpfile current "$WORK/removed.json" --argjson required_fields '["id"]' -f "$FILTER" >"$WORK/removal.json"
@@ -31,7 +32,7 @@ jq '.limitations=[{"id":3,"reason":"inaccessible"}]' "$WORK/new.json" >"$WORK/li
 jq -n --slurpfile previous "$WORK/old.json" --slurpfile current "$WORK/limited.json" --argjson required_fields '["id"]' -f "$FILTER" >"$WORK/limited-result.json"
 [ "$(jq -r '.limitations[0].reason' "$WORK/limited-result.json")" = inaccessible ]
 
-if jq -n --slurpfile previous "$WORK/old.json" --slurpfile current "$WORK/new.json" --argjson required_fields '["deadline"]' -f "$FILTER" >/dev/null 2>&1; then
+if jq -n --slurpfile previous "$WORK/old.json" --slurpfile current "$WORK/new.json" --argjson required_fields '["custom_missing"]' -f "$FILTER" >/dev/null 2>&1; then
   echo 'expected incompatible fields failure' >&2
   exit 1
 fi
@@ -85,6 +86,23 @@ fp_b=$(printf '%s' "$query_b" | "$HERE/../scripts/scope-fingerprint.sh")
 [ "$fp_a" = "$fp_b" ]
 fp_c=$(printf '%s' '{"name":"core-weekly","product":["C"],"status":["NEW"]}' | "$HERE/../scripts/scope-fingerprint.sh")
 [ "$fp_a" != "$fp_c" ]
+tuple_a=$(printf '%s' '{"raw_params":[["f1","component"]]}' | "$HERE/../scripts/scope-fingerprint.sh")
+tuple_b=$(printf '%s' '{"raw_params":[["component","f1"]]}' | "$HERE/../scripts/scope-fingerprint.sh")
+[ "$tuple_a" != "$tuple_b" ]
+
+runs="$WORK/history/runs"
+mkdir -p "$runs/run-a" "$runs/run-b" "$runs/run-c"
+jq '.created_at="2026-08-01T00:00:00Z"' "$WORK/old.json" >"$runs/run-a/snapshot.json"
+jq '.created_at="2026-08-02T00:00:00Z" | .scope_fingerprint="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' "$WORK/old.json" >"$runs/run-b/snapshot.json"
+jq '.created_at="2026-08-03T00:00:00Z"' "$WORK/new.json" >"$runs/run-c/snapshot.json"
+selected=$("$HERE/../scripts/select-baseline.sh" "$runs/run-c/snapshot.json" "$runs" '["id","status"]')
+[ "$selected" = "$runs/run-a/snapshot.json" ]
+
+jq '.created_at="2026-08-01T00:00:00Z" | .bugs={"9":{"id":9,"summary":"idle","status":"NEW","resolution":"","last_change_time":"2026-07-25T00:00:00Z"}}' "$WORK/old.json" >"$WORK/stale-old.json"
+jq '.created_at="2026-08-08T00:00:00Z" | .bugs={"9":{"id":9,"summary":"idle","status":"NEW","resolution":"","last_change_time":"2026-07-25T00:00:00Z"}}' "$WORK/new.json" >"$WORK/stale-new.json"
+jq -n --slurpfile previous "$WORK/stale-old.json" --slurpfile current "$WORK/stale-new.json" --argjson required_fields '["id","last_change_time"]' -f "$FILTER" >"$WORK/stale-result.json"
+[ "$(jq -r '.stale_crossed[0]' "$WORK/stale-result.json")" = 9 ]
+[ "$(jq -r '.attention_unchanged[0]' "$WORK/stale-result.json")" = 9 ]
 
 [ "$(printf '%s' '=cmd' | jq -Rr -L "$HERE/../scripts" 'include "safe-output"; spreadsheet_text')" = "'=cmd" ]
 [ "$(printf '%s' '<b>&' | jq -Rr -L "$HERE/../scripts" 'include "safe-output"; html_text')" = '&lt;b&gt;&amp;' ]

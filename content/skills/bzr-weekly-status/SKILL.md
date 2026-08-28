@@ -61,8 +61,11 @@ or fields the report does not need. Write files with owner-only permissions wher
 ## 3. Select and compare a baseline
 
 The first run states: **No compatible prior snapshot exists; this report establishes the baseline.**
-For later runs, compare only when format version, sanitized server identity, and normalized scope are
-equal and the old field set contains every field required by the effective comparison rules:
+For later runs, use `scripts/select-baseline.sh current.json "$SNAPSHOT_ROOT/runs"
+'["required","fields"]'`. It orders candidates by `created_at` and run-directory name, skips the
+current run and every incompatible candidate, and returns the newest compatible snapshot even when
+newer runs belong to another scope. Compare only when format version, sanitized server identity, and
+scope fingerprint are equal and the old field set contains every field required by the effective rules:
 
 ```sh
 jq -n --slurpfile previous previous.json --slurpfile current current.json \
@@ -75,7 +78,9 @@ Report added IDs as new to scope and removed IDs as removed from scope—not clo
 only from current status/resolution or bounded current detail/history evidence. Preserve inaccessible
 or failed bugs as unknown limitations.
 
-Detect supported changes only when their fields were selected: opened/resolved state, status,
+The comparator reads `terminal_statuses` and `stale_after_days` from the current snapshot's `rules`
+and emits `newly_opened`, `newly_resolved`, field-level `transitions`, `stale_crossed`, and
+`attention_unchanged`. Detect supported changes only when their fields were selected: opened/resolved state, status,
 resolution, assignee, priority, severity, target milestone, deadline, blockers/dependencies,
 whiteboard snapshot, and crossing the staleness threshold. Unchanged work may still require attention
 when the effective rules say so.
