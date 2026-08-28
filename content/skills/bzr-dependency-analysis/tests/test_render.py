@@ -1,5 +1,6 @@
 """Behavioral contract for safe deterministic dependency-report rendering."""
 
+import copy
 import importlib.util
 import json
 from pathlib import Path
@@ -25,7 +26,7 @@ RENDER_SPEC.loader.exec_module(RENDERER)
 class RendererTestCase(unittest.TestCase):
     maxDiff = None
 
-    def run_renderer(self, source, output_format, *, initial=None):
+    def run_renderer(self, source, output_format, *, initial=None, option_names=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             input_path = root / "analysis.json"
@@ -37,14 +38,15 @@ class RendererTestCase(unittest.TestCase):
             if initial is not None:
                 output_path.parent.mkdir(parents=True)
                 output_path.write_bytes(initial)
+            option_names = option_names or {}
             command = [
                 sys.executable,
                 str(RENDER),
-                "--input",
+                option_names.get("--input", "--input"),
                 str(input_path),
-                "--format",
+                option_names.get("--format", "--format"),
                 output_format,
-                "--output",
+                option_names.get("--output", "--output"),
                 str(output_path),
             ]
             result = subprocess.run(command, capture_output=True, check=False, timeout=5)
@@ -117,6 +119,96 @@ class RendererTestCase(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertEqual(output, b"keep\n")
         self.assertEqual(result.stderr, b"render input error: analysis has invalid keys\n")
+
+    def test_abbreviated_options_are_rejected_without_replacing_output(self):
+        source = (FIXTURES / "hostile.analysis.json").read_bytes()
+        for full, abbreviated in (
+            ("--input", "--inp"),
+            ("--format", "--for"),
+            ("--output", "--out"),
+        ):
+            with self.subTest(option=abbreviated):
+                result, output = self.run_renderer(
+                    source,
+                    "markdown",
+                    initial=b"keep\n",
+                    option_names={full: abbreviated},
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(output, b"keep\n")
+
+    def test_cap_metadata_contradictions_do_not_replace_output(self):
+        complete = json.loads((FIXTURES / "hostile.analysis.json").read_text())
+        partial = copy.deepcopy(complete)
+        partial["status"] = "partial"
+        partial["limitations"] = ["collection-http"]
+
+        mutations = []
+
+        graph_limitation_without_flag = copy.deepcopy(partial)
+        graph_limitation_without_flag["limitations"] = ["graph-node-cap"]
+        mutations.append(graph_limitation_without_flag)
+
+        graph_flag_without_limitation = copy.deepcopy(partial)
+        graph_flag_without_limitation["cap"]["graph_cap_reached"] = True
+        mutations.append(graph_flag_without_limitation)
+
+        omissions_without_graph_cap = copy.deepcopy(partial)
+        omissions_without_graph_cap["cap"]["omitted_discovered_identities"] = 1
+        mutations.append(omissions_without_graph_cap)
+
+        for limitation in ("restriction-node-cap", "scope-node-cap"):
+            scope_limitation_without_flag = copy.deepcopy(partial)
+            scope_limitation_without_flag["limitations"] = [limitation]
+            mutations.append(scope_limitation_without_flag)
+
+        scope_flag_without_limitation = copy.deepcopy(partial)
+        scope_flag_without_limitation["cap"]["scope_truncated"] = True
+        mutations.append(scope_flag_without_limitation)
+
+        both_scope_limitations = copy.deepcopy(partial)
+        both_scope_limitations["cap"]["scope_truncated"] = True
+        both_scope_limitations["limitations"] = [
+            "restriction-node-cap",
+            "scope-node-cap",
+        ]
+        mutations.append(both_scope_limitations)
+
+        complete_with_limitation = copy.deepcopy(complete)
+        complete_with_limitation["cap"]["graph_cap_reached"] = True
+        complete_with_limitation["limitations"] = ["graph-node-cap"]
+        mutations.append(complete_with_limitation)
+
+        partial_without_limitation = copy.deepcopy(complete)
+        partial_without_limitation["status"] = "partial"
+        mutations.append(partial_without_limitation)
+
+        for document in mutations:
+            with self.subTest(
+                cap=document["cap"],
+                limitations=document["limitations"],
+                status=document["status"],
+            ):
+                result, output = self.run_renderer(
+                    document,
+                    "markdown",
+                    initial=b"keep\n",
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(output, b"keep\n")
+                self.assertIn(b"render input error:", result.stderr)
+
+    def test_graph_cap_accepts_zero_or_positive_omission_counts(self):
+        document = json.loads((FIXTURES / "hostile.analysis.json").read_text())
+        document["status"] = "partial"
+        document["limitations"] = ["graph-node-cap"]
+        document["cap"]["graph_cap_reached"] = True
+        for count in (0, 2):
+            with self.subTest(count=count):
+                document["cap"]["omitted_discovered_identities"] = count
+                result, output = self.run_renderer(document, "markdown")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIsNotNone(output)
 
     def test_duplicate_json_keys_are_rejected(self):
         source = b'{"schema":"bzr-dependency-analysis/v1","schema":"other"}'
