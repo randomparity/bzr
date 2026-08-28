@@ -23,7 +23,9 @@ a choice, it records the resulting assumption in the report.
    priority/severity/keyword/flag/custom-field values, stale duration, resolved
    dependency handling, and artifact format.
 3. Derive the smallest field projection from the selected checks. Every complete
-   collection uses `--paginate --json` with `--sort bug_id --order asc` where
+   collection overrides URL and saved-query page sizing with the bounded positive
+   page size `--limit 100`, including when the stored value is missing, zero, or
+   greater than 100. It then uses `--paginate --json` with `--sort bug_id --order asc` where
    that scope command supports ordering. De-duplicate returned IDs and record
    collection start/end. This is a non-transactional rolling snapshot: exhausting
    pagination is complete only for rows the server exposed during that rolling
@@ -61,10 +63,11 @@ limitations, source commands, and generation time. Each assessment statement
 links to its supporting fact section. Counts never hide their contributing bug
 IDs.
 
-Only predicates the operator explicitly designates as release-blocking may
-produce `not ready`. A matched blocking predicate produces `not ready`; an
-unknown or conflicted blocking predicate produces `indeterminate`; otherwise the
-assessment is `no configured blocker observed`, not a universal `ready` claim.
+Only predicates the operator explicitly designates as release-blocking affect
+the headline, with this total precedence: any known matched blocker produces
+`not ready`, even when other blocking checks are unknown; otherwise any unknown
+or conflicted blocking check produces `indeterminate`; otherwise the assessment
+is `no configured blocker observed`, not a universal `ready` claim.
 Non-blocking findings appear under risks or decisions needed and cannot invent a
 veto. Zero visible rows means `no visible evidence` unless the operator's stated
 policy explicitly assigns it another meaning.
@@ -110,8 +113,12 @@ concatenate remote strings into markup. Document generators likewise insert
 remote values only as text nodes. Links are parsed and canonicalized first;
 userinfo, credentials, controls, protocol-relative forms, and parse errors are
 rejected before allowing exact lowercased `http` or `https` schemes. Displayed
-Before any tool call, parse the supplied scope URL and reject userinfo or known
-credential parameter names, asking for a credential-free URL and configured or
+Before any tool call, parse the supplied scope URL and reject userinfo or an
+authentication parameter name after percent-decoding the name and comparing it
+case-insensitively against this complete Bugzilla alias set: `Bugzilla_login`,
+`login`, `Bugzilla_password`, `password`, `Bugzilla_token`, `token`,
+`Bugzilla_api_key`, and `api_key`. Reject malformed percent encoding and any
+matching duplicate key. Ask for a credential-free URL and configured or
 environment-backed authentication. Displayed source URLs omit fragment/userinfo, redact credential-parameter values, retain
 canonical non-secret filter and boolean-chart parameters, and list every dropped
 parameter name. Unsafe links render as text. The
@@ -149,8 +156,9 @@ visible facts, assumptions, and complete or explicitly limited collection.
 
 - `RR-HAPPY`: milestone data with open P1 and stale bugs produces a report with
   blocker/stale sections, source IDs, rules, command, and timestamp.
-- `RR-ROLLUP`: designated blocker match yields `not ready`, blocking unknown
-  yields `indeterminate`, and non-blocking risks cannot invent a veto.
+- `RR-ROLLUP`: a designated blocker match yields `not ready` even alongside a
+  blocking unknown; with no match, a blocking unknown yields `indeterminate`;
+  non-blocking risks cannot invent a veto.
 - `RR-EMPTY`: zero visible rows yields `no visible evidence`, not `ready`.
 - `RR-COMPLETE`: open and complete bugs share P1/severity/unowned values; only
   open bugs contribute.
@@ -171,7 +179,8 @@ visible facts, assumptions, and complete or explicitly limited collection.
   without inventing a hidden count.
 - `RR-BOUNDED`: a cycle and 101 sorted root IDs at the default cap execute no
   supplementary command for ID 101 and list it as skipped.
-- `RR-PAGING`: URL and saved-query scopes with offset 50 are rejected as
+- `RR-PAGING`: URL and saved-query scopes with absent, zero, 100, and oversized
+  stored limits all execute bounded requests of exactly 100 rows; offset 50 is rejected as
   complete; `query show --json` provides saved-query preflight; an accepted
   window is labelled partial. A changing-server fixture proves that stable ID
   order and start/end timestamps still report a rolling-snapshot limitation;
@@ -183,9 +192,10 @@ visible facts, assumptions, and complete or explicitly limited collection.
   the requested optional artifact is reported unavailable.
 - `RR-READ-ONLY`: every documented command is classified against an allowlist;
   no mutation verb is present.
-- `RR-SECRET-URL`: a scope URL with userinfo or a credential parameter is
+- `RR-SECRET-URL`: every listed authentication alias, duplicate, ASCII case
+  variant, percent-encoded key spelling, malformed encoding, and userinfo form is
   rejected before execution; the secret appears in no argv, trace, provenance,
-  report, or retained evidence.
+  report, request, or retained evidence.
 
 Each fixture stores operator input, structured command results, the expected
 command trace, and report assertions. A deterministic validator checks the trace
@@ -193,10 +203,18 @@ against the read-only allowlist, selected fields and cap, then compares sanitize
 Markdown/HTML golden fragments. When document capability exists,
 `RR-INJECTION` also generates a document and inspects extracted text and package
 relationships to reject macros, active markup, or external relationships derived
-from remote values; capability absence routes to `RR-NO-ARTIFACT`. An independent manual agent eval installs the
-built skill in a temporary project, supplies each `RR-*` request through an
-isolated mock-tool transcript, and retains the generated report and checklist as
-release evidence; no model grades its own output.
+from remote values; capability absence routes to `RR-NO-ARTIFACT`.
+
+The independent manual agent gate uses exactly Codex CLI 0.150.1,
+`gpt-5.6-terra`, reasoning effort `high`, temperature/default sampling unchanged,
+the committed skill, and the committed isolated mock-tool transcript. Each
+`RR-*` case runs three attempts: the exact committed request plus two committed
+paraphrases. The evaluator retains every prompt, command trace, stdout/stderr,
+artifact, checklist result, CLI/model/reasoning identifiers, and exit status;
+attempts are never retried or discarded. Release requires all attempts to pass
+the deterministic assertions and zero severity-4/5 failures. Any failure blocks
+release; a later run is a new fully retained gate, never retry-until-pass. No
+model grades its own output.
 
 ## Threat model
 
