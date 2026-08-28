@@ -91,7 +91,12 @@ if assert_success; then
         assert_json '.[0] | has("id")' "true" &&
         assert_json '.[0] | has("last_change_time")' "true" &&
         assert_json '.[0] | has("blocks")' "true" &&
-        assert_json '.[0] | has("depends_on")' "true"; then test_pass; fi
+        assert_json '.[0] | has("depends_on")' "true"; then
+        run_bzr bug history "$BUG1"
+        if assert_success && assert_json_array_min_length '.' 1 &&
+            assert_json '.[0] | has("field")' "true" &&
+            assert_json '.[0] | has("when")' "true"; then test_pass; fi
+    fi
 fi
 unset _Q_WEEKLY_URL
 

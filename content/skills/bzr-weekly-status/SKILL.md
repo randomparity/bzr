@@ -25,12 +25,13 @@ bzr query run core-weekly \
   --paginate --json
 ```
 
-For a Custom Search URL, sanitize it before displaying or persisting it. Reject userinfo and remove
-credential parameters such as `api_key`, `token`, `password`, and `login`. Ask before assigning the
-stable local query name:
+For a Custom Search URL, pass the original URL only to `bzr query save --from-url`; its Rust URL
+parser removes recognized credential parameters from the saved source URL and raw parameters. Never
+parse, rewrite, display, or persist the original URL in agent-authored jq or shell code. Ask before
+assigning the stable local query name:
 
 ```sh
-bzr query save core-weekly --from-url "$SANITIZED_URL"
+bzr query save core-weekly --from-url "$URL"
 bzr query run core-weekly \
   --fields id,summary,status,resolution,assigned_to,priority,severity,target_milestone,deadline,last_change_time,whiteboard,blocks,depends_on \
   --paginate --json
@@ -51,9 +52,10 @@ Validate against [the version-1 schema](reference/snapshot-v1.schema.json). Stor
 - the available `bzr schema --json` version; and
 - `bugs`, keyed by decimal bug ID, containing only the selected comparison state.
 
-Canonicalize the effective `query show --json` definition with `scripts/scope-fingerprint.sh`, not
-merely its name. The helper sorts object keys and membership arrays and omits volatile display
-metadata, the human name, and source URL. Reject URL userinfo and credential aliases before import.
+Canonicalize the parser-sanitized `query show --json` definition with
+`scripts/scope-fingerprint.sh`, not merely its name. The helper sorts object keys and membership
+arrays and omits volatile display metadata, the human name, and source URL. The agent never
+implements URL parsing itself.
 
 Never store credentials, comments, attachment contents, unrelated configuration, auth-bearing URLs,
 or fields the report does not need. Write files with owner-only permissions where supported.
@@ -122,3 +124,11 @@ Use a same-directory rename primitive appropriate to the active platform. Never 
 `latest` in place. On query, rendering, or snapshot failure, remove only temporaries created by this
 run and retain the previous pointer. A pointer-update failure can leave an immutable orphan run;
 report it and never delete an older run.
+
+## Demonstration
+
+From the repository, `tools/record-demo.sh --weekly-status` records a real two-run workflow against
+the functional Bugzilla container. Its driver installs this skill, collects a baseline, executes the
+shipped fingerprint, snapshot-builder, publisher, baseline-selector, and comparator helpers, changes
+one seeded bug, then publishes and displays the comparison. The script renders
+`docs/assets/bzr-weekly-status-demo.gif` when `asciinema` and `agg` are available.

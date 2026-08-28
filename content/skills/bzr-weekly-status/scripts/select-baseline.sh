@@ -11,10 +11,12 @@ for candidate in "$runs"/*/snapshot.json; do
   if jq -e --slurpfile current "$current" --argjson required "$required_fields" '
     .format_version == $current[0].format_version and .server == $current[0].server and
     .scope_fingerprint == $current[0].scope_fingerprint and
+    .rules == $current[0].rules and
     (($required - .fields) | length) == 0
   ' "$candidate" >/dev/null; then
     key=$(jq -r '.created_at' "$candidate")/$(dirname "$candidate" | sed 's|.*/||')
-    if [ -z "$best_key" ] || [ "$key" \> "$best_key" ]; then
+    newer=$(jq -nr --arg candidate "$key" --arg current "$best_key" '$candidate > $current')
+    if [ -z "$best_key" ] || [ "$newer" = true ]; then
       best_key=$key
       best_path=$candidate
     fi

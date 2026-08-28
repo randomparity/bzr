@@ -48,8 +48,10 @@ parameters and userinfo; when trustworthy sanitization cannot be established, st
 label instead. For named queries and URL imports, canonicalize the effective `query show --json`
 definition with the shipped fingerprint helper: object keys sorted; known order-insensitive filter
 arrays sorted; raw parameter pairs sorted only as complete pairs, preserving each key/value order;
-volatile display metadata, human query name, and source URL removed; and URL userinfo and credential
-parameters rejected before import. Hash those UTF-8 bytes with SHA-256. Persist the
+volatile display metadata, human query name, and source URL removed. The original Custom Search URL
+is passed only to `bzr query save --from-url`; the existing Rust URL parser owns credential removal,
+and agent-authored jq/shell never parses or persists the original. Hash those UTF-8 bytes with
+SHA-256. Persist the
 human label separately. Rules are normalized JSON values so changing a staleness threshold or terminal-status
 set is visible provenance, while only rules that affect a requested comparison make an older
 snapshot incompatible.

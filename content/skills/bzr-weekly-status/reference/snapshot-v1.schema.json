@@ -11,9 +11,27 @@
     "scope_label": { "type": "string", "minLength": 1 },
     "scope_fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "fields": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
-    "rules": { "type": "object" },
+    "rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "terminal_statuses": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "stale_after_days": { "type": "integer", "minimum": 1 }
+      }
+    },
     "bzr_schema_version": { "type": ["string", "null"] },
     "bugs": { "type": "object", "propertyNames": { "pattern": "^[1-9][0-9]*$" }, "additionalProperties": { "type": "object" } },
-    "limitations": { "type": "array", "items": { "type": "object" } }
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reason"],
+        "properties": {
+          "id": { "type": ["integer", "null"], "minimum": 1 },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
   }
 }

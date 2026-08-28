@@ -78,11 +78,7 @@ if [[ "${1:-}" == "--drive-weekly-status" ]]; then
   fields='id,summary,status,resolution,assigned_to,priority,severity,target_milestone,deadline,last_change_time,whiteboard,blocks,depends_on'
   type_run 'bzr skills install --agent codex --project .' 1.2
   type_run "bzr query save core-weekly --product Nimbus --fields $fields" 1.2
-  type_run "bzr query run core-weekly --fields $fields --paginate --json > '$workdir/baseline.json'" 1.0
-  type_run 'echo "No compatible prior snapshot exists; this report establishes the baseline."' 2.0
-  type_run "bzr bug update $bug_id --status IN_PROGRESS --whiteboard 'blocked: parser owner needed'" 1.2
-  type_run "bzr query run core-weekly --fields $fields --paginate --json > '$workdir/current.json'" 1.0
-  type_run "jq -n --arg id '$bug_id' '{facts:[\"Bug #\(\$id) changed status and whiteboard\"],interpretation:[\"Owner decision needed\"]}'" 2.6
+  type_run "tools/run-weekly-status-demo.sh '$bug_id' '$workdir' '.agents/skills/bzr-weekly-status'" 3.2
   printf '%b\n' "$prompt"
   exit 0
 fi

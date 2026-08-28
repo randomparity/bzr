@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+HERE=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 FILTER="$HERE/../scripts/compare-snapshots.jq"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
@@ -49,6 +49,12 @@ if jq -n --slurpfile previous "$WORK/old.json" --slurpfile current "$WORK/wrong-
   exit 1
 fi
 
+jq '.rules.stale_after_days=14' "$WORK/new.json" >"$WORK/wrong-rules.json"
+if jq -n --slurpfile previous "$WORK/old.json" --slurpfile current "$WORK/wrong-rules.json" --argjson required_fields '["id"]' -f "$FILTER" >/dev/null 2>&1; then
+  echo 'expected incompatible rules failure' >&2
+  exit 1
+fi
+
 root="$WORK/published"
 mkdir -p "$root/.staging"
 stage="$root/.staging/stage-ok"
@@ -70,6 +76,23 @@ if "$HERE/../scripts/publish-run.sh" "$root" run-2 "$stage" >/dev/null 2>&1; the
 fi
 [ -f "$root/runs/run-1/snapshot.json" ]
 [ -f "$root/runs/run-2/snapshot.json" ]
+
+invalid_stage="$root/.staging/invalid"
+mkdir "$invalid_stage"
+jq '.unexpected=true' "$WORK/new.json" >"$invalid_stage/snapshot.json"
+if "$HERE/../scripts/publish-run.sh" "$root" invalid "$invalid_stage" >/dev/null 2>&1; then
+  echo 'expected schema allowlist rejection' >&2
+  exit 1
+fi
+[ ! -e "$root/runs/invalid" ]
+
+sensitive_stage="$root/.staging/sensitive"
+mkdir "$sensitive_stage"
+jq '.rules.token="secret"' "$WORK/new.json" >"$sensitive_stage/snapshot.json"
+if "$HERE/../scripts/publish-run.sh" "$root" sensitive "$sensitive_stage" >/dev/null 2>&1; then
+  echo 'expected sensitive key rejection' >&2
+  exit 1
+fi
 
 outside="$WORK/outside-stage"
 mkdir "$outside"
@@ -109,6 +132,9 @@ jq -n --slurpfile previous "$WORK/stale-old.json" --slurpfile current "$WORK/sta
 [ "$(printf '%s' 'javascript:alert(1)' | jq -Rr -L "$HERE/../scripts" 'include "safe-output"; safe_http_url')" = null ]
 
 grep -q 'WS-10' "$HERE/../reference/eval-cases.md"
-! grep -Eq 'bzr (bug|comment|attachment) (create|update|close|resolve|reopen|dup|add|upload|delete)' "$HERE/../SKILL.md"
+if grep -Eq 'bzr (bug|comment|attachment) (create|update|close|resolve|reopen|dup|add|upload|delete)' "$HERE/../SKILL.md"; then
+  echo 'skill documents a forbidden mutation command' >&2
+  exit 1
+fi
 
 printf '%s\n' 'weekly-status fixtures: ok'
