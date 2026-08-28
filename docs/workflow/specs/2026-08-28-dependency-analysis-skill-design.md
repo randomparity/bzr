@@ -70,12 +70,15 @@ boundary. Tests substitute a recorded runner; live use invokes the configured bi
 shell. The collector maintains `queued`, `fetched`, and `nodes` sets keyed by `(server, bug-id)`.
 Admission immediately creates a `boundary` node with `boundary_reason: pending_fetch`; every
 admitted identity therefore has a legal record before its command runs.
-When an alias root is present, the collector resolves it before admitting numeric roots. The
-successful response must contain one numeric ID. The collector re-keys the temporary alias record
-to `(server, returned_id)`, preserves the alias in a sorted `requested_aliases` array, and then
-stable-deduplicates numeric roots and later adjacency against that key without another fetch or cap
-charge. More than one alias for the same server is rejected before collection because the released
-surface cannot prove two aliases differ without fetching the same underlying bug twice.
+Root processing follows canonical server/root order. Before every alias lookup, the collector
+reserves and consumes one node-cap slot and creates its pending boundary record; a failed lookup
+retains that slot. When no slot remains, later aliases are not looked up. A successful alias response
+must contain one numeric ID. The collector re-keys the temporary alias record to
+`(server, returned_id)`, sets canonical `requested` to the decimal numeric ID, preserves the original
+alias only in a sorted `requested_aliases` array, and stable-deduplicates numeric roots and later
+adjacency against that key without another fetch or cap charge. More than one alias for the same
+server is rejected before collection because the released surface cannot prove two aliases differ
+without fetching the same underlying bug twice.
 The current fallback fetches each ID separately with `bzr --json bug view ID --fields
 id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on`, because only a
 command-level failure exposes the versioned structured error envelope. It therefore makes at most
@@ -166,8 +169,10 @@ The normative collection shape is:
 ```
 
 All displayed keys are required. Node `state` is `known`, `unknown`, or `boundary`; `requested` is
-always the original string identifier. `id` is required for every numeric requested or discovered
+the decimal ID for a resolved node and otherwise the original string identifier. `id` is required for every numeric requested or discovered
 identity, including `unknown` nodes, and is null only for an unresolved nonnumeric root alias.
+After successful alias resolution, `requested` is the decimal numeric ID and every original alias
+appears only in sorted `requested_aliases`.
 Known nodes require the fetched fields and null `error_type`; unknown nodes require a stable
 `error_type`, null fetched fields, and null `boundary_reason`; boundary nodes require null fetched
 fields and `error_type` plus one reason from `pending_fetch`, `depth_limit`, `scope_restriction`, or
