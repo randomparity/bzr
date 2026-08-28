@@ -43,8 +43,7 @@ Before retrieval, the skill resolves:
   milestone, or a version;
 - direction: `depends_on`, `blocks`, or both;
 - maximum depth and maximum distinct nodes, both required and positive;
-- whether resolved nodes are included and traversed, included but not traversed, or omitted
-  after being recorded;
+- whether resolved nodes are included and traversed or included but not traversed;
 - optional product, milestone, or query-membership restriction;
 - stale threshold, analysis timestamp, and requested output formats.
 
@@ -355,10 +354,11 @@ Schema-intentional null timestamps on resolved, unknown, and boundary nodes neve
 warnings. Warning node lists use the identity-reference object above, are deduplicated, and contain
 exactly the affected known unresolved nodes.
 
-A time-based critical path is forbidden unless duration data exists and the user explicitly
-chooses its units and interpretation. Weighted analysis names the duration field, missing-value
-policy, and whether estimates apply to bugs or edges. Otherwise output says “longest dependency
-chain by edge count,” never “critical path” or a delivery-date prediction.
+Version 1 does not ingest duration data and always emits `policy.duration: null`. It reports only
+“longest dependency chain by edge count,” never “critical path” or a delivery-date prediction.
+If a user supplies estimates, the skill explains that weighted critical-path analysis is
+unsupported until a later version defines units, bug-versus-edge interpretation, missing-value
+policy, and a versioned input/output shape; it does not improvise those semantics.
 
 ### Outputs
 
@@ -450,17 +450,19 @@ log assertions, and runs DA-18 for alias canonicalization. `python3 content/skil
 against every deterministic renderer. `content/skills/bzr-dependency-analysis/tests/skill-contract.sh`
 runs DA-02 and DA-12 plus static command allowlist and phantom-flag checks. The fixture suite validates the skill
 contract and every documented `bzr` invocation. A real
-functional Bugzilla demonstration creates a branch, a diamond, a cycle, a resolved blocker, and
+functional Bugzilla demonstration creates a branch, a diamond, a resolved blocker, and
 a dependency with a safely hostile summary, then records bounded structured collection and a
-textual/Mermaid report.
+textual/Mermaid report. The installed-copy fixture pipeline separately runs the deterministic cycle
+fixture through the analyzer and asserts cycle reporting because stock Bugzilla rejects circular
+dependency mutations.
 
 ## Threat model
 
 ### Boundaries and actors
 
 Bugzilla-controlled summaries, field values, errors, and URLs cross from an authenticated or
-anonymous Bugzilla user into local artifacts. User-supplied scopes, bounds, output paths, and
-duration semantics cross from the local operator into agent-composed commands. Installed skill
+anonymous Bugzilla user into local artifacts. User-supplied scopes, bounds, and output paths cross
+from the local operator into agent-composed commands. Installed skill
 instructions cross from the released `bzr` binary into the agent environment. The design adds no
 credential handling and widens no server authorization.
 
@@ -496,12 +498,14 @@ check under the same directory. The embedded-name unit test and
 functional installer fixture include it. The existing `18c-skills-install.sh` phase verifies every
 dependency-analysis payload path after installation and runs one fixture-based
 collect→analyze→render pipeline from the installed destination. A new
-`18d-dependency-analysis.sh` functional phase creates live branches, a diamond, cycle, resolved
+`18d-dependency-analysis.sh` functional phase creates live branches, a diamond, resolved
 blocker, and hostile summary. It selects the freshly installed
 `$SKILLS_PROJECT/.agents/skills/bzr-dependency-analysis` root, asserts the real paths of collector,
 analyzer, renderer, and fixtures remain beneath it, and runs the complete installed
 collect→analyze→render chain through the real `bzr` binary. It asserts server-qualified edges,
-cycle/resolved handling, caps, and inert rendered text without resolving any stage from the checkout.
+resolved handling, caps, and inert rendered text without resolving any stage from the checkout.
+The phase also analyzes the installed deterministic cycle fixture and asserts its cyclic component;
+it does not attempt an impossible live circular mutation.
 `tools/record-demo.sh` gains a named dependency-analysis
 mode that seeds and records the graph without changing the existing README demo default.
 
