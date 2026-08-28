@@ -11,6 +11,7 @@ import unittest
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 COLLECT = SKILL_ROOT / "scripts" / "collect.py"
+ANALYZE = SKILL_ROOT / "scripts" / "analyze.py"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 RUNNER = FIXTURES / "recording_runner.py"
 TIMESTAMP = "2026-08-28T12:00:00Z"
@@ -158,7 +159,7 @@ class CollectorTestCase(unittest.TestCase):
         self.assertEqual(len([argv for argv in log if argv[3:5] == ["bug", "view"]]), 2)
         self.assertEqual(document["observations"][0]["target"]["id"], 2)
 
-    def test_da06_cycle_terminates_at_cap_and_fetches_each_identity_once(self):
+    def test_da06_exact_cap_boundary_analyzes_without_omissions(self):
         responses = [
             ok(view_argv("primary", 1), bug(1, depends=[2])),
             ok(view_argv("primary", 2), bug(2, depends=[3, 1])),
@@ -170,8 +171,32 @@ class CollectorTestCase(unittest.TestCase):
         document = self.parse(output)
         self.assertEqual([node["id"] for node in document["nodes"]], [1, 2, 3])
         self.assertEqual(document["nodes"][-1]["boundary_reason"], "pending_fetch")
-        self.assertTrue(document["cap"]["graph_cap_reached"])
+        self.assertEqual(document["cap"], {
+            "graph_cap_reached": True,
+            "omitted_discovered_identities": 0,
+            "scope_truncated": False,
+        })
+        self.assertEqual(document["limitations"], ["graph-node-cap"])
         self.assertEqual(len(log), len({tuple(argv) for argv in log}))
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            collection_path = root / "collection.json"
+            analysis_path = root / "analysis.json"
+            collection_path.write_bytes(output)
+            analysis_result = subprocess.run([
+                sys.executable,
+                str(ANALYZE),
+                "--input",
+                str(collection_path),
+                "--output",
+                str(analysis_path),
+                "--allow-partial",
+            ], capture_output=True, check=False, timeout=5)
+            self.assertEqual(analysis_result.returncode, 0, analysis_result.stderr)
+            analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+        self.assertEqual(analysis["cap"], document["cap"])
+        self.assertEqual(analysis["status"], "partial")
 
     def test_da13_broad_scope_stops_at_cap_plus_one(self):
         scope = {"kind": "product", "server": "primary", "value": "Widget"}
