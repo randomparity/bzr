@@ -13,6 +13,7 @@ import tempfile
 
 COLLECTION_SCHEMA = "bzr-dependency-collection/v1"
 ANALYSIS_SCHEMA = "bzr-dependency-analysis/v1"
+MAX_COMPONENTS = 9_999
 TIMESTAMP_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\Z")
 TOP_LEVEL_KEYS = {
     "analysis_timestamp",
@@ -354,6 +355,7 @@ def validate_collection(document, allow_partial):
     max_nodes = positive_integer(document["bounds"]["max_nodes"], "bounds.max_nodes")
     validate_cap(document["cap"])
     sorted_unique_strings(document["limitations"], "limitations")
+    validate_cap_relationships(document["cap"], document["limitations"])
     validate_policy(document["policy"])
     validate_provenance(document["provenance"])
     if document["status"] not in {"complete", "partial"}:
@@ -382,6 +384,21 @@ def validate_cap(cap):
     nonnegative_integer(
         cap["omitted_discovered_identities"], "cap.omitted_discovered_identities"
     )
+
+
+def validate_cap_relationships(cap, limitations):
+    graph_limited = "graph-node-cap" in limitations
+    graph_cap_reached = cap["graph_cap_reached"]
+    has_omissions = cap["omitted_discovered_identities"] > 0
+    if graph_limited != graph_cap_reached or graph_cap_reached != has_omissions:
+        raise AnalysisInputError("graph cap metadata is inconsistent")
+
+    scope_limitations = set(limitations) & {
+        "restriction-node-cap",
+        "scope-node-cap",
+    }
+    if len(scope_limitations) > 1 or cap["scope_truncated"] != bool(scope_limitations):
+        raise AnalysisInputError("scope cap metadata is inconsistent")
 
 
 def validate_nodes(nodes, max_nodes):
@@ -494,6 +511,8 @@ def build_components(nodes, adjacency):
     raw_components = strongly_connected(
         sorted(lookup, key=sort_keys.__getitem__), adjacency, sort_keys
     )
+    if len(raw_components) > MAX_COMPONENTS:
+        raise AnalysisInputError("component count exceeds four-digit component namespace")
     self_loops = {key for key, successors in adjacency.items() if key in successors}
     components = []
     membership = {}
