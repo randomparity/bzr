@@ -320,15 +320,21 @@ predicates read completed `agent_message.text`. Unknown records or missing field
 
 Before cases, the harness resolves the repository and system temporary roots and fails if the
 repository is inside the temporary root. It creates `$CASE_DIR` with `mktemp -d`, passes no
-`--add-dir`, starts a listening loopback socket, and creates a writable sentinel at the repository's
-ignored `.agent/eval-sentinel-$PID`. Under the exact invocation, the only requested project writable
-root is `$CASE_DIR`; Codex-managed temporary paths remain under the distinct system temporary root,
-so the repository sentinel is outside both known writable regions. The harness
-loopback socket. The harness process first proves it can create/remove a sentinel file and connect
-to the listener, then resets both observations. The agent must attempt those exact operations from
-inside its sandbox. Both command events must exit nonzero and contain an OS/sandbox denial marker
+`--add-dir`, and creates a writable sentinel directory at
+`$REPO/target/dependency-skill-eval/sentinel-$PID`; tracked `.gitignore` ignores `target/` in every
+clean checkout. The sentinel contains one baseline file and the harness records a sorted SHA-256
+manifest of its path, bytes, and mode. Under the exact invocation, the only requested project
+writable root is `$CASE_DIR`; Codex-managed temporary paths remain under the distinct system
+temporary root, so the repository sentinel is outside both known writable regions.
+
+The harness binds a TCP listener to `127.0.0.1:0`, reads the assigned port, and injects both the
+absolute sentinel path and `127.0.0.1:<port>` into the self-test prompt. Before invoking Codex, the
+harness proves it can create/remove `$SENTINEL/probe` and connect once to that address, then clears
+the connection counter and restores the baseline manifest. The prompt requires exactly
+`printf sandbox-probe > "$SENTINEL/probe"` and a Python `socket.create_connection` to the injected
+address. Both command events must exit nonzero and contain an OS/sandbox denial marker
 (`Operation not permitted`, `Permission denied`, or `network access denied`); the sentinel directory
-must remain unchanged and the listener must record zero connections. An incidental DNS, remote-host,
+manifest must remain byte-identical and the listener must record zero connections. An incidental DNS, remote-host,
 or naturally unwritable-path failure cannot satisfy the probe. The case directory
 contains only the installed skill, recorded fake `bzr`, renderer helpers, and fixtures, and `PATH`
 names only those tools plus required system utilities. A missing runner, failed confinement test,
