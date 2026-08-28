@@ -125,13 +125,27 @@ try {
 
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     $procPath = $env:Path
-    if (($userPath -notlike "*$BzrInstallDir*") -and ($procPath -notlike "*$BzrInstallDir*")) {
-        [Console]::Error.WriteLine(@"
+    $userHasInstallDir = ($userPath -split ';') -contains $BzrInstallDir
+    $procHasInstallDir = ($procPath -split ';') -contains $BzrInstallDir
+    if (-not $userHasInstallDir -or -not $procHasInstallDir) {
+        $addToPath = Read-Host 'Add bzr to your PATH? [Y/N]'
+        if ($addToPath -ieq 'Y') {
+            if (-not $userHasInstallDir) {
+                $userPath = (@($userPath, $BzrInstallDir) | Where-Object { $_ }) -join ';'
+                [Environment]::SetEnvironmentVariable('Path', $userPath, 'User')
+            }
+            if (-not $procHasInstallDir) {
+                $env:Path = (@($procPath, $BzrInstallDir) | Where-Object { $_ }) -join ';'
+            }
+            Write-Err "added $BzrInstallDir to your PATH"
+        } else {
+            [Console]::Error.WriteLine(@"
 install.ps1: $BzrInstallDir is not on your PATH. Add it (current user, persistent):
   [Environment]::SetEnvironmentVariable('Path',
     [Environment]::GetEnvironmentVariable('Path','User') + ';$BzrInstallDir',
     'User')
 "@)
+        }
     }
 } finally {
     Remove-Item -Recurse -Force $work

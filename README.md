@@ -137,16 +137,20 @@ For a one-line install on Linux, macOS arm64, or Windows:
 curl -fsSL https://raw.githubusercontent.com/randomparity/bzr/main/install.sh | sh
 ```
 
-**Windows (x86_64 / ARM64):**
+**Windows PowerShell (x86_64 / ARM64):**
 
 ```powershell
 irm https://raw.githubusercontent.com/randomparity/bzr/main/install.ps1 | iex
 ```
 
+Run this command in PowerShell, not Command Prompt. The installer asks before
+adding `bzr` to your user PATH and current PowerShell session.
+
 The installer detects your platform, verifies the SHA-256 checksum
 against the published `SHA256SUMS`, and drops the binary in
 `~/.local/bin` (Unix) or `%LOCALAPPDATA%\Programs\bzr` (Windows).
-It never modifies PATH or system files.
+The Unix installer never modifies PATH. The Windows installer modifies PATH
+only with confirmation; neither installer modifies system files.
 
 Env var overrides:
 
