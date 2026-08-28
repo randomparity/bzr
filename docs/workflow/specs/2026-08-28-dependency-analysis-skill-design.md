@@ -70,7 +70,8 @@ boundary. Tests substitute a recorded runner; live use invokes the configured bi
 shell. The collector maintains `queued`, `fetched`, and `nodes` sets keyed by `(server, bug-id)`.
 Admission immediately creates a `boundary` node with `boundary_reason: pending_fetch`; every
 admitted identity therefore has a legal record before its command runs.
-Root processing follows canonical server/root order. Before every alias lookup, the collector
+Root processing follows server aliases lexically, with the optional alias root before numeric roots
+for each server regardless of caller input order. Before every alias lookup, the collector
 reserves and consumes one node-cap slot and creates its pending boundary record; a failed lookup
 retains that slot. When no slot remains, later aliases are not looked up. A successful alias response
 must contain one numeric ID. The collector re-keys the temporary alias record to
@@ -79,6 +80,10 @@ alias only in a sorted `requested_aliases` array, and stable-deduplicates numeri
 adjacency against that key without another fetch or cap charge. More than one alias for the same
 server is rejected before collection because the released surface cannot prove two aliases differ
 without fetching the same underlying bug twice.
+Because alias roots are canonicalized first, a matching numeric root is never already admitted: the
+temporary reservation becomes the canonical node's single slot, and the later numeric root merges
+without reserving or releasing another slot. DA-18 permutes caller root order at caps 1 and 2 and
+expects the same one-slot result.
 The current fallback fetches each ID separately with `bzr --json bug view ID --fields
 id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on`, because only a
 command-level failure exposes the versioned structured error envelope. It therefore makes at most
@@ -119,6 +124,9 @@ not raw stderr or server messages.
 On fatal stop, the identity whose command failed and every admitted but unfetched identity remain
 `boundary` with `boundary_reason: fetch_interrupted`; the generic failure exists only as a run-level
 limitation. A successful fetch changes the node to `known`; `not_found` changes it to `unknown`.
+For an alias lookup, structured `not_found` retains the consumed slot and becomes a nonnumeric
+`unknown` node with null `id`, the original alias in `requested`, an empty `requested_aliases`, and
+no run-fatal limitation. Every other alias failure takes the fatal `fetch_interrupted` transition.
 
 The collector atomically writes one `bzr-dependency-collection/v1` JSON document. It contains
 `status` (`complete` or
@@ -175,7 +183,7 @@ After successful alias resolution, `requested` is the decimal numeric ID and eve
 appears only in sorted `requested_aliases`.
 Known nodes require the fetched fields and null `error_type`; unknown nodes require a stable
 `error_type`, null fetched fields, and null `boundary_reason`; boundary nodes require null fetched
-fields and `error_type` plus one reason from `pending_fetch`, `depth_limit`, `scope_restriction`, or
+fields and null `error_type` plus one reason from `pending_fetch`, `depth_limit`, `scope_restriction`, or
 `fetch_interrupted`. Provenance contains only the allowlisted command name and server alias. Nodes sort by
 server, depth, resolved ID (null last), then requested string; observations sort by source server,
 source ID, target server, target ID, then field; roots and provenance retain canonical scope order;
