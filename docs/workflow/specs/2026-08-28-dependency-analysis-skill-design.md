@@ -170,7 +170,7 @@ The normative collection shape is:
     "target": {"id": 1199, "server": "primary"}
   }],
   "provenance": [{"scope_kind": "bug-ids", "server": "primary"}],
-  "roots": [{"id": 1200, "server": "primary"}],
+  "roots": [{"id": 1200, "requested": "1200", "server": "primary"}],
   "schema": "bzr-dependency-collection/v1",
   "status": "complete"
 }
@@ -186,7 +186,9 @@ Known nodes require the fetched fields and null `error_type`; unknown nodes requ
 fields and null `error_type` plus one reason from `pending_fetch`, `depth_limit`, `scope_restriction`, or
 `fetch_interrupted`. Provenance contains only the allowlisted command name and server alias. Nodes sort by
 server, depth, resolved ID (null last), then requested string; observations sort by source server,
-source ID, target server, target ID, then field; roots and provenance retain canonical scope order;
+source ID, target server, target ID, then field. Every root entry requires `server`, nullable `id`,
+and `requested`; it links to a node by `(server, id)` when ID is non-null and otherwise by
+`(server, requested)`. Roots sort by server, ID (null last), then requested; provenance retains canonical scope order;
 limitations are sorted stable codes. Serialization is UTF-8, sorted object keys, two-space indent,
 and one trailing newline. Starting-scope overflow sets `scope_truncated: true`, status `partial`, and
 limitation `scope-node-cap`; the first `max_nodes` roots remain. Traversal exhaustion sets
@@ -348,7 +350,7 @@ skill change. A human spot-checks captured outputs as additional evidence, not a
 | DA-15 | Single-ID unknown and global auth/TLS/transport failures | Unknown only for classified per-ID error; global failure stops partial run | Fabricated unknowns or raw stderr | block |
 | DA-16 | Stale, missing, and malformed timestamps at injected UTC time | `true` or `unknown` with warning | Wall-clock-dependent or ignored result | block |
 | DA-17 | Fatal error after one successful frontier | Valid `partial` JSON, generic stderr, exit 1; rejected without opt-in | Truncated stream accepted as complete | block |
-| DA-18 | Alias plus matching numeric root and adjacency | One node, one fetch, one cap slot, alias provenance retained | Duplicate node or fetch | block |
+| DA-18 | Alias success/collapse and alias `not_found` | Canonical numeric node or linked unresolved root, one fetch and slot, byte-exact roots and alias provenance | Duplicate/unlinked node or fetch | block |
 
 `python3 content/skills/bzr-dependency-analysis/tests/test_analyze.py` runs DA-01 and DA-03
 through DA-11 plus DA-16. `python3 content/skills/bzr-dependency-analysis/tests/test_collect.py`
