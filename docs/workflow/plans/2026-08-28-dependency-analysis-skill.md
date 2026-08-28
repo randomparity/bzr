@@ -31,7 +31,7 @@ loader, `jq`, Docker-compatible Bugzilla harness, asciinema/agg demo tooling.
 - Version 1 reports only longest dependency chain by edge count and never calls it a schedule or
   weighted critical path.
 - No Bugzilla mutation, no Codex/model runtime or confinement harness, and no new Rust graph policy.
-- User-facing output safely escapes Markdown, Mermaid, DOT, HTML, and CSV formula contexts.
+- User-facing output safely escapes Markdown and Mermaid contexts.
 - Functional coverage is mandatory. Final gates: `make lint`, `make test`, and
   `make functional-test-all`.
 
@@ -115,25 +115,25 @@ Files:
 - Create `content/skills/bzr-dependency-analysis/tests/test_render.py`.
 - Create `content/skills/bzr-dependency-analysis/tests/skill-contract.sh`.
 - Create `content/skills/bzr-dependency-analysis/SKILL.md`.
-- Add hostile rendering fixtures and expected Markdown/Mermaid/DOT/HTML/CSV artifacts.
+- Add hostile rendering fixtures and expected Markdown/Mermaid artifacts.
 
 Interfaces:
 
-- CLI: `render.py --input PATH --format markdown|mermaid|dot|html|csv --output PATH`.
+- CLI: `render.py --input PATH --format markdown|mermaid --output PATH`.
 - `SKILL.md` documents the exact three-stage commands, defaults, allowed reads, structural wording,
   unknown-node behavior, and refusal of mutation requests.
 
 Steps:
 
-1. Write failing DA-02, DA-07, and DA-12 tests for HTML/script payloads, Markdown links/images/fences,
-   Mermaid/DOT directives and quoting, unsafe schemes, and CSV formulas after control whitespace.
+1. Write failing DA-02, DA-07, and DA-12 tests for HTML-like payloads, Markdown
+   links/images/fences, and Mermaid directives and quoting.
 2. Run the Python renderer test and `bash .../skill-contract.sh`; expect red.
-3. Implement strict analysis input parsing and deterministic format-specific escaping. Use
-   `html.escape`, `csv.writer`, explicit URL scheme validation, quoted graph identifiers, and atomic
-   output writes.
+3. Implement strict analysis input parsing and deterministic format-specific escaping. Disable
+   Markdown raw HTML, images, and autolinks; quote Mermaid labels and directives; use atomic output
+   writes.
 4. Write the skill workflow using only commands validated by current `--help` output. State bounds
    before retrieval and describe fixture-only cycle proof and unsupported weighted analysis.
-5. Run focused tests, parse final HTML with `html.parser` and CSV with `csv.reader`, and expect green.
+5. Run focused tests, inspect complete Markdown fences and Mermaid tokens, and expect green.
 6. Commit `feat(skills): render safe dependency reports`.
 
 Acceptance: no hostile fixture becomes active syntax; all output is deterministic; contract scan
@@ -166,7 +166,8 @@ Steps:
    it at the end of 18d. Update embedding/install lists and extend 18c to run an installed fixture cycle through analyze
    and render.
 4. Build 18d live fixtures: branch, diamond, resolved blocker, hostile summary, a nonexistent root,
-   and the earlier restricted bug through the credentialless server. Run installed collect,
+   and the earlier restricted bug through the credentialless server. Give the disposable graph a
+   stable unique whiteboard marker that the recorder can later discover without mutation. Run installed collect,
    analyze, and render; assert separate `not_found`/`inaccessible` unknowns, continuation, bounds,
    server identities, resolved behavior, and inert text.
 5. Source 18d after 18c in `run-tests.sh`; run the default functional suite and expect all new cases
@@ -196,9 +197,11 @@ Steps:
 1. Add failing shell assertions for the named recorder mode and documentation asset references.
 2. Implement `dependency-analysis` orchestration and `--drive-dependency-analysis` PTY modes. The
    orchestrator creates a temporary project, runs `bzr skills install --agent codex --project`,
-   resolves collector/analyzer/renderer beneath that installation, seeds exact branch/diamond and
-   resolved dependency mutations, writes the policy with produced IDs, and passes only those paths
-   and IDs to the drive mode. Keep the current no-argument and `--drive` branches byte-compatible.
+   resolves collector/analyzer/renderer beneath that installation, and discovers the graph already
+   provisioned by phase 18d using its stable marker and read-only commands. It writes the policy with
+   the discovered IDs and passes only those paths and IDs to the drive mode. If the marker is absent,
+   stop with an instruction to run the functional setup; never create bugs or dependency links.
+   Keep the current no-argument and `--drive` branches byte-compatible.
 3. Record directly to `docs/assets/bzr-dependency-analysis-demo.cast`, using the installed helpers
    in the drive commands, then render the named GIF. Record the live
    branch/diamond/resolved/hostile-summary flow against the functional server;
@@ -208,7 +211,7 @@ Steps:
 6. Commit `docs(skills): demonstrate dependency analysis`.
 
 Acceptance: both assets exist, are referenced by published documentation, contain no credential or
-private host data, and the default recorder remains unchanged.
+private host data, the displayed workflow is read-only, and the default recorder remains unchanged.
 
 ## Task 6: File the measured retrieval-primitive follow-up
 
