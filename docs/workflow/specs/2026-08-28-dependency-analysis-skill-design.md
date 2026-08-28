@@ -92,8 +92,10 @@ requests `product`, `target_milestone`, or `version` when the corresponding rest
 active. Both adjacency fields are fetched so reciprocal evidence can be normalized. The selected
 direction controls discovery, admission, cap consumption, and omitted-identity counts:
 `depends_on` selects dependency neighbors, `blocks` selects blocking neighbors, and `both` selects
-their union. After admission, observations from either fetched field are retained when both
-endpoints are already admitted; an unselected field never admits a new endpoint. Query restrictions
+their union. After admission, an observation from an unselected field is retained only when it
+normalizes onto a canonical edge already established by a selected-field observation; it can
+enrich provenance but cannot create an edge or alter analysis. An unselected field never admits a
+new endpoint. Query restrictions
 use the bounded, fully paginated server-qualified membership set
 described above. Returned adjacency lists add an observation when both endpoint nodes are admitted,
 even when the target is already fetched. Classified per-ID failures create unknown nodes
@@ -445,7 +447,7 @@ behavioral Python tests compare helper output against fixture oracles byte-for-b
 | DA-12 | Custom Search URL containing secret-like and unknown parameters | Sanitized scope kind and allowlisted names only | Literal value appears | block |
 | DA-13 | Broad scope and oversized query restriction | Root enumeration stops at cap; restriction refuses before pagination | Exhaustive unbounded fetch | block |
 | DA-14 | Permuted roots, responses, adjacency lists, and saved-query order around cap | Explicit bug-ID sort and byte-identical capped inventory | Order-dependent graph | block |
-| DA-15 | Single-ID unknown and global auth/TLS/transport failures | Unknown only for classified per-ID error; global failure stops partial run | Fabricated unknowns or raw stderr | block |
+| DA-15 | Single-ID API 101 missing, API 102 inaccessible, and global auth/TLS/transport failures | 101 becomes nonfatal sanitized `not_found`; 102 becomes nonfatal sanitized `inaccessible`; each remains an unknown node and traversal continues; global failure stops partial run | Fatal inaccessible node, fabricated unknown, raw stderr, or continued global failure | block |
 | DA-16 | Stale, missing, and malformed timestamps at injected UTC time | `true` or `unknown` with warning | Wall-clock-dependent or ignored result | block |
 | DA-17 | Fatal error after one successful frontier | Valid `partial` JSON, generic stderr, exit 1; rejected without opt-in | Truncated stream accepted as complete | block |
 | DA-18 | Alias success/collapse and alias `not_found` | Canonical numeric node or linked unresolved root, one fetch and slot, byte-exact roots and alias provenance | Duplicate/unlinked node or fetch | block |
