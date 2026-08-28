@@ -69,6 +69,21 @@ def boolean(value, context):
         raise RenderInputError(f"{context} must be a boolean")
 
 
+def validate_cap_relationships(cap, limitations):
+    graph_limited = "graph-node-cap" in limitations
+    graph_cap_reached = cap["graph_cap_reached"]
+    has_omissions = cap["omitted_discovered_identities"] > 0
+    if graph_limited != graph_cap_reached or (has_omissions and not graph_cap_reached):
+        raise RenderInputError("graph cap metadata is inconsistent")
+
+    scope_limitations = set(limitations) & {
+        "restriction-node-cap",
+        "scope-node-cap",
+    }
+    if len(scope_limitations) > 1 or cap["scope_truncated"] != bool(scope_limitations):
+        raise RenderInputError("scope cap metadata is inconsistent")
+
+
 def sorted_strings(value, context, *, allowed=None, nonempty=False):
     if not isinstance(value, list) or any(
         not isinstance(item, str) or not item for item in value
@@ -398,6 +413,7 @@ def validate_analysis(document):
     if document["status"] not in {"complete", "partial"}:
         raise RenderInputError("status is unsupported")
     sorted_strings(document["limitations"], "limitations")
+    validate_cap_relationships(document["cap"], document["limitations"])
     if (document["status"] == "partial") != bool(document["limitations"]):
         raise RenderInputError("status and limitations disagree")
     validate_policy(document)
@@ -694,7 +710,7 @@ def load_analysis(path):
 
 
 def parse_arguments(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--input", required=True)
     parser.add_argument("--format", choices=("markdown", "mermaid"), required=True)
     parser.add_argument("--output", required=True)

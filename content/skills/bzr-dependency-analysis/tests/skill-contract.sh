@@ -3,7 +3,24 @@ set -euo pipefail
 
 skill_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 skill="$skill_root/SKILL.md"
-skill_text=$(tr '\n' ' ' < "$skill")
+skill_text=$(tr '\n' ' ' <"$skill")
+
+normalized_commands=$(awk '
+  /^```sh[[:space:]]*$/ { in_block = 1; next }
+  in_block && /^```[[:space:]]*$/ { in_block = 0; next }
+  in_block {
+    line = $0
+    sub(/^[[:space:]]+/, "", line)
+    sub(/[[:space:]]+$/, "", line)
+    if (line ~ /\\$/) {
+      sub(/[[:space:]]*\\$/, "", line)
+      command = command line " "
+    } else if (line != "") {
+      print command line
+      command = ""
+    }
+  }
+' "$skill")
 
 fail() {
   printf 'skill contract failure: %s\n' "$1" >&2
@@ -20,36 +37,47 @@ require_words() {
   [[ "$skill_text" == *"$value"* ]] || fail "missing: $value"
 }
 
+expected_helper_commands=$(
+  cat <<'EOF'
+python3 "$SKILL_ROOT/scripts/collect.py" --policy "$POLICY" --output "$COLLECTION"
+python3 "$SKILL_ROOT/scripts/analyze.py" --input "$COLLECTION" --output "$ANALYSIS"
+python3 "$SKILL_ROOT/scripts/render.py" --input "$ANALYSIS" --format markdown --output "$REPORT"
+python3 "$SKILL_ROOT/scripts/render.py" --input "$ANALYSIS" --format mermaid --output "$DIAGRAM"
+python3 "$SKILL_ROOT/scripts/analyze.py" --input "$SKILL_ROOT/tests/fixtures/cycle.collection.json" --allow-partial --output "$ANALYSIS"
+EOF
+)
+actual_helper_commands=$(printf '%s\n' "$normalized_commands" |
+  awk '/^python3 "\$SKILL_ROOT\/scripts\//')
+[[ "$actual_helper_commands" == "$expected_helper_commands" ]] ||
+  fail 'collect/analyze/Markdown/Mermaid command blocks are not exact'
+
 first_collect=$(rg -n -m1 'scripts/collect\.py' "$skill" | cut -d: -f1)
 depth_default=$(rg -n -m1 'depth 5' "$skill" | cut -d: -f1)
 node_default=$(rg -n -m1 '200 nodes' "$skill" | cut -d: -f1)
-[[ -n "$first_collect" && -n "$depth_default" && -n "$node_default" ]] \
-  || fail 'DA-02 defaults or collection command are absent'
-(( depth_default < first_collect && node_default < first_collect )) \
-  || fail 'DA-02 defaults must precede the first collection command'
-
-require_literal 'python3 "$SKILL_ROOT/scripts/collect.py" \'
-require_literal '  --policy "$POLICY" \'
-require_literal '  --output "$COLLECTION"'
-require_literal 'python3 "$SKILL_ROOT/scripts/analyze.py" \'
-require_literal '  --input "$COLLECTION" \'
-require_literal '  --output "$ANALYSIS"'
-require_literal 'python3 "$SKILL_ROOT/scripts/render.py" \'
-require_literal '  --input "$ANALYSIS" \'
-require_literal '  --format markdown \'
-require_literal '  --format mermaid \'
-require_literal '  --output "$REPORT"'
+[[ -n "$first_collect" && -n "$depth_default" && -n "$node_default" ]] ||
+  fail 'DA-02 defaults or collection command are absent'
+((depth_default < first_collect && node_default < first_collect)) ||
+  fail 'DA-02 defaults must precede the first collection command'
 
 for command in 'bug view' 'bug list' 'bug search' 'query run'; do
   require_literal "$command"
 done
-for forbidden in 'bug links' '--paginate' '--count' '--permissive' \
-  'bug create' 'bug update' 'bug clone' 'bug resolve' 'comment add' \
-  'attachment upload' 'query save' 'query update'; do
-  if rg -Fq -- "$forbidden" "$skill"; then
-    fail "phantom or mutating command: $forbidden"
-  fi
-done
+
+resource_pattern='attachment|bug|classification|comment|component|config|field|group'
+resource_pattern+='|product|query|server|template|user|whoami'
+command_pattern="\`(?:bzr )?(?:${resource_pattern})"
+command_pattern+="(?: [a-z][a-z-]*)?\`"
+command_pattern+="|\\bbzr (?:${resource_pattern})"
+command_pattern+='(?: [a-z][a-z-]*)?'
+while IFS= read -r documented; do
+  documented=${documented#\`}
+  documented=${documented%\`}
+  documented=${documented#bzr }
+  case "$documented" in
+  'bug view' | 'bug list' | 'bug search' | 'query run') ;;
+  *) fail "non-allowlisted bzr command: $documented" ;;
+  esac
+done < <(rg -o "$command_pattern" "$skill")
 
 require_words 'server alias, scope kind, saved-query name, allowlisted parameter names, and collection command name'
 require_words 'never includes parameter values, a literal Custom Search URL, credentials, raw server errors, or a full command line'
