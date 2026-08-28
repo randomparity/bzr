@@ -52,25 +52,28 @@ CUSTOM_PARAMETER_ALLOWLIST = {
     "target_milestone",
     "version",
 }
-ERROR_KEYS = {
+ERROR_STRING_KEYS = {
     "type",
     "message",
-    "exit_code",
     "field",
     "value",
-    "bug_id",
     "last_change_time",
     "if_match_token",
     "resource",
     "identifier",
-    "status",
-    "api_code",
-    "succeeded",
-    "failed",
     "server",
     "expected",
     "actual",
 }
+ERROR_INTEGER_KEYS = {
+    "exit_code",
+    "bug_id",
+    "status",
+    "api_code",
+    "succeeded",
+    "failed",
+}
+ERROR_KEYS = ERROR_STRING_KEYS | ERROR_INTEGER_KEYS
 FATAL_LIMITATIONS = {
     "api": "collection-api",
     "http": "collection-http",
@@ -337,11 +340,12 @@ def validate_error_envelope(value, returncode):
         raise FatalCollection("collection-malformed-output", "malformed-output")
     if not set(value).issubset(ERROR_KEYS):
         raise FatalCollection("collection-malformed-output", "malformed-output")
-    if not isinstance(value["type"], str) or not isinstance(value["message"], str):
-        raise FatalCollection("collection-malformed-output", "malformed-output")
-    if type(value["exit_code"]) is not int or value["exit_code"] != returncode:
-        raise FatalCollection("collection-malformed-output", "malformed-output")
-    if "api_code" in value and type(value["api_code"]) is not int:
+    for key, item in value.items():
+        if key in ERROR_STRING_KEYS and not isinstance(item, str):
+            raise FatalCollection("collection-malformed-output", "malformed-output")
+        if key in ERROR_INTEGER_KEYS and type(item) is not int:
+            raise FatalCollection("collection-malformed-output", "malformed-output")
+    if not 1 <= value["exit_code"] <= 14 or value["exit_code"] != returncode:
         raise FatalCollection("collection-malformed-output", "malformed-output")
     return value
 
@@ -472,9 +476,15 @@ class Collector:
         numeric_key = (server, detail["id"])
         del self.nodes[alias_key]
         self.roots.remove((server, None, alias))
-        self.nodes[numeric_key] = known_node(server, detail, 0, [alias])
         self.roots.add((server, detail["id"], str(detail["id"])))
         self.fetched.add(numeric_key)
+        reason = self.membership_boundary(numeric_key)
+        if reason != "pending_fetch":
+            self.nodes[numeric_key] = boundary_node(
+                server, detail["id"], str(detail["id"]), 0, reason, [alias]
+            )
+            return
+        self.nodes[numeric_key] = known_node(server, detail, 0, [alias])
         self.stage_detail(server, detail)
         self.apply_field_restriction(numeric_key, detail)
 

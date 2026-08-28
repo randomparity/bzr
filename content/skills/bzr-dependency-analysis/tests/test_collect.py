@@ -366,6 +366,39 @@ class CollectorTestCase(unittest.TestCase):
         self.assertEqual(document["nodes"][0]["error_type"], "not_found")
         self.assertEqual(log, [view_argv("primary", "missing-alias")])
 
+    def test_da18_resolved_alias_outside_saved_query_is_not_staged_or_traversed(self):
+        restriction = {"kind": "saved-query", "server": "primary", "name": "allowed"}
+        first = list_argv("primary", 4, 0, "query", "run", "allowed")
+        probe = list_argv("primary", 3, 1, "query", "run", "allowed")
+        responses = [
+            ok(first, [{"id": 1}]),
+            ok(probe, []),
+            ok(view_argv("primary", "delivery"), bug(2, depends=[1], summary="Delivery")),
+            ok(view_argv("primary", 1), bug(1)),
+        ]
+        result, output, log = self.run_collector(
+            policy(
+                [alias_scope("primary", "delivery"), bug_scope("primary", 1)],
+                max_nodes=3,
+                restriction=restriction,
+            ),
+            responses,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        document = self.parse(output)
+        alias_node = next(node for node in document["nodes"] if node["id"] == 2)
+        self.assertEqual((alias_node["state"], alias_node["boundary_reason"]), (
+            "boundary", "scope_restriction",
+        ))
+        self.assertEqual(alias_node["requested_aliases"], ["delivery"])
+        self.assertEqual(document["observations"], [])
+        self.assertEqual(log, [
+            first,
+            probe,
+            view_argv("primary", "delivery"),
+            view_argv("primary", 1),
+        ])
+
     def test_da21_direction_isolation_and_two_pass_reciprocal_evidence(self):
         expected_nodes = {
             "depends_on": [1, 2, 4],
@@ -391,10 +424,54 @@ class CollectorTestCase(unittest.TestCase):
                 ]
                 self.assertEqual(sorted(reciprocal), ["blocks", "blocks", "depends_on", "depends_on"])
 
-    def test_policy_schema_and_timestamp_are_rejected_before_runner(self):
+    def test_malformed_structured_error_fields_are_rejected(self):
+        string_fields = [
+            "type", "message", "field", "value", "last_change_time",
+            "if_match_token", "resource", "identifier", "server", "expected", "actual",
+        ]
+        integer_fields = ["bug_id", "status", "api_code", "succeeded", "failed"]
+        argv = view_argv("primary", 1)
+        for field, invalid in [
+            *((field, 7) for field in string_fields),
+            *((field, "7") for field in integer_fields),
+        ]:
+            with self.subTest(field=field):
+                error = {"type": "api", "message": "private", "exit_code": 4, field: invalid}
+                response = {
+                    "argv": argv,
+                    "exit_code": 4,
+                    "stderr": {"schema_version": SCHEMA_VERSION, "error": error},
+                }
+                result, output, log = self.run_collector(
+                    policy([bug_scope("primary", 1)]), [response]
+                )
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(self.parse(output)["limitations"], [
+                    "collection-malformed-output"
+                ])
+                self.assertEqual(log, [argv])
+
+    def test_structured_error_exit_code_must_be_in_contract_range(self):
+        argv = view_argv("primary", 1)
+        response = {
+            "argv": argv,
+            "exit_code": 15,
+            "stderr": {
+                "schema_version": SCHEMA_VERSION,
+                "error": {"type": "api", "message": "private", "exit_code": 15},
+            },
+        }
+        result, output, log = self.run_collector(
+            policy([bug_scope("primary", 1)]), [response]
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.parse(output)["limitations"], ["collection-malformed-output"])
+        self.assertEqual(log, [argv])
+
+    def test_unknown_policy_keys_are_rejected_before_runner(self):
         malformed = policy([bug_scope("primary", 1)])
         malformed["surprise"] = True
-        result, output, log = self.run_collector(malformed, [], timestamp="not-a-timestamp")
+        result, output, log = self.run_collector(malformed, [])
         self.assertEqual(result.returncode, 2)
         self.assertIsNone(output)
         self.assertEqual(log, [])
