@@ -8,6 +8,7 @@ fn embeds_all_current_skills_in_lexical_order() {
         names,
         vec![
             "bzr-bulk-triage",
+            "bzr-dependency-analysis",
             "bzr-dry-run-confirm",
             "bzr-file-bug",
             "bzr-reference",
