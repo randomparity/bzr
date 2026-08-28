@@ -66,8 +66,14 @@ if [[ "${1:-}" == "--drive-weekly-status" ]]; then
   type_run() {
     local cmd=$1 pause=${2:-1.8} i
     printf '%b' "$prompt"
-    for ((i = 0; i < ${#cmd}; i++)); do printf '%s' "${cmd:i:1}"; sleep 0.012; done
-    sleep 0.3; printf '\n'; eval "$cmd"; sleep "$pause"
+    for ((i = 0; i < ${#cmd}; i++)); do
+      printf '%s' "${cmd:i:1}"
+      sleep 0.012
+    done
+    sleep 0.3
+    printf '\n'
+    eval "$cmd"
+    sleep "$pause"
   }
   fields='id,summary,status,resolution,assigned_to,priority,severity,target_milestone,deadline,last_change_time,whiteboard,blocks,depends_on'
   type_run 'bzr skills install --agent codex --project .' 1.2
