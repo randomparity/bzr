@@ -141,6 +141,7 @@ The normative collection shape is:
 
 ```json
 {
+  "analysis_timestamp": "2026-08-28T12:00:00Z",
   "bounds": {"max_depth": 5, "max_nodes": 200},
   "cap": {
     "graph_cap_reached": false,
@@ -170,6 +171,13 @@ The normative collection shape is:
     "target": {"id": 1199, "server": "primary"}
   }],
   "provenance": [{"scope_kind": "bug-ids", "server": "primary"}],
+  "policy": {
+    "direction": "both",
+    "duration": null,
+    "resolved_mode": "include-no-traverse",
+    "resolved_statuses": ["RESOLVED"],
+    "stale_after_days": 14
+  },
   "roots": [{"id": 1200, "requested": "1200", "server": "primary"}],
   "schema": "bzr-dependency-collection/v1",
   "status": "complete"
@@ -204,6 +212,41 @@ identity, all observations to that identity are omitted and the identity contrib
 to `omitted_discovered_identities`.
 Observation endpoint equality is `(server, id)`; observations can originate only from numeric
 adjacency fields, so neither endpoint has a null ID.
+
+The normative analyzer output is one `bzr-dependency-analysis/v1` document:
+
+```json
+{
+  "analysis_timestamp": "2026-08-28T12:00:00Z",
+  "components": [{"cyclic": false, "id": "c0001", "nodes": [{"id": 1199, "server": "primary"}]}],
+  "edges": [{
+    "observations": ["depends_on"],
+    "predecessor": {"id": 1199, "server": "primary"},
+    "successor": {"id": 1200, "server": "primary"}
+  }],
+  "layers": [["c0001"], ["c0002"]],
+  "limitations": [],
+  "longest_chain": {"kind": "edge_count", "length": 1, "path": ["c0001", "c0002"]},
+  "nodes": [],
+  "policy": {},
+  "schema": "bzr-dependency-analysis/v1",
+  "status": "complete",
+  "warnings": []
+}
+```
+
+The analyzer copies `analysis_timestamp`, `status`, `limitations`, `policy`, and the complete node
+records from collection; each copied node adds required `stale` (`true`, `false`, or `unknown`).
+Warnings are stable objects `{code, nodes}` sorted by code then node identity; missing/invalid
+timestamps use `stale-timestamp-unknown`. Canonical edges sort by predecessor then successor and
+contain sorted unique observation names. Strongly connected components sort by their smallest node
+identity and receive IDs `c0001`, `c0002`, and so on; component node lists use node order. Layers
+use condensation-graph topological order with component-ID tie breaking. Longest-chain ties choose
+the lexicographically smallest component-ID path. Cyclic components set `cyclic: true`; their
+internal ordering is not presented as executable order. Partial collection input is rejected unless
+`--allow-partial`; when allowed, status and limitations remain partial and all analyses are labelled
+structural over incomplete evidence. Serialization uses the collection document's canonical JSON
+rules.
 
 Resolved-node policy is applied after recording the node and incoming edge. Status meanings
 are installation-specific, so the skill asks which statuses count as resolved or states the
@@ -371,7 +414,13 @@ vulnerabilities, and access control on files after the operator chooses their de
 The new skill lives at `content/skills/bzr-dependency-analysis/SKILL.md`, with deterministic
 fixtures, `scripts/collect.py`, `scripts/analyze.py`, `scripts/render.py`, Python behavioral tests, and a shell contract
 check under the same directory. The embedded-name unit test and
-functional installer fixture include it. `tools/record-demo.sh` gains a named dependency-analysis
+functional installer fixture include it. The existing `18c-skills-install.sh` phase verifies every
+dependency-analysis payload path after installation and runs one fixture-based
+collect→analyze→render pipeline from the installed destination. A new
+`18d-dependency-analysis.sh` functional phase creates live branches, a diamond, cycle, resolved
+blocker, and hostile summary, then runs the installed collector through the real `bzr` binary and
+asserts server-qualified edges, cycle/resolved handling, caps, and inert rendered text.
+`tools/record-demo.sh` gains a named dependency-analysis
 mode that seeds and records the graph without changing the existing README demo default.
 
 Verification uses focused fixture checks while iterating, then `make lint`, `make test`, and
