@@ -1,0 +1,195 @@
+{
+  "analysis_timestamp": "2026-08-28T12:00:00Z",
+  "bounds": {
+    "max_depth": 3,
+    "max_nodes": 5
+  },
+  "cap": {
+    "graph_cap_reached": true,
+    "omitted_discovered_identities": 1,
+    "scope_truncated": false
+  },
+  "limitations": [
+    "graph-node-cap"
+  ],
+  "nodes": [
+    {
+      "assigned_to": "a@example.test",
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 20,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "20",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "state": "known",
+      "status": "NEW",
+      "summary": "Cycle A"
+    },
+    {
+      "assigned_to": null,
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": "not_found",
+      "id": null,
+      "last_change_time": null,
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "ghost",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "state": "unknown",
+      "status": null,
+      "summary": null
+    },
+    {
+      "assigned_to": "b@example.test",
+      "boundary_reason": null,
+      "depth": 1,
+      "error_type": null,
+      "id": 21,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "21",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "state": "known",
+      "status": "NEW",
+      "summary": "Cycle B"
+    },
+    {
+      "assigned_to": null,
+      "boundary_reason": null,
+      "depth": 2,
+      "error_type": null,
+      "id": 22,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "22",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "state": "known",
+      "status": "NEW",
+      "summary": "Cycle C and branch"
+    },
+    {
+      "assigned_to": null,
+      "boundary_reason": "depth_limit",
+      "depth": 3,
+      "error_type": null,
+      "id": 23,
+      "last_change_time": null,
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "23",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "state": "boundary",
+      "status": null,
+      "summary": null
+    }
+  ],
+  "observations": [
+    {
+      "field": "blocks",
+      "source": {
+        "id": 20,
+        "server": "primary"
+      },
+      "target": {
+        "id": 21,
+        "server": "primary"
+      }
+    },
+    {
+      "field": "blocks",
+      "source": {
+        "id": 21,
+        "server": "primary"
+      },
+      "target": {
+        "id": 22,
+        "server": "primary"
+      }
+    },
+    {
+      "field": "blocks",
+      "source": {
+        "id": 22,
+        "server": "primary"
+      },
+      "target": {
+        "id": 20,
+        "server": "primary"
+      }
+    },
+    {
+      "field": "blocks",
+      "source": {
+        "id": 22,
+        "server": "primary"
+      },
+      "target": {
+        "id": 23,
+        "server": "primary"
+      }
+    }
+  ],
+  "policy": {
+    "direction": "both",
+    "duration": null,
+    "resolved_mode": "include-no-traverse",
+    "resolved_statuses": [
+      "RESOLVED"
+    ],
+    "stale_after_days": 14
+  },
+  "provenance": [
+    {
+      "parameter_names": [],
+      "scope_kind": "bug-ids",
+      "server": "primary",
+      "source": null
+    },
+    {
+      "parameter_names": [],
+      "scope_kind": "alias",
+      "server": "primary",
+      "source": null
+    }
+  ],
+  "roots": [
+    {
+      "id": 20,
+      "requested": "20",
+      "server": "primary"
+    },
+    {
+      "id": null,
+      "requested": "ghost",
+      "server": "primary"
+    }
+  ],
+  "schema": "bzr-dependency-collection/v1",
+  "status": "partial"
+}

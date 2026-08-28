@@ -1,6 +1,6 @@
 ---
 name: bzr-dependency-analysis
-description: Use when collecting a bounded, deterministic Bugzilla dependency inventory with bzr for later analysis.
+description: Use when collecting and analyzing a bounded, deterministic Bugzilla dependency inventory with bzr.
 ---
 
 # Collect bounded dependency evidence
@@ -75,3 +75,19 @@ The output schema is `bzr-dependency-collection/v1`. Bugzilla API codes
 transport failures stop the run, preserve a sanitized partial JSON file, print
 one generic failure class, and exit 1. Never copy raw server error text into a
 shareable report.
+
+Analyze a complete collection with:
+
+```sh
+python3 "$SKILL_ROOT/scripts/analyze.py" \
+  --input "$COLLECTION" \
+  --output "$ANALYSIS"
+```
+
+The analyzer writes canonical `bzr-dependency-analysis/v1` JSON with
+server-qualified nodes, canonical scheduling edges, cycle components,
+topological layers, the longest dependency chain by edge count, staleness, and
+structural project-management findings. It does not accept durations or make
+delivery-date claims. A partial collection is rejected unless the operator
+explicitly adds `--allow-partial`; partial evidence and boundaries remain
+visible in the analysis.

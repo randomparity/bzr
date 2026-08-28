@@ -1,0 +1,291 @@
+{
+  "analysis_timestamp": "2026-08-28T12:00:00Z",
+  "bounds": {
+    "max_depth": 3,
+    "max_nodes": 10
+  },
+  "cap": {
+    "graph_cap_reached": false,
+    "omitted_discovered_identities": 0,
+    "scope_truncated": false
+  },
+  "components": [
+    {
+      "cyclic": false,
+      "id": "c0001",
+      "nodes": [
+        {
+          "id": 10,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    },
+    {
+      "cyclic": false,
+      "id": "c0002",
+      "nodes": [
+        {
+          "id": 11,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    },
+    {
+      "cyclic": false,
+      "id": "c0003",
+      "nodes": [
+        {
+          "id": 12,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    },
+    {
+      "cyclic": false,
+      "id": "c0004",
+      "nodes": [
+        {
+          "id": 13,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "observations": [
+        "blocks",
+        "depends_on"
+      ],
+      "predecessor": {
+        "id": 10,
+        "server": "primary"
+      },
+      "successor": {
+        "id": 11,
+        "server": "primary"
+      }
+    },
+    {
+      "observations": [
+        "blocks"
+      ],
+      "predecessor": {
+        "id": 10,
+        "server": "primary"
+      },
+      "successor": {
+        "id": 12,
+        "server": "primary"
+      }
+    },
+    {
+      "observations": [
+        "blocks"
+      ],
+      "predecessor": {
+        "id": 11,
+        "server": "primary"
+      },
+      "successor": {
+        "id": 13,
+        "server": "primary"
+      }
+    },
+    {
+      "observations": [
+        "blocks"
+      ],
+      "predecessor": {
+        "id": 12,
+        "server": "primary"
+      },
+      "successor": {
+        "id": 13,
+        "server": "primary"
+      }
+    }
+  ],
+  "findings": {
+    "bottlenecks": [
+      {
+        "fan_out": 2,
+        "node": {
+          "id": 10,
+          "requested": null,
+          "server": "primary"
+        }
+      }
+    ],
+    "execution_order": {
+      "assumptions": [
+        "resolved-include-no-traverse"
+      ],
+      "component_order": [
+        "c0001",
+        "c0002",
+        "c0003",
+        "c0004"
+      ],
+      "cycle_impediments": [],
+      "incomplete_boundaries": []
+    },
+    "stale_blockers": [],
+    "structural_leaves": [
+      {
+        "id": 13,
+        "requested": null,
+        "server": "primary"
+      }
+    ],
+    "structural_roots": [
+      {
+        "id": 10,
+        "requested": null,
+        "server": "primary"
+      }
+    ],
+    "unassigned_blockers": [
+      {
+        "id": 10,
+        "requested": null,
+        "server": "primary"
+      }
+    ]
+  },
+  "layers": [
+    [
+      "c0001"
+    ],
+    [
+      "c0002",
+      "c0003"
+    ],
+    [
+      "c0004"
+    ]
+  ],
+  "limitations": [],
+  "longest_chain": {
+    "kind": "edge_count",
+    "length": 2,
+    "path": [
+      "c0001",
+      "c0002",
+      "c0004"
+    ]
+  },
+  "nodes": [
+    {
+      "assigned_to": null,
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 10,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "10",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": false,
+      "state": "known",
+      "status": "NEW",
+      "summary": "Diamond root"
+    },
+    {
+      "assigned_to": "a@example.test",
+      "boundary_reason": null,
+      "depth": 1,
+      "error_type": null,
+      "id": 11,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "11",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": false,
+      "state": "known",
+      "status": "NEW",
+      "summary": "Left"
+    },
+    {
+      "assigned_to": "b@example.test",
+      "boundary_reason": null,
+      "depth": 1,
+      "error_type": null,
+      "id": 12,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "12",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": false,
+      "state": "known",
+      "status": "NEW",
+      "summary": "Right"
+    },
+    {
+      "assigned_to": "c@example.test",
+      "boundary_reason": null,
+      "depth": 2,
+      "error_type": null,
+      "id": 13,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "13",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": false,
+      "state": "known",
+      "status": "NEW",
+      "summary": "Join"
+    }
+  ],
+  "policy": {
+    "direction": "both",
+    "duration": null,
+    "resolved_mode": "include-no-traverse",
+    "resolved_statuses": [
+      "RESOLVED"
+    ],
+    "stale_after_days": 14
+  },
+  "provenance": [
+    {
+      "parameter_names": [],
+      "scope_kind": "bug-ids",
+      "server": "primary",
+      "source": null
+    }
+  ],
+  "roots": [
+    {
+      "id": 10,
+      "requested": "10",
+      "server": "primary"
+    }
+  ],
+  "schema": "bzr-dependency-analysis/v1",
+  "status": "complete",
+  "warnings": []
+}

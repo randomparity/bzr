@@ -1,0 +1,122 @@
+{
+  "analysis_timestamp": "2026-08-28T12:00:00Z",
+  "bounds": {
+    "max_depth": 3,
+    "max_nodes": 10
+  },
+  "cap": {
+    "graph_cap_reached": false,
+    "omitted_discovered_identities": 0,
+    "scope_truncated": false
+  },
+  "limitations": [],
+  "nodes": [
+    {
+      "assigned_to": "owner@example.test",
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 1,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "1",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "state": "known",
+      "status": "NEW",
+      "summary": "Branch root"
+    },
+    {
+      "assigned_to": "a@example.test",
+      "boundary_reason": null,
+      "depth": 1,
+      "error_type": null,
+      "id": 2,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "2",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "state": "known",
+      "status": "NEW",
+      "summary": "Left"
+    },
+    {
+      "assigned_to": "b@example.test",
+      "boundary_reason": null,
+      "depth": 1,
+      "error_type": null,
+      "id": 3,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "3",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "state": "known",
+      "status": "NEW",
+      "summary": "Right"
+    }
+  ],
+  "observations": [
+    {
+      "field": "blocks",
+      "source": {
+        "id": 1,
+        "server": "primary"
+      },
+      "target": {
+        "id": 2,
+        "server": "primary"
+      }
+    },
+    {
+      "field": "blocks",
+      "source": {
+        "id": 1,
+        "server": "primary"
+      },
+      "target": {
+        "id": 3,
+        "server": "primary"
+      }
+    }
+  ],
+  "policy": {
+    "direction": "both",
+    "duration": null,
+    "resolved_mode": "include-no-traverse",
+    "resolved_statuses": [
+      "RESOLVED"
+    ],
+    "stale_after_days": 14
+  },
+  "provenance": [
+    {
+      "parameter_names": [],
+      "scope_kind": "bug-ids",
+      "server": "primary",
+      "source": null
+    }
+  ],
+  "roots": [
+    {
+      "id": 1,
+      "requested": "1",
+      "server": "primary"
+    }
+  ],
+  "schema": "bzr-dependency-collection/v1",
+  "status": "complete"
+}
