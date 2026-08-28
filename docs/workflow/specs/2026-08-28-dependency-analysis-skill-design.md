@@ -46,7 +46,7 @@ Before retrieval, the skill resolves:
 - whether resolved nodes are included and traversed, included but not traversed, or omitted
   after being recorded;
 - optional product, milestone, or query-membership restriction;
-- stale threshold and requested output formats.
+- stale threshold, analysis timestamp, and requested output formats.
 
 If the user omits bounds, the skill proposes conservative defaults of depth 5 and 200 nodes
 and states them before fetching. It never starts an unbounded walk. Refresh is an explicit
@@ -56,15 +56,21 @@ new collection run; within one run a server-qualified bug identity is fetched at
 
 Scope commands use versioned JSON and request only fields needed by the selected analysis.
 Named queries use `bzr query run`; Custom Search URLs use `bzr bug search --from-url`;
-milestone/version scopes use `bzr bug list`. Every complete scope query uses `--paginate`.
+milestone/version scopes use `bzr bug list`. Starting scopes request at most `node_cap + 1`
+rows without `--paginate`; the extra row detects truncation and becomes aggregate scope metadata,
+not a node. A query used as a membership restriction is counted first. If its count exceeds the
+node cap, the skill refuses exhaustive materialization and asks the user to narrow the query or
+raise the cap; otherwise it paginates the complete membership.
 
-The collector maintains `queued`, `fetched`, and `nodes` sets keyed by `(server, bug-id)`.
+The bundled `scripts/collect.py` owns collection and invokes `bzr` through a command-runner
+boundary. Tests substitute a recorded runner; live use invokes the configured binary without a
+shell. The collector maintains `queued`, `fetched`, and `nodes` sets keyed by `(server, bug-id)`.
 It fetches each frontier using `bzr --json bug view ID... --permissive --fields
 id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on` when at least two
 IDs remain; a single ID uses `bug view` without `--permissive`. The field list additionally
 requests `product`, `target_milestone`, or `version` when the corresponding restriction is
-active. Query restrictions are a fully paginated, server-qualified membership set collected
-before traversal. Returned adjacency lists add
+active. Query restrictions use the bounded, fully paginated server-qualified membership set
+described above. Returned adjacency lists add
 edges even when the target is already fetched. Failures create unknown nodes carrying the
 server, requested identifier, and public error text. A failed or missing node is never
 silently removed.
@@ -73,9 +79,19 @@ Depth is the minimum hop distance from any root. A newly discovered node beyond 
 depth is recorded as a boundary node but not fetched, provided it fits inside the maximum
 distinct-node count. The node cap covers every emitted known, unknown, boundary, or truncated
 node. Once exhausted, no more node identities are emitted; the graph metadata records an
-aggregate omitted-reference count and collection stops. Scope restrictions
+aggregate omitted-reference count and collection stops. Collection order is canonical: server
+aliases lexically, caller-supplied roots in original order after stable deduplication,
+breadth-first depth, and numeric bug ID within each frontier. Returned nodes and adjacency IDs are
+sorted before admission, and output records use the same order. Scope restrictions
 are evaluated from fetched fields or the initial scope membership; nodes outside the
 restriction remain visible boundary nodes and are not traversed.
+
+Only structured per-ID not-found or permission failures become unknown nodes. A single-ID failure
+is classified from the versioned structured error envelope using the same error types. Global
+authentication, TLS, transport, schema-version, malformed-output, and unclassified failures stop
+collection and preserve a partial inventory with a run-level limitation. Batch failures are never
+copied onto every requested node. Shareable records retain only error type and affected identifier,
+not raw stderr or server messages.
 
 Resolved-node policy is applied after recording the node and incoming edge. Status meanings
 are installation-specific, so the skill asks which statuses count as resolved or states the
@@ -101,6 +117,11 @@ The agent runs standard graph operations over the collected inventory:
 - longest dependency chain uses edge count and is always labelled structural;
 - suggested execution order lists assumptions, unknown/truncated boundaries, resolved-node
   policy, and every cyclic component that prevents a complete order.
+
+Staleness is an observation, not an ordering weight. The user supplies a positive age threshold;
+the collector records an injected analysis timestamp in UTC and parses `last_change_time` as an
+absolute timestamp. A known unresolved node is stale when its age is at least the threshold.
+Missing or invalid timestamps produce `stale: unknown` plus a data-quality warning.
 
 A time-based critical path is forbidden unless duration data exists and the user explicitly
 chooses its units and interpretation. Weighted analysis names the duration field, missing-value
@@ -149,12 +170,13 @@ fixtures deterministically produce the expected node/edge inventory, warnings, a
 | Treats stale/conflicting or missing source data as fact | 4 | Required limitation/unknown assertions |
 | Loops on cycles or a wide graph | 4 | Hard-cap and completion assertions |
 
-All evaluations are deterministic fixture checks against the bundled
-`content/skills/bzr-dependency-analysis/scripts/analyze.py` helper; no model judges its own
-output. The helper accepts newline-delimited captured node records plus explicit policy JSON and
-emits a versioned JSON node/edge/analysis inventory. It performs no network or Bugzilla mutation.
-Static shell checks validate the skill's documented commands and safety rules; behavioral Python
-tests compare helper output against fixture oracles byte-for-byte.
+All evaluations are deterministic fixture checks against bundled helpers; no model judges its own
+output. `scripts/collect.py` accepts explicit policy JSON, invokes an injectable command runner,
+and emits newline-delimited node records plus collection metadata. `scripts/analyze.py` consumes
+those records and emits a versioned JSON node/edge/analysis inventory. Neither helper can issue a
+Bugzilla mutation; the live collector allowlists only `bug view`, `bug list`, `bug search`, and
+`query run`. Static shell checks validate the skill's documented commands and safety rules;
+behavioral Python tests compare helper output against fixture oracles byte-for-byte.
 
 | ID | Case | Observable pass traits | Forbidden traits | Gate |
 |---|---|---|---|---|
@@ -170,10 +192,16 @@ tests compare helper output against fixture oracles byte-for-byte.
 | DA-10 | Product/milestone/version/query restriction | Cross-scope neighbors are boundary nodes | Out-of-scope traversal | block |
 | DA-11 | Reciprocal `blocks`/`depends_on` observations | One canonical edge retaining both observations | Inflated degree/path | block |
 | DA-12 | Custom Search URL containing secret-like and unknown parameters | Sanitized scope kind and allowlisted names only | Literal value appears | block |
+| DA-13 | Broad scope and oversized query restriction | Root enumeration stops at cap; restriction refuses before pagination | Exhaustive unbounded fetch | block |
+| DA-14 | Permuted roots, responses, and adjacency lists | Byte-identical capped inventory | Order-dependent graph | block |
+| DA-15 | Single-ID unknown and global auth/TLS/transport failures | Unknown only for classified per-ID error; global failure stops partial run | Fabricated unknowns or raw stderr | block |
+| DA-16 | Stale, missing, and malformed timestamps at injected UTC time | `true` or `unknown` with warning | Wall-clock-dependent or ignored result | block |
 
 `python3 content/skills/bzr-dependency-analysis/tests/test_analyze.py` runs DA-01 and DA-03
-through DA-11; `content/skills/bzr-dependency-analysis/tests/skill-contract.sh` runs DA-02 and
-DA-12 plus command allowlist and phantom-flag checks. The fixture suite validates the skill
+through DA-11 plus DA-16. `python3 content/skills/bzr-dependency-analysis/tests/test_collect.py`
+runs DA-02, DA-04, DA-06, and DA-13 through DA-15 with a stubbed command runner and exact command
+log assertions. `content/skills/bzr-dependency-analysis/tests/skill-contract.sh` runs DA-12 plus
+static command allowlist and phantom-flag checks. The fixture suite validates the skill
 contract and every documented `bzr` invocation. A real
 functional Bugzilla demonstration creates a branch, a diamond, a cycle, a resolved blocker, and
 a dependency with a safely hostile summary, then records bounded structured collection and a
@@ -215,8 +243,8 @@ vulnerabilities, and access control on files after the operator chooses their de
 ## Documentation and verification
 
 The new skill lives at `content/skills/bzr-dependency-analysis/SKILL.md`, with deterministic
-fixtures, `scripts/analyze.py`, Python behavioral tests, and a shell contract check under the
-same directory. The embedded-name unit test and
+fixtures, `scripts/collect.py`, `scripts/analyze.py`, Python behavioral tests, and a shell contract
+check under the same directory. The embedded-name unit test and
 functional installer fixture include it. `tools/record-demo.sh` gains a named dependency-analysis
 mode that seeds and records the graph without changing the existing README demo default.
 
