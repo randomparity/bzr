@@ -58,9 +58,12 @@ Scope commands use versioned JSON and request only fields needed by the selected
 Named queries use `bzr query run`; Custom Search URLs use `bzr bug search --from-url`;
 milestone/version scopes use `bzr bug list`. Starting scopes request at most `node_cap + 1`
 rows without `--paginate`; the extra row detects truncation and becomes aggregate scope metadata,
-not a node. A query used as a membership restriction is counted first. If its count exceeds the
-node cap, the skill refuses exhaustive materialization and asks the user to narrow the query or
-raise the cap; otherwise it paginates the complete membership.
+not a node. A query used as a membership restriction is enumerated manually in pages whose total
+requested rows never exceeds `node_cap + 1`; the collector stops on the extra row and asks the user
+to narrow the query or raise the cap. It never uses `--count` as an upper-bound proof because the
+server may cap that result. If a server returns fewer rows than requested, the collector advances
+the offset and probes once more; an empty page proves completion, while the cumulative extra row
+proves oversize. This bounds both membership storage and requests by the chosen cap.
 
 The bundled `scripts/collect.py` owns collection and invokes `bzr` through a command-runner
 boundary. Tests substitute a recorded runner; live use invokes the configured binary without a
@@ -78,17 +81,21 @@ silently removed.
 
 Depth is the minimum hop distance from any root. A newly discovered node beyond the maximum
 depth is recorded as a boundary node but not fetched, provided it fits inside the maximum
-distinct-node count. The node cap covers every emitted known, unknown, boundary, or truncated
+distinct-node count. The node cap covers every emitted known, unknown, or boundary
 node. Once exhausted, no more node identities are emitted; the graph metadata records an
-aggregate omitted-reference count and collection stops. Collection order is canonical: server
+aggregate `cap_reached: true` and `omitted_discovered_identities` count. The count is the number of
+distinct server-qualified identities rejected while scanning all adjacency lists already returned
+for the current frontier; duplicate observations count once. No further frontier is fetched, so
+deeper undiscovered identities are neither named nor counted. Collection order is canonical: server
 aliases lexically, caller-supplied roots in original order after stable deduplication,
 breadth-first depth, and numeric bug ID within each frontier. Returned nodes and adjacency IDs are
 sorted before admission, and output records use the same order. Scope restrictions
 are evaluated from fetched fields or the initial scope membership; nodes outside the
 restriction remain visible boundary nodes and are not traversed.
 
-Only structured per-ID not-found or permission failures become unknown nodes. A single-ID failure
-is classified from the versioned structured error envelope using the same error types. Global
+Only a structured `not_found` failure becomes an unknown node under the released fallback. Generic
+`http` and `api` failures, including permission failures that lack a stable published code, are
+fatal until the follow-up primitive supplies a versioned per-ID classification. Global
 authentication, TLS, transport, schema-version, malformed-output, and unclassified failures stop
 collection and preserve a partial inventory with a run-level limitation. Batch failures are never
 copied onto every requested node. Shareable records retain only error type and affected identifier,
@@ -110,7 +117,7 @@ chosen assumption.
 ### Graph model and analysis
 
 Each node contains server identity, bug ID or unresolved input, summary, status, resolution,
-assignee, last-change time, fetch state (`known`, `unknown`, `boundary`, or `truncated`), and
+assignee, last-change time, fetch state (`known`, `unknown`, or `boundary`), and
 the provenance command. Each directed edge contains its source, target, and Bugzilla field.
 For scheduling orientation, `A depends_on B` means B precedes A; `A blocks B` is normalized
 to the same predecessor relation. A canonical scheduling edge is keyed by
@@ -142,7 +149,9 @@ chain by edge count,” never “critical path” or a delivery-date prediction.
 
 The bundled `scripts/render.py` deterministically renders Markdown, Mermaid, DOT, HTML, and CSV
 from the versioned analysis inventory. Node IDs use server identity plus numeric ID, never
-summaries. Markdown chooses a fence longer than any backtick run in data. Mermaid/DOT use quoted
+summaries. Markdown renders untrusted values only as escaped plain text, disables raw HTML and
+image/autolink construction, validates every emitted destination as `http` or `https`, and chooses
+a fence longer than any backtick run in fenced data. Mermaid/DOT use quoted
 grammar strings with backslash, quote, newline, directive, and delimiter encoding. HTML inserts
 escaped text nodes and safe `http`/`https` links; it never interpolates inventory into script,
 style, event-handler, or raw-HTML contexts. CSV neutralizes a cell when, after leading spaces,
@@ -150,8 +159,9 @@ tabs, carriage returns, or newlines, its first character is `=`, `+`, `-`, or `@
 prefixes an apostrophe before RFC 4180 serialization. The helper emits sanitized CSV; an optional spreadsheet
 capability may convert it to XLSX without reintroducing raw Bugzilla values. XLSX is offered only
 when that capability exists; otherwise the skill gives CSV. Renderer tests parse final HTML and
-CSV, inspect complete Markdown fences and Mermaid/DOT tokens, and cover `</script>`, triple
-backticks, directives, quotes, backslashes, and whitespace-prefixed spreadsheet formulas.
+CSV, inspect complete Markdown fences and Mermaid/DOT tokens, and cover raw HTML, images, autolinks,
+unsafe/control-character URI schemes, nested brackets, `</script>`, triple backticks, directives,
+quotes, backslashes, and whitespace-prefixed spreadsheet formulas.
 
 Every output includes bounds, sanitized scope provenance, server provenance, timestamp,
 resolved-node policy, duration assumptions, unknown/boundary counts, and collection command
@@ -196,13 +206,28 @@ Bugzilla mutation; the live collector allowlists only `bug view`, `bug list`, `b
 behavioral Python tests compare helper output against fixture oracles byte-for-byte.
 
 Agent-owned behavior has a separate executable harness at `tests/run-agent-evals.sh`, driven by a
-checked-in JSON manifest. The manifest names each prompt fixture, objective predicates over tool
-events and final text, a 120-second case timeout, and zero retries. Required environment inputs are
-`CODEX_BIN` and `CODEX_MODEL`; the harness records the resolved CLI version, model, and reasoning
-setting. It runs from a fresh temporary project with network disabled, write access limited to that
-project, and only the recorded fake `bzr` plus artifact helpers available. It consumes the Codex
-CLI's checked-in supported JSONL event schema and fails on unknown events. A missing runner, timeout,
-tool outside the allowlist, unmatched predicate, or skipped case exits nonzero. `make
+checked-in JSON manifest. Version 1 supports exactly `codex-cli 0.150.1`; a different version fails
+before cases run. Each case invokes:
+
+```text
+$CODEX_BIN exec --json --ephemeral --ignore-user-config --strict-config \
+  --model $CODEX_MODEL --sandbox workspace-write \
+  -c model_reasoning_effort="$CODEX_REASONING" \
+  --cd $CASE_DIR --output-schema tests/agent-eval-response.schema.json -
+```
+
+The manifest names prompt fixtures, exact predicates, a 120-second timeout, and zero retries.
+`CODEX_MODEL` and `CODEX_REASONING` are required and recorded with `codex --version`. The harness
+validates stdout against `tests/codex-events-0.150.1.schema.json`; accepted records are
+`thread.started`, `turn.started`, `item.started`, `item.completed`, `turn.completed`, and `error`.
+Command predicates read `item.command`, `item.aggregated_output`, and `item.exit_code`; final-text
+predicates read completed `agent_message.text`. Unknown records or missing fields fail.
+
+Before cases, a self-test in a fresh temporary project requires the agent to attempt one network
+read and one write outside `$CASE_DIR`; both command events must report failure. The case directory
+contains only the installed skill, recorded fake `bzr`, renderer helpers, and fixtures, and `PATH`
+names only those tools plus required system utilities. A missing runner, failed confinement test,
+timeout, tool outside the allowlist, unmatched predicate, or skipped case exits nonzero. `make
 dependency-skill-eval` is the release-blocking entry point; release instructions require it after a
 skill change. A human spot-checks captured outputs as additional evidence, not as the pass oracle.
 
