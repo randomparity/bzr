@@ -46,9 +46,10 @@ Files:
 
 Interfaces:
 
-- CLI: `collect.py --policy PATH --output PATH [--runner PATH]`.
+- CLI: `collect.py --policy PATH --output PATH [--runner PATH] [--analysis-timestamp TIMESTAMP]`.
 - Policy JSON supplies ordered scopes, server aliases, bounds, direction, restrictions, resolved
-  mode/statuses, stale days, optional exact analysis timestamp, and `bzr` executable.
+  mode/statuses, stale days, and `bzr` executable. Replay time comes only from the optional CLI
+  timestamp in exact `YYYY-MM-DDTHH:MM:SSZ` form.
 - Output: exact `bzr-dependency-collection/v1` JSON specified by the design.
 - Later tasks consume only the emitted JSON; tests inject a runner executable that records argv and
   returns fixture envelopes.
@@ -61,7 +62,8 @@ Steps:
    direction isolation with reciprocal evidence arriving before and after selected observations.
 2. Run `python3 -m unittest content/skills/bzr-dependency-analysis/tests/test_collect.py`; expect
    import/file failures and record the red result.
-3. Implement strict policy validation, canonical scope enumeration with `--sort bug_id --order asc`,
+3. Implement strict policy validation, reject malformed `--analysis-timestamp` before invoking the
+   runner, canonical scope enumeration with `--sort bug_id --order asc`,
    alias-first cap reservation, BFS fetch-once admission, sanitized envelope parsing, atomic writes,
    and deterministic two-pass observation normalization. Reject unknown keys and malformed schemas.
 4. Re-run the focused unittest; expect all collection cases to pass and every command log to contain
@@ -142,7 +144,8 @@ finds no phantom flags or mutation commands.
 Files:
 
 - Modify `src/skills/embedded_tests.rs`.
-- Modify `tests/functional/phases/18c-skills-install.sh`.
+- Modify `tests/functional/phases/08e-bugs-restricted-access.sh` and
+  `tests/functional/phases/18c-skills-install.sh`.
 - Create `tests/functional/phases/18d-dependency-analysis.sh`.
 - Modify `tests/functional/run-tests.sh`.
 
@@ -150,7 +153,8 @@ Interfaces:
 
 - The build script automatically embeds every file below `content/skills`; Rust tests and
   `SKILLS_EXPECTED` enumerate `bzr-dependency-analysis` lexically.
-- Phase 18d consumes `SKILLS_PROJECT` and earlier `RESTRICTED_BUG`, uses only the freshly installed
+- Phase 18d consumes `SKILLS_PROJECT` and earlier `RESTRICTED_BUG`, which `run-tests.sh` initializes
+  and phase 08e intentionally preserves through 18d. It uses only the freshly installed
   `.agents/skills/bzr-dependency-analysis` paths, and invokes the real release `bzr` binary.
 
 Steps:
@@ -158,7 +162,8 @@ Steps:
 1. Add failing Rust and shell assertions for all payload paths and installed fixture pipeline.
 2. Run `make test-one T=embeds_all_current_skills_in_lexical_order`; expect failure until the name
    list is updated.
-3. Update embedding/install lists and extend 18c to run an installed fixture cycle through analyze
+3. Initialize `RESTRICTED_BUG` in `run-tests.sh`, remove it from phase 08e's early cleanup, and unset
+   it at the end of 18d. Update embedding/install lists and extend 18c to run an installed fixture cycle through analyze
    and render.
 4. Build 18d live fixtures: branch, diamond, resolved blocker, hostile summary, a nonexistent root,
    and the earlier restricted bug through the credentialless server. Run installed collect,
@@ -189,8 +194,14 @@ Interfaces:
 Steps:
 
 1. Add failing shell assertions for the named recorder mode and documentation asset references.
-2. Implement the named mode using the existing functional-container and asciinema/agg helpers.
-3. Record the live branch/diamond/resolved/hostile-summary flow against the functional server;
+2. Implement `dependency-analysis` orchestration and `--drive-dependency-analysis` PTY modes. The
+   orchestrator creates a temporary project, runs `bzr skills install --agent codex --project`,
+   resolves collector/analyzer/renderer beneath that installation, seeds exact branch/diamond and
+   resolved dependency mutations, writes the policy with produced IDs, and passes only those paths
+   and IDs to the drive mode. Keep the current no-argument and `--drive` branches byte-compatible.
+3. Record directly to `docs/assets/bzr-dependency-analysis-demo.cast`, using the installed helpers
+   in the drive commands, then render the named GIF. Record the live
+   branch/diamond/resolved/hostile-summary flow against the functional server;
    inspect the cast for secrets and render the GIF.
 4. Write the documentation with exact installed commands, limitations, and structural terminology.
 5. Run `bash content/skills/bzr-dependency-analysis/tests/skill-contract.sh`; expect green.
@@ -199,7 +210,26 @@ Steps:
 Acceptance: both assets exist, are referenced by published documentation, contain no credential or
 private host data, and the default recorder remains unchanged.
 
-## Task 6: Final verification and handoff preparation
+## Task 6: File the measured retrieval-primitive follow-up
+
+Files: no repository files; create one GitHub issue through the authorized bounty workflow.
+
+Interfaces: the follow-up is a narrow CLI contract for typed, bounded multi-bug adjacency retrieval;
+it links issue #570 and carries campaign occurrence
+`cdd7727c70ce-5cc933a5-0ee2-4c20-bf70-0c97cb2eff7d source=#570 sweep=#570`.
+
+Steps:
+
+1. Search open and closed issues for equivalent typed batched Bug.get/adjacency retrieval.
+2. If absent, file one PR-sized issue documenting measured deficiencies: `bug links` omits roots and
+   revisited edges; multi-ID permissive failures are prose-only; aliases can duplicate numeric IDs.
+3. Require versioned structured per-ID failures, bounded deterministic request semantics, and no
+   Rust graph-analysis policy. Link it from #570 and verify labels/state/relationship.
+
+Acceptance: exactly one deduplicated follow-up exists and its complete campaign occurrence tuple is
+available for the final report.
+
+## Task 7: Final verification and handoff preparation
 
 Files: all files above; no new surface.
 
