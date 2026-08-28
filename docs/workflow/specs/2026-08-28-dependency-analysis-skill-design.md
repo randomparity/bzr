@@ -218,7 +218,12 @@ The normative analyzer output is one `bzr-dependency-analysis/v1` document:
 ```json
 {
   "analysis_timestamp": "2026-08-28T12:00:00Z",
-  "components": [{"cyclic": false, "id": "c0001", "nodes": [{"id": 1199, "server": "primary"}]}],
+  "bounds": {"max_depth": 5, "max_nodes": 200},
+  "cap": {"graph_cap_reached": false, "omitted_discovered_identities": 0, "scope_truncated": false},
+  "components": [
+    {"cyclic": false, "id": "c0001", "nodes": [{"id": 1199, "server": "primary"}]},
+    {"cyclic": false, "id": "c0002", "nodes": [{"id": 1200, "server": "primary"}]}
+  ],
   "edges": [{
     "observations": ["depends_on"],
     "predecessor": {"id": 1199, "server": "primary"},
@@ -227,17 +232,28 @@ The normative analyzer output is one `bzr-dependency-analysis/v1` document:
   "layers": [["c0001"], ["c0002"]],
   "limitations": [],
   "longest_chain": {"kind": "edge_count", "length": 1, "path": ["c0001", "c0002"]},
-  "nodes": [],
+  "nodes": [
+    {"id": 1199, "server": "primary", "stale": false, "state": "known", "summary": "Foundation"},
+    {"id": 1200, "server": "primary", "stale": false, "state": "known", "summary": "Delivery"}
+  ],
   "policy": {},
+  "provenance": [{"scope_kind": "bug-ids", "server": "primary"}],
   "schema": "bzr-dependency-analysis/v1",
   "status": "complete",
   "warnings": []
 }
 ```
 
-The analyzer copies `analysis_timestamp`, `status`, `limitations`, `policy`, and the complete node
-records from collection; each copied node adds required `stale` (`true`, `false`, or `unknown`).
-Warnings are stable objects `{code, nodes}` sorted by code then node identity; missing/invalid
+Required top-level keys are exactly those shown: `analysis_timestamp`, `bounds`, `cap`, `components`,
+`edges`, `layers`, `limitations`, `longest_chain`, `nodes`, `policy`, `provenance`, `schema`,
+`status`, and `warnings`. The analyzer copies collection metadata and complete node records; each
+copied node retains every collection key and adds required `stale` (`true`, `false`, or `unknown`).
+Every component node exists in `nodes`, every node belongs to exactly one component, and every
+layer/longest-chain component exists in `components`.
+The total analysis identity key is server alias by Unicode code-point order, then numeric ID; a
+null-ID unresolved root sorts after numeric IDs by its `requested` string. Edges, warning node lists,
+SCC minima/members, component numbering, and every tie break use this key; collection depth order
+does not affect analysis identity. Warnings are stable objects `{code, nodes}` sorted by code then node identity; missing/invalid
 timestamps use `stale-timestamp-unknown`. Canonical edges sort by predecessor then successor and
 contain sorted unique observation names. Strongly connected components sort by their smallest node
 identity and receive IDs `c0001`, `c0002`, and so on; component node lists use node order. Layers
@@ -273,10 +289,13 @@ The agent runs standard graph operations over the collected inventory:
 - suggested execution order lists assumptions, unknown/truncated boundaries, resolved-node
   policy, and every cyclic component that prevents a complete order.
 
-Staleness is an observation, not an ordering weight. The user supplies a positive age threshold;
-the collector records an injected analysis timestamp in UTC and parses `last_change_time` as an
+Staleness is an observation, not an ordering weight. The user supplies a positive age threshold.
+`collect.py` captures the current instant exactly once for a live run and canonicalizes it to
+second-precision UTC RFC 3339 (`YYYY-MM-DDTHH:MM:SSZ`). Tests and replay may supply
+`--analysis-timestamp` only in that exact form; malformed values fail before collection. The collector parses `last_change_time` as an
 absolute timestamp. A known unresolved node is stale when its age is at least the threshold.
-Missing or invalid timestamps produce `stale: unknown` plus a data-quality warning.
+Missing, invalid, or future node timestamps produce `stale: unknown` plus stable
+`stale-timestamp-unknown` or `stale-timestamp-future` warnings.
 
 A time-based critical path is forbidden unless duration data exists and the user explicitly
 chooses its units and interpretation. Weighted analysis names the duration field, missing-value
@@ -418,8 +437,11 @@ functional installer fixture include it. The existing `18c-skills-install.sh` ph
 dependency-analysis payload path after installation and runs one fixture-based
 collect→analyze→render pipeline from the installed destination. A new
 `18d-dependency-analysis.sh` functional phase creates live branches, a diamond, cycle, resolved
-blocker, and hostile summary, then runs the installed collector through the real `bzr` binary and
-asserts server-qualified edges, cycle/resolved handling, caps, and inert rendered text.
+blocker, and hostile summary. It selects the freshly installed
+`$SKILLS_PROJECT/.agents/skills/bzr-dependency-analysis` root, asserts the real paths of collector,
+analyzer, renderer, and fixtures remain beneath it, and runs the complete installed
+collect→analyze→render chain through the real `bzr` binary. It asserts server-qualified edges,
+cycle/resolved handling, caps, and inert rendered text without resolving any stage from the checkout.
 `tools/record-demo.sh` gains a named dependency-analysis
 mode that seeds and records the graph without changing the existing README demo default.
 
