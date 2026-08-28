@@ -56,12 +56,16 @@ function Test-SuccessPath {
         $env:BZR_BASE_URL = Convert-PathToFileUri (Join-Path $work 'releases')
         $env:BZR_VERSION = 'v0.0.0-test'
         $env:BZR_INSTALL_DIR = $installDir
+        $env:BZR_INSTALL_SCRIPT = $InstallPs1
         $env:BZR_SKIP_SMOKE = '1'
         try {
-            & powershell -NoProfile -ExecutionPolicy Bypass -File $InstallPs1
+            & powershell -NoProfile -ExecutionPolicy Bypass -Command @'
+function Read-Host { 'N' }
+& $env:BZR_INSTALL_SCRIPT
+'@
             if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed with exit $LASTEXITCODE" }
         } finally {
-            Remove-Item Env:BZR_BASE_URL, Env:BZR_VERSION, Env:BZR_INSTALL_DIR, Env:BZR_SKIP_SMOKE -ErrorAction SilentlyContinue
+            Remove-Item Env:BZR_BASE_URL, Env:BZR_VERSION, Env:BZR_INSTALL_DIR, Env:BZR_INSTALL_SCRIPT, Env:BZR_SKIP_SMOKE -ErrorAction SilentlyContinue
         }
 
         if (-not (Test-Path (Join-Path $installDir 'bzr.exe'))) {
