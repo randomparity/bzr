@@ -354,10 +354,6 @@ class AnalyzerTestCase(unittest.TestCase):
         graph_flag_without_limitation["limitations"] = ["collection-http"]
         mutations.append(graph_flag_without_limitation)
 
-        graph_cap_without_omissions = copy.deepcopy(graph_partial)
-        graph_cap_without_omissions["cap"]["omitted_discovered_identities"] = 0
-        mutations.append(graph_cap_without_omissions)
-
         omissions_without_graph_cap = copy.deepcopy(scope_partial)
         omissions_without_graph_cap["cap"]["omitted_discovered_identities"] = 1
         mutations.append(omissions_without_graph_cap)

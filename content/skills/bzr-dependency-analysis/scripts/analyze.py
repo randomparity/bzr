@@ -390,7 +390,7 @@ def validate_cap_relationships(cap, limitations):
     graph_limited = "graph-node-cap" in limitations
     graph_cap_reached = cap["graph_cap_reached"]
     has_omissions = cap["omitted_discovered_identities"] > 0
-    if graph_limited != graph_cap_reached or graph_cap_reached != has_omissions:
+    if graph_limited != graph_cap_reached or (has_omissions and not graph_cap_reached):
         raise AnalysisInputError("graph cap metadata is inconsistent")
 
     scope_limitations = set(limitations) & {
