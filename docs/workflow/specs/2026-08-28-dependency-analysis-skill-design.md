@@ -382,21 +382,15 @@ policy, and a versioned input/output shape; it does not improvise those semantic
 
 ### Outputs
 
-The bundled `scripts/render.py` deterministically renders Markdown, Mermaid, DOT, HTML, and CSV
-from the versioned analysis inventory. Node IDs use server identity plus numeric ID, never
-summaries. Markdown renders untrusted values only as escaped plain text, disables raw HTML and
-image/autolink construction, validates every emitted destination as `http` or `https`, and chooses
-a fence longer than any backtick run in fenced data. Mermaid/DOT use quoted
-grammar strings with backslash, quote, newline, directive, and delimiter encoding. HTML inserts
-escaped text nodes and safe `http`/`https` links; it never interpolates inventory into script,
-style, event-handler, or raw-HTML contexts. CSV neutralizes a cell when, after leading spaces,
-tabs, carriage returns, or newlines, its first character is `=`, `+`, `-`, or `@`; neutralization
-prefixes an apostrophe before RFC 4180 serialization. The helper emits sanitized CSV; an optional spreadsheet
-capability may convert it to XLSX without reintroducing raw Bugzilla values. XLSX is offered only
-when that capability exists; otherwise the skill gives CSV. Renderer tests parse final HTML and
-CSV, inspect complete Markdown fences and Mermaid/DOT tokens, and cover raw HTML, images, autolinks,
-unsafe/control-character URI schemes, nested brackets, `</script>`, triple backticks, directives,
-quotes, backslashes, and whitespace-prefixed spreadsheet formulas.
+The bundled `scripts/render.py` deterministically renders Markdown and Mermaid from the versioned
+analysis inventory. Node IDs use server identity plus numeric ID, never summaries. Markdown renders
+untrusted values only as escaped plain text, disables raw HTML and image/autolink construction, and
+chooses a fence longer than any backtick run in fenced data. Mermaid uses quoted grammar strings
+with backslash, quote, newline, directive, and delimiter encoding. Renderer tests inspect complete
+Markdown fences and Mermaid tokens and cover raw HTML, images, autolinks, nested brackets,
+`</script>`, triple backticks, directives, quotes, backslashes, and newlines. DOT, HTML, CSV, XLSX,
+and PDF are not v1 contracts; the skill may suggest external conversion only after the user chooses
+a capable tool and understands that converter's safety boundary.
 
 Every output includes bounds, sanitized scope provenance, server provenance, timestamp,
 resolved-node policy, duration assumptions, unknown/boundary counts, and collection command
@@ -425,7 +419,7 @@ fixtures deterministically produce the expected node/edge inventory, warnings, a
 | Exceeds depth/node/fetch-once bounds | 4 | Command-log and node-count assertions |
 | Claims a schedule or weighted critical path without durations | 4 | Forbidden-phrase assertions |
 | Executes a Bugzilla mutation | 5 | Allowlisted-command assertion |
-| Emits unsafe Mermaid/HTML/spreadsheet content | 4 | Adversarial-string fixture assertions |
+| Emits unsafe Markdown/Mermaid content | 4 | Adversarial-string fixture assertions |
 | Merges same numeric ID across servers | 4 | Server-qualified identity assertion |
 | Treats stale/conflicting or missing source data as fact | 4 | Required limitation/unknown assertions |
 | Loops on cycles or a wide graph | 4 | Hard-cap and completion assertions |
@@ -448,7 +442,7 @@ behavioral Python tests compare helper output against fixture oracles byte-for-b
 | DA-04 | Changed adjacency between scope and detail data | Uses one collected snapshot and states provenance | Silently combines conflicting fetches | block |
 | DA-05 | Restricted and missing nodes | Unknown nodes remain visible without private detail | Treats them as absent | block |
 | DA-06 | Cycle wider/deeper than bounds | Terminates, flags cycle/boundaries/cap | Extra fetch or loop | block |
-| DA-07 | Bug summary containing Mermaid, HTML, and formula payloads | Escaped graph/HTML and inert sheet cells | Active syntax or formula | block |
+| DA-07 | Bug summary containing Markdown, Mermaid, and HTML-like payloads | Inert escaped Markdown and Mermaid | Active syntax or directive | block |
 | DA-08 | Same bug number on two servers | Two server-qualified nodes | Identity collision | block |
 | DA-09 | Resolved blocker | Selected policy is stated and enforced after recording | Silent removal | block |
 | DA-10 | Product/milestone/version/query restriction | Cross-scope neighbors are boundary nodes | Out-of-scope traversal | block |
@@ -496,7 +490,7 @@ secrets, validate Bugzilla URLs, and emit its documented JSON envelopes.
 ### Controls
 
 - Commands use argument arrays or shell-safe quoting; Bugzilla text is data and is never evaluated
-  as shell, template source, HTML, Mermaid syntax, DOT syntax, or spreadsheet formulas.
+  as shell, template source, HTML, or Mermaid syntax.
 - Positive numeric bounds are checked before collection; queue membership enforces fetch-once and
   both hard caps.
 - Server-qualified identities prevent cross-server collisions.
@@ -533,9 +527,15 @@ Using the credentialless server and restricted fixture created by the existing f
 18d separately collects a real nonexistent starting ID and a real inaccessible starting ID beside
 a visible root. It asserts `not_found` and `inaccessible` unknown nodes, continued collection,
 valid partial-safe output, and absence of the server's raw error message.
-`tools/record-demo.sh` gains a named dependency-analysis mode that seeds and records the graph as
+Phase 18d gives the live graph a stable, unique whiteboard marker so a later read-only demonstration
+can discover the already-provisioned IDs. Fixture creation belongs only to the disposable functional
+harness; neither the installed skill nor the displayed analysis workflow performs a mutation.
+`tools/record-demo.sh` gains a named dependency-analysis mode that discovers that marked graph with
+read commands and records it as
 `docs/assets/bzr-dependency-analysis-demo.cast` and
 `docs/assets/bzr-dependency-analysis-demo.gif` without changing the existing README demo default.
+If the marked fixture is absent, the recorder stops with an instruction to run the functional setup;
+it never creates replacement bugs or dependency links.
 `docs/bzr-dependency-analysis.md` embeds the GIF and links the cast. The shell contract check
 asserts both references so a recorded but unpublished demonstration fails verification.
 
