@@ -22,7 +22,7 @@ workflow:
   `depends_on`, but fetches every requested ID sequentially.
 
 The skill can still deliver correct bounded analysis by fetching each discovered bug once
-with permissive multi-view and retaining every returned adjacency list. A bundled Python
+with single-ID structured requests and retaining every returned adjacency list. A bundled Python
 standard-library helper analyzes captured node records deterministically; when Python is
 unavailable, the skill may perform the same steps directly but must report that the executable
 helper was unavailable. It must explicitly warn that collection can make one request per bug.
@@ -65,9 +65,10 @@ raise the cap; otherwise it paginates the complete membership.
 The bundled `scripts/collect.py` owns collection and invokes `bzr` through a command-runner
 boundary. Tests substitute a recorded runner; live use invokes the configured binary without a
 shell. The collector maintains `queued`, `fetched`, and `nodes` sets keyed by `(server, bug-id)`.
-It fetches each frontier using `bzr --json bug view ID... --permissive --fields
-id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on` when at least two
-IDs remain; a single ID uses `bug view` without `--permissive`. The field list additionally
+The current fallback fetches each ID separately with `bzr --json bug view ID --fields
+id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on`, because only a
+command-level failure exposes the versioned structured error envelope. It therefore makes at most
+one command per admitted bug. The field list additionally
 requests `product`, `target_milestone`, or `version` when the corresponding restriction is
 active. Query restrictions use the bounded, fully paginated server-qualified membership set
 described above. Returned adjacency lists add
@@ -93,11 +94,14 @@ collection and preserve a partial inventory with a run-level limitation. Batch f
 copied onto every requested node. Shareable records retain only error type and affected identifier,
 not raw stderr or server messages.
 
-The collector writes one versioned JSON document atomically. It contains `status` (`complete` or
+The collector atomically writes one `bzr-dependency-collection/v1` JSON document. It contains
+`status` (`complete` or
 `partial`), nodes, observed edges, bounds, sanitized provenance, omitted counts, and limitations.
 A complete run exits 0. A fatal run still writes a valid `partial` document, writes one generic
 error-type line to stderr, and exits 1. A consumer rejects `partial` input unless the operator
-passes `--allow-partial`, so no prefix stream can be mistaken for completion.
+passes `--allow-partial`, so no prefix stream can be mistaken for completion. `analyze.py` reads
+only that schema and atomically writes one `bzr-dependency-analysis/v1` JSON document, preserving
+status and limitations. Both readers reject truncated JSON and unknown schema versions.
 
 Resolved-node policy is applied after recording the node and incoming edge. Status meanings
 are installation-specific, so the skill asks which statuses count as resolved or states the
@@ -137,15 +141,17 @@ chain by edge count,” never “critical path” or a delivery-date prediction.
 ### Outputs
 
 The bundled `scripts/render.py` deterministically renders Markdown, Mermaid, DOT, HTML, and CSV
-from the versioned analysis inventory. Mermaid and DOT quote every label and escape quotes,
-backslashes, newlines, Mermaid syntax, and HTML-significant characters from Bugzilla-controlled
-text. Node IDs are generated from server identity plus numeric bug ID rather than summaries.
-HTML is self-contained and HTML-escapes all Bugzilla text and validates links as `http` or
-`https`. CSV/XLSX inventories prefix cells beginning with `=`, `+`, `-`, or `@` so spreadsheet
-software does not execute formulas. The helper emits sanitized CSV; an optional spreadsheet
+from the versioned analysis inventory. Node IDs use server identity plus numeric ID, never
+summaries. Markdown chooses a fence longer than any backtick run in data. Mermaid/DOT use quoted
+grammar strings with backslash, quote, newline, directive, and delimiter encoding. HTML inserts
+escaped text nodes and safe `http`/`https` links; it never interpolates inventory into script,
+style, event-handler, or raw-HTML contexts. CSV neutralizes a cell when, after leading spaces,
+tabs, carriage returns, or newlines, its first character is `=`, `+`, `-`, or `@`; neutralization
+prefixes an apostrophe before RFC 4180 serialization. The helper emits sanitized CSV; an optional spreadsheet
 capability may convert it to XLSX without reintroducing raw Bugzilla values. XLSX is offered only
-when that capability exists; otherwise the skill gives CSV. Renderer tests parse HTML, CSV, and
-JSON and assert exact escaping for hostile fixtures.
+when that capability exists; otherwise the skill gives CSV. Renderer tests parse final HTML and
+CSV, inspect complete Markdown fences and Mermaid/DOT tokens, and cover `</script>`, triple
+backticks, directives, quotes, backslashes, and whitespace-prefixed spreadsheet formulas.
 
 Every output includes bounds, sanitized scope provenance, server provenance, timestamp,
 resolved-node policy, duration assumptions, unknown/boundary counts, and collection command
@@ -182,19 +188,23 @@ fixtures deterministically produce the expected node/edge inventory, warnings, a
 Algorithm and collection evaluations are deterministic fixture checks against bundled helpers;
 no model judges its own
 output. `scripts/collect.py` accepts explicit policy JSON, invokes an injectable command runner,
-and emits newline-delimited node records plus collection metadata. `scripts/analyze.py` consumes
-those records and emits a versioned JSON node/edge/analysis inventory. Neither helper can issue a
+and atomically emits one `bzr-dependency-collection/v1` JSON document. `scripts/analyze.py`
+consumes that document and atomically emits one `bzr-dependency-analysis/v1` JSON inventory.
+Neither helper can issue a
 Bugzilla mutation; the live collector allowlists only `bug view`, `bug list`, `bug search`, and
 `query run`. Static shell checks validate the skill's documented commands and safety rules;
 behavioral Python tests compare helper output against fixture oracles byte-for-byte.
 
-Agent-owned behavior has a separate executable harness at `tests/run-agent-evals.sh`. It installs
-the staged skill into a temporary project, puts a recorded fake `bzr` first on `PATH`, invokes the
-available Codex CLI against stable prompts, captures tool calls and the final response, and checks
-announced bounds, allowlisted command order, refusal of mutation, released-command use, capability
-fallbacks, and structural terminology. The harness records the model/version and is a release-time
-blocking check rather than a deterministic CI unit; any changed skill prompt reruns a human spot
-check of all captured outputs before release. Static and helper tests remain the CI gates.
+Agent-owned behavior has a separate executable harness at `tests/run-agent-evals.sh`, driven by a
+checked-in JSON manifest. The manifest names each prompt fixture, objective predicates over tool
+events and final text, a 120-second case timeout, and zero retries. Required environment inputs are
+`CODEX_BIN` and `CODEX_MODEL`; the harness records the resolved CLI version, model, and reasoning
+setting. It runs from a fresh temporary project with network disabled, write access limited to that
+project, and only the recorded fake `bzr` plus artifact helpers available. It consumes the Codex
+CLI's checked-in supported JSONL event schema and fails on unknown events. A missing runner, timeout,
+tool outside the allowlist, unmatched predicate, or skipped case exits nonzero. `make
+dependency-skill-eval` is the release-blocking entry point; release instructions require it after a
+skill change. A human spot-checks captured outputs as additional evidence, not as the pass oracle.
 
 | ID | Case | Observable pass traits | Forbidden traits | Gate |
 |---|---|---|---|---|
