@@ -4,6 +4,9 @@ set -euo pipefail
 skill_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 skill="$skill_root/SKILL.md"
 skill_text=$(tr '\n' ' ' <"$skill")
+repo_root=$(cd "$skill_root/../../.." && pwd -P)
+documentation="$repo_root/docs/bzr-dependency-analysis.md"
+recorder="$repo_root/tools/record-demo.sh"
 
 normalized_commands=$(awk '
   /^```sh[[:space:]]*$/ { in_block = 1; next }
@@ -35,6 +38,12 @@ require_literal() {
 require_words() {
   local value=$1
   [[ "$skill_text" == *"$value"* ]] || fail "missing: $value"
+}
+
+require_file_literal() {
+  local path=$1
+  local value=$2
+  rg -Fq -- "$value" "$path" || fail "missing from $path: $value"
 }
 
 expected_helper_commands=$(
@@ -87,5 +96,16 @@ require_words 'Weighted critical-path analysis and delivery-date prediction are 
 require_words 'refuse the request rather than mutate Bugzilla'
 require_literal 'cycle.collection.json'
 require_literal 'fixture-only cycle proof'
+
+require_file_literal "$recorder" '"${1:-}" == "dependency-analysis"'
+require_file_literal "$recorder" \
+  '[.data[] | select(.whiteboard == $marker) | .id] | max // empty'
+require_file_literal "$recorder" \
+  'dependency_workdir=$(cd "$dependency_workdir" && pwd -P)'
+[[ -f "$documentation" ]] || fail "missing documentation: $documentation"
+require_file_literal "$documentation" \
+  '![Dependency analysis demo](assets/bzr-dependency-analysis-demo.gif)'
+require_file_literal "$documentation" \
+  '[Download the asciinema cast](assets/bzr-dependency-analysis-demo.cast)'
 
 printf 'dependency-analysis skill contract: ok\n'
