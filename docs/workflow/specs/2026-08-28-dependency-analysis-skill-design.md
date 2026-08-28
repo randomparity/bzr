@@ -71,8 +71,8 @@ IDs remain; a single ID uses `bug view` without `--permissive`. The field list a
 requests `product`, `target_milestone`, or `version` when the corresponding restriction is
 active. Query restrictions use the bounded, fully paginated server-qualified membership set
 described above. Returned adjacency lists add
-edges even when the target is already fetched. Failures create unknown nodes carrying the
-server, requested identifier, and public error text. A failed or missing node is never
+edges even when the target is already fetched. Classified per-ID failures create unknown nodes
+carrying only the server, requested identifier, and structured error type. A failed or missing node is never
 silently removed.
 
 Depth is the minimum hop distance from any root. A newly discovered node beyond the maximum
@@ -92,6 +92,12 @@ authentication, TLS, transport, schema-version, malformed-output, and unclassifi
 collection and preserve a partial inventory with a run-level limitation. Batch failures are never
 copied onto every requested node. Shareable records retain only error type and affected identifier,
 not raw stderr or server messages.
+
+The collector writes one versioned JSON document atomically. It contains `status` (`complete` or
+`partial`), nodes, observed edges, bounds, sanitized provenance, omitted counts, and limitations.
+A complete run exits 0. A fatal run still writes a valid `partial` document, writes one generic
+error-type line to stderr, and exits 1. A consumer rejects `partial` input unless the operator
+passes `--allow-partial`, so no prefix stream can be mistaken for completion.
 
 Resolved-node policy is applied after recording the node and incoming edge. Status meanings
 are installation-specific, so the skill asks which statuses count as resolved or states the
@@ -130,13 +136,16 @@ chain by edge count,” never “critical path” or a delivery-date prediction.
 
 ### Outputs
 
-Markdown text is always available. Mermaid and DOT quote every label and escape quotes,
+The bundled `scripts/render.py` deterministically renders Markdown, Mermaid, DOT, HTML, and CSV
+from the versioned analysis inventory. Mermaid and DOT quote every label and escape quotes,
 backslashes, newlines, Mermaid syntax, and HTML-significant characters from Bugzilla-controlled
 text. Node IDs are generated from server identity plus numeric bug ID rather than summaries.
 HTML is self-contained and HTML-escapes all Bugzilla text and validates links as `http` or
 `https`. CSV/XLSX inventories prefix cells beginning with `=`, `+`, `-`, or `@` so spreadsheet
-software does not execute formulas. Optional formats are offered only when the active agent has
-the corresponding artifact capability; otherwise the skill gives a Markdown or DOT fallback.
+software does not execute formulas. The helper emits sanitized CSV; an optional spreadsheet
+capability may convert it to XLSX without reintroducing raw Bugzilla values. XLSX is offered only
+when that capability exists; otherwise the skill gives CSV. Renderer tests parse HTML, CSV, and
+JSON and assert exact escaping for hostile fixtures.
 
 Every output includes bounds, sanitized scope provenance, server provenance, timestamp,
 resolved-node policy, duration assumptions, unknown/boundary counts, and collection command
@@ -170,13 +179,22 @@ fixtures deterministically produce the expected node/edge inventory, warnings, a
 | Treats stale/conflicting or missing source data as fact | 4 | Required limitation/unknown assertions |
 | Loops on cycles or a wide graph | 4 | Hard-cap and completion assertions |
 
-All evaluations are deterministic fixture checks against bundled helpers; no model judges its own
+Algorithm and collection evaluations are deterministic fixture checks against bundled helpers;
+no model judges its own
 output. `scripts/collect.py` accepts explicit policy JSON, invokes an injectable command runner,
 and emits newline-delimited node records plus collection metadata. `scripts/analyze.py` consumes
 those records and emits a versioned JSON node/edge/analysis inventory. Neither helper can issue a
 Bugzilla mutation; the live collector allowlists only `bug view`, `bug list`, `bug search`, and
 `query run`. Static shell checks validate the skill's documented commands and safety rules;
 behavioral Python tests compare helper output against fixture oracles byte-for-byte.
+
+Agent-owned behavior has a separate executable harness at `tests/run-agent-evals.sh`. It installs
+the staged skill into a temporary project, puts a recorded fake `bzr` first on `PATH`, invokes the
+available Codex CLI against stable prompts, captures tool calls and the final response, and checks
+announced bounds, allowlisted command order, refusal of mutation, released-command use, capability
+fallbacks, and structural terminology. The harness records the model/version and is a release-time
+blocking check rather than a deterministic CI unit; any changed skill prompt reruns a human spot
+check of all captured outputs before release. Static and helper tests remain the CI gates.
 
 | ID | Case | Observable pass traits | Forbidden traits | Gate |
 |---|---|---|---|---|
@@ -196,11 +214,14 @@ behavioral Python tests compare helper output against fixture oracles byte-for-b
 | DA-14 | Permuted roots, responses, and adjacency lists | Byte-identical capped inventory | Order-dependent graph | block |
 | DA-15 | Single-ID unknown and global auth/TLS/transport failures | Unknown only for classified per-ID error; global failure stops partial run | Fabricated unknowns or raw stderr | block |
 | DA-16 | Stale, missing, and malformed timestamps at injected UTC time | `true` or `unknown` with warning | Wall-clock-dependent or ignored result | block |
+| DA-17 | Fatal error after one successful frontier | Valid `partial` JSON, generic stderr, exit 1; rejected without opt-in | Truncated stream accepted as complete | block |
 
 `python3 content/skills/bzr-dependency-analysis/tests/test_analyze.py` runs DA-01 and DA-03
 through DA-11 plus DA-16. `python3 content/skills/bzr-dependency-analysis/tests/test_collect.py`
-runs DA-02, DA-04, DA-06, and DA-13 through DA-15 with a stubbed command runner and exact command
-log assertions. `content/skills/bzr-dependency-analysis/tests/skill-contract.sh` runs DA-12 plus
+runs DA-04, DA-06, and DA-13 through DA-15 and DA-17 with a stubbed command runner and exact command
+log assertions. `python3 content/skills/bzr-dependency-analysis/tests/test_render.py` runs DA-07
+against every deterministic renderer. `tests/run-agent-evals.sh` runs DA-02 and the agent-owned
+parts of DA-03, DA-06, and DA-12. `content/skills/bzr-dependency-analysis/tests/skill-contract.sh` runs DA-12 plus
 static command allowlist and phantom-flag checks. The fixture suite validates the skill
 contract and every documented `bzr` invocation. A real
 functional Bugzilla demonstration creates a branch, a diamond, a cycle, a resolved blocker, and
@@ -232,7 +253,8 @@ secrets, validate Bugzilla URLs, and emit its documented JSON envelopes.
   analysis.
 - Generated links accept only `http` and `https`; output-path selection remains with the local
   operator and existing artifact tools.
-- Unknown/restricted errors disclose only `bzr`'s public error text and never raw auth/config data.
+- Unknown/restricted records disclose only an allowlisted structured error type and affected
+  identifier, never raw server messages, stderr, or auth/config data.
 - Shareable provenance stores only server alias, scope kind, saved-query name, and allowlisted
   parameter names. It drops parameter values from pasted URLs and never reproduces the literal URL
   or command line.
@@ -243,7 +265,7 @@ vulnerabilities, and access control on files after the operator chooses their de
 ## Documentation and verification
 
 The new skill lives at `content/skills/bzr-dependency-analysis/SKILL.md`, with deterministic
-fixtures, `scripts/collect.py`, `scripts/analyze.py`, Python behavioral tests, and a shell contract
+fixtures, `scripts/collect.py`, `scripts/analyze.py`, `scripts/render.py`, Python behavioral tests, and a shell contract
 check under the same directory. The embedded-name unit test and
 functional installer fixture include it. `tools/record-demo.sh` gains a named dependency-analysis
 mode that seeds and records the graph without changing the existing README demo default.
