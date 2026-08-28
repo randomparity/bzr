@@ -111,7 +111,11 @@ if (($env:Path -split ';') -notcontains $env:BZR_INSTALL_DIR) {
             [Environment]::SetEnvironmentVariable('Path', $originalUserPath, 'User')
             $noOutput = & powershell -NoProfile -ExecutionPolicy Bypass -Command @'
 function Read-Host { 'N' }
+$pathBefore = $env:Path
 & $env:BZR_INSTALL_SCRIPT
+if ($env:Path -ne $pathBefore) {
+    throw 'N response changed the current process PATH'
+}
 '@ 2>&1
             if ($LASTEXITCODE -ne 0) { throw "install.ps1 N response failed: $noOutput" }
             if ([Environment]::GetEnvironmentVariable('Path', 'User') -ne $originalUserPath) {
