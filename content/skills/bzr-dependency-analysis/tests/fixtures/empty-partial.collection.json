@@ -1,0 +1,37 @@
+{
+  "analysis_timestamp": "2026-08-28T12:00:00Z",
+  "bounds": {
+    "max_depth": 3,
+    "max_nodes": 2
+  },
+  "cap": {
+    "graph_cap_reached": false,
+    "omitted_discovered_identities": 0,
+    "scope_truncated": true
+  },
+  "limitations": [
+    "restriction-node-cap"
+  ],
+  "nodes": [],
+  "observations": [],
+  "policy": {
+    "direction": "both",
+    "duration": null,
+    "resolved_mode": "include-no-traverse",
+    "resolved_statuses": [
+      "RESOLVED"
+    ],
+    "stale_after_days": 14
+  },
+  "provenance": [
+    {
+      "parameter_names": [],
+      "scope_kind": "restriction",
+      "server": "primary",
+      "source": "allowed"
+    }
+  ],
+  "roots": [],
+  "schema": "bzr-dependency-collection/v1",
+  "status": "partial"
+}

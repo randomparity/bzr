@@ -1,0 +1,232 @@
+{
+  "analysis_timestamp": "2026-08-28T12:00:00Z",
+  "bounds": {
+    "max_depth": 3,
+    "max_nodes": 10
+  },
+  "cap": {
+    "graph_cap_reached": false,
+    "omitted_discovered_identities": 0,
+    "scope_truncated": false
+  },
+  "limitations": [],
+  "nodes": [
+    {
+      "assigned_to": null,
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 70,
+      "last_change_time": "2026-08-14T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "70",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "state": "known",
+      "status": "NEW",
+      "summary": "Stale"
+    },
+    {
+      "assigned_to": "a@example.test",
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 71,
+      "last_change_time": null,
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "71",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "state": "known",
+      "status": "NEW",
+      "summary": "Missing time"
+    },
+    {
+      "assigned_to": "b@example.test",
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 72,
+      "last_change_time": "yesterday",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "72",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "state": "known",
+      "status": "NEW",
+      "summary": "Malformed time"
+    },
+    {
+      "assigned_to": "c@example.test",
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 73,
+      "last_change_time": "2026-08-29T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "73",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "state": "known",
+      "status": "NEW",
+      "summary": "Future time"
+    },
+    {
+      "assigned_to": null,
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 76,
+      "last_change_time": "invalid-but-resolved",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "76",
+      "requested_aliases": [],
+      "resolution": "FIXED",
+      "server": "primary",
+      "state": "known",
+      "status": "RESOLVED",
+      "summary": "Resolved"
+    },
+    {
+      "assigned_to": "d@example.test",
+      "boundary_reason": null,
+      "depth": 1,
+      "error_type": null,
+      "id": 74,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "74",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "state": "known",
+      "status": "NEW",
+      "summary": "Successor"
+    }
+  ],
+  "observations": [
+    {
+      "field": "blocks",
+      "source": {
+        "id": 70,
+        "server": "primary"
+      },
+      "target": {
+        "id": 74,
+        "server": "primary"
+      }
+    },
+    {
+      "field": "blocks",
+      "source": {
+        "id": 71,
+        "server": "primary"
+      },
+      "target": {
+        "id": 74,
+        "server": "primary"
+      }
+    },
+    {
+      "field": "blocks",
+      "source": {
+        "id": 72,
+        "server": "primary"
+      },
+      "target": {
+        "id": 74,
+        "server": "primary"
+      }
+    },
+    {
+      "field": "blocks",
+      "source": {
+        "id": 73,
+        "server": "primary"
+      },
+      "target": {
+        "id": 74,
+        "server": "primary"
+      }
+    },
+    {
+      "field": "blocks",
+      "source": {
+        "id": 76,
+        "server": "primary"
+      },
+      "target": {
+        "id": 74,
+        "server": "primary"
+      }
+    }
+  ],
+  "policy": {
+    "direction": "both",
+    "duration": null,
+    "resolved_mode": "include-no-traverse",
+    "resolved_statuses": [
+      "RESOLVED"
+    ],
+    "stale_after_days": 14
+  },
+  "provenance": [
+    {
+      "parameter_names": [],
+      "scope_kind": "bug-ids",
+      "server": "primary",
+      "source": null
+    }
+  ],
+  "roots": [
+    {
+      "id": 70,
+      "requested": "70",
+      "server": "primary"
+    },
+    {
+      "id": 71,
+      "requested": "71",
+      "server": "primary"
+    },
+    {
+      "id": 72,
+      "requested": "72",
+      "server": "primary"
+    },
+    {
+      "id": 73,
+      "requested": "73",
+      "server": "primary"
+    },
+    {
+      "id": 76,
+      "requested": "76",
+      "server": "primary"
+    }
+  ],
+  "schema": "bzr-dependency-collection/v1",
+  "status": "complete"
+}

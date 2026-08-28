@@ -1,0 +1,174 @@
+{
+  "analysis_timestamp": "2026-08-28T12:00:00Z",
+  "bounds": {
+    "max_depth": 3,
+    "max_nodes": 10
+  },
+  "cap": {
+    "graph_cap_reached": false,
+    "omitted_discovered_identities": 0,
+    "scope_truncated": false
+  },
+  "limitations": [],
+  "nodes": [
+    {
+      "assigned_to": null,
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 10,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "10",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "state": "known",
+      "status": "NEW",
+      "summary": "Diamond root"
+    },
+    {
+      "assigned_to": "a@example.test",
+      "boundary_reason": null,
+      "depth": 1,
+      "error_type": null,
+      "id": 11,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "11",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "state": "known",
+      "status": "NEW",
+      "summary": "Left"
+    },
+    {
+      "assigned_to": "b@example.test",
+      "boundary_reason": null,
+      "depth": 1,
+      "error_type": null,
+      "id": 12,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "12",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "state": "known",
+      "status": "NEW",
+      "summary": "Right"
+    },
+    {
+      "assigned_to": "c@example.test",
+      "boundary_reason": null,
+      "depth": 2,
+      "error_type": null,
+      "id": 13,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "13",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "state": "known",
+      "status": "NEW",
+      "summary": "Join"
+    }
+  ],
+  "observations": [
+    {
+      "field": "blocks",
+      "source": {
+        "id": 10,
+        "server": "primary"
+      },
+      "target": {
+        "id": 11,
+        "server": "primary"
+      }
+    },
+    {
+      "field": "blocks",
+      "source": {
+        "id": 10,
+        "server": "primary"
+      },
+      "target": {
+        "id": 12,
+        "server": "primary"
+      }
+    },
+    {
+      "field": "depends_on",
+      "source": {
+        "id": 11,
+        "server": "primary"
+      },
+      "target": {
+        "id": 10,
+        "server": "primary"
+      }
+    },
+    {
+      "field": "blocks",
+      "source": {
+        "id": 11,
+        "server": "primary"
+      },
+      "target": {
+        "id": 13,
+        "server": "primary"
+      }
+    },
+    {
+      "field": "blocks",
+      "source": {
+        "id": 12,
+        "server": "primary"
+      },
+      "target": {
+        "id": 13,
+        "server": "primary"
+      }
+    }
+  ],
+  "policy": {
+    "direction": "both",
+    "duration": null,
+    "resolved_mode": "include-no-traverse",
+    "resolved_statuses": [
+      "RESOLVED"
+    ],
+    "stale_after_days": 14
+  },
+  "provenance": [
+    {
+      "parameter_names": [],
+      "scope_kind": "bug-ids",
+      "server": "primary",
+      "source": null
+    }
+  ],
+  "roots": [
+    {
+      "id": 10,
+      "requested": "10",
+      "server": "primary"
+    }
+  ],
+  "schema": "bzr-dependency-collection/v1",
+  "status": "complete"
+}

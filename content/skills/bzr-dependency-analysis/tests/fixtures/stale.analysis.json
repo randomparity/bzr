@@ -1,0 +1,429 @@
+{
+  "analysis_timestamp": "2026-08-28T12:00:00Z",
+  "bounds": {
+    "max_depth": 3,
+    "max_nodes": 10
+  },
+  "cap": {
+    "graph_cap_reached": false,
+    "omitted_discovered_identities": 0,
+    "scope_truncated": false
+  },
+  "components": [
+    {
+      "cyclic": false,
+      "id": "c0001",
+      "nodes": [
+        {
+          "id": 70,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    },
+    {
+      "cyclic": false,
+      "id": "c0002",
+      "nodes": [
+        {
+          "id": 71,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    },
+    {
+      "cyclic": false,
+      "id": "c0003",
+      "nodes": [
+        {
+          "id": 72,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    },
+    {
+      "cyclic": false,
+      "id": "c0004",
+      "nodes": [
+        {
+          "id": 73,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    },
+    {
+      "cyclic": false,
+      "id": "c0005",
+      "nodes": [
+        {
+          "id": 74,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    },
+    {
+      "cyclic": false,
+      "id": "c0006",
+      "nodes": [
+        {
+          "id": 76,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "observations": [
+        "blocks"
+      ],
+      "predecessor": {
+        "id": 70,
+        "server": "primary"
+      },
+      "successor": {
+        "id": 74,
+        "server": "primary"
+      }
+    },
+    {
+      "observations": [
+        "blocks"
+      ],
+      "predecessor": {
+        "id": 71,
+        "server": "primary"
+      },
+      "successor": {
+        "id": 74,
+        "server": "primary"
+      }
+    },
+    {
+      "observations": [
+        "blocks"
+      ],
+      "predecessor": {
+        "id": 72,
+        "server": "primary"
+      },
+      "successor": {
+        "id": 74,
+        "server": "primary"
+      }
+    },
+    {
+      "observations": [
+        "blocks"
+      ],
+      "predecessor": {
+        "id": 73,
+        "server": "primary"
+      },
+      "successor": {
+        "id": 74,
+        "server": "primary"
+      }
+    },
+    {
+      "observations": [
+        "blocks"
+      ],
+      "predecessor": {
+        "id": 76,
+        "server": "primary"
+      },
+      "successor": {
+        "id": 74,
+        "server": "primary"
+      }
+    }
+  ],
+  "findings": {
+    "bottlenecks": [],
+    "execution_order": {
+      "assumptions": [
+        "resolved-include-no-traverse"
+      ],
+      "component_order": [
+        "c0001",
+        "c0002",
+        "c0003",
+        "c0004",
+        "c0006",
+        "c0005"
+      ],
+      "cycle_impediments": [],
+      "incomplete_boundaries": []
+    },
+    "stale_blockers": [
+      {
+        "id": 70,
+        "requested": null,
+        "server": "primary"
+      }
+    ],
+    "structural_leaves": [
+      {
+        "id": 74,
+        "requested": null,
+        "server": "primary"
+      }
+    ],
+    "structural_roots": [
+      {
+        "id": 70,
+        "requested": null,
+        "server": "primary"
+      },
+      {
+        "id": 71,
+        "requested": null,
+        "server": "primary"
+      },
+      {
+        "id": 72,
+        "requested": null,
+        "server": "primary"
+      },
+      {
+        "id": 73,
+        "requested": null,
+        "server": "primary"
+      },
+      {
+        "id": 76,
+        "requested": null,
+        "server": "primary"
+      }
+    ],
+    "unassigned_blockers": [
+      {
+        "id": 70,
+        "requested": null,
+        "server": "primary"
+      }
+    ]
+  },
+  "layers": [
+    [
+      "c0001",
+      "c0002",
+      "c0003",
+      "c0004",
+      "c0006"
+    ],
+    [
+      "c0005"
+    ]
+  ],
+  "limitations": [],
+  "longest_chain": {
+    "kind": "edge_count",
+    "length": 1,
+    "path": [
+      "c0001",
+      "c0005"
+    ]
+  },
+  "nodes": [
+    {
+      "assigned_to": null,
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 70,
+      "last_change_time": "2026-08-14T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "70",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": true,
+      "state": "known",
+      "status": "NEW",
+      "summary": "Stale"
+    },
+    {
+      "assigned_to": "a@example.test",
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 71,
+      "last_change_time": null,
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "71",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": "unknown",
+      "state": "known",
+      "status": "NEW",
+      "summary": "Missing time"
+    },
+    {
+      "assigned_to": "b@example.test",
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 72,
+      "last_change_time": "yesterday",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "72",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": "unknown",
+      "state": "known",
+      "status": "NEW",
+      "summary": "Malformed time"
+    },
+    {
+      "assigned_to": "c@example.test",
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 73,
+      "last_change_time": "2026-08-29T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "73",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": "unknown",
+      "state": "known",
+      "status": "NEW",
+      "summary": "Future time"
+    },
+    {
+      "assigned_to": "d@example.test",
+      "boundary_reason": null,
+      "depth": 1,
+      "error_type": null,
+      "id": 74,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "74",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": false,
+      "state": "known",
+      "status": "NEW",
+      "summary": "Successor"
+    },
+    {
+      "assigned_to": null,
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 76,
+      "last_change_time": "invalid-but-resolved",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "76",
+      "requested_aliases": [],
+      "resolution": "FIXED",
+      "server": "primary",
+      "stale": false,
+      "state": "known",
+      "status": "RESOLVED",
+      "summary": "Resolved"
+    }
+  ],
+  "policy": {
+    "direction": "both",
+    "duration": null,
+    "resolved_mode": "include-no-traverse",
+    "resolved_statuses": [
+      "RESOLVED"
+    ],
+    "stale_after_days": 14
+  },
+  "provenance": [
+    {
+      "parameter_names": [],
+      "scope_kind": "bug-ids",
+      "server": "primary",
+      "source": null
+    }
+  ],
+  "roots": [
+    {
+      "id": 70,
+      "requested": "70",
+      "server": "primary"
+    },
+    {
+      "id": 71,
+      "requested": "71",
+      "server": "primary"
+    },
+    {
+      "id": 72,
+      "requested": "72",
+      "server": "primary"
+    },
+    {
+      "id": 73,
+      "requested": "73",
+      "server": "primary"
+    },
+    {
+      "id": 76,
+      "requested": "76",
+      "server": "primary"
+    }
+  ],
+  "schema": "bzr-dependency-analysis/v1",
+  "status": "complete",
+  "warnings": [
+    {
+      "code": "stale-timestamp-future",
+      "nodes": [
+        {
+          "id": 73,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    },
+    {
+      "code": "stale-timestamp-unknown",
+      "nodes": [
+        {
+          "id": 71,
+          "requested": null,
+          "server": "primary"
+        },
+        {
+          "id": 72,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    }
+  ]
+}

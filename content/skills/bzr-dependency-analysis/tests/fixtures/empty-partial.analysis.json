@@ -1,0 +1,61 @@
+{
+  "analysis_timestamp": "2026-08-28T12:00:00Z",
+  "bounds": {
+    "max_depth": 3,
+    "max_nodes": 2
+  },
+  "cap": {
+    "graph_cap_reached": false,
+    "omitted_discovered_identities": 0,
+    "scope_truncated": true
+  },
+  "components": [],
+  "edges": [],
+  "findings": {
+    "bottlenecks": [],
+    "execution_order": {
+      "assumptions": [
+        "partial-evidence",
+        "resolved-include-no-traverse"
+      ],
+      "component_order": [],
+      "cycle_impediments": [],
+      "incomplete_boundaries": []
+    },
+    "stale_blockers": [],
+    "structural_leaves": [],
+    "structural_roots": [],
+    "unassigned_blockers": []
+  },
+  "layers": [],
+  "limitations": [
+    "restriction-node-cap"
+  ],
+  "longest_chain": {
+    "kind": "edge_count",
+    "length": 0,
+    "path": []
+  },
+  "nodes": [],
+  "policy": {
+    "direction": "both",
+    "duration": null,
+    "resolved_mode": "include-no-traverse",
+    "resolved_statuses": [
+      "RESOLVED"
+    ],
+    "stale_after_days": 14
+  },
+  "provenance": [
+    {
+      "parameter_names": [],
+      "scope_kind": "restriction",
+      "server": "primary",
+      "source": "allowed"
+    }
+  ],
+  "roots": [],
+  "schema": "bzr-dependency-analysis/v1",
+  "status": "partial",
+  "warnings": []
+}
