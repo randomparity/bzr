@@ -27,8 +27,15 @@ equivalent entry, the installer does not prompt or rewrite either value.
 If either PATH lacks the directory, the installer asks `Add bzr to your PATH? [Y/N]`. Only a
 trimmed, case-insensitive `Y` or `Yes` is affirmative. On affirmation, it appends the directory to
 each missing scope with exactly one separator when needed. On `N`, empty input, any other input, or
-a prompt failure, it changes neither value and prints the existing actionable persistent command
-plus a note that a new shell is needed after running it.
+a prompt failure, it changes neither value and prints state-aware guidance. When the user PATH is
+missing, guidance prints the persistent append command and notes that a new shell is needed after
+running it. When only the process PATH is missing, guidance says to open a new shell, which will
+inherit the already-correct user PATH; it does not prescribe another persistent append.
+
+Before prompting, the installer checks whether the install directory contains `;`. Such a path
+cannot be represented as one semicolon-delimited PATH entry. The installer leaves both PATH scopes
+unchanged, reports that the installed executable remains usable by full path, and does not prompt
+for a write it cannot perform safely.
 
 If persisting PATH fails after an affirmative response, installation remains successful but the
 installer reports the failed PATH operation and the manual command. It must not claim PATH was
@@ -50,7 +57,9 @@ README change is checked by review and the existing installer smoke workflow.
 - Null or empty PATH values accept the install directory without a leading separator.
 - Existing values retain their exact spelling, order, and separators.
 - Case, whitespace, and trailing separators do not cause duplicate entries.
+- A semicolon in the install directory prevents PATH mutation without undoing installation.
 - Refusal and unavailable input are non-errors and leave environment state unchanged.
+- Refusal guidance distinguishes missing persistent state from a stale current process.
 - Persistence failure is reported with the attempted operation, install directory, and manual fix.
 - Re-running the installer after consent does not prompt or append a duplicate entry.
 
@@ -73,6 +82,8 @@ untrusted for archive bytes and is already controlled by the existing checksum v
 - Persistent mutation requires an explicit affirmative console response.
 - PATH membership is exact by entry rather than substring, preventing a similarly named directory
   from suppressing the prompt or causing an accidental duplicate.
+- The install directory must not contain the PATH delimiter before it can cross into either PATH
+  value, preventing one filesystem path from becoming multiple executable-search entries.
 - The write targets only the current user's environment through .NET's `User` scope; it does not
   request elevation or write the machine PATH.
 - Error output names the operation and recovery command without exposing credentials.
@@ -80,18 +91,19 @@ untrusted for archive bytes and is already controlled by the existing checksum v
 
 ### Out of scope
 
-The design does not validate whether a custom install directory is trustworthy or writable; the
-operator supplied it and the existing copy step already relies on it. It does not protect against a
-malicious local process modifying the same user's PATH concurrently. It does not change archive
-download or checksum controls.
+The design does not otherwise validate whether a custom install directory is trustworthy or
+writable; the operator supplied it and the existing copy step already relies on it. It does not
+protect against a malicious local process modifying the same user's PATH concurrently. It does not
+change archive download or checksum controls.
 
 ## Verification
 
 Windows smoke tests must prove affirmative persistence and current-process availability, refusal
-without mutation, exact duplicate detection, empty PATH handling, and cleanup restoration. Run
-PowerShell static analysis and the repository lint and test guardrails. Because this is a
-user-facing installer change, the real Windows installer smoke arm in CI is required; the local
-macOS host cannot substitute for that target.
+without mutation, state-aware refusal guidance, both partial-state repairs, exact duplicate
+detection, empty PATH handling, semicolon rejection, and cleanup restoration. Run PowerShell
+static analysis and the repository lint and test guardrails. Because this is a user-facing
+installer change, the real Windows installer smoke arm in CI is required; the local macOS host
+cannot substitute for that target.
 
 ## Global constraints
 

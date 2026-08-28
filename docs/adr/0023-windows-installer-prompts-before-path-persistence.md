@@ -22,13 +22,16 @@ already contain the directory, the installer does not prompt or rewrite either v
 
 PATH membership is determined by case-insensitive comparison of semicolon-delimited entries after
 trimming surrounding whitespace and trailing directory separators. The installer never rewrites or
-normalizes existing entries.
+normalizes existing entries. An install directory containing a semicolon cannot be represented as
+one PATH entry, so the installer refuses the PATH update and reports the constraint.
 
 ## Consequences
 
 - A consenting interactive user can invoke `bzr` immediately and in later shells.
 - The installer performs no environment mutation without an affirmative response.
 - Existing PATH spelling and ordering are preserved, and equivalent entries are not duplicated.
+- A custom install directory containing the PATH delimiter remains usable by full path but cannot
+  be added through this prompt.
 - Automated or noninteractive installation remains possible, but PATH stays unchanged unless an
   affirmative response is available.
 
