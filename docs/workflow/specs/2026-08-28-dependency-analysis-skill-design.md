@@ -229,15 +229,23 @@ The normative analyzer output is one `bzr-dependency-analysis/v1` document:
     "predecessor": {"id": 1199, "server": "primary"},
     "successor": {"id": 1200, "server": "primary"}
   }],
+  "findings": {
+    "bottlenecks": [],
+    "execution_order": {"assumptions": ["resolved-include-no-traverse"], "component_order": ["c0001", "c0002"], "cycle_impediments": [], "incomplete_boundaries": []},
+    "structural_leaves": [{"id": 1200, "requested": null, "server": "primary"}],
+    "structural_roots": [{"id": 1199, "requested": null, "server": "primary"}],
+    "unassigned_blockers": []
+  },
   "layers": [["c0001"], ["c0002"]],
   "limitations": [],
   "longest_chain": {"kind": "edge_count", "length": 1, "path": ["c0001", "c0002"]},
   "nodes": [
-    {"assigned_to": null, "boundary_reason": null, "depth": 1, "error_type": null, "id": 1199, "last_change_time": null, "provenance": {"command": "bug view", "server": "primary"}, "requested": "1199", "requested_aliases": [], "resolution": "FIXED", "server": "primary", "stale": "unknown", "state": "known", "status": "RESOLVED", "summary": "Foundation"},
+    {"assigned_to": null, "boundary_reason": null, "depth": 1, "error_type": null, "id": 1199, "last_change_time": null, "provenance": {"command": "bug view", "server": "primary"}, "requested": "1199", "requested_aliases": [], "resolution": "FIXED", "server": "primary", "stale": false, "state": "known", "status": "RESOLVED", "summary": "Foundation"},
     {"assigned_to": null, "boundary_reason": null, "depth": 0, "error_type": null, "id": 1200, "last_change_time": "2026-08-27T12:00:00Z", "provenance": {"command": "bug view", "server": "primary"}, "requested": "1200", "requested_aliases": [], "resolution": null, "server": "primary", "stale": false, "state": "known", "status": "NEW", "summary": "Delivery"}
   ],
   "policy": {},
   "provenance": [{"scope_kind": "bug-ids", "server": "primary"}],
+  "roots": [{"id": 1200, "requested": "1200", "server": "primary"}],
   "schema": "bzr-dependency-analysis/v1",
   "status": "complete",
   "warnings": []
@@ -245,8 +253,10 @@ The normative analyzer output is one `bzr-dependency-analysis/v1` document:
 ```
 
 Required top-level keys are exactly those shown: `analysis_timestamp`, `bounds`, `cap`, `components`,
-`edges`, `layers`, `limitations`, `longest_chain`, `nodes`, `policy`, `provenance`, `schema`,
-`status`, and `warnings`. The analyzer copies collection metadata and complete node records; each
+`edges`, `findings`, `layers`, `limitations`, `longest_chain`, `nodes`, `policy`, `provenance`,
+`roots`, `schema`, `status`, and `warnings`. The analyzer copies `analysis_timestamp`, `bounds`,
+`cap`, `limitations`, `policy`, `provenance`, `roots`, and `status` byte-semantically from the
+collection plus complete node records; each
 copied node retains every collection key and adds required `stale` (`true`, `false`, or `unknown`).
 Every component node exists in `nodes`, every node belongs to exactly one component, and every
 layer/longest-chain component exists in `components`.
@@ -268,6 +278,25 @@ internal ordering is not presented as executable order. Partial collection input
 `--allow-partial`; when allowed, status and limitations remain partial and all analyses are labelled
 structural over incomplete evidence. Serialization uses the collection document's canonical JSON
 rules.
+
+`findings` has exactly the five keys shown. Structural roots have zero incoming canonical edges;
+structural leaves have zero outgoing canonical edges. Both lists contain identity references in
+identity order. A bottleneck is a node with more than one outgoing canonical edge and has the exact
+shape `{"fan_out": NUMBER, "node": IDENTITY_REFERENCE}`; bottlenecks sort by descending `fan_out`
+then identity. An unassigned blocker is a known unresolved node with null `assigned_to` and at
+least one outgoing canonical edge; its list uses identity references in identity order.
+`execution_order.component_order` is the concatenation of `layers`; `cycle_impediments` contains
+cyclic component IDs in component order; and `incomplete_boundaries` contains every `unknown` or
+`boundary` identity in identity order. `assumptions` contains stable sorted codes: the selected
+resolved mode as `resolved-<mode>`, `partial-evidence` when status is partial, and
+`cycles-prevent-total-node-order` when cycle impediments are nonempty. This is a component order,
+not an order among members of a cyclic component.
+
+For a legal zero-node partial input accepted with `--allow-partial`, `components`, `edges`,
+`layers`, all four findings lists, `execution_order.component_order`, and
+`execution_order.cycle_impediments` are empty; assumptions are
+`["partial-evidence", "resolved-<mode>"]` in lexical order; `longest_chain` is exactly
+`{"kind": "edge_count", "length": 0, "path": []}`; warnings follow the normal state rules.
 
 Resolved-node policy is applied after recording the node and incoming edge. Status meanings
 are installation-specific, so the skill asks which statuses count as resolved or states the
@@ -399,9 +428,11 @@ behavioral Python tests compare helper output against fixture oracles byte-for-b
 | DA-16 | Stale, missing, and malformed timestamps at injected UTC time | `true` or `unknown` with warning | Wall-clock-dependent or ignored result | block |
 | DA-17 | Fatal error after one successful frontier | Valid `partial` JSON, generic stderr, exit 1; rejected without opt-in | Truncated stream accepted as complete | block |
 | DA-18 | Alias success/collapse and alias `not_found` | Canonical numeric node or linked unresolved root, one fetch and slot, byte-exact roots and alias provenance | Duplicate/unlinked node or fetch | block |
+| DA-19 | PM findings with unresolved roots, branch, and cycle | Roots preserved; deterministic structural roots/leaves, bottlenecks, unassigned blockers, and execution assumptions | Missing or ambiguous finding | block |
+| DA-20 | Zero-node partial restriction result | Exact empty findings and zero-length empty path with partial assumption | Rejection or fabricated path | block |
 
 `python3 content/skills/bzr-dependency-analysis/tests/test_analyze.py` runs DA-01 and DA-03
-through DA-11 plus DA-16. `python3 content/skills/bzr-dependency-analysis/tests/test_collect.py`
+through DA-11 plus DA-16, DA-19, and DA-20. `python3 content/skills/bzr-dependency-analysis/tests/test_collect.py`
 runs DA-04, DA-06, and DA-13 through DA-15 and DA-17 with a stubbed command runner and exact command
 log assertions, and runs DA-18 for alias canonicalization. `python3 content/skills/bzr-dependency-analysis/tests/test_render.py` runs DA-07
 against every deterministic renderer. `content/skills/bzr-dependency-analysis/tests/skill-contract.sh`
