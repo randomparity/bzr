@@ -31,7 +31,9 @@ each missing scope with exactly one separator when needed. On `N`, empty input, 
 a prompt failure, it changes neither value and prints state-aware guidance. When the user PATH is
 missing, guidance prints the persistent append command and notes that a new shell is needed after
 running it. When only the process PATH is missing, guidance says to open a new shell, which will
-inherit the already-correct user PATH; it does not prescribe another persistent append.
+inherit the already-correct user PATH; it does not prescribe another persistent append. Any install
+directory embedded in a printed PowerShell command is encoded as a valid single-quoted literal,
+including paths containing an apostrophe.
 
 Before prompting, the installer checks whether the install directory contains `;`. Such a path
 cannot be represented as one semicolon-delimited PATH entry. The installer leaves both PATH scopes
@@ -62,6 +64,7 @@ README change is checked by review and the existing installer smoke workflow.
 - A semicolon in the install directory prevents PATH mutation without undoing installation.
 - Refusal and unavailable input are non-errors and leave environment state unchanged.
 - Refusal guidance distinguishes missing persistent state from a stale current process.
+- Manual recovery guidance remains valid PowerShell for install paths containing an apostrophe.
 - Persistence failure is reported with the attempted operation, install directory, and manual fix.
 - Re-running the installer after consent does not prompt or append a duplicate entry.
 
@@ -103,9 +106,10 @@ change archive download or checksum controls.
 Windows smoke tests must prove affirmative persistence and current-process availability, refusal
 without mutation, state-aware refusal guidance, both partial-state repairs, exact duplicate
 detection, empty PATH handling, root-versus-drive-relative distinction, semicolon rejection, and
-cleanup restoration. Run PowerShell static analysis and the repository lint and test guardrails.
-Because this is a user-facing installer change, the real Windows installer smoke arm in CI is
-required; the local macOS host cannot substitute for that target.
+cleanup restoration. At least one affirmative and one negative case must invoke the installer entry
+point rather than only its PATH helper. Run PowerShell static analysis and the repository lint and
+test guardrails. Because this is a user-facing installer change, the real Windows installer smoke
+arm in CI is required; the local macOS host cannot substitute for that target.
 
 ## Global constraints
 
