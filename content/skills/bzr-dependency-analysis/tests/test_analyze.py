@@ -1,6 +1,7 @@
 """Behavioral contract for deterministic dependency-graph analysis."""
 
 import copy
+import importlib.util
 import json
 from pathlib import Path
 import subprocess
@@ -23,6 +24,12 @@ CASES = (
     "cross-server",
     "stale",
 )
+
+ANALYZE_SPEC = importlib.util.spec_from_file_location("dependency_analyzer", ANALYZE)
+if ANALYZE_SPEC is None or ANALYZE_SPEC.loader is None:
+    raise RuntimeError("unable to load dependency analyzer")
+ANALYZER = importlib.util.module_from_spec(ANALYZE_SPEC)
+ANALYZE_SPEC.loader.exec_module(ANALYZER)
 
 
 class AnalyzerTestCase(unittest.TestCase):
@@ -64,6 +71,23 @@ class AnalyzerTestCase(unittest.TestCase):
 
     def load_collection(self, case):
         return json.loads((FIXTURES / f"{case}.collection.json").read_text())
+
+    def collection_with_isolated_nodes(self, count):
+        collection = self.load_collection("branch")
+        template = collection["nodes"][0]
+        collection["bounds"]["max_nodes"] = count
+        collection["nodes"] = [
+            {
+                **template,
+                "id": bug_id,
+                "requested": str(bug_id),
+                "summary": f"Bug {bug_id}",
+            }
+            for bug_id in range(1, count + 1)
+        ]
+        collection["observations"] = []
+        collection["roots"] = [{"id": 1, "requested": "1", "server": "primary"}]
+        return collection
 
     def test_fixture_oracles_are_byte_exact(self):
         for case in CASES:
@@ -316,6 +340,67 @@ class AnalyzerTestCase(unittest.TestCase):
                 self.assertEqual(result.returncode, 2)
                 self.assertIsNone(output)
                 self.assertIn(b"analysis input error:", result.stderr)
+
+    def test_partial_cap_limitations_require_matching_flag_and_count_state(self):
+        graph_partial = self.load_collection("cycle")
+        scope_partial = self.load_collection("empty-partial")
+        mutations = []
+
+        graph_limitation_without_flag = copy.deepcopy(graph_partial)
+        graph_limitation_without_flag["cap"]["graph_cap_reached"] = False
+        mutations.append(graph_limitation_without_flag)
+
+        graph_flag_without_limitation = copy.deepcopy(graph_partial)
+        graph_flag_without_limitation["limitations"] = ["collection-http"]
+        mutations.append(graph_flag_without_limitation)
+
+        graph_cap_without_omissions = copy.deepcopy(graph_partial)
+        graph_cap_without_omissions["cap"]["omitted_discovered_identities"] = 0
+        mutations.append(graph_cap_without_omissions)
+
+        omissions_without_graph_cap = copy.deepcopy(scope_partial)
+        omissions_without_graph_cap["cap"]["omitted_discovered_identities"] = 1
+        mutations.append(omissions_without_graph_cap)
+
+        restriction_limitation_without_flag = copy.deepcopy(scope_partial)
+        restriction_limitation_without_flag["cap"]["scope_truncated"] = False
+        mutations.append(restriction_limitation_without_flag)
+
+        scope_limitation_without_flag = copy.deepcopy(scope_partial)
+        scope_limitation_without_flag["cap"]["scope_truncated"] = False
+        scope_limitation_without_flag["limitations"] = ["scope-node-cap"]
+        mutations.append(scope_limitation_without_flag)
+
+        scope_flag_without_limitation = copy.deepcopy(scope_partial)
+        scope_flag_without_limitation["limitations"] = ["collection-http"]
+        mutations.append(scope_flag_without_limitation)
+
+        both_scope_limitations = copy.deepcopy(scope_partial)
+        both_scope_limitations["limitations"] = [
+            "restriction-node-cap",
+            "scope-node-cap",
+        ]
+        mutations.append(both_scope_limitations)
+
+        for collection in mutations:
+            with self.subTest(collection=collection):
+                result, output = self.run_analyzer(collection, allow_partial=True)
+                self.assertEqual(result.returncode, 2)
+                self.assertIsNone(output)
+                self.assertIn(b"analysis input error:", result.stderr)
+
+    def test_component_namespace_accepts_9999_isolated_components(self):
+        document = ANALYZER.analyze(self.collection_with_isolated_nodes(9_999))
+        self.assertEqual(len(document["components"]), 9_999)
+        self.assertEqual(document["components"][-1]["id"], "c9999")
+
+    def test_component_namespace_rejects_10000_isolated_components(self):
+        collection = self.collection_with_isolated_nodes(10_000)
+        with self.assertRaisesRegex(
+            ANALYZER.AnalysisInputError,
+            "four-digit component namespace",
+        ):
+            ANALYZER.analyze(collection)
 
     def test_truncated_input_is_rejected_without_replacing_existing_output(self):
         with tempfile.TemporaryDirectory() as directory:
