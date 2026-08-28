@@ -28,8 +28,8 @@ unavailable, the skill may perform the same steps directly but must report that 
 helper was unavailable. It must explicitly warn that collection can make one request per bug.
 A separate narrowly scoped issue will
 request a deterministic batched adjacency primitive that preserves all requested IDs and
-their failures. The skill must detect and prefer that primitive only after it is released;
-it must not describe an unreleased command or flag.
+their failures. Adoption of any released primitive belongs to a later skill update; this version
+must not describe an unreleased command or flag.
 
 ## Workflow
 
