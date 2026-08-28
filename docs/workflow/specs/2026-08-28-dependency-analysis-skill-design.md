@@ -88,7 +88,11 @@ id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on`, be
 command-level failure exposes the versioned structured error envelope. It therefore makes at most
 one command per admitted bug. The field list additionally
 requests `product`, `target_milestone`, or `version` when the corresponding restriction is
-active. Query restrictions use the bounded, fully paginated server-qualified membership set
+active. Both adjacency fields are fetched so reciprocal evidence can be normalized, but the
+selected direction is filtered before discovery: only selected adjacency contributes admission,
+observations, cap consumption, or omitted-identity counts. `depends_on` selects dependency
+neighbors, `blocks` selects blocking neighbors, and `both` selects their union. Query restrictions
+use the bounded, fully paginated server-qualified membership set
 described above. Returned adjacency lists add an observation when both endpoint nodes are admitted,
 even when the target is already fetched. Classified per-ID failures create unknown nodes
 carrying only the server, requested identifier, and structured error type. A failed or missing node is never
@@ -245,6 +249,7 @@ The normative analyzer output is one `bzr-dependency-analysis/v1` document:
     "execution_order": {"assumptions": ["resolved-include-no-traverse"], "component_order": ["c0001", "c0002"], "cycle_impediments": [], "incomplete_boundaries": []},
     "structural_leaves": [{"id": 1200, "requested": null, "server": "primary"}],
     "structural_roots": [{"id": 1199, "requested": null, "server": "primary"}],
+    "stale_blockers": [],
     "unassigned_blockers": []
   },
   "layers": [["c0001"], ["c0002"]],
@@ -290,12 +295,14 @@ internal ordering is not presented as executable order. Partial collection input
 structural over incomplete evidence. Serialization uses the collection document's canonical JSON
 rules.
 
-`findings` has exactly the five keys shown. Structural roots have zero incoming canonical edges;
+`findings` has exactly the six keys shown. Structural roots have zero incoming canonical edges;
 structural leaves have zero outgoing canonical edges. Both lists contain identity references in
 identity order. A bottleneck is a node with more than one outgoing canonical edge and has the exact
 shape `{"fan_out": NUMBER, "node": IDENTITY_REFERENCE}`; bottlenecks sort by descending `fan_out`
 then identity. An unassigned blocker is a known unresolved node with null `assigned_to` and at
 least one outgoing canonical edge; its list uses identity references in identity order.
+A stale blocker is a node with `stale: true` and at least one outgoing canonical edge; its list
+uses identity references in identity order. Stale nodes with no successors are not blockers.
 `execution_order.component_order` is the concatenation of `layers`; `cycle_impediments` contains
 cyclic component IDs in component order; and `incomplete_boundaries` contains every `unknown` or
 `boundary` identity in identity order. `assumptions` contains stable sorted codes: the selected
@@ -304,7 +311,7 @@ resolved mode as `resolved-<mode>`, `partial-evidence` when status is partial, a
 not an order among members of a cyclic component.
 
 For a legal zero-node partial input accepted with `--allow-partial`, `components`, `edges`,
-`layers`, all four findings lists, `execution_order.component_order`, and
+`layers`, all five findings lists, `execution_order.component_order`, and
 `execution_order.cycle_impediments` are empty; assumptions are
 `["partial-evidence", "resolved-<mode>"]` in lexical order; `longest_chain` is exactly
 `{"kind": "edge_count", "length": 0, "path": []}`; warnings follow the normal state rules.
@@ -442,11 +449,12 @@ behavioral Python tests compare helper output against fixture oracles byte-for-b
 | DA-18 | Alias success/collapse and alias `not_found` | Canonical numeric node or linked unresolved root, one fetch and slot, byte-exact roots and alias provenance | Duplicate/unlinked node or fetch | block |
 | DA-19 | PM findings with unresolved roots, branch, and cycle | Roots preserved; deterministic structural roots/leaves, bottlenecks, unassigned blockers, and execution assumptions | Missing or ambiguous finding | block |
 | DA-20 | Zero-node partial restriction result | Exact empty findings and zero-length empty path with partial assumption | Rejection or fabricated path | block |
+| DA-21 | Direction isolation at cap | Only selected adjacency admits nodes and consumes cap for `depends_on`, `blocks`, and `both` | Unselected neighbor changes inventory | block |
 
 `python3 content/skills/bzr-dependency-analysis/tests/test_analyze.py` runs DA-01 and DA-03
 through DA-11 plus DA-16, DA-19, and DA-20. `python3 content/skills/bzr-dependency-analysis/tests/test_collect.py`
 runs DA-04, DA-06, and DA-13 through DA-15 and DA-17 with a stubbed command runner and exact command
-log assertions, and runs DA-18 for alias canonicalization. `python3 content/skills/bzr-dependency-analysis/tests/test_render.py` runs DA-07
+log assertions, and runs DA-18 for alias canonicalization plus DA-21 for direction isolation. `python3 content/skills/bzr-dependency-analysis/tests/test_render.py` runs DA-07
 against every deterministic renderer. `content/skills/bzr-dependency-analysis/tests/skill-contract.sh`
 runs DA-02 and DA-12 plus static command allowlist and phantom-flag checks. The fixture suite validates the skill
 contract and every documented `bzr` invocation. A real
@@ -506,8 +514,11 @@ collect→analyze→render chain through the real `bzr` binary. It asserts serve
 resolved handling, caps, and inert rendered text without resolving any stage from the checkout.
 The phase also analyzes the installed deterministic cycle fixture and asserts its cyclic component;
 it does not attempt an impossible live circular mutation.
-`tools/record-demo.sh` gains a named dependency-analysis
-mode that seeds and records the graph without changing the existing README demo default.
+`tools/record-demo.sh` gains a named dependency-analysis mode that seeds and records the graph as
+`docs/assets/bzr-dependency-analysis-demo.cast` and
+`docs/assets/bzr-dependency-analysis-demo.gif` without changing the existing README demo default.
+`docs/bzr-dependency-analysis.md` embeds the GIF and links the cast. The shell contract check
+asserts both references so a recorded but unpublished demonstration fails verification.
 
 Verification uses focused fixture checks while iterating, then `make lint`, `make test`, and
 `make functional-test-all`. The functional demo is exercised against the same real Bugzilla
