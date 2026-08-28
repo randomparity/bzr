@@ -221,8 +221,8 @@ The normative analyzer output is one `bzr-dependency-analysis/v1` document:
   "bounds": {"max_depth": 5, "max_nodes": 200},
   "cap": {"graph_cap_reached": false, "omitted_discovered_identities": 0, "scope_truncated": false},
   "components": [
-    {"cyclic": false, "id": "c0001", "nodes": [{"id": 1199, "server": "primary"}]},
-    {"cyclic": false, "id": "c0002", "nodes": [{"id": 1200, "server": "primary"}]}
+    {"cyclic": false, "id": "c0001", "nodes": [{"id": 1199, "requested": null, "server": "primary"}]},
+    {"cyclic": false, "id": "c0002", "nodes": [{"id": 1200, "requested": null, "server": "primary"}]}
   ],
   "edges": [{
     "observations": ["depends_on"],
@@ -233,8 +233,8 @@ The normative analyzer output is one `bzr-dependency-analysis/v1` document:
   "limitations": [],
   "longest_chain": {"kind": "edge_count", "length": 1, "path": ["c0001", "c0002"]},
   "nodes": [
-    {"id": 1199, "server": "primary", "stale": false, "state": "known", "summary": "Foundation"},
-    {"id": 1200, "server": "primary", "stale": false, "state": "known", "summary": "Delivery"}
+    {"assigned_to": null, "boundary_reason": null, "depth": 1, "error_type": null, "id": 1199, "last_change_time": null, "provenance": {"command": "bug view", "server": "primary"}, "requested": "1199", "requested_aliases": [], "resolution": "FIXED", "server": "primary", "stale": "unknown", "state": "known", "status": "RESOLVED", "summary": "Foundation"},
+    {"assigned_to": null, "boundary_reason": null, "depth": 0, "error_type": null, "id": 1200, "last_change_time": "2026-08-27T12:00:00Z", "provenance": {"command": "bug view", "server": "primary"}, "requested": "1200", "requested_aliases": [], "resolution": null, "server": "primary", "stale": false, "state": "known", "status": "NEW", "summary": "Delivery"}
   ],
   "policy": {},
   "provenance": [{"scope_kind": "bug-ids", "server": "primary"}],
@@ -250,6 +250,11 @@ Required top-level keys are exactly those shown: `analysis_timestamp`, `bounds`,
 copied node retains every collection key and adds required `stale` (`true`, `false`, or `unknown`).
 Every component node exists in `nodes`, every node belongs to exactly one component, and every
 layer/longest-chain component exists in `components`.
+Component members and warning node lists use exactly the identity-reference object
+`{"id": NUMBER_OR_NULL, "requested": STRING_OR_NULL, "server": STRING}`. `requested` is null
+when `id` is numeric and is the unresolved original identifier when `id` is null. This same object
+links an identity reference to exactly one analysis node. Edge endpoints remain the exact numeric
+object `{"id": NUMBER, "server": STRING}` because observations cannot have null-ID endpoints.
 The total analysis identity key is server alias by Unicode code-point order, then numeric ID; a
 null-ID unresolved root sorts after numeric IDs by its `requested` string. Edges, warning node lists,
 SCC minima/members, component numbering, and every tie break use this key; collection depth order
@@ -293,9 +298,21 @@ Staleness is an observation, not an ordering weight. The user supplies a positiv
 `collect.py` captures the current instant exactly once for a live run and canonicalizes it to
 second-precision UTC RFC 3339 (`YYYY-MM-DDTHH:MM:SSZ`). Tests and replay may supply
 `--analysis-timestamp` only in that exact form; malformed values fail before collection. The collector parses `last_change_time` as an
-absolute timestamp. A known unresolved node is stale when its age is at least the threshold.
-Missing, invalid, or future node timestamps produce `stale: unknown` plus stable
-`stale-timestamp-unknown` or `stale-timestamp-future` warnings.
+absolute timestamp. The analyzer derives every comparison solely from the collection's validated
+`analysis_timestamp`. Staleness is total over legal nodes:
+
+| Node case | `stale` | Warning |
+| --- | --- | --- |
+| known, unresolved, valid timestamp not in the future | age at least threshold | none |
+| known, resolved, any timestamp value | `false` | none |
+| known, unresolved, missing or invalid timestamp | `unknown` | `stale-timestamp-unknown` |
+| known, unresolved, valid future timestamp | `unknown` | `stale-timestamp-future` |
+| unknown | `unknown` | none |
+| boundary (`pending_fetch`, `depth_limit`, `scope_restriction`, or `fetch_interrupted`) | `unknown` | none |
+
+Schema-intentional null timestamps on resolved, unknown, and boundary nodes never emit timestamp
+warnings. Warning node lists use the identity-reference object above, are deduplicated, and contain
+exactly the affected known unresolved nodes.
 
 A time-based critical path is forbidden unless duration data exists and the user explicitly
 chooses its units and interpretation. Weighted analysis names the duration field, missing-value
