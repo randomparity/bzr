@@ -95,6 +95,17 @@ even when the target is already fetched. Classified per-ID failures create unkno
 carrying only the server, requested identifier, and structured error type. A failed or missing node is never
 silently removed.
 
+Empirical functional-server evidence fixes the fallback boundary. Across the repository's stock
+Bugzilla 5.0.6, 5.2, and 5.3.3+ harnesses, single-ID reads return structured API code 101 for a missing ID and 102 for an
+inaccessible restricted bug; a connection refusal is a global HTTP failure. Multi-ID
+`--permissive` continues after codes 101/102 but exposes only an untyped prose `error`, and an
+alias plus its numeric ID returns the same bug twice. Consequently collection uses single-ID
+commands for typed classification and performs its own alias/numeric collapse. `bug links` batches
+each breadth-first frontier efficiently, but omits the root, collapses revisited observations, and
+cannot expose inaccessible endpoints, so it is discovery evidence rather than a complete graph
+inventory. Stock Bugzilla rejects circular dependency mutations; cycle behavior remains a
+deterministic helper fixture rather than a live-server fixture.
+
 Depth is the minimum hop distance from any root. A newly discovered node beyond the maximum
 depth is recorded as a boundary node but not fetched, provided it fits inside the maximum
 distinct-node count. The node cap covers every emitted known, unknown, or boundary
@@ -103,7 +114,7 @@ aggregate `cap_reached: true` and `omitted_discovered_identities` count. The cou
 distinct server-qualified identities rejected while scanning all adjacency lists already returned
 for the current frontier; duplicate observations count once. No further frontier is fetched, so
 deeper undiscovered identities are neither named nor counted. Collection order is canonical: server
-aliases lexically, caller-supplied roots in original order after stable deduplication,
+aliases lexically, numeric roots sorted ascending after stable deduplication,
 breadth-first depth, and numeric bug ID within each frontier. Returned nodes and adjacency IDs are
 sorted before admission, and output records use the same order. Scope restrictions
 are evaluated from fetched fields or the initial scope membership; nodes outside the
@@ -114,17 +125,18 @@ admitted identity in that frontier is fetched in canonical order. Their returned
 record observations only between admitted endpoints and contribute rejected identities to the
 deduplicated omitted count. Collection then stops before fetching a next frontier.
 
-Only a structured `not_found` failure becomes an unknown node under the released fallback. Generic
-`http` and `api` failures, including permission failures that lack a stable published code, are
-fatal until the follow-up primitive supplies a versioned per-ID classification. Global
+The single-ID structured error envelope makes Bugzilla API codes 100/101 (`not_found`) and 102
+(`inaccessible`) per-resource failures; each becomes an unknown node with that stable `error_type`.
+Other `api` failures and every `http` failure are fatal. Global
 authentication, TLS, transport, schema-version, malformed-output, and unclassified failures stop
 collection and preserve a partial inventory with a run-level limitation. Batch failures are never
 copied onto every requested node. Shareable records retain only error type and affected identifier,
 not raw stderr or server messages.
 On fatal stop, the identity whose command failed and every admitted but unfetched identity remain
 `boundary` with `boundary_reason: fetch_interrupted`; the generic failure exists only as a run-level
-limitation. A successful fetch changes the node to `known`; `not_found` changes it to `unknown`.
-For an alias lookup, structured `not_found` retains the consumed slot and becomes a nonnumeric
+limitation. A successful fetch changes the node to `known`; a classified per-resource failure
+changes it to `unknown`. For an alias lookup, structured `not_found` or `inaccessible` retains the
+consumed slot and becomes a nonnumeric
 `unknown` node with null `id`, the original alias in `requested`, an empty `requested_aliases`, and
 no run-fatal limitation. Every other alias failure takes the fatal `fetch_interrupted` transition.
 
@@ -243,7 +255,7 @@ The normative analyzer output is one `bzr-dependency-analysis/v1` document:
     {"assigned_to": null, "boundary_reason": null, "depth": 1, "error_type": null, "id": 1199, "last_change_time": null, "provenance": {"command": "bug view", "server": "primary"}, "requested": "1199", "requested_aliases": [], "resolution": "FIXED", "server": "primary", "stale": false, "state": "known", "status": "RESOLVED", "summary": "Foundation"},
     {"assigned_to": null, "boundary_reason": null, "depth": 0, "error_type": null, "id": 1200, "last_change_time": "2026-08-27T12:00:00Z", "provenance": {"command": "bug view", "server": "primary"}, "requested": "1200", "requested_aliases": [], "resolution": null, "server": "primary", "stale": false, "state": "known", "status": "NEW", "summary": "Delivery"}
   ],
-  "policy": {},
+  "policy": {"direction": "both", "duration": null, "resolved_mode": "include-no-traverse", "resolved_statuses": ["RESOLVED"], "stale_after_days": 14},
   "provenance": [{"scope_kind": "bug-ids", "server": "primary"}],
   "roots": [{"id": 1200, "requested": "1200", "server": "primary"}],
   "schema": "bzr-dependency-analysis/v1",
