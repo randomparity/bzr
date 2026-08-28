@@ -116,7 +116,20 @@ python3 "$_DA_RENDER" --input "$_DA_ANALYSIS" --format mermaid \
 test_begin "123m. installed live pipeline preserves identities, bounds, and resolved policy"
 if [[ $_DA_PIPELINE_OK -eq 1 ]] &&
   jq -e --argjson root "$_DA_ROOT" --argjson base "$_DA_BASE" \
+    --argjson left "$_DA_LEFT" --argjson right "$_DA_RIGHT" \
     --argjson resolved "$_DA_RESOLVED" --argjson skipped "$_DA_RESOLVED_PARENT" '
+      def edge($server; $predecessor; $successor): {
+        observations: ["blocks", "depends_on"],
+        predecessor: {id: $predecessor, server: $server},
+        successor: {id: $successor, server: $server}
+      };
+      def inventory($server): [
+        edge($server; $base; $left),
+        edge($server; $base; $right),
+        edge($server; $left; $root),
+        edge($server; $right; $root),
+        edge($server; $resolved; $root)
+      ];
       .schema == "bzr-dependency-analysis/v1" and
       .status == "complete" and
       .bounds == {"max_depth": 5, "max_nodes": 20} and
@@ -126,6 +139,10 @@ if [[ $_DA_PIPELINE_OK -eq 1 ]] &&
         "scope_truncated": false
       } and
       ([.nodes[] | select(.id == $root) | .server] | sort) == ["public", "test"] and
+      .edges == (inventory("public") + inventory("test")) and
+      all(.edges[];
+        .predecessor.server == .successor.server and
+        (.predecessor.server == "public" or .predecessor.server == "test")) and
       ([.nodes[] | select(.id == $resolved and .status == "RESOLVED")] | length) == 2 and
       ([.nodes[] | select(.id == $skipped)] | length) == 0 and
       ([.findings.bottlenecks[] |

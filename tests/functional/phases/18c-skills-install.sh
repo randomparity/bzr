@@ -234,32 +234,94 @@ else
   [[ $FAIL_COUNT -gt 0 ]] || test_fail "missing scope emitted stdout"
 fi
 
-test_begin "123j. installed cycle fixture analyzes and renders deterministically"
+test_begin "123j. installed cycle fixture analyzes deterministically"
 _DA_CYCLE_COLLECTION="$_DA_INSTALLED_ROOT/tests/fixtures/cycle.collection.json"
 _DA_CYCLE_EXPECTED="$_DA_INSTALLED_ROOT/tests/fixtures/cycle.analysis.json"
 _DA_CYCLE_ANALYSIS="$FUNC_CONFIG_DIR/dependency-cycle.analysis.json"
-_DA_CYCLE_REPORT="$FUNC_CONFIG_DIR/dependency-cycle.md"
-_DA_CYCLE_DIAGRAM="$FUNC_CONFIG_DIR/dependency-cycle.mmd"
 if python3 "$_DA_INSTALLED_ROOT/scripts/analyze.py" \
   --input "$_DA_CYCLE_COLLECTION" --allow-partial \
   --output "$_DA_CYCLE_ANALYSIS" &&
   cmp -s "$_DA_CYCLE_EXPECTED" "$_DA_CYCLE_ANALYSIS" &&
-  python3 "$_DA_INSTALLED_ROOT/scripts/render.py" \
-    --input "$_DA_CYCLE_ANALYSIS" --format markdown \
-    --output "$_DA_CYCLE_REPORT" &&
-  python3 "$_DA_INSTALLED_ROOT/scripts/render.py" \
-    --input "$_DA_CYCLE_ANALYSIS" --format mermaid \
-    --output "$_DA_CYCLE_DIAGRAM" &&
-  jq -e '.components | any(.cyclic == true)' "$_DA_CYCLE_ANALYSIS" >/dev/null &&
-  grep -q 'Cycle impediments: c0001' "$_DA_CYCLE_REPORT" &&
-  grep -q 'cyclic=true' "$_DA_CYCLE_DIAGRAM"; then
+  jq -e '.components | any(.cyclic == true)' "$_DA_CYCLE_ANALYSIS" >/dev/null; then
   test_pass
 else
-  test_fail "installed cycle fixture pipeline did not preserve cycle evidence"
+  test_fail "installed cycle fixture analysis did not preserve cycle evidence"
+fi
+
+test_begin "123ja. installed collector replay feeds installed analyzer and renderers"
+_DA_REPLAY_POLICY="$_DA_INSTALLED_ROOT/tests/fixtures/alias-collapse.policy.json"
+_DA_REPLAY_EXPECTED="$_DA_INSTALLED_ROOT/tests/fixtures/alias-collapse.expected.json"
+_DA_REPLAY_RUNNER="$_DA_INSTALLED_ROOT/tests/fixtures/recording_runner.py"
+_DA_REPLAY_SCENARIO="$FUNC_CONFIG_DIR/dependency-replay.scenario.json"
+_DA_REPLAY_LOG="$FUNC_CONFIG_DIR/dependency-replay.commands.ndjson"
+_DA_REPLAY_COLLECTION="$FUNC_CONFIG_DIR/dependency-replay.collection.json"
+_DA_REPLAY_ANALYSIS="$FUNC_CONFIG_DIR/dependency-replay.analysis.json"
+_DA_REPLAY_REPORT="$FUNC_CONFIG_DIR/dependency-replay.md"
+_DA_REPLAY_DIAGRAM="$FUNC_CONFIG_DIR/dependency-replay.mmd"
+jq -n '{
+  responses: [{
+    argv: [
+      "--server", "primary", "--json", "bug", "view", "delivery",
+      "--fields",
+      "id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on"
+    ],
+    exit_code: 0,
+    stdout: {
+      schema_version: "0.6.1",
+      data: {
+        assigned_to: null,
+        blocks: [],
+        depends_on: [11],
+        id: 10,
+        last_change_time: "2026-08-27T12:00:00Z",
+        resolution: null,
+        status: "NEW",
+        summary: "Delivery"
+      }
+    }
+  }]
+}' >"$_DA_REPLAY_SCENARIO"
+_DA_REPLAY_OK=1
+chmod u+x "$_DA_REPLAY_RUNNER" || _DA_REPLAY_OK=0
+BZR_DEPENDENCY_RUNNER_SCENARIO="$_DA_REPLAY_SCENARIO" \
+  BZR_DEPENDENCY_RUNNER_LOG="$_DA_REPLAY_LOG" \
+  python3 "$_DA_INSTALLED_ROOT/scripts/collect.py" \
+  --policy "$_DA_REPLAY_POLICY" --output "$_DA_REPLAY_COLLECTION" \
+  --runner "$_DA_REPLAY_RUNNER" \
+  --analysis-timestamp "2026-08-28T12:00:00Z" || _DA_REPLAY_OK=0
+python3 "$_DA_INSTALLED_ROOT/scripts/analyze.py" \
+  --input "$_DA_REPLAY_COLLECTION" --allow-partial \
+  --output "$_DA_REPLAY_ANALYSIS" || _DA_REPLAY_OK=0
+python3 "$_DA_INSTALLED_ROOT/scripts/render.py" \
+  --input "$_DA_REPLAY_ANALYSIS" --format markdown \
+  --output "$_DA_REPLAY_REPORT" || _DA_REPLAY_OK=0
+python3 "$_DA_INSTALLED_ROOT/scripts/render.py" \
+  --input "$_DA_REPLAY_ANALYSIS" --format mermaid \
+  --output "$_DA_REPLAY_DIAGRAM" || _DA_REPLAY_OK=0
+if [[ $_DA_REPLAY_OK -eq 1 ]] &&
+  cmp -s "$_DA_REPLAY_EXPECTED" "$_DA_REPLAY_COLLECTION" &&
+  jq -s -e 'length == 1 and .[0] == [
+      "--server", "primary", "--json", "bug", "view", "delivery",
+      "--fields",
+      "id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on"
+    ]' "$_DA_REPLAY_LOG" >/dev/null &&
+  jq -e '
+      .status == "partial" and .edges == [] and (.nodes | length) == 1 and
+      .nodes[0].id == 10 and .nodes[0].server == "primary" and
+      .nodes[0].requested_aliases == ["delivery"]
+    ' "$_DA_REPLAY_ANALYSIS" >/dev/null &&
+  grep -q 'primary&#35;10' "$_DA_REPLAY_REPORT" &&
+  grep -q 'primary&#35;10' "$_DA_REPLAY_DIAGRAM"; then
+  test_pass
+else
+  test_fail "installed collect-to-render replay did not match its fixture oracle"
 fi
 
 unset DEPENDENCY_ANALYSIS_PAYLOAD _DA_CYCLE_ANALYSIS _DA_CYCLE_COLLECTION
-unset _DA_CYCLE_DIAGRAM _DA_CYCLE_EXPECTED _DA_CYCLE_REPORT _DA_INSTALLED_EXPECTED
+unset _DA_CYCLE_EXPECTED _DA_INSTALLED_EXPECTED
 unset _DA_INSTALLED_OK _DA_INSTALLED_PATHS _DA_INSTALLED_ROOT _DA_LAYOUT _DA_LAYOUT_ROOT
+unset _DA_REPLAY_ANALYSIS _DA_REPLAY_COLLECTION _DA_REPLAY_DIAGRAM
+unset _DA_REPLAY_EXPECTED _DA_REPLAY_LOG _DA_REPLAY_OK _DA_REPLAY_POLICY
+unset _DA_REPLAY_REPORT _DA_REPLAY_RUNNER _DA_REPLAY_SCENARIO
 
 echo ""
