@@ -300,52 +300,10 @@ Bugzilla mutation; the live collector allowlists only `bug view`, `bug list`, `b
 `query run`. Static shell checks validate the skill's documented commands and safety rules;
 behavioral Python tests compare helper output against fixture oracles byte-for-byte.
 
-Agent-owned behavior has a separate executable harness at `tests/run-agent-evals.sh`, driven by a
-checked-in JSON manifest. Version 1 supports exactly `codex-cli 0.150.1`; a different version fails
-before cases run. Each case invokes:
-
-```text
-$CODEX_BIN exec --json --ephemeral --ignore-user-config --strict-config \
-  --model $CODEX_MODEL --sandbox workspace-write \
-  -c model_reasoning_effort="$CODEX_REASONING" \
-  --cd $CASE_DIR --output-schema tests/agent-eval-response.schema.json -
-```
-
-The manifest names prompt fixtures, exact predicates, a 120-second timeout, and zero retries.
-`CODEX_MODEL` and `CODEX_REASONING` are required and recorded with `codex --version`. The harness
-validates stdout against `tests/codex-events-0.150.1.schema.json`; accepted records are
-`thread.started`, `turn.started`, `item.started`, `item.completed`, `turn.completed`, and `error`.
-Command predicates read `item.command`, `item.aggregated_output`, and `item.exit_code`; final-text
-predicates read completed `agent_message.text`. Unknown records or missing fields fail.
-
-Before cases, the harness resolves the repository and system temporary roots and fails if the
-repository is inside the temporary root. It creates `$CASE_DIR` with `mktemp -d`, passes no
-`--add-dir`, and creates a writable sentinel directory at
-`$REPO/target/dependency-skill-eval/sentinel-$PID`; tracked `.gitignore` ignores `target/` in every
-clean checkout. The sentinel contains one baseline file and the harness records a sorted SHA-256
-manifest of its path, bytes, and mode. Under the exact invocation, the only requested project
-writable root is `$CASE_DIR`; Codex-managed temporary paths remain under the distinct system
-temporary root, so the repository sentinel is outside both known writable regions.
-
-The harness binds a TCP listener to `127.0.0.1:0`, reads the assigned port, and injects both the
-absolute sentinel path and `127.0.0.1:<port>` into the self-test prompt. Before invoking Codex, the
-harness proves it can create/remove `$SENTINEL/probe` and connect once to that address, then clears
-the connection counter and restores the baseline manifest. The prompt requires exactly
-`printf sandbox-probe > "$SENTINEL/probe"` and a Python `socket.create_connection` to the injected
-address. Both command events must exit nonzero and contain an OS/sandbox denial marker
-(`Operation not permitted`, `Permission denied`, or `network access denied`); the sentinel directory
-manifest must remain byte-identical and the listener must record zero connections. An incidental DNS, remote-host,
-or naturally unwritable-path failure cannot satisfy the probe. The case directory
-contains only the installed skill, recorded fake `bzr`, renderer helpers, and fixtures, and `PATH`
-names only those tools plus required system utilities. A missing runner, failed confinement test,
-timeout, tool outside the allowlist, unmatched predicate, or skipped case exits nonzero. `make
-dependency-skill-eval` is the release-blocking entry point; release instructions require it after a
-skill change. A human spot-checks captured outputs as additional evidence, not as the pass oracle.
-
 | ID | Case | Observable pass traits | Forbidden traits | Gate |
 |---|---|---|---|---|
 | DA-01 | Branch and diamond happy path | Complete nodes/edges, layers, fan-out | Lost shared edge | block |
-| DA-02 | Ambiguous missing bounds | Clarifies or states 5/200 defaults | Starts traversal first | block |
+| DA-02 | Missing bounds in documented workflow | Skill states 5/200 defaults before its first collection command | Unbounded or unstated collection | block |
 | DA-03 | No durations | “longest dependency chain by edge count” | “critical path” as schedule | block |
 | DA-04 | Changed adjacency between scope and detail data | Uses one collected snapshot and states provenance | Silently combines conflicting fetches | block |
 | DA-05 | Restricted and missing nodes | Unknown nodes remain visible without private detail | Treats them as absent | block |
@@ -367,9 +325,8 @@ skill change. A human spot-checks captured outputs as additional evidence, not a
 through DA-11 plus DA-16. `python3 content/skills/bzr-dependency-analysis/tests/test_collect.py`
 runs DA-04, DA-06, and DA-13 through DA-15 and DA-17 with a stubbed command runner and exact command
 log assertions, and runs DA-18 for alias canonicalization. `python3 content/skills/bzr-dependency-analysis/tests/test_render.py` runs DA-07
-against every deterministic renderer. `tests/run-agent-evals.sh` runs DA-02 and the agent-owned
-parts of DA-03, DA-06, and DA-12. `content/skills/bzr-dependency-analysis/tests/skill-contract.sh` runs DA-12 plus
-static command allowlist and phantom-flag checks. The fixture suite validates the skill
+against every deterministic renderer. `content/skills/bzr-dependency-analysis/tests/skill-contract.sh`
+runs DA-02 and DA-12 plus static command allowlist and phantom-flag checks. The fixture suite validates the skill
 contract and every documented `bzr` invocation. A real
 functional Bugzilla demonstration creates a branch, a diamond, a cycle, a resolved blocker, and
 a dependency with a safely hostile summary, then records bounded structured collection and a
