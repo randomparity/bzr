@@ -92,10 +92,11 @@ requests `product`, `target_milestone`, or `version` when the corresponding rest
 active. Both adjacency fields are fetched so reciprocal evidence can be normalized. The selected
 direction controls discovery, admission, cap consumption, and omitted-identity counts:
 `depends_on` selects dependency neighbors, `blocks` selects blocking neighbors, and `both` selects
-their union. The collector stages every selected-field observation plus every unselected-field
-observation whose endpoints are already admitted. After all admitted nodes are fetched, a
-deterministic second pass establishes canonical edges from selected observations, then attaches
-staged unselected observations only when they normalize onto one of those established edges. Thus
+their union. The collector stages every returned selected- and unselected-field observation before
+endpoint filtering. After all admission and fetching finishes, a deterministic second pass first
+filters staged observations to pairs whose endpoints are admitted, establishes canonical edges
+from selected observations, then attaches unselected observations only when they normalize onto
+one of those established edges. Thus
 unselected evidence can enrich provenance but cannot admit an endpoint, create an edge, or alter
 analysis, regardless of fetch order. Query restrictions
 use the bounded, fully paginated server-qualified membership set
