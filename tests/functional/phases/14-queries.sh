@@ -80,6 +80,21 @@ if assert_success; then
 fi
 unset _Q_URL
 
+test_begin "82c. weekly-status query collection shape"
+_Q_WEEKLY_URL="${BZ_URL}/buglist.cgi?product=FuncTestProd&query_format=advanced"
+run_bzr query save weekly-status-fixture --from-url "$_Q_WEEKLY_URL"
+if assert_success; then
+    run_bzr query run weekly-status-fixture \
+        --fields id,summary,status,resolution,assigned_to,priority,severity,target_milestone,deadline,last_change_time,whiteboard,blocks,depends_on \
+        --paginate
+    if assert_success && assert_json_array_min_length '.' 1 &&
+        assert_json '.[0] | has("id")' "true" &&
+        assert_json '.[0] | has("last_change_time")' "true" &&
+        assert_json '.[0] | has("blocks")' "true" &&
+        assert_json '.[0] | has("depends_on")' "true"; then test_pass; fi
+fi
+unset _Q_WEEKLY_URL
+
 # ── Cleanup and error handling ───────────────────────────────────────
 
 test_begin "83. query delete"
@@ -107,5 +122,7 @@ if assert_success; then
         if assert_success; then test_pass; fi
     fi
 fi
+run_bzr query delete weekly-status-fixture
+[ "$BZR_EXIT" -eq 0 ] || test_fail "weekly-status fixture query cleanup failed"
 
 echo ""

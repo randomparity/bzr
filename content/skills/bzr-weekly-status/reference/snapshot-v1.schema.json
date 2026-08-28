@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/content/skills/bzr-weekly-status/reference/snapshot-v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format_version", "created_at", "server", "scope_label", "scope_fingerprint", "fields", "rules", "bugs", "limitations"],
+  "properties": {
+    "format_version": { "const": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "server": { "type": "string", "minLength": 1 },
+    "scope_label": { "type": "string", "minLength": 1 },
+    "scope_fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "fields": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+    "rules": { "type": "object" },
+    "bzr_schema_version": { "type": ["string", "null"] },
+    "bugs": { "type": "object", "propertyNames": { "pattern": "^[1-9][0-9]*$" }, "additionalProperties": { "type": "object" } },
+    "limitations": { "type": "array", "items": { "type": "object" } }
+  }
+}
