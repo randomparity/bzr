@@ -495,7 +495,12 @@ jobs:
           # internet-zone Mark-of-the-Web, which a RemoteSigned execution policy
           # would refuse. Hashing the on-disk file first preserves the integrity
           # check; piping its content to iex avoids the policy/MOTW gate.
-          Get-Content install.ps1 -Raw | Invoke-Expression
+          function Read-Host { 'N' }
+          try {
+              Get-Content install.ps1 -Raw | Invoke-Expression
+          } finally {
+              Remove-Item Function:Read-Host
+          }
           $installed = & (Join-Path $env:BZR_INSTALL_DIR 'bzr.exe') --version
           $expected = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"' |
                        Select-Object -First 1).Matches[0].Groups[1].Value

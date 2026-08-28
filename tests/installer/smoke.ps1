@@ -73,6 +73,72 @@ function Test-SuccessPath {
     }
 }
 
+function Test-PathPrompt {
+    $work = New-Item -ItemType Directory -Path (Join-Path $env:TEMP ("bzr-smoke-" + [Guid]::NewGuid())) -Force
+    $originalUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $originalProcessPath = $env:Path
+    try {
+        $fixtures = New-Item -ItemType Directory -Path (Join-Path $work 'releases\v0.0.0-test') -Force
+        $installDir = Join-Path $work 'bin'
+        $target = Get-NativeTarget
+        if (-not $target) { [Console]::Error.WriteLine("smoke: skipping path_prompt (unsupported host)"); return }
+        Build-Fixture -Dir $fixtures.FullName -Tag 'v0.0.0-test' -Target $target
+
+        $env:BZR_BASE_URL = Convert-PathToFileUri (Join-Path $work 'releases')
+        $env:BZR_VERSION = 'v0.0.0-test'
+        $env:BZR_INSTALL_DIR = $installDir
+        $env:BZR_INSTALL_SCRIPT = $InstallPs1
+        $env:BZR_SKIP_SMOKE = '1'
+        try {
+            [Environment]::SetEnvironmentVariable('Path', $originalUserPath, 'User')
+            $yesOutput = & powershell -NoProfile -ExecutionPolicy Bypass -Command @'
+function Read-Host { 'Y' }
+& $env:BZR_INSTALL_SCRIPT
+if (($env:Path -split ';') -notcontains $env:BZR_INSTALL_DIR) {
+    throw 'install directory missing from current process PATH'
+}
+'@ 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "install.ps1 Y response failed: $yesOutput" }
+            $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+            if (($userPath -split ';') -notcontains $installDir) {
+                throw 'smoke: Y response did not update the user PATH'
+            }
+
+            [Environment]::SetEnvironmentVariable('Path', $originalUserPath, 'User')
+            $noOutput = & powershell -NoProfile -ExecutionPolicy Bypass -Command @'
+function Read-Host { 'N' }
+& $env:BZR_INSTALL_SCRIPT
+'@ 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "install.ps1 N response failed: $noOutput" }
+            if ([Environment]::GetEnvironmentVariable('Path', 'User') -ne $originalUserPath) {
+                throw 'smoke: N response changed the user PATH'
+            }
+
+            $presentUserPath = (@($originalUserPath, $installDir) | Where-Object { $_ }) -join ';'
+            [Environment]::SetEnvironmentVariable('Path', $presentUserPath, 'User')
+            $env:Path = (@($env:Path, $installDir) | Where-Object { $_ }) -join ';'
+            $presentOutput = & powershell -NoProfile -ExecutionPolicy Bypass -Command @'
+function Read-Host { throw 'installer prompted for an existing PATH entry' }
+& $env:BZR_INSTALL_SCRIPT
+'@ 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "install.ps1 existing PATH failed: $presentOutput" }
+            $pathMatches = @(([Environment]::GetEnvironmentVariable('Path', 'User') -split ';') |
+                Where-Object { $_ -ieq $installDir })
+            if ($pathMatches.Count -ne 1) { throw "smoke: expected one user PATH entry, got $($pathMatches.Count)" }
+        } finally {
+            [Environment]::SetEnvironmentVariable('Path', $originalUserPath, 'User')
+            $env:Path = $originalProcessPath
+            Remove-Item Env:BZR_BASE_URL, Env:BZR_VERSION, Env:BZR_INSTALL_DIR, Env:BZR_INSTALL_SCRIPT, Env:BZR_SKIP_SMOKE -ErrorAction SilentlyContinue
+        }
+
+        [Console]::Error.WriteLine("smoke: path_prompt OK")
+    } finally {
+        [Environment]::SetEnvironmentVariable('Path', $originalUserPath, 'User')
+        $env:Path = $originalProcessPath
+        Remove-Item -Recurse -Force $work
+    }
+}
+
 function Test-ChecksumMismatch {
     $work = New-Item -ItemType Directory -Path (Join-Path $env:TEMP ("bzr-smoke-" + [Guid]::NewGuid())) -Force
     try {
@@ -130,6 +196,7 @@ function Test-UnsupportedTarget {
 }
 
 Test-SuccessPath
+Test-PathPrompt
 Test-ChecksumMismatch
 Test-UnsupportedTarget
 [Console]::Error.WriteLine("smoke: all sub-tests passed")
