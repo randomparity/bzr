@@ -21,8 +21,9 @@ the installer offers to add its directory to PATH and only does so with consent.
 
 After copying and smoke-checking `bzr.exe`, the installer compares its install directory against
 the current user's persistent PATH and the current process PATH. Comparison splits on semicolons,
-trims whitespace and trailing `\` or `/`, and ignores case. If both PATH values already contain an
-equivalent entry, the installer does not prompt or rewrite either value.
+trims whitespace and non-root trailing `\` or `/`, and ignores case. It preserves the separator of
+a Windows drive or UNC root, so absolute `C:\` is never treated as drive-relative `C:`. If both PATH
+values already contain an equivalent entry, the installer does not prompt or rewrite either value.
 
 If either PATH lacks the directory, the installer asks `Add bzr to your PATH? [Y/N]`. Only a
 trimmed, case-insensitive `Y` or `Yes` is affirmative. On affirmation, it appends the directory to
@@ -56,7 +57,8 @@ README change is checked by review and the existing installer smoke workflow.
 
 - Null or empty PATH values accept the install directory without a leading separator.
 - Existing values retain their exact spelling, order, and separators.
-- Case, whitespace, and trailing separators do not cause duplicate entries.
+- Case, whitespace, and non-root trailing separators do not cause duplicate entries; root and
+  drive-relative paths remain distinct.
 - A semicolon in the install directory prevents PATH mutation without undoing installation.
 - Refusal and unavailable input are non-errors and leave environment state unchanged.
 - Refusal guidance distinguishes missing persistent state from a stale current process.
@@ -100,10 +102,10 @@ change archive download or checksum controls.
 
 Windows smoke tests must prove affirmative persistence and current-process availability, refusal
 without mutation, state-aware refusal guidance, both partial-state repairs, exact duplicate
-detection, empty PATH handling, semicolon rejection, and cleanup restoration. Run PowerShell
-static analysis and the repository lint and test guardrails. Because this is a user-facing
-installer change, the real Windows installer smoke arm in CI is required; the local macOS host
-cannot substitute for that target.
+detection, empty PATH handling, root-versus-drive-relative distinction, semicolon rejection, and
+cleanup restoration. Run PowerShell static analysis and the repository lint and test guardrails.
+Because this is a user-facing installer change, the real Windows installer smoke arm in CI is
+required; the local macOS host cannot substitute for that target.
 
 ## Global constraints
 

@@ -17,13 +17,17 @@ choice.
 When the install directory is absent from either the user or current-process PATH value, the
 Windows installer prompts the user to complete the missing PATH state. A `Y` response appends one
 path entry to each scope where it is absent. A `N` response, empty response, or unavailable
-interactive input leaves both values unchanged and prints the manual command. When both scopes
-already contain the directory, the installer does not prompt or rewrite either value.
+interactive input leaves both values unchanged and prints guidance for the missing scope. The
+persistent append command is printed only when the user PATH is missing; when only the running
+process is stale, the guidance says to open a new shell. When both scopes already contain the
+directory, the installer does not prompt or rewrite either value.
 
 PATH membership is determined by case-insensitive comparison of semicolon-delimited entries after
-trimming surrounding whitespace and trailing directory separators. The installer never rewrites or
-normalizes existing entries. An install directory containing a semicolon cannot be represented as
-one PATH entry, so the installer refuses the PATH update and reports the constraint.
+trimming surrounding whitespace and non-root trailing directory separators. Root separators are
+preserved, so an absolute drive root such as `C:\` never aliases the drive-relative `C:` entry. The
+installer never rewrites or normalizes existing entries. An install directory containing a
+semicolon cannot be represented as one PATH entry, so the installer refuses the PATH update and
+reports the constraint.
 
 ## Consequences
 
