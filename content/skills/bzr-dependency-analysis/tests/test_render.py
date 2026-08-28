@@ -1,0 +1,149 @@
+"""Behavioral contract for safe deterministic dependency-report rendering."""
+
+import importlib.util
+import json
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+
+SKILL_ROOT = Path(__file__).resolve().parents[1]
+RENDER = SKILL_ROOT / "scripts" / "render.py"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+
+RENDER_SPEC = importlib.util.spec_from_file_location("dependency_renderer", RENDER)
+if RENDER_SPEC is None or RENDER_SPEC.loader is None:
+    raise RuntimeError("unable to load dependency renderer")
+RENDERER = importlib.util.module_from_spec(RENDER_SPEC)
+RENDER_SPEC.loader.exec_module(RENDERER)
+
+
+class RendererTestCase(unittest.TestCase):
+    maxDiff = None
+
+    def run_renderer(self, source, output_format, *, initial=None):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            input_path = root / "analysis.json"
+            output_path = root / "nested" / f"report.{output_format}"
+            if isinstance(source, bytes):
+                input_path.write_bytes(source)
+            else:
+                input_path.write_text(json.dumps(source), encoding="utf-8")
+            if initial is not None:
+                output_path.parent.mkdir(parents=True)
+                output_path.write_bytes(initial)
+            command = [
+                sys.executable,
+                str(RENDER),
+                "--input",
+                str(input_path),
+                "--format",
+                output_format,
+                "--output",
+                str(output_path),
+            ]
+            result = subprocess.run(command, capture_output=True, check=False, timeout=5)
+            output = output_path.read_bytes() if output_path.exists() else None
+            return result, output
+
+    def render_fixture(self, output_format):
+        source = (FIXTURES / "hostile.analysis.json").read_bytes()
+        result, output = self.run_renderer(source, output_format)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIsNotNone(output)
+        self.assertTrue(output.endswith(b"\n"))
+        return output
+
+    def test_da07_fixture_outputs_are_byte_exact_and_deterministic(self):
+        for output_format, extension in (("markdown", "md"), ("mermaid", "mmd")):
+            with self.subTest(output_format=output_format):
+                first = self.render_fixture(output_format)
+                second = self.render_fixture(output_format)
+                self.assertEqual(first, second)
+                self.assertEqual(
+                    first,
+                    (FIXTURES / f"hostile.expected.{extension}").read_bytes(),
+                )
+
+    def test_da07_markdown_hostile_syntax_is_confined_to_a_complete_fence(self):
+        output = self.render_fixture("markdown").decode("utf-8")
+        match = re.search(
+            r"(?ms)^(?P<fence>`{3,})text\n(?P<body>.*?)\n(?P=fence)$",
+            output,
+        )
+        self.assertIsNotNone(match)
+        body = match.group("body")
+        outside = output[: match.start()] + output[match.end() :]
+        for token in (
+            "<script>",
+            "</script>",
+            "![image]",
+            "<https://evil.example>",
+            "%%{init:",
+        ):
+            self.assertIn(token, body)
+            self.assertNotIn(token, outside)
+        runs = [len(value) for value in re.findall(r"`+", body)]
+        self.assertGreater(len(match.group("fence")), max(runs, default=0))
+        self.assertIn("release &#91;nightly&#93; &lt;unsafe&gt;", outside)
+        self.assertNotIn("token=secret", output)
+        self.assertIn("Collection commands: bug search, bug view, query run", output)
+
+    def test_da07_mermaid_hostile_values_remain_inside_quoted_tokens(self):
+        output = self.render_fixture("mermaid").decode("utf-8")
+        self.assertEqual(output.splitlines()[0], "flowchart TD")
+        self.assertNotIn("\n%%{", output)
+        self.assertNotIn("<script>", output)
+        self.assertNotIn("</script>", output)
+        self.assertNotIn("![image]", output)
+        self.assertNotIn("<https://evil.example>", output)
+        self.assertNotIn("token=secret", output)
+        token = re.compile(r'^    [a-z][a-z0-9_]*\["(?:\\.|[^"\\])*"\]$')
+        for line in output.splitlines():
+            if "[\"" in line:
+                self.assertRegex(line, token)
+        self.assertIn("n_7072696d617279_80", output)
+        self.assertIn("n_7072696d617279_81", output)
+
+    def test_strict_schema_rejects_unknown_keys_without_replacing_output(self):
+        document = json.loads((FIXTURES / "hostile.analysis.json").read_text())
+        document["unexpected"] = True
+        result, output = self.run_renderer(document, "markdown", initial=b"keep\n")
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(output, b"keep\n")
+        self.assertEqual(result.stderr, b"render input error: analysis has invalid keys\n")
+
+    def test_duplicate_json_keys_are_rejected(self):
+        source = b'{"schema":"bzr-dependency-analysis/v1","schema":"other"}'
+        result, output = self.run_renderer(source, "mermaid")
+        self.assertEqual(result.returncode, 2)
+        self.assertIsNone(output)
+        self.assertIn(b"duplicate JSON key: schema", result.stderr)
+
+    def test_every_analysis_fixture_renders_in_both_formats(self):
+        for fixture in sorted(FIXTURES.glob("*.analysis.json")):
+            for output_format in ("markdown", "mermaid"):
+                with self.subTest(fixture=fixture.name, output_format=output_format):
+                    result, output = self.run_renderer(fixture.read_bytes(), output_format)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIsNotNone(output)
+                    self.assertTrue(output.endswith(b"\n"))
+
+    def test_atomic_write_preserves_destination_when_replace_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "report.md"
+            output.write_text("before\n", encoding="utf-8")
+            with mock.patch.object(RENDERER.os, "replace", side_effect=OSError("fault")):
+                with self.assertRaises(OSError):
+                    RENDERER.atomic_write(output, "after\n")
+            self.assertEqual(output.read_text(encoding="utf-8"), "before\n")
+            self.assertEqual(list(output.parent.glob(f".{output.name}.*")), [])
+
+
+if __name__ == "__main__":
+    unittest.main()
