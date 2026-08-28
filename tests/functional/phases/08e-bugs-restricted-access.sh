@@ -33,7 +33,6 @@ echo "── Phase 8e: Restricted-bug access (#504) ─────────�
 RESTRICTED_USER="restricted-member@test.bzr"
 RESTRICTED_KEY="FuncTestRestricted0123456789abcdef012345"
 RESTRICTED_GROUP=$(unique_name restrict-grp)
-RESTRICTED_BUG=""
 # 08c unsets its own fixture array, so declare the shared create args here.
 _RA=(--product FuncTestProd --component Backend --op-sys Linux
     --rep-platform PC --description d)
@@ -263,7 +262,7 @@ if assert_exit_code 4 &&
     fi
 fi
 
-unset RESTRICTED_USER RESTRICTED_KEY RESTRICTED_GROUP RESTRICTED_BUG
+unset RESTRICTED_USER RESTRICTED_KEY RESTRICTED_GROUP
 unset RESTRICTED_PRODUCT RESTRICTED_PROD_BUG _RA
 
 echo ""
