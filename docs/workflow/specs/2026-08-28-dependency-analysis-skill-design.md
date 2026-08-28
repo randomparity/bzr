@@ -39,7 +39,7 @@ Before retrieval, the skill resolves:
 
 - one configured server per input scope; multi-server analysis is a union of separately
   fetched server-qualified graphs;
-- roots from bug IDs or aliases, a named saved query, a Custom Search URL, a target
+- roots from bug IDs, one alias per server, a named saved query, a Custom Search URL, a target
   milestone, or a version;
 - direction: `depends_on`, `blocks`, or both;
 - maximum depth and maximum distinct nodes, both required and positive;
@@ -70,6 +70,12 @@ boundary. Tests substitute a recorded runner; live use invokes the configured bi
 shell. The collector maintains `queued`, `fetched`, and `nodes` sets keyed by `(server, bug-id)`.
 Admission immediately creates a `boundary` node with `boundary_reason: pending_fetch`; every
 admitted identity therefore has a legal record before its command runs.
+When an alias root is present, the collector resolves it before admitting numeric roots. The
+successful response must contain one numeric ID. The collector re-keys the temporary alias record
+to `(server, returned_id)`, preserves the alias in a sorted `requested_aliases` array, and then
+stable-deduplicates numeric roots and later adjacency against that key without another fetch or cap
+charge. More than one alias for the same server is rejected before collection because the released
+surface cannot prove two aliases differ without fetching the same underlying bug twice.
 The current fallback fetches each ID separately with `bzr --json bug view ID --fields
 id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on`, because only a
 command-level failure exposes the versioned structured error envelope. It therefore makes at most
@@ -140,6 +146,7 @@ The normative collection shape is:
     "last_change_time": null,
     "provenance": {"command": "bug view", "server": "primary"},
     "requested": "1200",
+    "requested_aliases": [],
     "resolution": null,
     "server": "primary",
     "state": "known",
@@ -328,11 +335,12 @@ skill change. A human spot-checks captured outputs as additional evidence, not a
 | DA-15 | Single-ID unknown and global auth/TLS/transport failures | Unknown only for classified per-ID error; global failure stops partial run | Fabricated unknowns or raw stderr | block |
 | DA-16 | Stale, missing, and malformed timestamps at injected UTC time | `true` or `unknown` with warning | Wall-clock-dependent or ignored result | block |
 | DA-17 | Fatal error after one successful frontier | Valid `partial` JSON, generic stderr, exit 1; rejected without opt-in | Truncated stream accepted as complete | block |
+| DA-18 | Alias plus matching numeric root and adjacency | One node, one fetch, one cap slot, alias provenance retained | Duplicate node or fetch | block |
 
 `python3 content/skills/bzr-dependency-analysis/tests/test_analyze.py` runs DA-01 and DA-03
 through DA-11 plus DA-16. `python3 content/skills/bzr-dependency-analysis/tests/test_collect.py`
 runs DA-04, DA-06, and DA-13 through DA-15 and DA-17 with a stubbed command runner and exact command
-log assertions. `python3 content/skills/bzr-dependency-analysis/tests/test_render.py` runs DA-07
+log assertions, and runs DA-18 for alias canonicalization. `python3 content/skills/bzr-dependency-analysis/tests/test_render.py` runs DA-07
 against every deterministic renderer. `tests/run-agent-evals.sh` runs DA-02 and the agent-owned
 parts of DA-03, DA-06, and DA-12. `content/skills/bzr-dependency-analysis/tests/skill-contract.sh` runs DA-12 plus
 static command allowlist and phantom-flag checks. The fixture suite validates the skill
