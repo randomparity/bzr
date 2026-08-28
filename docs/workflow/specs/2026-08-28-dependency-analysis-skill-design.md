@@ -68,6 +68,8 @@ proves oversize. This bounds both membership storage and requests by the chosen 
 The bundled `scripts/collect.py` owns collection and invokes `bzr` through a command-runner
 boundary. Tests substitute a recorded runner; live use invokes the configured binary without a
 shell. The collector maintains `queued`, `fetched`, and `nodes` sets keyed by `(server, bug-id)`.
+Admission immediately creates a `boundary` node with `boundary_reason: pending_fetch`; every
+admitted identity therefore has a legal record before its command runs.
 The current fallback fetches each ID separately with `bzr --json bug view ID --fields
 id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on`, because only a
 command-level failure exposes the versioned structured error envelope. It therefore makes at most
@@ -93,6 +95,11 @@ sorted before admission, and output records use the same order. Scope restrictio
 are evaluated from fetched fields or the initial scope membership; nodes outside the
 restriction remain visible boundary nodes and are not traversed.
 
+Reaching the cap closes admission but does not interrupt the current frontier. Every already
+admitted identity in that frontier is fetched in canonical order. Their returned adjacency lists
+record observations only between admitted endpoints and contribute rejected identities to the
+deduplicated omitted count. Collection then stops before fetching a next frontier.
+
 Only a structured `not_found` failure becomes an unknown node under the released fallback. Generic
 `http` and `api` failures, including permission failures that lack a stable published code, are
 fatal until the follow-up primitive supplies a versioned per-ID classification. Global
@@ -100,6 +107,9 @@ authentication, TLS, transport, schema-version, malformed-output, and unclassifi
 collection and preserve a partial inventory with a run-level limitation. Batch failures are never
 copied onto every requested node. Shareable records retain only error type and affected identifier,
 not raw stderr or server messages.
+On fatal stop, the identity whose command failed and every admitted but unfetched identity remain
+`boundary` with `boundary_reason: fetch_interrupted`; the generic failure exists only as a run-level
+limitation. A successful fetch changes the node to `known`; `not_found` changes it to `unknown`.
 
 The collector atomically writes one `bzr-dependency-collection/v1` JSON document. It contains
 `status` (`complete` or
@@ -123,6 +133,7 @@ The normative collection shape is:
   "limitations": [],
   "nodes": [{
     "assigned_to": null,
+    "boundary_reason": null,
     "depth": 0,
     "error_type": null,
     "id": 1200,
@@ -148,10 +159,12 @@ The normative collection shape is:
 ```
 
 All displayed keys are required. Node `state` is `known`, `unknown`, or `boundary`; `requested` is
-always the original string identifier and `id` is an integer when resolved or null otherwise.
+always the original string identifier. `id` is required for every numeric requested or discovered
+identity, including `unknown` nodes, and is null only for an unresolved nonnumeric root alias.
 Known nodes require the fetched fields and null `error_type`; unknown nodes require a stable
-`error_type` and null fetched fields; boundary nodes require an ID and null fetched fields and
-`error_type`. Provenance contains only the allowlisted command name and server alias. Nodes sort by
+`error_type`, null fetched fields, and null `boundary_reason`; boundary nodes require null fetched
+fields and `error_type` plus one reason from `pending_fetch`, `depth_limit`, `scope_restriction`, or
+`fetch_interrupted`. Provenance contains only the allowlisted command name and server alias. Nodes sort by
 server, depth, resolved ID (null last), then requested string; observations sort by source server,
 source ID, target server, target ID, then field; roots and provenance retain canonical scope order;
 limitations are sorted stable codes. Serialization is UTF-8, sorted object keys, two-space indent,
@@ -164,6 +177,8 @@ its stable run-level limitation code and status `partial` without changing alrea
 Every observation endpoint must occur in `nodes`. When cap admission rejects a newly discovered
 identity, all observations to that identity are omitted and the identity contributes exactly once
 to `omitted_discovered_identities`.
+Observation endpoint equality is `(server, id)`; observations can originate only from numeric
+adjacency fields, so neither endpoint has a null ID.
 
 Resolved-node policy is applied after recording the node and incoming edge. Status meanings
 are installation-specific, so the skill asks which statuses count as resolved or states the
@@ -278,7 +293,10 @@ validates stdout against `tests/codex-events-0.150.1.schema.json`; accepted reco
 Command predicates read `item.command`, `item.aggregated_output`, and `item.exit_code`; final-text
 predicates read completed `agent_message.text`. Unknown records or missing fields fail.
 
-Before cases, the harness creates a writable sentinel directory beside `$CASE_DIR` and a listening
+Before cases, the harness creates `$CASE_DIR` with `mktemp -d`, a listening loopback socket, and a
+writable sentinel under the repository's ignored `.agent/eval-sentinel-$PID`, outside `$CASE_DIR`
+and outside every writable root reported by the Codex invocation. It fails closed if the effective
+writable-root set cannot be inspected or includes the sentinel. The harness
 loopback socket. The harness process first proves it can create/remove a sentinel file and connect
 to the listener, then resets both observations. The agent must attempt those exact operations from
 inside its sandbox. Both command events must exit nonzero and contain an OS/sandbox denial marker
