@@ -110,6 +110,51 @@ passes `--allow-partial`, so no prefix stream can be mistaken for completion. `a
 only that schema and atomically writes one `bzr-dependency-analysis/v1` JSON document, preserving
 status and limitations. Both readers reject truncated JSON and unknown schema versions.
 
+The normative collection shape is:
+
+```json
+{
+  "bounds": {"max_depth": 5, "max_nodes": 200},
+  "cap": {
+    "graph_cap_reached": false,
+    "omitted_discovered_identities": 0,
+    "scope_truncated": false
+  },
+  "limitations": [],
+  "nodes": [{
+    "assigned_to": null,
+    "depth": 0,
+    "id": 1200,
+    "last_change_time": null,
+    "resolution": null,
+    "server": "primary",
+    "state": "known",
+    "status": "NEW",
+    "summary": "Example"
+  }],
+  "observations": [{
+    "field": "depends_on",
+    "source": {"id": 1200, "server": "primary"},
+    "target": {"id": 1199, "server": "primary"}
+  }],
+  "provenance": [{"scope_kind": "bug-ids", "server": "primary"}],
+  "roots": [{"id": 1200, "server": "primary"}],
+  "schema": "bzr-dependency-collection/v1",
+  "status": "complete"
+}
+```
+
+All displayed keys are required. Nullable node values use JSON null; node `state` is `known`,
+`unknown`, or `boundary`. Nodes sort by server, depth, then ID; observations sort by source server,
+source ID, target server, target ID, then field; roots and provenance retain canonical scope order;
+limitations are sorted stable codes. Serialization is UTF-8, sorted object keys, two-space indent,
+and one trailing newline. Starting-scope overflow sets `scope_truncated: true`, status `partial`, and
+limitation `scope-node-cap`; the first `max_nodes` roots remain. Traversal exhaustion sets
+`graph_cap_reached: true`, status `partial`, the deduplicated rejected-identity count, and limitation
+`graph-node-cap`. An oversized membership restriction emits no nodes, status `partial`, limitation
+`restriction-node-cap`, and `scope_truncated: true`; traversal does not start. Fatal collection adds
+its stable run-level limitation code and status `partial` without changing already recorded nodes.
+
 Resolved-node policy is applied after recording the node and incoming edge. Status meanings
 are installation-specific, so the skill asks which statuses count as resolved or states the
 chosen assumption.
@@ -223,8 +268,13 @@ validates stdout against `tests/codex-events-0.150.1.schema.json`; accepted reco
 Command predicates read `item.command`, `item.aggregated_output`, and `item.exit_code`; final-text
 predicates read completed `agent_message.text`. Unknown records or missing fields fail.
 
-Before cases, a self-test in a fresh temporary project requires the agent to attempt one network
-read and one write outside `$CASE_DIR`; both command events must report failure. The case directory
+Before cases, the harness creates a writable sentinel directory beside `$CASE_DIR` and a listening
+loopback socket. The harness process first proves it can create/remove a sentinel file and connect
+to the listener, then resets both observations. The agent must attempt those exact operations from
+inside its sandbox. Both command events must exit nonzero and contain an OS/sandbox denial marker
+(`Operation not permitted`, `Permission denied`, or `network access denied`); the sentinel directory
+must remain unchanged and the listener must record zero connections. An incidental DNS, remote-host,
+or naturally unwritable-path failure cannot satisfy the probe. The case directory
 contains only the installed skill, recorded fake `bzr`, renderer helpers, and fixtures, and `PATH`
 names only those tools plus required system utilities. A missing runner, failed confinement test,
 timeout, tool outside the allowlist, unmatched predicate, or skipped case exits nonzero. `make
