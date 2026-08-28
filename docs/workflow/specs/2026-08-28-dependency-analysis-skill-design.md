@@ -55,7 +55,8 @@ new collection run; within one run a server-qualified bug identity is fetched at
 
 Scope commands use versioned JSON and request only fields needed by the selected analysis.
 Named queries use `bzr query run`; Custom Search URLs use `bzr bug search --from-url`;
-milestone/version scopes use `bzr bug list`. Starting scopes request at most `node_cap + 1`
+milestone/version scopes use `bzr bug list`. Every scope and restriction request overrides saved
+or URL order with `--sort bug_id --order asc` and uses stable offsets. Starting scopes request at most `node_cap + 1`
 rows without `--paginate`; the extra row detects truncation and becomes aggregate scope metadata,
 not a node. A query used as a membership restriction is enumerated manually in pages whose total
 requested rows never exceeds `node_cap + 1`; the collector stops on the extra row and asks the user
@@ -88,10 +89,11 @@ id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on`, be
 command-level failure exposes the versioned structured error envelope. It therefore makes at most
 one command per admitted bug. The field list additionally
 requests `product`, `target_milestone`, or `version` when the corresponding restriction is
-active. Both adjacency fields are fetched so reciprocal evidence can be normalized, but the
-selected direction is filtered before discovery: only selected adjacency contributes admission,
-observations, cap consumption, or omitted-identity counts. `depends_on` selects dependency
-neighbors, `blocks` selects blocking neighbors, and `both` selects their union. Query restrictions
+active. Both adjacency fields are fetched so reciprocal evidence can be normalized. The selected
+direction controls discovery, admission, cap consumption, and omitted-identity counts:
+`depends_on` selects dependency neighbors, `blocks` selects blocking neighbors, and `both` selects
+their union. After admission, observations from either fetched field are retained when both
+endpoints are already admitted; an unselected field never admits a new endpoint. Query restrictions
 use the bounded, fully paginated server-qualified membership set
 described above. Returned adjacency lists add an observation when both endpoint nodes are admitted,
 even when the target is already fetched. Classified per-ID failures create unknown nodes
@@ -442,7 +444,7 @@ behavioral Python tests compare helper output against fixture oracles byte-for-b
 | DA-11 | Reciprocal `blocks`/`depends_on` observations | One canonical edge retaining both observations | Inflated degree/path | block |
 | DA-12 | Custom Search URL containing secret-like and unknown parameters | Sanitized scope kind and allowlisted names only | Literal value appears | block |
 | DA-13 | Broad scope and oversized query restriction | Root enumeration stops at cap; restriction refuses before pagination | Exhaustive unbounded fetch | block |
-| DA-14 | Permuted roots, responses, and adjacency lists | Byte-identical capped inventory | Order-dependent graph | block |
+| DA-14 | Permuted roots, responses, adjacency lists, and saved-query order around cap | Explicit bug-ID sort and byte-identical capped inventory | Order-dependent graph | block |
 | DA-15 | Single-ID unknown and global auth/TLS/transport failures | Unknown only for classified per-ID error; global failure stops partial run | Fabricated unknowns or raw stderr | block |
 | DA-16 | Stale, missing, and malformed timestamps at injected UTC time | `true` or `unknown` with warning | Wall-clock-dependent or ignored result | block |
 | DA-17 | Fatal error after one successful frontier | Valid `partial` JSON, generic stderr, exit 1; rejected without opt-in | Truncated stream accepted as complete | block |
