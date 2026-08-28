@@ -234,18 +234,28 @@ else
   [[ $FAIL_COUNT -gt 0 ]] || test_fail "missing scope emitted stdout"
 fi
 
-test_begin "123j. installed cycle fixture analyzes deterministically"
+test_begin "123j. installed cycle fixture analyzes and renders deterministically"
 _DA_CYCLE_COLLECTION="$_DA_INSTALLED_ROOT/tests/fixtures/cycle.collection.json"
 _DA_CYCLE_EXPECTED="$_DA_INSTALLED_ROOT/tests/fixtures/cycle.analysis.json"
 _DA_CYCLE_ANALYSIS="$FUNC_CONFIG_DIR/dependency-cycle.analysis.json"
+_DA_CYCLE_REPORT="$FUNC_CONFIG_DIR/dependency-cycle.md"
+_DA_CYCLE_DIAGRAM="$FUNC_CONFIG_DIR/dependency-cycle.mmd"
 if python3 "$_DA_INSTALLED_ROOT/scripts/analyze.py" \
   --input "$_DA_CYCLE_COLLECTION" --allow-partial \
   --output "$_DA_CYCLE_ANALYSIS" &&
   cmp -s "$_DA_CYCLE_EXPECTED" "$_DA_CYCLE_ANALYSIS" &&
-  jq -e '.components | any(.cyclic == true)' "$_DA_CYCLE_ANALYSIS" >/dev/null; then
+  python3 "$_DA_INSTALLED_ROOT/scripts/render.py" \
+    --input "$_DA_CYCLE_ANALYSIS" --format markdown \
+    --output "$_DA_CYCLE_REPORT" &&
+  python3 "$_DA_INSTALLED_ROOT/scripts/render.py" \
+    --input "$_DA_CYCLE_ANALYSIS" --format mermaid \
+    --output "$_DA_CYCLE_DIAGRAM" &&
+  jq -e '.components | any(.cyclic == true)' "$_DA_CYCLE_ANALYSIS" >/dev/null &&
+  grep -q 'Cycle impediments: c0001' "$_DA_CYCLE_REPORT" &&
+  grep -q 'cyclic=true' "$_DA_CYCLE_DIAGRAM"; then
   test_pass
 else
-  test_fail "installed cycle fixture analysis did not preserve cycle evidence"
+  test_fail "installed cycle fixture pipeline did not preserve cycle evidence"
 fi
 
 test_begin "123ja. installed collector replay feeds installed analyzer and renderers"
@@ -318,7 +328,7 @@ else
 fi
 
 unset DEPENDENCY_ANALYSIS_PAYLOAD _DA_CYCLE_ANALYSIS _DA_CYCLE_COLLECTION
-unset _DA_CYCLE_EXPECTED _DA_INSTALLED_EXPECTED
+unset _DA_CYCLE_DIAGRAM _DA_CYCLE_EXPECTED _DA_CYCLE_REPORT _DA_INSTALLED_EXPECTED
 unset _DA_INSTALLED_OK _DA_INSTALLED_PATHS _DA_INSTALLED_ROOT _DA_LAYOUT _DA_LAYOUT_ROOT
 unset _DA_REPLAY_ANALYSIS _DA_REPLAY_COLLECTION _DA_REPLAY_DIAGRAM
 unset _DA_REPLAY_EXPECTED _DA_REPLAY_LOG _DA_REPLAY_OK _DA_REPLAY_POLICY
