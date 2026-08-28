@@ -188,7 +188,10 @@ fields and null `error_type` plus one reason from `pending_fetch`, `depth_limit`
 server, depth, resolved ID (null last), then requested string; observations sort by source server,
 source ID, target server, target ID, then field. Every root entry requires `server`, nullable `id`,
 and `requested`; it links to a node by `(server, id)` when ID is non-null and otherwise by
-`(server, requested)`. Roots sort by server, ID (null last), then requested; provenance retains canonical scope order;
+`(server, requested)`. A successfully resolved alias root serializes with numeric `id` and the same
+decimal ID in `requested`; alias provenance exists only on the linked node's sorted
+`requested_aliases`. An unresolved `not_found` alias root serializes with null `id` and the original
+alias in `requested`. Roots sort by server, ID (null last), then requested; provenance retains canonical scope order;
 limitations are sorted stable codes. Serialization is UTF-8, sorted object keys, two-space indent,
 and one trailing newline. Starting-scope overflow sets `scope_truncated: true`, status `partial`, and
 limitation `scope-node-cap`; the first `max_nodes` roots remain. Traversal exhaustion sets
@@ -315,10 +318,12 @@ validates stdout against `tests/codex-events-0.150.1.schema.json`; accepted reco
 Command predicates read `item.command`, `item.aggregated_output`, and `item.exit_code`; final-text
 predicates read completed `agent_message.text`. Unknown records or missing fields fail.
 
-Before cases, the harness creates `$CASE_DIR` with `mktemp -d`, a listening loopback socket, and a
-writable sentinel under the repository's ignored `.agent/eval-sentinel-$PID`, outside `$CASE_DIR`
-and outside every writable root reported by the Codex invocation. It fails closed if the effective
-writable-root set cannot be inspected or includes the sentinel. The harness
+Before cases, the harness resolves the repository and system temporary roots and fails if the
+repository is inside the temporary root. It creates `$CASE_DIR` with `mktemp -d`, passes no
+`--add-dir`, starts a listening loopback socket, and creates a writable sentinel at the repository's
+ignored `.agent/eval-sentinel-$PID`. Under the exact invocation, the only requested project writable
+root is `$CASE_DIR`; Codex-managed temporary paths remain under the distinct system temporary root,
+so the repository sentinel is outside both known writable regions. The harness
 loopback socket. The harness process first proves it can create/remove a sentinel file and connect
 to the listener, then resets both observations. The agent must attempt those exact operations from
 inside its sandbox. Both command events must exit nonzero and contain an OS/sandbox denial marker
