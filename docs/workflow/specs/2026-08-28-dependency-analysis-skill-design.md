@@ -92,10 +92,12 @@ requests `product`, `target_milestone`, or `version` when the corresponding rest
 active. Both adjacency fields are fetched so reciprocal evidence can be normalized. The selected
 direction controls discovery, admission, cap consumption, and omitted-identity counts:
 `depends_on` selects dependency neighbors, `blocks` selects blocking neighbors, and `both` selects
-their union. After admission, an observation from an unselected field is retained only when it
-normalizes onto a canonical edge already established by a selected-field observation; it can
-enrich provenance but cannot create an edge or alter analysis. An unselected field never admits a
-new endpoint. Query restrictions
+their union. The collector stages every selected-field observation plus every unselected-field
+observation whose endpoints are already admitted. After all admitted nodes are fetched, a
+deterministic second pass establishes canonical edges from selected observations, then attaches
+staged unselected observations only when they normalize onto one of those established edges. Thus
+unselected evidence can enrich provenance but cannot admit an endpoint, create an edge, or alter
+analysis, regardless of fetch order. Query restrictions
 use the bounded, fully paginated server-qualified membership set
 described above. Returned adjacency lists add an observation when both endpoint nodes are admitted,
 even when the target is already fetched. Classified per-ID failures create unknown nodes
@@ -189,7 +191,7 @@ The normative collection shape is:
     "source": {"id": 1200, "server": "primary"},
     "target": {"id": 1199, "server": "primary"}
   }],
-  "provenance": [{"scope_kind": "bug-ids", "server": "primary"}],
+  "provenance": [{"parameter_names": [], "scope_kind": "bug-ids", "source": null, "server": "primary"}],
   "policy": {
     "direction": "both",
     "duration": null,
@@ -218,7 +220,13 @@ and `requested`; it links to a node by `(server, id)` when ID is non-null and ot
 `(server, requested)`. A successfully resolved alias root serializes with numeric `id` and the same
 decimal ID in `requested`; alias provenance exists only on the linked node's sorted
 `requested_aliases`. An unresolved `not_found` alias root serializes with null `id` and the original
-alias in `requested`. Roots sort by server, ID (null last), then requested; provenance retains canonical scope order;
+alias in `requested`. Roots sort by server, ID (null last), then requested. Every provenance entry
+has exactly `parameter_names`, `scope_kind`, `source`, and `server`. `parameter_names` is a sorted
+unique list of allowlisted names; `source` is the saved-query name only for `saved-query` and null
+otherwise. Entries deduplicate by exact object equality and sort by server, then scope-kind rank
+`bug-ids`, `alias`, `saved-query`, `custom-search`, `product`, `milestone`, `version`,
+`restriction`, then null-last source, then the parameter-name list, all strings by Unicode code
+point. Equivalent mixed scopes therefore serialize identically regardless of caller order;
 limitations are sorted stable codes. Serialization is UTF-8, sorted object keys, two-space indent,
 and one trailing newline. Starting-scope overflow sets `scope_truncated: true`, status `partial`, and
 limitation `scope-node-cap`; the first `max_nodes` roots remain. Traversal exhaustion sets
@@ -264,7 +272,7 @@ The normative analyzer output is one `bzr-dependency-analysis/v1` document:
     {"assigned_to": null, "boundary_reason": null, "depth": 0, "error_type": null, "id": 1200, "last_change_time": "2026-08-27T12:00:00Z", "provenance": {"command": "bug view", "server": "primary"}, "requested": "1200", "requested_aliases": [], "resolution": null, "server": "primary", "stale": false, "state": "known", "status": "NEW", "summary": "Delivery"}
   ],
   "policy": {"direction": "both", "duration": null, "resolved_mode": "include-no-traverse", "resolved_statuses": ["RESOLVED"], "stale_after_days": 14},
-  "provenance": [{"scope_kind": "bug-ids", "server": "primary"}],
+  "provenance": [{"parameter_names": [], "scope_kind": "bug-ids", "source": null, "server": "primary"}],
   "roots": [{"id": 1200, "requested": "1200", "server": "primary"}],
   "schema": "bzr-dependency-analysis/v1",
   "status": "complete",
@@ -446,8 +454,10 @@ behavioral Python tests compare helper output against fixture oracles byte-for-b
 | DA-11 | Reciprocal `blocks`/`depends_on` observations | One canonical edge retaining both observations | Inflated degree/path | block |
 | DA-12 | Custom Search URL containing secret-like and unknown parameters | Sanitized scope kind and allowlisted names only | Literal value appears | block |
 | DA-13 | Broad scope and oversized query restriction | Root enumeration stops at cap; restriction refuses before pagination | Exhaustive unbounded fetch | block |
-| DA-14 | Permuted roots, responses, adjacency lists, and saved-query order around cap | Explicit bug-ID sort and byte-identical capped inventory | Order-dependent graph | block |
-| DA-15 | Single-ID API 101 missing, API 102 inaccessible, and global auth/TLS/transport failures | 101 becomes nonfatal sanitized `not_found`; 102 becomes nonfatal sanitized `inaccessible`; each remains an unknown node and traversal continues; global failure stops partial run | Fatal inaccessible node, fabricated unknown, raw stderr, or continued global failure | block |
+| DA-14 | Permuted mixed scopes, roots, responses, adjacency lists, and saved-query order around cap | Canonical deduplicated provenance, explicit bug-ID sort, and byte-identical capped inventory | Order-dependent graph or provenance | block |
+| DA-15a | Single-ID API 100/101 missing | Each becomes nonfatal sanitized `not_found`, remains an unknown node, and traversal continues | Fatal missing node, fabricated detail, or raw stderr | block |
+| DA-15b | Single-ID API 102 inaccessible | Becomes nonfatal sanitized `inaccessible`, remains an unknown node, and traversal continues | Fatal inaccessible node, fabricated detail, or raw stderr | block |
+| DA-15c | Other API and global auth/TLS/connection/transport failures | Stops with a partial run-level limitation and fetch-interrupted boundaries | Fabricated unknown or continued global failure | block |
 | DA-16 | Stale, missing, and malformed timestamps at injected UTC time | `true` or `unknown` with warning | Wall-clock-dependent or ignored result | block |
 | DA-17 | Fatal error after one successful frontier | Valid `partial` JSON, generic stderr, exit 1; rejected without opt-in | Truncated stream accepted as complete | block |
 | DA-18 | Alias success/collapse and alias `not_found` | Canonical numeric node or linked unresolved root, one fetch and slot, byte-exact roots and alias provenance | Duplicate/unlinked node or fetch | block |
@@ -457,7 +467,7 @@ behavioral Python tests compare helper output against fixture oracles byte-for-b
 
 `python3 content/skills/bzr-dependency-analysis/tests/test_analyze.py` runs DA-01 and DA-03
 through DA-11 plus DA-16, DA-19, and DA-20. `python3 content/skills/bzr-dependency-analysis/tests/test_collect.py`
-runs DA-04, DA-06, and DA-13 through DA-15 and DA-17 with a stubbed command runner and exact command
+runs DA-04, DA-06, DA-13 through DA-15c, and DA-17 with a stubbed command runner and exact command
 log assertions, and runs DA-18 for alias canonicalization plus DA-21 for direction isolation. `python3 content/skills/bzr-dependency-analysis/tests/test_render.py` runs DA-07
 against every deterministic renderer. `content/skills/bzr-dependency-analysis/tests/skill-contract.sh`
 runs DA-02 and DA-12 plus static command allowlist and phantom-flag checks. The fixture suite validates the skill
@@ -518,6 +528,10 @@ collect→analyze→render chain through the real `bzr` binary. It asserts serve
 resolved handling, caps, and inert rendered text without resolving any stage from the checkout.
 The phase also analyzes the installed deterministic cycle fixture and asserts its cyclic component;
 it does not attempt an impossible live circular mutation.
+Using the credentialless server and restricted fixture created by the existing functional phases,
+18d separately collects a real nonexistent starting ID and a real inaccessible starting ID beside
+a visible root. It asserts `not_found` and `inaccessible` unknown nodes, continued collection,
+valid partial-safe output, and absence of the server's raw error message.
 `tools/record-demo.sh` gains a named dependency-analysis mode that seeds and records the graph as
 `docs/assets/bzr-dependency-analysis-demo.cast` and
 `docs/assets/bzr-dependency-analysis-demo.gif` without changing the existing README demo default.
