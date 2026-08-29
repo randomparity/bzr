@@ -532,6 +532,40 @@ class CollectorTestCase(unittest.TestCase):
             )
         self.assertEqual(analysis_result.returncode, 0, analysis_result.stderr)
 
+    def test_huge_stale_threshold_crosses_into_analyzer(self):
+        input_policy = policy([bug_scope("primary", 1)])
+        input_policy["stale_after_days"] = 1_000_000_000
+        response = ok(view_argv("primary", 1), bug(1))
+        result, output, log = self.run_collector(input_policy, [response])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(log, [view_argv("primary", 1)])
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            collection_path = root / "collection.json"
+            analysis_path = root / "analysis.json"
+            collection_path.write_bytes(output)
+            analysis_result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ANALYZE),
+                    "--input",
+                    str(collection_path),
+                    "--output",
+                    str(analysis_path),
+                ],
+                capture_output=True,
+                check=False,
+            )
+            analysis = (
+                json.loads(analysis_path.read_bytes())
+                if analysis_path.exists()
+                else None
+            )
+        self.assertEqual(analysis_result.returncode, 0, analysis_result.stderr)
+        self.assertIsNotNone(analysis)
+        self.assertFalse(analysis["nodes"][0]["stale"])
+
     def test_max_nodes_rejects_10000_before_runner(self):
         input_policy = policy([bug_scope("primary", 1)], max_nodes=10_000)
         result, output, log = self.run_collector(input_policy, [])

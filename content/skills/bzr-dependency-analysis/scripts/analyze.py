@@ -2,7 +2,8 @@
 """Analyze a deterministic Bugzilla dependency collection."""
 
 import argparse
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
+import heapq
 import json
 import os
 from pathlib import Path
@@ -549,33 +550,69 @@ def topological_layers(graph):
         for successor in successors:
             indegree[successor] += 1
     layers = []
-    remaining = set(graph)
-    while remaining:
-        layer = sorted(component for component in remaining if indegree[component] == 0)
-        if not layer:
-            raise AnalysisInputError("component condensation graph is cyclic")
-        layers.append(layer)
-        remaining.difference_update(layer)
-        for component in layer:
+    ready = [component for component, degree in indegree.items() if degree == 0]
+    heapq.heapify(ready)
+    processed = 0
+    while ready:
+        layer = []
+        following = []
+        while ready:
+            component = heapq.heappop(ready)
+            layer.append(component)
             for successor in graph[component]:
                 indegree[successor] -= 1
+                if indegree[successor] == 0:
+                    heapq.heappush(following, successor)
+        layers.append(layer)
+        processed += len(layer)
+        ready = following
+    if processed != len(graph):
+        raise AnalysisInputError("component condensation graph is cyclic")
     return layers
 
 
 def longest_chain(graph, component_order):
     if not component_order:
         return {"kind": "edge_count", "length": 0, "path": []}
-    best = {component: (component,) for component in component_order}
+    lengths = {component: 0 for component in component_order}
+    incoming = {component: [] for component in component_order}
     for component in component_order:
-        for successor in sorted(graph[component]):
-            candidate = (*best[component], successor)
-            current = best[successor]
-            if len(candidate) > len(current) or (
-                len(candidate) == len(current) and candidate < current
-            ):
-                best[successor] = candidate
-    path = min(best.values(), key=lambda value: (-(len(value) - 1), value))
-    return {"kind": "edge_count", "length": len(path) - 1, "path": list(path)}
+        for successor in graph[component]:
+            incoming[successor].append(component)
+            lengths[successor] = max(lengths[successor], lengths[component] + 1)
+
+    by_length = {}
+    for component, length in lengths.items():
+        by_length.setdefault(length, []).append(component)
+    predecessors = {}
+    ranks = {}
+    for length in range(max(by_length) + 1):
+        components = by_length.get(length, [])
+        if length == 0:
+            ordered = sorted(components)
+        else:
+            for component in components:
+                candidates = (
+                    predecessor
+                    for predecessor in incoming[component]
+                    if lengths[predecessor] == length - 1
+                )
+                predecessors[component] = min(candidates, key=ranks.__getitem__)
+            ordered = sorted(
+                components,
+                key=lambda component: (ranks[predecessors[component]], component),
+            )
+        for rank, component in enumerate(ordered):
+            ranks[component] = rank
+
+    length = max(lengths.values())
+    component = min(by_length[length], key=ranks.__getitem__)
+    path = [component]
+    while component in predecessors:
+        component = predecessors[component]
+        path.append(component)
+    path.reverse()
+    return {"kind": "edge_count", "length": length, "path": path}
 
 
 def parse_node_timestamp(value):
@@ -592,7 +629,7 @@ def parse_node_timestamp(value):
 
 def apply_staleness(nodes, policy, analysis_time):
     resolved_statuses = set(policy["resolved_statuses"])
-    threshold = timedelta(days=policy["stale_after_days"])
+    threshold_days = policy["stale_after_days"]
     warnings = {}
     output = []
     for node in sorted(nodes, key=identity_key):
@@ -614,7 +651,8 @@ def apply_staleness(nodes, policy, analysis_time):
                     identity_reference(node)
                 )
             else:
-                copied["stale"] = analysis_time - changed >= threshold
+                age_days = (analysis_time - changed).days
+                copied["stale"] = age_days >= threshold_days
         output.append(copied)
     warning_list = [
         {"code": code, "nodes": references}
