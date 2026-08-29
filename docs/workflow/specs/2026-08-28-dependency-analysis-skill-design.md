@@ -47,6 +47,8 @@ Before retrieval, the skill resolves:
   and the node ceiling keeps every component in the four-digit `cNNNN` namespace;
 - whether resolved nodes are included and traversed or included but not traversed;
 - optional product, milestone, or query-membership restriction;
+- an exact server universe: `servers` equals the aliases referenced by scopes and the optional
+  restriction, with neither missing nor unused declarations;
 - optional `unassigned_assignees`, a map from declared server alias to a sorted unique list of
   exact login strings observed through that same alias, default `{}`; no prefix or substring
   inference;
@@ -72,11 +74,17 @@ to narrow the query or raise the cap. It never uses `--count` as an upper-bound 
 server may cap that result. If a server returns fewer rows than requested, the collector advances
 the offset and probes once more; an empty page proves completion, while the cumulative extra row
 proves oversize. This bounds both membership storage and requests by the chosen cap.
+Custom Search URL validation rejects userinfo and case-insensitive `bugzilla_api_key`, `token`, and
+`api_key` query names with a generic policy error before constructing runner arguments. Values are
+never copied into diagnostics.
 
 The bundled `scripts/collect.py` owns collection and invokes `bzr` through a command-runner
 boundary. Tests substitute a recorded runner; live use invokes the configured binary without a
-shell. Before other retrieval, it preflights every declared server exactly once with released
-read-only `bug list --limit 1 --offset 0 --fields id --sort bug_id --order asc`. Any preflight
+shell. Each child receives a copy of the caller environment so configuration and credential
+sources remain available, with `RUST_LOG` forced to `off` so inherited tracing cannot precede the
+structured failure envelope. Before other retrieval, the collector verifies that declared servers
+exactly equal the scope/restriction server universe, then preflights each server exactly once with
+released read-only `bug list --limit 1 --offset 0 --fields id --sort bug_id --order asc`. Any preflight
 failure is command-fatal. The collector maintains `queued`, `fetched`, and `nodes` sets keyed by
 `(server, bug-id)`.
 Admission immediately creates a `boundary` node with `boundary_reason: pending_fetch`; every
@@ -132,6 +140,10 @@ described above. Returned adjacency lists add an observation when both endpoint 
 even when the target is already fetched. Classified per-ID failures create unknown nodes
 carrying only the server, requested identifier, and structured error type. A failed or missing node is never
 silently removed.
+Product, milestone, and version restrictions are likewise decided immediately after a fetched
+detail is normalized and before selected or reciprocal staging, for numeric and alias roots alike.
+An excluded node stays visible as a `scope_restriction` boundary but contributes no observation,
+discovery, omission, or relationship-budget charge.
 
 Empirical functional-server evidence fixes the fallback boundary. Across the repository's stock
 Bugzilla 5.0.6, 5.2, and 5.3.3+ harnesses, single-ID reads return structured API code 101 for a missing ID and 102 for an
@@ -505,7 +517,7 @@ behavioral Python tests compare helper output against fixture oracles byte-for-b
 | DA-09 | Resolved blocker | Selected policy is stated and enforced after recording | Silent removal | block |
 | DA-10 | Product/milestone/version/query restriction | Cross-scope neighbors are boundary nodes | Out-of-scope traversal | block |
 | DA-11 | Reciprocal `blocks`/`depends_on` observations | One canonical edge retaining both observations | Inflated degree/path | block |
-| DA-12 | Custom Search URL containing secret-like and unknown parameters | Sanitized scope kind and allowlisted names only | Literal value appears | block |
+| DA-12 | Custom Search URL containing secret-like and unknown parameters | Userinfo and credential query keys are rejected before argv; accepted provenance contains allowlisted names only | Runner invocation or literal value appears | block |
 | DA-13 | Broad scope and oversized query restriction | Root enumeration stops at cap; restriction refuses before pagination | Exhaustive unbounded fetch | block |
 | DA-14 | Permuted mixed scopes, roots, responses, adjacency lists, and saved-query order around cap | Canonical deduplicated provenance, explicit bug-ID sort, and byte-identical capped inventory | Order-dependent graph or provenance | block |
 | DA-15a | Single-ID API 100/101 or structured bug `not_found` | Each becomes nonfatal sanitized `not_found`, remains an unknown node, and traversal continues | Fatal missing node, fabricated detail, or raw stderr | block |
@@ -522,12 +534,14 @@ behavioral Python tests compare helper output against fixture oracles byte-for-b
 | DA-23 | Default-assignee placeholder login | Exact per-server login and null assignee are unassigned blockers; prefix lookalike is assigned | Missing blocker or prefix inference | block |
 | DA-24 | Every traversal direction rendered | Escaped `Traversal direction` metadata in Markdown and Mermaid | Direction omitted from PM artifact | block |
 | DA-25 | Relationship exhaustion inside a multi-node frontier | Later admitted siblings reach known/unknown terminal states; resolved no-traverse adjacency consumes no selected budget; reciprocal-only edge groups are rejected | Pending admitted sibling, resolved branch truncates active work, or ungrounded edge | block |
+| DA-26 | Restriction, process environment, and server-universe trust boundaries | Field-excluded numeric/alias roots stage no evidence or budget; child tracing is off with other environment preserved; declared servers exactly match referenced aliases | Excluded adjacency affects cap, tracing corrupts an envelope, or an unused server is preflighted | block |
 
 `python3 content/skills/bzr-dependency-analysis/tests/test_analyze.py` runs DA-01 and DA-03
 through DA-11 plus DA-16, DA-19, and DA-20. `python3 content/skills/bzr-dependency-analysis/tests/test_collect.py`
 runs DA-04, DA-06, DA-13 through DA-15c, and DA-17 with a stubbed command runner and exact command
 log assertions, and runs DA-18 for alias canonicalization, DA-21 for direction isolation, and DA-22
-for aggregate relationship bounding. The collector, analyzer, and renderer suites jointly run DA-25.
+for aggregate relationship bounding. It also runs DA-26 and the argv/disclosure arm of DA-12. The
+collector, analyzer, and renderer suites jointly run DA-25.
 `python3 content/skills/bzr-dependency-analysis/tests/test_render.py` runs DA-07 against every
 deterministic renderer. `content/skills/bzr-dependency-analysis/tests/skill-contract.sh`
 runs DA-02 and DA-12 plus static command allowlist and phantom-flag checks. The fixture suite validates the skill
@@ -596,7 +610,9 @@ by the existing functional phases, 18d collects real nonexistent starting IDs in
 a real inaccessible starting ID beside visible roots in both modes. It asserts `not_found` and
 `inaccessible` unknown nodes, continued collection, valid partial-safe output, and absence of raw
 server messages. Deliberately rejected credentials in both modes additionally prove that preflight
-is sanitized, command-fatal, and completes before any root is admitted or resource read begins.
+is sanitized, command-fatal, and completes before any root is admitted or resource read begins,
+even when the parent enables noisy Rust tracing. Installed policy checks also reject credentialed
+Custom Search URLs and unused server declarations before runner invocation.
 It also runs the installed pipeline with a one-relationship budget and asserts the bounded admitted
 prefix, `relationship_cap`, and lower-bound omission metadata. Its main live graph derives the
 actual component default-assignee login separately through each server profile, configures those

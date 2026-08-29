@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
@@ -292,7 +293,7 @@ class CollectorTestCase(unittest.TestCase):
         custom = {
             "kind": "custom-search",
             "server": "zeta",
-            "url": "https://bugs.invalid/buglist.cgi?product=X&token=secret",
+            "url": "https://bugs.invalid/buglist.cgi?product=X&display_hint=secret",
             "parameter_names": ["product"],
         }
         numeric = bug_scope("zeta", 3, 1, 3)
@@ -323,6 +324,32 @@ class CollectorTestCase(unittest.TestCase):
             ["bug-ids", "saved-query", "custom-search"],
         )
         self.assertNotIn(b"token=secret", first)
+
+    def test_custom_search_credentials_are_rejected_without_disclosure(self):
+        secret = "DoNotExposeThisValue"
+        urls = (
+            f"https://reader:{secret}@bugs.invalid/buglist.cgi?product=X",
+            f"https://bugs.invalid/buglist.cgi?product=X&Bugzilla_API_Key={secret}",
+            f"https://bugs.invalid/buglist.cgi?product=X&ToKeN={secret}",
+            f"https://bugs.invalid/buglist.cgi?product=X&API_KEY={secret}",
+        )
+        for url in urls:
+            with self.subTest(url=url):
+                scope = {
+                    "kind": "custom-search",
+                    "server": "primary",
+                    "url": url,
+                    "parameter_names": ["product"],
+                }
+                result, output, log = self.run_collector(policy([scope]), [])
+                self.assertEqual(result.returncode, 2)
+                self.assertIsNone(output)
+                self.assertEqual(log, [])
+                self.assertEqual(
+                    result.stderr,
+                    b"policy error: scopes[0].url must not include credentials\n",
+                )
+                self.assertNotIn(secret.encode(), result.stderr)
 
     def test_da15a_api_100_and_101_are_nonfatal_not_found_nodes(self):
         responses = [
@@ -356,6 +383,35 @@ class CollectorTestCase(unittest.TestCase):
         self.assertEqual(log[:2], [preflight_argv("alpha"), preflight_argv("zeta")])
         self.assertEqual(log.count(preflight_argv("alpha")), 1)
         self.assertEqual(log.count(preflight_argv("zeta")), 1)
+
+    def test_child_runner_disables_tracing_and_preserves_other_environment(self):
+        with tempfile.TemporaryDirectory() as directory:
+            script = Path(directory) / "structured_failure.py"
+            script.write_text(
+                "import json, os, sys\n"
+                "if os.environ.get('RUST_LOG') != 'off':\n"
+                "    sys.stderr.write('WARN inherited tracing\\n')\n"
+                "preserved = os.environ.get('DEPENDENCY_TEST_PRESERVED') == 'yes'\n"
+                "error_type = 'http' if preserved else 'api'\n"
+                "exit_code = 5 if preserved else 4\n"
+                "json.dump({'schema_version': '0.6.1', 'error': {\n"
+                "    'type': error_type, 'message': 'private',\n"
+                "    'exit_code': exit_code}}, sys.stderr)\n"
+                "sys.stderr.write('\\n')\n"
+                "raise SystemExit(exit_code)\n",
+                encoding="utf-8",
+            )
+            runner = COLLECTOR.CommandRunner(sys.executable)
+            inherited = {
+                "DEPENDENCY_TEST_PRESERVED": "yes",
+                "RUST_LOG": "bzr=debug",
+            }
+            with mock.patch.dict(os.environ, inherited, clear=False):
+                with self.assertRaises(COLLECTOR.FatalCollection) as raised:
+                    runner.run_json([str(script)])
+                self.assertEqual(os.environ["RUST_LOG"], "bzr=debug")
+        self.assertEqual(raised.exception.limitation, "collection-http")
+        self.assertEqual(raised.exception.error_type, "http")
 
     def test_failed_preflight_and_ambiguous_api_102_are_command_fatal(self):
         response = failed(
@@ -532,6 +588,64 @@ class CollectorTestCase(unittest.TestCase):
             view_argv("primary", "delivery"),
             view_argv("primary", 1),
         ])
+
+    def test_field_restriction_precedes_staging_in_numeric_and_alias_paths(self):
+        restriction = {"kind": "product", "server": "primary", "value": "Widget"}
+        cases = (
+            (
+                "numeric",
+                [bug_scope("primary", 1, 2)],
+                view_argv("primary", 1, "product"),
+            ),
+            (
+                "alias",
+                [alias_scope("primary", "excluded"), bug_scope("primary", 2)],
+                view_argv("primary", "excluded", "product"),
+            ),
+        )
+        for name, scopes, excluded_argv in cases:
+            with self.subTest(path=name):
+                responses = [
+                    ok(
+                        excluded_argv,
+                        bug(
+                            1,
+                            depends=[4],
+                            blocks=[2],
+                            extra={"product": "Other"},
+                        ),
+                    ),
+                    ok(
+                        view_argv("primary", 2, "product"),
+                        bug(2, depends=[1], extra={"product": "Widget"}),
+                    ),
+                ]
+                result, output, log = self.run_collector(
+                    policy(
+                        scopes,
+                        max_relationships=1,
+                        direction="depends_on",
+                        restriction=restriction,
+                    ),
+                    responses,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                document = self.parse(output)
+                self.assertEqual(
+                    [(node["id"], node["state"]) for node in document["nodes"]],
+                    [(1, "boundary"), (2, "known")],
+                )
+                self.assertEqual(document["limitations"], [])
+                self.assertEqual(document["cap"]["omitted_relationships_lower_bound"], 0)
+                self.assertEqual(document["observations"], [{
+                    "field": "depends_on",
+                    "source": {"id": 2, "server": "primary"},
+                    "target": {"id": 1, "server": "primary"},
+                }])
+                self.assertEqual(
+                    log,
+                    [excluded_argv, view_argv("primary", 2, "product")],
+                )
 
     def test_da21_direction_isolation_and_two_pass_reciprocal_evidence(self):
         expected_nodes = {
@@ -1027,6 +1141,50 @@ class CollectorTestCase(unittest.TestCase):
                 self.assertEqual(result.returncode, 2)
                 self.assertIsNone(output)
                 self.assertEqual(log, [])
+
+    def test_declared_servers_must_equal_the_cross_stage_server_universe(self):
+        invalid = policy(
+            [bug_scope("alpha", 1)],
+            unassigned_assignees={"beta": ["nobody@beta.example"]},
+        )
+        invalid["servers"].append("beta")
+        result, output, log = self.run_collector(invalid, [])
+        self.assertEqual(result.returncode, 2)
+        self.assertIsNone(output)
+        self.assertEqual(log, [])
+        self.assertEqual(
+            result.stderr,
+            b"policy error: servers must match scope and restriction servers\n",
+        )
+
+        valid = policy(
+            [bug_scope("alpha", 1)],
+            unassigned_assignees={"alpha": ["nobody@alpha.example"]},
+        )
+        result, output, log = self.run_collector(
+            valid,
+            [ok(view_argv("alpha", 1), bug(1))],
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(log, [view_argv("alpha", 1)])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            collection_path = root / "collection.json"
+            analysis_path = root / "analysis.json"
+            collection_path.write_bytes(output)
+            analyzed = subprocess.run(
+                [
+                    sys.executable,
+                    str(ANALYZE),
+                    "--input",
+                    str(collection_path),
+                    "--output",
+                    str(analysis_path),
+                ],
+                capture_output=True,
+                check=False,
+            )
+        self.assertEqual(analyzed.returncode, 0, analyzed.stderr)
 
     def test_duplicate_policy_keys_are_rejected_before_runner(self):
         serialized = json.dumps(policy([bug_scope("primary", 1)]))

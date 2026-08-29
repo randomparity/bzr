@@ -35,6 +35,9 @@ and `query run`. It preflights each declared server once with a released, read-o
 `bug list` before resource reads, then uses deterministic ascending bug-ID scope enumeration and
 hard depth and node caps plus a post-parse aggregate relationship cap.
 No direct `bzr` command composition is needed outside the collector.
+Each child command inherits the caller's environment for configuration and credential lookup, but
+the collector forces child `RUST_LOG=off` so diagnostic tracing cannot corrupt the structured error
+envelope.
 
 Released `bzr` commands emit a complete JSON response before the collector parses it.
 `max_relationships` therefore bounds only selected relationship records retained, staged,
@@ -84,7 +87,9 @@ server alias; never infer placeholders from a prefix or substring.
 Supported scopes are bug IDs, one alias per server, a saved-query name, a Custom Search URL, a
 product, a target milestone, or a version. A restriction may be a saved query, product, milestone,
 or version. For a Custom Search URL, set `parameter_names` to the recognized allowlisted names in
-the URL; do not copy parameter values into any report.
+the URL; do not copy parameter values into any report. The collector rejects URL userinfo and the
+case-insensitive query names `bugzilla_api_key`, `token`, and `api_key` before invoking `bzr` and
+reports only a generic policy error.
 
 Use one of these exact scope objects:
 
@@ -97,9 +102,10 @@ Use one of these exact scope objects:
 - `{"kind":"version","server":"NAME","value":"VERSION"}`
 
 Set `restriction` to null or to one saved-query, product, milestone, or version object using the
-same fields. Declare every scope/restriction server in `servers`. Multi-server analysis is the
-union of separately collected server-qualified graphs; never merge matching numeric IDs across
-servers.
+same fields. `servers` must equal the set of server aliases referenced by scopes and the optional
+restriction: declare every referenced alias and no extras. This is checked before server preflight.
+Multi-server analysis is the union of separately collected server-qualified graphs; never merge
+matching numeric IDs across servers.
 
 Run the collector exactly as follows:
 
@@ -120,6 +126,9 @@ an ambiguous code 102 without a successful preflight is command-fatal. Unknown a
 remain visible with stable identifiers and classes, never raw server messages. Any other API,
 authentication, TLS, HTTP, connection, transport, malformed output, or schema failure stops
 collection, preserves a valid partial inventory when possible, and prints a generic class.
+For product, milestone, and version restrictions, a fetched node's eligibility is decided before
+any selected or reciprocal adjacency is staged. An excluded node remains a visible
+`scope_restriction` boundary and contributes no observation or relationship-budget charge.
 
 ## Stage 2: analyze the captured evidence
 
