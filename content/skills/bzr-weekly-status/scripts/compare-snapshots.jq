@@ -1,9 +1,10 @@
 def sorted_unique: unique | sort;
+def canonical_rules: if (.terminal_statuses | type) == "array" then .terminal_statuses |= (unique | sort) else . end;
 def incompatibilities($old; $new; $required):
   ([if $old.format_version != $new.format_version then "format_version" else empty end,
     if $old.server != $new.server then "server" else empty end,
     if $old.scope_fingerprint != $new.scope_fingerprint then "scope" else empty end,
-    if $old.rules != $new.rules then "rules" else empty end,
+    if ($old.rules | canonical_rules) != ($new.rules | canonical_rules) then "rules" else empty end,
     if (($required - $old.fields) | length) > 0 then "fields" else empty end] | sorted_unique);
 def ids($snapshot): ($snapshot.bugs | keys | sort);
 def terminal($bug; $rules): (($rules.terminal_statuses // []) | index($bug.status)) != null;

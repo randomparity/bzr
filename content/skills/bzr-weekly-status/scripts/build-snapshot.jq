@@ -8,7 +8,7 @@ def bug_map:
   scope_label: $scope_label,
   scope_fingerprint: $scope_fingerprint,
   fields: ($fields | unique | sort),
-  rules: $rules,
+  rules: ($rules | if (.terminal_statuses | type) == "array" then .terminal_statuses |= (unique | sort) else . end),
   bugs: ((.data // .) | bug_map),
   limitations: []
 }
