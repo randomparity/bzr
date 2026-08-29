@@ -121,7 +121,8 @@ run_evidence dependency-links "$workdir/links.json" bug links "$root" \
 collection_end=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 
 summary="$workdir/summary.json"
-jq -cer --arg cutoff "$stale_cutoff" --slurpfile links "$workdir/links.json" '
+jq -cer --arg cutoff "$stale_cutoff" --argjson root "$root" \
+  --slurpfile links "$workdir/links.json" '
   def nonempty_string: type == "string" and length > 0;
   def status_known: (.status? | nonempty_string);
   def complete:
@@ -137,6 +138,7 @@ jq -cer --arg cutoff "$stale_cutoff" --slurpfile links "$workdir/links.json" '
   def blocker_unknown:
     if (status_known | not) then true
     elif complete then false
+    elif blocker_match then false
     else ((priority_known and whiteboard_known) | not) end;
   def timestamp_epoch: try (.last_change_time? | fromdateiso8601) catch null;
   def stale_match($cutoff_epoch):
@@ -155,7 +157,19 @@ jq -cer --arg cutoff "$stale_cutoff" --slurpfile links "$workdir/links.json" '
     if length == 0 then "(none)" else map("#" + tostring) | join(", ") end;
   ($cutoff | fromdateiso8601) as $cutoff_epoch |
   .data as $bugs |
-  ($links[0].data | map(select(.relation == "depends_on"))) as $dependencies |
+  ($bugs | map(select(.id == $root)) | .[0].depends_on? // [] |
+    if type == "array" then
+      map(select(type == "number" and . > 0 and floor == .)) | unique | sort
+    else [] end) as $dependency_ids |
+  ($links[0].data? // [] |
+    if type == "array" then
+      map(select(type == "object" and .relation? == "depends_on"))
+    else [] end) as $link_dependencies |
+  ($dependency_ids | map(
+    . as $dependency_id |
+    ($link_dependencies | map(select(.id? == $dependency_id)) | .[0]) //
+      {id: $dependency_id}
+  )) as $dependencies |
   ($bugs | map(select(blocker_match)) | map(.id)) as $blockers |
   ($bugs | map(select(blocker_unknown)) | map(.id)) as $unknown_blockers |
   ($bugs | map(select(stale_match($cutoff_epoch))) | map(.id)) as $stale |
@@ -249,7 +263,8 @@ fi
   printf '## Dependency risks\n\n'
   printf -- '- **Fact:** %s/%s visible outgoing dependencies are known unresolved. ' \
     "$dependency_count" "$dependency_total"
-  printf 'Bounded sample: %s. Source: `dependency-links`.' "$dependency_sample"
+  printf 'Bounded sample: %s. Sources: `product-scope`, `dependency-links`.' \
+    "$dependency_sample"
   if [[ $dependency_count -gt 0 ]]; then
     printf ' It affects #%s.\n' "$root"
   else
@@ -257,10 +272,10 @@ fi
   fi
   printf -- '- **Fact:** %s/%s visible outgoing dependencies have unknown status. ' \
     "$dependency_unknown_count" "$dependency_total"
-  printf 'Bounded sample: %s. Source: `dependency-links`.\n' \
+  printf 'Bounded sample: %s. Sources: `product-scope`, `dependency-links`.\n' \
     "$dependency_unknown_sample"
   if [[ $dependency_count -eq 0 ]]; then
-    printf -- '- **Fact:** No visible outgoing dependency is known unresolved. Source: `dependency-links`.\n'
+    printf -- '- **Fact:** No visible outgoing dependency is known unresolved. Sources: `product-scope`, `dependency-links`.\n'
   fi
   printf '\n'
   printf '## Stale or unowned work\n\n'

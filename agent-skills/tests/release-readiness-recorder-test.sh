@@ -64,6 +64,9 @@ case " $* " in
   unknown-missing)
     printf '%s\n' '{"data":[{"id":1,"relation":"depends_on"}]}'
     ;;
+  omitted)
+    printf '%s\n' '{"data":[]}'
+    ;;
   *)
     printf 'unexpected FAKE_LINK_MODE: %s\n' "$FAKE_LINK_MODE" >&2
     exit 1
@@ -92,6 +95,12 @@ case " $* " in
     ;;
   no-blocker)
     printf '%s\n' '{"data":[{"id":1,"summary":"dependency","status":"NEW","priority":"Normal","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 dependency","depends_on":[]},{"id":2,"summary":"complete","status":"RESOLVED","priority":"Highest","last_change_time":"2030-07-01T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 complete","depends_on":[]},{"id":3,"summary":"release root","status":"NEW","priority":"Normal","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 complete","depends_on":[1]}]}'
+    ;;
+  asymmetric-blocker)
+    printf '%s\n' '{"data":[{"id":1,"summary":"priority blocker","status":"NEW","priority":"Highest","last_change_time":"2030-08-29T00:00:00Z","depends_on":[]},{"id":2,"summary":"whiteboard blocker","status":"NEW","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"release-blocker","depends_on":[]},{"id":3,"summary":"complete root","status":"RESOLVED","last_change_time":"2030-08-29T00:00:00Z","depends_on":[]}]}'
+    ;;
+  missing-link-target)
+    printf '%s\n' '{"data":[{"id":1,"summary":"visible work","status":"NEW","priority":"Normal","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"ordinary","depends_on":[]},{"id":2,"summary":"complete","status":"RESOLVED","priority":"Normal","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"ordinary","depends_on":[]},{"id":3,"summary":"release root","status":"NEW","priority":"Highest","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"release-blocker","depends_on":[7]}]}'
     ;;
   *)
     printf 'unexpected FAKE_PRODUCT_MODE: %s\n' "$FAKE_PRODUCT_MODE" >&2
@@ -242,7 +251,7 @@ assert_report_contains "$work/timed-report.md" \
 assert_report_contains "$work/timed-report.md" \
   '1/3 visible bugs are known stale under the stated assumptions. Bounded sample: #3. Source: `product-scope`.'
 assert_report_contains "$work/timed-report.md" \
-  '1/1 visible outgoing dependencies are known unresolved. Bounded sample: #1. Source: `dependency-links`.'
+  '1/1 visible outgoing dependencies are known unresolved. Bounded sample: #1. Sources: `product-scope`, `dependency-links`.'
 grep -Fq 'Blocker IDs: #3. Stale IDs: #3. Dependency-risk IDs: #1.' \
   "$work/timed-report.md"
 grep -Fq 'whether dependency #1 must close before the release proceeds.' \
@@ -257,7 +266,7 @@ assert_report_contains "$work/unknown-status-report.md" \
 assert_report_contains "$work/unknown-status-report.md" \
   '3/3 visible bugs have unknown stale evidence. Bounded sample: #1, #2, #3. Source: `product-scope`.'
 assert_report_contains "$work/unknown-status-report.md" \
-  '1/1 visible outgoing dependencies have unknown status. Bounded sample: #1. Source: `dependency-links`.'
+  '1/1 visible outgoing dependencies have unknown status. Bounded sample: #1. Sources: `product-scope`, `dependency-links`.'
 assert_report_contains "$work/unknown-status-report.md" \
   'Unknown blocker IDs: #1, #2, #3. Unknown stale IDs: #1, #2, #3. Unknown dependency-risk IDs: #1.'
 
@@ -267,7 +276,7 @@ assert_report_contains "$work/unknown-time-report.md" \
 assert_report_contains "$work/unknown-time-report.md" \
   '3/3 visible bugs have unknown stale evidence. Bounded sample: #1, #2, #3. Source: `product-scope`.'
 assert_report_contains "$work/unknown-time-report.md" \
-  '1/1 visible outgoing dependencies have unknown status. Bounded sample: #1. Source: `dependency-links`.'
+  '1/1 visible outgoing dependencies have unknown status. Bounded sample: #1. Sources: `product-scope`, `dependency-links`.'
 assert_report_contains "$work/unknown-time-report.md" \
   'Unknown stale IDs: #1, #2, #3. Unknown dependency-risk IDs: #1.'
 
@@ -281,12 +290,32 @@ assert_report_excludes "$work/no-blocker-report.md" 'whether blocker (none)'
 
 run_helper_case no-dependency default resolved
 assert_report_contains "$work/no-dependency-report.md" \
-  'No visible outgoing dependency is known unresolved. Source: `dependency-links`.'
+  'No visible outgoing dependency is known unresolved. Sources: `product-scope`, `dependency-links`.'
 assert_report_contains "$work/no-dependency-report.md" \
   'Decide whether blocker #3 can be cleared before the release proceeds.'
 assert_report_excludes "$work/no-dependency-report.md" 'dependency (none)'
 assert_report_excludes "$work/no-dependency-report.md" '(none) must close'
 assert_report_excludes "$work/no-dependency-report.md" 'It affects #3.'
+
+run_helper_case asymmetric-blocker asymmetric-blocker resolved
+assert_report_contains "$work/asymmetric-blocker-report.md" \
+  '2/3 visible bugs are known to match a configured blocker. Bounded sample: #1, #2. Source: `product-scope`.'
+assert_report_contains "$work/asymmetric-blocker-report.md" \
+  '0/3 visible bugs have unknown blocker evidence. Bounded sample: (none). Source: `product-scope`.'
+assert_report_contains "$work/asymmetric-blocker-report.md" \
+  'Known blocker IDs #1, #2 are open and match at least one configured blocker rule.'
+assert_report_contains "$work/asymmetric-blocker-report.md" \
+  'Unknown blocker IDs: (none).'
+
+run_helper_case missing-link-target missing-link-target omitted
+assert_report_contains "$work/missing-link-target-report.md" \
+  '0/1 visible outgoing dependencies are known unresolved. Bounded sample: (none). Sources: `product-scope`, `dependency-links`.'
+assert_report_contains "$work/missing-link-target-report.md" \
+  '1/1 visible outgoing dependencies have unknown status. Bounded sample: #7. Sources: `product-scope`, `dependency-links`.'
+assert_report_contains "$work/missing-link-target-report.md" \
+  'Unknown dependency-risk IDs: #7.'
+assert_report_contains "$work/missing-link-target-report.md" \
+  'Resolve the unknown selected evidence before relying on the affected checks.'
 
 cat >"$work/fake-release-helper" <<'EOF'
 #!/usr/bin/env bash

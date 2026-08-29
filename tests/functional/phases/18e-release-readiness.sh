@@ -211,7 +211,7 @@ if [[ $_RR_REPORT_OK -eq 1 ]] &&
   grep -Fq '0/3 visible bugs are known stale' "$_RR_REPORT" &&
   grep -Fq "Bounded sample: (none). Source: \`product-scope\`" "$_RR_REPORT" &&
   grep -Fq '1/1 visible outgoing dependencies are known unresolved' "$_RR_REPORT" &&
-  grep -Fq "Source: \`dependency-links\`" "$_RR_REPORT" &&
+  grep -Fq "Sources: \`product-scope\`, \`dependency-links\`." "$_RR_REPORT" &&
   grep -Fq 'Stale IDs: (none)' "$_RR_REPORT" &&
   grep -Fq 'Unknown blocker IDs: (none). Unknown stale IDs: (none). Unknown dependency-risk IDs: (none).' "$_RR_REPORT" &&
   grep -Fq 'No selected blocker, dependency, or stale evidence was unknown' "$_RR_REPORT" &&
