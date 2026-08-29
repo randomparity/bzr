@@ -80,6 +80,17 @@ grep -Fq -- 'after the baseline and no later than `as-of`' "$SKILL"
 grep -Fq -- '`as-of - duration`' "$SKILL"
 grep -Fq -- 'Deadline, missing-milestone, blocker, stale, and ownership checks ignore complete bugs.' "$SKILL"
 grep -Fq -- '--server <server-profile>' "$SKILL"
+for source_url_contract in \
+  'For displayed Custom Search source-command provenance, never render the input URL verbatim.' \
+  'Omit userinfo and the fragment.' \
+  'Preserve only canonical non-secret filter and Boolean-chart' \
+  'List every distinct dropped query-parameter name without a value'; do
+  grep -Fq -- "$source_url_contract" "$SKILL" || {
+    printf 'release-readiness skill lacks safe source URL contract: %s\n' \
+      "$source_url_contract" >&2
+    exit 1
+  }
+done
 
 # Every named hardened-spec case must carry deterministic fixture data.
 for case_name in \
@@ -220,6 +231,32 @@ jq -e '
        contains("TOKEN") or contains("password") or contains("login") or
        contains("api_key")) ] | length) == 13 and
     ((.command_traces | tostring) | contains($case.secret) | not)))
+' "$BUGS" >/dev/null
+
+# RR-SECRET-URL provenance: an accepted credential-free URL still carries
+# report-private values. The displayed command keeps only canonical, non-secret
+# filters/Boolean-chart parameters and discloses dropped names without values.
+jq -e '
+  .contract_cases["RR-SECRET-URL"].provenance as $case |
+  all($case.retained_parameter_names[]; . as $name |
+    ($case.canonical_filter_names | index($name)) != null or
+    ($name | test("^[fov][1-9][0-9]*$"))) and
+  all($case.retained_parameter_names[]; . as $name |
+    $case.displayed_url | contains($name + "=")) and
+  all($case.retained_pairs[];
+    . as $pair | $case.displayed_url | contains($pair)) and
+  all($case.sensitive_parameter_names[]; . as $name |
+    $case.dropped_parameter_names | index($name) != null) and
+  all($case.input_sensitive_values[];
+    . as $value | $case.input_url | contains($value)) and
+  all($case.dropped_parameter_names[]; . as $name |
+    ($case.displayed_url | contains($name + "=") | not) and
+    ($case.displayed_source_command | contains("`" + $name + "`"))) and
+  all($case.dropped_values[]; . as $value |
+    $case.displayed_source_command | contains($value) | not) and
+  ($case.displayed_url | contains("#") | not) and
+  ($case.displayed_url | startswith("https://bugzilla.invalid/buglist.cgi?")) and
+  ($case.displayed_source_command | contains($case.displayed_url))
 ' "$BUGS" >/dev/null
 
 jq -e '

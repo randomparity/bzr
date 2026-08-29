@@ -20,8 +20,9 @@ agent.
 | RR-DIRECTION | Supplement only requested evidence | Only outgoing `depends_on` links are prerequisites; unreadable targets are unknown. |
 | RR-NO-ARTIFACT | Write a safe artifact | Markdown remains available when HTML/document capability is absent. |
 | RR-READ-ONLY | Collect one bounded rolling snapshot | Every command belongs to the read-only allowlist. |
-| RR-SECRET-URL | Start with scope and policy | Credential aliases, duplicate aliases, encoded names, malformed encoding, and userinfo stop before execution. |
+| RR-SECRET-URL | Start with scope and policy; Write a safe artifact | Credential aliases, duplicate aliases, encoded names, malformed encoding, and userinfo stop before execution. Accepted URL provenance omits sensitive values and fragments while naming dropped inputs. |
 
-The committed fixture includes one hostile `RR-INJECTION` report. Its expected
-Markdown is compared byte-for-byte by `tests/run.sh`; the structured source
-records operator input, command trace, and visible data separately.
+The committed fixture includes one hostile `RR-INJECTION` report and one accepted
+`RR-SECRET-URL` provenance record. `tests/run.sh` compares the Markdown golden
+byte-for-byte and verifies that the displayed source command preserves only canonical,
+non-secret filters while naming dropped inputs without their values.

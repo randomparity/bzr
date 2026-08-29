@@ -57,4 +57,6 @@ Generated: [UTC timestamp]
 Every assessment must point to supporting facts. Remote text is represented as
 inert code spans, never as executable Markdown or copied HTML. Preserve an
 explicit server selection in source commands as `--server <server-profile>` so
-the provenance remains reproducible without disclosing the configured name.
+the provenance remains reproducible without disclosing the configured name. A
+Custom Search source command contains only canonical, non-secret filter and
+Boolean-chart parameters, followed by the names—not values—of dropped inputs.
