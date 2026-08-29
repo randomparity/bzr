@@ -201,6 +201,26 @@ assert_report_excludes() {
   fi
 }
 
+history_normalizer="$repo_root/tests/functional/normalize-history.jq"
+history_order_a='[{"when":"2030-01-02T00:00:00Z","who":"alice@example.invalid","field":"status","old_value":"ASSIGNED","new_value":"RESOLVED","comment_id":12},{"when":"2030-01-01T00:00:00Z","who":"bob@example.invalid","field":"priority","old_value":"P2","new_value":"P1","comment_id":null},{"when":"2030-01-01T00:00:00Z","who":"alice@example.invalid","field":"status","old_value":"NEW","new_value":"ASSIGNED","comment_id":11}]'
+history_order_b='[{"when":"2030-01-01T00:00:00Z","who":"alice@example.invalid","field":"status","old_value":"NEW","new_value":"ASSIGNED","comment_id":11},{"when":"2030-01-02T00:00:00Z","who":"alice@example.invalid","field":"status","old_value":"ASSIGNED","new_value":"RESOLVED","comment_id":12},{"when":"2030-01-01T00:00:00Z","who":"bob@example.invalid","field":"priority","old_value":"P2","new_value":"P1","comment_id":null}]'
+normalized_history_a=$(jq -Sc -f "$history_normalizer" <<<"$history_order_a")
+normalized_history_b=$(jq -Sc -f "$history_normalizer" <<<"$history_order_b")
+[[ $normalized_history_a == "$normalized_history_b" ]] || {
+  printf 'history normalization failure: shuffled equivalent records differ\n' >&2
+  exit 1
+}
+for divergent_history in \
+  "$(jq -c '.[0].new_value = "CLOSED"' <<<"$history_order_a")" \
+  "$(jq -c '.[1:]' <<<"$history_order_a")" \
+  "$(jq -c '. + [{when: "2030-01-03T00:00:00Z", who: "alice@example.invalid", field: "resolution", old_value: "", new_value: "FIXED", comment_id: 13}]' <<<"$history_order_a")"; do
+  normalized_divergent=$(jq -Sc -f "$history_normalizer" <<<"$divergent_history")
+  [[ $normalized_history_a != "$normalized_divergent" ]] || {
+    printf 'history normalization failure: a state change was erased\n' >&2
+    exit 1
+  }
+done
+
 run_helper_case() {
   local name=$1
   local product_mode=$2
