@@ -170,28 +170,34 @@ test_begin "123u. demo helper turns live evidence into a PM report"
 _RR_REPORT_OK=1
 if [[ -x "$REPO_ROOT/tools/run-release-readiness-demo.sh" ]] &&
   BZR_BIN="$BZR_BIN" "$REPO_ROOT/tools/run-release-readiness-demo.sh" \
-    test "$_RR_MARKER" "$_RR_REPORT" "$_RR_REPORT_TRACE"; then
-  jq -r 'join(" ")' "$_RR_REPORT_TRACE" >"$_RR_REPORT_TRACE.expected"
+    test "$_RR_MARKER" "$_RR_ROOT" "$_RR_PRODUCT" \
+    "$_RR_REPORT" "$_RR_REPORT_TRACE"; then
+  jq -r '"[\(.label)] \(.argv | join(" "))"' "$_RR_REPORT_TRACE" \
+    >"$_RR_REPORT_TRACE.expected"
   # shellcheck disable=SC2016 # The sed addresses are literal Markdown fences.
   sed -n '/^```text$/,/^```$/p' "$_RR_REPORT" |
     sed '1d;$d' >"$_RR_REPORT_TRACE.actual"
   diff -u "$_RR_REPORT_TRACE.expected" "$_RR_REPORT_TRACE.actual" ||
     _RR_REPORT_OK=0
   jq -s -e --arg fields \
-    'id,summary,status,priority,severity,keywords,flags,depends_on,last_change_time,whiteboard' '
-    all(.[]; .[0:4] ==
+    'id,summary,status,priority,depends_on,last_change_time,whiteboard' '
+    all(.[]; (.label | type) == "string" and .argv[0:4] ==
       ["bzr", "--server", "<server-profile>", "--json"]) and
-    any(.[]; .[4:6] == ["bug", "list"] and
-      any(.[]; . == "bzr-release-readiness-demo-v1")) and
-    ([.[] | select(.[4:6] == ["query", "show"])] | length) == 2 and
+    ([.[].label] | length) == ([.[].label] | unique | length) and
+    any(.[]; .label == "marker-discovery" and .argv[4:6] == ["bug", "list"] and
+      any(.argv[]; . == "bzr-release-readiness-demo-v1")) and
+    ([.[] | select(.argv[4:6] == ["query", "show"])] | length) == 2 and
     all(.[];
-      if ((.[4:6] == ["bug", "search"]) or
-          (.[4:6] == ["query", "run"]) or
-          (.[4:6] == ["bug", "list"] and (index("--whiteboard") == null)))
-      then .[index("--fields") + 1] == $fields
+      if ((.argv[4:6] == ["bug", "search"]) or
+          (.argv[4:6] == ["query", "run"]) or
+          (.argv[4:6] == ["bug", "list"] and
+            (.argv | index("--whiteboard") == null)))
+      then .argv[(.argv | index("--fields")) + 1] == $fields
       else true
       end) and
-    all(.[]; .[4:6] != ["bug", "history"])
+    any(.[]; .label == "product-scope") and
+    any(.[]; .label == "dependency-links") and
+    all(.[]; .argv[4:6] != ["bug", "history"])
   ' "$_RR_REPORT_TRACE" >/dev/null || _RR_REPORT_OK=0
 else
   _RR_REPORT_OK=0
@@ -201,6 +207,12 @@ if [[ $_RR_REPORT_OK -eq 1 ]] &&
   grep -Fq '**Fact:**' "$_RR_REPORT" &&
   grep -Fq '**Assumption:**' "$_RR_REPORT" &&
   grep -Fq '**Assessment:** not ready' "$_RR_REPORT" &&
+  grep -Fq '1/3 visible bugs match a configured blocker' "$_RR_REPORT" &&
+  grep -Fq '0/3 visible bugs are stale' "$_RR_REPORT" &&
+  grep -Fq "Bounded sample: (none). Source: \`product-scope\`" "$_RR_REPORT" &&
+  grep -Fq '1/1 visible outgoing dependencies are unresolved' "$_RR_REPORT" &&
+  grep -Fq "Source: \`dependency-links\`" "$_RR_REPORT" &&
+  grep -Fq 'Stale IDs: (none)' "$_RR_REPORT" &&
   grep -Fq 'Ownership check: N/A (not selected)' "$_RR_REPORT" &&
   grep -Fq 'History/regression check: N/A (not selected)' "$_RR_REPORT" &&
   grep -Fq '## Data limitations' "$_RR_REPORT" &&
