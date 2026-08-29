@@ -46,11 +46,14 @@ Interfaces:
 
 Steps:
 
-1. Create a temporary controlled copy containing a nonexistent command shape in
-   the skill-local test, run `sh content/skills/bzr-release-readiness/tests/run.sh`,
-   and require that controlled negative case to fail while the test exits 0.
-2. Add the minimal test driver and hook it into `agent-skills/tests/run.sh`; run
-   `sh content/skills/bzr-release-readiness/tests/run.sh` and expect exit 0.
+1. Add the minimal test driver and a deliberately nonexistent documented command
+   shape, then run `cargo build --locked` followed by
+   `BZR_BIN="$PWD/target/debug/bzr" sh
+   content/skills/bzr-release-readiness/tests/run.sh`; require a non-zero exit
+   caused by that controlled command fault.
+2. Replace only the nonexistent command with its valid shape, hook the driver
+   into `agent-skills/tests/run.sh`, rerun the same `BZR_BIN`-bound command, and
+   expect exit 0. Run `make skills-test` for the aggregate hook proof.
 3. Write `SKILL.md` with scope selection, policy elicitation, exact command
    templates, selected-field matrix, rolling-snapshot/unknown rules, custom-field
    type/operator validation, total readiness precedence, read-only allowlist,
@@ -78,8 +81,10 @@ Steps:
    payload files in the functional installer fixture.
 2. Run `make test-one T=embeds_all_current_skills_in_lexical_order`; expect one
    passing focused test.
-3. Run `make test-one T=skills_install`; expect the installer integration tests
-   to pass.
+3. Run `make test-one
+   T=installs_all_embedded_files_and_replaces_owned_content_idempotently`;
+   expect the embedded payload replacement test to pass. Phase 18c supplies the
+   later real-binary, two-layout proof.
 
 Acceptance: both supported agent layouts receive the complete skill payload.
 
@@ -105,10 +110,14 @@ Interfaces:
 Steps:
 
 1. Add a functional phase that seeds deadline, assignee, milestone, priority,
-   whiteboard, history, dependency, saved-query, and custom-field evidence.
+   whiteboard, history, dependency, and saved-query evidence. Keep custom-field
+   operator behavior in deterministic fixtures because the supported containers
+   expose no portable custom-field creation surface.
 2. Exercise Custom Search URL, saved query, milestone, version, and product
    complete reads with explicit paging/order/projections plus the supplementary
-   read-only commands; assert no mutation occurs during the review segment.
+   read-only commands, including `server capabilities --json`; assert no mutation
+   occurs during the review segment and record the container's actual custom-field
+   availability rather than assuming one exists.
 3. Run the default functional suite and expect the new phase green.
 4. Add and test the demo helper against that live fixture; require its report to
    distinguish facts, assumptions, assessment, limitations, and bug IDs.
