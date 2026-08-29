@@ -34,9 +34,11 @@ once with a released read-only command before retrieving resources. A minimal po
 configured server and bug-ID root is:
 
 `max_relationships` applies after each released `bzr` command has returned and its complete JSON
-response has been parsed. It bounds retained, staged, and traversed relationship records, not the
-upstream Bugzilla/`bzr` response size, JSON-decoding work, or peak parse memory. Upstream bounded
-retrieval is tracked separately in issue #573.
+response has been parsed. It bounds selected relationship records retained, staged, and traversed.
+A one-direction run may additionally retain the same number of optional reciprocal candidates,
+which never drive traversal. Neither limit bounds the upstream Bugzilla/`bzr` response size,
+JSON-decoding work, or peak parse memory. Upstream bounded retrieval is tracked separately in
+issue #573.
 
 ```json
 {
@@ -48,9 +50,15 @@ retrieval is tracked separately in issue #573.
   "restriction": null,
   "scopes": [{"ids": [1200], "kind": "bug-ids", "server": "primary"}],
   "servers": ["primary"],
-  "stale_after_days": 14
+  "stale_after_days": 14,
+  "unassigned_assignees": {}
 }
 ```
+
+If a server assigns new bugs to a placeholder account, set `unassigned_assignees` to a per-server
+map of sorted exact login lists, such as `{"primary":["nobody@bugs.example"]}`. It defaults to an
+empty map. Use the `assigned_to` string returned through that same server alias. Exact equality is
+required; prefixes and substrings are not inferred as unassigned.
 
 Set the artifact paths, then run the installed helpers exactly as shown:
 
@@ -87,6 +95,11 @@ contain additional relationships.
 
 Version 1 reports structural roots and leaves, fan-out bottlenecks, stale and unassigned blockers,
 strongly connected components, component layers, and the longest dependency chain by edge count.
+Both text formats state the traversal direction and exact unassigned-assignee policy used to derive
+those findings. For one-direction collection, only selected evidence consumes
+`max_relationships`; bounded optional reciprocal evidence cannot preempt selected traversal.
+Selected adjacency IDs are deduplicated and sorted numerically before cap admission. For `both`,
+the canonical order is `blocks` then `depends_on`, with numeric order inside each field.
 These are properties of the collected graph, not a delivery schedule. The format has no duration
 model, so it does not support weighted critical-path analysis or delivery-date prediction. Members
 of a cyclic component also have no total execution order.

@@ -232,21 +232,21 @@ def validate_restriction(value, servers):
 
 
 def validate_policy(value):
-    exact_keys(
-        value,
-        {
-            "bounds",
-            "bzr",
-            "direction",
-            "resolved_mode",
-            "resolved_statuses",
-            "restriction",
-            "scopes",
-            "servers",
-            "stale_after_days",
-        },
-        "policy",
-    )
+    required_keys = {
+        "bounds",
+        "bzr",
+        "direction",
+        "resolved_mode",
+        "resolved_statuses",
+        "restriction",
+        "scopes",
+        "servers",
+        "stale_after_days",
+    }
+    if not isinstance(value, dict) or not required_keys.issubset(value):
+        raise PolicyError("policy has invalid keys")
+    if not set(value).issubset(required_keys | {"unassigned_assignees"}):
+        raise PolicyError("policy has invalid keys")
     if not isinstance(value["bounds"], dict) or not set(value["bounds"]).issubset(
         {"max_depth", "max_nodes", "max_relationships"}
     ) or not {"max_depth", "max_nodes"}.issubset(value["bounds"]):
@@ -287,6 +287,10 @@ def validate_policy(value):
     if not isinstance(statuses, list) or not statuses:
         raise PolicyError("resolved_statuses must be a non-empty array")
     statuses = sorted(set(nonempty_string(status, "resolved_statuses") for status in statuses))
+    unassigned_assignees = validate_unassigned_assignees(
+        value.get("unassigned_assignees", {}),
+        set(servers),
+    )
     return {
         "bounds": bounds,
         "bzr": nonempty_string(value["bzr"], "bzr"),
@@ -297,7 +301,24 @@ def validate_policy(value):
         "scopes": scopes,
         "servers": sorted(servers),
         "stale_after_days": positive_integer(value["stale_after_days"], "stale_after_days"),
+        "unassigned_assignees": unassigned_assignees,
     }
+
+
+def validate_unassigned_assignees(value, servers):
+    if not isinstance(value, dict) or not set(value).issubset(servers):
+        raise PolicyError("unassigned_assignees must map declared servers to login arrays")
+    normalized = {}
+    for server in sorted(value):
+        logins = value[server]
+        if not isinstance(logins, list) or any(
+            not isinstance(login, str) or not login for login in logins
+        ):
+            raise PolicyError("unassigned_assignees values must be login arrays")
+        if logins != sorted(set(logins)):
+            raise PolicyError("unassigned_assignees login arrays must be sorted and unique")
+        normalized[server] = logins
+    return normalized
 
 
 def analysis_timestamp(value):
@@ -403,6 +424,7 @@ class Collector:
         self.fetched = set()
         self.roots = set()
         self.staged = set()
+        self.reciprocal_staged = set()
         self.rejected = set()
         self.limitations = set()
         self.scope_truncated = False
@@ -622,28 +644,39 @@ class Collector:
     def stage_detail(self, server, detail):
         key = (server, detail["id"])
         retained = {"blocks": [], "depends_on": []}
-        field_order = relationship_field_order(self.policy["direction"])
-        for field_index, field in enumerate(field_order):
-            relationships = detail[field]
+        relationships = {
+            field: canonical_relationship_ids(detail[field])
+            for field in ("blocks", "depends_on")
+        }
+        selected = selected_fields(self.policy["direction"])
+        for field_index, field in enumerate(selected):
+            field_relationships = relationships[field]
             index = 0
             while (
-                index < len(relationships)
+                index < len(field_relationships)
                 and self.relationships_processed < self.max_relationships
             ):
-                target = relationships[index]
-                if type(target) is not int or target <= 0:
-                    raise FatalCollection("collection-malformed-output", "malformed-output")
+                target = field_relationships[index]
                 self.relationships_processed += 1
                 retained[field].append(target)
                 self.staged.add((field, server, detail["id"], server, target))
                 index += 1
-            if index < len(relationships):
-                self.omitted_relationships_lower_bound += len(relationships) - index
+            if index < len(field_relationships):
+                self.omitted_relationships_lower_bound += len(field_relationships) - index
                 self.record_relationship_cap()
             if self.relationship_cap_reached:
-                for later_field in field_order[field_index + 1:]:
-                    self.omitted_relationships_lower_bound += len(detail[later_field])
+                for later_field in selected[field_index + 1:]:
+                    self.omitted_relationships_lower_bound += len(
+                        relationships[later_field]
+                    )
                 break
+        if self.policy["direction"] != "both":
+            reciprocal_field = "blocks" if selected[0] == "depends_on" else "depends_on"
+            available = self.max_relationships - len(self.reciprocal_staged)
+            for target in relationships[reciprocal_field][:available]:
+                self.reciprocal_staged.add(
+                    (reciprocal_field, server, detail["id"], server, target)
+                )
         self.details[key] = {
             field: sorted(set(values)) for field, values in retained.items()
         }
@@ -691,10 +724,20 @@ class Collector:
 
     def normalized_observations(self):
         endpoints = {key for key in self.nodes if isinstance(key[1], int)}
-        staged = [item for item in self.staged if (item[1], item[2]) in endpoints and (item[3], item[4]) in endpoints]
-        selected = selected_fields(self.policy["direction"])
-        canonical = {canonical_edge(item) for item in staged if item[0] in selected}
-        retained = [item for item in staged if item[0] in selected or canonical_edge(item) in canonical]
+        selected = [
+            item
+            for item in self.staged
+            if (item[1], item[2]) in endpoints and (item[3], item[4]) in endpoints
+        ]
+        canonical = {canonical_edge(item) for item in selected}
+        reciprocal = [
+            item
+            for item in self.reciprocal_staged
+            if (item[1], item[2]) in endpoints
+            and (item[3], item[4]) in endpoints
+            and canonical_edge(item) in canonical
+        ]
+        retained = [*selected, *reciprocal]
         retained.sort(key=lambda item: (item[1], item[2], item[3], item[4], item[0]))
         return [
             {
@@ -732,6 +775,7 @@ class Collector:
                 "resolved_mode": self.policy["resolved_mode"],
                 "resolved_statuses": self.policy["resolved_statuses"],
                 "stale_after_days": self.policy["stale_after_days"],
+                "unassigned_assignees": self.policy["unassigned_assignees"],
             },
             "roots": roots,
             "schema": SCHEMA,
@@ -745,10 +789,10 @@ def selected_fields(direction):
     return (direction,)
 
 
-def relationship_field_order(direction):
-    if direction == "depends_on":
-        return ("depends_on", "blocks")
-    return ("blocks", "depends_on")
+def canonical_relationship_ids(values):
+    if any(type(value) is not int or value <= 0 for value in values):
+        raise FatalCollection("collection-malformed-output", "malformed-output")
+    return sorted(set(values))
 
 
 def canonical_edge(observation):

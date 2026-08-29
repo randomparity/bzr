@@ -5,6 +5,8 @@
 - Analysis timestamp: 2026&#45;08&#45;28T12:00:00Z
 - Bounds: maximum depth 5; maximum nodes 200; maximum relationships 200
 - Resolved&#45;node policy: include&#45;no&#45;traverse; resolved statuses RESOLVED
+- Traversal direction: both
+- Unassigned&#45;assignee policy: none
 - Duration assumptions: none; weighted critical&#45;path analysis is unsupported
 - Evidence gaps: 0 unknown nodes; 0 boundary nodes
 - Graph cap reached: false

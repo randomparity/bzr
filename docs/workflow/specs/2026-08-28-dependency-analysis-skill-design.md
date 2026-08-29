@@ -47,6 +47,9 @@ Before retrieval, the skill resolves:
   and the node ceiling keeps every component in the four-digit `cNNNN` namespace;
 - whether resolved nodes are included and traversed or included but not traversed;
 - optional product, milestone, or query-membership restriction;
+- optional `unassigned_assignees`, a map from declared server alias to a sorted unique list of
+  exact login strings observed through that same alias, default `{}`; no prefix or substring
+  inference;
 - stale threshold, analysis timestamp, and requested output formats.
 
 If the user omits bounds, the skill proposes conservative defaults of depth 5, 200 nodes, and 200
@@ -99,16 +102,21 @@ one command per admitted bug. The field list additionally
 requests `product`, `target_milestone`, or `version` when the corresponding restriction is
 active. A released `bzr` command produces a complete JSON response, which the collector captures
 and parses before applying `max_relationships`. The relationship cap therefore bounds only the
-post-parse relationship records retained, staged, discovered from, and traversed. It does not bound
-the upstream Bugzilla/`bzr` response size, JSON-decoding work, or peak parse memory; bounded
-upstream retrieval is deferred to issue #573. Both adjacency fields are fetched so reciprocal
+post-parse selected relationship records retained, staged, discovered from, and traversed. A
+one-direction run separately retains at most `max_relationships` optional reciprocal candidates,
+which never drive traversal. Neither limit bounds the upstream Bugzilla/`bzr` response size,
+JSON-decoding work, or peak parse memory; bounded upstream retrieval is deferred to issue #573.
+Both adjacency fields are fetched so reciprocal
 evidence can be normalized. The selected direction controls discovery, admission, node-cap
 consumption, and omitted-identity counts:
 `depends_on` selects dependency neighbors, `blocks` selects blocking neighbors, and `both` selects
-their union. For a one-direction policy, the collector stages the selected field before optional
-reciprocal evidence. For `both`, the canonical order is `blocks` then `depends_on`. Within a field,
-the collector preserves response order until the aggregate relationship budget is consumed; it
-never retains or discovers from the unprocessed suffix. After all admission and fetching finishes,
+their union. Every adjacency array is validated, deduplicated, and sorted numerically before cap
+admission, so response permutations cannot change a capped graph. For a one-direction policy, only
+selected-field observations consume `max_relationships`; optional reciprocal candidates use a
+separate retention ceiling of `max_relationships` and cannot stop selected traversal. For `both`,
+both fields are selected and consume the shared budget in canonical order `blocks` then
+`depends_on`, with numeric order inside each field. The collector never retains or discovers
+selected evidence from the unprocessed canonical suffix. After all admission and fetching finishes,
 a deterministic second pass first
 filters staged observations to pairs whose endpoints are admitted, establishes canonical edges
 from selected observations, then attaches unselected observations only when they normalize onto
@@ -142,10 +150,10 @@ for the current frontier; duplicate observations count once. No further frontier
 deeper undiscovered identities are neither named nor counted. Collection order is canonical: server
 aliases lexically, numeric roots sorted ascending after stable deduplication,
 breadth-first depth, and numeric bug ID within each frontier. Output records use canonical sorted
-order. Relationship exhaustion stops further staging, discovery, and fetching, preserves the
-already admitted graph, and adds limitation `relationship_cap`. Its
-`omitted_relationships_lower_bound` counts only visibly skipped entries in fetched arrays and is
-explicitly a lower bound because unprocessed nodes may contain more. Scope restrictions
+order. Selected-relationship exhaustion stops further selected staging, discovery, and fetching,
+preserves the already admitted graph, and adds limitation `relationship_cap`. Its
+`omitted_relationships_lower_bound` counts only visibly skipped canonical selected entries in
+fetched arrays and is explicitly a lower bound because unprocessed nodes may contain more. Scope restrictions
 are evaluated from fetched fields or the initial scope membership; nodes outside the
 restriction remain visible boundary nodes and are not traversed.
 
@@ -221,7 +229,8 @@ The normative collection shape is:
     "duration": null,
     "resolved_mode": "include-no-traverse",
     "resolved_statuses": ["RESOLVED"],
-    "stale_after_days": 14
+    "stale_after_days": 14,
+    "unassigned_assignees": {}
   },
   "roots": [{"id": 1200, "requested": "1200", "server": "primary"}],
   "schema": "bzr-dependency-collection/v1",
@@ -260,6 +269,9 @@ limitation `scope-node-cap`; the first `max_nodes` roots remain. Traversal exhau
 its stable run-level limitation code and status `partial` without changing already recorded nodes.
 Relationship exhaustion sets `relationship_cap_reached: true`, limitation `relationship_cap`, and
 the explicit lower-bound omission count without discarding already admitted nodes or observations.
+For a one-direction policy, at most `max_relationships` selected observations and a separately
+bounded `max_relationships` reciprocal candidates may be retained; unmatched reciprocal candidates
+are not serialized. For `both`, every observation is selected and the single bound applies.
 The complete version 1 limitation vocabulary is `collection-api`, `collection-auth`,
 `collection-http`, `collection-malformed-output`, `collection-schema-version`, `collection-tls`,
 `collection-transport`, `collection-unclassified`, `graph-node-cap`, `relationship_cap`,
@@ -301,7 +313,7 @@ The normative analyzer output is one `bzr-dependency-analysis/v1` document:
     {"assigned_to": null, "boundary_reason": null, "depth": 1, "error_type": null, "id": 1199, "last_change_time": null, "provenance": {"command": "bug view", "server": "primary"}, "requested": "1199", "requested_aliases": [], "resolution": "FIXED", "server": "primary", "stale": false, "state": "known", "status": "RESOLVED", "summary": "Foundation"},
     {"assigned_to": null, "boundary_reason": null, "depth": 0, "error_type": null, "id": 1200, "last_change_time": "2026-08-27T12:00:00Z", "provenance": {"command": "bug view", "server": "primary"}, "requested": "1200", "requested_aliases": [], "resolution": null, "server": "primary", "stale": false, "state": "known", "status": "NEW", "summary": "Delivery"}
   ],
-  "policy": {"direction": "both", "duration": null, "resolved_mode": "include-no-traverse", "resolved_statuses": ["RESOLVED"], "stale_after_days": 14},
+  "policy": {"direction": "both", "duration": null, "resolved_mode": "include-no-traverse", "resolved_statuses": ["RESOLVED"], "stale_after_days": 14, "unassigned_assignees": {}},
   "provenance": [{"parameter_names": [], "scope_kind": "bug-ids", "source": null, "server": "primary"}],
   "roots": [{"id": 1200, "requested": "1200", "server": "primary"}],
   "schema": "bzr-dependency-analysis/v1",
@@ -344,8 +356,10 @@ rules.
 structural leaves have zero outgoing canonical edges. Both lists contain identity references in
 identity order. A bottleneck is a node with more than one outgoing canonical edge and has the exact
 shape `{"fan_out": NUMBER, "node": IDENTITY_REFERENCE}`; bottlenecks sort by descending `fan_out`
-then identity. An unassigned blocker is a known unresolved node with null `assigned_to` and at
-least one outgoing canonical edge; its list uses identity references in identity order.
+then identity. An unassigned blocker is a known unresolved node with at least one outgoing
+canonical edge whose `assigned_to` is null or exactly equals a login in
+`policy.unassigned_assignees[node.server]`; prefixes and substrings never match. Its list uses
+identity references in identity order.
 A stale blocker is a node with `stale: true` and at least one outgoing canonical edge; its list
 uses identity references in identity order. Stale nodes with no successors are not blockers.
 `execution_order.component_order` is the concatenation of `layers`; `cycle_impediments` contains
@@ -425,9 +439,10 @@ Markdown fences and Mermaid tokens and cover raw HTML, images, autolinks, nested
 and PDF are not v1 contracts; the skill may suggest external conversion only after the user chooses
 a capable tool and understands that converter's safety boundary.
 
-Every output includes bounds, sanitized scope provenance, server provenance, timestamp,
-resolved-node policy, duration assumptions, unknown/boundary counts, and collection command
-names. Provenance records server aliases, scope kind, saved-query name, and allowlisted filter
+Every output includes bounds, sanitized scope provenance, server provenance, timestamp, traversal
+direction, resolved-node policy, exact unassigned-assignee policy, duration assumptions,
+unknown/boundary counts, and collection command names. Provenance records server aliases, scope
+kind, saved-query name, and allowlisted filter
 names, never literal credentials, unknown URL parameters, or unsanitized Custom Search URLs.
 No workflow command mutates Bugzilla.
 
@@ -495,7 +510,9 @@ behavioral Python tests compare helper output against fixture oracles byte-for-b
 | DA-19 | PM findings with unresolved roots, branch, and cycle | Roots preserved; deterministic structural roots/leaves, bottlenecks, unassigned blockers, and execution assumptions | Missing or ambiguous finding | block |
 | DA-20 | Zero-node partial restriction result | Exact empty findings and zero-length empty path with partial assumption | Rejection or fabricated path | block |
 | DA-21 | Direction isolation at cap | Only selected adjacency admits nodes and consumes cap for `depends_on`, `blocks`, and `both` | Unselected neighbor changes inventory | block |
-| DA-22 | Wide adjacency beyond `max_relationships` | Retains/traverses only the deterministic post-parse bounded prefix, prioritizes the selected direction, and reports a lower-bound omission count | Unbounded retained/traversed state or hidden omission | block |
+| DA-22 | Wide/permuted adjacency beyond `max_relationships` | Canonical numeric selected prefix is byte-identical; one-direction reciprocal evidence cannot preempt later selected traversal; omissions are lower bounds | Response-order graph, unbounded retained state, or hidden omission | block |
+| DA-23 | Default-assignee placeholder login | Exact per-server login and null assignee are unassigned blockers; prefix lookalike is assigned | Missing blocker or prefix inference | block |
+| DA-24 | Every traversal direction rendered | Escaped `Traversal direction` metadata in Markdown and Mermaid | Direction omitted from PM artifact | block |
 
 `python3 content/skills/bzr-dependency-analysis/tests/test_analyze.py` runs DA-01 and DA-03
 through DA-11 plus DA-16, DA-19, and DA-20. `python3 content/skills/bzr-dependency-analysis/tests/test_collect.py`
@@ -531,8 +548,9 @@ secrets, validate Bugzilla URLs, and emit its documented JSON envelopes.
   as shell, template source, HTML, or Mermaid syntax.
 - Positive numeric bounds, including the 9,999 node and relationship ceilings, duplicate-free keys,
   and valid UTF-8 are checked before collection; queue membership enforces fetch-once and the hard
-  depth and node caps, while the post-parse relationship cap bounds retained/staged/traversed
-  relationship records.
+  depth and node caps, while post-parse selected and optional-reciprocal ceilings bound retained
+  relationship evidence to at most twice `max_relationships` for one-direction runs and once that
+  value for `both`.
 - Server-qualified identities prevent cross-server collisions.
 - Only documented read commands are allowlisted; the skill refuses mutation requests during an
   analysis.
@@ -570,7 +588,10 @@ a real inaccessible starting ID beside visible roots in both modes. It asserts `
 server messages. Deliberately rejected credentials in both modes additionally prove that preflight
 is sanitized, command-fatal, and completes before any root is admitted or resource read begins.
 It also runs the installed pipeline with a one-relationship budget and asserts the bounded admitted
-prefix, `relationship_cap`, and lower-bound omission metadata.
+prefix, `relationship_cap`, and lower-bound omission metadata. Its main live graph derives the
+actual component default-assignee login separately through each server profile, configures those
+exact per-server values, and asserts the default-assigned structural blocker plus escaped
+direction/policy metadata.
 Phase 18d gives the live graph a stable, unique whiteboard marker so a later read-only demonstration
 can discover the already-provisioned IDs. Fixture creation belongs only to the disposable functional
 harness; neither the installed skill nor the displayed analysis workflow performs a mutation.

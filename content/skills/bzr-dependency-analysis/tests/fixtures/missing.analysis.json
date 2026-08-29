@@ -159,7 +159,8 @@
     "resolved_statuses": [
       "RESOLVED"
     ],
-    "stale_after_days": 14
+    "stale_after_days": 14,
+    "unassigned_assignees": {}
   },
   "provenance": [
     {

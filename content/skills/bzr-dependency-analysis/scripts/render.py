@@ -140,7 +140,10 @@ def validate_policy(document):
     policy = document["policy"]
     exact_keys(
         policy,
-        {"direction", "duration", "resolved_mode", "resolved_statuses", "stale_after_days"},
+        {
+            "direction", "duration", "resolved_mode", "resolved_statuses",
+            "stale_after_days", "unassigned_assignees",
+        },
         "policy",
     )
     if policy["direction"] not in {"blocks", "both", "depends_on"}:
@@ -151,6 +154,21 @@ def validate_policy(document):
         raise RenderInputError("policy.resolved_mode is unsupported")
     sorted_strings(policy["resolved_statuses"], "policy.resolved_statuses", nonempty=True)
     integer(policy["stale_after_days"], "policy.stale_after_days", positive=True)
+    validate_unassigned_assignees(
+        policy["unassigned_assignees"],
+        {entry["server"] for entry in document["provenance"]},
+    )
+
+
+def validate_unassigned_assignees(value, servers):
+    if not isinstance(value, dict) or not set(value).issubset(servers):
+        raise RenderInputError(
+            "policy.unassigned_assignees must map provenance servers to login arrays"
+        )
+    if list(value) != sorted(value):
+        raise RenderInputError("policy.unassigned_assignees must use sorted server keys")
+    for server, logins in value.items():
+        sorted_strings(logins, f"policy.unassigned_assignees.{server}")
 
 
 def validate_provenance(document):
@@ -461,8 +479,8 @@ def validate_analysis(document):
     validate_cap_relationships(document["cap"], document["limitations"])
     if (document["status"] == "partial") != bool(document["limitations"]):
         raise RenderInputError("status and limitations disagree")
-    validate_policy(document)
     validate_provenance(document)
+    validate_policy(document)
     if not isinstance(document["nodes"], list):
         raise RenderInputError("nodes must be an array")
     identities = [validate_node(node, index) for index, node in enumerate(document["nodes"])]
@@ -531,6 +549,10 @@ def metadata_lines(document):
     commands = collection_commands(document)
     statuses = ", ".join(document["policy"]["resolved_statuses"])
     limitations = ", ".join(document["limitations"]) or "none"
+    unassigned = " | ".join(
+        f"{server}={','.join(logins)}"
+        for server, logins in document["policy"]["unassigned_assignees"].items()
+    ) or "none"
     return [
         f"Schema: {document['schema']}",
         f"Status: {document['status']}",
@@ -544,6 +566,8 @@ def metadata_lines(document):
             f"Resolved-node policy: {document['policy']['resolved_mode']}; "
             f"resolved statuses {statuses}"
         ),
+        f"Traversal direction: {document['policy']['direction']}",
+        f"Unassigned-assignee policy: {unassigned}",
         "Duration assumptions: none; weighted critical-path analysis is unsupported",
         (
             f"Evidence gaps: {states.count('unknown')} unknown nodes; "
