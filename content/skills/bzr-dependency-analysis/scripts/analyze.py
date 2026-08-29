@@ -165,10 +165,17 @@ def parse_analysis_timestamp(value):
         ) from error
 
 
-def validate_policy(policy):
+def validate_policy(policy, servers):
     exact_keys(
         policy,
-        {"direction", "duration", "resolved_mode", "resolved_statuses", "stale_after_days"},
+        {
+            "direction",
+            "duration",
+            "resolved_mode",
+            "resolved_statuses",
+            "stale_after_days",
+            "unassigned_assignees",
+        },
         "policy",
     )
     if policy["direction"] not in {"depends_on", "blocks", "both"}:
@@ -181,6 +188,21 @@ def validate_policy(policy):
         policy["resolved_statuses"], "policy.resolved_statuses", allow_empty=False
     )
     positive_integer(policy["stale_after_days"], "policy.stale_after_days")
+    validate_unassigned_assignees(policy["unassigned_assignees"], servers)
+
+
+def validate_unassigned_assignees(value, servers):
+    if not isinstance(value, dict) or not set(value).issubset(servers):
+        raise AnalysisInputError(
+            "policy.unassigned_assignees must map provenance servers to login arrays"
+        )
+    if list(value) != sorted(value):
+        raise AnalysisInputError("policy.unassigned_assignees must use sorted server keys")
+    for server, logins in value.items():
+        sorted_unique_strings(
+            logins,
+            f"policy.unassigned_assignees.{server}",
+        )
 
 
 def identity_key(node):
@@ -397,8 +419,11 @@ def validate_collection(document, allow_partial):
         allowed=LIMITATION_CODES,
     )
     validate_cap_relationships(document["cap"], document["limitations"])
-    validate_policy(document["policy"])
     validate_provenance(document["provenance"])
+    validate_policy(
+        document["policy"],
+        {entry["server"] for entry in document["provenance"]},
+    )
     if document["status"] not in {"complete", "partial"}:
         raise AnalysisInputError("status is unsupported")
     if (document["status"] == "partial") != bool(document["limitations"]):
@@ -407,8 +432,15 @@ def validate_collection(document, allow_partial):
         raise AnalysisInputError("partial input requires --allow-partial")
     nodes, node_lookup, numeric_nodes = validate_nodes(document["nodes"], max_nodes)
     validate_observations(document["observations"], numeric_nodes)
-    if len(document["observations"]) > max_relationships:
-        raise AnalysisInputError("observations exceeds bounds.max_relationships")
+    selected = selected_fields(document["policy"]["direction"])
+    selected_count = sum(
+        observation["field"] in selected
+        for observation in document["observations"]
+    )
+    if selected_count > max_relationships:
+        raise AnalysisInputError("selected observations exceeds bounds.max_relationships")
+    if len(document["observations"]) - selected_count > max_relationships:
+        raise AnalysisInputError("reciprocal observations exceeds bounds.max_relationships")
     validate_roots(document["roots"], node_lookup)
     return nodes
 
@@ -461,6 +493,12 @@ def validate_cap_relationships(cap, limitations):
     }
     if len(scope_limitations) > 1 or cap["scope_truncated"] != bool(scope_limitations):
         raise AnalysisInputError("scope cap metadata is inconsistent")
+
+
+def selected_fields(direction):
+    if direction == "both":
+        return {"blocks", "depends_on"}
+    return {direction}
 
 
 def validate_nodes(nodes, max_nodes):
@@ -755,6 +793,10 @@ def pm_findings(nodes, edges, components, layers, policy, status):
     if cycles:
         assumptions.append("cycles-prevent-total-node-order")
     resolved = set(policy["resolved_statuses"])
+    unassigned_assignees = {
+        server: set(logins)
+        for server, logins in policy["unassigned_assignees"].items()
+    }
     bottleneck_keys = sorted(
         (key for key in ordered if outgoing[key] > 1),
         key=lambda key: (-outgoing[key], identity_key(lookup[key])),
@@ -790,7 +832,11 @@ def pm_findings(nodes, edges, components, layers, policy, status):
             for key in ordered
             if lookup[key]["state"] == "known"
             and lookup[key]["status"] not in resolved
-            and lookup[key]["assigned_to"] is None
+            and (
+                lookup[key]["assigned_to"] is None
+                or lookup[key]["assigned_to"]
+                in unassigned_assignees.get(lookup[key]["server"], set())
+            )
             and outgoing[key] > 0
         ],
     }

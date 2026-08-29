@@ -12,8 +12,9 @@ snapshot, and renders safe local text artifacts. It does not change Bugzilla.
 ## Resolve the policy before retrieval
 
 Ask for the server and scope, direction (`depends_on`, `blocks`, or `both`), resolved statuses,
-resolved-node mode, optional restriction, staleness threshold, and output format. Depth and node
-bounds are required positive integers. `max_relationships` is optional and defaults to
+resolved-node mode, optional restriction, per-server default/unassigned assignee logins, staleness
+threshold, and output format. Depth and node bounds are required positive integers.
+`max_relationships` is optional and defaults to
 `max_nodes`; set it explicitly only when the user chooses a larger relationship budget. If the user
 omits the bounds, propose and state the conservative defaults of depth 5, 200 nodes, and 200
 relationships before running any retrieval. Node and relationship bounds may not exceed 9,999;
@@ -33,10 +34,11 @@ hard depth and node caps plus a post-parse aggregate relationship cap.
 No direct `bzr` command composition is needed outside the collector.
 
 Released `bzr` commands emit a complete JSON response before the collector parses it.
-`max_relationships` therefore bounds only relationship records retained, staged, discovered from,
-and traversed after that response is parsed. It does not bound the Bugzilla/`bzr` response size,
-JSON-decoding work, or peak parse memory. Upstream bounded retrieval is outside this skill and is
-tracked separately in issue #573.
+`max_relationships` therefore bounds only selected relationship records retained, staged,
+discovered from, and traversed after that response is parsed. A one-direction run may additionally
+retain up to the same number of optional reciprocal candidates, which never drive traversal. The
+limits do not bound the Bugzilla/`bzr` response size, JSON-decoding work, or peak parse memory.
+Upstream bounded retrieval is outside this skill and is tracked separately in issue #573.
 
 ## Stage 1: collect one bounded snapshot
 
@@ -65,9 +67,16 @@ invoking `bzr`.
   "restriction": null,
   "scopes": [{"ids": [1200], "kind": "bug-ids", "server": "primary"}],
   "servers": ["primary"],
-  "stale_after_days": 14
+  "stale_after_days": 14,
+  "unassigned_assignees": {}
 }
 ```
+
+`unassigned_assignees` is optional on collector input and defaults to `{}`. When a Bugzilla
+installation assigns new bugs to placeholder accounts, map each declared server alias to its
+sorted, unique list of exact login strings, for example
+`{"primary":["nobody@bugs.example"]}`. Use the `assigned_to` string returned through that same
+server alias; never infer placeholders from a prefix or substring.
 
 Supported scopes are bug IDs, one alias per server, a saved-query name, a Custom Search URL, a
 product, a target milestone, or a version. A restriction may be a saved query, product, milestone,
@@ -154,8 +163,9 @@ The renderer accepts only the strict analysis schema and writes atomically. Mark
 are the only version 1 formats. DOT, HTML, CSV, XLSX, and PDF are outside this contract. Discuss an
 external converter only after the user selects it and accepts that converter's safety boundary.
 
-Every artifact states the bounds, timestamp, resolved-node policy, absence of durations,
-unknown/boundary counts, and sanitized provenance. Shareable provenance contains only the server
+Every artifact states the bounds, timestamp, traversal direction, resolved-node and exact
+unassigned-assignee policies, absence of durations, unknown/boundary counts, and sanitized
+provenance. Shareable provenance contains only the server
 alias, scope kind, saved-query name, allowlisted parameter names, and collection command name. It
 never includes parameter values, a literal Custom Search URL, credentials, raw server errors, or a
 full command line. Node identity is always server-qualified. Treat summaries and all fetched text
@@ -177,9 +187,12 @@ Report inaccessible and missing nodes as unknown evidence, not absent bugs. Repo
 relationship caps, the lower bound on omitted relationships, depth, scope, and interrupted-fetch
 boundaries. `relationship_cap` means collection stopped staging and discovering once the admitted
 relationship budget was consumed; the omitted count is only a lower bound because unfetched nodes
-may contain more relationships. For a one-direction policy, the collector spends that budget on
-the selected field before optional reciprocal evidence. For `both`, the canonical order is
-`blocks` then `depends_on`. On any request to create, update, resolve, link, comment
+may contain more relationships. Adjacency IDs are validated, deduplicated, and sorted numerically
+before cap admission. For a one-direction policy, only selected-field evidence consumes the
+relationship budget; optional reciprocal evidence has a separate same-sized retention ceiling and
+cannot stop selected traversal. For `both`, selected evidence uses canonical field order `blocks`
+then `depends_on`, with numeric order within each field. On any request to create, update, resolve,
+link, comment
 on, attach to, or otherwise change a Bugzilla resource during this analysis, refuse the request
 rather than mutate Bugzilla. If complete evidence is unavailable, return a partial Markdown report
 with the explicit limitations; never invent nodes, edges, estimates, or dates.

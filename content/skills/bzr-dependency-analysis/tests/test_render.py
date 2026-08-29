@@ -157,6 +157,54 @@ class RendererTestCase(unittest.TestCase):
                 for value in expected_stale:
                     self.assertIn(value, normalized_stale)
 
+    def test_traversal_direction_metadata_is_escaped_in_both_formats(self):
+        source = json.loads((FIXTURES / "hostile.analysis.json").read_text())
+        source["policy"]["unassigned_assignees"] = {}
+        for direction in ("blocks", "both", "depends_on"):
+            source["policy"]["direction"] = direction
+            for output_format in ("markdown", "mermaid"):
+                with self.subTest(direction=direction, output_format=output_format):
+                    result, output = self.run_renderer(source, output_format)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    rendered = output.decode("utf-8")
+                    expected = direction.replace("_", "&#95;") \
+                        if output_format == "markdown" else direction
+                    self.assertIn(f"Traversal direction: {expected}", rendered)
+
+    def test_unassigned_assignee_policy_is_closed_and_metadata_is_escaped(self):
+        source = json.loads((FIXTURES / "hostile.analysis.json").read_text())
+        source["policy"]["unassigned_assignees"] = {
+            "primary": ["nobody_[default]@example.test"]
+        }
+        markdown_result, markdown = self.run_renderer(source, "markdown")
+        self.assertEqual(markdown_result.returncode, 0, markdown_result.stderr)
+        self.assertIn(
+            b"Unassigned&#45;assignee policy: primary=nobody&#95;&#91;default&#93;@example&#46;test",
+            markdown,
+        )
+        mermaid_result, mermaid = self.run_renderer(source, "mermaid")
+        self.assertEqual(mermaid_result.returncode, 0, mermaid_result.stderr)
+        self.assertIn(
+            b"Unassigned-assignee policy: primary=nobody_&#91;default&#93;@example.test",
+            mermaid,
+        )
+
+        for value in (
+            {"other": ["nobody@example.test"]},
+            {"primary": ["z@example.test", "a@example.test"]},
+            {"primary": ["same@example.test", "same@example.test"]},
+            {"primary": "nobody@example.test"},
+        ):
+            hostile = copy.deepcopy(source)
+            hostile["policy"]["unassigned_assignees"] = value
+            result, output = self.run_renderer(
+                hostile,
+                "markdown",
+                initial=b"keep\n",
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertEqual(output, b"keep\n")
+
     def test_strict_schema_rejects_unknown_keys_without_replacing_output(self):
         document = json.loads((FIXTURES / "hostile.analysis.json").read_text())
         document["unexpected"] = True

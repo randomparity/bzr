@@ -21,6 +21,7 @@ DETAIL_FIELDS = (
     "id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on"
 )
 DEFAULT_RELATIONSHIP_LIMIT = object()
+DEFAULT_UNASSIGNED_ASSIGNEES = object()
 
 COLLECT_SPEC = importlib.util.spec_from_file_location("dependency_collector", COLLECT)
 if COLLECT_SPEC is None or COLLECT_SPEC.loader is None:
@@ -37,6 +38,7 @@ def policy(
     max_relationships=DEFAULT_RELATIONSHIP_LIMIT,
     direction="both",
     restriction=None,
+    unassigned_assignees=DEFAULT_UNASSIGNED_ASSIGNEES,
 ):
     servers = sorted({scope["server"] for scope in scopes} | (
         {restriction["server"]} if restriction else set()
@@ -46,7 +48,7 @@ def policy(
         bounds["max_relationships"] = 9_999
     elif max_relationships is not None:
         bounds["max_relationships"] = max_relationships
-    return {
+    result = {
         "bounds": bounds,
         "bzr": "bzr",
         "direction": direction,
@@ -57,6 +59,9 @@ def policy(
         "servers": servers,
         "stale_after_days": 14,
     }
+    if unassigned_assignees is not DEFAULT_UNASSIGNED_ASSIGNEES:
+        result["unassigned_assignees"] = unassigned_assignees
+    return result
 
 
 def bug_scope(server, *ids):
@@ -787,6 +792,150 @@ class CollectorTestCase(unittest.TestCase):
                     [1, expected_id],
                 )
                 self.assertEqual(log, [view_argv("primary", 1)])
+
+    def test_relationship_cap_canonicalizes_selected_adjacency_before_admission(self):
+        cases = (
+            ("depends_on", bug(1, depends=[3, 2]), bug(1, depends=[2, 3])),
+            ("blocks", bug(1, blocks=[3, 2]), bug(1, blocks=[2, 3])),
+            (
+                "both",
+                bug(1, blocks=[3, 2], depends=[5, 4]),
+                bug(1, blocks=[2, 3], depends=[4, 5]),
+            ),
+        )
+        for direction, permuted, canonical in cases:
+            with self.subTest(direction=direction):
+                input_policy = policy(
+                    [bug_scope("primary", 1)],
+                    max_relationships=1,
+                    direction=direction,
+                )
+                first = self.run_collector(
+                    input_policy,
+                    [ok(view_argv("primary", 1), permuted)],
+                )
+                second = self.run_collector(
+                    input_policy,
+                    [ok(view_argv("primary", 1), canonical)],
+                )
+                self.assertEqual(first[0].returncode, 0, first[0].stderr)
+                self.assertEqual(second[0].returncode, 0, second[0].stderr)
+                self.assertEqual(first[1], second[1])
+                self.assertEqual(
+                    [node["id"] for node in self.parse(first[1])["nodes"]],
+                    [1, 2],
+                )
+
+    def test_reciprocal_evidence_cannot_preempt_later_selected_traversal(self):
+        for direction in ("blocks", "depends_on"):
+            with self.subTest(direction=direction):
+                selected_field = "depends" if direction == "depends_on" else "blocks"
+                reciprocal_field = "blocks" if direction == "depends_on" else "depends"
+                selected = {selected_field: [2]}
+                reciprocal = {reciprocal_field: [2]}
+                later_selected = {selected_field: [3, 1]}
+                later_reciprocal = {reciprocal_field: [1]}
+                responses = [
+                    ok(view_argv("primary", 1), bug(1, **selected, **reciprocal)),
+                    ok(
+                        view_argv("primary", 2),
+                        bug(2, **later_selected, **later_reciprocal),
+                    ),
+                ]
+                result, output, log = self.run_collector(
+                    policy(
+                        [bug_scope("primary", 1)],
+                        max_relationships=3,
+                        direction=direction,
+                    ),
+                    responses,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                document = self.parse(output)
+                self.assertEqual(
+                    [node["id"] for node in document["nodes"]],
+                    [1, 2, 3],
+                )
+                self.assertEqual(len(document["observations"]), 5)
+                self.assertEqual(
+                    document["cap"]["omitted_relationships_lower_bound"],
+                    0,
+                )
+                self.assertEqual(
+                    log,
+                    [view_argv("primary", 1), view_argv("primary", 2)],
+                )
+
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    collection_path = root / "collection.json"
+                    analysis_path = root / "analysis.json"
+                    collection_path.write_bytes(output)
+                    analyzed = subprocess.run(
+                        [
+                            sys.executable,
+                            str(ANALYZE),
+                            "--input",
+                            str(collection_path),
+                            "--output",
+                            str(analysis_path),
+                            "--allow-partial",
+                        ],
+                        capture_output=True,
+                        check=False,
+                    )
+                self.assertEqual(analyzed.returncode, 0, analyzed.stderr)
+
+    def test_unassigned_assignee_policy_defaults_and_validates_per_server_logins(self):
+        default_result, default_output, default_log = self.run_collector(
+            policy([bug_scope("primary", 1)]),
+            [ok(view_argv("primary", 1), bug(1))],
+        )
+        self.assertEqual(default_result.returncode, 0, default_result.stderr)
+        self.assertEqual(
+            self.parse(default_output)["policy"]["unassigned_assignees"],
+            {},
+        )
+        self.assertEqual(default_log, [view_argv("primary", 1)])
+
+        configured = policy(
+            [bug_scope("alpha", 1), bug_scope("beta", 2)],
+            unassigned_assignees={
+                "alpha": ["nobody@alpha.example"],
+                "beta": ["nobody@beta.example"],
+            },
+        )
+        result, output, _ = self.run_collector(
+            configured,
+            [
+                ok(view_argv("alpha", 1), bug(1)),
+                ok(view_argv("beta", 2), bug(2)),
+            ],
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            self.parse(output)["policy"]["unassigned_assignees"],
+            configured["unassigned_assignees"],
+        )
+
+        invalid_values = (
+            {"other": ["nobody@example.test"]},
+            {"alpha": ["z@example.test", "a@example.test"]},
+            {"alpha": ["same@example.test", "same@example.test"]},
+            {"alpha": "nobody@example.test"},
+        )
+        for value in invalid_values:
+            with self.subTest(value=value):
+                result, output, log = self.run_collector(
+                    policy(
+                        [bug_scope("alpha", 1)],
+                        unassigned_assignees=value,
+                    ),
+                    [],
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertIsNone(output)
+                self.assertEqual(log, [])
 
     def test_duplicate_policy_keys_are_rejected_before_runner(self):
         serialized = json.dumps(policy([bug_scope("primary", 1)]))

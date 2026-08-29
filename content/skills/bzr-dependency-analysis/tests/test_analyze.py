@@ -187,6 +187,57 @@ class AnalyzerTestCase(unittest.TestCase):
         self.assertEqual(document["findings"]["unassigned_blockers"], [])
         self.assertEqual(document["edges"][0]["predecessor"]["id"], 50)
 
+    def test_unassigned_assignee_policy_uses_exact_server_login_matches(self):
+        collection = self.load_collection("branch")
+        collection["policy"]["unassigned_assignees"] = {
+            "primary": ["owner@example.test"]
+        }
+        document = ANALYZER.analyze(collection)
+        self.assertEqual(document["findings"]["unassigned_blockers"], [
+            {"id": 1, "requested": None, "server": "primary"}
+        ])
+        self.assertEqual(
+            document["policy"]["unassigned_assignees"],
+            {"primary": ["owner@example.test"]},
+        )
+
+        collection["policy"]["unassigned_assignees"] = {
+            "primary": ["owner@example"]
+        }
+        document = ANALYZER.analyze(collection)
+        self.assertEqual(document["findings"]["unassigned_blockers"], [])
+
+        collection["provenance"].append({
+            "parameter_names": [],
+            "scope_kind": "bug-ids",
+            "server": "secondary",
+            "source": None,
+        })
+        collection["policy"]["unassigned_assignees"] = {
+            "secondary": ["owner@example.test"]
+        }
+        document = ANALYZER.analyze(collection)
+        self.assertEqual(document["findings"]["unassigned_blockers"], [])
+
+    def test_unassigned_assignee_policy_schema_is_closed_and_canonical(self):
+        valid = self.load_collection("branch")
+        mutations = []
+        for value in (
+            {"other": ["nobody@example.test"]},
+            {"primary": ["z@example.test", "a@example.test"]},
+            {"primary": ["same@example.test", "same@example.test"]},
+            {"primary": "nobody@example.test"},
+        ):
+            document = copy.deepcopy(valid)
+            document["policy"]["unassigned_assignees"] = value
+            mutations.append(document)
+        for collection in mutations:
+            with self.subTest(policy=collection["policy"]):
+                result, output = self.run_analyzer(collection)
+                self.assertEqual(result.returncode, 2)
+                self.assertIsNone(output)
+                self.assertIn(b"analysis input error:", result.stderr)
+
     def test_da10_scope_restriction_boundary_remains_in_findings(self):
         collection = self.load_collection("missing")
         boundary = collection["nodes"][1]

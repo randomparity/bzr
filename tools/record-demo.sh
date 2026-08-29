@@ -192,13 +192,22 @@ if [[ "${1:-}" == "dependency-analysis" ]]; then
     echo "  Then rerun: tools/record-demo.sh dependency-analysis" >&2
     exit 1
   fi
+  dependency_root_detail=$(bzr --server demo --output json bug view \
+    "$dependency_root" --fields assigned_to)
+  dependency_default_assignee=$(jq -r '.data.assigned_to // empty' \
+    <<<"$dependency_root_detail")
+  if [[ -z "$dependency_default_assignee" ]]; then
+    echo "ERROR: dependency-analysis demo root has no default assignee login" >&2
+    exit 1
+  fi
 
   dependency_policy="$dependency_project/dependency-policy.json"
   dependency_collection="$dependency_project/dependency-collection.json"
   dependency_analysis="$dependency_project/dependency-analysis.json"
   dependency_report="$dependency_project/dependency-report.md"
   dependency_diagram="$dependency_project/dependency-graph.mmd"
-  jq -n --arg bzr "$BZR_BIN" --argjson root "$dependency_root" '{
+  jq -n --arg bzr "$BZR_BIN" --argjson root "$dependency_root" \
+    --arg default_assignee "$dependency_default_assignee" '{
     bounds: {max_depth: 5, max_nodes: 20, max_relationships: 40},
     bzr: $bzr,
     direction: "both",
@@ -207,7 +216,8 @@ if [[ "${1:-}" == "dependency-analysis" ]]; then
     restriction: null,
     scopes: [{ids: [$root], kind: "bug-ids", server: "demo"}],
     servers: ["demo"],
-    stale_after_days: 14
+    stale_after_days: 14,
+    unassigned_assignees: {demo: [$default_assignee]}
   }' >"$dependency_policy"
 
   export DEPENDENCY_DEMO_PROJECT="$dependency_project"

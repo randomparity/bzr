@@ -81,10 +81,16 @@ fi
 test_begin "123l. disposable live fixture forms a marked diamond and resolved blocker"
 if [[ $_DA_FIXTURE_OK -eq 1 ]] && [[ -n $RESTRICTED_BUG ]]; then
   run_bzr bug view "$_DA_ROOT"
+  _DA_TEST_DEFAULT_ASSIGNEE=$(jq -r '.assigned_to // empty' "$BZR_STDOUT")
   if assert_success && assert_json '.whiteboard' "$_DA_MARKER" &&
     assert_json '.depends_on | sort | join(",")' \
       "$(printf '%s\n' "$_DA_LEFT" "$_DA_RESOLVED" "$_DA_RIGHT" | sort -n | paste -sd, -)"; then
-    test_pass
+    run_bzr --server public bug view "$_DA_ROOT"
+    _DA_PUBLIC_DEFAULT_ASSIGNEE=$(jq -r '.assigned_to // empty' "$BZR_STDOUT")
+    if assert_success && [[ -n $_DA_PUBLIC_DEFAULT_ASSIGNEE ]] &&
+      [[ -n $_DA_TEST_DEFAULT_ASSIGNEE ]]; then
+      test_pass
+    fi
   fi
 else
   test_fail "could not provision the dependency-analysis fixture"
@@ -98,6 +104,8 @@ _DA_DIAGRAM="$FUNC_CONFIG_DIR/dependency-live.mmd"
 jq -n \
   --arg bzr "$_DA_BZR_CANONICAL" \
   --argjson root "${_DA_ROOT:-0}" \
+  --arg public_default_assignee "${_DA_PUBLIC_DEFAULT_ASSIGNEE:-}" \
+  --arg test_default_assignee "${_DA_TEST_DEFAULT_ASSIGNEE:-}" \
   '{
     bounds: {max_depth: 5, max_nodes: 20, max_relationships: 40},
     bzr: $bzr,
@@ -110,7 +118,11 @@ jq -n \
       {ids: [$root], kind: "bug-ids", server: "test"}
     ],
     servers: ["public", "test"],
-    stale_after_days: 14
+    stale_after_days: 14,
+    unassigned_assignees: {
+      public: [$public_default_assignee],
+      test: [$test_default_assignee]
+    }
   }' >"$_DA_POLICY"
 
 _DA_PIPELINE_OK=1
@@ -127,7 +139,9 @@ test_begin "123m. installed live pipeline preserves identities, bounds, and reso
 if [[ $_DA_PIPELINE_OK -eq 1 ]] &&
   jq -e --argjson root "$_DA_ROOT" --argjson base "$_DA_BASE" \
     --argjson left "$_DA_LEFT" --argjson right "$_DA_RIGHT" \
-    --argjson resolved "$_DA_RESOLVED" --argjson skipped "$_DA_RESOLVED_PARENT" '
+    --argjson resolved "$_DA_RESOLVED" --argjson skipped "$_DA_RESOLVED_PARENT" \
+    --arg public_default_assignee "$_DA_PUBLIC_DEFAULT_ASSIGNEE" \
+    --arg test_default_assignee "$_DA_TEST_DEFAULT_ASSIGNEE" '
       def edge($server; $predecessor; $successor): {
         observations: ["blocks", "depends_on"],
         predecessor: {id: $predecessor, server: $server},
@@ -150,6 +164,10 @@ if [[ $_DA_PIPELINE_OK -eq 1 ]] &&
         "relationship_cap_reached": false,
         "scope_truncated": false
       } and
+      .policy.unassigned_assignees == {
+        "public": [$public_default_assignee],
+        "test": [$test_default_assignee]
+      } and
       ([.nodes[] | select(.id == $root) | .server] | sort) == ["public", "test"] and
       .edges == (inventory("public") + inventory("test")) and
       all(.edges[];
@@ -159,6 +177,9 @@ if [[ $_DA_PIPELINE_OK -eq 1 ]] &&
       ([.nodes[] | select(.id == $skipped)] | length) == 0 and
       ([.findings.bottlenecks[] |
         select(.node.id == $base and .fan_out == 2)] | length) == 2 and
+      ([.findings.unassigned_blockers[] |
+        select(.id == $base and
+          (.server == "public" or .server == "test"))] | length) == 2 and
       (.findings.execution_order.assumptions |
         index("resolved-include-no-traverse")) != null and
       .longest_chain.kind == "edge_count" and
@@ -170,6 +191,8 @@ if [[ $_DA_PIPELINE_OK -eq 1 ]] &&
   grep -Fq -- '- Omitted discovered identities: 0' "$_DA_REPORT" &&
   grep -Fq -- '- Relationship cap reached: false' "$_DA_REPORT" &&
   grep -Fq -- '- Omitted relationships &#40;lower bound&#41;: 0' "$_DA_REPORT" &&
+  grep -Fq -- '- Traversal direction: both' "$_DA_REPORT" &&
+  grep -Fq -- '- Unassigned&#45;assignee policy: public=' "$_DA_REPORT" &&
   grep -Fq -- '- Longest dependency chain components:' "$_DA_REPORT" &&
   grep -Fq -- '- Bottlenecks:' "$_DA_REPORT" &&
   grep -Fq -- '- Execution assumptions:' "$_DA_REPORT" &&
@@ -427,12 +450,14 @@ fi
 
 unset RESTRICTED_BUG
 unset _DA_ANALYSIS _DA_ANALYZE _DA_BASE _DA_BZR_CANONICAL _DA_COLLECT _DA_CONFIG
-unset _DA_COLLECTION _DA_CREATE _DA_CYCLE _DA_DIAGRAM _DA_FIXTURE_OK
+unset _DA_COLLECTION _DA_CREATE _DA_CYCLE _DA_DIAGRAM
+unset _DA_FIXTURE_OK
 unset _DA_HOSTILE_SUMMARY _DA_INACCESSIBLE_ANALYSIS _DA_INACCESSIBLE_COLLECTION
 unset _DA_INACCESSIBLE_OK _DA_INACCESSIBLE_POLICY _DA_LEFT _DA_MARKER
 unset _DA_MISSING _DA_MISSING_ANALYSIS _DA_MISSING_COLLECTION _DA_MISSING_OK
 unset _DA_MISSING_POLICY _DA_PATH _DA_PATH_CANONICAL _DA_PATHS_OK _DA_PIPELINE_OK
-unset _DA_POLICY _DA_RENDER _DA_REPORT _DA_RESOLVED _DA_RESOLVED_PARENT
+unset _DA_POLICY _DA_PUBLIC_DEFAULT_ASSIGNEE _DA_RENDER _DA_REPORT
+unset _DA_RESOLVED _DA_RESOLVED_PARENT
 unset _DA_RELATIONSHIP_ANALYSIS _DA_RELATIONSHIP_COLLECTION _DA_RELATIONSHIP_OK
 unset _DA_RELATIONSHIP_POLICY
 unset _DA_REJECTED_KEY _DA_REJECTED_MODE _DA_REJECTED_POLICY
@@ -440,6 +465,7 @@ unset _DA_REJECTED_REST_COLLECTION _DA_REJECTED_REST_ERROR _DA_REJECTED_REST_EXI
 unset _DA_REJECTED_REST_POLICY _DA_REJECTED_XMLRPC_COLLECTION
 unset _DA_REJECTED_XMLRPC_ERROR _DA_REJECTED_XMLRPC_EXIT _DA_REJECTED_XMLRPC_POLICY
 unset _DA_RIGHT _DA_ROOT _DA_SKILL_ROOT _DA_SKILL_ROOT_CANONICAL
+unset _DA_TEST_DEFAULT_ASSIGNEE
 unset _DA_XMLRPC_INACCESSIBLE_COLLECTION _DA_XMLRPC_INACCESSIBLE_OK
 unset _DA_XMLRPC_INACCESSIBLE_POLICY
 
