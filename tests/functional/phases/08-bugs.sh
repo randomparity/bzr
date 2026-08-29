@@ -193,14 +193,20 @@ else test_skip "no BUG1"; fi
 
 test_begin "45a. bug list --changed-since (recent activity)"
 if [[ -n "$BUG2" ]]; then
-    # Capture a timestamp safely after BUG2 was created/modified, so the
-    # filter window includes BUG2 and excludes any older fixtures. Bugzilla
-    # matches "at or after" inclusively; subtract 5 minutes to tolerate clock
-    # skew between the runner and the container.
-    SINCE_TS=$(date -u -d '5 minutes ago' '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null ||
-        date -u -v-5M '+%Y-%m-%dT%H:%M:%SZ')
-    run_bzr bug list --product FuncTestProd --changed-since "$SINCE_TS"
-    if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
+    run_bzr bug view "$BUG2"
+    if assert_success; then
+        SINCE_TS=$(jq -r '.last_change_time // empty' "$BZR_STDOUT" 2>/dev/null)
+        if [[ $SINCE_TS =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+            echo "    changed-since boundary: bug=$BUG2 timestamp=$SINCE_TS"
+            run_bzr bug list --product FuncTestProd --changed-since "$SINCE_TS"
+            if assert_success &&
+                assert_json "[.[] | select(.id == $BUG2)] | length" "1"; then
+                test_pass
+            fi
+        else
+            test_fail "bug #$BUG2 returned invalid last_change_time '$SINCE_TS'"
+        fi
+    fi
 else test_skip "no BUG2"; fi
 
 test_begin "45b. bug list --changed-since (malformed -> exit 7)"
