@@ -239,6 +239,7 @@ if [[ "${1:-}" == "release-readiness" ]]; then
   export RELEASE_READINESS_DEMO_REPORT="$release_workdir/release-readiness.md"
   export RELEASE_READINESS_DEMO_SERVER=demo
   release_pending_cast="$release_workdir/bzr-release-readiness-demo.cast"
+  release_pending_gif="$release_workdir/bzr-release-readiness-demo.gif"
   release_cast="$REPO_ROOT/docs/assets/bzr-release-readiness-demo.cast"
   release_gif="$REPO_ROOT/docs/assets/bzr-release-readiness-demo.gif"
 
@@ -258,11 +259,12 @@ if [[ "${1:-}" == "release-readiness" ]]; then
     echo "ERROR: release-readiness cast contains private recording data" >&2
     exit 1
   fi
-  mv "$release_pending_cast" "$release_cast"
 
   echo "==> Rendering release-readiness GIF"
   agg --theme dracula --font-size 16 --idle-time-limit 3 \
-    "$release_cast" "$release_gif"
+    "$release_pending_cast" "$release_pending_gif"
+  mv "$release_pending_cast" "$release_cast"
+  mv "$release_pending_gif" "$release_gif"
   ls -la "$release_cast" "$release_gif"
   exit 0
 fi

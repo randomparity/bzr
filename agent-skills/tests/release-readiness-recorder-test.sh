@@ -43,9 +43,9 @@ set -euo pipefail
 args=("$@")
 input=${args[${#args[@]}-2]}
 output=${args[${#args[@]}-1]}
-printf '%s\n' "$input" >"$AGG_CALLED"
-[[ $input == "$EXPECTED_CAST_PATH" ]]
+printf '%s\n%s\n' "$input" "$output" >"$AGG_CALLED"
 printf 'rendered-gif\n' >"$output"
+[[ ${FAKE_AGG_FAIL:-0} -eq 0 ]]
 EOF
 chmod +x "$stub_bin/bzr" "$stub_bin/curl" "$stub_bin/asciinema" "$stub_bin/agg"
 
@@ -53,7 +53,6 @@ common_env=(
   PATH="$stub_bin:$PATH"
   BZR_BIN="$stub_bin/bzr"
   AGG_CALLED="$work/agg-called"
-  EXPECTED_CAST_PATH="$tracked_cast"
 )
 
 if env "${common_env[@]}" FAKE_CAST_CONTENT='http://127.0.0.1:8089' \
@@ -75,11 +74,29 @@ cmp "$work/gif.before" "$tracked_gif" || {
   exit 1
 }
 
+if env "${common_env[@]}" FAKE_CAST_CONTENT='verified-cast' FAKE_AGG_FAIL=1 \
+  bash "$sandbox/tools/record-demo.sh" release-readiness \
+  >"$work/render-failure.stdout" 2>"$work/render-failure.stderr"; then
+  printf 'recorder publication failure: failing renderer was accepted\n' >&2
+  exit 1
+fi
+cmp "$work/cast.before" "$tracked_cast" || {
+  printf 'recorder publication failure: failed render replaced the published cast\n' >&2
+  exit 1
+}
+cmp "$work/gif.before" "$tracked_gif" || {
+  printf 'recorder publication failure: failed render replaced the published GIF\n' >&2
+  exit 1
+}
+
 env "${common_env[@]}" FAKE_CAST_CONTENT='verified-cast' \
   bash "$sandbox/tools/record-demo.sh" release-readiness \
   >"$work/clean.stdout" 2>"$work/clean.stderr"
 grep -Fxq 'verified-cast' "$tracked_cast"
 grep -Fxq 'rendered-gif' "$tracked_gif"
-grep -Fxq "$tracked_cast" "$work/agg-called"
+if grep -Fq "$sandbox/docs/assets/" "$work/agg-called"; then
+  printf 'recorder publication failure: renderer used a published asset path\n' >&2
+  exit 1
+fi
 
 printf 'release-readiness recorder privacy: ok\n'
