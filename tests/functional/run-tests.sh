@@ -71,7 +71,7 @@ for _phase in \
     15-comments 15b-comments-private 16-attachments 16b-attachments-private \
     17-global-options 17b-arg-validation 18-completion-schema 18a-json-envelope \
     18b-http-error-preview 18c-skills-install 18d-dependency-analysis \
-    18e-release-readiness 99-sequences; do
+    18e-release-readiness 18f-project-manager-reporting 99-sequences; do
     # shellcheck source=/dev/null
     source "$SCRIPT_DIR/phases/${_phase}.sh"
 done
