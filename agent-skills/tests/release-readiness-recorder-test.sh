@@ -16,11 +16,8 @@ cp -p "$repo_root/tools/run-release-readiness-demo.sh" \
   "$sandbox/tools/run-release-readiness-demo.sh"
 
 tracked_cast="$sandbox/docs/assets/bzr-release-readiness-demo.cast"
-tracked_gif="$sandbox/docs/assets/bzr-release-readiness-demo.gif"
 printf 'published-cast\n' >"$tracked_cast"
-printf 'published-gif\n' >"$tracked_gif"
 cp "$tracked_cast" "$work/cast.before"
-cp "$tracked_gif" "$work/gif.before"
 
 cat >"$stub_bin/bzr" <<'EOF'
 #!/usr/bin/env bash
@@ -149,16 +146,6 @@ if [[ ${FAKE_ASCIINEMA_RUN_COMMAND:-0} -eq 1 ]]; then
 fi
 printf '%s\n' "$FAKE_CAST_CONTENT" >"$output"
 EOF
-cat >"$stub_bin/agg" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-args=("$@")
-input=${args[${#args[@]}-2]}
-output=${args[${#args[@]}-1]}
-printf '%s\n%s\n' "$input" "$output" >"$AGG_CALLED"
-printf 'rendered-gif\n' >"$output"
-[[ ${FAKE_AGG_FAIL:-0} -eq 0 ]]
-EOF
 cat >"$stub_bin/mv" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -173,12 +160,11 @@ fi
 exec "$MV_REAL" "$@"
 EOF
 chmod +x "$stub_bin/bzr" "$stub_bin/date" "$stub_bin/curl" \
-  "$stub_bin/asciinema" "$stub_bin/agg" "$stub_bin/mv"
+  "$stub_bin/asciinema" "$stub_bin/mv"
 
 common_env=(
-  PATH="$stub_bin:$PATH"
+  PATH="$stub_bin:/usr/bin:/bin"
   BZR_BIN="$stub_bin/bzr"
-  AGG_CALLED="$work/agg-called"
   MV_REAL="$real_mv"
   FAKE_MV_STATE="$work/mv-failed"
 )
@@ -377,7 +363,7 @@ grep -Fq 'Do not run deadline, ownership, milestone, status/resolution, or histo
 grep -Fq 'Use a maximum of 100 root bugs and return a PM-ready Markdown report.' \
   "$work/driver.stdout"
 
-rm -f "$work/discovery-state" "$work/agg-called"
+rm -f "$work/discovery-state"
 if env "${common_env[@]}" FAKE_CAST_CONTENT=verified-cast \
   FAKE_ASCIINEMA_RUN_COMMAND=1 FAKE_DRIVE_STDOUT="$work/changed-driver.stdout" \
   FAKE_DISCOVERY_STATE="$work/discovery-state" FAKE_DISCOVERY_CHANGE=1 \
@@ -391,15 +377,6 @@ cmp "$work/cast.before" "$tracked_cast" || {
   printf 'recorder identity failure: mismatched evidence replaced the cast\n' >&2
   exit 1
 }
-cmp "$work/gif.before" "$tracked_gif" || {
-  printf 'recorder identity failure: mismatched evidence replaced the GIF\n' >&2
-  exit 1
-}
-[[ ! -e $work/agg-called ]] || {
-  printf 'recorder identity failure: mismatched evidence reached the renderer\n' >&2
-  exit 1
-}
-
 if env "${common_env[@]}" FAKE_CAST_CONTENT='http://127.0.0.1:8089' \
   bash "$sandbox/tools/record-demo.sh" release-readiness \
   >"$work/leak.stdout" 2>"$work/leak.stderr"; then
@@ -410,65 +387,26 @@ cmp "$work/cast.before" "$tracked_cast" || {
   printf 'recorder privacy failure: unverified cast replaced the published cast\n' >&2
   exit 1
 }
-cmp "$work/gif.before" "$tracked_gif" || {
-  printf 'recorder privacy failure: rejected cast replaced the published GIF\n' >&2
-  exit 1
-}
-[[ ! -e $work/agg-called ]] || {
-  printf 'recorder privacy failure: rejected cast reached the renderer\n' >&2
-  exit 1
-}
-
-if env "${common_env[@]}" FAKE_CAST_CONTENT='verified-cast' FAKE_AGG_FAIL=1 \
+rm -f "$work/mv-failed"
+if env "${common_env[@]}" FAKE_CAST_CONTENT='verified-cast' \
+  FAKE_MV_FAIL_TARGET=cast \
   bash "$sandbox/tools/record-demo.sh" release-readiness \
-  >"$work/render-failure.stdout" 2>"$work/render-failure.stderr"; then
-  printf 'recorder publication failure: failing renderer was accepted\n' >&2
+  >"$work/cast-failure.stdout" 2>"$work/cast-failure.stderr"; then
+  printf 'recorder publication failure: failing cast move was accepted\n' >&2
   exit 1
 fi
 cmp "$work/cast.before" "$tracked_cast" || {
-  printf 'recorder publication failure: failed render replaced the published cast\n' >&2
+  printf 'recorder publication failure: failed move replaced the published cast\n' >&2
   exit 1
 }
-cmp "$work/gif.before" "$tracked_gif" || {
-  printf 'recorder publication failure: failed render replaced the published GIF\n' >&2
-  exit 1
-}
-
-for failed_asset in cast gif; do
-  cp "$work/cast.before" "$tracked_cast"
-  cp "$work/gif.before" "$tracked_gif"
-  rm -f "$work/mv-failed"
-  if env "${common_env[@]}" FAKE_CAST_CONTENT='verified-cast' \
-    FAKE_MV_FAIL_TARGET="$failed_asset" \
-    bash "$sandbox/tools/record-demo.sh" release-readiness \
-    >"$work/$failed_asset-failure.stdout" \
-    2>"$work/$failed_asset-failure.stderr"; then
-    printf 'recorder publication failure: failing %s move was accepted\n' \
-      "$failed_asset" >&2
-    exit 1
-  fi
-  cmp "$work/cast.before" "$tracked_cast" || {
-    printf 'recorder publication failure: %s failure did not restore cast\n' \
-      "$failed_asset" >&2
-    exit 1
-  }
-  cmp "$work/gif.before" "$tracked_gif" || {
-    printf 'recorder publication failure: %s failure did not restore GIF\n' \
-      "$failed_asset" >&2
-    exit 1
-  }
-done
 
 rm -f "$work/mv-failed"
-env "${common_env[@]}" FAKE_CAST_CONTENT='verified-cast' \
+if ! env "${common_env[@]}" FAKE_CAST_CONTENT='verified-cast' \
   bash "$sandbox/tools/record-demo.sh" release-readiness \
-  >"$work/clean.stdout" 2>"$work/clean.stderr"
-grep -Fxq 'verified-cast' "$tracked_cast"
-grep -Fxq 'rendered-gif' "$tracked_gif"
-if grep -Fxq "$tracked_cast" "$work/agg-called" ||
-  grep -Fxq "$tracked_gif" "$work/agg-called"; then
-  printf 'recorder publication failure: renderer used a published asset path\n' >&2
+  >"$work/clean.stdout" 2>"$work/clean.stderr"; then
+  printf 'recorder cast-only failure: recording required an out-of-scope tool\n' >&2
   exit 1
 fi
+grep -Fxq 'verified-cast' "$tracked_cast"
 
 printf 'release-readiness recorder privacy: ok\n'
