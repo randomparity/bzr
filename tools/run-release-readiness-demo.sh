@@ -32,6 +32,11 @@ root=$(jq -er --arg marker "$marker" '
 product=$(jq -er '.data.product' "$workdir/root.json")
 version=$(jq -er '.data.version' "$workdir/root.json")
 milestone=$(jq -er '.data.target_milestone' "$workdir/root.json")
+fixture_ids=$(jq -cer --arg marker "$marker" --arg product "$product" '
+  [.data[] | select(
+    .product == $product and (.whiteboard | startswith($marker + " "))
+  ) | .id] | sort | select(length == 3)
+' "$workdir/discovery.json")
 for value in "$product" "$version" "$milestone"; do
   [[ $value =~ ^[A-Za-z0-9._-]+$ ]] || {
     echo "ERROR: demo fixture contains a non-portable scope value" >&2
@@ -46,15 +51,16 @@ custom_url=$(jq -er '.data.source_url' "$workdir/url-query.json")
   --sort bug_id --order asc --fields "$fields" >"$workdir/custom.json"
 "${bzr_json[@]}" query run "$saved_query" --limit 100 --paginate \
   --sort bug_id --order asc --fields "$fields" >"$workdir/saved.json"
-"${bzr_json[@]}" bug list "--target-milestone=$milestone" --limit 100 --paginate \
-  --sort bug_id --order asc --fields "$fields" >"$workdir/milestone.json"
+"${bzr_json[@]}" bug list --product "$product" "--target-milestone=$milestone" \
+  --limit 100 --paginate --sort bug_id --order asc --fields "$fields" \
+  >"$workdir/milestone.json"
 "${bzr_json[@]}" bug list --version "$version" --limit 100 --paginate \
   --sort bug_id --order asc --fields "$fields" >"$workdir/version.json"
 "${bzr_json[@]}" bug list --product "$product" --limit 100 --paginate \
   --sort bug_id --order asc --fields "$fields" >"$workdir/product.json"
 
 for scope in custom saved milestone version product; do
-  jq -e --argjson root "$root" 'any(.data[]; .id == $root)' \
+  jq -e --argjson expected "$fixture_ids" '[.data[].id] == $expected' \
     "$workdir/$scope.json" >/dev/null
 done
 
@@ -135,7 +141,7 @@ fi
   printf 'bzr bug search --from-url <credential-free-url> --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$fields"
   printf 'bzr query show %s --json\n' "$saved_query"
   printf 'bzr query run %s --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$saved_query" "$fields"
-  printf 'bzr bug list --target-milestone %s --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$milestone" "$fields"
+  printf 'bzr bug list --product %s --target-milestone %s --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$product" "$milestone" "$fields"
   printf 'bzr bug list --version %s --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$version" "$fields"
   printf 'bzr bug list --product %s --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$product" "$fields"
   printf 'bzr bug view %s --json --fields %s\n' "$root" "$fields"

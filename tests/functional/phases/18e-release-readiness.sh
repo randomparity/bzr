@@ -39,7 +39,11 @@ else
   [[ $BZR_EXIT -eq 0 ]] || _RR_FIXTURE_OK=0
   run_bzr bug update "$_RR_COMPLETE" --status RESOLVED --resolution FIXED
   [[ $BZR_EXIT -eq 0 ]] || _RR_FIXTURE_OK=0
+  _RR_EXPECTED_IDS=$(jq -cn --argjson dependency "$_RR_DEPENDENCY" \
+    --argjson complete "$_RR_COMPLETE" --argjson root "$_RR_ROOT" \
+    '[$dependency, $complete, $root] | sort')
 fi
+_RR_EXPECTED_IDS=${_RR_EXPECTED_IDS:-[]}
 
 _RR_URL="${BZ_URL}/buglist.cgi?product=${_RR_PRODUCT}&query_format=advanced&limit=1&order=changeddate%20DESC"
 run_bzr query save "$_RR_QUERY" --product "$_RR_PRODUCT" --limit 1 \
@@ -68,51 +72,60 @@ else
   test_fail "could not provision release-readiness fixture"
 fi
 
-# Everything below is the read-only review segment. Preserve the local profile,
-# one complete bug record, and its history to prove the segment made no change.
+# Everything below is the read-only review segment. Preserve the complete
+# fixture scope, each bug's history, the product, and the local profile to prove
+# the segment made no change.
 _RR_CONFIG="$XDG_CONFIG_HOME/bzr/config.toml"
-_RR_CONFIG_BEFORE="$FUNC_CONFIG_DIR/release-readiness-config.before"
-_RR_BUG_BEFORE="$FUNC_CONFIG_DIR/release-readiness-bug.before.json"
-_RR_HISTORY_BEFORE="$FUNC_CONFIG_DIR/release-readiness-history.before.json"
-cp "$_RR_CONFIG" "$_RR_CONFIG_BEFORE"
-run_bzr bug view "$_RR_ROOT"
-cp "$BZR_STDOUT" "$_RR_BUG_BEFORE"
-run_bzr bug history "$_RR_ROOT"
-cp "$BZR_STDOUT" "$_RR_HISTORY_BEFORE"
+_RR_STATE_BEFORE="$FUNC_CONFIG_DIR/release-readiness-state.before"
+_RR_STATE_AFTER="$FUNC_CONFIG_DIR/release-readiness-state.after"
+
+_rr_capture_fixture_state() {
+  local destination=$1
+  local bug_id
+  mkdir -p "$destination" || return 1
+  cp "$_RR_CONFIG" "$destination/config.toml" || return 1
+  run_bzr product view "$_RR_PRODUCT"
+  [[ $BZR_EXIT -eq 0 ]] || return 1
+  jq -S . "$BZR_STDOUT" >"$destination/product.json" || return 1
+  for bug_id in "$_RR_DEPENDENCY" "$_RR_COMPLETE" "$_RR_ROOT"; do
+    run_bzr bug view "$bug_id"
+    [[ $BZR_EXIT -eq 0 ]] || return 1
+    jq -S . "$BZR_STDOUT" >"$destination/bug-$bug_id.json" || return 1
+    run_bzr bug history "$bug_id"
+    [[ $BZR_EXIT -eq 0 ]] || return 1
+    jq -S . "$BZR_STDOUT" >"$destination/history-$bug_id.json" || return 1
+  done
+}
+
+_RR_STATE_OK=1
+_rr_capture_fixture_state "$_RR_STATE_BEFORE" || _RR_STATE_OK=0
+
+_rr_scope_matches_fixture() {
+  [[ $BZR_EXIT -eq 0 ]] &&
+    jq -e --argjson expected "$_RR_EXPECTED_IDS" \
+      'map(.id) == $expected' "$BZR_STDOUT" >/dev/null
+}
 
 test_begin "123s. five release scope forms use bounded complete reads"
 _RR_SCOPES_OK=1
 run_bzr --server test bug search --from-url "$_RR_URL" --limit 100 --paginate \
   --sort bug_id --order asc --fields "$_RR_FIELDS"
-[[ $BZR_EXIT -eq 0 ]] &&
-  jq -e --argjson root "$_RR_ROOT" 'any(.[]; .id == $root)' "$BZR_STDOUT" >/dev/null ||
-  _RR_SCOPES_OK=0
+_rr_scope_matches_fixture || _RR_SCOPES_OK=0
 run_bzr query show "$_RR_QUERY"
 [[ $BZR_EXIT -eq 0 ]] && [[ $(jq -r '.limit' "$BZR_STDOUT") == 1 ]] ||
   _RR_SCOPES_OK=0
 run_bzr query run "$_RR_QUERY" --limit 100 --paginate \
   --sort bug_id --order asc --fields "$_RR_FIELDS"
-[[ $BZR_EXIT -eq 0 ]] &&
-  jq -e --argjson root "$_RR_ROOT" 'any(.[]; .id == $root)' "$BZR_STDOUT" >/dev/null ||
-  _RR_SCOPES_OK=0
-run_bzr bug list --target-milestone=--- --limit 100 --paginate \
+_rr_scope_matches_fixture || _RR_SCOPES_OK=0
+run_bzr bug list --product "$_RR_PRODUCT" --target-milestone=--- --limit 100 --paginate \
   --sort bug_id --order asc --fields "$_RR_FIELDS"
-[[ $BZR_EXIT -eq 0 ]] &&
-  jq -e --argjson root "$_RR_ROOT" 'any(.[]; .id == $root)' "$BZR_STDOUT" >/dev/null ||
-  _RR_SCOPES_OK=0
+_rr_scope_matches_fixture || _RR_SCOPES_OK=0
 run_bzr bug list --version "$_RR_VERSION" --limit 100 --paginate \
   --sort bug_id --order asc --fields "$_RR_FIELDS"
-[[ $BZR_EXIT -eq 0 ]] &&
-  jq -e --argjson root "$_RR_ROOT" 'any(.[]; .id == $root)' "$BZR_STDOUT" >/dev/null ||
-  _RR_SCOPES_OK=0
+_rr_scope_matches_fixture || _RR_SCOPES_OK=0
 run_bzr bug list --product "$_RR_PRODUCT" --limit 100 --paginate \
   --sort bug_id --order asc --fields "$_RR_FIELDS"
-[[ $BZR_EXIT -eq 0 ]] &&
-  jq -e --argjson root "$_RR_ROOT" --argjson complete "$_RR_COMPLETE" '
-    (map(.id) | index($root)) != null and
-    (map(.id) | index($complete)) != null and
-    ([.[].id] | . == sort)
-  ' "$BZR_STDOUT" >/dev/null || _RR_SCOPES_OK=0
+_rr_scope_matches_fixture || _RR_SCOPES_OK=0
 if [[ $_RR_SCOPES_OK -eq 1 ]]; then
   test_pass
 else
@@ -169,20 +182,20 @@ else
 fi
 
 test_begin "123v. release review leaves Bugzilla and local configuration unchanged"
-run_bzr bug view "$_RR_ROOT"
-cp "$BZR_STDOUT" "$FUNC_CONFIG_DIR/release-readiness-bug.after.json"
-run_bzr bug history "$_RR_ROOT"
-cp "$BZR_STDOUT" "$FUNC_CONFIG_DIR/release-readiness-history.after.json"
-if cmp -s "$_RR_CONFIG_BEFORE" "$_RR_CONFIG" &&
-  cmp -s "$_RR_BUG_BEFORE" "$FUNC_CONFIG_DIR/release-readiness-bug.after.json" &&
-  cmp -s "$_RR_HISTORY_BEFORE" "$FUNC_CONFIG_DIR/release-readiness-history.after.json"; then
+_rr_capture_fixture_state "$_RR_STATE_AFTER" || _RR_STATE_OK=0
+if [[ $_RR_STATE_OK -eq 1 ]] && diff -qr "$_RR_STATE_BEFORE" "$_RR_STATE_AFTER" \
+  >"$FUNC_CONFIG_DIR/release-readiness-state.diff"; then
   test_pass
 else
-  test_fail "read-only release review changed config or Bugzilla evidence"
+  if [[ -s $FUNC_CONFIG_DIR/release-readiness-state.diff ]]; then
+    sed -n '1,20p' "$FUNC_CONFIG_DIR/release-readiness-state.diff"
+  fi
+  test_fail "read-only release review changed config or fixture evidence"
 fi
 
 unset _RR_MARKER _RR_PRODUCT _RR_VERSION _RR_QUERY _RR_URL_QUERY _RR_FIELDS _RR_CREATE
-unset _RR_FIXTURE_OK _RR_DEPENDENCY _RR_COMPLETE _RR_ROOT _RR_URL
-unset _RR_CONFIG _RR_CONFIG_BEFORE _RR_BUG_BEFORE _RR_HISTORY_BEFORE
+unset _RR_FIXTURE_OK _RR_DEPENDENCY _RR_COMPLETE _RR_ROOT _RR_EXPECTED_IDS _RR_URL
+unset _RR_CONFIG _RR_STATE_BEFORE _RR_STATE_AFTER _RR_STATE_OK
 unset _RR_SCOPES_OK _RR_SUPPLEMENT_OK _RR_CUSTOM_FIELD_COUNT _RR_REPORT
+unset -f _rr_capture_fixture_state _rr_scope_matches_fixture
 echo ""
