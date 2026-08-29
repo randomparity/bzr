@@ -27,6 +27,7 @@ sh "$HERE/flag-drift-check.sh" || rc=1
 sh "$HERE/skills-flag-check.sh" || rc=1
 sh "$HERE/version-check.sh" || rc=1
 sh "$HERE/package-content-check.sh" || rc=1
+sh "$HERE/../../content/skills/bzr-weekly-status/tests/run.sh" || rc=1
 
 # Self-tests
 run "validate-skills-test.sh"

@@ -354,6 +354,21 @@ fn parse_url_strips_credentials_from_source_url() {
 }
 
 #[test]
+fn parse_url_strips_userinfo_from_source_url() {
+    let config = make_config("https://bugzilla.example.com");
+    let parsed = parse_bugzilla_url(
+        "https://user:secret@bugzilla.example.com/buglist.cgi?product=Firefox",
+        &config,
+    )
+    .unwrap();
+
+    assert_eq!(
+        parsed.query.source_url.as_deref(),
+        Some("https://bugzilla.example.com/buglist.cgi?product=Firefox")
+    );
+}
+
+#[test]
 fn parses_known_name_into_suggested_name() {
     let parsed = parse_test_url("product=Firefox&known_name=my%20saved%20search");
     assert_eq!(parsed.suggested_name, Some("my saved search".into()));

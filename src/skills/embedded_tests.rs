@@ -16,6 +16,7 @@ fn embeds_all_current_skills_in_lexical_order() {
             "bzr-search-report",
             "bzr-setup",
             "bzr-triage-bug",
+            "bzr-weekly-status",
         ]
     );
 }

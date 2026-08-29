@@ -58,9 +58,15 @@ pub(crate) struct ParsedUrl {
     pub(crate) suggested_name: Option<String>,
 }
 
-/// Strip credential query parameters from a URL, returning the sanitized string.
-fn sanitize_url(url: &Url) -> String {
+/// Strip credentials from a URL, returning the sanitized string.
+fn sanitize_url(url: &Url) -> Result<String> {
     let mut sanitized = url.clone();
+    sanitized
+        .set_username("")
+        .map_err(|()| BzrError::input("URL username could not be removed".into()))?;
+    sanitized
+        .set_password(None)
+        .map_err(|()| BzrError::input("URL password could not be removed".into()))?;
     let pairs: Vec<(String, String)> = sanitized
         .query_pairs()
         .filter(|(k, _)| !CREDENTIAL_PARAMS.contains(&k.to_ascii_lowercase().as_str()))
@@ -71,7 +77,7 @@ fn sanitize_url(url: &Url) -> String {
     } else {
         sanitized.query_pairs_mut().clear().extend_pairs(pairs);
     }
-    sanitized.to_string()
+    Ok(sanitized.to_string())
 }
 
 /// Strip backslashes that precede URL-significant characters (`?`, `&`, `=`).
@@ -136,7 +142,7 @@ pub(crate) fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<Parse
     }
 
     let mut query = SavedQuery {
-        source_url: Some(sanitize_url(&url)),
+        source_url: Some(sanitize_url(&url)?),
         server: server.map(String::from),
         ..SavedQuery::default()
     };

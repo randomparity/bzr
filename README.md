@@ -542,6 +542,15 @@ The skills shell out to the real `bzr` binary and are agent-agnostic: global
 flags are consistent, machine-readable output is built in, and saved templates
 and queries let agents reuse local workflows without custom wrappers.
 
+The `bzr-weekly-status` skill keeps versioned local snapshots and compares each report with the
+newest compatible prior run. This asciinema-based demonstration creates a baseline, changes live
+Bugzilla state, then runs the shipped selector, comparator, and atomic publisher:
+
+![Snapshot-based weekly status demonstration](docs/assets/bzr-weekly-status-demo.gif)
+
+Regenerate it against a fresh functional container with
+`tools/record-demo.sh --weekly-status`.
+
 ## Documentation
 
 - [CLI reference](https://github.com/randomparity/bzr/blob/main/docs/bzr-cli.md) — every command, flag, and output format.

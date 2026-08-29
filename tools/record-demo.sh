@@ -13,6 +13,8 @@ set -euo pipefail
 #   - a release bzr binary: cargo build --release (override with BZR_BIN)
 #
 # Usage: tools/record-demo.sh
+#        tools/record-demo.sh --weekly-status
+#        tools/record-demo.sh dependency-analysis
 
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 BZ_URL=${BZ_URL:-http://127.0.0.1:8089}
@@ -21,6 +23,9 @@ API_KEY="FuncTest0123456789abcdef0123456789abcdef"
 ADMIN_EMAIL="admin@test.bzr"
 BZR_BIN=${BZR_BIN:-$REPO_ROOT/target/release/bzr}
 OUT_GIF="$REPO_ROOT/docs/assets/bzr-demo.gif"
+if [[ "${1:-}" == "--weekly-status" ]]; then
+  OUT_GIF="$REPO_ROOT/docs/assets/bzr-weekly-status-demo.gif"
+fi
 
 # ── Driver mode: runs inside the asciinema PTY ───────────────────────
 # Types each command with a human-ish cadence, then runs it for real.
@@ -52,6 +57,31 @@ if [[ "${1:-}" == "--drive" ]]; then
   printf '%b' "$prompt"
   sleep 1.6
   printf '\n'
+  exit 0
+fi
+
+# ── Weekly-status driver mode: runs inside the asciinema PTY ────────
+if [[ "${1:-}" == "--drive-weekly-status" ]]; then
+  bug_id=$2
+  workdir=$3
+  prompt=$'\e[1;35m❯\e[0m '
+  type_run() {
+    local cmd=$1 pause=${2:-1.8} i
+    printf '%b' "$prompt"
+    for ((i = 0; i < ${#cmd}; i++)); do
+      printf '%s' "${cmd:i:1}"
+      sleep 0.012
+    done
+    sleep 0.3
+    printf '\n'
+    eval "$cmd"
+    sleep "$pause"
+  }
+  fields='id,summary,status,resolution,assigned_to,priority,severity,target_milestone,deadline,last_change_time,whiteboard,blocks,depends_on'
+  type_run 'bzr skills install --agent codex --project .' 1.2
+  type_run "bzr query save core-weekly --product Nimbus --fields $fields" 1.2
+  type_run "tools/run-weekly-status-demo.sh '$bug_id' '$workdir' '.agents/skills/bzr-weekly-status'" 3.2
+  printf '%b\n' "$prompt"
   exit 0
 fi
 
@@ -322,8 +352,12 @@ bzr --output json bug update "$b2" --status IN_PROGRESS \
 bzr --output json bug update "$b4" --status RESOLVED --resolution FIXED >/dev/null
 
 echo "==> Recording session (targets bug $b1)"
+driver=(--drive "$b1")
+if [[ "${1:-}" == "--weekly-status" ]]; then
+  driver=(--drive-weekly-status "$b1" "$workdir")
+fi
 asciinema rec --headless --window-size 100x30 \
-  -c "bash ${BASH_SOURCE[0]} --drive $b1" "$workdir/demo.cast"
+  -c "bash ${BASH_SOURCE[0]} ${driver[*]}" "$workdir/demo.cast"
 
 echo "==> Rendering GIF"
 agg --theme dracula --font-size 16 --idle-time-limit 3 \
