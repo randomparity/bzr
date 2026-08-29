@@ -219,7 +219,7 @@ fi
   printf '## Recent adverse changes\n\n'
   printf -- '- **Fact:** History/regression check: N/A (not selected); no history read was issued.\n\n'
   printf '## Decisions needed\n\n'
-  printf -- '- **Assessment:** Decide whether #%s can be cleared and whether dependency #%s ' \
+  printf -- '- **Assessment:** Decide whether #%s can be cleared and whether dependency %s ' \
     "$root" "$dependency_ids"
   printf 'must close before the release proceeds.\n\n'
   printf '## Data limitations\n\n'
