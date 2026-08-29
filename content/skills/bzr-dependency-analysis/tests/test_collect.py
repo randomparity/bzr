@@ -413,6 +413,27 @@ class CollectorTestCase(unittest.TestCase):
         self.assertEqual(raised.exception.limitation, "collection-http")
         self.assertEqual(raised.exception.error_type, "http")
 
+    def test_child_runner_decodes_structured_output_as_utf8(self):
+        with tempfile.TemporaryDirectory() as directory:
+            script = Path(directory) / "utf8_output.py"
+            script.write_text(
+                "import json\n"
+                "json.dump({'schema_version': '0.6.1', 'data': "
+                "{'summary': 'Résumé'}}, open(1, 'w', encoding='utf-8'), "
+                "ensure_ascii=False)\n",
+                encoding="utf-8",
+            )
+            runner = COLLECTOR.CommandRunner(sys.executable)
+            with mock.patch.object(
+                COLLECTOR.subprocess,
+                "run",
+                wraps=subprocess.run,
+            ) as run:
+                data, error = runner.run_json([str(script)])
+        self.assertIsNone(error)
+        self.assertEqual(data, {"summary": "Résumé"})
+        self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
+
     def test_failed_preflight_and_ambiguous_api_102_are_command_fatal(self):
         response = failed(
             preflight_argv("primary"),
