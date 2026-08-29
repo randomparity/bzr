@@ -164,6 +164,9 @@ jq -n --slurpfile previous "$WORK/stale-old.json" --slurpfile current "$WORK/sta
 [ "$(jq -r '.attention_unchanged[0]' "$WORK/stale-result.json")" = 9 ]
 
 [ "$(printf '%s' '=cmd' | jq -Rr -L "$HERE/../scripts" 'include "safe-output"; spreadsheet_text')" = "'=cmd" ]
+printf '\t=cmd' | jq -Re -L "$HERE/../scripts" 'include "safe-output"; spreadsheet_text | startswith("'\''")' >/dev/null
+printf '\r=cmd' | jq -Re -L "$HERE/../scripts" 'include "safe-output"; spreadsheet_text | startswith("'\''")' >/dev/null
+printf '\n=cmd' | jq -Rse -L "$HERE/../scripts" 'include "safe-output"; spreadsheet_text | startswith("'\''")' >/dev/null
 [ "$(printf '%s' '<b>&' | jq -Rr -L "$HERE/../scripts" 'include "safe-output"; html_text')" = '&lt;b&gt;&amp;' ]
 
 grep -q 'WS-10' "$HERE/../reference/eval-cases.md"
